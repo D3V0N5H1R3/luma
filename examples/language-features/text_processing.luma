@@ -1,0 +1,237 @@
+# ═══════════════════════════════════════════════════════════
+# Text Processing
+#
+# Demonstrates regular expressions, string indexing/slicing,
+# multi-line strings, the Encoder module, the Set module,
+# and for-over-string iteration.
+# ═══════════════════════════════════════════════════════════
+
+function array<string> extract_words(string text) {
+    # Split on whitespace and punctuation using regex
+    array<string> raw = Result.unwrap(RegularExpression.split(text, "[\\s,.:;!?]+"))
+
+    return raw
+    !> Array.filter((string w) -> !String.is_empty(w))
+    !> Array.map((string w) -> String.lowercase(w))
+    |> Result.unwrap_or([])
+}
+
+function string shift_letter(string letter, integer shift) {
+    array<integer> codes = String.to_codepoints(letter)
+    integer code = codes[0]
+
+    if code >= 65 && code <= 90 {
+        # Uppercase letter
+        integer shifted = (code - 65 + shift) % 26 + 65
+
+        return Result.unwrap_or(String.from_codepoints([shifted]), letter)
+    } else if code >= 97 && code <= 122 {
+        # Lowercase letter
+        integer shifted = (code - 97 + shift) % 26 + 97
+
+        return Result.unwrap_or(String.from_codepoints([shifted]), letter)
+    }
+
+    return letter
+}
+
+function string caesar_encode(string text, integer shift) {
+    # Map each character once and join in a single pass. Building the result
+    # with output += per character would reallocate the whole string on every
+    # step — O(n²) over the length of the text.
+    return String.characters(text)
+    |> Array.map((string letter) -> shift_letter(letter, shift))
+    |> Result.unwrap_or([])
+    |> String.join("")
+}
+
+# ── Multi-line strings ──
+
+function void demo_multiline_strings() {
+    print("=== Multi-line string ===")
+
+    string poem = """
+    Roses are red,
+    Violets are blue,
+    Luma is great,
+    And so are you!
+    """
+
+    print(poem)
+}
+
+# ── String indexing and slicing ──
+
+function void demo_string_indexing() {
+    print("=== String indexing ===")
+
+    string text = "Hello, Luma!"
+
+    print("First char: ${text[0]}")
+    print("Slice [0..5]: ${text[0 .. 5]}")
+    print("Slice [7..=10]: ${text[7 ..= 10]}")
+}
+
+# ── For-over-string iteration ──
+
+function void demo_character_iteration() {
+    print("")
+    print("=== Character iteration ===")
+
+    mutable string vowels = ""
+
+    for ch in "Hello World" {
+        if String.lowercase(ch) in "aeiou" {
+            vowels += ch
+        }
+    }
+
+    print("Vowels in 'Hello World': ${vowels}")
+}
+
+# ── Regular expressions ──
+
+function void demo_regular_expressions() {
+    print("")
+    print("=== Regular expressions ===")
+
+    string email_pattern = "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+    string sample = "Contact us at info@example.com or support@luma.dev for help."
+
+    result<array<RegularExpression.Match>> emails =
+    RegularExpression.find_all(sample, email_pattern)
+
+    match emails {
+        success(found) {
+            print("Found emails:")
+
+            result<none> _ = found
+            |> Array.each((RegularExpression.Match m) -> print("  ${m.text}"))
+        }
+        failure(err) { print("Regex error: ${err}") }
+    }
+}
+
+# ── Capture groups ──
+
+function void demo_capture_groups() {
+    print("")
+    print("=== Capture groups ===")
+
+    string log_line = "2026-05-02 09:15:30 [ERROR] disk full"
+    string log_pattern = "(\\d{4}-\\d{2}-\\d{2}) (\\d{2}:\\d{2}:\\d{2}) \\[([A-Z]+)\\]"
+
+    RegularExpression.Match log_match =
+    RegularExpression.find(log_line, log_pattern) |> Result.unwrap()
+
+    print("Full match: ${log_match.text}")
+    print("Date:       ${log_match.groups[0].text}")
+    print("Time:       ${log_match.groups[1].text}")
+    print("Level:      ${log_match.groups[2].text}")
+
+    # Extract key=value pairs
+    array<RegularExpression.Match> pairs =
+    RegularExpression.find_all("width=100 height=200 depth=50", "([a-z]+)=([0-9]+)")
+    |> Result.unwrap()
+
+    print("")
+    print("Key-value pairs:")
+
+    for pair in pairs {
+        print("  ${pair.groups[0].text} -> ${pair.groups[1].text}")
+    }
+
+    result<boolean> is_hex = RegularExpression.matches("1a2b3c", "^[0-9a-f]+$")
+
+    print("Is '1a2b3c' hex? ${Result.unwrap_or(is_hex, false)}")
+
+    string censored = Result.unwrap(RegularExpression.replace_all(
+        "The password is secret123 and the code is hidden456",
+        "[a-z]+[0-9]+",
+        "***"
+    ))
+
+    print("Censored: ${censored}")
+}
+
+# ── Encoder module ──
+
+function void demo_encoding() {
+    print("")
+    print("=== Encoding ===")
+
+    string original = "Hello, Luma!"
+    string b64 = Encoder.encode_base64(original) |> Result.unwrap()
+    string decoded = Result.unwrap(Encoder.decode_base64(b64))
+
+    print("Base64: ${original} -> ${b64} -> ${decoded}")
+
+    # ── URL-safe Base64 ──
+    string b64url = Encoder.encode_base64url(original) |> Result.unwrap()
+    string decoded_url = Result.unwrap(Encoder.decode_base64url(b64url))
+
+    print("Base64URL: ${original} -> ${b64url} -> ${decoded_url}")
+
+    # ── URL encoding ──
+    string url_input = "search query=hello world&lang=en"
+    string url_encoded = Result.unwrap(Encoder.encode_url(url_input))
+    string url_decoded = Result.unwrap(Encoder.decode_url(url_encoded))
+
+    print("URL encode: ${url_input} -> ${url_encoded}")
+    print("URL decode: ${url_encoded} -> ${url_decoded}")
+}
+
+# ── Set module ──
+
+function void demo_set_operations() {
+    print("")
+    print("=== Set operations ===")
+
+    string passage = "the quick brown fox jumps over the lazy dog the fox"
+    array<string> words = extract_words(passage)
+    array<string> unique_words = Set.from_array(words) |> Set.to_array()
+
+    print("Words: ${Array.length(words)}, Unique: ${Array.length(unique_words)}")
+
+    string unique_list = Array.join(unique_words, ", ")
+
+    print("Unique: ${unique_list}")
+
+    array<string> found_animals = Set.intersection(
+        Set.from_array(words),
+        Set.from_array(["fox", "dog", "cat"])
+    ) |> Set.to_array()
+
+    string found_list = Array.join(found_animals, ", ")
+
+    print("Animals found: ${found_list}")
+}
+
+# ── Caesar cipher using for-over-string ──
+
+function void demo_caesar_cipher() {
+    print("")
+    print("=== Caesar cipher ===")
+
+    string message = "Hello World"
+    string encoded = caesar_encode(message, 3)
+    string back = caesar_encode(encoded, 23)
+
+    print("Original: ${message}")
+    print("Encoded (shift 3): ${encoded}")
+    print("Decoded (shift 23): ${back}")
+}
+
+@main
+function void main() {
+    print("Shows strings, regular expressions, encoding, sets, and a Caesar cipher.")
+
+    demo_multiline_strings()
+    demo_string_indexing()
+    demo_character_iteration()
+    demo_regular_expressions()
+    demo_capture_groups()
+    demo_encoding()
+    demo_set_operations()
+    demo_caesar_cipher()
+}

@@ -1,0 +1,60 @@
+# ═══════════════════════════════════════════════════════════
+# Data Structures: Queue and Stack
+#
+# Demonstrates the Queue and Stack modules — immutable,
+# functional data structures for FIFO and LIFO processing.
+# ═══════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # ── Queue: first-in, first-out ──
+    print("=== Task Queue ===")
+
+    # Build and inspect a queue.
+    integer count = Queue.new()
+    |> Queue.enqueue("compile")
+    |> Queue.enqueue("test")
+    |> Queue.enqueue("deploy")
+    |> Queue.enqueue("notify")
+    |> Queue.length()
+
+    print("${count} tasks queued")
+
+    # Peek at the front element.
+    string front = Queue.from_array(["compile", "test", "deploy"])
+    |> Queue.peek()
+    |> Result.unwrap()
+
+    print("Front: ${front}")
+
+    # Convert to array.
+    array<string> names = Queue.new()
+    |> Queue.enqueue("Alice")
+    |> Queue.enqueue("Bob")
+    |> Queue.enqueue("Carol")
+    |> Queue.to_array()
+
+    result<none> _ = names |> Array.each((string name) -> print("  ${name}"))
+
+    # ── Stack: last-in, first-out ──
+    print("\n=== Stack ===")
+
+    # Build a stack and peek at the top.
+    string top = Stack.new()
+    |> Stack.push("first")
+    |> Stack.push("second")
+    |> Stack.push("third")
+    |> Stack.peek()
+    |> Result.unwrap()
+
+    print("Top of stack: ${top}")
+
+    # Convert from array and inspect.
+    integer stack_len = Stack.from_array([10, 20, 30]) |> Stack.length()
+
+    print("Stack length: ${stack_len}")
+
+    boolean is_empty = Stack.new() |> Stack.is_empty()
+
+    print("New stack is empty: ${is_empty}")
+}

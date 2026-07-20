@@ -1,0 +1,14 @@
+{
+    "linux": {
+        "x86_64": "linux-x86_64.tar.gz",
+        "aarch64": "linux-aarch64.tar.gz"
+    },
+    "macos": {
+        "x86_64": "macos-x86_64.tar.gz",
+        "aarch64": "macos-aarch64.tar.gz"
+    },
+    "windows": {
+        "x86_64": "windows-x86_64.zip",
+        "aarch64": "windows-aarch64.zip"
+    }
+}

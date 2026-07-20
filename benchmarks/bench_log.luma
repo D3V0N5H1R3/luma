@@ -1,0 +1,76 @@
+# Log benchmarks: log level checks, formatting, context.
+#
+# Log output is redirected to a temporary file for the duration so emitted
+# messages do not pollute the suite's stdout/stderr (which CI captures), and
+# Log.reset() restores the default level, context, format, and output sink
+# afterwards so these benchmarks do not leak global state into later ones.
+
+function BenchResult run_log_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    integer pid = Process.get_process_id()
+    string log_sink = "__bench_log_${pid}.log"
+    result<void> _redirect = Log.set_output(log_sink)
+
+    # --- Level filtering (messages below threshold are discarded) ---
+
+    st = time_it(st, "Log below-level (suppressed)", 10000, () -> {
+        Log.set_level(Log.Level.Error)
+        Log.debug("this is suppressed")
+        Log.info("this is suppressed")
+        Log.warn("this is suppressed")
+    })
+
+    st = time_it(st, "Log at-level (emitted)", 5000, () -> {
+        Log.set_level(Log.Level.Debug)
+        Log.debug("debug message")
+        Log.set_level(Log.Level.Error)
+    })
+
+    # --- Context management ---
+
+    st = time_it(st, "Log set/clear context", 5000, () -> {
+        Log.set_context("module", "bench")
+        Log.set_context("iteration", "1")
+        Log.clear_context()
+    })
+
+    # --- Level get/set round-trip ---
+
+    st = time_it(st, "Log get/set level", 10000, () -> {
+        Log.set_level(Log.Level.Info)
+        Log.Level _lvl = Log.get_level()
+        Log.set_level(Log.Level.Error)
+    })
+
+    # --- Formatting hot path (emitted with placeholders + context) ---
+    #
+    # Configure the level, a multi-placeholder format, and context once, then
+    # measure repeated emission so the benchmark isolates format_message
+    # (placeholder substitution + context append) rather than re-running setup
+    # on every iteration.  A literal "\${...}" escapes Luma string interpolation
+    # so the placeholder reaches Log's own formatter intact.
+
+    Log.set_level(Log.Level.Debug)
+    Log.set_format("\${timestamp} [\${level}] \${message}")
+    Log.set_context("module", "bench")
+    Log.set_context("request_id", "req-001")
+
+    st = time_it(st, "Log emit formatted + context", 5000, () -> {
+        Log.info("formatted message with context")
+    })
+
+    Log.clear_context()
+
+    # --- Format template updates (pure configuration) ---
+
+    st = time_it(st, "Log set_format", 10000, () -> {
+        Log.set_format("[bench] \${message}")
+    })
+
+    # Restore default logging state and remove the temporary sink file.
+    Log.reset()
+    result<boolean> _cleanup = FileSystem.delete(log_sink)
+
+    return st
+}

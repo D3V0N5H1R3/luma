@@ -1,0 +1,77 @@
+# VM: optional construction, Optional.* combinators, '?' propagation,
+# null-coalescing (??), optional chaining (?. and ?[), and match
+# destructuring executed end-to-end. Reaches MakeSome, NullCoalesce,
+# GetFieldOpt, IndexGetOpt, IsSome, and optional-propagation paths
+# through the VM.
+
+record Box { integer value }
+
+function optional<integer> find_positive(integer n) {
+    if n > 0 {
+        return some(n)
+    }
+
+    return none
+}
+
+# '?' propagation across two optional-returning calls.
+function optional<integer> add_both(optional<integer> a, optional<integer> b) {
+    integer va = a?
+    integer vb = b?
+
+    return some(va + vb)
+}
+
+@main
+function void main() {
+    integer chained = some(5)
+    |> Optional.filter((integer i) -> i > 0)
+    |> Optional.map((integer i) -> i * 2)
+    |> Optional.unwrap_or(0)
+
+    print(chained)
+
+    integer piped = some(10)
+    |> Optional.and_then((integer x) -> some(x + 1))
+    |> Optional.flat_map((integer x) -> some(x * 3))
+    |> Optional.unwrap_or(-1)
+
+    print(piped)
+
+    # Null-coalescing and optional chaining.
+    optional<Box> b = some(Box { value = 7 })
+    integer v = b?.value ?? 0
+    print(v)
+
+    optional<array<integer>> arr = some([10, 20, 30])
+    integer second = arr?[1] ?? -1
+    print(second)
+
+    # zip, contains, flatten, to_result, and tap.
+    (integer za, integer zb) = Optional.zip(some(1), some(2))
+    print(za + zb)
+
+    print(Optional.contains(some(42), 42))
+
+    optional<optional<integer>> nested = some(some(99))
+    print(Optional.unwrap_or(Optional.flatten(nested), 0))
+
+    optional<integer> maybe = none
+    result<integer> r = Optional.to_result(maybe, "missing")
+    print(Result.is_success(r))
+
+    print(Optional.unwrap_or(Optional.tap(some(3), (integer i) -> { print(i) }), 0))
+
+    # unwrap a recovered value, fallback via Optional.or, and is_some predicate.
+    print(Optional.unwrap(Optional.or(none, some(7))))
+    print(Optional.is_some(some(1)))
+
+    # match destructuring combined with '?' propagation.
+    optional<integer> total = add_both(find_positive(4), find_positive(6))
+    string label = match total {
+    case some(t) { "sum=${t}" }
+    case none    { "none" }
+    }
+
+    print(label)
+}

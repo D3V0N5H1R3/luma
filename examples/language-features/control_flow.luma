@@ -1,0 +1,144 @@
+# ═══════════════════════════════════════════════════════════
+# Control Flow
+#
+# Demonstrates while loops, break, continue, match with
+# multiple patterns, dictionary iteration, loop variable
+# discard (_), and for-in with strings.
+# ═══════════════════════════════════════════════════════════
+
+# ── While loop ──
+function void demo_while_loop() {
+    print("=== While loop ===")
+
+    mutable integer n = 1
+
+    while n < 128 {
+        n *= 2
+    }
+
+    print("Smallest power of 2 >= 128: ${n}")
+}
+
+# ── Break and continue ──
+function void demo_break_and_continue() {
+    print("")
+    print("=== Break and continue ===")
+
+    mutable array<integer> odds = []
+
+    for i in 0 .. 100 {
+        if i % 2 == 0 {
+            continue
+        }
+
+        if i > 9 {
+            break
+        }
+
+        odds = Array.push(odds, i)
+    }
+
+    print("Odd numbers < 10: ${odds}")
+}
+
+# ── Loop variable discard ──
+function void demo_loop_variable_discard() {
+    print("")
+    print("=== Loop variable discard ===")
+
+    mutable integer count = 0
+
+    for _ in 0 .. 10 {
+        count++
+    }
+
+    print("Counted ${count} iterations using _")
+}
+
+# ── Dictionary iteration ──
+function void demo_dictionary_iteration() {
+    print("")
+    print("=== Dictionary iteration ===")
+
+    dictionary<integer> scores = {
+        "Alice": 95,
+        "Bob": 87,
+        "Charlie": 92,
+        "Diana": 78
+    }
+
+    for name, score in scores {
+        string grade = if score >= 90 { "A" } else if score >= 80 { "B" } else { "C" }
+        print("  ${name}: ${score} (${grade})")
+    }
+}
+
+# ── For-in with strings ──
+function void demo_iterating_over_a_string() {
+    print("")
+    print("=== Iterating over a string ===")
+
+    string word = "Luma"
+
+    for ch in word {
+        print("  '${ch}'")
+    }
+}
+
+# ── Match with multiple patterns ──
+function void demo_match_with_multiple_patterns() {
+    print("")
+    print("=== Match with multiple patterns ===")
+
+    array<string> commands = ["quit", "help", "run", "?", "exit", "build"]
+
+    for cmd in commands {
+        string response = match cmd {
+        case "quit" | "exit" | "q" { "Goodbye!" }
+        case "help" | "?"          { "Showing help..." }
+        else                       { "Running: ${cmd}" }
+        }
+
+        print("  ${cmd} -> ${response}")
+    }
+
+    # Number grouping with match.
+    array<integer> values = [1, 3, 5, 7, 10]
+
+    for v in values {
+        string label = match v {
+        case 1 | 2 | 3 { "low" }
+        case 4 | 5 | 6 { "mid" }
+        else           { "high" }
+        }
+
+        print("  ${v} -> ${label}")
+    }
+}
+
+# ── While with break ──
+function void demo_collatz_sequence() {
+    print("")
+    print("=== Collatz sequence ===")
+
+    mutable integer c = 27
+    mutable integer steps = 0
+
+    while c != 1 {
+        c = if c % 2 == 0 { c / 2 } else { 3 * c + 1 }
+        steps++
+    }
+
+    print("Collatz(27) reaches 1 in ${steps} steps")
+}
+
+@main
+function void main() {
+    demo_while_loop()
+    demo_break_and_continue()
+    demo_loop_variable_discard()
+    demo_dictionary_iteration()
+    demo_iterating_over_a_string()
+    demo_match_with_multiple_patterns()
+    demo_collatz_sequence()
+}

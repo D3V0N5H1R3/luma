@@ -1,0 +1,42 @@
+# ═══════════════════════════════════════════════════════════════════
+# Luma Highlight Test — Types and Declarations
+# ═══════════════════════════════════════════════════════════════════
+
+record Point {
+    number x,
+    number y
+}
+
+record Circle {
+    Point center,
+    number radius = 1.0
+}
+
+choice Shape {
+    Rectangle(number width, number height)
+    Circle(number radius)
+    Triangle(number a, number b, number c)
+}
+
+interface Drawable {
+    string name
+}
+
+namespace Geometry {
+    function number area(Shape shape) {
+        match shape {
+        case Shape.Rectangle(w, h) {
+            return w * h
+        }
+    case Shape.Circle(r) {
+        return 3.14159 * r * r
+    }
+case Shape.Triangle(a, b, c) {
+    number s = (a + b + c) / 2.0
+    return s
+}
+}
+}
+}
+
+type Coordinates = (number, number)

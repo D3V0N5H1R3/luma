@@ -1,0 +1,412 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Graph Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_graph_new_undirected() {
+    assert(!(Graph.undirected() |> Graph.is_directed()))
+}
+
+@test
+function void test_graph_new_directed() {
+    assert(Graph.directed() |> Graph.is_directed())
+}
+
+@test
+function void test_graph_add_vertex() {
+    assert(Graph.undirected()
+    |> Graph.add_vertex("A")
+    |> Graph.has_vertex("A"))
+}
+
+@test
+function void test_graph_add_edge() {
+    assert(Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.has_edge("A", "B"))
+}
+
+@test
+function void test_graph_undirected_edge_bidirectional() {
+    assert(Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.has_edge("B", "A"))
+}
+
+@test
+function void test_graph_directed_edge_one_way() {
+    assert(!(Graph.directed()
+    |> Graph.add_edge("A", "B")
+    |> Graph.has_edge("B", "A")))
+}
+
+@test
+function void test_graph_vertex_count() {
+    integer count = Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_vertex("C")
+    |> Graph.vertex_count()
+
+    assert(count == 3)
+}
+
+@test
+function void test_graph_edge_count() {
+    integer count = Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("B", "C")
+    |> Graph.edge_count()
+
+    assert(count == 2)
+}
+
+@test
+function void test_graph_neighbors() {
+    array<string> n = Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("A", "C")
+    |> Graph.neighbors("A")
+    |> Result.unwrap()
+
+    assert(Array.length(n) == 2)
+}
+
+@test
+function void test_graph_degree() {
+    integer d = Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("A", "C")
+    |> Graph.degree("A")
+    |> Result.unwrap()
+
+    assert(d == 2)
+}
+
+@test
+function void test_graph_remove_vertex() {
+    assert(!(Graph.undirected()
+    |> Graph.add_vertex("A")
+    |> Graph.add_vertex("B")
+    |> Graph.remove_vertex("A")
+    |> Graph.has_vertex("A")))
+}
+
+@test
+function void test_graph_remove_edge() {
+    assert(!(Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.remove_edge("A", "B")
+    |> Graph.has_edge("A", "B")))
+}
+
+@test
+function void test_graph_edge_weight() {
+    number w = Graph.undirected()
+    |> Graph.add_edge("A", "B", 3.5)
+    |> Graph.edge_weight("A", "B")
+    |> Result.unwrap()
+
+    assert(Math.approximately_equal(w, 3.5, 0.001))
+}
+
+@test
+function void test_graph_bfs() {
+    array<string> order = Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("A", "C")
+    |> Graph.add_edge("B", "D")
+    |> Graph.breadth_first_search("A")
+    |> Result.unwrap()
+
+    assert(Array.length(order) == 4)
+    assert(order[0] == "A")
+}
+
+@test
+function void test_graph_dfs() {
+    array<string> order = Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("A", "C")
+    |> Graph.depth_first_search("A")
+    |> Result.unwrap()
+
+    assert(Array.length(order) == 3)
+    assert(order[0] == "A")
+}
+
+@test
+function void test_graph_shortest_path() {
+    array<string> path = Graph.undirected()
+    |> Graph.add_edge("A", "B", 1)
+    |> Graph.add_edge("B", "C", 2)
+    |> Graph.add_edge("A", "C", 10)
+    |> Graph.shortest_path("A", "C")
+    |> Result.unwrap()
+
+    assert(Array.length(path) == 3)
+    assert(path[0] == "A")
+    assert(path[1] == "B")
+    assert(path[2] == "C")
+}
+
+@test
+function void test_graph_shortest_path_no_path() {
+    assert(Graph.directed()
+    |> Graph.add_vertex("A")
+    |> Graph.add_vertex("B")
+    |> Graph.shortest_path("A", "B")
+    |> Result.is_failure())
+}
+
+@test
+function void test_graph_vertices() {
+    array<string> verts = Graph.undirected()
+    |> Graph.add_vertex("X")
+    |> Graph.add_vertex("Y")
+    |> Graph.vertices()
+
+    assert(Array.length(verts) == 2)
+}
+
+@test
+function void test_graph_to_adjacency_list() {
+    dictionary<array<string>> adj = Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.to_adjacency_list()
+
+    assert(Dictionary.has(adj, "A"))
+    assert(Dictionary.has(adj, "B"))
+}
+
+@test
+function void test_graph_has_cycle_directed() {
+    assert(!(Graph.directed()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("B", "C")
+    |> Graph.has_cycle()))
+
+    assert(Graph.directed()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("B", "C")
+    |> Graph.add_edge("C", "A")
+    |> Graph.has_cycle())
+}
+
+@test
+function void test_graph_has_cycle_undirected() {
+    assert(!(Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("B", "C")
+    |> Graph.has_cycle()))
+
+    assert(Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("B", "C")
+    |> Graph.add_edge("C", "A")
+    |> Graph.has_cycle())
+}
+
+@test
+function void test_graph_topological_sort() {
+    array<string> order = Graph.directed()
+    |> Graph.add_edge("A", "C")
+    |> Graph.add_edge("B", "C")
+    |> Graph.add_edge("C", "D")
+    |> Graph.topological_sort()
+    |> Result.unwrap()
+
+    assert(Array.length(order) == 4)
+    assert(Result.is_success(Array.find(order, (string s) -> s == "A")))
+    assert(Result.is_success(Array.find(order, (string s) -> s == "D")))
+}
+
+@test
+function void test_graph_topological_sort_cycle_fails() {
+    assert(Graph.directed()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("B", "A")
+    |> Graph.topological_sort()
+    |> Result.is_failure())
+}
+
+@test
+function void test_graph_topological_sort_undirected_fails() {
+    assert(Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.topological_sort()
+    |> Result.is_failure())
+}
+
+@test
+function void test_graph_connected_components() {
+    array<array<string>> comps = Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("C", "D")
+    |> Graph.connected_components()
+    |> Result.unwrap()
+
+    assert(Array.length(comps) == 2)
+}
+
+@test
+function void test_graph_connected_components_directed_fails() {
+    assert(Graph.directed()
+    |> Graph.add_edge("A", "B")
+    |> Graph.connected_components()
+    |> Result.is_failure())
+}
+
+# ───────────────────────────────────────────────────────────
+# strongly_connected_components, minimum_spanning_tree,
+# all_pairs_shortest_paths
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_graph_strongly_connected_components() {
+    integer count = Graph.directed()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("B", "C")
+    |> Graph.add_edge("C", "A")
+    |> Graph.strongly_connected_components()
+    |> Result.unwrap()
+    |> Array.length()
+
+    assert(count == 1)
+}
+
+@test
+function void test_graph_minimum_spanning_tree() {
+    integer edges = Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("B", "C")
+    |> Graph.add_edge("A", "C")
+    |> Graph.minimum_spanning_tree()
+    |> Result.unwrap()
+    |> Graph.edge_count()
+
+    assert(edges == 2)
+}
+
+@test
+function void test_graph_all_pairs_shortest_paths() {
+    dictionary<dictionary<number>> distances = Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("B", "C")
+    |> Graph.all_pairs_shortest_paths()
+    |> Result.unwrap()
+
+    number ac = Result.unwrap(Dictionary.get(Result.unwrap(Dictionary.get(distances, "A")), "C"))
+
+    assert(Math.approximately_equal(ac, 2.0, 0.001))
+}
+
+@test
+function void test_graph_all_pairs_directed_asymmetry() {
+    dictionary<dictionary<number>> distances = Graph.directed()
+    |> Graph.add_edge("A", "B", 5.0)
+    |> Graph.all_pairs_shortest_paths()
+    |> Result.unwrap()
+
+    # A -> B is reachable with weight 5.
+    number ab = Result.unwrap(Dictionary.get(Result.unwrap(Dictionary.get(distances, "A")), "B"))
+    assert(Math.approximately_equal(ab, 5.0, 0.001))
+
+    # B -> A is unreachable in a directed graph, so it is absent from B's row.
+    assert(Result.is_failure(Dictionary.get(Result.unwrap(Dictionary.get(distances, "B")), "A")))
+}
+
+@test
+function void test_graph_remove_vertex_clears_incoming_edges() {
+    # Removing B from A -> B -> C must drop both A -> B and B -> C.
+    integer ec = Graph.directed()
+    |> Graph.add_edge("A", "B")
+    |> Graph.add_edge("B", "C")
+    |> Graph.remove_vertex("B")
+    |> Graph.edge_count()
+
+    assert(ec == 0)
+}
+
+# ───────────────────────────────────────────────────────────
+# Negative cases — operations that yield a result<...> failure
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_graph_neighbors_missing_vertex_fails() {
+    assert(Graph.undirected()
+    |> Graph.add_vertex("A")
+    |> Graph.neighbors("Z")
+    |> Result.is_failure())
+}
+
+@test
+function void test_graph_degree_missing_vertex_fails() {
+    assert(Graph.undirected()
+    |> Graph.add_vertex("A")
+    |> Graph.degree("Z")
+    |> Result.is_failure())
+}
+
+@test
+function void test_graph_edge_weight_missing_fails() {
+    assert(Graph.undirected()
+    |> Graph.add_vertex("A")
+    |> Graph.add_vertex("B")
+    |> Graph.edge_weight("A", "B")
+    |> Result.is_failure())
+}
+
+@test
+function void test_graph_bfs_missing_start_fails() {
+    assert(Graph.undirected()
+    |> Graph.add_vertex("A")
+    |> Graph.breadth_first_search("Z")
+    |> Result.is_failure())
+}
+
+@test
+function void test_graph_dfs_missing_start_fails() {
+    assert(Graph.undirected()
+    |> Graph.add_vertex("A")
+    |> Graph.depth_first_search("Z")
+    |> Result.is_failure())
+}
+
+@test
+function void test_graph_shortest_path_negative_weight_fails() {
+    # Dijkstra rejects negative edge weights.
+    assert(Graph.undirected()
+    |> Graph.add_edge("A", "B", -1.0)
+    |> Graph.add_edge("B", "C", 2.0)
+    |> Graph.shortest_path("A", "C")
+    |> Result.is_failure())
+}
+
+@test
+function void test_graph_strongly_connected_components_undirected_fails() {
+    assert(Graph.undirected()
+    |> Graph.add_edge("A", "B")
+    |> Graph.strongly_connected_components()
+    |> Result.is_failure())
+}
+
+@test
+function void test_graph_minimum_spanning_tree_directed_fails() {
+    assert(Graph.directed()
+    |> Graph.add_edge("A", "B")
+    |> Graph.minimum_spanning_tree()
+    |> Result.is_failure())
+}
+
+@test
+function void test_graph_all_pairs_shortest_paths_negative_cycle_fails() {
+    # A -> B -> A with negative weights forms a negative cycle.
+    assert(Graph.directed()
+    |> Graph.add_edge("A", "B", -1.0)
+    |> Graph.add_edge("B", "A", -1.0)
+    |> Graph.all_pairs_shortest_paths()
+    |> Result.is_failure())
+}

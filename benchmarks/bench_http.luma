@@ -1,0 +1,49 @@
+# Http benchmarks: URL parsing, query string building/parsing, and auth header
+# builders. Only the network-free, pure helpers are benchmarked — the request
+# methods (get/post/...) require network access and are out of scope.
+
+function BenchResult run_http_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    string simple_url = "http://example.com/path?q=1"
+    string ipv6_url = "http://[2001:db8::1]:8080/a/b/c?x=1&y=2"
+    string query_string = "name=alice&age=30&city=a%20b&flag"
+
+    dictionary<string> params = {"name": "alice", "age": "30", "city": "a b", "tag": "x&y"}
+
+    # --- URL parsing ---
+
+    st = time_it(st, "Http.parse_url (simple)", 5000, () -> {
+        Http.UrlParts _p = Http.parse_url(simple_url)
+    })
+
+    st = time_it(st, "Http.parse_url (IPv6 + query)", 5000, () -> {
+        Http.UrlParts _p = Http.parse_url(ipv6_url)
+    })
+
+    # --- Query strings ---
+
+    st = time_it(st, "Http.build_query", 5000, () -> {
+        string _q = Http.build_query(params)
+    })
+
+    st = time_it(st, "Http.parse_query", 5000, () -> {
+        dictionary<string> _q = Http.parse_query(query_string)
+    })
+
+    st = time_it(st, "Http build/parse roundtrip", 2000, () -> {
+        dictionary<string> _q = params |> Http.build_query() |> Http.parse_query()
+    })
+
+    # --- Auth header builders ---
+
+    st = time_it(st, "Http.basic_auth", 5000, () -> {
+        string _h = Http.basic_auth("user", "s3cr3t-p4ss")
+    })
+
+    st = time_it(st, "Http.bearer_auth", 5000, () -> {
+        string _h = Http.bearer_auth("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")
+    })
+
+    return st
+}

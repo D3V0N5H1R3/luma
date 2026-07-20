@@ -1,0 +1,469 @@
+#include "runtime/stdlib/io/terminal_module.hpp"
+
+#include <atomic>
+#include <cstdint>
+#include <format>
+#include <iostream>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+
+#include "analysis/source/source_location.hpp"
+#include "runtime/stdlib/common/function_builder.hpp"
+#include "runtime/stdlib/common/native_function.hpp"
+#include "runtime/stdlib/io/platform_terminal.hpp"
+#include "runtime/stdlib/io/terminal_input.hpp"
+#include "runtime/stdlib/io/terminal_module_internal.hpp"
+
+namespace luma {
+
+// ============================================================================
+// terminal_internal — shared state and helpers (defined in
+// terminal_module_internal.hpp, visible to terminal_module_ansi.cpp)
+// ============================================================================
+
+namespace terminal_internal {
+
+std::mutex terminal_mutex;
+std::atomic<bool> raw_mode_active{false};
+std::atomic<bool> mouse_mode_active{false};
+
+bool stdout_is_terminal() {
+    if (headless_input_active.load()) {
+        return true;
+    }
+
+    return platform_terminal::stdout_is_terminal();
+}
+
+void emit_unlocked(std::string_view sequence) {
+    if (capture_active.load(std::memory_order_relaxed)) {
+        capture_buffer.append(sequence);
+
+        return;
+    }
+
+    std::cout << sequence << std::flush;
+}
+
+void emit(std::string_view sequence) {
+    const std::scoped_lock lock{terminal_mutex};
+    emit_unlocked(sequence);
+}
+
+void prepare() {
+    platform_terminal::enable_vt_processing();
+}
+
+// Use static maps for O(1) lookup instead of O(n) linear scan.
+struct ColorCodes {
+    std::string_view fg_code;
+    std::string_view bg_code;
+};
+
+static const std::unordered_map<std::string_view, ColorCodes>& color_map() {
+    static const std::unordered_map<std::string_view, ColorCodes> table = {
+        {"black", {.fg_code = "\033[30m", .bg_code = "\033[40m"}},
+        {"blue", {.fg_code = "\033[34m", .bg_code = "\033[44m"}},
+        {"bright_black", {.fg_code = "\033[90m", .bg_code = "\033[100m"}},
+        {"bright_blue", {.fg_code = "\033[94m", .bg_code = "\033[104m"}},
+        {"bright_cyan", {.fg_code = "\033[96m", .bg_code = "\033[106m"}},
+        {"bright_green", {.fg_code = "\033[92m", .bg_code = "\033[102m"}},
+        {"bright_magenta", {.fg_code = "\033[95m", .bg_code = "\033[105m"}},
+        {"bright_red", {.fg_code = "\033[91m", .bg_code = "\033[101m"}},
+        {"bright_white", {.fg_code = "\033[97m", .bg_code = "\033[107m"}},
+        {"bright_yellow", {.fg_code = "\033[93m", .bg_code = "\033[103m"}},
+        {"cyan", {.fg_code = "\033[36m", .bg_code = "\033[46m"}},
+        {"default", {.fg_code = "\033[39m", .bg_code = "\033[49m"}},
+        {"green", {.fg_code = "\033[32m", .bg_code = "\033[42m"}},
+        {"magenta", {.fg_code = "\033[35m", .bg_code = "\033[45m"}},
+        {"red", {.fg_code = "\033[31m", .bg_code = "\033[41m"}},
+        {"white", {.fg_code = "\033[37m", .bg_code = "\033[47m"}},
+        {"yellow", {.fg_code = "\033[33m", .bg_code = "\033[43m"}},
+    };
+
+    return table;
+}
+
+std::string valid_color_names() {
+    return "black, blue, bright_black, bright_blue, bright_cyan, bright_green, "
+           "bright_magenta, bright_red, bright_white, bright_yellow, cyan, "
+           "default, green, magenta, red, white, yellow";
+}
+
+std::string_view fg_code_for(std::string_view name) {
+    const auto& map = color_map();
+    const auto it = map.find(name);
+    return it != map.end() ? it->second.fg_code : std::string_view{};
+}
+
+std::string_view bg_code_for(std::string_view name) {
+    const auto& map = color_map();
+    const auto it = map.find(name);
+    return it != map.end() ? it->second.bg_code : std::string_view{};
+}
+
+TerminalDimensions query_terminal_size() {
+    TerminalDimensions dims;
+
+    // In a headless test session there is no real terminal; report a fixed,
+    // deterministic size so columns()/rows()-driven layout is reproducible.
+    if (headless_input_active.load()) {
+        return dims;
+    }
+
+    platform_terminal::query_terminal_size(dims.cols, dims.rows);
+
+    return dims;
+}
+
+} // namespace terminal_internal
+
+// ============================================================================
+// Raw mode (file-local — only used in this translation unit)
+// ============================================================================
+
+namespace {
+
+using namespace terminal_internal;
+
+void enter_raw_mode(const SourceLocation& loc) {
+    const std::scoped_lock lock{terminal_mutex};
+
+    if (raw_mode_active) {
+        return;
+    }
+
+    // In a headless test session there is no real console to reconfigure;
+    // simply mark raw mode active so the program under test proceeds.
+    if (headless_input_active.load()) {
+        raw_mode_active = true;
+
+        return;
+    }
+
+    platform_terminal::enter_raw_mode(loc);
+
+    raw_mode_active = true;
+}
+
+void leave_raw_mode() {
+    const std::scoped_lock lock{terminal_mutex};
+
+    if (!raw_mode_active) {
+        return;
+    }
+
+    // In a headless test session no real console mode was changed (enter_raw_mode
+    // no-opped), so just clear the flags without touching the console.
+    if (headless_input_active.load()) {
+        mouse_mode_active = false;
+        raw_mode_active = false;
+
+        return;
+    }
+
+    if (mouse_mode_active) {
+        if (const auto seq = platform_terminal::disable_mouse(); !seq.empty()) {
+            emit_unlocked(seq);
+        }
+
+        mouse_mode_active = false;
+    }
+
+    platform_terminal::leave_raw_mode();
+
+    raw_mode_active = false;
+}
+
+// Build a Terminal.InputEvent record from a decoded key string, splitting any
+// leading "shift+" / "ctrl+" / "alt+" modifier prefixes into boolean fields.
+// Shared by the live get_input path and the headless test harness.
+[[nodiscard]] Value build_input_event(const std::string& raw_key) {
+    bool shift{false};
+    bool ctrl{false};
+    bool alt{false};
+
+    std::string_view remaining{raw_key};
+
+    while (true) {
+        if (remaining.starts_with("shift+")) {
+            shift = true;
+            remaining.remove_prefix(6);
+        } else if (remaining.starts_with("ctrl+")) {
+            ctrl = true;
+            remaining.remove_prefix(5);
+        } else if (remaining.starts_with("alt+")) {
+            alt = true;
+            remaining.remove_prefix(4);
+        } else {
+            break;
+        }
+    }
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "InputEvent";
+    rec->fields.emplace_back("key", Value{std::string{remaining}});
+    rec->fields.emplace_back("shift", Value{shift});
+    rec->fields.emplace_back("ctrl", Value{ctrl});
+    rec->fields.emplace_back("alt", Value{alt});
+
+    return Value{std::move(rec)};
+}
+
+} // namespace
+
+// ============================================================================
+// Registration
+// ============================================================================
+
+void register_terminal_ns(const EnvPtr& env) {
+    using namespace terminal_internal;
+
+    // === Terminal information ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("is_terminal", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return Value{stdout_is_terminal()};
+        })
+        .func("size", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            const auto [cols, rows] = query_terminal_size();
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Size";
+            rec->fields.emplace_back("columns", Value{static_cast<std::int64_t>(cols)});
+            rec->fields.emplace_back("rows", Value{static_cast<std::int64_t>(rows)});
+
+            return Value{std::move(rec)};
+        })
+        .func("columns", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return Value{static_cast<std::int64_t>(query_terminal_size().cols)};
+        })
+        .func("rows", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return Value{static_cast<std::int64_t>(query_terminal_size().rows)};
+        });
+
+    // === Raw mode & key input ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("enable_raw_mode", 0)
+        .raw_body([](std::span<const Value>, SourceLocation loc) -> Value {
+            return apply_with_error_handling([&]() -> Value {
+                enter_raw_mode(loc);
+
+                return Value{NullValue{}};
+            });
+        })
+        .func("disable_raw_mode", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            leave_raw_mode();
+
+            return NullValue{};
+        })
+        .func("is_in_raw_mode", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return Value{raw_mode_active.load()};
+        })
+        .func("read_key", 0)
+        .raw_body([](std::span<const Value>, SourceLocation loc) -> Value {
+            if (headless_input_is_active()) {
+                const auto key = next_scripted_key();
+
+                if (!key) {
+                    return make_failure_value("Terminal.read_key: end of scripted input");
+                }
+
+                return make_success_value(Value{*key});
+            }
+
+            if (!raw_mode_active) {
+                return make_failure_value(error_msg("Terminal", "read_key", k_raw_mode_required));
+            }
+
+            try {
+                return make_success_value(
+                    Value{terminal_detail::read_input(-1, loc, mouse_mode_active).key});
+            } catch (const RuntimeError& e) {
+                return failure_from_exception(e);
+            }
+        })
+        .func("read_key_timeout", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto ms = args[0].as_integer();
+
+            if (ms < 0) {
+                throw RuntimeError{"Terminal.read_key_timeout: timeout must be >= 0", loc,
+                                   "timeout cannot be negative"};
+            }
+
+            if (headless_input_is_active()) {
+                const auto key = next_scripted_key();
+
+                if (!key) {
+                    // A drained scripted queue behaves like an idle terminal.
+                    return make_failure_value("timeout");
+                }
+
+                return make_success_value(Value{*key});
+            }
+
+            if (!raw_mode_active) {
+                return make_failure_value(
+                    error_msg("Terminal", "read_key_timeout", k_raw_mode_required));
+            }
+
+            auto [key, timed_out] = terminal_detail::read_input(ms, loc, mouse_mode_active);
+
+            if (timed_out) {
+                return make_failure_value("timeout");
+            }
+
+            return make_success_value(Value{key});
+        })
+        .func("get_input", 0)
+        .raw_body([](std::span<const Value>, SourceLocation loc) -> Value {
+            if (headless_input_is_active()) {
+                const auto key = next_scripted_key();
+
+                if (!key) {
+                    return make_failure_value("Terminal.get_input: end of scripted input");
+                }
+
+                return make_success_value(build_input_event(*key));
+            }
+
+            if (!raw_mode_active) {
+                return make_failure_value(error_msg("Terminal", "get_input", k_raw_mode_required));
+            }
+
+            try {
+                auto raw_key = terminal_detail::read_input(-1, loc, mouse_mode_active).key;
+
+                return make_success_value(build_input_event(raw_key));
+            } catch (const RuntimeError& e) {
+                return failure_from_exception(e);
+            }
+        });
+
+    // === Mouse input ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("enable_mouse", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            if (headless_input_is_active()) {
+                // No real console to reconfigure in a headless test session;
+                // record the mode so scripted mouse events are interpreted.
+                mouse_mode_active = true;
+
+                return make_success_value(Value{NullValue{}});
+            }
+
+            prepare();
+
+            if (!raw_mode_active) {
+                return make_failure_value(
+                    error_msg("Terminal", "enable_mouse", k_raw_mode_required));
+            }
+
+            if (const auto seq = platform_terminal::enable_mouse(); !seq.empty()) {
+                emit(seq);
+            }
+
+            mouse_mode_active = true;
+
+            return make_success_value(Value{NullValue{}});
+        })
+        .func("disable_mouse", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            if (headless_input_is_active()) {
+                mouse_mode_active = false;
+
+                return NullValue{};
+            }
+
+            prepare();
+
+            if (const auto seq = platform_terminal::disable_mouse(); !seq.empty()) {
+                emit(seq);
+            }
+
+            mouse_mode_active = false;
+
+            return NullValue{};
+        })
+        .func("is_mouse_enabled", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return Value{mouse_mode_active.load()};
+        });
+
+    // === Window title ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("set_title", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            prepare();
+
+            (void)expect_string(args[0], "Terminal.set_title", loc);
+
+            emit(std::format("\033]2;{}\033\\", args[0].as_string()));
+
+            return NullValue{};
+        });
+
+    // === Capability detection ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("supports_color", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            if (!stdout_is_terminal()) {
+                return Value{false};
+            }
+
+            return Value{platform_terminal::supports_color()};
+        })
+        .func("supports_true_color", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            if (!stdout_is_terminal()) {
+                return Value{false};
+            }
+
+            return Value{platform_terminal::supports_true_color()};
+        });
+
+    // === Escape timeout ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("set_escape_timeout", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto ms = expect_integer(args[0], "Terminal.set_escape_timeout", loc);
+
+            if (ms < 1 || ms > 5000) {
+                throw RuntimeError{
+                    "Terminal.set_escape_timeout: timeout must be between 1 and 5000 ms", loc,
+                    "pass a timeout between 1 and 5000 milliseconds"};
+            }
+
+            terminal_detail::escape_timeout_ms.store(ms, std::memory_order_relaxed);
+
+            return NullValue{};
+        })
+        .func("get_escape_timeout", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return Value{terminal_detail::escape_timeout_ms.load(std::memory_order_relaxed)};
+        });
+
+    // === ANSI escape code registrations (split into terminal_module_ansi.cpp) ===
+
+    register_terminal_ansi(env);
+
+    // === Headless interaction-testing API (split into terminal_testing.cpp) ===
+
+    register_terminal_testing(env);
+}
+
+} // namespace luma

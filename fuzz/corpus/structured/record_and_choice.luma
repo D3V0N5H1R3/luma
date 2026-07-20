@@ -1,0 +1,33 @@
+record Point {
+    integer x,
+    integer y
+}
+
+record Config {
+    string host = "localhost",
+    integer port = 8080
+}
+
+choice Shape {
+    Circle(integer radius)
+    Rectangle(integer width, integer height)
+}
+
+function integer area(Shape s) {
+    return match s {
+    case Shape.Circle(r) { r * r * 3 }
+    case Shape.Rectangle(w, h) { w * h }
+    }
+}
+
+@main
+function void main() {
+    Point p = Point { x = 1, y = 2 }
+    Point moved = p with { x = 10 }
+    Config c = Config { port = 443 }
+    Shape s = Shape.Circle(5)
+
+    print(moved.x)
+    print(c.host)
+    print(area(s))
+}

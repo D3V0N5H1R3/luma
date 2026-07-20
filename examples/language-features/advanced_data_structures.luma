@@ -1,0 +1,278 @@
+# ═══════════════════════════════════════════════════════════
+# Advanced Data Structures
+#
+# Demonstrates HashSet, LinkedList, BinaryTree, and Graph
+# modules — immutable, functional data structures.
+# ═══════════════════════════════════════════════════════════
+
+function string join_numbers(array<number> values) {
+    return values
+    |> Array.map((number x) -> Converter.to_string(x))
+    |> Result.unwrap_or([])
+    |> String.join(", ")
+}
+
+# ── HashSet: fast membership testing ──
+
+function void demo_hash_set() {
+    print("=== HashSet ===")
+
+    number unique_count = HashSet.from_array([1, 2, 3, 2, 1, 4, 3])
+    |> HashSet.length()
+    print("Unique elements: ${unique_count}")
+
+    boolean has_three = HashSet.from_array([1, 2, 3]) |> HashSet.contains(3)
+    print("Contains 3: ${has_three}")
+
+    number union_size = HashSet.union(
+        HashSet.from_array([1, 2, 3]),
+        HashSet.from_array([3, 4, 5])
+    ) |> HashSet.length()
+    print("Union size: ${union_size}")
+
+    number intersect_size = HashSet.intersection(
+        HashSet.from_array([1, 2, 3, 4]),
+        HashSet.from_array([3, 4, 5, 6])
+    ) |> HashSet.length()
+    print("Intersection size: ${intersect_size}")
+}
+
+# ── LinkedList: efficient prepend/append ──
+
+function void demo_linked_list() {
+    print("\n=== LinkedList ===")
+
+    number len = LinkedList.new()
+    |> LinkedList.prepend(3)
+    |> LinkedList.prepend(2)
+    |> LinkedList.prepend(1)
+    |> LinkedList.length()
+    print("List length: ${len}")
+
+    linked_list numbers = LinkedList.from_array([10, 20, 30])
+    number first = numbers |> LinkedList.first() |> Result.unwrap()
+    number last = numbers |> LinkedList.last() |> Result.unwrap()
+    print("First: ${first}, Last: ${last}")
+
+    array<number> reversed = LinkedList.from_array([1, 2, 3])
+    |> LinkedList.reverse()
+    |> LinkedList.to_array()
+    string rev_str = join_numbers(reversed)
+    print("Reversed: [${rev_str}]")
+}
+
+# ── BinaryTree: sorted data with fast lookup ──
+
+function void demo_binary_tree() {
+    print("\n=== BinaryTree ===")
+
+    binary_tree sample_tree = BinaryTree.from_array([50, 30, 70, 20, 40, 60, 80])
+    number tree_size = sample_tree |> BinaryTree.length()
+    print("Tree size: ${tree_size}")
+
+    binary_tree lookup_tree = BinaryTree.from_array([50, 30, 70, 20, 40])
+    number tree_min = lookup_tree |> BinaryTree.min() |> Result.unwrap()
+    number tree_max = lookup_tree |> BinaryTree.max() |> Result.unwrap()
+    print("Min: ${tree_min}, Max: ${tree_max}")
+
+    array<number> sorted = BinaryTree.from_array([5, 3, 7, 1, 9, 2, 8])
+    |> BinaryTree.inorder()
+    string sorted_str = join_numbers(sorted)
+    print("Sorted: [${sorted_str}]")
+
+    number height = sample_tree |> BinaryTree.height()
+    print("Height: ${height}")
+}
+
+# ── Graph: vertices and edges ──
+
+function void demo_graph() {
+    print("\n=== Graph ===")
+
+    # Build the sample city graph once, then ask several questions of it.
+    graph cities = Graph.undirected()
+    |> Graph.add_edge("Paris", "London", 340)
+    |> Graph.add_edge("London", "Berlin", 930)
+    |> Graph.add_edge("Paris", "Berlin", 880)
+    |> Graph.add_edge("Berlin", "Vienna", 525)
+
+    number city_count = cities |> Graph.vertex_count()
+    print("Cities: ${city_count}")
+
+    number edges = cities |> Graph.edge_count()
+    print("Routes: ${edges}")
+
+    array<string> route = cities
+    |> Graph.shortest_path("Paris", "Vienna")
+    |> Result.unwrap()
+    string route_str = route |> String.join(" -> ")
+    print("Shortest Paris to Vienna: ${route_str}")
+}
+
+# ── Combining and partitioning collections ──
+
+function void demo_combining_and_partitioning() {
+    print("\n=== Combining & Partitioning ===")
+
+    # Array.concat — join two arrays
+    array<number> combined = Array.concat([1, 2, 3], [4, 5, 6])
+    print("Concat arrays: length = ${Array.length(combined)}")
+
+    # Array.partition — split by predicate
+    (array<number> evens, array<number> odds) = [1, 2, 3, 4, 5, 6]
+    |> Array.partition((number x) -> x % 2 == 0)
+    |> Result.unwrap()
+    string evens_str = join_numbers(evens)
+    string odds_str = join_numbers(odds)
+    print("Evens: [${evens_str}]")
+    print("Odds:  [${odds_str}]")
+
+    # BinaryTree.union — merge two trees (duplicates discarded)
+    number union_tree_size = BinaryTree.union(
+        BinaryTree.from_array([1, 3, 5, 7]),
+        BinaryTree.from_array([2, 4, 6, 7])
+    ) |> BinaryTree.length()
+    print("Tree union size (overlap at 7): ${union_tree_size}")
+
+    # Set.partition — split a set by predicate
+    (set small, set large) = Set.from_array([10, 25, 3, 42, 7, 99])
+    |> Set.partition((number x) -> x < 20)
+    |> Result.unwrap()
+    print("Small (<20): ${Set.length(small)} items")
+    print("Large (>=20): ${Set.length(large)} items")
+
+    # Dictionary.partition — split by key/value predicate
+    dictionary<integer> scores = {"Alice": 95, "Bob": 42, "Carol": 78, "Dave": 51}
+    (dictionary<integer> passing, dictionary<integer> failing) = scores
+    |> Dictionary.partition((string _name, integer score) -> score >= 60)
+    |> Result.unwrap()
+    print("Passing: ${Dictionary.length(passing)}, Failing: ${Dictionary.length(failing)}")
+
+    # HashSet.partition — split by predicate
+    (hash_set evens_hs, hash_set odds_hs) = HashSet.from_array([1, 2, 3, 4, 5, 6, 7, 8])
+    |> HashSet.partition((integer x) -> x % 2 == 0)
+    |> Result.unwrap()
+    print("HashSet evens: ${HashSet.length(evens_hs)}, odds: ${HashSet.length(odds_hs)}")
+
+    # BinaryTree.partition — split by predicate
+    (binary_tree small_tree, binary_tree large_tree) = BinaryTree.from_array(
+        [10, 5, 20, 3, 8, 15, 30]
+    )
+    |> BinaryTree.partition((integer x) -> x <= 10)
+    |> Result.unwrap()
+    integer small_count = BinaryTree.length(small_tree)
+    integer large_count = BinaryTree.length(large_tree)
+    print("Tree nodes <=10: ${small_count}, >10: ${large_count}")
+}
+
+# ── Filtering and reducing collections ──
+
+function void demo_filtering_and_reducing() {
+    print("\n=== Filtering & Reducing ===")
+
+    # Set.filter — keep elements matching a predicate
+    number positives = Set.from_array([-2, -1, 0, 1, 2, 3])
+    |> Set.filter((number x) -> x > 0)
+    |> Result.unwrap()
+    |> Set.length()
+    print("Positive integers in set: ${positives}")
+
+    # Set.reduce — fold elements with accumulator
+    number set_sum = Set.from_array([1, 2, 3, 4, 5])
+    |> Set.reduce(0, (number acc, number x) -> acc + x)
+    |> Result.unwrap()
+    print("Sum of set {1..5}: ${set_sum}")
+
+    # HashSet.filter — keep elements matching a predicate
+    number long_words = HashSet.from_array(["hi", "hello", "hey", "greetings"])
+    |> HashSet.filter((string s) -> String.length(s) > 3)
+    |> Result.unwrap()
+    |> HashSet.length()
+    print("Words longer than 3 chars: ${long_words}")
+
+    # HashSet.reduce — fold elements with accumulator
+    number hash_sum = HashSet.from_array([10, 20, 30])
+    |> HashSet.reduce(0, (number acc, number x) -> acc + x)
+    |> Result.unwrap()
+    print("Sum of hash_set {10,20,30}: ${hash_sum}")
+
+    # BinaryTree.filter — keep elements matching a predicate
+    binary_tree evens_tree = BinaryTree.from_array([1, 2, 3, 4, 5, 6])
+    |> BinaryTree.filter((number x) -> x % 2 == 0)
+    |> Result.unwrap()
+    print("Even nodes in tree: ${BinaryTree.length(evens_tree)}")
+
+    # BinaryTree.reduce — fold elements inorder with accumulator
+    string tree_csv = BinaryTree.from_array([5, 2, 8, 1, 4])
+    |> BinaryTree.reduce("", (string acc, number x) ->
+        if acc == "" { Converter.to_string(x) } else { "${acc}, ${Converter.to_string(x)}" })
+    |> Result.unwrap()
+    print("Tree inorder: [${tree_csv}]")
+}
+
+# ── Queue and Stack: concat & partition ──
+
+function void demo_queue_and_stack() {
+    print("\n=== Queue & Stack ===")
+
+    # Queue.concat — join two queues
+    queue<integer> first_queue = Queue.new() |> Queue.enqueue(1) |> Queue.enqueue(2)
+    queue<integer> second_queue = Queue.new() |> Queue.enqueue(3) |> Queue.enqueue(4)
+    queue<integer> combined_queue = Queue.concat(first_queue, second_queue)
+    print("Queue concat length: ${Queue.length(combined_queue)}")
+
+    # Queue.partition — split by predicate
+    (queue<integer> small_q, queue<integer> large_q) = combined_queue
+    |> Queue.partition((integer x) -> x <= 2)
+    |> Result.unwrap()
+    print("Queue small (<=2): ${Queue.length(small_q)}, large (>2): ${Queue.length(large_q)}")
+
+    # Stack.concat — join two stacks
+    stack<integer> first_stack = Stack.new() |> Stack.push(10) |> Stack.push(20)
+    stack<integer> second_stack = Stack.new() |> Stack.push(30) |> Stack.push(40)
+    stack<integer> combined_stack = Stack.concat(first_stack, second_stack)
+    print("Stack concat length: ${Stack.length(combined_stack)}")
+
+    # Stack.partition — split by predicate
+    (stack<integer> low_s, stack<integer> high_s) = combined_stack
+    |> Stack.partition((integer x) -> x < 25)
+    |> Result.unwrap()
+    print("Stack low (<25): ${Stack.length(low_s)}, high (>= 25): ${Stack.length(high_s)}")
+
+    # LinkedList.partition — split by predicate
+    (linked_list head_ll, linked_list tail_ll) = LinkedList.from_array([1, 2, 3, 4, 5, 6])
+    |> LinkedList.partition((integer x) -> x <= 3)
+    |> Result.unwrap()
+    integer head_count = LinkedList.length(head_ll)
+    integer tail_count = LinkedList.length(tail_ll)
+    print("LinkedList head (<=3): ${head_count}, tail (>3): ${tail_count}")
+}
+
+# ── Type keyword annotations ──
+
+function void demo_type_keywords() {
+    print("\n=== Type Keywords ===")
+
+    # binary_tree, queue<T>, and stack<T> are first-class type keywords
+    binary_tree my_tree = BinaryTree.from_array([10, 5, 15, 3, 7])
+    queue<string> my_queue = Queue.new() |> Queue.enqueue("alpha") |> Queue.enqueue("beta")
+    stack<number> my_stack = Stack.new() |> Stack.push(1.5) |> Stack.push(2.5)
+
+    print("Tree has ${BinaryTree.length(my_tree)} nodes")
+    print("Queue has ${Queue.length(my_queue)} items")
+    print("Stack has ${Stack.length(my_stack)} items")
+}
+
+@main
+function void main() {
+    print("Shows HashSet, LinkedList, BinaryTree, Graph, Queue, Stack, and collection helpers.")
+
+    demo_hash_set()
+    demo_linked_list()
+    demo_binary_tree()
+    demo_graph()
+    demo_combining_and_partitioning()
+    demo_filtering_and_reducing()
+    demo_queue_and_stack()
+    demo_type_keywords()
+}

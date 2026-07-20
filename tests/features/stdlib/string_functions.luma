@@ -1,0 +1,774 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — String Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_string_length() {
+    assert(String.length("hello") == 5)
+    assert(String.length("") == 0)
+}
+
+@test
+function void test_string_upper_lower() {
+    assert(String.uppercase("hello") == "HELLO")
+    assert(String.lowercase("HELLO") == "hello")
+}
+
+@test
+function void test_string_trim() {
+    assert(String.trim("  hello  ") == "hello")
+    assert(String.trim_start("  hello") == "hello")
+    assert(String.trim_end("hello  ") == "hello")
+}
+
+@test
+function void test_string_reverse() {
+    assert(String.reverse("hello") == "olleh")
+    assert(String.reverse("") == "")
+}
+
+@test
+function void test_string_title_case() {
+    assert(String.title_case("hello world") == "Hello World")
+}
+
+@test
+function void test_string_search() {
+    assert("world" in "hello world")
+    assert(!("xyz" in "hello world"))
+    assert(String.starts_with("file.luma", "file"))
+    assert(String.ends_with("file.luma", ".luma"))
+    assert(Result.unwrap(String.index_of("banana", "an")) == 1)
+    assert(Result.unwrap(String.last_index_of("banana", "an")) == 3)
+    assert(String.count("banana", "a") == 3)
+}
+
+@test
+function void test_string_replace() {
+    assert(String.replace("foo bar foo", "foo", "x") == "x bar foo")
+    assert(String.replace("hello world", "world", "luma") == "hello luma")
+    assert(String.replace("no match", "xyz", "?") == "no match")
+}
+
+@test
+function void test_string_replace_all() {
+    assert(String.replace_all("foo bar foo", "foo", "x") == "x bar x")
+    assert(String.replace_all("aaa", "a", "bb") == "bbbbbb")
+    assert(String.replace_all("no match", "xyz", "?") == "no match")
+}
+
+@test
+function void test_string_pad() {
+    assert(Result.unwrap(String.pad_left("42", 6, "0")) == "000042")
+    assert(Result.unwrap(String.pad_right("hi", 5, ".")) == "hi...")
+}
+
+@test
+function void test_string_pad_empty_fill() {
+    string padded_result = Result.unwrap(String.pad_left("hi", 10, ""))
+
+    assert(padded_result == "hi")
+}
+
+@test
+function void test_string_repeat() {
+    assert(Result.unwrap(String.repeat("ab", 3)) == "ababab")
+    assert(Result.unwrap(String.repeat("x", 0)) == "")
+}
+
+@test
+function void test_string_split() {
+    array<string> parts = String.split("a,b,c", ",")
+
+    assert(Array.length(parts) == 3)
+    assert(parts[0] == "a")
+    assert(parts[2] == "c")
+}
+
+@test
+function void test_string_split_n() {
+    array<string> parts = String.split_n("a:b:c:d", ":", 2)
+
+    assert(Array.length(parts) == 2)
+    assert(parts[0] == "a")
+    assert(parts[1] == "b:c:d")
+}
+
+@test
+function void test_string_join() {
+    array<string> items = ["a", "b", "c"]
+
+    assert(String.join(items, ", ") == "a, b, c")
+}
+
+@test
+function void test_string_character_at() {
+    assert(Result.unwrap(String.character_at("hello", 0)) == "h")
+    assert(Result.unwrap(String.character_at("hello", 4)) == "o")
+}
+
+@test
+function void test_string_substring() {
+    assert(String.substring("hello", 1, 4) == "ell")
+    assert(String.substring("hello", 0, 5) == "hello")
+}
+
+@test
+function void test_string_format_number() {
+    assert(String.format_number(3.14159, 2) == "3.14")
+    assert(String.format_number(1.0, 0) == "1")
+}
+
+@test
+function void test_string_truncate() {
+    assert(String.truncate("Hello World", 8) == "Hello...")
+    assert(String.truncate("Hi", 10) == "Hi")
+}
+
+@test
+function void test_string_is_checks() {
+    assert(String.is_empty(""))
+    assert(!String.is_empty("x"))
+    assert(String.is_numeric("3.14"))
+    assert(String.is_numeric("42"))
+    assert(!String.is_numeric("abc"))
+    assert(String.is_alpha("hello"))
+    assert(!String.is_alpha("123"))
+    assert(String.is_alphanumeric("abc123"))
+    assert(!String.is_alphanumeric("abc 123"))
+}
+
+@test
+function void test_string_parse_integer_ok() {
+    result<integer> parse_result = String.parse_integer("42")
+
+    assert(Result.is_success(parse_result))
+    assert(Result.unwrap(parse_result) == 42)
+}
+
+@test
+function void test_string_parse_integer_fail() {
+    result<integer> parse_result = String.parse_integer("abc")
+
+    assert(!Result.is_success(parse_result))
+}
+
+@test
+function void test_string_parse_number() {
+    result<number> parse_result = String.parse_number("3.14")
+
+    assert(Result.is_success(parse_result))
+    assert(Math.approximately_equal(Result.unwrap(parse_result), 3.14))
+}
+
+@test
+function void test_string_wrap() {
+    string wrapped = String.wrap("The quick brown fox", 10)
+
+    assert("\n" in wrapped)
+
+    # Verify lines do not exceed the requested width.
+    array<string> lines = String.split(wrapped, "\n")
+    assert(String.length(lines[0]) <= 10, "first line within width")
+}
+
+@test
+function void test_string_indent() {
+    string indented = String.indent("a\nb", "  ")
+
+    assert(String.starts_with(indented, "  a"))
+}
+
+@test
+function void test_string_dedent() {
+    string dedented = String.dedent("  a\n  b")
+
+    assert(String.starts_with(dedented, "a"))
+}
+
+@test
+function void test_string_matches() {
+    assert(Result.unwrap(String.matches("file.luma", "*.luma")))
+    assert(!Result.unwrap(String.matches("file.txt", "*.luma")))
+    assert(Result.unwrap(String.matches("hello", "h?llo")))
+}
+
+@test
+function void test_string_template() {
+    dictionary<string> template_variables = {"name": "World"}
+    string template_result = String.template("Hello, {name}!", template_variables)
+
+    assert(template_result == "Hello, World!")
+}
+
+@test
+function void test_string_template_extended() {
+    dictionary<string> vars = {
+        "noun": "World",
+        "adj": "Wonderful"
+    }
+    string template = "Hello, {adj} {noun}! Welcome to {place}."
+    string output = String.template(template, vars)
+
+    # "place" is missing, so it should not be replaced.
+    assert(output == "Hello, Wonderful World! Welcome to {place}.")
+}
+
+@test
+function void test_string_template_repeated_occurrences() {
+    dictionary<string> vars = {"x": "Z"}
+    string output = String.template("{x}-{x}-{x}", vars)
+
+    # Every occurrence of a key is replaced, not just the first.
+    assert(output == "Z-Z-Z")
+}
+
+@test
+function void test_string_template_sequential_keys() {
+    # Keys are applied in insertion order, so an earlier key's replacement can
+    # introduce a later key's placeholder, which the later pass then resolves.
+    dictionary<string> vars = {
+        "first": "<{second}>",
+        "second": "done"
+    }
+    string output = String.template("[{first}]", vars)
+
+    assert(output == "[<done>]")
+}
+
+@test
+function void test_string_template_replacement_not_rescanned_for_same_key() {
+    # A replacement that contains its own key's placeholder is left intact:
+    # substitution does not recurse into text it just inserted.
+    dictionary<string> vars = {"loop": "a{loop}b"}
+    string output = String.template("({loop})", vars)
+
+    assert(output == "(a{loop}b)")
+}
+
+@test
+function void test_string_center() {
+    assert(Result.unwrap(String.center("hi", 6, ".")) == "..hi..")
+    assert(Result.unwrap(String.center("abc", 7, "-")) == "--abc--")
+    assert(Result.unwrap(String.center("long", 2, ".")) == "long")
+
+    # Odd total padding: extra character goes on the right.
+    assert(Result.unwrap(String.center("x", 6, ".")) == "..x...")
+    assert(Result.unwrap(String.center("ab", 5, "-")) == "-ab--")
+}
+
+@test
+function void test_string_characters() {
+    array<string> character_list = String.characters("hello")
+
+    assert(Array.length(character_list) == 5)
+    assert(character_list[0] == "h")
+    assert(character_list[4] == "o")
+}
+
+@test
+function void test_string_remove_prefix() {
+    assert(String.remove_prefix("file.luma", "file") == ".luma")
+    assert(String.remove_prefix("hello", "xyz") == "hello")
+}
+
+@test
+function void test_string_remove_suffix() {
+    assert(String.remove_suffix("file.luma", ".luma") == "file")
+    assert(String.remove_suffix("hello", "xyz") == "hello")
+}
+
+@test
+function void test_string_empty_operations() {
+    assert(String.length("") == 0)
+    assert(String.uppercase("") == "")
+    assert(String.lowercase("") == "")
+    assert(String.trim("") == "")
+    assert(String.reverse("") == "")
+}
+
+@test
+function void test_substring_negative_end() {
+    string substring_result = String.substring("hello", 0, -1)
+
+    assert(substring_result == "")
+}
+
+@test
+function void test_string_byte_length() {
+    assert(String.byte_length("hello") == 5)
+    assert(String.byte_length("") == 0)
+}
+
+@test
+function void test_string_capitalize() {
+    assert(String.capitalize("hello") == "Hello")
+    assert(String.capitalize("Hello") == "Hello")
+    assert(String.capitalize("") == "")
+    assert(String.capitalize("a") == "A")
+    assert(String.capitalize("ABC") == "ABC")
+}
+
+@test
+function void test_string_chunk() {
+    assert(String.chunk("abcdef", 2) == ["ab", "cd", "ef"])
+    assert(String.chunk("abcde", 2) == ["ab", "cd", "e"])
+    assert(String.chunk("hello", 5) == ["hello"])
+    assert(String.chunk("hi", 10) == ["hi"])
+    assert(String.chunk("", 3) == [])
+}
+
+@test
+function void test_string_chunk_invalid_size() {
+    mutable boolean has_thrown = false
+
+    try {
+        array<string> _ = String.chunk("abc", 0)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown, "String.chunk throws when size <= 0")
+}
+
+@test
+function void test_string_unicode_reverse() {
+    assert(String.reverse("abc") == "cba")
+}
+
+@test
+function void test_string_unicode_characters() {
+    array<string> character_list = String.characters("hey")
+
+    assert(Array.length(character_list) == 3)
+    assert(character_list[0] == "h")
+    assert(character_list[1] == "e")
+    assert(character_list[2] == "y")
+}
+
+@test
+function void test_string_is_whitespace() {
+    assert(String.is_whitespace("   "))
+    assert(String.is_whitespace(" \t\n"))
+    assert(!String.is_whitespace(""))
+    assert(!String.is_whitespace("hello"))
+    assert(!String.is_whitespace(" hello "))
+}
+
+@test
+function void test_string_is_uppercase() {
+    assert(String.is_uppercase("HELLO"))
+    assert(String.is_uppercase("HELLO 123"))
+    assert(!String.is_uppercase("Hello"))
+    assert(!String.is_uppercase("hello"))
+    assert(!String.is_uppercase(""))
+}
+
+@test
+function void test_string_is_lowercase() {
+    assert(String.is_lowercase("hello"))
+    assert(String.is_lowercase("hello 123"))
+    assert(!String.is_lowercase("Hello"))
+    assert(!String.is_lowercase("HELLO"))
+    assert(!String.is_lowercase(""))
+}
+
+@test
+function void test_string_is_digit() {
+    assert(String.is_digit("12345"))
+    assert(String.is_digit("0"))
+    assert(!String.is_digit(""))
+    assert(!String.is_digit("12a45"))
+    assert(!String.is_digit("3.14"))
+}
+
+@test
+function void test_string_to_codepoints() {
+    array<integer> codepoints = String.to_codepoints("ABC")
+
+    assert(Array.length(codepoints) == 3)
+    assert(codepoints[0] == 65)
+    assert(codepoints[1] == 66)
+    assert(codepoints[2] == 67)
+}
+
+@test
+function void test_string_to_codepoints_empty() {
+    array<integer> codepoints = String.to_codepoints("")
+
+    assert(Array.length(codepoints) == 0)
+}
+
+@test
+function void test_string_to_codepoints_multibyte() {
+    # é is U+00E9 (codepoint 233), two bytes in UTF-8.
+    string cafe = String.from_codepoints([99, 97, 102, 233]) |> Result.unwrap()
+    array<integer> codepoints = String.to_codepoints(cafe)
+
+    assert(Array.length(codepoints) == 4)
+    assert(codepoints[0] == 99)
+    assert(codepoints[3] == 233)
+}
+
+@test
+function void test_string_from_codepoints() {
+    array<integer> codepoints = [72, 105]
+    result<string> from_codepoints_result = String.from_codepoints(codepoints)
+
+    assert(Result.is_success(from_codepoints_result))
+    string codepoints_text = Result.unwrap(from_codepoints_result)
+    assert(codepoints_text == "Hi")
+}
+
+@test
+function void test_string_from_codepoints_empty() {
+    result<string> r = String.from_codepoints([])
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == "")
+}
+
+@test
+function void test_string_from_codepoints_roundtrip() {
+    string original = "Hello, World!"
+    array<integer> codepoints = String.to_codepoints(original)
+    string restored = String.from_codepoints(codepoints) |> Result.unwrap()
+
+    assert(restored == original)
+}
+
+@test
+function void test_string_from_codepoints_invalid() {
+    # Codepoint above U+10FFFF is invalid.
+    result<string> r = String.from_codepoints([1114112])
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_string_to_bytes() {
+    array<integer> bytes = String.to_bytes("AB")
+
+    assert(Array.length(bytes) == 2)
+    assert(bytes[0] == 65)
+    assert(bytes[1] == 66)
+}
+
+@test
+function void test_string_to_bytes_empty() {
+    array<integer> bytes = String.to_bytes("")
+
+    assert(Array.length(bytes) == 0)
+}
+
+@test
+function void test_string_from_bytes() {
+    array<integer> bytes = [72, 101, 108, 108, 111]
+    result<string> from_bytes_result = String.from_bytes(bytes)
+
+    assert(Result.is_success(from_bytes_result))
+    assert(Result.unwrap(from_bytes_result) == "Hello")
+}
+
+@test
+function void test_string_from_bytes_empty() {
+    result<string> r = String.from_bytes([])
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == "")
+}
+
+@test
+function void test_string_from_bytes_roundtrip() {
+    string original = "Test123"
+    array<integer> bytes = String.to_bytes(original)
+    string restored = String.from_bytes(bytes) |> Result.unwrap()
+
+    assert(restored == original)
+}
+
+@test
+function void test_string_from_bytes_negative_value() {
+    # Byte value below 0 is out of range.
+    result<string> r = String.from_bytes([-1])
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_string_from_bytes_above_255() {
+    # Byte value above 255 is out of range.
+    result<string> r = String.from_bytes([256])
+
+    assert(Result.is_failure(r))
+}
+
+# ─── UTF-8 multi-byte character tests ──────────────────────
+
+@test
+function void test_string_length_multibyte_cjk() {
+    # CJK character U+4E16 is 3 bytes in UTF-8.
+    string s = String.from_codepoints([19990]) |> Result.unwrap()
+    assert(String.length(s) == 1, "CJK character should be 1 codepoint")
+    assert(String.byte_length(s) == 3, "CJK character should be 3 bytes")
+}
+
+@test
+function void test_string_length_accented() {
+    # Build "café" from codepoints: c=99, a=97, f=102, é=233
+    string cafe = String.from_codepoints([99, 97, 102, 233]) |> Result.unwrap()
+    assert(String.length(cafe) == 4, "café has 4 codepoints")
+    assert(String.byte_length(cafe) == 5, "café is 5 bytes in UTF-8")
+}
+
+@test
+function void test_string_reverse_multibyte() {
+    # Build "café" and reverse it — should yield "éfac".
+    string cafe = String.from_codepoints([99, 97, 102, 233]) |> Result.unwrap()
+    string reversed = String.reverse(cafe)
+    string expected = String.from_codepoints([233, 102, 97, 99]) |> Result.unwrap()
+    assert(reversed == expected, "reversing multi-byte string should preserve codepoints")
+}
+
+@test
+function void test_string_characters_multibyte() {
+    # Build "Ñ" from codepoint 209 — characters() should yield exactly 1 element.
+    string n_tilde = String.from_codepoints([209]) |> Result.unwrap()
+    array<string> chars = String.characters(n_tilde)
+    assert(Array.length(chars) == 1, "Ñ should be 1 character")
+    assert(chars[0] == n_tilde, "character should equal the original")
+}
+
+@test
+function void test_string_for_loop_multibyte() {
+    # For-in on a multi-byte string should yield codepoints, not bytes.
+    string s = String.from_codepoints([65, 233, 66]) |> Result.unwrap()  # "AéB"
+    mutable integer count = 0
+    for _ch in s {
+        count += 1
+    }
+    assert(count == 3, "for-in should yield 3 codepoints")
+}
+
+# ─── String.is_blank ─────────────────────────────────────
+
+@test
+function void test_string_is_blank_empty() {
+    assert(String.is_blank(""))
+}
+
+@test
+function void test_string_is_blank_whitespace() {
+    assert(String.is_blank("   "))
+    assert(String.is_blank(" \t\n"))
+}
+
+@test
+function void test_string_is_blank_non_blank() {
+    assert(!String.is_blank("hello"))
+    assert(!String.is_blank(" x "))
+}
+
+# ─── String.is_ascii ──────────────────────────────────
+
+@test
+function void test_string_is_ascii() {
+    assert(String.is_ascii("hello world"))
+    assert(String.is_ascii("abc123!@#"))
+    assert(String.is_ascii(""))
+    assert(!String.is_ascii("héllo"))
+    assert(!String.is_ascii("日本語"))
+}
+
+# ─── String.common_prefix ─────────────────────────────
+
+@test
+function void test_string_common_prefix() {
+    assert(String.common_prefix("abcdef", "abcxyz") == "abc")
+    assert(String.common_prefix("hello", "hello world") == "hello")
+    assert(String.common_prefix("abc", "xyz") == "")
+    assert(String.common_prefix("", "hello") == "")
+    assert(String.common_prefix("same", "same") == "same")
+}
+
+# ─── String.common_suffix ─────────────────────────────
+
+@test
+function void test_string_common_suffix() {
+    assert(String.common_suffix("abcdef", "xyzdef") == "def")
+    assert(String.common_suffix("world", "hello world") == "world")
+    assert(String.common_suffix("abc", "xyz") == "")
+    assert(String.common_suffix("", "hello") == "")
+    assert(String.common_suffix("same", "same") == "same")
+}
+
+# ───────────────────────────────────────────────────────────
+# Case conversion, slug, palindrome, and edit distance
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_string_to_snake_case() {
+    assert(String.to_snake_case("helloWorld") == "hello_world")
+}
+
+@test
+function void test_string_to_camel_case() {
+    assert(String.to_camel_case("hello_world") == "helloWorld")
+}
+
+@test
+function void test_string_to_pascal_case() {
+    assert(String.to_pascal_case("hello_world") == "HelloWorld")
+}
+
+@test
+function void test_string_to_kebab_case() {
+    assert(String.to_kebab_case("helloWorld") == "hello-world")
+}
+
+@test
+function void test_string_slug() {
+    assert(String.slug("Hello, World!") == "hello-world")
+}
+
+@test
+function void test_string_is_palindrome() {
+    assert(String.is_palindrome("racecar"))
+    assert(!String.is_palindrome("hello"))
+}
+
+@test
+function void test_string_levenshtein_distance() {
+    assert(String.levenshtein_distance("kitten", "sitting") == 3)
+    assert(String.levenshtein_distance("abc", "abc") == 0)
+}
+
+# ───────────────────────────────────────────────────────────
+# Negative / error-path tests
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_string_character_at_out_of_bounds() {
+    assert(Result.is_failure(String.character_at("abc", 5)))
+}
+
+@test
+function void test_string_character_at_negative() {
+    assert(Result.is_failure(String.character_at("abc", -1)))
+}
+
+@test
+function void test_string_index_of_not_found() {
+    assert(Result.is_failure(String.index_of("hello", "xyz")))
+}
+
+@test
+function void test_string_last_index_of_not_found() {
+    assert(Result.is_failure(String.last_index_of("hello", "xyz")))
+}
+
+@test
+function void test_string_pad_left_width_exceeds_max() {
+    assert(Result.is_failure(String.pad_left("x", 20000000, " ")))
+}
+
+@test
+function void test_string_pad_right_width_exceeds_max() {
+    assert(Result.is_failure(String.pad_right("x", 20000000, " ")))
+}
+
+@test
+function void test_string_repeat_exceeds_max() {
+    assert(Result.is_failure(String.repeat("x", 20000000)))
+}
+
+@test
+function void test_string_center_width_exceeds_max() {
+    assert(Result.is_failure(String.center("hi", 20000000, " ")))
+}
+
+@test
+function void test_string_parse_number_fail() {
+    assert(Result.is_failure(String.parse_number("abc")))
+}
+
+@test
+function void test_string_format_number_invalid_precision() {
+    mutable boolean has_thrown = false
+
+    try {
+        string _ = String.format_number(1.0, 200)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown, "String.format_number throws when precision is out of range")
+}
+
+@test
+function void test_string_levenshtein_distance_too_long() {
+    # Inputs above 10,000 codepoints are rejected with a runtime error.
+    string huge = Result.unwrap(String.repeat("a", 10001))
+    mutable boolean has_thrown = false
+
+    try {
+        integer _ = String.levenshtein_distance(huge, "b")
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown, "String.levenshtein_distance throws on oversized input")
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional coverage: count, truncate edges, negative search,
+# surrogate rejection, multibyte indexing
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_string_count() {
+    assert(String.count("banana", "a") == 3)
+    assert(String.count("banana", "an") == 2)
+    # Matches do not overlap: "aa" in "aaaa" is found twice, not three times.
+    assert(String.count("aaaa", "aa") == 2)
+    assert(String.count("hello", "z") == 0)
+}
+
+@test
+function void test_string_truncate_no_ellipsis() {
+    # A limit of 3 or fewer leaves no room for the "..." marker.
+    assert(String.truncate("Hello", 3) == "Hel")
+    assert(String.truncate("Hello", 0) == "")
+    # Exactly at the limit is returned unchanged.
+    assert(String.truncate("Hello", 5) == "Hello")
+}
+
+@test
+function void test_string_search_negative() {
+    assert(!String.contains("hello world", "xyz"))
+    assert(!String.starts_with("hello world", "world"))
+    assert(!String.ends_with("hello world", "hello"))
+}
+
+@test
+function void test_string_from_codepoints_surrogate() {
+    # UTF-16 surrogate halves (U+D800-U+DFFF) are not valid scalar values.
+    result<string> r = String.from_codepoints([55296])
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_string_character_at_multibyte() {
+    # "AéB": codepoints A=65, é=233, B=66. Index 1 must yield "é", not a byte.
+    string s = String.from_codepoints([65, 233, 66]) |> Result.unwrap()
+    string accented = String.from_codepoints([233]) |> Result.unwrap()
+
+    assert(Result.unwrap(String.character_at(s, 1)) == accented)
+    assert(Result.unwrap(String.character_at(s, 2)) == "B")
+}
+
+

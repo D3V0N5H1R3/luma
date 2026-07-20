@@ -1,0 +1,12 @@
+# Step-over loop test — step over iterations of a loop.
+
+@main
+function void main() {
+    mutable number total = 0
+
+    for i in 1 .. 6 {
+        total += i
+    }
+
+    print("Total: ${total}")
+}

@@ -1,0 +1,23 @@
+# Type checker: the catch variable is an immutable string holding the error
+# message, usable wherever a string is expected.
+@main
+function void main() {
+    integer zero = 0
+
+    try {
+        integer _ = 1 / zero
+    } catch(err) {
+        string message = "caught: " + err
+
+        print(message)
+        print("length is ${String.length(err)}")
+    } finally {
+        print("cleanup")
+    }
+
+    try {
+        print("body")
+    } finally {
+        print("always")
+    }
+}

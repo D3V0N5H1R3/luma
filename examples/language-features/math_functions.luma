@@ -1,0 +1,144 @@
+# ═══════════════════════════════════════════════════════════
+# Math Functions
+#
+# Demonstrates the Math standard library module:
+# constants, trigonometry, rounding, roots, powers,
+# logarithms, absolute value, min/max, statistics,
+# combinatorics, and primality testing.
+# ═══════════════════════════════════════════════════════════
+
+# ── Constants ──
+function void demo_math_constants() {
+    print("=== Math constants ===")
+
+    print("pi  = ${Math.pi}")
+    print("e   = ${Math.e}")
+    print("tau = ${Math.tau}")
+}
+
+# ── Trigonometry ──
+function void demo_trigonometry() {
+    print("")
+    print("=== Trigonometry ===")
+
+    number angle = Math.pi / 4   # 45 degrees
+
+    print("sin(pi/4) = ${Result.unwrap(Math.sine(angle))}")
+    print("cos(pi/4) = ${Result.unwrap(Math.cosine(angle))}")
+    print("tan(pi/4) = ${Result.unwrap(Math.tangent(angle))}")
+
+    print("asin(1) = ${Result.unwrap(Math.arc_sine(1.0))}")
+    print("acos(0) = ${Result.unwrap(Math.arc_cosine(0.0))}")
+    print("atan(1) = ${Result.unwrap(Math.arc_tangent(1.0))}")
+}
+
+# ── Rounding ──
+function void demo_rounding() {
+    print("")
+    print("=== Rounding ===")
+
+    number value = 3.7
+
+    print("floor(${value})    = ${Result.unwrap(Math.floor(value))}")
+    print("ceiling(${value})  = ${Result.unwrap(Math.ceil(value))}")
+    print("round(${value})    = ${Result.unwrap(Math.round(value))}")
+    print("truncate(${value}) = ${Result.unwrap(Math.truncate(value))}")
+}
+
+# ── Roots and powers ──
+function void demo_roots_and_powers() {
+    print("")
+    print("=== Roots and powers ===")
+
+    print("sqrt(144)   = ${Result.unwrap(Math.square_root(144.0))}")
+    print("2^10        = ${Result.unwrap(Math.power(2.0, 10.0))}")
+    print("e^1         = ${Result.unwrap(Math.exponential(1.0))}")
+}
+
+# ── Logarithms ──
+function void demo_logarithms() {
+    print("")
+    print("=== Logarithms ===")
+
+    print("ln(e)      = ${Result.unwrap(Math.log_e(Math.e))}")
+    print("log10(100) = ${Result.unwrap(Math.log_10(100.0))}")
+    print("log2(256)  = ${Result.unwrap(Math.log_2(256.0))}")
+}
+
+# ── Absolute value, sign, clamp ──
+function void demo_absolute_value_and_clamping() {
+    print("")
+    print("=== Absolute value and clamping ===")
+
+    print("abs(-42)          = ${Result.unwrap(Math.absolute(-42))}")
+    print("sign(-7)          = ${Math.sign(-7)}")
+    print("sign(0)           = ${Math.sign(0)}")
+    print("sign(5)           = ${Math.sign(5)}")
+    print("clamp(15, 0, 10)  = ${Result.unwrap(Math.clamp(15, 0, 10))}")
+}
+
+# ── Min and max ──
+function void demo_min_and_max() {
+    print("")
+    print("=== Min and max ===")
+
+    print("min(3, 7) = ${Math.min(3, 7)}")
+    print("max(3, 7) = ${Math.max(3, 7)}")
+}
+
+# ── Statistics ──
+function void demo_statistics() {
+    print("")
+    print("=== Statistics ===")
+
+    array<number> data = [4, 8, 15, 16, 23, 42]
+
+    print("data = ${data}")
+    print("mean   = ${Result.unwrap(Math.mean(data))}")
+    print("median = ${Result.unwrap(Math.median(data))}")
+    print("stddev = ${String.format_number(Result.unwrap(Math.standard_deviation(data)), 4)}")
+}
+
+# ── Combinatorics and primes ──
+function void demo_combinatorics_and_primes() {
+    print("")
+    print("=== Combinatorics and primes ===")
+
+    print("5!         = ${Result.unwrap(Math.factorial(5))}")
+    print("gcd(48,18) = ${Result.unwrap(Math.greatest_common_divisor(48, 18))}")
+    print("lcm(4, 6)  = ${Result.unwrap(Math.least_common_multiple(4, 6))}")
+
+    array<integer> test_primes = [2, 7, 15, 23, 100]
+
+    for n in test_primes {
+        print("  is_prime(${n}) = ${Math.is_prime(n)}")
+    }
+}
+
+# ── Approximate equality ──
+function void demo_approximate_equality() {
+    print("")
+    print("=== Approximate equality ===")
+
+    number a = 0.1 + 0.2
+    number diff = Result.unwrap(Math.absolute(a - 0.3))
+    boolean exact_match = diff < 0.0000001
+    print("0.1 + 0.2 == 0.3 (exact): ${exact_match}")
+    print("approximately_equal: ${Math.approximately_equal(a, 0.3)}")
+}
+
+@main
+function void main() {
+    print("Shows Math constants, trigonometry, rounding, statistics, and prime checks.")
+
+    demo_math_constants()
+    demo_trigonometry()
+    demo_rounding()
+    demo_roots_and_powers()
+    demo_logarithms()
+    demo_absolute_value_and_clamping()
+    demo_min_and_max()
+    demo_statistics()
+    demo_combinatorics_and_primes()
+    demo_approximate_equality()
+}

@@ -1,0 +1,58 @@
+# ═══════════════════════════════════════════════════════════════════
+# Luma Highlight Test — Match/Case Expressions
+# ═══════════════════════════════════════════════════════════════════
+
+choice Color {
+    Red
+    Green
+    Blue
+    Custom(integer r, integer g, integer b)
+}
+
+function string color_name(Color c) {
+    match c {
+    case Color.Red {
+        return "red"
+    }
+case Color.Green {
+    return "green"
+}
+case Color.Blue {
+    return "blue"
+}
+case Color.Custom(r, g, b) {
+    return "rgb(${Converter.to_string(r)}, ${Converter.to_string(g)}, ${Converter.to_string(b)})"
+}
+}
+}
+
+# Nested match expressions.
+function string describe(optional<Color> maybe_color) {
+    match maybe_color {
+    case some(color) {
+        match color {
+        case Color.Red {
+            return "definitely red"
+        }
+    else {
+        return "some other color"
+    }
+}
+}
+case none {
+    return "no color"
+}
+}
+}
+
+# Match with result type.
+function string handle_result(result<integer> r) {
+    match r {
+        success(val) {
+            return "got ${Converter.to_string(val)}"
+        }
+        failure(err) {
+            return "error: ${err}"
+        }
+    }
+}

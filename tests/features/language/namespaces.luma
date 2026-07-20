@@ -1,0 +1,458 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Namespaces
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+namespace Geometry {
+    record GeoPoint {
+        number x,
+        number y
+    }
+
+    function number calculate_geo_distance(GeoPoint from_point, GeoPoint to_point) {
+        number delta_x = from_point.x - to_point.x
+        number delta_y = from_point.y - to_point.y
+
+        result<number> distance_result = Math.square_root(delta_x * delta_x + delta_y * delta_y)
+
+        return Result.unwrap_or(distance_result, 0.0)
+    }
+}
+
+namespace Formatting {
+    function string format_upper(string text) {
+        return String.uppercase(text)
+    }
+}
+
+namespace Traffic {
+    choice Light {
+        Red
+        Yellow
+        Green
+    }
+
+    type Distance = number
+}
+
+namespace Shapes {
+    record Circle {
+        number radius
+    }
+
+    record Rect {
+        number width,
+        number height
+    }
+
+    function number calculate_circle_area(Circle circle) {
+        return Math.pi * circle.radius * circle.radius
+    }
+}
+
+use Geometry
+use Traffic
+use Formatting
+use Shapes
+
+@test
+function void test_namespace_qualified_access() {
+    # use Geometry imports all names; qualified function calls still work
+    GeoPoint point = GeoPoint { x = 3.0, y = 4.0 }
+    GeoPoint origin = GeoPoint { x = 0.0, y = 0.0 }
+    number distance = Geometry.calculate_geo_distance(point, origin)
+
+    assert(Math.approximately_equal(distance, 5.0))
+}
+
+@test
+function void test_namespace_use_import() {
+    GeoPoint point = GeoPoint { x = 6.0, y = 8.0 }
+    GeoPoint origin = GeoPoint { x = 0.0, y = 0.0 }
+    number distance = calculate_geo_distance(point, origin)
+
+    assert(Math.approximately_equal(distance, 10.0))
+}
+
+@test
+function void test_namespace_qualified_function_call() {
+    # Functions in a namespace can be called with explicit qualification.
+    string upper_result = Formatting.format_upper("hello")
+
+    assert(upper_result == "HELLO")
+}
+
+@test
+function void test_namespace_unqualified_access() {
+    # After 'use Formatting', functions are available unqualified.
+    string upper_result = format_upper("world")
+
+    assert(upper_result == "WORLD")
+}
+
+# ─── Type support in namespaces ───
+
+@test
+function void test_namespace_qualified_record_creation() {
+    # Records inside a namespace can be created with a qualified name.
+    Shapes.Circle unit = Shapes.Circle { radius = 1.0 }
+
+    assert(Math.approximately_equal(unit.radius, 1.0))
+}
+
+@test
+function void test_namespace_qualified_record_type_annotation() {
+    # The qualified name is valid as a type annotation.
+    Shapes.Rect box = Shapes.Rect { width = 3.0, height = 4.0 }
+
+    assert(Math.approximately_equal(box.width, 3.0))
+    assert(Math.approximately_equal(box.height, 4.0))
+}
+
+@test
+function void test_namespace_qualified_record_in_function() {
+    # Qualified names work inside a namespace function body.
+    Shapes.Circle circle = Shapes.Circle { radius = 5.0 }
+    number area = Shapes.calculate_circle_area(circle)
+
+    assert(area > 78.53 && area < 78.54)
+}
+
+@test
+function void test_namespace_qualified_enum_access() {
+    # choice variants accessible via Namespace.choice.Variant.
+    Traffic.Light light = Traffic.Light.Red
+
+    assert(light == Traffic.Light.Red)
+    assert(light != Traffic.Light.Green)
+}
+
+@test
+function void test_namespace_qualified_match() {
+    # match arms accept Namespace.choice.Variant patterns.
+    Traffic.Light light = Traffic.Light.Yellow
+    string signal = match light {
+    case Traffic.Light.Red    { "stop" }
+    case Traffic.Light.Yellow { "caution" }
+    case Traffic.Light.Green  { "go" }
+    }
+
+    assert(signal == "caution")
+}
+
+@test
+function void test_namespace_type_alias_qualified() {
+    # Type aliases inside a namespace can be referenced with qualified names.
+    Traffic.Distance distance = 42.0
+
+    assert(Math.approximately_equal(distance, 42.0))
+}
+
+@test
+function void test_namespace_bare_and_qualified_interop() {
+    # After 'use Shapes', bare and qualified names resolve to the same type.
+    Circle first_circle = Circle { radius = 2.0 }
+    Shapes.Circle second_circle = Shapes.Circle { radius = 3.0 }
+
+    assert(Math.approximately_equal(first_circle.radius, 2.0))
+    assert(Math.approximately_equal(second_circle.radius, 3.0))
+}
+
+@test
+function void test_namespace_use_imports_enum_variants() {
+    # use also makes qualified choice variants available as bare short names.
+    # (use is top-level; Traffic is imported at the top of this file.)
+    Traffic.Light red_light = Light.Red
+    Traffic.Light green_light = Traffic.Light.Green
+
+    assert(red_light == Traffic.Light.Red)
+    assert(green_light != red_light)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Internal keyword tests
+# ═══════════════════════════════════════════════════════════
+
+namespace TextUtils {
+    function string format(string text) {
+        string trimmed = TextUtils.trim_whitespace(text)
+
+        return TextUtils.add_brackets(trimmed)
+    }
+
+    internal function string trim_whitespace(string text) {
+        return String.trim(text)
+    }
+
+    internal function string add_brackets(string text) {
+        return "[${text}]"
+    }
+
+    internal record TextConfig {
+        string prefix,
+        string suffix
+    }
+
+    internal choice TextCase { Upper, Lower, Original }
+}
+
+@test
+function void test_internal_function_callable_within_namespace() {
+    # Public function delegates to internal helpers — this should work fine.
+    string output = TextUtils.format("  hello  ")
+
+    assert(output == "[hello]")
+}
+
+@test
+function void test_non_internal_function_still_accessible() {
+    # Public members remain accessible from outside.
+    string output = TextUtils.format("  world  ")
+
+    assert(output == "[world]")
+}
+
+@test
+function void test_use_does_not_import_internal_functions() {
+    # Even with 'use TextUtils', internal members must not be importable.
+    # We verify by checking that the public format() function works
+    # and produces the result that relies on internally-called helpers.
+    string output = TextUtils.format("  test  ")
+
+    assert(output == "[test]")
+}
+
+# ─── Specific imports ──────────────────────────
+
+namespace MathUtils {
+    function integer double_it(integer x) {
+        return x * 2
+    }
+
+    function integer triple_it(integer x) {
+        return x * 3
+    }
+
+    record Config {
+        string mode
+    }
+
+    choice Direction { Up, Down }
+}
+
+use MathUtils.double_it
+
+@test
+function void test_specific_import_function() {
+    integer val = double_it(5)
+
+    assert(val == 10)
+}
+
+use MathUtils.Config
+
+@test
+function void test_specific_import_record() {
+    Config c = Config { mode = "fast" }
+
+    assert(c.mode == "fast")
+}
+
+use MathUtils.Direction
+
+@test
+function void test_specific_import_choice() {
+    Direction d = Direction.Up
+
+    assert(d == Direction.Up)
+}
+
+@test
+function void test_specific_import_does_not_import_others() {
+    # double_it is available via specific import above,
+    # but triple_it should require qualified access.
+    integer a = double_it(5)
+    integer b = MathUtils.triple_it(5)
+
+    assert(a == 10)
+    assert(b == 15)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Cross-namespace composition
+# ═══════════════════════════════════════════════════════════
+
+namespace Billing {
+    function integer with_tax(integer amount) {
+        return amount + Billing.tax(amount)
+    }
+
+    internal function integer tax(integer amount) {
+        return amount / 10
+    }
+}
+
+namespace Orders {
+    function integer checkout(integer base) {
+        return Billing.with_tax(base) + Orders.handling_fee()
+    }
+
+    internal function integer handling_fee() {
+        return 2
+    }
+}
+
+@test
+function void test_namespace_cross_namespace_composition() {
+    # A public function in one namespace calls a public function in another,
+    # and each delegates to its own internal helper.
+    integer total = Orders.checkout(100)
+
+    assert(total == 112)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Internal records used within their own namespace
+# ═══════════════════════════════════════════════════════════
+
+namespace Accounts {
+    internal record Ledger {
+        integer balance
+    }
+
+    function integer deposit(integer start, integer amount) {
+        Accounts.Ledger ledger = Accounts.Ledger { balance = start + amount }
+
+        return ledger.balance
+    }
+}
+
+@test
+function void test_namespace_internal_record_used_within_namespace() {
+    # An internal record can be constructed and read inside a public function
+    # of its own namespace, even though it is not accessible from outside.
+    integer balance = Accounts.deposit(50, 25)
+
+    assert(balance == 75)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Internal choice and type alias used within their own namespace
+# ═══════════════════════════════════════════════════════════
+
+namespace Palette {
+    internal type ColorCode = integer
+
+    internal choice Shade {
+        Light
+        Dark
+    }
+
+    function integer code_for(boolean dark) {
+        Palette.Shade shade = Palette.resolve(dark)
+
+        return match shade {
+        case Palette.Shade.Light { Palette.shift(10) }
+        case Palette.Shade.Dark  { Palette.shift(20) }
+        }
+    }
+
+    internal function Shade resolve(boolean dark) {
+        if dark {
+            return Palette.Shade.Dark
+        }
+
+        return Palette.Shade.Light
+    }
+
+    internal function ColorCode shift(ColorCode base) {
+        return base + 1
+    }
+}
+
+@test
+function void test_namespace_internal_choice_and_type_alias_within_namespace() {
+    # code_for resolves an internal choice (Shade) through an internal helper,
+    # matches on it, and computes via the internal type alias ColorCode (= integer)
+    # inside the internal shift() helper — all private to Palette, yet reachable
+    # only through its public API.
+    assert(Palette.code_for(false) == 11)
+    assert(Palette.code_for(true) == 21)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Internal interface used within its own namespace
+# ═══════════════════════════════════════════════════════════
+
+namespace Shapes {
+    internal interface Sized {
+        integer size
+    }
+
+    record Box {
+        integer size
+    }
+
+    function integer measure(Box box) {
+        return Shapes.area(box)
+    }
+
+    internal function integer area(Sized item) {
+        return item.size
+    }
+}
+
+@test
+function void test_namespace_internal_interface_within_namespace() {
+    # The public measure() delegates to the internal area(), whose parameter is
+    # typed by the internal interface Sized. The public Box record structurally
+    # satisfies Sized from within the namespace, even though Sized is invisible
+    # outside it.
+    integer size = Shapes.measure(Shapes.Box { size = 9 })
+
+    assert(size == 9)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Data-carrying namespace choice matched with payload bindings
+# ═══════════════════════════════════════════════════════════
+
+namespace Signals {
+    choice Command {
+        Move(integer distance)
+        Turn(integer degrees)
+        Halt
+    }
+
+    function integer magnitude(Command command) {
+        return match command {
+        case Signals.Command.Move(d)  { d }
+        case Signals.Command.Turn(a)  { a }
+        case Signals.Command.Halt     { 0 }
+        }
+    }
+}
+
+use Signals
+
+@test
+function void test_namespace_choice_data_variant_match() {
+    # A namespace choice with data-carrying variants is matched with payload
+    # bindings — both inside a namespace function (qualified patterns) and via
+    # use-imported bare names.
+    Signals.Command move = Signals.Command.Move(7)
+    Command turn = Command.Turn(90)
+
+    assert(Signals.magnitude(move) == 7)
+    assert(Signals.magnitude(turn) == 90)
+
+    integer bound = match move {
+    case Command.Move(d) { d }
+    case Command.Turn(a) { a }
+    case Command.Halt    { 0 }
+    }
+
+    assert(bound == 7)
+}

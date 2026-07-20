@@ -1,0 +1,109 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Luma: Debug Current File",
+            "type": "luma",
+            "request": "launch",
+            "program": "${file}",
+            "stopOnEntry": false
+        },
+        {
+            "name": "Luma: Debug Current File (Stop on Entry)",
+            "type": "luma",
+            "request": "launch",
+            "program": "${file}",
+            "stopOnEntry": true
+        },
+        {
+            "name": "C++: Interpreter (MSVC)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/Debug/luma.exe",
+            "args": ["${workspaceFolder}/examples/language-features/hello.luma"],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "CMake: Build (Debug)"
+        },
+        {
+            "name": "C++: Interpreter (GDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/luma",
+            "args": ["${workspaceFolder}/examples/language-features/hello.luma"],
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "preLaunchTask": "CMake: Build (Debug)"
+        },
+        {
+            "name": "C++: Interpreter (LLDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/luma",
+            "args": ["${workspaceFolder}/examples/language-features/hello.luma"],
+            "cwd": "${workspaceFolder}",
+            "MIMode": "lldb",
+            "preLaunchTask": "CMake: Build (Debug)"
+        },
+        {
+            "name": "C++: Language Server (MSVC)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/Debug/luma_lsp.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "preLaunchTask": "CMake: Build (Debug)"
+        },
+        {
+            "name": "C++: Language Server (GDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/luma_lsp",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "preLaunchTask": "CMake: Build (Debug)"
+        },
+        {
+            "name": "C++: DAP Debugger (MSVC)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/Debug/luma_dap.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "preLaunchTask": "CMake: Build (Debug)"
+        },
+        {
+            "name": "C++: DAP Debugger (GDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/luma_dap",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "preLaunchTask": "CMake: Build (Debug)"
+        },
+        {
+            "name": "C++: REPL (MSVC)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/Debug/luma.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "preLaunchTask": "CMake: Build (Debug)"
+        },
+        {
+            "name": "C++: REPL (GDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/luma",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "externalConsole": true,
+            "preLaunchTask": "CMake: Build (Debug)"
+        }
+    ]
+}

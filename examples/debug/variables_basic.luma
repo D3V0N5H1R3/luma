@@ -1,0 +1,20 @@
+# Variable inspection test — various types for debugger variable display.
+
+@main
+function void main() {
+    boolean flag = true
+    number count = 42
+    number pi = 3.14159
+    string greeting = "hello world"
+    array<integer> items = [1, 2, 3, 4, 5]
+    dictionary<string> config = { "host": "localhost", "port": "8080" }
+    (integer, integer) point = (10, 20)
+
+    print("Variable flag: ${flag}")
+    print("Variable count: ${count}")
+    print("Variable pi: ${pi}")
+    print("Variable greeting: ${greeting}")
+    print("Variable items: ${items}")
+    print("Variable config: ${config}")
+    print("Variable point: ${point}")
+}

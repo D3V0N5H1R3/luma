@@ -1,0 +1,42 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — Reusable Raspberry Pi OS Build (ARM64)
+#
+# Builds and tests Luma for Raspberry Pi OS (ARM64) by emulating
+# linux/arm64 via QEMU on top of Debian bookworm. The toolchain
+# parameters (image, compilers, install command) are defined here
+# once so ci.yml and release.yml share a single definition;
+# callers opt into artifact upload for release builds.
+#
+# Thin wrapper over reusable-linux-build.yml.
+# ─────────────────────────────────────────────────────────────
+
+name: Reusable — Raspberry Pi OS Build (ARM64)
+
+on:
+  workflow_call:
+    inputs:
+      upload-artifact:
+        description: Whether to package and upload the built binaries.
+        required: false
+        type: boolean
+        default: false
+      artifact-name:
+        description: Name of the uploaded artifact (and tarball stem).
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable-linux-build.yml
+    with:
+      image: arm64v8/debian:bookworm
+      cc: gcc-13
+      cxx: g++-13
+      install-cmd: apt-get update -q && apt-get install -y cmake gcc-13 g++-13 make
+      platform: linux/arm64
+      upload-artifact: ${{ inputs.upload-artifact }}
+      artifact-name: ${{ inputs.artifact-name }}

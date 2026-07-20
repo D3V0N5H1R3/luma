@@ -1,0 +1,260 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Pipe Operator
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+function integer double_value(integer n) {
+    return n * 2
+}
+
+function integer increment(integer n) {
+    return n + 1
+}
+
+function integer add_values(integer a, integer b) {
+    return a + b
+}
+
+namespace PipeMath {
+    function integer triple(integer n) {
+        return n * 3
+    }
+}
+
+# ─── Basic pipe ───
+
+@test
+function void test_pipe_single_step() {
+    string output = "hello" |> String.uppercase()
+
+    assert(output == "HELLO")
+}
+
+@test
+function void test_pipe_multi_step() {
+    string output = "  hello world  " |> String.trim() |> String.uppercase()
+
+    assert(output == "HELLO WORLD")
+}
+
+@test
+function void test_pipe_user_defined_function() {
+    integer output = 5 |> double_value() |> increment()
+
+    assert(output == 11)
+}
+
+# ─── Pipe into a namespaced function ───
+
+@test
+function void test_pipe_namespace_function() {
+    integer output = 14 |> PipeMath.triple()
+
+    assert(output == 42, "14 piped into PipeMath.triple() == 42")
+}
+
+# ─── Pipe supplies the implicit first argument before explicit ones ───
+
+@test
+function void test_pipe_extra_positional_arg() {
+    integer output = 10 |> add_values(5)
+
+    assert(output == 15, "piped value is the first argument, explicit args follow")
+}
+
+# ─── Pipe into user functions with differently-typed extra args ───
+# Regression: the piped value must fill parameter 0 and each explicit argument
+# the parameters after it, even when their types differ.  Previously the type
+# checker matched the first explicit argument against parameter 0 and rejected
+# the call.
+
+record PipeLabelled {
+    string text = "",
+    integer size = 0
+}
+
+function PipeLabelled with_text(PipeLabelled item, string t) {
+    return item with { text = t }
+}
+
+function PipeLabelled with_size(PipeLabelled item, integer s) {
+    return item with { size = s }
+}
+
+@test
+function void test_pipe_user_function_typed_extra_args() {
+    PipeLabelled start = PipeLabelled {}
+    PipeLabelled item = start
+    |> with_text("ok")
+    |> with_size(18)
+
+    assert(item.text == "ok", "piped value fills parameter 0, string arg fills parameter 1")
+    assert(item.size == 18, "an explicit arg of a different type also type-checks and applies")
+}
+
+# ─── Pipe precedence sits below arithmetic ───
+
+@test
+function void test_pipe_precedence_with_arithmetic() {
+    integer output = 1 + 2 |> double_value()
+
+    assert(output == 6, "1 + 2 is grouped before piping into double_value()")
+}
+
+# ─── Pipe with extra arguments ───
+
+@test
+function void test_pipe_with_extra_args() {
+    string output = Result.unwrap("42" |> String.pad_left(6, "0"))
+
+    assert(output == "000042")
+}
+
+@test
+function void test_pipe_array_filter_map() {
+    array<integer> output = [1, 2, 3, 4, 5, 6]
+    |> Array.filter((integer x) -> x % 2 == 0)
+    |> Result.unwrap_or([])
+    |> Array.map((integer x) -> x * x)
+    |> Result.unwrap_or([])
+
+    assert(Array.length(output) == 3)
+    assert(output[0] == 4)
+    assert(output[1] == 16)
+    assert(output[2] == 36)
+}
+
+# ─── Multi-line pipes ───
+
+@test
+function void test_pipe_multiline_string_chain() {
+    array<string> output = ["  Alpha  ", "  beta  ", "", "  GAMMA  "]
+    |> Array.map((string s) -> String.trim(s))
+    |> Result.unwrap_or([])
+    |> Array.filter((string s) -> !String.is_empty(s))
+    |> Result.unwrap_or([])
+    |> Array.map((string s) -> String.lowercase(s))
+    |> Result.unwrap_or([])
+
+    assert(Array.length(output) == 3)
+    assert(output[0] == "alpha")
+    assert(output[1] == "beta")
+    assert(output[2] == "gamma")
+}
+
+@test
+function void test_pipe_aggregate() {
+    number total = [1, 2, 3, 4, 5]
+    |> Array.map((integer x) -> x * x)
+    |> Result.unwrap_or([])
+    |> Array.sum()
+    |> Result.unwrap()
+
+    assert(Math.approximately_equal(total, 55.0))
+}
+
+# ─── Pipe as expression ───
+
+@test
+function void test_pipe_in_condition() {
+    string value = "Luma"
+    string upper = value |> String.uppercase()
+    boolean is_upper = upper == "LUMA"
+
+    assert(is_upper)
+}
+
+@test
+function void test_pipe_chained_numeric() {
+    integer output = [10, 3, 7, 1, 8]
+    |> Array.sort((integer a, integer b) -> a - b)
+    |> Result.unwrap_or([])
+    |> Array.first()
+    |> Result.unwrap_or(0)
+
+    assert(output == 1)
+}
+
+# ─── Pipe with named arguments ──────────────────────────
+
+@test
+function void test_pipe_with_named_args() {
+    string padded = Result.unwrap("42" |> String.pad_left(width: 6, fill: "0"))
+
+    assert(padded == "000042")
+}
+
+@test
+function void test_pipe_with_named_args_pad_right() {
+    string padded = Result.unwrap("hi" |> String.pad_right(width: 5, fill: "."))
+
+    assert(padded == "hi...")
+}
+
+# ─── Pipe with lambdas and chaining ──────────────────────────
+
+@test
+function void test_pipe_chain_three_steps() {
+    string text = "hello world"
+    integer output = text
+    |> String.uppercase()
+    |> String.length()
+
+    assert(output == 11, "hello world -> upper -> length == 11")
+}
+
+# ═══════════════════════════════════════════════════════════
+# Negative / edge-case tests — pipe operator
+# ═══════════════════════════════════════════════════════════
+
+# Note: Piping to non-functions and type mismatches are caught at compile
+# time. Below we test runtime error conditions via pipe chains.
+
+@test
+function void test_pipe_with_failing_result() {
+    # Pipe through a function that returns a result.
+    result<integer> r = String.parse_integer("not_a_number")
+
+    assert(Result.is_failure(r), "parse_integer on invalid string should fail")
+}
+
+@test
+function void test_pipe_chain_preserves_type() {
+    string result_value = "  hello  "
+    |> String.trim()
+    |> String.uppercase()
+
+    assert(result_value == "HELLO")
+}
+
+@test
+function void test_pipe_single_element() {
+    integer x = 5
+    string s = x |> Converter.to_string()
+
+    assert(s == "5", "piping integer to Converter.to_string")
+}
+
+# A failing result piped through Result.unwrap_or recovers mid-chain so the
+# overall pipe still yields a usable value.
+@test
+function void test_pipe_recovers_failing_result_in_chain() {
+    integer output = "not_a_number"
+    |> String.parse_integer()
+    |> Result.unwrap_or(-1)
+
+    assert(output == -1, "a failed parse is recovered to the fallback in the pipe chain")
+}
+
+# A pipe chain that recovers a failure and then keeps transforming the value.
+@test
+function void test_pipe_recover_then_continue() {
+    integer output = "123"
+    |> String.parse_integer()
+    |> Result.unwrap_or(0)
+    |> double_value()
+
+    assert(output == 246, "recovered value continues through the rest of the chain")
+}

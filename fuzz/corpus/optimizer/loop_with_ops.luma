@@ -1,0 +1,12 @@
+function integer compute(integer n) {
+    mutable integer result = 0
+    for i in 0..n {
+        result += i * 2 + 1
+    }
+    return result
+}
+
+@main
+function void main() {
+    print(compute(100))
+}

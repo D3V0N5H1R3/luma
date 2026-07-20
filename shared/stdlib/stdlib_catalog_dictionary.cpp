@@ -1,0 +1,61 @@
+#include "stdlib/stdlib_catalog_internal.hpp"
+
+namespace luma::stdlib::detail {
+
+void register_dictionary_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                                   const ParamShorthands& p) {
+    append_specs(
+        specs,
+        {
+            m.fn("has_value", 2, "(dict: dictionary<V>, value: V)", R::boolean_type(),
+                 {p.dict_any, p.any}),
+            m.fn("deep_merge", 2, "(a: dictionary<V>, b: dictionary<V>)", R::dict_any(),
+                 {p.dict_any, p.dict_any}),
+            m.fn("each", 2, "(dict: dictionary<V>, f: func(string, V) -> void)",
+                 R::result(R::none_type()), {p.dict_any, p.func}),
+            m.fn("filter", 2, "(dict: dictionary<V>, f: func(string, V) -> boolean)",
+                 R::result(R::dict(R::any_type())), {p.dict_any, p.func}),
+            m.fn("from_entries", 1, "(pairs: array<(string, V)>)", R::dict_any(), {p.array_any}),
+            m.fn("from_keys", 2, "(keys: array<string>, value: V)", R::dict_any(),
+                 {p.array_string, p.any}),
+            m.fn("get", 2, "(dict: dictionary<V>, key: string)", R::result_any(),
+                 {p.dict_any, p.string}),
+            m.fn("get_or", 3, "(dict: dictionary<V>, key: string, default: V)", R::any_type(),
+                 {p.dict_any, p.string, p.any}),
+            m.fn("has", 2, "(dict: dictionary<V>, key: string)", R::boolean_type(),
+                 {p.dict_any, p.string}),
+            m.fn("invert", 1, "(dict: dictionary<V>)", R::dict_any(), {p.dict_any}),
+            m.fn("is_empty", 1, "(dict: dictionary<V>)", R::boolean_type(), {p.dict_any}),
+            m.fn("keys", 1, "(dict: dictionary<V>)", R::array_string(), {p.dict_any}),
+            m.fn("length", 1, "(dict: dictionary<V>)", R::integer_type(), {p.dict_any}),
+            m.fn("map", 2, "(dict: dictionary<V>, f: func(string, V) -> V)",
+                 R::result(R::dict(R::any_type())), {p.dict_any, p.func}),
+            m.fn("map_values", 2, "(dict: dictionary<V>, f: func(V) -> U)",
+                 R::result(R::dict(R::any_type())), {p.dict_any, p.func}),
+            m.fn("merge", 2, "(a: dictionary<V>, b: dictionary<V>)", R::dict_any(),
+                 {p.dict_any, p.dict_any}),
+            m.fn("partition", 2, "(dict: dictionary<V>, f: func(string, V) -> boolean)",
+                 R::result_any(), {p.dict_any, p.func}),
+            m.fn("reduce", 3, "(dict: dictionary<V>, initial: U, f: func(U, string, V) -> U)",
+                 R::result_any(), {p.dict_any, p.any, p.func}),
+            m.fn("remove", 2, "(dict: dictionary<V>, key: string)", R::dict_any(),
+                 {p.dict_any, p.string}),
+            m.fn("set", 3, "(dict: dictionary<V>, key: string, value: V)", R::dict_any(),
+                 {p.dict_any, p.string, p.any}),
+            m.fn("to_array", 1, "(dict: dictionary<V>)", R::array_any(), {p.dict_any}),
+            m.fn("to_entries", 1, "(dict: dictionary<V>)", R::array_any(), {p.dict_any}),
+            m.fn("values", 1, "(dict: dictionary<V>)", R::array_any(), {p.dict_any}),
+            m.fn("pick", 2, "(dict: dictionary<V>, keys: array<string>)", R::dict_any(),
+                 {p.dict_any, p.array_string}),
+            m.fn("omit", 2, "(dict: dictionary<V>, keys: array<string>)", R::dict_any(),
+                 {p.dict_any, p.array_string}),
+            m.fn("find", 2, "(dict: dictionary<V>, f: func(string, V) -> boolean)", R::result_any(),
+                 {p.dict_any, p.func}),
+            m.fn("flip", 1, "(dict: dictionary<V>)", R::result(R::dict(R::string_type())),
+                 {p.dict_any}),
+            m.fn("count", 2, "(dict: dictionary<V>, f: func(string, V) -> boolean)",
+                 R::result_integer(), {p.dict_any, p.func}),
+        });
+}
+
+} // namespace luma::stdlib::detail

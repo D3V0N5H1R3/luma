@@ -1,0 +1,103 @@
+# ═══════════════════════════════════════════════════════════
+# References and Resources
+#
+# Demonstrates the Reference module — mutable reference cells
+# for shared state across closures — and the Resource module
+# for deterministic cleanup.
+# ═══════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # ── Basic get / set ──
+    print("=== Reference Basics ===")
+
+    reference<integer> age = Reference.new(30)
+    print("Initial age: ${Reference.get(age)}")
+
+    Reference.set(age, 31)
+    print("After set:   ${Reference.get(age)}")
+
+    # ── Update with a function ──
+    print("\n=== Update ===")
+
+    reference<number> balance = Reference.new(100.0)
+    Reference.update(balance, (number b) -> b * 1.05)  # 5% interest
+    string balance_after_interest = String.format_number(Reference.get(balance), 2)
+    print("After 5% interest: ${balance_after_interest}")
+
+    Reference.update(balance, (number b) -> b - 20.0)  # withdraw
+    string balance_after_withdrawal = String.format_number(Reference.get(balance), 2)
+    print("After withdrawal:  ${balance_after_withdrawal}")
+
+    # ── Swap ──
+    print("\n=== Swap ===")
+
+    reference<string> first = Reference.new("hello")
+    reference<string> second = Reference.new("world")
+    print("Before swap: a=${Reference.get(first)}, b=${Reference.get(second)}")
+
+    Reference.swap(first, second)
+    print("After swap:  a=${Reference.get(first)}, b=${Reference.get(second)}")
+
+    # ── Shared state across closures ──
+    print("\n=== Shared State Across Closures ===")
+
+    reference<integer> total = Reference.new(0)
+
+    # Multiple closures all capture the same reference.
+    function(integer) -> void increment = (integer n) ->
+    Reference.update(total, (integer v) -> v + n)
+
+    increment(1)
+    increment(1)
+    increment(5)
+    increment(10)
+    print("Total after 1 + 1 + 5 + 10: ${Reference.get(total)}")
+
+    # ── Accumulator pattern ──
+    print("\n=== Accumulator ===")
+
+    reference<array<string>> log_ref = Reference.new([])
+
+    for entry in ["connect", "authenticate", "query", "disconnect"] {
+        Reference.update(log_ref, (array<string> entries) -> Array.push(entries, entry))
+    }
+
+    array<string> entries = Reference.get(log_ref)
+    print("Log entries: ${Array.length(entries)}")
+    for item in entries {
+        print("  ${item}")
+    }
+
+    # ── Resource.with for deterministic cleanup ──
+    print("\n=== Resource Cleanup ===")
+
+    # Resource.with(resource, body, cleanup):
+    #   1. Calls body(resource) to produce a value.
+    #   2. Calls cleanup(resource) unconditionally after body completes.
+    #   3. Returns the body's value.
+
+    string temp_file = "_ref_example_tmp.txt"
+    boolean _ = FileSystem.write_file(temp_file, "temporary data") |> Result.is_success()
+
+    string content = Resource.with(
+        temp_file,
+        (string path) -> Result.unwrap(FileSystem.read_file(path)),
+        (string path) -> FileSystem.delete(path)
+    )
+
+    print("Read: ${content}")
+
+    boolean still_exists = FileSystem.exists(temp_file) |> Result.unwrap()
+    print("File deleted by cleanup: ${!still_exists}")
+
+    # ── Resource with integer handle ──
+    print("\n=== Resource with Computed Value ===")
+
+    integer doubled = Resource.with(
+        21,
+        (integer n) -> n * 2,
+        (integer _n) -> none  # no cleanup needed for plain values
+    )
+    print("Resource body result: ${doubled}")
+}

@@ -1,0 +1,53 @@
+# Type checker: ownership — unique consumption (move-once), borrow read-only
+# references, consumption across if/else and match arms, and pipe consumption.
+
+function unique string acquire(string name) {
+    return "handle:${name}"
+}
+
+function string consume(unique string s) {
+    return "used:${s}"
+}
+
+function integer measure(borrow string s) {
+    return String.length(s)
+}
+
+function string consume_in_branches(boolean flag) {
+    unique string handle = acquire("branch")
+    return if flag {
+        consume(handle)
+    } else {
+        consume(handle)
+    }
+}
+
+function string consume_in_match(boolean flag) {
+    unique string handle = acquire("match")
+    return match flag {
+    case true  { consume(handle) }
+    case false { consume(handle) }
+    }
+}
+
+function integer borrow_reads() {
+    borrow string view = "borrowed"
+    integer a = measure(view)
+    integer b = measure(view)
+    return a + b
+}
+
+function string piped() {
+    unique string handle = acquire("pipe")
+    return handle |> consume()
+}
+
+@main
+function void main() {
+    print(consume_in_branches(true))
+    print(consume_in_match(false))
+    print(borrow_reads())
+    print(piped())
+
+    unique string _ignored = acquire("ignored")
+}

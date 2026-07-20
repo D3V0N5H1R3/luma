@@ -1,0 +1,9 @@
+# Include resolver: absolute include paths that escape the allowed tree
+include "/etc/hosts"
+include "/usr/lib/luma/x.luma"
+include "/tmp/payload.luma"
+
+@main
+function void main() {
+    print("escape")
+}

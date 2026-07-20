@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — CMake Lint Workflow
+#
+# Runs cmakelint on all first-party CMake files (every CMakeLists.txt
+# and cmake/*.cmake, excluding vendored external/) on every push and
+# PR targeting main that touches them. Rule configuration lives in
+# .cmakelintrc.
+# ─────────────────────────────────────────────────────────────
+
+name: CI — CMake
+
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - ".github/workflows/ci-cmake.yml"
+      - ".cmakelintrc"
+      - "**/CMakeLists.txt"
+      - "**/*.cmake"
+  pull_request:
+    branches: [main]
+    paths: *paths
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cmakelint:
+    name: cmakelint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install cmakelint
+        run: pip install cmakelint==1.4.3
+
+      - name: Run cmakelint
+        run: |
+          # Discover all first-party CMake files (excluding vendored external/).
+          # The bare 'CMakeLists.txt' pathspec is required: git's '**/CMakeLists.txt'
+          # matches subdirectories only, not the root-level build file.
+          mapfile -t files < <(git ls-files 'CMakeLists.txt' '**/CMakeLists.txt' '*.cmake' ':!:external/**')
+          printf 'Linting %d CMake file(s):\n' "${#files[@]}"
+          printf '  %s\n' "${files[@]}"
+          cmakelint --config=.cmakelintrc "${files[@]}"

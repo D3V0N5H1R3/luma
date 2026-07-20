@@ -1,0 +1,521 @@
+{
+    "name": "luma-language",
+    "displayName": "Luma Language Support",
+    "description": "Syntax highlighting, language configuration, and language server integration for the Luma programming language.",
+    "version": "0.5.0",
+    "publisher": "D3V0N5H1R3",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/d3v0n5h1r3/luma"
+    },
+    "engines": {
+        "vscode": "^1.120.0"
+    },
+    "capabilities": {
+        "untrustedWorkspaces": {
+            "supported": "limited",
+            "description": "In restricted mode, syntax highlighting and snippets work but the language server is disabled.",
+            "restrictedConfigurations": [
+                "luma.lsp.path",
+                "luma.path",
+                "luma.dap.path"
+            ]
+        }
+    },
+    "categories": [
+        "Programming Languages",
+        "Snippets",
+        "Testing",
+        "Themes"
+    ],
+    "icon": "images/icon.png",
+    "keywords": [
+        "luma",
+        "syntax highlighting",
+        "language server",
+        "language"
+    ],
+    "activationEvents": [
+        "workspaceContains:**/*.luma"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "languages": [
+            {
+                "id": "luma",
+                "aliases": [
+                    "Luma",
+                    "luma"
+                ],
+                "extensions": [
+                    ".luma"
+                ],
+                "configuration": "./language-configuration.json",
+                "icon": {
+                    "light": "./images/luma-file-light.svg",
+                    "dark": "./images/luma-file-dark.svg"
+                }
+            }
+        ],
+        "grammars": [
+            {
+                "language": "luma",
+                "scopeName": "source.luma",
+                "path": "./syntaxes/luma.tmLanguage.json"
+            },
+            {
+                "scopeName": "markdown.luma.codeblock",
+                "path": "./syntaxes/luma.markdown-injection.json",
+                "injectTo": [
+                    "text.html.markdown"
+                ],
+                "embeddedLanguages": {
+                    "meta.embedded.block.luma": "luma"
+                }
+            }
+        ],
+        "snippets": [
+            {
+                "language": "luma",
+                "path": "../shared/snippets/luma.json"
+            }
+        ],
+        "themes": [
+            {
+                "label": "Luma Dark",
+                "uiTheme": "vs-dark",
+                "path": "./themes/luma-dark-color-theme.json"
+            },
+            {
+                "label": "Luma Light",
+                "uiTheme": "vs",
+                "path": "./themes/luma-light-color-theme.json"
+            }
+        ],
+        "configuration": {
+            "title": "Luma",
+            "properties": {
+                "luma.lsp.path": {
+                    "type": "string",
+                    "default": "",
+                    "markdownDescription": "Absolute path to the `luma_lsp` binary. If empty, the extension downloads it automatically or searches `PATH`. Supports `${workspaceFolder}` and `${workspaceFolder:name}` variables."
+                },
+                "luma.lsp.autoUpdate": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "Automatically check for language server updates on activation."
+                },
+                "luma.path": {
+                    "type": "string",
+                    "default": "",
+                    "markdownDescription": "Absolute path to the `luma` interpreter binary. If empty, the extension searches `PATH`. Supports `${workspaceFolder}` and `${workspaceFolder:name}` variables."
+                },
+                "luma.dap.path": {
+                    "type": "string",
+                    "default": "",
+                    "markdownDescription": "Absolute path to the `luma_dap` debug adapter binary. If empty, the extension searches `PATH`. Supports `${workspaceFolder}` and `${workspaceFolder:name}` variables."
+                },
+                "luma.diagnostics.onSave": {
+                    "type": "boolean",
+                    "default": false,
+                    "markdownDescription": "When enabled, only report linter warnings on save (not while typing). Syntax and type errors are always reported immediately."
+                },
+                "luma.inlayHints.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "Show inferred type annotations as inlay hints."
+                },
+                "luma.codeLens.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "Show reference counts above functions and types."
+                },
+                "luma.playground.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "markdownDescription": "Enable the Luma Playground for interactive code execution."
+                },
+                "luma.playground.timeout": {
+                    "type": "integer",
+                    "default": 10000,
+                    "minimum": 1000,
+                    "maximum": 120000,
+                    "markdownDescription": "Maximum execution time (in milliseconds) for playground snippets."
+                },
+                "luma.playground.maxOutputSize": {
+                    "type": "integer",
+                    "default": 1048576,
+                    "minimum": 1024,
+                    "maximum": 10485760,
+                    "markdownDescription": "Maximum output buffer size (in bytes) for playground snippets."
+                }
+            }
+        },
+        "debuggers": [
+            {
+                "type": "luma",
+                "label": "Luma Debug",
+                "languages": [
+                    "luma"
+                ],
+                "configurationAttributes": {
+                    "launch": {
+                        "required": [
+                            "program"
+                        ],
+                        "properties": {
+                            "program": {
+                                "type": "string",
+                                "description": "Path to the Luma program to debug.",
+                                "default": "${file}"
+                            },
+                            "stopOnEntry": {
+                                "type": "boolean",
+                                "description": "Pause on the first executable line.",
+                                "default": false
+                            },
+                            "args": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "description": "Command-line arguments passed to the program (available via Process.get_arguments()).",
+                                "default": []
+                            },
+                            "cwd": {
+                                "type": "string",
+                                "description": "Working directory for the debugged program.",
+                                "default": "${workspaceFolder}"
+                            }
+                        }
+                    }
+                },
+                "initialConfigurations": [
+                    {
+                        "type": "luma",
+                        "request": "launch",
+                        "name": "Debug Current File",
+                        "program": "${file}",
+                        "stopOnEntry": false
+                    }
+                ],
+                "configurationSnippets": [
+                    {
+                        "label": "Luma: Debug Current File",
+                        "description": "Launch and debug the current Luma file.",
+                        "body": {
+                            "type": "luma",
+                            "request": "launch",
+                            "name": "Debug Current File",
+                            "program": "^\"\\${file}\"",
+                            "stopOnEntry": false
+                        }
+                    }
+                ]
+            }
+        ],
+        "views": {
+            "debug": [
+                {
+                    "type": "webview",
+                    "id": "luma.debugVisualizer",
+                    "name": "Luma Visualizer",
+                    "when": "debugType == 'luma'"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "luma.restartServer",
+                "title": "Restart Language Server",
+                "category": "Luma"
+            },
+            {
+                "command": "luma.showOutputChannel",
+                "title": "Show Language Server Output",
+                "category": "Luma"
+            },
+            {
+                "command": "luma.runFile",
+                "title": "Run Current File",
+                "category": "Luma",
+                "icon": "$(play)"
+            },
+            {
+                "command": "luma.runTests",
+                "title": "Run Tests in Current File",
+                "category": "Luma",
+                "icon": "$(beaker)"
+            },
+            {
+                "command": "luma.updateServer",
+                "title": "Check for Language Server Updates",
+                "category": "Luma"
+            },
+            {
+                "command": "luma.showReferences",
+                "title": "Show References",
+                "category": "Luma"
+            },
+            {
+                "command": "luma.visualizeVariable",
+                "title": "Visualize Variable",
+                "category": "Luma",
+                "icon": "$(graph)"
+            },
+            {
+                "command": "luma.openPlayground",
+                "title": "Open Playground",
+                "category": "Luma",
+                "icon": "$(play)"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "luma.runFile",
+                "key": "ctrl+alt+r",
+                "mac": "cmd+alt+r",
+                "when": "resourceLangId == luma"
+            },
+            {
+                "command": "luma.runTests",
+                "key": "ctrl+alt+t",
+                "mac": "cmd+alt+t",
+                "when": "resourceLangId == luma"
+            }
+        ],
+        "menus": {
+            "commandPalette": [
+                {
+                    "command": "luma.showReferences",
+                    "when": "false"
+                }
+            ],
+            "editor/title/run": [
+                {
+                    "command": "luma.runFile",
+                    "when": "resourceLangId == luma",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "luma.runTests",
+                    "when": "resourceLangId == luma",
+                    "group": "navigation@2"
+                }
+            ]
+        },
+        "taskDefinitions": [
+            {
+                "type": "luma",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "enum": [
+                            "run",
+                            "test",
+                            "check"
+                        ],
+                        "description": "The task command to execute."
+                    },
+                    "file": {
+                        "type": "string",
+                        "description": "The Luma file to execute."
+                    }
+                },
+                "required": [
+                    "command"
+                ]
+            }
+        ],
+        "problemMatchers": [
+            {
+                "name": "luma",
+                "label": "Luma",
+                "owner": "luma",
+                "fileLocation": [
+                    "absolute"
+                ],
+                "pattern": [
+                    {
+                        "regexp": "^(SyntaxError|TypeError|CompileError|RuntimeError|Warning)(?:\\[([^\\]]+)\\])? in (.+):(\\d+):(\\d+)",
+                        "severity": 1,
+                        "code": 2,
+                        "file": 3,
+                        "line": 4,
+                        "column": 5
+                    },
+                    {
+                        "regexp": "^\\s+(.+)$",
+                        "message": 1
+                    }
+                ]
+            },
+            {
+                "name": "luma-test",
+                "label": "Luma Test",
+                "owner": "luma",
+                "fileLocation": [
+                    "absolute"
+                ],
+                "pattern": {
+                    "regexp": "^\\s*FAIL\\s+(\\w+):\\s+(.+)$",
+                    "message": 2,
+                    "code": 1
+                }
+            }
+        ],
+        "walkthroughs": [
+            {
+                "id": "luma.gettingStarted",
+                "title": "Getting Started with Luma",
+                "description": "Learn how to write, run, and test Luma programs.",
+                "steps": [
+                    {
+                        "id": "luma.gettingStarted.install",
+                        "title": "Install the Language Server",
+                        "description": "The Luma extension automatically downloads the language server on first use. If it can't be downloaded, [build from source](https://github.com/d3v0n5h1r3/luma#build-and-test) or configure the path manually.\n\n[Open Settings](command:workbench.action.openSettings?%5B%22luma.lsp.path%22%5D)",
+                        "media": {
+                            "markdown": "walkthroughs/install.md"
+                        }
+                    },
+                    {
+                        "id": "luma.gettingStarted.hello",
+                        "title": "Write Your First Program",
+                        "description": "Create a `.luma` file with an `@main` function and hit Run.\n\n[Create hello.luma](command:workbench.action.files.newUntitledFile)",
+                        "media": {
+                            "markdown": "walkthroughs/hello.md"
+                        }
+                    },
+                    {
+                        "id": "luma.gettingStarted.edit",
+                        "title": "Explore Editing Features",
+                        "description": "As you write, the language server offers completions, hover, go to definition, rename, and quick fixes.\n\n[Go to Symbol in Editor](command:workbench.action.gotoSymbol)",
+                        "media": {
+                            "markdown": "walkthroughs/edit.md"
+                        }
+                    },
+                    {
+                        "id": "luma.gettingStarted.run",
+                        "title": "Run a Luma File",
+                        "description": "Use the play button in the editor title bar or the command palette.\n\n[Run Current File](command:luma.runFile)",
+                        "media": {
+                            "markdown": "walkthroughs/run.md"
+                        }
+                    },
+                    {
+                        "id": "luma.gettingStarted.debug",
+                        "title": "Debug a Program",
+                        "description": "Set breakpoints, then press F5 to launch the debugger — step through code and inspect variables.\n\n[Start Debugging](command:workbench.action.debug.start)",
+                        "media": {
+                            "markdown": "walkthroughs/debug.md"
+                        }
+                    },
+                    {
+                        "id": "luma.gettingStarted.test",
+                        "title": "Write and Run Tests",
+                        "description": "Add `@test` annotated functions and discover them in the Test Explorer.\n\n[Run Tests](command:luma.runTests)",
+                        "media": {
+                            "markdown": "walkthroughs/test.md"
+                        }
+                    },
+                    {
+                        "id": "luma.gettingStarted.playground",
+                        "title": "Try the Playground",
+                        "description": "Experiment with Luma snippets interactively, without creating a file.\n\n[Open Playground](command:luma.openPlayground)",
+                        "media": {
+                            "markdown": "walkthroughs/playground.md"
+                        }
+                    }
+                ]
+            }
+        ],
+        "semanticTokenScopes": [
+            {
+                "language": "luma",
+                "scopes": {
+                    "namespace": [
+                        "entity.name.namespace.luma"
+                    ],
+                    "type": [
+                        "entity.name.type.luma"
+                    ],
+                    "function": [
+                        "entity.name.function.luma"
+                    ],
+                    "function.declaration": [
+                        "entity.name.function.definition.luma"
+                    ],
+                    "variable": [
+                        "variable.other.luma"
+                    ],
+                    "variable.readonly": [
+                        "variable.other.constant.luma"
+                    ],
+                    "variable.declaration": [
+                        "variable.other.definition.luma"
+                    ],
+                    "parameter": [
+                        "variable.parameter.luma"
+                    ],
+                    "parameter.declaration": [
+                        "variable.parameter.definition.luma"
+                    ],
+                    "keyword": [
+                        "keyword.other.luma"
+                    ],
+                    "string": [
+                        "string.quoted.double.luma"
+                    ],
+                    "number": [
+                        "constant.numeric.luma"
+                    ],
+                    "operator": [
+                        "keyword.operator.luma"
+                    ],
+                    "comment": [
+                        "comment.line.luma"
+                    ],
+                    "decorator": [
+                        "entity.name.tag.annotation.luma"
+                    ],
+                    "decorator.declaration": [
+                        "entity.name.tag.annotation.definition.luma"
+                    ]
+                }
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+        "watch": "npm run compile -- --watch",
+        "lint": "eslint . && tsc --noEmit",
+        "lint:eslint": "eslint .",
+        "lint:types": "tsc --noEmit",
+        "format": "prettier --write \"src/**/*.ts\" \"src/**/*.js\" \"*.mjs\"",
+        "format:check": "prettier --check \"src/**/*.ts\" \"src/**/*.js\" \"*.mjs\"",
+        "test": "tsc -p tsconfig.json && node ./out/test/run_tests.js",
+        "test:unit": "tsc -p tsconfig.json && node --require ./src/test/vscode_stub.js ./out/test/run_unit_tests.js",
+        "package": "npm run compile && vsce package"
+    },
+    "dependencies": {
+        "vscode-languageclient": "9.0.1"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.39.4",
+        "@types/mocha": "^10.0.10",
+        "@types/node": "^20.19.41",
+        "@types/vscode": "^1.120.0",
+        "@vscode/test-electron": "^2.5.2",
+        "@vscode/vsce": "^3.9.1",
+        "esbuild": "^0.28.0",
+        "eslint": "^9.39.4",
+        "glob": "^10.5.0",
+        "globals": "^17.6.0",
+        "mocha": "^10.8.2",
+        "prettier": "^3.8.4",
+        "typescript": "^5.9.3",
+        "typescript-eslint": "^8.61.1"
+    }
+}

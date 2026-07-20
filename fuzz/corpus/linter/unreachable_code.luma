@@ -1,0 +1,5 @@
+@main
+function integer main() {
+    return 1
+    integer dead = 2
+}

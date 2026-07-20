@@ -1,0 +1,62 @@
+# Resource benchmarks: scoped cleanup (with) and acquire/use/release (using).
+# These measure the dispatch overhead of the resource-management helpers, which
+# wrap a body callable and guarantee a cleanup/release callable always runs.
+
+function BenchResult run_resource_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    st = time_it(st, "Resource.with (success path)", 10000, () -> {
+        integer _v = Resource.with(
+            42,
+            (integer v) -> v + 1,
+            (integer _c) -> none
+        )
+    })
+
+    st = time_it(st, "Resource.with (cleanup side-effect)", 10000, () -> {
+        reference<integer> r = Reference.new(0)
+        integer _v = Resource.with(
+            7,
+            (integer v) -> v * 2,
+            (integer _c) -> Reference.set(r, 1)
+        )
+    })
+
+    st = time_it(st, "Resource.using (acquire/use/release)", 10000, () -> {
+        integer _v = Resource.using(
+            () -> 100,
+            (integer v) -> v + 1,
+            (integer _c) -> none
+        )
+    })
+
+    st = time_it(st, "Resource.using (cleanup on error)", 5000, () -> {
+        reference<boolean> released = Reference.new(false)
+        try {
+            integer _v = Resource.using(
+                () -> 5,
+                (integer _b) -> {
+                    assert(false, "boom")
+                    return 0
+                },
+                (integer _c) -> Reference.set(released, true)
+            )
+        } catch(_e) {
+            boolean _ran = Reference.get(released)
+        }
+    })
+
+    st = time_it(st, "Resource.with (nested)", 5000, () -> {
+        integer _v = Resource.with(
+            10,
+            (integer outer) -> Resource.with(
+                outer + 5,
+                (integer inner) -> inner * 2,
+                (integer _c) -> none
+            ),
+            (integer _c) -> none
+        )
+    })
+
+    return st
+}

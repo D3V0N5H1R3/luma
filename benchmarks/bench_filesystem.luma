@@ -1,0 +1,100 @@
+# FileSystem I/O benchmarks: read, write, directory operations.
+
+function BenchResult run_filesystem_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    integer pid = Process.get_process_id()
+    string test_dir = "luma_bench_tmp_${pid}"
+    string test_file = "${test_dir}/bench_io.txt"
+
+    # Set up temp directory
+    result<boolean> _mkdir = FileSystem.create_directory(test_dir)
+
+    # --- Write ---
+
+    st = time_it(st, "FileSystem.write_file", 500, () -> {
+        result<boolean> _w = FileSystem.write_file(test_file, "The quick brown fox jumps over the lazy dog.\n")
+    })
+
+    # --- Read ---
+
+    # Ensure file exists for read benchmarks
+    result<boolean> _setup = FileSystem.write_file(test_file, "Line one\nLine two\nLine three\nLine four\nLine five\n")
+
+    st = time_it(st, "FileSystem.read_file", 1000, () -> {
+        result<string> _content = FileSystem.read_file(test_file)
+    })
+
+    st = time_it(st, "FileSystem.read_lines", 1000, () -> {
+        result<array<string>> _lines = FileSystem.read_lines(test_file)
+    })
+
+    # --- Write lines ---
+
+    st = time_it(st, "FileSystem.write_lines", 500, () -> {
+        result<boolean> _wl = FileSystem.write_lines(test_file, ["alpha", "beta", "gamma", "delta"])
+    })
+
+    # --- Append ---
+
+    st = time_it(st, "FileSystem.append_file", 500, () -> {
+        result<boolean> _a = FileSystem.append_file(test_file, "appended line\n")
+    })
+
+    # --- Directory listing ---
+
+    # Populate the directory so listing has several entries to walk.
+    result<boolean> _f1 = FileSystem.write_file("${test_dir}/a.txt", "a")
+    result<boolean> _f2 = FileSystem.write_file("${test_dir}/b.txt", "b")
+    result<boolean> _f3 = FileSystem.write_file("${test_dir}/c.txt", "c")
+
+    st = time_it(st, "FileSystem.list_files", 1000, () -> {
+        result<array<string>> _ls = FileSystem.list_files(test_dir)
+    })
+
+    st = time_it(st, "FileSystem.list_recursively", 1000, () -> {
+        result<array<string>> _lr = FileSystem.list_recursively(test_dir)
+    })
+
+    # --- Copy ---
+
+    string copy_target = "${test_dir}/bench_copy.txt"
+
+    st = time_it(st, "FileSystem.copy", 500, () -> {
+        result<boolean> _c = FileSystem.copy(test_file, copy_target)
+    })
+
+    # --- Metadata ---
+
+    st = time_it(st, "FileSystem.exists + is_file", 5000, () -> {
+        result<boolean> _e = FileSystem.exists(test_file)
+        result<boolean> _f = FileSystem.is_file(test_file)
+    })
+
+    st = time_it(st, "FileSystem.size + extension", 5000, () -> {
+        result<integer> _sz = FileSystem.size(test_file)
+        string _ext = FileSystem.extension(test_file)
+        string _name = FileSystem.name(test_file)
+        string _stem = FileSystem.stem(test_file)
+    })
+
+    # --- Path operations ---
+
+    st = time_it(st, "FileSystem path ops", 10000, () -> {
+        string _joined = FileSystem.join("a", "b")
+        string _norm = FileSystem.normalize("a/../b/./c")
+        string _parent = FileSystem.parent("a/b/c.txt")
+        string _stem = FileSystem.stem("a/b/c.txt")
+        string _rel = FileSystem.relative("a/b/c", "a")
+        boolean _abs = FileSystem.is_absolute("/usr/bin")
+        boolean _is_rel = FileSystem.is_relative("foo/bar")
+    })
+
+    # --- Cleanup ---
+
+    # delete_directory removes the directory and all files created above.
+    result<boolean> _del_file = FileSystem.delete(test_file)
+    result<boolean> _del_dir = FileSystem.delete_directory(test_dir)
+
+    return st
+}

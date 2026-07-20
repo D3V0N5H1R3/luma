@@ -1,0 +1,58 @@
+# Benchmark harness for Luma.
+# Provides timing and iteration control.
+#
+# Note: The VM enforces a 10M global loop-iteration limit.
+# Iteration counts are tuned to stay well under that ceiling.
+
+record BenchResult {
+    array<string> lines,
+    number total_time
+}
+
+function BenchResult time_it(BenchResult state, string name, integer iterations, function() -> none body) {
+    # Warmup: run a fraction of iterations to stabilise caches.
+    integer warmup_count = Result.unwrap(Converter.to_integer(Math.max(1, iterations / 10)))
+    for _ in 0 .. warmup_count {
+        body()
+    }
+
+    # Timed run.
+    number start = DateTime.milliseconds_since_start()
+
+    for _ in 0 .. iterations {
+        body()
+    }
+
+    number elapsed = DateTime.milliseconds_since_start() - start
+    number per_iter = elapsed / Result.unwrap(Converter.to_number(iterations))
+
+    string iters_str = Converter.to_string(iterations)
+    string elapsed_str = Converter.to_string(Result.unwrap_or(Math.round(elapsed), 0))
+
+    # Round to 6 decimal places (nanosecond resolution). Three places quantised
+    # most fast benchmarks to "0.001", hiding sub-microsecond regressions and
+    # collapsing distinct cases to the same value (and "0.000" entries are
+    # skipped entirely by compare_benchmarks.py).
+    number rounded_per_iter = Result.unwrap_or(Math.round(per_iter * 1000000.0), 0) / 1000000.0
+    string per_iter_str = Converter.to_string(rounded_per_iter)
+
+    # Output contract (parsed by scripts/parse_benchmark_results.py):
+    #   "<name> | <n> iterations | <ms> ms | <per_iter> ms/iter"
+    string line = "${name} | ${iters_str} iterations | ${elapsed_str} ms | ${per_iter_str} ms/iter"
+
+    # Buffering result lines with immutable Array.push is O(n) per call, hence
+    # O(n^2) over a full run — but measured at ~7 ms total (~0.04% of suite
+    # wall-clock, below run-to-run jitter), and it runs outside every timed
+    # region so it distorts no reported figure. The only truly O(n) fix is to
+    # print(line) here instead of buffering, but that reorders the observable
+    # output: each result would print as its module runs (interleaved with any
+    # output the benchmarks themselves emit) instead of appearing together in a
+    # block under the "Benchmark Results:" header. That reordering is a
+    # user-visible behaviour change, out of scope for a behaviour-preserving
+    # optimisation. (The per-line parser in scripts/parse_benchmark_results.py
+    # and the trailing total from total_time would both survive streaming — the
+    # blocker is output ordering, not either of those.) Left buffered
+    # deliberately: the cost is noise and streaming is out of scope.
+    array<string> new_lines = Array.push(state.lines, line)
+    return BenchResult { lines = new_lines, total_time = state.total_time + elapsed }
+}

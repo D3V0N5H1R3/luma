@@ -1,0 +1,361 @@
+# GraphicalUi Settings Panel — demonstrates form inputs, interactive widgets,
+# commands, init commands, subscriptions, and accessibility.
+#
+# A preferences screen with dropdown, slider, radio group, toggle, checkbox,
+# text area, and alert notifications. Shows how to manage complex form state
+# with the Elm Architecture pattern. Uses commands for save feedback and
+# keyboard shortcuts via subscriptions.
+
+function dictionary<string> button_variant(string variant) {
+    return {"variant": variant}
+}
+
+function dictionary save_settings(dictionary model) {
+    dictionary updated = Dictionary.set(model, "saved", true)
+
+    # Announce and auto-dismiss the success message after 2 seconds.
+    return GraphicalUi.with_command(updated, GraphicalUi.batch([
+        GraphicalUi.announce("Settings saved successfully"),
+        GraphicalUi.delay(2000, (result<string> _r) -> "dismiss_saved")
+    ]))
+}
+
+function dictionary request_reset(dictionary model) {
+    return Dictionary.set(model, "show_reset_confirm", true)
+}
+
+function dictionary cancel_reset(dictionary model) {
+    return Dictionary.set(model, "show_reset_confirm", false)
+}
+
+function dictionary reset_settings(dictionary _model) {
+    return GraphicalUi.with_command(create_default_model(),
+        GraphicalUi.announce("Settings reset to defaults"))
+}
+
+function widget view_appearance_section(dictionary model) {
+    mutable dictionary language_options = {}
+    language_options["help"] = "Controls the display language for the interface."
+
+    mutable dictionary font_options = {}
+    font_options["help"] = "Choose a comfortable editor text size."
+
+    mutable dictionary theme_options = {}
+    theme_options["help"] = "Pick the colour theme used by the editor."
+
+    return GraphicalUi.accessible(
+        GraphicalUi.panel("Appearance", [
+            GraphicalUi.field(
+                "Language",
+                GraphicalUi.dropdown(
+                    ["English", "Spanish", "French", "German", "Japanese"],
+                    model["language"],
+                    (string value) -> Dictionary.set(model, "language", value)
+                ),
+                language_options
+            ),
+
+            GraphicalUi.field(
+                "Font Size",
+                GraphicalUi.row([
+                    GraphicalUi.slider(
+                        model["font_size"],
+                        10, 28,
+                        (number value) -> Dictionary.set(model, "font_size", value)
+                    ),
+                    GraphicalUi.label("${model["font_size"]}px")
+                ], {"align_items": "center", "gap": GraphicalUi.VAR_GAP}),
+                font_options
+            ),
+
+            GraphicalUi.field(
+                "Editor Theme",
+                GraphicalUi.radio_group(
+                    ["Light", "Dark", "High Contrast", "Solarised"],
+                    model["editor_theme"],
+                    (string value) -> Dictionary.set(model, "editor_theme", value)
+                ),
+                theme_options
+            )
+        ], GraphicalUi.spacing(12)),
+        {"role": "region", "aria_label": "Appearance settings"}
+    )
+}
+
+function widget view_notifications_section(dictionary model) {
+    mutable dictionary email_options = {}
+    email_options["help"] = "Send account updates and reminders by email."
+
+    mutable dictionary push_options = {}
+    push_options["help"] = "Show notifications on this device."
+
+    mutable dictionary digest_options = {}
+    digest_options["help"] = "Bundle low-priority updates into a weekly summary."
+
+    mutable dictionary mentions_options = {}
+    mentions_options["help"] = "Limit alerts to conversations that mention you."
+
+    return GraphicalUi.accessible(
+        GraphicalUi.panel("Notifications", [
+            GraphicalUi.field(
+                "Email notifications",
+                GraphicalUi.toggle(
+                    "Enable email notifications",
+                    model["email_notifications"],
+                    (boolean value) -> Dictionary.set(model, "email_notifications", value)
+                ),
+                email_options
+            ),
+
+            GraphicalUi.field(
+                "Push notifications",
+                GraphicalUi.toggle(
+                    "Enable push notifications",
+                    model["push_notifications"],
+                    (boolean value) -> Dictionary.set(model, "push_notifications", value)
+                ),
+                push_options
+            ),
+
+            GraphicalUi.field(
+                "Weekly digest",
+                GraphicalUi.checkbox(
+                    "Send weekly digest",
+                    model["weekly_digest"],
+                    (boolean value) -> Dictionary.set(model, "weekly_digest", value)
+                ),
+                digest_options
+            ),
+
+            GraphicalUi.field(
+                "Mentions only",
+                GraphicalUi.checkbox(
+                    "Notify on mentions only",
+                    model["mentions_only"],
+                    (boolean value) -> Dictionary.set(model, "mentions_only", value)
+                ),
+                mentions_options
+            )
+        ], GraphicalUi.spacing(12)),
+        {"role": "region", "aria_label": "Notification preferences"}
+    )
+}
+
+function widget view_profile_section(dictionary model) {
+    mutable dictionary name_options = {}
+    name_options["help"] = "Shown to collaborators in shared spaces."
+
+    mutable dictionary bio_options = {}
+    bio_options["help"] = "A short introduction shown on your profile."
+
+    return GraphicalUi.accessible(
+        GraphicalUi.panel("Profile", [
+            GraphicalUi.field(
+                "Display Name",
+                GraphicalUi.text_input(
+                    model["display_name"],
+                    (string value) -> Dictionary.set(model, "display_name", value),
+                    "Enter your name"
+                ),
+                name_options
+            ),
+
+            GraphicalUi.field(
+                "Bio",
+                GraphicalUi.text_area(
+                    model["bio"],
+                    (string value) -> Dictionary.set(model, "bio", value)
+                ),
+                bio_options
+            )
+        ], GraphicalUi.spacing(12)),
+        {"role": "region", "aria_label": "Profile information"}
+    )
+}
+
+function widget view_reset_confirm(dictionary model) {
+    mutable dictionary opts = {}
+    opts["confirm_label"] = "Reset settings"
+    opts["cancel_label"] = "Keep changes"
+    opts["danger"] = true
+    return GraphicalUi.when(Dictionary.get_or(model, "show_reset_confirm", false),
+        GraphicalUi.confirm(
+            "Reset all settings?",
+            "This discards your current preferences and restores the defaults.",
+            () -> reset_settings(model),
+            () -> cancel_reset(model),
+            opts
+        )
+    )
+}
+
+function widget view_settings(dictionary model) {
+    return GraphicalUi.column([
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("settings", 20),
+            GraphicalUi.heading("Settings", 1)
+        ]),
+        GraphicalUi.separator(),
+
+        GraphicalUi.when(model["saved"],
+            GraphicalUi.toast_region([
+                GraphicalUi.toast("Settings saved successfully.", GraphicalUi.SUCCESS)
+            ])),
+
+        view_appearance_section(model),
+        view_notifications_section(model),
+        view_profile_section(model),
+
+        GraphicalUi.separator(),
+
+        # Footer actions — Save is primary, Reset is destructive and confirmed.
+        GraphicalUi.row([
+            GraphicalUi.button("Reset", () -> request_reset(model),
+                button_variant(GraphicalUi.DANGER)),
+            GraphicalUi.button("Save Settings", () -> save_settings(model),
+                button_variant(GraphicalUi.PRIMARY))
+        ], {"justify_content": "flex-end", "gap": GraphicalUi.VAR_GAP}),
+
+        view_reset_confirm(model)
+    ], GraphicalUi.merge_styles(GraphicalUi.spacing(16), GraphicalUi.padding(8)))
+}
+
+function dictionary create_default_model() {
+    mutable dictionary model = {"language": "English"}
+    model["font_size"] = 14.0
+    model["editor_theme"] = "Dark"
+    model["email_notifications"] = true
+    model["push_notifications"] = false
+    model["weekly_digest"] = true
+    model["mentions_only"] = false
+    model["display_name"] = ""
+    model["bio"] = ""
+    model["saved"] = false
+    model["show_reset_confirm"] = false
+    return model
+}
+
+# Ctrl+S saves settings without conflicting with ordinary text entry.
+function array<dictionary<string>> settings_subscriptions(dictionary _model) {
+    return [
+        GraphicalUi.on_key("save_key", "Ctrl+S", (string _key) -> "save")
+    ]
+}
+
+@main
+function void main() {
+    GraphicalUi.app(settings_config())
+}
+
+# Exposed as a named function (rather than inlined in main) so the form inputs,
+# the Save/Reset actions, the update reducer and the Ctrl+S shortcut can be driven
+# by the @test blocks below.
+function dictionary settings_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Luma Settings"
+    config["width"] = 520
+    config["height"] = 680
+    config["model"] = create_default_model()
+    config["view"] = view_settings
+    config["init"] = (dictionary model) -> {
+        # Announce readiness on startup for screen reader users.
+        return GraphicalUi.with_command(model,
+            GraphicalUi.announce("Settings panel ready"))
+    }
+    config["update"] = (dictionary model, string msg) -> {
+        return match msg {
+            case == "save" { save_settings(model) }
+            case == "dismiss_saved" { Dictionary.set(model, "saved", false) }
+            else { model }
+        }
+    }
+    config["subscribe"] = settings_subscriptions
+
+    return config
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+# Drive each control headlessly and assert the resulting model state.
+
+@test
+function void test_dropdown_changes_language() {
+    dictionary outcome = GraphicalUi.test_input(settings_config(), create_default_model(),
+        "English", "German")
+    assert(Dictionary.get_or(outcome, "language", "") == "German")
+}
+
+@test
+function void test_radio_changes_editor_theme() {
+    dictionary outcome = GraphicalUi.test_input(settings_config(), create_default_model(),
+        "Dark", "Light")
+    assert(Dictionary.get_or(outcome, "editor_theme", "") == "Light")
+}
+
+@test
+function void test_toggle_disables_email_notifications() {
+    dictionary outcome = GraphicalUi.test_input(settings_config(), create_default_model(),
+        "Enable email notifications", false)
+    boolean enabled = Dictionary.get_or(outcome, "email_notifications", true)
+    assert(!enabled)
+}
+
+@test
+function void test_checkbox_disables_weekly_digest() {
+    dictionary outcome = GraphicalUi.test_input(settings_config(), create_default_model(),
+        "Send weekly digest", false)
+    boolean enabled = Dictionary.get_or(outcome, "weekly_digest", true)
+    assert(!enabled)
+}
+
+@test
+function void test_text_input_sets_display_name() {
+    dictionary outcome = GraphicalUi.test_input(settings_config(), create_default_model(),
+        "Enter your name", "Ada Lovelace")
+    assert(Dictionary.get_or(outcome, "display_name", "") == "Ada Lovelace")
+}
+
+@test
+function void test_save_button_marks_saved() {
+    dictionary outcome = GraphicalUi.test_click(settings_config(), create_default_model(),
+        "Save Settings")
+    boolean saved = Dictionary.get_or(outcome, "saved", false)
+    assert(saved)
+}
+
+@test
+function void test_save_message_marks_saved() {
+    dictionary outcome = GraphicalUi.test_message(settings_config(), create_default_model(), "save")
+    boolean saved = Dictionary.get_or(outcome, "saved", false)
+    assert(saved)
+}
+
+@test
+function void test_dismiss_saved_message_clears_flag() {
+    mutable dictionary saved_model = create_default_model()
+    saved_model["saved"] = true
+    dictionary outcome = GraphicalUi.test_message(settings_config(), saved_model, "dismiss_saved")
+    boolean saved = Dictionary.get_or(outcome, "saved", true)
+    assert(!saved)
+}
+
+@test
+function void test_save_keyboard_shortcut_marks_saved() {
+    dictionary outcome = GraphicalUi.test_key(settings_config(), create_default_model(), "Ctrl+S")
+    boolean saved = Dictionary.get_or(outcome, "saved", false)
+    assert(saved)
+}
+
+@test
+function void test_reset_button_requires_confirm() {
+    mutable dictionary dirty = create_default_model()
+    dirty["language"] = "Japanese"
+    dirty["saved"] = true
+    dictionary requested = GraphicalUi.test_click(settings_config(), dirty, "Reset")
+    assert(Dictionary.get_or(requested, "language", "") == "Japanese")
+    assert(Dictionary.get_or(requested, "show_reset_confirm", false))
+
+    dictionary outcome = GraphicalUi.test_click(settings_config(), requested, "Reset all settings?")
+    assert(Dictionary.get_or(outcome, "language", "") == "English")
+    boolean saved = Dictionary.get_or(outcome, "saved", true)
+    assert(!saved)
+}

@@ -1,0 +1,68 @@
+# Linear algebra benchmarks: vectors, matrices, determinants, inverses.
+
+function BenchResult run_linearalgebra_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # Matrices and vectors built via library constructors are hoisted out of the
+    # timed bodies so each operation benchmark measures the operation itself, not
+    # repeated operand construction. Cheap inline literals (3-5 elements) stay in
+    # place, as does identity(10) below, whose construction the benchmark names.
+    array<number> vec50_zero = LinearAlgebra.zero_vector(50)
+    array<number> vec50_unit = LinearAlgebra.unit_vector(50, 0)
+    array<array<number>> mat5_identity = LinearAlgebra.identity(5)
+    array<array<number>> mat5_diagonal = LinearAlgebra.diagonal([1.0, 2.0, 3.0, 4.0, 5.0])
+    array<array<number>> mat4_diagonal = LinearAlgebra.diagonal([2.0, 3.0, 4.0, 5.0])
+    array<number> vec4_rhs = [1.0, 2.0, 3.0, 4.0]
+
+    # --- Vector operations ---
+
+    st = time_it(st, "LinAlg vector add/scale (dim 50)", 2000, () -> {
+        array<number> _sum = LinearAlgebra.add(vec50_zero, vec50_unit) |> Result.unwrap()
+        array<number> _scaled = LinearAlgebra.scale(vec50_unit, 3.0)
+    })
+
+    st = time_it(st, "LinAlg dot/norm/distance", 5000, () -> {
+        array<number> a = [1.0, 2.0, 3.0, 4.0, 5.0]
+        array<number> b = [5.0, 4.0, 3.0, 2.0, 1.0]
+        number _dot = LinearAlgebra.dot(a, b) |> Result.unwrap()
+        number _norm = LinearAlgebra.norm(a)
+        number _dist = LinearAlgebra.distance(a, b) |> Result.unwrap()
+    })
+
+    st = time_it(st, "LinAlg cross/normalize (3D)", 10000, () -> {
+        array<number> a = [1.0, 0.0, 0.0]
+        array<number> b = [0.0, 1.0, 0.0]
+        array<number> _cross = LinearAlgebra.cross(a, b) |> Result.unwrap()
+        array<number> _unit = LinearAlgebra.normalize(a) |> Result.unwrap()
+    })
+
+    # --- Matrix operations ---
+
+    st = time_it(st, "LinAlg identity/transpose (10x10)", 2000, () -> {
+        array<array<number>> m = LinearAlgebra.identity(10)
+        array<array<number>> _t = LinearAlgebra.transpose(m)
+    })
+
+    st = time_it(st, "LinAlg matrix multiply (5x5)", 500, () -> {
+        array<array<number>> _prod = LinearAlgebra.multiply(mat5_identity, mat5_diagonal) |> Result.unwrap()
+    })
+
+    st = time_it(st, "LinAlg matrix-vector mult (5x5)", 2000, () -> {
+        array<number> v = [1.0, 2.0, 3.0, 4.0, 5.0]
+        array<number> _result = LinearAlgebra.multiply_vector(mat5_identity, v) |> Result.unwrap()
+    })
+
+    st = time_it(st, "LinAlg determinant (4x4)", 1000, () -> {
+        number _det = LinearAlgebra.determinant(mat4_diagonal) |> Result.unwrap()
+    })
+
+    st = time_it(st, "LinAlg inverse (4x4)", 500, () -> {
+        result<array<array<number>>> _inv = LinearAlgebra.inverse(mat4_diagonal)
+    })
+
+    st = time_it(st, "LinAlg solve (4x4)", 500, () -> {
+        array<number> _x = LinearAlgebra.solve(mat4_diagonal, vec4_rhs) |> Result.unwrap()
+    })
+
+    return st
+}

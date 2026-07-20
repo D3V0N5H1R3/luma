@@ -1,0 +1,13 @@
+# Numeric literals and operators
+integer int_val = 42
+integer neg = -100
+number float_val = 3.14159
+number sci = 1.0e10
+integer hex = 0xFF
+integer bin = 0b1010
+integer x = 2 + 3 * 4 - 1 / 2
+integer y = x % 3
+boolean cmp = x == y
+boolean neq = x != y
+boolean lt = x < y
+boolean gt = x > y

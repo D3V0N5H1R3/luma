@@ -1,0 +1,79 @@
+# Complex match expressions and pattern matching
+choice Expr {
+    Num(integer value)
+    Add(Expr left, Expr right)
+    Neg(Expr operand)
+}
+
+function integer eval(Expr e) {
+    return match e {
+    case Expr.Num(v) { v }
+    case Expr.Add(l, r) { eval(l) + eval(r) }
+    case Expr.Neg(x) { 0 - eval(x) }
+    }
+}
+
+function string describe(integer x) {
+    return match x {
+    case == 0 { "zero" }
+    case == 1 { "small" }
+    case == 2 { "small" }
+    case == 3 { "small" }
+    else { "big" }
+    }
+}
+
+# Guards (when clauses) on comparison, optional, and result arms.
+function string classify(integer n) {
+    return match n {
+    case >= 100 when n % 2 == 0 { "big-even" }
+    case >= 100 { "big-odd" }
+    case < 0 { "negative" }
+    else { "small" }
+    }
+}
+
+function string check_opt(optional<integer> o) {
+    return match o {
+    case some(v) when v > 10 { "big" }
+    case some(v) { "small-${v}" }
+    case none { "empty" }
+    }
+}
+
+function string check_res(result<integer> r) {
+    return match r {
+    success(v) when v > 0 { "positive" }
+    success(v) { "nonpositive-${v}" }
+    failure(e) { "error-${e}" }
+    }
+}
+
+# Alternative patterns on choice unit variants.
+choice Signal { Red  Yellow  Green }
+
+function string action(Signal s) {
+    return match s {
+    case Signal.Red | Signal.Yellow { "stop" }
+    case Signal.Green { "go" }
+    }
+}
+
+# Boolean, string, != catch-all, and statement-form matches.
+function string flags(boolean b, string s, integer n) {
+    mutable string out = ""
+    match b {
+    case true { out = "T" }
+    case false { out = "F" }
+    }
+    string label = match s {
+    case == "a" { "alpha" }
+    case == "b" { "beta" }
+    else { "other" }
+    }
+    string parity = match n {
+    case == 0 { "zero" }
+    case != 0 { "nonzero" }
+    }
+    return "${out}${label}${parity}"
+}

@@ -1,0 +1,706 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Control Flow
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_if_else() {
+    integer score = 85
+
+    string grade = if score >= 90 {
+        "A"
+    } else if score >= 80 {
+        "B"
+    } else if score >= 70 {
+        "C"
+    } else {
+        "F"
+    }
+
+    assert(grade == "B")
+}
+
+@test
+function void test_if_expression() {
+    integer score = 75
+
+    string label = if score >= 60 { "pass" } else { "fail" }
+
+    assert(label == "pass")
+
+    string excellence_label = if score >= 90 { "excellent" } else { "ok" }
+
+    assert(excellence_label == "ok")
+}
+
+@test
+function void test_for_in_range() {
+    mutable integer total = 0
+
+    for counter in 1 .. 11 {
+        total += counter
+    }
+
+    assert(total == 55)
+}
+
+@test
+function void test_for_in_inclusive_range() {
+    mutable integer total = 0
+
+    for counter in 1 ..= 10 {
+        total += counter
+    }
+
+    assert(total == 55)
+}
+
+@test
+function void test_for_in_inclusive_range_includes_endpoint() {
+    mutable integer count = 0
+    mutable integer last = -1
+
+    for value in 0 ..= 3 {
+        count++
+        last = value
+    }
+
+    # Inclusive range visits 0, 1, 2, 3 — four iterations ending at 3.
+    assert(count == 4)
+    assert(last == 3)
+}
+
+@test
+function void test_for_in_exclusive_range_excludes_endpoint() {
+    mutable integer count = 0
+    mutable integer last = -1
+
+    for value in 0 .. 3 {
+        count++
+        last = value
+    }
+
+    # Exclusive range visits 0, 1, 2 — three iterations ending at 2.
+    assert(count == 3)
+    assert(last == 2)
+}
+
+@test
+function void test_for_in_array() {
+    array<string> fruits = ["apple", "banana", "cherry"]
+
+    mutable string output_text = ""
+
+    for fruit in fruits {
+        output_text = "${output_text}${fruit} "
+    }
+
+    assert(output_text == "apple banana cherry ")
+}
+
+@test
+function void test_for_with_index() {
+    array<string> items = ["a", "b", "c"]
+
+    mutable string output_text = ""
+
+    for index, item in items {
+        output_text = "${output_text}${index}:${item} "
+    }
+
+    assert(output_text == "0:a 1:b 2:c ")
+}
+
+@test
+function void test_for_discard_variable() {
+    mutable integer count = 0
+
+    for _ in 0 .. 10 {
+        count++
+    }
+
+    assert(count == 10)
+}
+
+@test
+function void test_for_over_string() {
+    mutable string built = ""
+
+    for ch in "hello" {
+        built = built + ch
+    }
+
+    assert(built == "hello")
+}
+
+@test
+function void test_for_over_string_count() {
+    mutable integer count = 0
+
+    for _ in "abc" {
+        count++
+    }
+
+    assert(count == 3)
+}
+
+@test
+function void test_break() {
+    mutable integer last = 0
+
+    for counter in 0 .. 100 {
+        if counter == 5 { break }
+
+        last = counter
+    }
+
+    assert(last == 4)
+}
+
+@test
+function void test_continue() {
+    mutable integer sum = 0
+
+    for counter in 0 .. 10 {
+        if counter % 2 == 0 { continue }
+
+        sum += counter
+    }
+
+    assert(sum == 25)
+}
+
+@test
+function void test_nested_loop_break_exits_inner_only() {
+    mutable integer count = 0
+
+    for _outer in 0 .. 3 {
+        for inner in 0 .. 5 {
+            if inner == 2 { break }
+
+            count++
+        }
+    }
+
+    # The inner break stops each inner loop at inner==2 (2 iterations),
+    # while the outer loop still runs all 3 times: 3 * 2 == 6.
+    assert(count == 6)
+}
+
+@test
+function void test_nested_loop_continue_inner() {
+    mutable integer sum = 0
+
+    for outer in 1 .. 4 {
+        for inner in 0 .. 4 {
+            if inner % 2 == 0 { continue }
+
+            sum += outer * inner
+        }
+    }
+
+    # inner contributes (1 + 3) = 4 per outer iteration; outer is 1, 2, 3.
+    # (1 + 2 + 3) * 4 == 24.
+    assert(sum == 24)
+}
+
+@test
+function void test_break_in_nested_while() {
+    mutable integer total = 0
+    mutable integer i = 0
+
+    while i < 3 {
+        i++
+
+        mutable integer j = 0
+
+        while true {
+            j++
+            if j == 4 { break }
+
+            total += 1
+        }
+    }
+
+    # Inner while adds 3 per outer pass (j == 1, 2, 3), outer runs 3 times.
+    assert(total == 9)
+}
+
+@test
+function void test_nested_if_expression() {
+    integer score = 5
+
+    string inner = if score > 3 { "medium" } else { "small" }
+    string label = if score > 10 { "big" } else { inner }
+
+    assert(label == "medium")
+}
+
+# ─── While Loops ───
+
+@test
+function void test_while_basic() {
+    mutable integer count = 0
+
+    while count < 5 {
+        count++
+    }
+
+    assert(count == 5)
+}
+
+@test
+function void test_while_break() {
+    mutable integer count = 0
+
+    while true {
+        count++
+        if count == 3 {
+            break
+        }
+    }
+
+    assert(count == 3)
+}
+
+@test
+function void test_while_continue() {
+    mutable integer sum = 0
+    mutable integer loop_counter = 0
+
+    while loop_counter < 10 {
+        loop_counter++
+
+        if loop_counter % 2 == 0 {
+            continue
+        }
+
+        sum += loop_counter
+    }
+
+    # Sum of odd numbers 1..9 = 1+3+5+7+9 = 25
+    assert(sum == 25)
+}
+
+@test
+function void test_while_never_runs() {
+    mutable integer counter = 42
+    boolean condition = false
+
+    while condition {
+        counter = 0
+    }
+
+    assert(counter == 42)
+}
+
+# While iteration limit is tested in the C++ unit test suite
+# (interpreter_test.cpp — test_while_iteration_limit) because
+# the 1-billion-iteration guard is too slow for the interpreted
+# Luma test runner.
+
+# ─── Try / Catch / Finally ────────────────────────────────
+
+@test
+function void test_try_no_error() {
+    mutable integer val = 0
+
+    try {
+        val = 42
+    } catch(_err) {
+        val = -1
+    }
+
+    assert(val == 42)
+}
+
+@test
+function void test_try_catches_runtime_error() {
+    mutable string caught = ""
+
+    integer zero = 0
+
+    try {
+        integer _ = 1 / zero
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "division by zero"))
+}
+
+@test
+function void test_try_catch_finally_no_error() {
+    mutable string log = ""
+
+    try {
+        log += "try"
+    } catch(_err) {
+        log += "catch"
+    } finally {
+        log += "-finally"
+    }
+
+    assert(log == "try-finally")
+}
+
+@test
+function void test_try_catch_finally_with_error() {
+    mutable string log = ""
+
+    integer zero = 0
+
+    try {
+        log += "try"
+
+        integer _ = 1 / zero
+
+        log += "-unreachable"
+    } catch(_err) {
+        log += "-catch"
+    } finally {
+        log += "-finally"
+    }
+
+    assert(log == "try-catch-finally")
+}
+
+@test
+function void test_finally_without_catch() {
+    mutable string log = ""
+
+    try {
+        log += "try"
+    } finally {
+        log += "-finally"
+    }
+
+    assert(log == "try-finally")
+}
+
+@test
+function void test_try_finally_runs_before_propagation() {
+    mutable string log = ""
+
+    integer zero = 0
+
+    try {
+        try {
+            log += "try"
+
+            integer _ = 1 / zero
+
+            log += "-unreachable"
+        } finally {
+            log += "-finally"
+        }
+    } catch(_err) {
+        log += "-caught"
+    }
+
+    assert(log == "try-finally-caught")
+}
+
+@test
+function void test_try_recovers_and_continues() {
+    mutable integer value = 0
+
+    try {
+        array<integer> arr = [1, 2, 3]
+        integer _ = arr[99]
+    } catch(_err) {
+        value = 1
+    }
+
+    value += 10
+
+    assert(value == 11)
+}
+
+# Regression: finally must run on every exit from the catch body — when the
+# catch raises a new error, returns from the function, breaks, or continues.
+# The combined try/catch/finally is lowered as nested layers so the finally
+# stays active while the catch body runs.
+
+@test
+function void test_finally_runs_when_catch_throws() {
+    mutable string log = ""
+
+    integer zero = 0
+
+    try {
+        try {
+            integer _ = 1 / zero
+        } catch(_err) {
+            log += "C"
+
+            integer _again = 1 / zero
+        } finally {
+            log += "F"
+        }
+    } catch(_outer) {
+        log += "O"
+    }
+
+    assert(log == "CFO")
+}
+
+@test
+function void test_finally_runs_on_break_from_catch() {
+    mutable integer ran = 0
+
+    integer zero = 0
+
+    for _i in 0 .. 5 {
+        try {
+            integer _ = 1 / zero
+        } catch(_err) {
+            break
+        } finally {
+            ran += 1
+        }
+    }
+
+    assert(ran == 1)
+}
+
+@test
+function void test_finally_runs_on_continue_from_catch() {
+    mutable integer ran = 0
+
+    integer zero = 0
+
+    for _i in 0 .. 3 {
+        try {
+            integer _ = 1 / zero
+        } catch(_err) {
+            continue
+        } finally {
+            ran += 1
+        }
+    }
+
+    assert(ran == 3)
+}
+
+function string catch_returns(reference<string> log) {
+    integer zero = 0
+
+    try {
+        integer _ = 1 / zero
+    } catch(_err) {
+        Reference.set(log, Reference.get(log) + "C")
+
+        return "ret"
+    } finally {
+        Reference.set(log, Reference.get(log) + "F")
+    }
+
+    return "end"
+}
+
+@test
+function void test_finally_runs_on_return_from_catch() {
+    reference<string> log = Reference.new("")
+
+    string returned = catch_returns(log)
+
+    assert(Reference.get(log) == "CF")
+    assert(returned == "ret")
+}
+
+# Regression: a `return` inside a finally whose try ALSO returns non-locally
+# previously re-entered emit_try_unwind over the same still-active handler set,
+# recursing without bound → a compile-time native stack overflow.  Compilation
+# must now succeed and the finally's return must win (yields 2, not 1).
+function integer try_return_overridden_by_finally_return() {
+    try {
+        return 1
+    } finally {
+        return 2
+    }
+}
+
+@test
+function void test_finally_return_overrides_try_return() {
+    assert(try_return_overridden_by_finally_return() == 2)
+}
+
+# ─── Scope and Shadowing ──────────────────────────────────
+@test
+function void test_inner_block_shadows_outer() {
+    integer x = 1
+    boolean condition = true
+
+    if condition {
+        integer _x = 2
+
+        assert(_x == 2)
+    }
+
+    assert(x == 1)
+}
+
+@test
+function void test_nested_scopes_shadow_correctly() {
+    string label = "outer"
+    boolean condition = true
+
+    if condition {
+        string _label = "middle"
+
+        assert(_label == "middle")
+
+        if condition {
+            string _inner_label = "inner"
+
+            assert(_inner_label == "inner")
+        }
+
+        assert(_label == "middle")
+    }
+
+    assert(label == "outer")
+}
+
+@test
+function void test_for_loop_creates_scope() {
+    integer x = 100
+
+    for x in 0 .. 3 {
+        assert(x < 3)
+    }
+
+    assert(x == 100)
+}
+
+# ─── For-in String (Unicode) ─────────────────────────────
+
+@test
+function void test_for_over_string_collects_characters() {
+    mutable array<string> chars = []
+
+    for ch in "abc" {
+        chars = Array.push(chars, ch)
+    }
+
+    assert(Array.length(chars) == 3)
+    assert(chars[0] == "a")
+    assert(chars[1] == "b")
+    assert(chars[2] == "c")
+}
+
+@test
+function void test_for_over_empty_string() {
+    mutable integer count = 0
+
+    for _ in "" {
+        count++
+    }
+
+    assert(count == 0)
+}
+
+# ─── Empty and Reverse Ranges ─────────────────────────────
+
+@test
+function void test_for_over_empty_array() {
+    mutable integer count = 0
+
+    array<integer> empty_values = []
+
+    for _ in empty_values {
+        count++
+    }
+
+    assert(count == 0)
+}
+
+@test
+function void test_for_empty_range_equal_bounds() {
+    mutable integer count = 0
+
+    for _ in 5 .. 5 {
+        count++
+    }
+
+    assert(count == 0)
+}
+
+@test
+function void test_for_reverse_range_is_empty() {
+    mutable integer count = 0
+
+    for _ in 5 .. 3 {
+        count++
+    }
+
+    assert(count == 0)
+}
+
+@test
+function void test_for_inclusive_range_single_element() {
+    mutable integer count = 0
+    mutable integer seen = -1
+
+    for value in 7 ..= 7 {
+        count++
+        seen = value
+    }
+
+    assert(count == 1)
+    assert(seen == 7)
+}
+
+@test
+function void test_for_over_negative_range() {
+    integer lower = -3
+
+    mutable integer sum = 0
+
+    for value in lower .. 1 {
+        sum += value
+    }
+
+    # -3 + -2 + -1 + 0 == -6 (exclusive of 1).
+    assert(sum == -6)
+}
+
+# ─── Match as Expression (additional) ────────────────────
+
+@test
+function void test_match_expression_result_binding() {
+    result<integer> r = success(42)
+
+    integer val = match r {
+        success(v) { v * 2 }
+        failure(_) { 0 }
+    }
+
+    assert(val == 84)
+}
+
+@test
+function void test_if_expression_nested() {
+    integer x = 5
+
+    string label = if x > 10 { "big" } else { if x > 3 { "medium" } else { "small" } }
+
+    assert(label == "medium")
+}
+
+# ─── For-in Dictionary ───────────────────────────────────
+
+@test
+function void test_for_over_dictionary() {
+    dictionary<integer> d = {"a": 1, "b": 2}
+    mutable integer total = 0
+
+    for _key, val in d {
+        total += val
+    }
+
+    assert(total == 3)
+}

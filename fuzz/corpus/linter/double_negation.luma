@@ -1,0 +1,6 @@
+@main
+function void main() {
+    boolean x = true
+    boolean y = !!x
+    print(y)
+}

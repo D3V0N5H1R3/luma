@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — Documentation Consistency Workflow
+#
+# Guards against stale references to renamed or removed source
+# files in the documentation and prompt files. Split out from the
+# main CI workflow so that documentation-only changes do not
+# trigger the full build/test matrix (and vice versa).
+# ─────────────────────────────────────────────────────────────
+
+name: Docs Consistency
+
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - ".github/workflows/docs.yml"
+      - ".github/prompts/**"
+      - ".github/stale-path-denylist.txt"
+      - "README.md"
+      - "documents/**"
+      - "instructions/**"
+      - "language-server/README.md"
+  pull_request:
+    branches: [main]
+    paths: *paths
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  documentation-consistency:
+    name: Documentation Consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Reject stale path references
+        run: |
+          # Patterns of removed/renamed paths live in the denylist file, one
+          # per line; comment (#) and blank lines are stripped before matching.
+          if grep -vE '^[[:space:]]*(#|$)' .github/stale-path-denylist.txt \
+            | grep -R -n -E -f - \
+              README.md \
+              documents \
+              instructions \
+              language-server/README.md \
+              .github/prompts; then
+            echo "::error::Found stale documentation or prompt references"
+            exit 1
+          fi

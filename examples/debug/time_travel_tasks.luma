@@ -1,0 +1,36 @@
+# Time-travel + concurrency regression fixture (B01).
+#
+# The main thread and a spawned task execute many lines *concurrently* inside a
+# task_scope. Under `timeTravel`, the line hook installed on the main VM is
+# propagated into the spawned task's VM, so the task worker thread runs it too.
+# If that hook captured the main VM by reference it would snapshot the main
+# thread's value stack from the task thread while the main thread mutates it —
+# a data race surfaced under TSan/ASan. Each thread must instead record against
+# the VM currently executing on it. The program must run cleanly to completion.
+
+function integer busy_loop(integer n) {
+    mutable integer sum = 0
+
+    for i in 1 .. n + 1 {
+        sum += i
+    }
+
+    return sum
+}
+
+@main
+function void main() {
+    mutable integer total = 0
+
+    task_scope {
+        task<integer> _worker = spawn busy_loop(2000)
+
+        # Main keeps stepping its own lines while the task above runs, so the
+        # two VMs change frames and value stacks at the same time.
+        for j in 1 .. 2001 {
+            total += j
+        }
+    }
+
+    print("main total: ${total}")
+}

@@ -1,0 +1,32 @@
+{
+  "include": [
+    {
+      "distro": "Debian (bookworm)",
+      "image": "debian:bookworm",
+      "cc": "gcc-13",
+      "cxx": "g++-13",
+      "install-cmd": "apt-get update -q && apt-get install -y cmake gcc-13 g++-13 make"
+    },
+    {
+      "distro": "Kali Linux",
+      "image": "kalilinux/kali-rolling",
+      "cc": "gcc",
+      "cxx": "g++",
+      "install-cmd": "apt-get update -q && apt-get install -y cmake gcc g++ make"
+    },
+    {
+      "distro": "Fedora",
+      "image": "fedora:latest",
+      "cc": "gcc",
+      "cxx": "g++",
+      "install-cmd": "dnf install -y cmake gcc gcc-c++ make"
+    },
+    {
+      "distro": "Arch Linux",
+      "image": "archlinux:latest",
+      "cc": "gcc",
+      "cxx": "g++",
+      "install-cmd": "pacman -Syu --noconfirm cmake gcc make"
+    }
+  ]
+}

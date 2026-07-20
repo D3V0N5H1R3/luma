@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — VS Code Extension Release Workflow
+#
+# Triggered on version tags (vscode-v*.*.*). Builds, validates,
+# and publishes the VS Code extension to the Visual Studio
+# Marketplace.
+# ─────────────────────────────────────────────────────────────
+
+name: Release — VS Code Extension
+
+on:
+  push:
+    tags: ["vscode-v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish VS Code Extension
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: extensions/vscode
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Build and package extension
+        id: build
+        uses: ./.github/actions/build-vscode-extension
+
+      - name: Publish to Visual Studio Marketplace
+        # Invoke the lockfile-pinned vsce installed by the build action's
+        # `npm ci`, not `npx vsce` (which can silently fetch an unpinned
+        # version from the registry) — this step holds the Marketplace PAT.
+        run: ./node_modules/.bin/vsce publish --no-dependencies
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#vscode-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          name: VS Code Extension v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: extensions/vscode/${{ steps.build.outputs.vsix-file }}

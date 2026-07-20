@@ -1,0 +1,860 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Match
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+function result<number> safe_divide(number numerator, number denominator) {
+    if denominator == 0 { return failure("division by zero") }
+
+    return success(numerator / denominator)
+}
+
+@test
+function void test_match_comparison_arms() {
+    integer score = 85
+
+    string grade = match score {
+    case >= 90 { "A" }
+    case >= 80 { "B" }
+    case >= 70 { "C" }
+    else       { "F" }
+    }
+
+    assert(grade == "B")
+}
+
+@test
+function void test_match_equality() {
+    string command = "help"
+
+    string output = match command {
+    case == "quit" { "quitting" }
+    case == "help" { "showing help" }
+    else           { "unknown" }
+    }
+
+    assert(output == "showing help")
+}
+
+@test
+function void test_match_boolean() {
+    boolean is_enabled = true
+
+    string output = match is_enabled {
+    case true  { "enabled" }
+    case false { "disabled" }
+    }
+
+    assert(output == "enabled")
+}
+
+@test
+function void test_match_result() {
+    result<number> division_result = safe_divide(10.0, 2.0)
+
+    string output = match division_result {
+        success(value) { "got ${value}" }
+        failure(error_message) { "error: ${error_message}" }
+    }
+
+    assert(output == "got 5.0")
+}
+
+@test
+function void test_match_as_expression() {
+    integer score = 42
+
+    string label = match score {
+    case == 0  { "zero" }
+    case >= 10 { "big" }
+    else       { "small" }
+    }
+
+    assert(label == "big")
+}
+
+@test
+function void test_match_optional() {
+    optional<string> maybe_value = none
+
+    string output = match maybe_value {
+    case some(v) { v }
+    case none    { "nothing" }
+    }
+
+    assert(output == "nothing")
+
+    optional<string> some_value = some("hello")
+
+    string output2 = match some_value {
+    case some(v) { v }
+    case none    { "nothing" }
+    }
+
+    assert(output2 == "hello")
+}
+
+@test
+function void test_match_not_equal() {
+    integer input_value = 7
+
+    string output = match input_value {
+    case == 5  { "five" }
+    case != 5  { "not five" }
+    }
+
+    assert(output == "not five")
+}
+
+@test
+function void test_match_multi_statement_arm() {
+    integer input_value = 3
+
+    integer computed_result = match input_value {
+    case == 0 {
+        integer zero_value = 0
+
+        zero_value
+    }
+else {
+    integer doubled = input_value * 2
+
+    doubled + 1
+}
+}
+
+assert(computed_result == 7)
+}
+
+@test
+function void test_match_less_than() {
+    integer numeric_value = 3
+
+    string label = match numeric_value {
+    case < 5  { "small" }
+    case < 10 { "medium" }
+    else      { "large" }
+    }
+
+    assert(label == "small")
+}
+
+@test
+function void test_match_less_equal() {
+    integer numeric_value = 5
+
+    string label = match numeric_value {
+    case <= 5  { "at most five" }
+    else       { "more" }
+    }
+
+    assert(label == "at most five")
+}
+
+# ─── String literal match arms (without == prefix) ────────
+
+@test
+function void test_match_string_literal_arm() {
+    string cmd = "quit"
+
+    string response = match cmd {
+    case "quit" { "goodbye" }
+    case "help" { "showing help" }
+    case "list" { "listing items" }
+    else        { "unknown command" }
+    }
+
+    assert(response == "goodbye")
+}
+
+@test
+function void test_match_string_literal_else_fallback() {
+    string cmd = "unknown"
+
+    string response = match cmd {
+    case "quit" { "goodbye" }
+    case "help" { "showing help" }
+    else        { "unknown command" }
+    }
+
+    assert(response == "unknown command")
+}
+
+@test
+function void test_match_string_literal_multi_arm() {
+    mutable integer count = 0
+
+    array<string> days = ["Mon", "Sat", "Sun", "Wed"]
+
+    for day in days {
+        string kind = match day {
+        case "Sat" { "weekend" }
+        case "Sun" { "weekend" }
+        else       { "weekday" }
+        }
+
+        if kind == "weekend" { count = count + 1 }
+    }
+
+    assert(count == 2)
+}
+
+# ─── Multi-pattern match arms ────────────────────────────
+
+choice Season { Spring, Summer, Autumn, Winter }
+
+@test
+function void test_match_multi_pattern_enum() {
+    Season s = Season.Summer
+
+    string outcome = match s {
+    case Season.Spring | Season.Summer { "warm" }
+    case Season.Autumn | Season.Winter { "cold" }
+    }
+
+    assert(outcome == "warm")
+}
+
+@test
+function void test_match_multi_pattern_string() {
+    string cmd = "exit"
+
+    string response = match cmd {
+    case "quit" | "exit" | "q" { "goodbye" }
+    case "help" | "?"          { "showing help" }
+    else                       { "unknown" }
+    }
+
+    assert(response == "goodbye")
+}
+
+@test
+function void test_match_multi_pattern_boolean() {
+    boolean flag = true
+
+    string label = match flag {
+    case true  { "yes" }
+    case false { "no" }
+    }
+
+    assert(label == "yes")
+}
+
+@test
+function void test_match_multi_pattern_comparison() {
+    integer score = 1
+
+    string grade = match score {
+    case == 0 | == 1 { "very low" }
+    case >= 90       { "high" }
+    else             { "other" }
+    }
+
+    assert(grade == "very low")
+}
+
+@test
+function void test_match_multi_pattern_with_else() {
+    Season s = Season.Autumn
+
+    string label = match s {
+    case Season.Spring | Season.Summer { "warm" }
+    else                               { "cold" }
+    }
+
+    assert(label == "cold")
+}
+
+# ─── Integer literal match arms ──────────────────────────
+
+@test
+function void test_match_integer_literal_arm() {
+    integer day = 3
+
+    string name = match day {
+    case 1 { "Monday" }
+    case 2 { "Tuesday" }
+    case 3 { "Wednesday" }
+    else   { "other" }
+    }
+
+    assert(name == "Wednesday")
+}
+
+@test
+function void test_match_integer_literal_else_fallback() {
+    integer code = 99
+
+    string label = match code {
+    case 0 { "zero" }
+    case 1 { "one" }
+    else   { "unknown" }
+    }
+
+    assert(label == "unknown")
+}
+
+@test
+function void test_match_integer_literal_expression() {
+    integer x = 2
+
+    string result_value = match x {
+    case 1 { "one" }
+    case 2 { "two" }
+    case 3 { "three" }
+    else   { "other" }
+    }
+
+    assert(result_value == "two")
+}
+
+@test
+function void test_match_multi_pattern_integer() {
+    integer code = 2
+
+    string category = match code {
+    case 1 | 2 | 3 { "low" }
+    case 4 | 5 | 6 { "mid" }
+    else           { "high" }
+    }
+
+    assert(category == "low")
+}
+
+@test
+function void test_match_multi_pattern_integer_else() {
+    integer val = 10
+
+    string label = match val {
+    case 0 | 1 { "binary" }
+    else       { "other" }
+    }
+
+    assert(label == "other")
+}
+
+# ═══════════════════════════════════════════════════════════
+# Negative / edge-case tests — match expression
+# ═══════════════════════════════════════════════════════════
+
+# Note: Non-exhaustive patterns and type mismatches in arms are caught
+# at compile time by the type checker (tested in type_checker_test.cpp).
+# Below we test runtime edge cases.
+
+choice MatchColor { Red, Green, Blue }
+
+@test
+function void test_match_choice_else_arm_catches_remaining() {
+    MatchColor c = MatchColor.Blue
+
+    string name = match c {
+    case MatchColor.Red { "red" }
+    else                { "other" }
+    }
+
+    assert(name == "other", "else arm should catch non-red variants")
+}
+
+@test
+function void test_match_integer_comparison_boundary() {
+    integer score = 90
+
+    string grade = match score {
+    case >= 90 { "A" }
+    case >= 80 { "B" }
+    case >= 70 { "C" }
+    else       { "F" }
+    }
+
+    assert(grade == "A", "score 90 should match >= 90")
+}
+
+@test
+function void test_match_integer_comparison_below_boundary() {
+    integer score = 89
+
+    string grade = match score {
+    case >= 90 { "A" }
+    case >= 80 { "B" }
+    case >= 70 { "C" }
+    else       { "F" }
+    }
+
+    assert(grade == "B", "score 89 should match >= 80")
+}
+
+@test
+function void test_match_string_no_match_uses_else() {
+    string cmd = "unknown"
+
+    string result_value = match cmd {
+    case "quit" { "quitting" }
+    case "help" { "helping" }
+    else        { "unrecognized" }
+    }
+
+    assert(result_value == "unrecognized")
+}
+
+@test
+function void test_match_result_failure_arm() {
+    result<integer> r = failure("bad input")
+
+    string msg = match r {
+        success(v) { "got ${v}" }
+        failure(e) { "error: ${e}" }
+    }
+
+    assert(String.contains(msg, "error: bad input"))
+}
+
+@test
+function void test_match_optional_none_arm() {
+    optional<string> opt = none
+
+    string output = match opt {
+    case some(v) { v }
+    case none    { "nothing" }
+    }
+
+    assert(output == "nothing")
+}
+
+# ═══════════════════════════════════════════════════════════
+# Regression — match as the tail value of an enclosing match arm
+#
+# A match used as the last expression of an enclosing match arm body
+# must evaluate to the inner match's value (previously yielded none).
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_match_nested_in_arm_value() {
+    result<integer> r = success(1)
+
+    string label = match r {
+        success(v) {
+            match v {
+            case 1 { "one" }
+            case 2 { "two" }
+            else   { "many" }
+            }
+        }
+        failure(_e) { "error" }
+    }
+
+    assert(label == "one", "nested match in success arm should return its value")
+}
+
+choice NestedMathError { DivByZero, Overflow }
+
+@test
+function void test_match_nested_typed_error_arm_value() {
+    result<integer, NestedMathError> r = failure(NestedMathError.DivByZero)
+
+    string label = match r {
+        success(v) { "ok ${v}" }
+        failure(e) {
+            match e {
+            case NestedMathError.DivByZero { "div0" }
+            case NestedMathError.Overflow  { "overflow" }
+            }
+        }
+    }
+
+    assert(label == "div0", "nested match in failure arm should return its value")
+}
+
+@test
+function void test_match_nested_in_else_arm_value() {
+    integer code = 9
+
+    string label = match code {
+    case 0 { "zero" }
+    else {
+        match code {
+        case >= 5 { "big" }
+        else      { "small" }
+        }
+    }
+    }
+
+    assert(label == "big", "nested match in else arm should return its value")
+}
+
+# ═══════════════════════════════════════════════════════════
+# Choice variant field destructuring
+#
+# `case Type.Variant(field)` binds the variant's payload fields to
+# names usable in the arm body.
+# ═══════════════════════════════════════════════════════════
+
+choice Shape {
+    Circle(number radius)
+    Square(number side)
+    Rectangle(number width, number height)
+}
+
+@test
+function void test_match_choice_destructure_single_field() {
+    Shape s = Shape.Circle(2.0)
+
+    number area = match s {
+    case Shape.Circle(r)       { 3.14 * r * r }
+    case Shape.Square(side)    { side * side }
+    case Shape.Rectangle(w, h) { w * h }
+    }
+
+    assert(area > 12.5 && area < 12.6, "circle area from destructured radius")
+}
+
+@test
+function void test_match_choice_destructure_multi_field() {
+    Shape s = Shape.Rectangle(3.0, 4.0)
+
+    number area = match s {
+    case Shape.Circle(r)       { 3.14 * r * r }
+    case Shape.Square(side)    { side * side }
+    case Shape.Rectangle(w, h) { w * h }
+    }
+
+    assert(area > 11.9 && area < 12.1, "rectangle area from two destructured fields")
+}
+
+@test
+function void test_match_choice_destructure_wildcard() {
+    Shape s = Shape.Rectangle(5.0, 6.0)
+
+    string kind = match s {
+    case Shape.Circle(_)       { "round" }
+    case Shape.Square(_)       { "square" }
+    case Shape.Rectangle(_, _) { "oblong" }
+    }
+
+    assert(kind == "oblong", "wildcard destructuring ignores payload fields")
+}
+
+@test
+function void test_match_choice_destructure_statement_form() {
+    Shape s = Shape.Square(7.0)
+
+    mutable number measured = 0.0
+
+    match s {
+    case Shape.Circle(r)       { measured = r }
+    case Shape.Square(side)    { measured = side }
+    case Shape.Rectangle(w, h) { measured = w + h }
+    }
+
+    assert(measured > 6.9 && measured < 7.1, "statement-form destructuring binds payload")
+}
+
+# ═══════════════════════════════════════════════════════════
+# Match guards — `case <pattern> when <condition>`
+#
+# A guard adds a boolean condition to a pattern arm.  When the guard
+# is false the arm is skipped and matching continues with the next
+# arm.  A guarded arm never contributes to exhaustiveness, so an
+# unguarded fallback (or `else`) is always required.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_match_guard_comparison_selected() {
+    integer x = 7
+
+    string label = match x {
+    case >= 5 when x % 2 == 1 { "odd-big" }
+    case >= 5                 { "even-big" }
+    else                      { "small" }
+    }
+
+    assert(label == "odd-big", "guard true selects the guarded arm")
+}
+
+@test
+function void test_match_guard_comparison_fallthrough() {
+    integer x = 8
+
+    string label = match x {
+    case >= 5 when x % 2 == 1 { "odd-big" }
+    case >= 5                 { "even-big" }
+    else                      { "small" }
+    }
+
+    assert(label == "even-big", "guard false falls through to next arm")
+}
+
+@test
+function void test_match_guard_uses_binding() {
+    optional<integer> o = some(4)
+
+    string label = match o {
+    case some(v) when v > 10 { "big" }
+    case some(v)             { "small ${v}" }
+    case none                { "none" }
+    }
+
+    assert(label == "small 4", "guard reads the pattern binding")
+}
+
+@test
+function void test_match_guard_choice_binding() {
+    Shape s = Shape.Circle(2.0)
+
+    string label = match s {
+    case Shape.Circle(r) when r > 10.0 { "big circle" }
+    case Shape.Circle(r)               { "small circle ${r}" }
+    case Shape.Square(_)               { "square" }
+    case Shape.Rectangle(_, _)         { "rectangle" }
+    }
+
+    assert(label == "small circle 2.0", "guard on a destructured choice field")
+}
+
+@test
+function void test_match_guard_success_binding() {
+    result<integer> r = success(5)
+
+    string label = match r {
+        success(v) when v > 10 { "big ${v}" }
+        success(v)             { "small ${v}" }
+        failure(e)             { "err ${e}" }
+    }
+
+    assert(label == "small 5", "guard on a success binding falls through")
+}
+
+@test
+function void test_match_guard_failure_binding() {
+    result<integer> r = failure("nope")
+
+    string label = match r {
+        success(v) { "ok ${v}" }
+        failure(e) when String.length(e) > 100 { "long" }
+        failure(e) { "short ${e}" }
+    }
+
+    assert(label == "short nope", "guard on a failure binding falls through")
+}
+
+@test
+function void test_match_guard_alternatives() {
+    integer code = 2
+    boolean strict = false
+
+    string label = match code {
+    case 1 | 2 | 3 when strict { "low-strict" }
+    case 1 | 2 | 3             { "low" }
+    else                       { "high" }
+    }
+
+    assert(label == "low", "guard combined with alternative patterns")
+}
+
+@test
+function void test_match_guard_integer_literal() {
+    integer x = 2
+    boolean flagged = false
+
+    string label = match x {
+    case 2 when flagged { "two-flagged" }
+    case 2              { "two" }
+    else                { "other" }
+    }
+
+    assert(label == "two", "guard on an integer literal arm falls through")
+}
+
+@test
+function void test_match_guard_string_literal() {
+    string cmd = "run"
+    boolean enabled = true
+
+    string out = match cmd {
+    case "run" when enabled { "running" }
+    case "run"              { "disabled" }
+    else                    { "unknown" }
+    }
+
+    assert(out == "running", "guard on a string literal arm")
+}
+
+@test
+function void test_match_guard_all_false_uses_else() {
+    integer x = 3
+
+    string label = match x {
+    case >= 0 when x > 100 { "huge" }
+    case >= 0 when x > 50  { "big" }
+    else                   { "ordinary" }
+    }
+
+    assert(label == "ordinary", "all guards false reaches else")
+}
+
+@test
+function void test_match_guard_statement_form() {
+    integer x = 7
+
+    mutable string out = ""
+
+    match x {
+    case >= 5 when x % 2 == 1 { out = "odd-big" }
+    case >= 5                 { out = "even-big" }
+    else                      { out = "small" }
+    }
+
+    assert(out == "odd-big", "statement-form guard selects guarded arm")
+}
+
+@test
+function void test_match_guard_statement_fallthrough() {
+    integer x = 8
+
+    mutable string out = ""
+
+    match x {
+    case >= 5 when x % 2 == 1 { out = "odd-big" }
+    case >= 5                 { out = "even-big" }
+    else                      { out = "small" }
+    }
+
+    assert(out == "even-big", "statement-form guard false falls through")
+}
+
+@test
+function void test_match_guard_statement_binding() {
+    optional<integer> o = some(3)
+
+    mutable string out = "none"
+
+    match o {
+    case some(v) when v > 10 { out = "big" }
+    case some(v)             { out = "small ${v}" }
+    case none                { out = "none" }
+    }
+
+    assert(out == "small 3", "statement-form guard with binding falls through")
+}
+
+@test
+function void test_match_guard_multiple_arms() {
+    integer x = 20
+
+    string label = match x {
+    case >= 10 when x < 15 { "10-14" }
+    case >= 10 when x < 25 { "15-24" }
+    case >= 10             { "25+" }
+    else                   { "small" }
+    }
+
+    assert(label == "15-24", "second guarded arm selected after first fails")
+}
+
+# ─── Regression: `case ==` comparison values that declare locals ───
+# A comparison value (`case == <expr>`) may be an arbitrary expression that
+# declares its own locals (an if/block in value position). Those locals must
+# receive slot indices matching their true runtime depth, accounting for the
+# untracked subject/Dup temporaries sitting on the operand stack during the
+# pattern test. A slot-indexing bug once made such arms read the wrong stack
+# slot, spuriously matching (or corrupting the result) at -O0/-O1; a related
+# unsound -O2 constant-propagation pass corrupted the interpolated result.
+
+@test
+function void test_match_comparison_value_with_inner_local_no_match() {
+    integer s = 100
+
+    # Comparison value is an if-expression that declares a local and evaluates
+    # to 200. s (100) != 200, so the else arm must be selected.
+    string r = match s {
+    case == if s > 0 { integer x = 100  x + 100 } else { 0 } { "hit" }
+    else { "miss" }
+    }
+
+    assert(r == "miss", "comparison value with inner local must not spuriously match")
+}
+
+@test
+function void test_match_comparison_value_with_inner_local_match() {
+    integer s = 200
+
+    # Comparison value computes 200 from a local; s (200) == 200 matches.
+    string r = match s {
+    case == if s > 0 { integer x = s  x } else { 0 } { "hit" }
+    else { "miss" }
+    }
+
+    assert(r == "hit", "comparison value equal to subject must match")
+}
+
+@test
+function void test_match_statement_comparison_value_with_inner_local() {
+    integer s = 7
+
+    mutable string out = "none"
+
+    # Statement-form match: the subject is a tracked hidden local, so only the
+    # Dup is an untracked temp. Comparison value 6 != 7, so the else arm runs.
+    match s {
+    case == if s > 0 { integer base = 5  base + 1 } else { 0 } { out = "six" }
+    else { out = "other" }
+    }
+
+    assert(out == "other", "statement-form comparison value with local: 7 != 6")
+}
+
+# ═══════════════════════════════════════════════════════════
+# Regression — `else` arm placed BEFORE later arms (not last)
+#
+# The `else` arm is an unconditional catch-all and must terminate the
+# match regardless of its position. The expression form once omitted the
+# merge jump after the else body, so when `else` was not last the loop
+# continued and the next arm's pattern test ran against the ELSE BODY'S
+# RESULT (the subject had already been popped and replaced). If a later
+# arm's pattern matched that result, the WRONG arm's body executed:
+# `match x { else { 2 } case == 2 { 99 } }` yielded 99 instead of 2.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_match_else_before_matching_arm_expression() {
+    integer x = 7
+
+    # else wins for any subject; the following `case == 2` must NOT run
+    # even though the else body's value (2) would satisfy `== 2`.
+    integer r = match x {
+    else      { 2 }
+    case == 2 { 99 }
+    }
+
+    assert(r == 2, "else before a later matching arm must win, not fall through")
+}
+
+@test
+function void test_match_else_before_matching_arm_string() {
+    string cmd = "anything"
+
+    # else body IS "quit"; the following `case "quit"` would spuriously match
+    # that result under the fallthrough bug.
+    string out = match cmd {
+    else        { "quit" }
+    case "quit" { "WRONG" }
+    }
+
+    assert(out == "quit", "else must catch all regardless of a following arm")
+}
+
+@test
+function void test_match_else_before_arm_statement_form() {
+    integer x = 2
+
+    mutable string out = "unset"
+
+    # Statement form already emits the merge jump; lock in the correct behaviour.
+    match x {
+    else      { out = "default" }
+    case == 2 { out = "specific" }
+    }
+
+    assert(out == "default", "statement-form else before a later arm must win")
+}

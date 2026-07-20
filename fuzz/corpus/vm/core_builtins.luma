@@ -1,0 +1,59 @@
+# VM: core built-ins — print, assert, type_of, success, failure — exercised
+# across many runtime value kinds. Reaches the native print/assert/type_of
+# paths and the MakeSuccess/MakeFailure opcodes with match destructuring.
+
+record CorePoint { number x, number y }
+
+choice CoreShape {
+    Circle(number radius)
+    Dot
+}
+
+function result<integer> checked_divide(integer a, integer b) {
+    if b == 0 {
+        return failure("division by zero")
+    }
+
+    return success(a / b)
+}
+
+@main
+function void main() {
+    # type_of across scalar, collection, and composite value kinds.
+    print(type_of(42))
+    print(type_of(3.14))
+    print(type_of("text"))
+    print(type_of(true))
+    print(type_of(none))
+    print(type_of([1, 2, 3]))
+    print(type_of({"a": 1}))
+    print(type_of((1, "a")))
+    print(type_of(success(1)))
+    print(type_of(() -> 1))
+
+    CorePoint p = CorePoint { x = 1.0, y = 2.0 }
+    CoreShape s = CoreShape.Circle(3.0)
+    print(type_of(p))
+    print(type_of(s))
+
+    # assert with default and custom messages on truthy conditions.
+    assert(1 + 1 == 2)
+    assert("luma" == "luma", "string equality holds")
+
+    # success / failure construction and match destructuring.
+    result<integer> ok = checked_divide(10, 2)
+    result<integer> bad = checked_divide(1, 0)
+
+    integer recovered = match ok {
+        success(v) { v }
+        failure(_e) { -1 }
+    }
+
+    string message = match bad {
+        success(_v) { "ok" }
+        failure(e) { e }
+    }
+
+    # print with multiple space-separated arguments.
+    print(recovered, message, type_of(bad))
+}

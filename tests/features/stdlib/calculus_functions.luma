@@ -1,0 +1,473 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Calculus Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────────
+# Derivatives
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_calculus_derivative_of_sine() {
+    # Derivative of sine at 0 should be ~1.0 (cosine(0)).
+    number d = Calculus.derivative(0.0, Math.sine)
+
+    assert(Math.approximately_equal(d, 1.0, 0.001))
+}
+
+@test
+function void test_calculus_derivative_of_cosine() {
+    # Derivative of cosine at 0 should be ~0.0 (-sine(0)).
+    number d = Calculus.derivative(0.0, Math.cosine)
+
+    assert(Math.approximately_equal(d, 0.0, 0.001))
+}
+
+@test
+function void test_calculus_second_derivative() {
+    # Second derivative of sine at 0 should be ~-0.0 (-sine(0)).
+    number d2 = Calculus.second_derivative(0.0, Math.sine)
+
+    assert(Math.approximately_equal(d2, 0.0, 0.01))
+}
+
+@test
+function void test_calculus_derivative_of_square() {
+    # Derivative of x^2 at x=3 should be ~6.0.
+    number d = Calculus.derivative(3.0, (number x) -> x * x)
+
+    assert(Math.approximately_equal(d, 6.0, 0.001))
+}
+
+# ───────────────────────────────────────────────────────────
+# Integration
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_calculus_integrate_sine() {
+    # Integral of sine from 0 to pi should be ~2.0.
+    number integral = Calculus.integrate(0.0, Math.pi, Math.sine)
+
+    assert(Math.approximately_equal(integral, 2.0, 0.001))
+}
+
+@test
+function void test_calculus_integrate_constant() {
+    # Integral of f(x)=5 from 0 to 3 should be 15.
+    number integral = Calculus.integrate(0.0, 3.0, (number _x) -> 5.0)
+
+    assert(Math.approximately_equal(integral, 15.0, 0.001))
+}
+
+@test
+function void test_calculus_integrate_linear() {
+    # Integral of f(x)=x from 0 to 4 should be 8.
+    number integral = Calculus.integrate(0.0, 4.0, (number x) -> x)
+
+    assert(Math.approximately_equal(integral, 8.0, 0.01))
+}
+
+# ───────────────────────────────────────────────────────────
+# Root finding
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_calculus_root() {
+    # Root of sine near pi should be ~pi.
+    number r = Calculus.root(3.0, 3.3, Math.sine) |> Result.unwrap()
+
+    assert(Math.approximately_equal(r, Math.pi, 0.0001))
+}
+
+@test
+function void test_calculus_newton() {
+    # Newton's method on sine starting near pi.
+    number r = Calculus.newton(3.0, Math.sine) |> Result.unwrap()
+
+    assert(Math.approximately_equal(r, Math.pi, 0.0001))
+}
+
+@test
+function void test_calculus_root_of_quadratic() {
+    # Root of x^2 - 4 near 2 should be ~2.
+    number r = Calculus.root(1.5, 2.5, (number x) -> x * x - 4.0)
+    |> Result.unwrap()
+
+    assert(Math.approximately_equal(r, 2.0, 0.0001))
+}
+
+# ───────────────────────────────────────────────────────────
+# Optimization
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_calculus_minimize() {
+    # Minimum of x^2 near 0 should be ~0.
+    (number, number) m = Calculus.minimize(-1.0, 1.0, (number x) -> x * x)
+
+    assert(Math.approximately_equal(m.0, 0.0, 0.01))
+}
+
+@test
+function void test_calculus_maximize() {
+    # Maximum of -x^2 near 0 should be ~0.
+    (number, number) m = Calculus.maximize(-1.0, 1.0, (number x) -> -(x * x))
+
+    assert(Math.approximately_equal(m.0, 0.0, 0.01))
+}
+
+# ───────────────────────────────────────────────────────────
+# Series and limits
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_calculus_sum_series() {
+    # Sum of 1/2^n over 10 terms starting at n=0 (n=0..9) approaches 2.0.
+    number s = Calculus.sum_series(0, 10, (integer n) -> 1.0 / Result.unwrap(Math.power(2.0, n)))
+
+    assert(Math.approximately_equal(s, 2.0, 0.01))
+}
+
+@test
+function void test_calculus_sum_series_counts_terms_from_start() {
+    # The second argument is the term count n: sum_series(start, n, fn) sums
+    # fn(start) + ... + fn(start + n - 1).  So sum_series(5, 3, n -> n) is
+    # 5 + 6 + 7 = 18 (not 0, which an inclusive-end reading would give).
+    number s = Calculus.sum_series(5, 3, (integer n) -> Result.unwrap(Converter.to_number(n)))
+
+    assert(Math.approximately_equal(s, 18.0, 0.0001))
+}
+
+@test
+function void test_calculus_limit() {
+    # Limit of sin(x)/x as x -> 0 should be ~1.0.
+    number lim = Calculus.limit(0.0, (number x) -> Result.unwrap(Math.sine(x)) / x)
+    |> Result.unwrap()
+
+    assert(Math.approximately_equal(lim, 1.0, 0.01))
+}
+
+# ─── derivative_with ─────────────────────────────────────
+
+@test
+function void test_calculus_derivative_with() {
+    # Custom step size — should still approximate cosine(0) ≈ 1.0
+    number d = Calculus.derivative_with(0.0, 0.0001, Math.sine)
+
+    assert(Math.approximately_equal(d, 1.0, 0.001))
+}
+
+@test
+function void test_calculus_derivative_with_square() {
+    # d/dx (x^2) at x=5 = 10
+    number d = Calculus.derivative_with(5.0, 0.0001, (number x) -> x * x)
+
+    assert(Math.approximately_equal(d, 10.0, 0.01))
+}
+
+# ─── integrate_with ──────────────────────────────────────
+
+@test
+function void test_calculus_integrate_with() {
+    # Integral of f(x)=x from 0 to 2 with 500 steps = 2.0
+    number r = Calculus.integrate_with(0.0, 2.0, 500, (number x) -> x)
+
+    assert(Math.approximately_equal(r, 2.0, 0.01))
+}
+
+@test
+function void test_calculus_integrate_with_fine_steps() {
+    # Integral of sine from 0 to pi with 2000 steps ≈ 2.0
+    number r = Calculus.integrate_with(0.0, Math.pi, 2000, Math.sine)
+
+    assert(Math.approximately_equal(r, 2.0, 0.001))
+}
+
+# ─── gradient ────────────────────────────────────────────
+
+@test
+function void test_calculus_gradient_linear() {
+    # Gradient of f(x,y) = x + 2y at (0,0) should be [1.0, 2.0]
+    array<number> g = Calculus.gradient([0.0, 0.0], (array<number> v) -> v[0] + 2.0 * v[1])
+
+    assert(Math.approximately_equal(g[0], 1.0, 0.001))
+    assert(Math.approximately_equal(g[1], 2.0, 0.001))
+}
+
+@test
+function void test_calculus_gradient_quadratic() {
+    # Gradient of f(x,y) = x^2 + y^2 at (3,4) should be [6.0, 8.0]
+    array<number> g = Calculus.gradient([3.0, 4.0], (array<number> v) -> v[0] * v[0] + v[1] * v[1])
+
+    assert(Math.approximately_equal(g[0], 6.0, 0.001))
+    assert(Math.approximately_equal(g[1], 8.0, 0.001))
+}
+
+# ─── taylor ──────────────────────────────────────────────
+
+@test
+function void test_calculus_taylor_sine() {
+    # Taylor coefficients of sine at 0:
+    # c[0] = sin(0) = 0, c[1] = cos(0)/1! = 1.0
+    array<number> coeffs = Calculus.taylor(0.0, 4, Math.sine)
+
+    assert(Array.length(coeffs) == 4)
+    assert(Math.approximately_equal(coeffs[0], 0.0, 0.01))
+    assert(Math.approximately_equal(coeffs[1], 1.0, 0.01))
+}
+
+@test
+function void test_calculus_taylor_constant() {
+    # Taylor coefficients of f(x)=5 at 0: c[0]=5, rest≈0
+    array<number> coeffs = Calculus.taylor(0.0, 3, (number _x) -> 5.0)
+
+    assert(Math.approximately_equal(coeffs[0], 5.0, 0.1))
+    assert(Math.approximately_equal(coeffs[1], 0.0, 0.1))
+}
+
+@test
+function void test_calculus_taylor_higher_degree_coefficients() {
+    # Characterizes the finite-difference stencil for degree >= 2 terms.
+    # Taylor coefficients of f(x) = x^2 at 0 are [0, 0, 1, 0]: the degree-2
+    # coefficient is f''(0) / 2! = 1.0 and the degree-3 coefficient is 0.
+    array<number> quad = Calculus.taylor(0.0, 4, (number x) -> x * x)
+
+    assert(Math.approximately_equal(quad[2], 1.0, 0.01))
+    assert(Math.approximately_equal(quad[3], 0.0, 0.01))
+
+    # Taylor coefficients of f(x) = x^3 at 0 are [0, 0, 0, 1]: the degree-3
+    # coefficient is f'''(0) / 3! = 1.0.
+    array<number> cubic = Calculus.taylor(0.0, 4, (number x) -> x * x * x)
+
+    assert(Math.approximately_equal(cubic[2], 0.0, 0.01))
+    assert(Math.approximately_equal(cubic[3], 1.0, 0.01))
+}
+
+# ───────────────────────────────────────────────────────────
+# partial_derivative, divergence, hessian, curl, convolution
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_calculus_partial_derivative() {
+    number slope = Calculus.partial_derivative([3.0, 4.0], 0, (array<number> v) -> v[0] * v[0] + v[1] * v[1])
+
+    assert(Math.approximately_equal(slope, 6.0, 0.001))
+}
+
+@test
+function void test_calculus_divergence() {
+    number d = Calculus.divergence([1.0, 1.0], [(array<number> v) -> v[0], (array<number> v) -> v[1]])
+
+    assert(Math.approximately_equal(d, 2.0, 0.001))
+}
+
+@test
+function void test_calculus_hessian() {
+    array<array<number>> h = Calculus.hessian([1.0, 1.0], (array<number> v) -> v[0] * v[0] + v[1] * v[1])
+
+    assert(Math.approximately_equal(h[0][0], 2.0, 0.01))
+    assert(Math.approximately_equal(h[0][1], 0.0, 0.01))
+}
+
+@test
+function void test_calculus_curl() {
+    array<number> c = Result.unwrap(Calculus.curl([1.0, 1.0, 1.0],
+        [(array<number> v) -> v[1], (array<number> v) -> v[0], (array<number> _v) -> 0.0]))
+
+    assert(Array.length(c) == 3)
+}
+
+@test
+function void test_calculus_convolution() {
+    number area = Calculus.convolution((number _x) -> 1.0, (number _y) -> 1.0, 0.5, 0.0, 1.0)
+
+    assert(Math.approximately_equal(area, 1.0, 0.001))
+}
+
+# ─── Negative tests: domain and convergence failures ─────
+
+@test
+function void test_calculus_root_without_sign_change_fails() {
+    # Bisection needs f(a) and f(b) to have opposite signs.
+    # On [2, 3], f(x) = x^2 - 1 is positive at both ends, so there
+    # is no bracketed root and the search must fail.
+    assert(
+        Calculus.root(2.0, 3.0, (number x) -> x * x - 1.0)
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_calculus_curl_dimension_mismatch_fails() {
+    # curl is defined for a 3D point with three component fields.
+    # A 2D point with a single field is a dimension mismatch.
+    assert(
+        Calculus.curl([1.0, 2.0], [(array<number> _v) -> 1.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_calculus_newton_zero_derivative_fails() {
+    # A constant function has a zero derivative, so Newton's method cannot take
+    # a step and must report failure rather than dividing by zero.
+    assert(
+        Calculus.newton(0.0, (number _x) -> 5.0)
+        |> Result.is_failure()
+    )
+}
+
+# ─── Negative tests: throwing argument validation ────────
+
+@test
+function void test_calculus_derivative_with_nonpositive_step_throws() {
+    # The finite-difference step must be positive.
+    mutable boolean has_thrown = false
+
+    try {
+        number _d = Calculus.derivative_with(1.0, 0.0, (number x) -> x * x)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+@test
+function void test_calculus_integrate_with_nonpositive_steps_throws() {
+    # The subdivision count must be a positive integer.
+    mutable boolean has_thrown = false
+
+    try {
+        number _r = Calculus.integrate_with(0.0, 1.0, 0, (number x) -> x)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+@test
+function void test_calculus_sum_series_too_many_terms_throws() {
+    # The term count is capped at one million to bound work.
+    mutable boolean has_thrown = false
+
+    try {
+        number _s = Calculus.sum_series(0, 2000000, (integer _n) -> 1.0)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+@test
+function void test_calculus_partial_derivative_index_out_of_range_throws() {
+    # Index 5 is outside a 2-element point.
+    mutable boolean has_thrown = false
+
+    try {
+        number _slope = Calculus.partial_derivative([1.0, 2.0], 5,
+            (array<number> v) -> v[0] + v[1])
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+@test
+function void test_calculus_divergence_field_mismatch_throws() {
+    # The number of component fields must match the point's dimension.
+    mutable boolean has_thrown = false
+
+    try {
+        number _d = Calculus.divergence([1.0, 2.0, 3.0], [(array<number> v) -> v[0]])
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+@test
+function void test_calculus_convolution_invalid_bounds_throws() {
+    # The lower integration bound must be strictly less than the upper bound.
+    mutable boolean has_thrown = false
+
+    try {
+        number _area = Calculus.convolution((number _x) -> 1.0, (number _y) -> 1.0, 0.5, 1.0, 0.0)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+@test
+function void test_calculus_taylor_too_few_terms_throws() {
+    # Fewer than one term is invalid.
+    mutable boolean has_thrown = false
+
+    try {
+        array<number> _c = Calculus.taylor(0.0, 0, (number x) -> x * x)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+@test
+function void test_calculus_taylor_too_many_terms_throws() {
+    # More than twenty terms is invalid.
+    mutable boolean has_thrown = false
+
+    try {
+        array<number> _c = Calculus.taylor(0.0, 21, (number x) -> x * x)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+# ─── Positive tests: under-verified output components ─────
+
+@test
+function void test_calculus_second_derivative_of_cubic() {
+    # f(x) = x^3 → f''(x) = 6x, so f''(2) = 12.
+    number d2 = Calculus.second_derivative(2.0, (number x) -> x * x * x)
+
+    assert(Math.approximately_equal(d2, 12.0, 0.01))
+}
+
+@test
+function void test_calculus_minimize_returns_function_value() {
+    # The second tuple element is f at the minimiser: f(1) = 0 for (x - 1)^2.
+    (number, number) m = Calculus.minimize(-2.0, 2.0, (number x) -> (x - 1.0) * (x - 1.0))
+
+    assert(Math.approximately_equal(m.0, 1.0, 0.01))
+    assert(Math.approximately_equal(m.1, 0.0, 0.01))
+}
+
+@test
+function void test_calculus_maximize_returns_function_value() {
+    # The second tuple element is f at the maximiser: f(1) = 0 for -(x - 1)^2.
+    (number, number) m = Calculus.maximize(-2.0, 2.0, (number x) -> -((x - 1.0) * (x - 1.0)))
+
+    assert(Math.approximately_equal(m.0, 1.0, 0.01))
+    assert(Math.approximately_equal(m.1, 0.0, 0.01))
+}
+
+@test
+function void test_calculus_hessian_mixed_partial() {
+    # f(x, y) = x * y → H = [[0, 1], [1, 0]]; the mixed partials are 1.
+    array<array<number>> h = Calculus.hessian([1.0, 1.0], (array<number> v) -> v[0] * v[1])
+
+    assert(Math.approximately_equal(h[0][1], 1.0, 0.01))
+    assert(Math.approximately_equal(h[1][0], 1.0, 0.01))
+    assert(Math.approximately_equal(h[0][0], 0.0, 0.01))
+}

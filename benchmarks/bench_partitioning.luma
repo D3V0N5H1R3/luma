@@ -1,0 +1,172 @@
+# Partitioning and combining benchmarks for v1.1 collection functions.
+#
+# Every case here measures a combine/partition/filter/reduce operation, so the
+# input collections are built once outside the timed body. Building them inside
+# would measure construction instead of the operation under test.
+
+function queue<integer> bench_build_queue(integer count, integer start) {
+    mutable queue<integer> q = Queue.new()
+    for i in 0 .. count {
+        q = Queue.enqueue(q, start + i)
+    }
+    return q
+}
+
+function stack<integer> bench_build_stack(integer count, integer start) {
+    mutable stack<integer> s = Stack.new()
+    for i in 0 .. count {
+        s = Stack.push(s, start + i)
+    }
+    return s
+}
+
+function dictionary<integer> bench_build_int_dict(integer count) {
+    mutable dictionary<integer> d = {}
+    for i in 0 .. count {
+        d = Dictionary.set(d, Converter.to_string(i), i)
+    }
+    return d
+}
+
+function BenchResult run_partitioning_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # --- Array.concat ---
+
+    array<integer> array_first = Array.range(0, 50) |> Result.unwrap()
+    array<integer> array_second = Array.range(50, 100) |> Result.unwrap()
+    st = time_it(st, "Array.concat (2 x 50)", 5000, () -> {
+        array<integer> _combined = Array.concat(array_first, array_second)
+    })
+
+    # --- Array.partition ---
+
+    array<integer> array100 = Array.range(0, 100) |> Result.unwrap()
+    st = time_it(st, "Array.partition (100 elem)", 2000, () -> {
+        (array<integer> _evens, array<integer> _odds) = array100
+        |> Array.partition((integer x) -> x % 2 == 0)
+        |> Result.unwrap()
+    })
+
+    # --- Dictionary.partition ---
+
+    dictionary<integer> dict20 = bench_build_int_dict(20)
+    st = time_it(st, "Dictionary.partition (20 keys)", 1000, () -> {
+        (dictionary<integer> _small, dictionary<integer> _large) = dict20
+        |> Dictionary.partition((string _k, integer v) -> v < 10)
+        |> Result.unwrap()
+    })
+
+    # --- Set.filter / reduce / partition ---
+
+    set set50 = Set.from_array(Array.range(0, 50) |> Result.unwrap())
+
+    st = time_it(st, "Set.filter (50 elem)", 2000, () -> {
+        set _filtered = set50
+        |> Set.filter((integer x) -> x > 25)
+        |> Result.unwrap()
+    })
+
+    st = time_it(st, "Set.reduce (50 elem)", 2000, () -> {
+        integer _total = set50
+        |> Set.reduce(0, (integer acc, integer x) -> acc + x)
+        |> Result.unwrap()
+    })
+
+    st = time_it(st, "Set.partition (50 elem)", 2000, () -> {
+        (set _small, set _large) = set50
+        |> Set.partition((integer x) -> x < 25)
+        |> Result.unwrap()
+    })
+
+    # --- HashSet.filter / reduce / partition ---
+
+    hash_set hashset50 = HashSet.from_array(Array.range(0, 50) |> Result.unwrap())
+
+    st = time_it(st, "HashSet.filter (50 elem)", 2000, () -> {
+        hash_set _filtered = hashset50
+        |> HashSet.filter((integer x) -> x > 25)
+        |> Result.unwrap()
+    })
+
+    st = time_it(st, "HashSet.reduce (50 elem)", 2000, () -> {
+        integer _total = hashset50
+        |> HashSet.reduce(0, (integer acc, integer x) -> acc + x)
+        |> Result.unwrap()
+    })
+
+    st = time_it(st, "HashSet.partition (50 elem)", 2000, () -> {
+        (hash_set _small, hash_set _large) = hashset50
+        |> HashSet.partition((integer x) -> x < 25)
+        |> Result.unwrap()
+    })
+
+    # --- BinaryTree.filter / reduce / union / partition ---
+
+    binary_tree tree30 = BinaryTree.from_array(Array.range(0, 30) |> Result.unwrap())
+
+    st = time_it(st, "BinaryTree.filter (30 elem)", 1000, () -> {
+        binary_tree _filtered = tree30
+        |> BinaryTree.filter((integer x) -> x % 2 == 0)
+        |> Result.unwrap()
+    })
+
+    st = time_it(st, "BinaryTree.reduce (30 elem)", 1000, () -> {
+        integer _total = tree30
+        |> BinaryTree.reduce(0, (integer acc, integer x) -> acc + x)
+        |> Result.unwrap()
+    })
+
+    binary_tree union_first = BinaryTree.from_array(Array.range(0, 20) |> Result.unwrap())
+    binary_tree union_second = BinaryTree.from_array(Array.range(15, 35) |> Result.unwrap())
+    st = time_it(st, "BinaryTree.union (2 x 20)", 1000, () -> {
+        binary_tree _merged = BinaryTree.union(union_first, union_second)
+    })
+
+    st = time_it(st, "BinaryTree.partition (30 elem)", 1000, () -> {
+        (binary_tree _matches, binary_tree _rest) = tree30
+        |> BinaryTree.partition((integer x) -> x < 15)
+        |> Result.unwrap()
+    })
+
+    # --- Queue.concat / partition ---
+
+    queue<integer> queue_first = bench_build_queue(25, 0)
+    queue<integer> queue_second = bench_build_queue(25, 25)
+    st = time_it(st, "Queue.concat (2 x 25)", 2000, () -> {
+        queue<integer> _combined = Queue.concat(queue_first, queue_second)
+    })
+
+    queue<integer> queue50 = bench_build_queue(50, 0)
+    st = time_it(st, "Queue.partition (50 elem)", 1000, () -> {
+        (queue<integer> _small, queue<integer> _large) = queue50
+        |> Queue.partition((integer x) -> x < 25)
+        |> Result.unwrap()
+    })
+
+    # --- Stack.concat / partition ---
+
+    stack<integer> stack_first = bench_build_stack(25, 0)
+    stack<integer> stack_second = bench_build_stack(25, 25)
+    st = time_it(st, "Stack.concat (2 x 25)", 2000, () -> {
+        stack<integer> _combined = Stack.concat(stack_first, stack_second)
+    })
+
+    stack<integer> stack50 = bench_build_stack(50, 0)
+    st = time_it(st, "Stack.partition (50 elem)", 1000, () -> {
+        (stack<integer> _small, stack<integer> _large) = stack50
+        |> Stack.partition((integer x) -> x < 25)
+        |> Result.unwrap()
+    })
+
+    # --- LinkedList.partition ---
+
+    linked_list llist50 = LinkedList.from_array(Array.range(0, 50) |> Result.unwrap())
+    st = time_it(st, "LinkedList.partition (50 elem)", 1000, () -> {
+        (linked_list _small, linked_list _large) = llist50
+        |> LinkedList.partition((integer x) -> x < 25)
+        |> Result.unwrap()
+    })
+
+    return st
+}

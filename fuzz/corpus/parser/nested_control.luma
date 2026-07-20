@@ -1,0 +1,35 @@
+# Nested control flow and complex statements
+function integer complex_flow(integer n) {
+    mutable integer sum = 0
+    for i in 0 .. n {
+        if i % 2 == 0 {
+            for j in 0 .. i {
+                sum += j
+            }
+        } else {
+            mutable integer k = i
+            while k > 0 {
+                sum += k
+                k -= 1
+            }
+        }
+    }
+    return sum
+}
+
+function string nested_match(integer x, integer y) {
+    return match x {
+    case == 0 {
+        match y {
+        case == 0 { "both zero" }
+        else { "x zero" }
+        }
+    }
+else {
+    match y {
+    case == 0 { "y zero" }
+    else { "neither zero" }
+    }
+}
+}
+}

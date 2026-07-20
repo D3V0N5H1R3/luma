@@ -1,0 +1,323 @@
+# GraphicalUi Markdown Editor — a split-pane editor with a live preview.
+# Demonstrates a multi-line text_area bound to the model, a split layout (two
+# panes in a row), and — the heart of the example — a *pure* Markdown-to-widget
+# transform: parse_markdown turns source text into a list of block descriptors,
+# and render_block turns each block into a real widget tree.
+#
+# Because parsing is a pure function, the whole preview pipeline is verifiable
+# headlessly without inspecting pixels.
+
+# ─── Markdown parsing (pure, fully testable) ───────────────
+
+function dictionary make_block(string kind, string text) {
+    return {"kind": kind, "text": text}
+}
+
+function dictionary parse_line(string line) {
+    string trimmed = String.trim(line)
+    integer length = String.length(trimmed)
+    if trimmed == "" {
+        return make_block("blank", "")
+    }
+    if trimmed == "---" {
+        return make_block("hr", "")
+    }
+    if String.starts_with(trimmed, "### ") {
+        return make_block("h3", String.substring(trimmed, 4, length))
+    }
+    if String.starts_with(trimmed, "## ") {
+        return make_block("h2", String.substring(trimmed, 3, length))
+    }
+    if String.starts_with(trimmed, "# ") {
+        return make_block("h1", String.substring(trimmed, 2, length))
+    }
+    if String.starts_with(trimmed, "> ") {
+        return make_block("quote", String.substring(trimmed, 2, length))
+    }
+    if String.starts_with(trimmed, "- ") || String.starts_with(trimmed, "* ") {
+        return make_block("li", String.substring(trimmed, 2, length))
+    }
+    return make_block("p", trimmed)
+}
+
+function array<dictionary> parse_markdown(string source) {
+    mutable array<dictionary> blocks = []
+    for line in String.split(source, "\n") {
+        blocks = Array.push(blocks, parse_line(line))
+    }
+    return blocks
+}
+
+function dictionary make_run(string text, boolean bold) {
+    mutable dictionary run = {"text": text}
+    run["bold"] = bold
+    return run
+}
+
+# Split a line into alternating normal / bold runs on the "**" delimiter.
+# "a **b** c" → [("a ", false), ("b", true), (" c", false)].
+function array<dictionary> split_inline(string text) {
+    mutable array<dictionary> runs = []
+    mutable boolean bold = false
+    for part in String.split(text, "**") {
+        if String.length(part) > 0 {
+            runs = Array.push(runs, make_run(part, bold))
+        }
+        bold = !bold
+    }
+    return runs
+}
+
+# ─── Rendering blocks to widgets ───────────────────────────
+
+function widget render_run(dictionary run) {
+    string weight = if Dictionary.get_or(run, "bold", false) { "700" } else { "400" }
+    return GraphicalUi.label(Dictionary.get_or(run, "text", ""), {
+        "font_weight": weight,
+        "white_space": "pre-wrap"
+    })
+}
+
+function widget render_inline(string text) {
+    array<widget> runs = Array.map(split_inline(text), (dictionary run) -> render_run(run))
+        |> Result.unwrap()
+    return GraphicalUi.row(runs, {"flex_wrap": "wrap", "gap": "0"})
+}
+
+function widget render_block(dictionary block) {
+    string kind = Dictionary.get_or(block, "kind", "p")
+    string text = Dictionary.get_or(block, "text", "")
+    if kind == "h1" {
+        return GraphicalUi.heading(text, 1)
+    }
+    if kind == "h2" {
+        return GraphicalUi.heading(text, 2)
+    }
+    if kind == "h3" {
+        return GraphicalUi.heading(text, 3)
+    }
+    if kind == "hr" {
+        return GraphicalUi.separator()
+    }
+    if kind == "blank" {
+        return GraphicalUi.spacer(6)
+    }
+    if kind == "quote" {
+        return GraphicalUi.label(text, {
+            "font_style": "italic",
+            "padding_left": "12px",
+            "border_left": "3px solid ${GraphicalUi.VAR_PRIMARY}",
+            "color": GraphicalUi.VAR_FG
+        })
+    }
+    if kind == "li" {
+        return GraphicalUi.row([
+            GraphicalUi.label("•", {"color": GraphicalUi.VAR_PRIMARY, "font_weight": "700"}),
+            render_inline(text)
+        ], GraphicalUi.spacing(8))
+    }
+    return render_inline(text)
+}
+
+# ─── Model + view ──────────────────────────────────────────
+
+function string default_source() {
+    return """
+        # Welcome
+
+        Type **Markdown** on the left and watch it render.
+
+        ## Features
+
+        - Live preview
+        - Split-pane layout
+        - **Bold** inline text
+
+        > Edit me to see updates!
+
+        ---
+
+        Built with the GraphicalUi module.
+        """
+}
+
+function dictionary markdown_initial() {
+    return {"source": default_source()}
+}
+
+function dictionary set_source(dictionary model, string text) {
+    mutable dictionary updated = model
+    updated["source"] = text
+    return updated
+}
+
+function dictionary<string> caption_style() {
+    return {
+        "font_size": GraphicalUi.VAR_TEXT_XS,
+        "font_weight": "700",
+        "letter_spacing": "0.08em",
+        "color": GraphicalUi.VAR_FG
+    }
+}
+
+function widget view_editor(dictionary model) {
+    return GraphicalUi.column([
+        GraphicalUi.field(
+            "Source",
+            GraphicalUi.text_area(
+                Dictionary.get_or(model, "source", ""),
+                (string text) -> set_source(model, text)
+            )
+        )
+    ], {"width": "100%", "flex": GraphicalUi.fill(), "gap": "6px"})
+}
+
+function widget view_preview(dictionary model) {
+    string source = Dictionary.get_or(model, "source", "")
+    array<widget> rendered = parse_markdown(source)
+        |> Array.map((dictionary block) -> render_block(block))
+        |> Result.unwrap()
+    widget preview_content = if String.trim(source) == "" {
+        GraphicalUi.empty_state("Nothing to preview yet.")
+    } else {
+        GraphicalUi.column(rendered, {
+            "id": "preview",
+            "gap": "8px",
+            "padding": "12px",
+            "background_color": "var(--gui-input-bg)",
+            "border": "1px solid ${GraphicalUi.VAR_BORDER}",
+            "border_radius": GraphicalUi.VAR_RADIUS,
+            "min_height": "320px",
+            "max_width": GraphicalUi.VAR_MEASURE
+        })
+    }
+    return GraphicalUi.column([
+        GraphicalUi.label("PREVIEW", caption_style()),
+        # Labelled polite live region so non-visual users can find the preview and
+        # hear that it changed as they type.
+        GraphicalUi.aria_live("polite",
+            GraphicalUi.accessible(preview_content,
+                {"role": "region", "aria_label": "Markdown preview"}))
+    ], {"width": "100%", "flex": GraphicalUi.fill(), "gap": "6px"})
+}
+
+function widget view_markdown(dictionary model) {
+    dictionary<string> pane_layout = GraphicalUi.responsive({
+        "0": {"flex_direction": "column", "gap": "12px"},
+        "720": {"flex_direction": "row", "gap": "12px"}
+    })
+    return GraphicalUi.column([
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("file-text", 20),
+            GraphicalUi.heading("Markdown Editor", 1)
+        ]),
+        GraphicalUi.row([
+            view_editor(model),
+            view_preview(model)
+        ], GraphicalUi.merge_styles(pane_layout, {"align_items": "stretch"}))
+    ], GraphicalUi.merge_styles(GraphicalUi.spacing(12), GraphicalUi.padding(12)))
+}
+
+@main
+function void main() {
+    GraphicalUi.app(markdown_config())
+}
+
+# Exposed as a named function (rather than inlined in main) so the example's
+# behaviour can be driven and verified by the @test blocks without a window.
+function dictionary markdown_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Luma Markdown Editor"
+    config["width"] = 760
+    config["height"] = 520
+    config["model"] = markdown_initial()
+    config["view"] = view_markdown
+    config["update"] = (dictionary model, string _msg) -> model
+    return config
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+# The parser is pure, so most assertions run it directly; the preview is checked
+# by rendering a known document and locating a widget with test_find.
+
+@test
+function void test_parses_heading_levels() {
+    array<dictionary> blocks = parse_markdown("# Title\n## Sub\n### Small")
+    assert(Dictionary.get_or(blocks[0], "kind", "") == "h1")
+    assert(Dictionary.get_or(blocks[0], "text", "") == "Title")
+    assert(Dictionary.get_or(blocks[1], "kind", "") == "h2")
+    assert(Dictionary.get_or(blocks[2], "kind", "") == "h3")
+}
+
+@test
+function void test_parses_list_items() {
+    array<dictionary> blocks = parse_markdown("- first\n* second")
+    assert(Dictionary.get_or(blocks[0], "kind", "") == "li")
+    assert(Dictionary.get_or(blocks[0], "text", "") == "first")
+    assert(Dictionary.get_or(blocks[1], "kind", "") == "li")
+    assert(Dictionary.get_or(blocks[1], "text", "") == "second")
+}
+
+@test
+function void test_parses_quote_and_horizontal_rule() {
+    array<dictionary> blocks = parse_markdown("> remember this\n---")
+    assert(Dictionary.get_or(blocks[0], "kind", "") == "quote")
+    assert(Dictionary.get_or(blocks[0], "text", "") == "remember this")
+    assert(Dictionary.get_or(blocks[1], "kind", "") == "hr")
+}
+
+@test
+function void test_parses_blank_lines_and_paragraphs() {
+    array<dictionary> blocks = parse_markdown("\nhello world")
+    assert(Dictionary.get_or(blocks[0], "kind", "") == "blank")
+    assert(Dictionary.get_or(blocks[1], "kind", "") == "p")
+    assert(Dictionary.get_or(blocks[1], "text", "") == "hello world")
+}
+
+@test
+function void test_inline_bold_splits_into_runs() {
+    array<dictionary> runs = split_inline("a **b** c")
+    assert(Array.length(runs) == 3)
+    assert(Dictionary.get_or(runs[0], "text", "") == "a ")
+    assert(!Dictionary.get_or(runs[0], "bold", true))
+    assert(Dictionary.get_or(runs[1], "text", "") == "b")
+    assert(Dictionary.get_or(runs[1], "bold", false))
+    assert(!Dictionary.get_or(runs[2], "bold", true))
+}
+
+@test
+function void test_plain_text_is_a_single_run() {
+    array<dictionary> runs = split_inline("just text")
+    assert(Array.length(runs) == 1)
+    assert(Dictionary.get_or(runs[0], "text", "") == "just text")
+    assert(!Dictionary.get_or(runs[0], "bold", true))
+}
+
+@test
+function void test_set_source_replaces_the_document() {
+    dictionary model = set_source(markdown_initial(), "# Fresh start")
+    assert(Dictionary.get_or(model, "source", "") == "# Fresh start")
+}
+
+@test
+function void test_editing_the_text_area_updates_the_source() {
+    dictionary config = markdown_config()
+    dictionary model = set_source(markdown_initial(), "old text")
+    dictionary outcome = GraphicalUi.test_input(config, model, "old text", "# New heading")
+    assert(Dictionary.get_or(outcome, "source", "") == "# New heading")
+}
+
+@test
+function void test_preview_renders_a_heading_widget() {
+    dictionary config = markdown_config()
+    dictionary model = set_source(markdown_initial(), "# Hello World")
+    dictionary heading = GraphicalUi.test_find(config, model, "Hello World")
+    assert(Dictionary.get_or(heading, "text", "") == "Hello World")
+}
+
+@test
+function void test_default_document_starts_with_a_title() {
+    array<dictionary> blocks = parse_markdown(default_source())
+    assert(Dictionary.get_or(blocks[0], "kind", "") == "h1")
+    assert(Dictionary.get_or(blocks[0], "text", "") == "Welcome")
+}

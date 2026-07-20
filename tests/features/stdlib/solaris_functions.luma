@@ -1,0 +1,227 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Solaris Surface
+#
+# Solaris is Luma's beginner-first GUI framework: the Model /
+# Message / update / view surface injected as a built-in prelude
+# and rendered through the lower-level GraphicalUi engine.
+#
+# These tests exercise the surface itself — element constructors,
+# fluent modifiers, design tokens, the app builder, config
+# modifiers, pure update transitions, event wiring, and the
+# reconciler — all headlessly via `luma --test`, so no window is
+# ever opened. Interaction is driven through the GraphicalUi
+# `test_*` harness (the engine beneath Solaris): controls are
+# located by label (buttons) or by `key` (inputs).
+# ═══════════════════════════════════════════════════════════
+
+# ─── A small typed Solaris app: Model, Message, update, view ───
+
+choice CounterMsg {
+    Increment,
+    Decrement,
+    Reset,
+    SetLabel(string value)
+}
+
+record CounterModel {
+    integer count = 0,
+    string label = ""
+}
+
+# A pure Model × Message -> Model transition, matched exhaustively
+# (no `else`), so a forgotten message would be a compile error.
+function CounterModel counter_update(CounterModel model, CounterMsg msg) {
+    return match msg {
+        case CounterMsg.Increment              { model with { count = model.count + 1 } }
+        case CounterMsg.Decrement              { model with { count = model.count - 1 } }
+        case CounterMsg.Reset                  { model with { count = 0 } }
+        case CounterMsg.SetLabel(value)        { model with { label = value } }
+    }
+}
+
+# A view exercising a broad slice of the surface: constructors
+# (heading, text, text_field, button, row, card, badge, divider,
+# column), fluent modifiers (size, bold, muted, primary, secondary,
+# danger, gap, padding, placeholder, key), event wiring (on_click,
+# on_change), and design tokens (TextScale, Spacing).
+function View counter_view(CounterModel model) {
+    return Solaris.column([
+        Solaris.heading("Solaris Counter")
+            |> Solaris.size(TextScale.Large)
+            |> Solaris.bold(),
+        Solaris.text("Count: ${model.count}")
+            |> Solaris.muted(),
+        Solaris.text_field(model.label)
+            |> Solaris.placeholder("label")
+            |> Solaris.on_change((string value) -> CounterMsg.SetLabel(value))
+            |> Solaris.key("label"),
+        Solaris.row([
+            Solaris.button("+ Increment")
+                |> Solaris.on_click(CounterMsg.Increment)
+                |> Solaris.primary(),
+            Solaris.button("- Decrement")
+                |> Solaris.on_click(CounterMsg.Decrement)
+                |> Solaris.secondary()
+        ]) |> Solaris.gap(Spacing.M),
+        Solaris.button("Reset")
+            |> Solaris.on_click(CounterMsg.Reset)
+            |> Solaris.danger(),
+        Solaris.divider(),
+        Solaris.card([ Solaris.badge("count") ])
+            |> Solaris.padding(Spacing.L)
+    ]) |> Solaris.padding(Spacing.L) |> Solaris.gap(Spacing.M)
+}
+
+# Exposed as a named function so the @test blocks below can build
+# the exact same app and drive it headlessly.
+function dictionary counter_app() {
+    return Solaris.app("Solaris Feature Test", CounterModel { count = 0 }, counter_update, counter_view)
+}
+
+# ─── Update: pure MVU transitions ──────────────────────────
+
+@test
+function void test_update_increment_adds_one() {
+    assert(counter_update(CounterModel { count = 10 }, CounterMsg.Increment).count == 11)
+}
+
+@test
+function void test_update_decrement_subtracts_one() {
+    assert(counter_update(CounterModel { count = 10 }, CounterMsg.Decrement).count == 9)
+}
+
+@test
+function void test_update_reset_returns_to_zero() {
+    assert(counter_update(CounterModel { count = 99 }, CounterMsg.Reset).count == 0)
+}
+
+@test
+function void test_update_data_carrying_message_sets_label() {
+    assert(counter_update(CounterModel { label = "" }, CounterMsg.SetLabel("ready")).label == "ready")
+}
+
+@test
+function void test_update_is_exhaustive_over_messages() {
+    CounterModel start = CounterModel { count = 5, label = "x" }
+    assert(counter_update(start, CounterMsg.Increment).count == 6)
+    assert(counter_update(start, CounterMsg.Decrement).count == 4)
+    assert(counter_update(start, CounterMsg.Reset).count == 0)
+    assert(counter_update(start, CounterMsg.SetLabel("y")).label == "y")
+}
+
+# ─── App builder: Solaris.app produces a config dictionary ──
+
+@test
+function void test_app_builds_config_with_title() {
+    dictionary config = counter_app()
+    assert(Dictionary.get_or(config, "title", "") == "Solaris Feature Test")
+}
+
+@test
+function void test_app_config_has_default_window_size() {
+    dictionary config = counter_app()
+    assert(Dictionary.get_or(config, "width", 0) == 960)
+    assert(Dictionary.get_or(config, "height", 0) == 640)
+}
+
+# ─── Config modifiers: chain onto app(...) with |> ─────────
+
+@test
+function void test_window_modifier_overrides_size() {
+    dictionary config = counter_app() |> Solaris.window(400, 300)
+    assert(Dictionary.get_or(config, "width", 0) == 400)
+    assert(Dictionary.get_or(config, "height", 0) == 300)
+}
+
+# ─── Event wiring: on_click routes a message through update ──
+
+@test
+function void test_increment_button_click_updates_model() {
+    CounterModel next = GraphicalUi.test_click(counter_app(), CounterModel { count = 0 }, "+ Increment")
+    assert(next.count == 1)
+}
+
+@test
+function void test_reset_button_click_zeroes_model() {
+    CounterModel next = GraphicalUi.test_click(counter_app(), CounterModel { count = 42 }, "Reset")
+    assert(next.count == 0)
+}
+
+# ─── Event wiring: on_change feeds a data-carrying message ──
+
+@test
+function void test_text_field_input_updates_label() {
+    CounterModel next = GraphicalUi.test_input(counter_app(), CounterModel { label = "" }, "label", "hello")
+    assert(next.label == "hello")
+}
+
+# ─── Reconciler: render a Solaris view to a widget tree ────
+
+@test
+function void test_render_root_is_a_column() {
+    dictionary tree = GraphicalUi.test_render(counter_app(), CounterModel { count = 3 })
+    assert(Dictionary.get_or(tree, "type", "") == "column")
+}
+
+@test
+function void test_render_contains_heading_label() {
+    assert(GraphicalUi.test_count(counter_app(), CounterModel { count = 0 }, "Solaris Counter") >= 1)
+}
+
+# ─── Lifecycle: the configured initial model flows through ──
+
+@test
+function void test_init_returns_configured_model() {
+    CounterModel initial = GraphicalUi.test_init(counter_app())
+    assert(initial.count == 0)
+}
+
+# ─── Commands: the no-op command is the engine's sentinel ──
+
+@test
+function void test_no_command_matches_engine_sentinel() {
+    assert(Solaris.no_command() == GraphicalUi.none())
+}
+
+# ─── Effect wrappers: thin adapters over the engine ────────
+#
+# The effect wrappers forward to the GraphicalUi engine. The
+# deterministic ones (no captured closure) must produce exactly
+# the engine's own command, so they are pinned by equality. The
+# timer/fetch/key wrappers capture a message in a fresh closure,
+# so instead they are checked for producing a real effect rather
+# than the no-op sentinel.
+
+@test
+function void test_notify_delegates_to_engine_command() {
+    assert(Solaris.notify("Saved", "All changes stored") ==
+        GraphicalUi.notify("Saved", "All changes stored"))
+}
+
+@test
+function void test_set_scheme_maps_each_scheme_to_engine() {
+    assert(Solaris.set_scheme(Scheme.Light) == GraphicalUi.set_theme_mode("light"))
+    assert(Solaris.set_scheme(Scheme.Dark) == GraphicalUi.set_theme_mode("dark"))
+    assert(Solaris.set_scheme(Scheme.Auto) == GraphicalUi.set_theme_mode("auto"))
+}
+
+@test
+function void test_after_produces_a_real_command() {
+    assert(Solaris.after(250, CounterMsg.Reset) != Solaris.no_command())
+}
+
+@test
+function void test_fetch_produces_a_real_command() {
+    assert(Solaris.fetch("https://example.test/data", (any _response) -> CounterMsg.Reset)
+        != Solaris.no_command())
+}
+
+@test
+function void test_every_produces_a_real_subscription() {
+    assert(Solaris.every("tick", 1000, CounterMsg.Increment) != Solaris.no_command())
+}
+
+@test
+function void test_on_key_press_produces_a_real_subscription() {
+    assert(Solaris.on_key_press("keys", "Enter", CounterMsg.Reset) != Solaris.no_command())
+}

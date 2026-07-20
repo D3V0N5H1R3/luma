@@ -1,0 +1,109 @@
+# ═══════════════════════════════════════════════════════════
+# Singleton Pattern
+#
+# Ensures a shared piece of state exists exactly once,
+# using a reference<T> to hold the single instance and
+# closures to capture it. Every consumer that receives
+# the accessor functions sees the same underlying state.
+#
+# Usage: luma examples/design-patterns/singleton.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Configuration store ──────────────────────────────────
+
+record AppConfig {
+    string app_name,
+    string version,
+    boolean is_debug
+}
+
+# Accessor record — closures over a single reference
+record ConfigStore {
+    function() -> AppConfig get,
+    function(boolean) -> void set_debug,
+    function(string) -> void set_version
+}
+
+function ConfigStore create_config_store() {
+    reference<AppConfig> config = Reference.new(
+        AppConfig {
+            app_name = "MyApp",
+            version = "1.0.0",
+            is_debug = false
+        }
+    )
+
+    return ConfigStore {
+        get = () -> Reference.get(config),
+        set_debug = (boolean is_debug) -> {
+            Reference.update(config, (AppConfig c) -> c with { is_debug = is_debug })
+        },
+        set_version = (string version) -> {
+            Reference.update(config, (AppConfig c) -> c with { version = version })
+        }
+    }
+}
+
+# ─── Counter service ─────────────────────────────────────
+
+record Counter {
+    function() -> void increment,
+    function() -> number get
+}
+
+function Counter create_counter() {
+    reference<number> count = Reference.new(0)
+
+    return Counter {
+        increment = () -> {
+            Reference.update(count, (number n) -> n + 1)
+        },
+        get = () -> Reference.get(count)
+    }
+}
+
+# ─── Consumer (depends on shared singletons) ─────────────
+
+function void handle_request(ConfigStore store, Counter counter, string endpoint) {
+    counter.increment()
+
+    AppConfig cfg = store.get()
+    number count = counter.get()
+
+    if cfg.is_debug {
+        print("  [debug] ${cfg.app_name} v${cfg.version} | #${count} ${endpoint}")
+    } else {
+        print("  ${endpoint} (request #${count})")
+    }
+}
+
+# ─── Main ─────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("=== Singleton Pattern ===")
+    print("")
+
+    # Create the singletons once
+    ConfigStore config = create_config_store()
+    Counter requests = create_counter()
+
+    # Normal mode
+    print("--- production mode ---")
+
+    handle_request(config, requests, "GET /users")
+    handle_request(config, requests, "POST /orders")
+
+    # Switch to debug — every consumer sees the change
+    print("")
+    print("--- enable debug ---")
+
+    config.set_debug(true)
+    config.set_version("1.1.0")
+
+    handle_request(config, requests, "GET /users/42")
+    handle_request(config, requests, "DELETE /orders/7")
+
+    print("")
+    print("Total requests: ${requests.get()}")
+}

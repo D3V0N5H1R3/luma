@@ -1,0 +1,51 @@
+# Process benchmarks: environment variables, arguments, working directory, PID.
+#
+# Subprocess spawning (Process.run) is exercised end-to-end by bench_startup.luma,
+# which launches the luma binary and is dominated by OS process-creation cost.
+# These cases instead isolate the cheap, in-process Process queries — env-var
+# lookup, the environment snapshot, argument marshalling and process metadata —
+# so regressions in those hot paths surface without subprocess noise.
+
+function BenchResult run_process_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # Seed a variable so the get/has hot paths resolve a present entry.
+    result<void> _seed = Process.set_environment_variable("_LUMA_BENCH_VAR", "benchmark-value")
+
+    st = time_it(st, "Process.has_environment_variable (hit)", 10000, () -> {
+        boolean _present = Process.has_environment_variable("_LUMA_BENCH_VAR")
+    })
+
+    st = time_it(st, "Process.has_environment_variable (miss)", 10000, () -> {
+        boolean _absent = Process.has_environment_variable("_LUMA_BENCH_MISSING_VAR")
+    })
+
+    st = time_it(st, "Process.get_environment_variable (hit)", 10000, () -> {
+        result<string> _value = Process.get_environment_variable("_LUMA_BENCH_VAR")
+    })
+
+    st = time_it(st, "Process.set_environment_variable", 5000, () -> {
+        result<void> _set = Process.set_environment_variable("_LUMA_BENCH_VAR", "benchmark-value")
+    })
+
+    st = time_it(st, "Process.get_arguments", 10000, () -> {
+        array<string> _args = Process.get_arguments()
+    })
+
+    st = time_it(st, "Process.get_process_id", 10000, () -> {
+        integer _pid = Process.get_process_id()
+    })
+
+    # current_directory issues a filesystem syscall, so it runs at a lower count.
+    st = time_it(st, "Process.current_directory", 2000, () -> {
+        result<string> _cwd = Process.current_directory()
+    })
+
+    # get_all_environment_variables allocates a dictionary over the whole
+    # environment block, the heaviest case here — keep the iteration count modest.
+    st = time_it(st, "Process.get_all_environment_variables", 1000, () -> {
+        dictionary<string> _env = Process.get_all_environment_variables()
+    })
+
+    return st
+}

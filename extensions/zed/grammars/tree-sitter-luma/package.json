@@ -1,0 +1,13 @@
+{
+  "name": "tree-sitter-luma",
+  "version": "0.0.1",
+  "description": "Luma grammar for tree-sitter",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "generate": "tree-sitter generate"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "0.24.7"
+  }
+}

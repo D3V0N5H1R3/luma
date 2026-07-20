@@ -1,0 +1,21 @@
+function result<integer> safe_double(integer n) {
+    if n < 0 {
+        return failure("negative")
+    }
+    return success(n * 2)
+}
+
+@main
+function void main() {
+    result<integer> ok = 10 !> safe_double() !> safe_double()
+    print(ok)
+
+    result<integer> recovered = failure("boom") !> safe_double()
+    print(recovered)
+
+    integer chained = [1, 2, 3]
+    |> Array.map((integer x) -> x * 2)
+    |> Result.unwrap_or([])
+    |> Array.length()
+    print(chained)
+}

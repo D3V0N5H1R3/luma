@@ -1,0 +1,47 @@
+# VM: Converter module — type, base, Roman, word, ordinal, and codepoint
+# conversions executed end-to-end. Reaches the hand-written numeric/roman
+# scanners and the UTF-8 encode/decode paths through the native call opcodes,
+# with Result unwrapping across both success and failure branches.
+
+@main
+function void main() {
+    # Type conversions, including failure branches.
+    print(Converter.to_string(42))
+    print(Result.unwrap_or(Converter.to_integer("256"), -1))
+    print(Result.unwrap_or(Converter.to_integer("not-a-number"), -1))
+    print(Result.is_failure(Converter.to_number("3.1.4")))
+    print(Result.unwrap_or(Converter.to_boolean("true"), false))
+
+    # Base conversions and round-trips.
+    print(Converter.to_hexadecimal(48879))
+    print(Result.unwrap_or(Converter.from_hexadecimal("deadbeef"), 0))
+    print(Converter.to_binary(-10))
+    print(Result.unwrap_or(Converter.from_binary(Converter.to_binary(12345)), 0))
+    print(Result.is_failure(Converter.from_binary("222")))
+
+    # Roman numerals across the full 1..3999 range and malformed input.
+    for v in [1, 4, 9, 1994, 3999] {
+        string roman = Result.unwrap_or(Converter.to_roman(v), "?")
+        print(roman)
+        print(Result.unwrap_or(Converter.from_roman(roman), -1))
+    }
+
+    print(Result.is_failure(Converter.to_roman(4000)))
+    print(Result.is_failure(Converter.from_roman("IIII")))
+
+    # Words and ordinals.
+    print(Converter.number_to_words(1234567))
+    print(Converter.number_to_words(-5))
+    print(Converter.ordinal(112))
+    print(Converter.ordinal(21))
+
+    # Character / codepoint round-trips across 1-, 3-, and 4-byte sequences.
+    array<integer> codepoints = [65, 233, 9733, 128512]
+
+    for cp in codepoints {
+        string ch = Result.unwrap_or(Converter.codepoint_to_character(cp), "?")
+        print(Result.unwrap_or(Converter.character_to_codepoint(ch), -1))
+    }
+
+    print(Result.is_failure(Converter.codepoint_to_character(1114112)))
+}

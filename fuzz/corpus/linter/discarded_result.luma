@@ -1,0 +1,5 @@
+@main
+function void main() {
+    FileSystem.read_file("test.txt")
+    print("done")
+}

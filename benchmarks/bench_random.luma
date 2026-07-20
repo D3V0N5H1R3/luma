@@ -1,0 +1,69 @@
+# Random benchmarks: number generation, shuffling, sampling, secure variants.
+#
+# Collection-based benchmarks (choice, shuffle, sample) share one source array
+# built once outside the timed body, so they measure the Random operation rather
+# than repeated array construction. The secure_* benchmarks exercise the
+# CSPRNG-backed path alongside the fast pseudo-random generators.
+
+function BenchResult run_random_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    st = time_it(st, "Random.generate_number", 10000, () -> {
+        number _n = Random.generate_number()
+    })
+
+    st = time_it(st, "Random.generate_integer (1..1000)", 10000, () -> {
+        result<integer> _n = Random.generate_integer(1, 1000)
+    })
+
+    st = time_it(st, "Random.generate_boolean", 10000, () -> {
+        boolean _b = Random.generate_boolean()
+    })
+
+    st = time_it(st, "Random.generate_string (len 16)", 5000, () -> {
+        result<string> _s = Random.generate_string(16)
+    })
+
+    st = time_it(st, "Random.generate_uuid", 5000, () -> {
+        string _u = Random.generate_uuid()
+    })
+
+    array<integer> source20 = Array.range(0, 20) |> Result.unwrap()
+
+    st = time_it(st, "Random.choice (20 elem)", 5000, () -> {
+        result<integer> _pick = Random.choice(source20)
+    })
+
+    st = time_it(st, "Random.shuffle (20 elem)", 2000, () -> {
+        array<integer> _shuffled = Random.shuffle(source20)
+    })
+
+    st = time_it(st, "Random.sample (5 from 20)", 2000, () -> {
+        array<integer> _sampled = Random.sample(source20, 5) |> Result.unwrap()
+    })
+
+    # Cryptographically secure variants (CSPRNG-backed). Results are bound
+    # without unwrapping so the benchmark still runs when the secure backend is
+    # unavailable (built without TLS), measuring the failure path instead.
+    st = time_it(st, "Random.secure_boolean", 10000, () -> {
+        result<boolean> _b = Random.secure_boolean()
+    })
+
+    st = time_it(st, "Random.secure_integer (1..1000)", 10000, () -> {
+        result<integer> _n = Random.secure_integer(1, 1000)
+    })
+
+    st = time_it(st, "Random.secure_number", 10000, () -> {
+        result<number> _n = Random.secure_number()
+    })
+
+    st = time_it(st, "Random.secure_string (len 16)", 5000, () -> {
+        result<string> _s = Random.secure_string(16)
+    })
+
+    st = time_it(st, "Random.secure_uuid", 5000, () -> {
+        result<string> _u = Random.secure_uuid()
+    })
+
+    return st
+}

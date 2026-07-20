@@ -1,0 +1,47 @@
+record Account {
+    string owner,
+    integer balance
+}
+
+function unique string acquire(string name) {
+    return "handle:${name}"
+}
+
+function string consume(unique string s) {
+    return "used:${s}"
+}
+
+function integer measure(borrow string s) {
+    return String.length(s)
+}
+
+function integer account_balance(borrow Account a) {
+    return a.balance
+}
+
+@main
+function void main() {
+    unique string handle = acquire("a")
+    string used = consume(handle)
+    print(used)
+
+    Account acc = Account { owner = "Alice", balance = 100 }
+    borrow Account view = acc
+    print(account_balance(view))
+    print(account_balance(view))
+
+    array<integer> nums = [10, 20, 30]
+    borrow array<integer> nums_view = nums
+    print(Array.length(nums_view))
+
+    unique string piped = acquire("b")
+    string out = piped |> consume()
+    print(out)
+
+    mutable integer i = 0
+    borrow string loop_view = used
+    while i < 3 {
+        print(measure(loop_view))
+        i = i + 1
+    }
+}

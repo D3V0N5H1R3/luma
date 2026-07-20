@@ -1,0 +1,10 @@
+@main
+function void main() {
+    mutable integer sum = 0
+    for i in 0..10 {
+        if i % 2 == 0 {
+            sum += i
+        }
+    }
+    print(sum)
+}

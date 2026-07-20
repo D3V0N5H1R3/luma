@@ -1,0 +1,108 @@
+# ═══════════════════════════════════════════════════════════
+# Strategy Pattern
+#
+# Defines a family of interchangeable algorithms as
+# first-class functions. The caller selects a strategy at
+# runtime without changing the code that uses it.
+#
+# Usage: luma examples/design-patterns/strategy.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Domain ───────────────────────────────────────────────
+
+record Product {
+    string name,
+    number price,
+    number quantity
+}
+
+# ─── Strategy types ──────────────────────────────────────
+
+type PricingStrategy = function(Product) -> number
+type SortKey = function(Product) -> number
+
+# ─── Pricing strategies ──────────────────────────────────
+
+function number full_price(Product product) {
+    return product.price * product.quantity
+}
+
+function number ten_percent_off(Product product) {
+    return product.price * product.quantity * 0.90
+}
+
+function PricingStrategy bulk_discount(number threshold, number rate) {
+    return (Product product) -> {
+        if product.quantity >= threshold {
+            return product.price * product.quantity * (1.0 - rate)
+        }
+
+        return product.price * product.quantity
+    }
+}
+
+# ─── Sorting strategies ──────────────────────────────────
+
+function number by_price(Product product) {
+    return product.price
+}
+
+function number by_quantity(Product product) {
+    return product.quantity
+}
+
+function number by_total(Product product) {
+    return product.price * product.quantity
+}
+
+# ─── Order processor (parameterised by strategies) ───────
+
+function void process_order(
+    array<Product> items,
+    PricingStrategy pricing,
+    SortKey sort_key,
+    string label
+) {
+    print("--- ${label} ---")
+
+    array<Product> sorted = items
+    |> Array.sort_by(sort_key)
+    |> Result.unwrap_or(items)
+
+    mutable number total = 0.0
+
+    for product in sorted {
+        number cost = pricing(product)
+        total += cost
+
+        print("  ${product.name}: ${String.format_number(cost, 2)}")
+    }
+
+    print("  Total: ${String.format_number(total, 2)}")
+    print("")
+}
+
+# ─── Main ─────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("=== Strategy Pattern ===")
+    print("")
+
+    array<Product> cart = [
+        Product { name = "Widget",  price = 25.00, quantity = 4 },
+        Product { name = "Gadget",  price = 49.99, quantity = 1 },
+        Product { name = "Gizmo",   price = 12.50, quantity = 10 }
+    ]
+
+    # Full price, sorted by name-order (price)
+    process_order(cart, full_price, by_price, "Full Price (by price)")
+
+    # 10% off everything, sorted by quantity
+    process_order(cart, ten_percent_off, by_quantity, "10% Off (by quantity)")
+
+    # Bulk discount: 20% off when quantity >= 5, sorted by total
+    PricingStrategy bulk = bulk_discount(5, 0.20)
+
+    process_order(cart, bulk, by_total, "Bulk Discount (by total)")
+}

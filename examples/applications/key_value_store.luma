@@ -1,0 +1,93 @@
+# ═══════════════════════════════════════════════════════════
+# Key-Value Store
+#
+# Demonstrates the KeyValueStore module — creating a store,
+# setting / getting values, batch operations, and querying.
+# ═══════════════════════════════════════════════════════════
+
+# Open a fresh store and apply set operations in order. Any failure
+# short-circuits the chain, so callers unwrap the result just once.
+function result<key_value_store> seed(string path, array<(string, string)> pairs) {
+    mutable result<key_value_store> store = KeyValueStore.open(path)
+
+    for pair in pairs {
+        store = store !> KeyValueStore.set(pair.0, pair.1)
+    }
+
+    return store
+}
+
+# Build a store with several entries and print them as a dictionary.
+function void show_entries() {
+    print("=== Key-Value Store ===")
+
+    array<(string, string)> initial = [
+        ("name", "Alice"),
+        ("language", "Luma"),
+        ("version", "1.0")
+    ]
+
+    dictionary<string> entries = seed("demo_store.kv", initial)
+    !> KeyValueStore.set_many({"color": "blue", "editor": "vscode"})
+    |> Result.unwrap()
+    |> KeyValueStore.to_dictionary()
+
+    print("Stored 5 keys; read back 'name' = ${entries["name"]}.")
+}
+
+# Read a single value back, and test for a key's presence.
+function void get_and_has() {
+    print("\n=== Get / Has ===")
+
+    string greeting = seed("demo_store2.kv", [("greeting", "hello")])
+    !> KeyValueStore.get("greeting")
+    |> Result.unwrap()
+
+    print("Read back 'greeting' = ${greeting}.")
+
+    boolean has_key = seed("demo_store3.kv", [("x", "1")])
+    |> Result.unwrap()
+    |> KeyValueStore.has("x")
+
+    print("Key 'x' is present: ${if has_key { "yes" } else { "no" }}.")
+}
+
+# List the keys held by a store.
+function void list_keys() {
+    print("\n=== Keys / Values ===")
+
+    array<string> keys = seed("demo_store4.kv", [("a", "1"), ("b", "2")])
+    |> Result.unwrap()
+    |> KeyValueStore.keys()
+
+    print("Keys: ${keys}")
+}
+
+# Count remaining entries after removing a key and after clearing.
+function void remove_and_clear() {
+    print("\n=== Remove / Count ===")
+
+    number count = seed("demo_store5.kv", [("x", "1"), ("y", "2")])
+    !> KeyValueStore.remove("x")
+    |> Result.unwrap()
+    |> KeyValueStore.count()
+
+    print("Count after remove: ${count}")
+
+    number after_clear = seed("demo_store6.kv", [("a", "1")])
+    !> KeyValueStore.clear()
+    |> Result.unwrap()
+    |> KeyValueStore.count()
+
+    print("Count after clear: ${after_clear}")
+}
+
+@main
+function void main() {
+    show_entries()
+    get_and_has()
+    list_keys()
+    remove_and_clear()
+
+    print("\nKey-value store demo complete: seeded, read, listed, removed, and cleared entries.")
+}

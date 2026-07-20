@@ -1,0 +1,287 @@
+# ═══════════════════════════════════════════════════════════
+# Concurrency — Parallel Prime Sieve
+#
+# Demonstrates tasks, channels, spawn/await, task_scope,
+# and concurrent data processing by distributing prime
+# number detection across multiple workers.
+#
+# Usage: luma examples/language-features/concurrency.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Prime Detection ───
+
+function boolean is_prime(integer candidate) {
+    if candidate < 2 { return false }
+    if candidate < 4 { return true }
+    if candidate % 2 == 0 || candidate % 3 == 0 { return false }
+
+    mutable integer factor = 5
+
+    while factor * factor <= candidate {
+        if candidate % factor == 0 || candidate % (factor + 2) == 0 {
+            return false
+        }
+
+        factor += 6
+    }
+
+    return true
+}
+
+# ─── Worker ───
+
+function array<integer> find_primes_in_range(integer start, integer end) {
+    # An empty or inverted range has no candidates. The original loop over
+    # start .. end simply ran zero times; guarding here keeps that behaviour,
+    # since Array.range only ever counts upward.
+    if start >= end {
+        return []
+    }
+
+    # One native range + filter pass. Pushing each prime onto a growing array
+    # would copy it on every hit, making the scan O(primes²).
+    return Array.range(start, end)
+    |> Result.unwrap_or([])
+    |> Array.filter(is_prime)
+    |> Result.unwrap_or([])
+}
+
+# ─── Chunked Parallel Computation ───
+
+# Splits 2..limit into worker_count chunks, runs each chunk on its own task
+# inside a task_scope (which awaits every spawned task), then merges, dedupes,
+# and sorts the results. Shared by both the parallel and scoped demos below.
+function array<integer> compute_primes_in_chunks(integer limit, integer worker_count) {
+    integer chunk_size = limit / worker_count
+
+    array<array<integer>> worker_results = task_scope {
+        for worker_index in 0 .. worker_count {
+            integer start = if worker_index == 0 { 2 } else { worker_index * chunk_size }
+            integer end = if worker_index == worker_count - 1 {
+                limit
+            } else {
+                (worker_index + 1) * chunk_size
+            }
+
+            spawn find_primes_in_range(start, end)
+        }
+    }
+
+    return worker_results
+    |> Array.flatten()
+    |> Array.unique()
+    |> Array.sort((integer left, integer right) -> left - right)
+    |> Result.unwrap_or([])
+}
+
+# ─── Sequential Baseline ───
+
+function array<integer> compute_primes_sequential(integer limit) {
+    return find_primes_in_range(2, limit)
+}
+
+# ─── Channel-based Pipeline ───
+
+function array<integer> run_producer_and_return(channel<integer> output, integer limit) {
+    for candidate in 2 .. limit {
+        boolean _ = Channel.send(output, candidate)
+    }
+
+    Channel.close(output)
+    return []
+}
+
+# Drains source until it is closed and empty, folding each received value into
+# an accumulator with combine. Owns the try_receive / is_closed loop shared by
+# the filter and collector stages below.
+function array<integer> drain_channel(
+    channel<integer> source,
+    array<integer> initial,
+    function(array<integer>, integer) -> array<integer> combine
+) {
+    mutable array<integer> accumulator = initial
+    mutable boolean is_running = true
+
+    while is_running {
+        result<integer> received = Channel.try_receive(source)
+
+        match received {
+            success(item) {
+                accumulator = combine(accumulator, item)
+            }
+            failure(_) {
+                # try_receive fails both when the channel is momentarily empty
+                # and when it is closed and drained. Stopping on the first
+                # closed observation alone would lose a value that was sent and
+                # then had its channel closed in the window between the failed
+                # try_receive above and this check. close() is permanent and
+                # happens after every send, so once the channel is both closed
+                # and empty no further value can arrive — only then is the drain
+                # complete.
+                if Channel.is_closed(source) && Channel.is_empty(source) {
+                    is_running = false
+                }
+            }
+        }
+    }
+
+    return accumulator
+}
+
+function array<integer> filter_worker_and_return(channel<integer> input, channel<integer> output) {
+    array<integer> _drained = drain_channel(
+        input,
+        [],
+        (array<integer> accumulator, integer candidate) -> {
+            if is_prime(candidate) {
+                boolean _ = Channel.send(output, candidate)
+            }
+
+            return accumulator
+        }
+    )
+
+    Channel.close(output)
+    return []
+}
+
+function array<integer> collect_primes(channel<integer> prime_channel) {
+    array<integer> collected = drain_channel(
+        prime_channel,
+        [],
+        (array<integer> primes_so_far, integer prime) -> Array.push(primes_so_far, prime)
+    )
+
+    return Result.unwrap_or(
+        Array.sort(collected, (integer left, integer right) -> left - right),
+        []
+    )
+}
+
+function array<integer> compute_primes_channel(integer limit) {
+    channel<integer> numbers = Channel.new_buffered(100)
+    channel<integer> prime_channel = Channel.new_buffered(100)
+
+    # All three pipeline stages run concurrently inside task_scope.
+    # Producer and filter return empty arrays; collector returns primes.
+    array<array<integer>> results = task_scope {
+        spawn run_producer_and_return(numbers, limit)
+        spawn filter_worker_and_return(numbers, prime_channel)
+        spawn collect_primes(prime_channel)
+    }
+
+    # The collector result is the third element.
+    return results[2]
+}
+
+function integer find_slow(integer multiplier) {
+    array<integer> prime_list = find_primes_in_range(2, multiplier * 100)
+
+    return Array.length(prime_list)
+}
+
+# ─── Tests ───
+
+@test
+function void test_channel_pipeline_small() {
+    array<integer> primes = compute_primes_channel(30)
+
+    assert(primes == [2, 3, 5, 7, 11, 13, 17, 19, 23, 29],
+        "channel pipeline must find the primes up to 30, got ${primes}")
+}
+
+@test
+function void test_channel_pipeline_matches_sequential() {
+    for limit in [30, 97, 200, 1000] {
+        array<integer> expected = compute_primes_sequential(limit)
+        array<integer> actual = compute_primes_channel(limit)
+
+        assert(actual == expected,
+            "channel pipeline must match sequential for limit ${limit}: " +
+            "expected ${expected} but got ${actual}")
+    }
+}
+
+# ─── Entry Point ───
+
+@main
+function void main() {
+    print("===============================")
+    print("   Concurrent Prime Finder")
+    print("===============================")
+
+    integer limit = 1000
+    integer worker_count = 4
+
+    print("\nSequential (2..${limit}):")
+
+    number sequential_start_ms = DateTime.milliseconds_since_start()
+    array<integer> sequential_prime_list = compute_primes_sequential(limit)
+    number sequential_elapsed_ms = DateTime.milliseconds_since_start() - sequential_start_ms
+
+    print("  Found ${Array.length(sequential_prime_list)} primes in ${sequential_elapsed_ms}ms")
+    print("  First 10: ${Result.unwrap_or(Array.slice(sequential_prime_list, 0, 10), [])}")
+
+    integer sequential_count = Array.length(sequential_prime_list)
+    integer slice_start = sequential_count - 10
+    array<integer> last_ten = Result.unwrap_or(
+        Array.slice(sequential_prime_list, slice_start, sequential_count),
+        []
+    )
+
+    print("  Last  10: ${last_ten}")
+
+    print("\nParallel with ${worker_count} workers:")
+
+    number parallel_start_ms = DateTime.milliseconds_since_start()
+    array<integer> parallel_prime_list = compute_primes_in_chunks(limit, worker_count)
+    number parallel_elapsed_ms = DateTime.milliseconds_since_start() - parallel_start_ms
+
+    print("  Found ${Array.length(parallel_prime_list)} primes in ${parallel_elapsed_ms}ms")
+
+    print("\nStructured (task_scope) with ${worker_count} workers:")
+
+    number scoped_start_ms = DateTime.milliseconds_since_start()
+    array<integer> scoped_prime_list = compute_primes_in_chunks(limit, worker_count)
+    number scoped_elapsed_ms = DateTime.milliseconds_since_start() - scoped_start_ms
+
+    print("  Found ${Array.length(scoped_prime_list)} primes in ${scoped_elapsed_ms}ms")
+
+    print("\nChannel pipeline:")
+
+    number channel_start_ms = DateTime.milliseconds_since_start()
+    array<integer> channel_prime_list = compute_primes_channel(limit)
+    number channel_elapsed_ms = DateTime.milliseconds_since_start() - channel_start_ms
+
+    print("  Found ${Array.length(channel_prime_list)} primes in ${channel_elapsed_ms}ms")
+
+    integer parallel_count = Array.length(parallel_prime_list)
+    integer channel_count = Array.length(channel_prime_list)
+    integer scoped_count = Array.length(scoped_prime_list)
+    boolean is_parallel_match = sequential_count == parallel_count
+    boolean is_channel_match = sequential_count == channel_count
+    boolean is_scoped_match = sequential_count == scoped_count
+
+    print("\nResults match: parallel=${is_parallel_match}, " +
+        "channel=${is_channel_match}, scoped=${is_scoped_match}")
+
+    print("\n--- Task Utilities ---")
+
+    # Run two tasks in a scope; task_scope waits for both, then we keep the
+    # first task's result. This is not a real race — both tasks run to the end.
+    array<integer> race_results = task_scope {
+        spawn find_slow(10)
+        spawn find_slow(100)
+    }
+
+    integer race_winner_count = race_results[0]
+    print("Race winner found ${race_winner_count} primes")
+
+    # Run a single task inside a scope and count the primes it returns.
+    array<array<integer>> timed_results = task_scope {
+        spawn find_primes_in_range(2, 10000)
+    }
+
+    integer timed_count = Array.length(timed_results[0])
+    print("Timed task found ${timed_count} primes")
+}

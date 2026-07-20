@@ -1,0 +1,16 @@
+# Function breakpoint test — named functions to break on.
+
+function integer double_value(integer n) {
+    return n * 2
+}
+
+function integer triple_value(integer n) {
+    return n * 3
+}
+
+@main
+function void main() {
+    integer a = double_value(5)
+    integer b = triple_value(3)
+    print("Function breakpoint result: a=${a}, b=${b}")
+}

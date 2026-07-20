@@ -1,0 +1,110 @@
+# Compression benchmarks: deflate/inflate, gzip, RLE.
+
+function BenchResult run_compression_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    string short_text = "hello world"
+    string repetitive = Result.unwrap_or(String.repeat("AAABBBCCC", 20), "")
+    string large = Result.unwrap_or(String.repeat("The quick brown fox jumps. ", 4000), "")
+
+    # --- Deflate / Inflate ---
+
+    st = time_it(st, "Compression.deflate (short)", 1000, () -> {
+        string _compressed = Compression.deflate(short_text)
+    })
+
+    st = time_it(st, "Compression.deflate (repetitive)", 500, () -> {
+        string _compressed = Compression.deflate(repetitive)
+    })
+
+    string deflated_short = Compression.deflate(short_text)
+    string deflated_rep = Compression.deflate(repetitive)
+
+    st = time_it(st, "Compression.inflate (short)", 1000, () -> {
+        result<string> _decompressed = Compression.inflate(deflated_short)
+    })
+
+    st = time_it(st, "Compression.inflate (repetitive)", 500, () -> {
+        result<string> _decompressed = Compression.inflate(deflated_rep)
+    })
+
+    # --- Gzip ---
+
+    st = time_it(st, "Compression.gzip (short)", 1000, () -> {
+        string _compressed = Compression.gzip(short_text)
+    })
+
+    string gzipped = Compression.gzip(short_text)
+
+    st = time_it(st, "Compression.gunzip (short)", 1000, () -> {
+        result<string> _decompressed = Compression.gunzip(gzipped)
+    })
+
+    # --- RLE ---
+
+    st = time_it(st, "Compression.encode_rle", 2000, () -> {
+        string _encoded = Compression.encode_rle("AAABBBCCCDDD")
+    })
+
+    st = time_it(st, "Compression.decode_rle", 2000, () -> {
+        result<string> _decoded = Compression.decode_rle("3A3B3C3D")
+    })
+
+    # --- Roundtrip ---
+
+    st = time_it(st, "deflate/inflate roundtrip", 500, () -> {
+        string compressed = Compression.deflate(repetitive)
+        result<string> _original = Compression.inflate(compressed)
+    })
+
+    # --- Compressed size ---
+
+    st = time_it(st, "Compression.compressed_size", 2000, () -> {
+        integer _sz = Compression.compressed_size(repetitive)
+    })
+
+    # --- Level-controlled variants ---
+
+    st = time_it(st, "Compression.deflate_with level=1 (repetitive)", 500, () -> {
+        result<string> _compressed = Compression.deflate_with(repetitive, 1)
+    })
+
+    st = time_it(st, "Compression.deflate_with level=9 (repetitive)", 500, () -> {
+        result<string> _compressed = Compression.deflate_with(repetitive, 9)
+    })
+
+    st = time_it(st, "Compression.gzip_with level=9 (repetitive)", 500, () -> {
+        result<string> _compressed = Compression.gzip_with(repetitive, 9)
+    })
+
+    # --- Gzip on repetitive data ---
+
+    st = time_it(st, "Compression.gzip (repetitive)", 500, () -> {
+        string _compressed = Compression.gzip(repetitive)
+    })
+
+    string gzipped_rep = Compression.gzip(repetitive)
+
+    st = time_it(st, "Compression.gunzip (repetitive)", 500, () -> {
+        result<string> _decompressed = Compression.gunzip(gzipped_rep)
+    })
+
+    # --- Large (multi-chunk) payloads ---
+
+    string deflated_large = Compression.deflate(large)
+
+    st = time_it(st, "Compression.deflate (large)", 100, () -> {
+        string _compressed = Compression.deflate(large)
+    })
+
+    st = time_it(st, "Compression.inflate (large, multi-chunk)", 100, () -> {
+        result<string> _decompressed = Compression.inflate(deflated_large)
+    })
+
+    st = time_it(st, "deflate/inflate roundtrip (large)", 100, () -> {
+        string compressed = Compression.deflate(large)
+        result<string> _original = Compression.inflate(compressed)
+    })
+
+    return st
+}

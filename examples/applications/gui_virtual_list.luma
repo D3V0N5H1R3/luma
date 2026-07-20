@@ -1,0 +1,107 @@
+# GraphicalUi Virtual List Example
+#
+# Demonstrates windowed rendering of large lists using
+# GraphicalUi.virtual_list for efficient scrolling.
+
+function widget render_item(integer index) {
+    string bg = if index % 2 == 0 { "color-mix(in srgb, var(--gui-fg) 4%, transparent)" } else { "transparent" }
+
+    return GraphicalUi.keyed("item-${index}", GraphicalUi.row([
+        GraphicalUi.label("#${index + 1}", {"color": GraphicalUi.VAR_DISABLED_FG, "min_width": "72px"}),
+        GraphicalUi.label("Item number ${index + 1}"),
+        GraphicalUi.flexible_space()
+    ], GraphicalUi.merge_styles(
+        GraphicalUi.padding_xy(12, 8),
+        GraphicalUi.style({"background": bg, "align_items": "center", "gap": "12px"})
+    )))
+}
+
+function widget list_header() {
+    return GraphicalUi.row([
+        GraphicalUi.label("#", {"color": GraphicalUi.VAR_DISABLED_FG, "min_width": "72px", "font_weight": "600"}),
+        GraphicalUi.label("Item", {"font_weight": "600"}),
+        GraphicalUi.flexible_space()
+    ], GraphicalUi.merge_styles(
+        GraphicalUi.padding_xy(12, 8),
+        GraphicalUi.style({
+            "background": "var(--gui-primary-subtle-bg)",
+            "border_bottom": "1px solid var(--gui-border)",
+            "align_items": "center",
+            "gap": "12px"
+        })
+    ))
+}
+
+function widget view_list(dictionary<string> _model) {
+    integer count = 1000
+
+    array<widget> items = Array.range(0, count)
+    |> Result.unwrap()
+    |> Array.map((integer index) -> render_item(index))
+    |> Result.unwrap()
+
+    return GraphicalUi.column([
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("list", 20),
+            GraphicalUi.heading("Virtual List (${count} items)", 2)
+        ]),
+        GraphicalUi.separator(),
+        GraphicalUi.label("Only visible items are rendered in the DOM."),
+        GraphicalUi.aria_live("polite",
+            GraphicalUi.label("Showing up to 15 items at a time, out of ${count}.", {"color": GraphicalUi.VAR_DISABLED_FG})),
+        GraphicalUi.column([
+            list_header(),
+            GraphicalUi.virtual_list(items, 40, 15, GraphicalUi.style({"border": "none"}))
+        ], GraphicalUi.style({
+            "border": "1px solid var(--gui-border)",
+            "border_radius": "var(--gui-radius)",
+            "overflow": "hidden",
+            "gap": "0"
+        }))
+    ], GraphicalUi.spacing(12))
+}
+
+@main
+function void main() {
+    GraphicalUi.app(list_config())
+}
+
+function dictionary<string> list_model() {
+    return {"_": "state"}
+}
+
+# Exposed as a named function (rather than inlined in main) so the rendered list
+# can be inspected by the @test blocks below.
+function dictionary list_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Virtual List"
+    config["width"] = 600
+    config["height"] = 700
+    config["model"] = list_model()
+    config["view"] = view_list
+    config["update"] = (dictionary<string> model, string _msg) -> { model }
+
+    return config
+}
+
+# ─── Rendering tests ───────────────────────────────────────
+# The view builds all 1000 item widgets (the DOM windowing happens browser-side),
+# so every item is present in the rendered tree and can be located.
+
+@test
+function void test_renders_heading_with_count() {
+    dictionary heading = GraphicalUi.test_find(list_config(), list_model(), "Virtual List (1000 items)")
+    assert(Dictionary.get_or(heading, "type", "") == "heading")
+}
+
+@test
+function void test_renders_first_item() {
+    dictionary item = GraphicalUi.test_find(list_config(), list_model(), "Item number 1")
+    assert(Dictionary.get_or(item, "type", "") == "label")
+}
+
+@test
+function void test_renders_last_item() {
+    dictionary item = GraphicalUi.test_find(list_config(), list_model(), "Item number 1000")
+    assert(Dictionary.get_or(item, "type", "") == "label")
+}

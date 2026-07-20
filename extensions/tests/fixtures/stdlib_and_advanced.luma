@@ -1,0 +1,71 @@
+# ═══════════════════════════════════════════════════════════════════
+# Luma Highlight Test — Standard Library Calls and Advanced Features
+# ═══════════════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # Standard library module calls
+    array<integer> nums = [3, 1, 4, 1, 5]
+    array<integer> sorted = nums |> Array.sort()
+    integer length = Array.length(nums)
+    string joined = Array.join(["a", "b", "c"], ", ")
+
+    # String module
+    string upper = String.uppercase("hello")
+    integer str_len = String.length("test")
+    boolean starts = String.starts_with("hello", "he")
+
+    # Math module
+    number sqrt_val = Math.sqrt(16.0)
+    number abs_val = Math.abs(-5.0)
+    number pi = Math.pi
+
+    # Dictionary
+    dictionary<integer> ages = {"alice": 30, "bob": 25}
+    for key, value in ages {
+        print("${key} is ${Converter.to_string(value)}")
+    }
+
+    # Result type
+    result<integer> parsed = success(42)
+    match parsed {
+    case success(val) {
+        print("Got: ${Converter.to_string(val)}")
+    }
+case failure(err) {
+    print("Error: ${err}")
+}
+}
+
+# Optional type
+optional<string> maybe = some("hello")
+string unwrapped = maybe ?? "default"
+
+# Lambda / closures
+array<integer> doubled = Array.map(nums, (integer x) -> x * 2)
+
+# Spawn and concurrency
+task_scope {
+    task<integer> t = spawn compute(10)
+    integer result = await t
+}
+
+# Built-in functions
+print("hello")
+assert(true)
+string t = type_of(42)
+
+# Downcast
+# boolean check = is<Circle>(shape)
+# Circle c = trusted_downcast<Circle>(shape)
+}
+
+function integer compute(integer n) {
+    return n * n
+}
+
+@test
+function void test_compute() {
+    assert(compute(5) == 25)
+    assert(compute(0) == 0)
+}

@@ -1,0 +1,137 @@
+# GraphicalUi Animation Example
+#
+# Demonstrates CSS transitions and keyframe animations
+# using GraphicalUi.transition and GraphicalUi.animate.
+
+function widget view_animation(dictionary<string> model) {
+    boolean expanded = model["expanded"] == "true"
+    string color = model["color"]
+    string date = model["date"]
+    string time = model["time"]
+
+    return GraphicalUi.column([
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("sparkles", 20),
+            GraphicalUi.heading("Animations", 2)
+        ]),
+        GraphicalUi.separator(),
+
+        # Transition example
+        GraphicalUi.panel("Transitions", [
+            GraphicalUi.label("Click the button to toggle the box scale with a smooth transition."),
+            GraphicalUi.transition(
+                GraphicalUi.panel("Animated Box", [
+                    GraphicalUi.label("This panel transitions smoothly.")
+                ], GraphicalUi.style({
+                    "width": "240px",
+                    "transform": if expanded { "scaleX(1.6)" } else { "scaleX(1)" },
+                    "transform_origin": "left center",
+                    "background_color": if expanded { "var(--gui-primary)" } else { "var(--gui-bg)" },
+                    "color": if expanded { "white" } else { "var(--gui-fg)" }
+                })),
+                {"transform": "0.3s ease-in-out", "background_color": "0.3s ease", "color": "0.3s ease"}
+            ),
+            GraphicalUi.spacer(8),
+            GraphicalUi.button(if expanded { "Collapse" } else { "Expand" }, () -> {
+                return Dictionary.set(model, "expanded", if expanded { "false" } else { "true" })
+            }, {"variant": GraphicalUi.PRIMARY, "aria_pressed": if expanded { "true" } else { "false" }})
+        ]),
+
+        # Keyframe animation example
+        GraphicalUi.panel("Keyframe Animations", [
+            GraphicalUi.label("The element below uses a brief three-pulse keyframe animation."),
+            GraphicalUi.animate(
+                GraphicalUi.panel("Pulsing", [
+                    GraphicalUi.label("I pulse three times.")
+                ]),
+                [
+                    {"opacity": "1", "transform": "scale(1)"},
+                    {"opacity": "0.7", "transform": "scale(0.97)"},
+                    {"opacity": "1", "transform": "scale(1)"}
+                ],
+                {"duration": "2s", "iterations": "3"}
+            )
+        ]),
+
+        # Picker widgets — wrapped_row lets the three fields stack onto multiple
+        # lines instead of cramping or overflowing on narrow windows.
+        GraphicalUi.panel("Pickers", [
+            GraphicalUi.wrapped_row([
+                GraphicalUi.field(
+                    "Color",
+                    GraphicalUi.color_picker(color, (string c) -> Dictionary.set(model, "color", c))
+                ),
+                GraphicalUi.field(
+                    "Date",
+                    GraphicalUi.date_picker(date, (string d) -> Dictionary.set(model, "date", d))
+                ),
+                GraphicalUi.field(
+                    "Time",
+                    GraphicalUi.time_picker(time, (string t) -> Dictionary.set(model, "time", t))
+                )
+            ], GraphicalUi.spacing(16)),
+            GraphicalUi.label("Selected: color=${color}, date=${date}, time=${time}",
+                {"color": GraphicalUi.VAR_DISABLED_FG})
+        ])
+    ], GraphicalUi.spacing(16))
+}
+
+@main
+function void main() {
+    GraphicalUi.app(animation_config())
+}
+
+function dictionary<string> animation_model() {
+    return {
+        "expanded": "false",
+        "color": "#4361ee",
+        "date": "2025-01-01",
+        "time": "12:00"
+    }
+}
+
+# Exposed as a named function (rather than inlined in main) so the Toggle Size
+# button and the colour/date/time pickers can be driven by the @test blocks.
+function dictionary animation_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Animations"
+    config["width"] = 600
+    config["height"] = 700
+    config["model"] = animation_model()
+    config["view"] = view_animation
+    config["update"] = (dictionary<string> model, string _msg) -> { model }
+
+    return config
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+
+@test
+function void test_toggle_size_expands_and_collapses() {
+    dictionary expanded = GraphicalUi.test_click(animation_config(), animation_model(), "Expand")
+    assert(Dictionary.get_or(expanded, "expanded", "") == "true")
+
+    dictionary collapsed = GraphicalUi.test_click(animation_config(), expanded, "Collapse")
+    assert(Dictionary.get_or(collapsed, "expanded", "") == "false")
+}
+
+@test
+function void test_color_picker_updates_color() {
+    dictionary outcome =
+        GraphicalUi.test_input(animation_config(), animation_model(), "#4361ee", "#ff0000")
+    assert(Dictionary.get_or(outcome, "color", "") == "#ff0000")
+}
+
+@test
+function void test_date_picker_updates_date() {
+    dictionary outcome =
+        GraphicalUi.test_input(animation_config(), animation_model(), "2025-01-01", "2025-12-25")
+    assert(Dictionary.get_or(outcome, "date", "") == "2025-12-25")
+}
+
+@test
+function void test_time_picker_updates_time() {
+    dictionary outcome =
+        GraphicalUi.test_input(animation_config(), animation_model(), "12:00", "08:30")
+    assert(Dictionary.get_or(outcome, "time", "") == "08:30")
+}

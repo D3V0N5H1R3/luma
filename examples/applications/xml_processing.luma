@@ -1,0 +1,96 @@
+# ═══════════════════════════════════════════════════════════
+# XML Processing
+#
+# Demonstrates the Xml module — parsing, tree building,
+# querying, and serialisation of XML documents.
+# ═══════════════════════════════════════════════════════════
+
+# Read an attribute of the <db> element from a parsed config document.
+function string db_attribute(xml config, string name) {
+    return config
+    |> Xml.find("db")
+    |> Result.unwrap()
+    |> Xml.attribute(name)
+    |> Result.unwrap()
+}
+
+# Build a small element tree and render it with indentation.
+function void build_elements() {
+    print("=== Build Elements ===")
+
+    string html = Xml.element("div")
+    |> Xml.set_attribute("class", "container")
+    |> Xml.add_child(
+        Xml.element("h1") |> Xml.set_text("Hello, Luma!")
+    )
+    |> Xml.add_child(
+        Xml.element("p") |> Xml.set_text("XML processing is easy.")
+    )
+    |> Xml.serialize_pretty()
+
+    print(html)
+}
+
+# Render elements as compact single-line markup.
+function void compact_serialisation() {
+    print("=== Compact ===")
+
+    string compact = Xml.element("br") |> Xml.serialize()
+
+    print(compact)
+
+    string link = Xml.element("a")
+    |> Xml.set_attribute("href", "https://luma-language.org")
+    |> Xml.set_text("Luma")
+    |> Xml.serialize()
+
+    print(link)
+}
+
+# Parse a document once, then read its tag and nested attributes.
+function void parse_and_query() {
+    print("\n=== Parse and Query ===")
+
+    string xml_input = "<config><db host=\"localhost\" port=\"5432\"/><cache ttl=\"300\"/></config>"
+    xml config = Xml.deserialize(xml_input) |> Result.unwrap()
+
+    string root_tag = Xml.tag(config)
+    string host = db_attribute(config, "host")
+    string port = db_attribute(config, "port")
+
+    print("Root tag: ${root_tag}")
+    print("Database: ${host}:${port}")
+}
+
+# Report structural facts about parsed and constructed nodes.
+function void tree_inspection() {
+    print("\n=== Tree Inspection ===")
+
+    string items_xml = "<list><item>Alpha</item><item>Bravo</item><item>Charlie</item></list>"
+
+    number child_count = Xml.deserialize(items_xml)
+    |> Result.unwrap()
+    |> Xml.child_count()
+
+    print("Child elements: ${child_count}")
+
+    boolean is_leaf = Xml.element("empty") |> Xml.is_leaf()
+
+    print("Leaf element: ${is_leaf}")
+}
+
+# Check whether strings are well-formed XML.
+function void validation() {
+    print("\n=== Validation ===")
+    print("Valid:   ${Xml.is_valid("<root><child/></root>")}")
+    print("Invalid: ${Xml.is_valid("<root>")}")
+}
+
+@main
+function void main() {
+    build_elements()
+    compact_serialisation()
+    parse_and_query()
+    tree_inspection()
+    validation()
+}

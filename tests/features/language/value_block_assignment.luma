@@ -1,0 +1,155 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Value-Block Assignment
+#
+# Regression coverage for a compiler codegen bug where a
+# value-producing block (`match` / `if` used as an expression)
+# on the right-hand side of an index assignment (`dict[k] = …`)
+# or a field assignment (`record.field = …`) corrupted the
+# operand stack. The block declared its subject/binding locals
+# at absolute slots that ignored the container and index
+# temporaries already on the stack, so the trailing IndexSet
+# popped the key string as the container and failed with
+# "cannot index-assign into 'string'".
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+record Holder {
+    string value
+}
+
+# ─── Index assignment with a `match` RHS (the reported case) ───
+
+@test
+function void test_index_assign_match_failure() {
+    result<string> res = failure("cors")
+    mutable dictionary<string> m = {"response": ""}
+    m["response"] = match res {
+        success(body) { body }
+        failure(err) { "Request failed: ${err}" }
+    }
+
+    assert(m["response"] == "Request failed: cors")
+}
+
+@test
+function void test_index_assign_match_success() {
+    result<string> res = success("hello body")
+    mutable dictionary<string> m = {"response": ""}
+    m["response"] = match res {
+        success(body) { body }
+        failure(err) { "Request failed: ${err}" }
+    }
+
+    assert(m["response"] == "hello body")
+}
+
+# ─── Index assignment preceded by another index assignment ───
+# Exercises the case where live temporaries (container + key) sit
+# beneath the value block while it declares binding locals.
+
+@test
+function void test_index_assign_match_after_simple_assign() {
+    result<string> res = failure("boom")
+    mutable dictionary<string> m = {"status": "", "response": ""}
+    m["status"] = "done"
+    m["response"] = match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    }
+
+    assert(m["status"] == "done")
+    assert(m["response"] == "fail:boom")
+}
+
+# ─── Index assignment with an `if` value block that has an inner let ───
+
+@test
+function void test_index_assign_if_inner_let() {
+    boolean flag = true
+    mutable dictionary<string> m = {"k": ""}
+    m["k"] = if flag {
+        string computed = "computed-value"
+        computed
+    } else {
+        "other"
+    }
+
+    assert(m["k"] == "computed-value")
+}
+
+# ─── Field assignment with a `match` RHS ───
+
+@test
+function void test_field_assign_match_failure() {
+    result<string> res = failure("nope")
+    mutable Holder h = Holder { value = "" }
+    h.value = match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    }
+
+    assert(h.value == "fail:nope")
+}
+
+# ─── Index assignment with a `match` RHS inside a closure ───
+# Mirrors the Http.get callback shape that first
+# surfaced the bug: a lambda capturing a dictionary upvalue and
+# index-assigning a match over its result<string> parameter.
+
+@test
+function void test_index_assign_match_in_closure() {
+    dictionary<string> model = {"response": ""}
+    function(result<string>) -> dictionary<string> cb = (result<string> res) -> {
+        mutable dictionary<string> m = model
+        m["response"] = match res {
+            success(body) { body }
+            failure(err) { "Request failed: ${err}" }
+        }
+        return m
+    }
+
+    dictionary<string> failed = cb(failure("cors"))
+    dictionary<string> ok = cb(success("payload"))
+
+    assert(failed["response"] == "Request failed: cors")
+    assert(ok["response"] == "payload")
+}
+
+# ─── Index assignment with a `match` whose arm is itself an `if` value block ───
+# Mirrors the gui_http.luma callback after its CORS-hint refinement: the failure
+# arm of the match is an `if`/`else` value block. Two nested value blocks share
+# the same index-assign target, so both must account for the container+key
+# temporaries beneath them.
+
+@test
+function void test_index_assign_match_arm_with_if_block() {
+    result<string> res = failure("boom")
+    mutable dictionary<string> m = {"k": ""}
+    m["k"] = match res {
+        success(body) { body }
+        failure(err) {
+            if String.contains(err, "oo") {
+                "matched:${err}"
+            } else {
+                "plain:${err}"
+            }
+        }
+    }
+
+    assert(m["k"] == "matched:boom")
+}
+
+# ─── Control: empty-prefix forms that always worked ───
+
+@test
+function void test_plain_var_match_still_works() {
+    result<string> res = success("direct")
+    string s = match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    }
+
+    assert(s == "direct")
+}

@@ -1,0 +1,160 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Process Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_process_get_environment_variable() {
+    result<string> path_result = Process.get_environment_variable("PATH")
+
+    assert(Result.is_success(path_result))
+
+    result<string> missing_result = Process.get_environment_variable("_NONEXISTENT_ENV_VAR_XYZ_")
+
+    assert(!Result.is_success(missing_result))
+}
+
+@test
+function void test_process_current_directory() {
+    result<string> current_dir_result = Process.current_directory()
+
+    assert(Result.is_success(current_dir_result))
+    assert(String.length(Result.unwrap(current_dir_result)) > 0)
+}
+
+@test
+function void test_process_has_environment_variable() {
+    assert(Process.has_environment_variable("PATH"))
+    assert(!Process.has_environment_variable("_NONEXISTENT_ENV_VAR_XYZ_"))
+}
+
+@test
+function void test_process_set_environment_variable() {
+    result<void> set_env_result = Process.set_environment_variable("_LUMA_TEST_VAR", "hello")
+
+    assert(Result.is_success(set_env_result))
+    assert(Process.has_environment_variable("_LUMA_TEST_VAR"))
+
+    result<string> env_value = Process.get_environment_variable("_LUMA_TEST_VAR")
+
+    assert(Result.is_success(env_value))
+    assert(Result.unwrap(env_value) == "hello")
+}
+
+@test
+function void test_process_get_args() {
+    array<string> args = Process.get_arguments()
+
+    assert(type_of(args) == "array")
+}
+
+@test
+function void test_process_run() {
+    # Use "cmd /c echo" on Windows since echo is a shell built-in
+    result<Process.ProcessResult> output = Process.run("cmd /c echo hello")
+
+    assert(Result.is_success(output))
+
+    Process.ProcessResult pr = Result.unwrap(output)
+
+    assert(pr.exit_code == 0)
+    assert(String.length(pr.output) > 0)
+}
+
+# ─── Negative / error tests ───
+
+@test
+function void test_process_run_nonexistent_command() {
+    # Running a command that does not exist should return a failure.
+    result<Process.ProcessResult> r = Process.run("_luma_nonexistent_command_xyz_123")
+
+    assert(Result.is_failure(r), "non-existent command should fail")
+}
+
+@test
+function void test_process_run_nonzero_exit_code() {
+    # A command that exits with a non-zero code.
+    result<Process.ProcessResult> r = Process.run("cmd /c exit 42")
+
+    assert(Result.is_success(r), "command should execute successfully")
+
+    Process.ProcessResult pr = Result.unwrap(r)
+
+    assert(pr.exit_code == 42, "exit code should be 42")
+}
+
+@test
+function void test_process_get_environment_variable_missing() {
+    result<string> r = Process.get_environment_variable("_LUMA_DEFINITELY_NOT_SET_XYZ_999_")
+
+    assert(Result.is_failure(r), "missing env var should return failure")
+}
+
+# ─── Process.get_process_id ──────────────────────────────
+
+@test
+function void test_process_get_process_id() {
+    integer pid = Process.get_process_id()
+
+    assert(pid > 0, "process ID should be positive")
+}
+
+# ─── Process.get_all_environment_variables ─────────────────────────────────
+
+@test
+function void test_process_get_all_environment_variables() {
+    dictionary<string> env = Process.get_all_environment_variables()
+
+    assert(Dictionary.length(env) > 0, "should have at least one env var")
+}
+
+@test
+function void test_process_set_variable_appears_in_snapshot() {
+    # A variable written through set_environment_variable must be visible both
+    # to a direct lookup and in the full environment snapshot.
+    result<void> set_result = Process.set_environment_variable("_LUMA_FEATURE_ENV_VAR", "round-trip")
+
+    assert(Result.is_success(set_result))
+
+    dictionary<string> env = Process.get_all_environment_variables()
+    result<string> looked_up = Dictionary.get(env, "_LUMA_FEATURE_ENV_VAR")
+
+    assert(Result.is_success(looked_up), "set variable should appear in the snapshot")
+    assert(Result.unwrap(looked_up) == "round-trip")
+}
+
+# ─── Additional negative / error tests (platform-neutral) ──────────────────
+
+@test
+function void test_process_run_empty_command() {
+    # An empty command string is rejected before any spawn is attempted.
+    result<Process.ProcessResult> r = Process.run("")
+
+    assert(Result.is_failure(r), "empty command should fail")
+}
+
+@test
+function void test_process_run_unclosed_quote() {
+    # A mismatched quote makes the tokeniser reject the command, surfaced as a
+    # failure result rather than a thrown error.
+    result<Process.ProcessResult> r = Process.run("echo \"unterminated")
+
+    assert(Result.is_failure(r), "unclosed quote should fail")
+}
+
+@test
+function void test_process_set_environment_variable_empty_name() {
+    result<void> r = Process.set_environment_variable("", "value")
+
+    assert(Result.is_failure(r), "empty variable name should fail")
+}
+
+@test
+function void test_process_set_environment_variable_name_with_equals() {
+    result<void> r = Process.set_environment_variable("invalid=name", "value")
+
+    assert(Result.is_failure(r), "variable name containing '=' should fail")
+}
+

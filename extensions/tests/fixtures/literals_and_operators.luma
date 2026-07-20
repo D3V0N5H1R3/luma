@@ -1,0 +1,69 @@
+# ═══════════════════════════════════════════════════════════════════
+# Luma Highlight Test — Strings, Numbers, Operators
+# ═══════════════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # String literals
+    string hello = "Hello, world!"
+    string escaped = "tab:\tnewline:\n"
+    string interpolated = "value is ${1 + 2}"
+    string triple = """
+    multi - line
+    string
+    """
+
+    # Number literals
+    integer dec = 42
+    integer hex = 0xFF
+    integer bin = 0b1010
+    number pi = 3.14159
+    number sci = 1.5e10
+
+    # Boolean and null
+    boolean flag = true
+    boolean off = false
+    optional<string> nothing = none
+
+    # Operators
+    integer sum = 1 + 2
+    integer diff = 10 - 3
+    integer product = 4 * 5
+    number quotient = 10.0 / 3.0
+    integer int_div = 10 // 3
+    integer remainder = 10 % 3
+
+    # Comparison
+    boolean eq = sum == 3
+    boolean ne = sum != 4
+    boolean lt = sum < 5
+    boolean gt = sum > 1
+    boolean le = sum <= 3
+    boolean ge = sum >= 3
+
+    # Logical
+    boolean and_op = flag && off
+    boolean or_op = flag || off
+    boolean not_op = !flag
+
+    # Bitwise
+    integer bw_and = 0xFF & 0x0F
+    integer bw_or = 0xF0 | 0x0F
+    integer bw_xor = 0xFF ^ 0x0F
+    integer bw_not = ~0
+    integer shift_l = 1 << 4
+    integer shift_r = 16 >> 2
+
+    # Pipe operators
+    string result = "hello" |> String.uppercase()
+
+    # Range
+    array<integer> range = 1 .. 10
+    array<integer> inclusive = 1 ..= 10
+
+    # Null coalescing
+    string value = nothing ?? "default"
+
+    # Optional chaining
+    # optional<string> len = nothing?.length
+}

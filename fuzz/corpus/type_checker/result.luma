@@ -1,0 +1,49 @@
+# Type checker: result<T> and result<T, E> with typed errors,
+# '?' propagation return-type enforcement, match destructuring,
+# string interpolation, and result combinator signatures.
+
+choice ParseError { Empty  TooLong  InvalidChar }
+
+function result<integer> parse_positive(string s) {
+    result<integer> parsed = String.parse_integer(s)
+
+    match parsed {
+        failure(e) { return failure(e) }
+        success(n) {
+            if n > 0 { return success(n) }
+
+            return failure("not positive")
+        }
+    }
+}
+
+function result<string, ParseError> validate(string s) {
+    if String.length(s) == 0 {
+        return failure(ParseError.Empty)
+    }
+
+    if String.length(s) > 50 {
+        return failure(ParseError.TooLong)
+    }
+
+    return success(s)
+}
+
+# '?' requires the enclosing function to return result<T>.
+function result<integer> chain(string a, string b) {
+    integer first = parse_positive(a)?
+    integer second = parse_positive(b)?
+
+    return success(first + second)
+}
+
+function string describe(result<integer> r) {
+    return match r {
+        success(v) { "got ${v}" }
+        failure(e) { "error: ${e}" }
+    }
+}
+
+function result<number> scale(result<integer> r) {
+    return Result.map_number(r, (number v) -> v * 2.0)
+}

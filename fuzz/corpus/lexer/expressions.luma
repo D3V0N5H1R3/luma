@@ -1,0 +1,5 @@
+integer x = 42
+string name = "hello ${x}"
+array<integer> arr = [1, 2, 3]
+dictionary<string> d = {"key": "value"}
+result<array<integer>> mapped = arr |> Array.map((integer n) -> n * 2)

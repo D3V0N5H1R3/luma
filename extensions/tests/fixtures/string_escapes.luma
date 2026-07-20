@@ -1,0 +1,37 @@
+# ═══════════════════════════════════════════════════════════════════
+# Luma Highlight Test — String Escapes and Edge Cases
+# ═══════════════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # Escape sequences.
+    string tab = "before\tafter"
+    string newline = "line1\nline2"
+    string cr = "before\rafter"
+    string backslash = "path\\to\\file"
+    string quote = "she said \"hello\""
+    string null_char = "null\0char"
+
+    # Nested interpolation.
+    integer x = 10
+    string nested = "result: ${Converter.to_string(x + 5)}"
+    string deep = "value: ${Converter.to_string(Array.length([1, 2, 3]))}"
+
+    # Multi-line strings.
+    string multi = """
+    This is a
+    multi - line string
+    with "quotes" inside
+    """
+
+    # Empty and single-character strings.
+    string empty = ""
+    string single = "a"
+
+    # String with only interpolation.
+    string only_interp = "${Converter.to_string(42)}"
+
+    # Adjacent string operations.
+    string concat = "hello" + " " + "world"
+    boolean check = String.starts_with("hello", "he") && String.ends_with("hello", "lo")
+}

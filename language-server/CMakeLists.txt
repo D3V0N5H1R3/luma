@@ -1,0 +1,52 @@
+# language-server/CMakeLists.txt
+# Language Server Protocol (LSP) implementation for Luma.
+
+luma_add_tool_library(lsp
+    SOURCES
+        source/lsp_analysis_cache.cpp
+        source/lsp_analysis_service_impl.cpp
+        source/lsp_analysis_service_symbols.cpp
+        source/lsp_capabilities.cpp
+        source/lsp_diagnostic_builder.cpp
+        source/lsp_include_processor.cpp
+        source/lsp_keyword_catalog.cpp
+        source/lsp_server.cpp
+        source/lsp_server_dispatch.cpp
+        source/lsp_server_lifecycle.cpp
+        source/lsp_server_code_actions.cpp
+        source/lsp_server_code_actions_refactoring.cpp
+        source/lsp_completion_provider.cpp
+        source/lsp_completion_strategy.cpp
+        source/lsp_server_completion.cpp
+        source/lsp_server_completion_resolve.cpp
+        source/lsp_server_folding.cpp
+        source/lsp_server_formatting.cpp
+        source/lsp_server_hover.cpp
+        source/lsp_hover_literals.cpp
+        source/lsp_server_hierarchy.cpp
+        source/lsp_server_inlay.cpp
+        source/lsp_server_navigation.cpp
+        source/lsp_server_rename.cpp
+        source/lsp_server_semantic_tokens.cpp
+        source/lsp_server_signature.cpp
+        source/lsp_server_sync.cpp
+        source/lsp_server_symbols.cpp
+        source/lsp_server_workspace.cpp
+        source/lsp_configuration_manager.cpp
+        source/lsp_workspace_manager.cpp
+        source/lsp_document_store.cpp
+        source/lsp_persisted_index.cpp
+        source/lsp_stdlib_registry.cpp
+        source/lsp_scope_stack.cpp
+        source/lsp_identifier_collector.cpp
+        source/lsp_symbol_resolver.cpp
+        source/lsp_workspace_indexer.cpp
+        source/lsp_transport_wrapper.cpp
+        source/lsp_document_synchronizer.cpp
+        source/lsp_analysis_pipeline.cpp
+        source/lsp_token_utils.cpp
+        source/lsp_text_formatter.cpp
+        source/lsp_types.cpp
+    DEPENDS
+        luma_analysis
+)

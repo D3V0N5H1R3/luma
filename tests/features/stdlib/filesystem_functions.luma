@@ -1,0 +1,533 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — FileSystem Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_filesystem_exists() {
+    assert(Result.is_success(FileSystem.create_directory("_test_exists_dir")))
+    assert(Result.is_success(FileSystem.write_file("_test_exists_file.txt", "data")))
+
+    assert(Result.unwrap(FileSystem.exists("_test_exists_dir")))
+    assert(Result.unwrap(FileSystem.exists("_test_exists_file.txt")))
+    assert(!Result.unwrap(FileSystem.exists("_nonexistent_dir_xyz")))
+
+    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_exists_dir"), false)
+
+    _ = Result.unwrap_or(FileSystem.delete("_test_exists_file.txt"), false)
+}
+
+@test
+function void test_filesystem_create_and_delete_directory() {
+    result<boolean> create_result = FileSystem.create_directory("_test_dir_tmp")
+
+    assert(Result.is_success(create_result))
+    assert(Result.unwrap(FileSystem.exists("_test_dir_tmp")))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_dir_tmp"), false)
+
+    assert(!Result.unwrap(FileSystem.exists("_test_dir_tmp")))
+}
+
+@test
+function void test_filesystem_list_directories() {
+    result<array<string>> list_result = FileSystem.list_directories(".")
+
+    assert(Result.is_success(list_result))
+}
+
+@test
+function void test_filesystem_copy_rename() {
+    assert(Result.is_success(FileSystem.write_file("_test_copy_src.txt", "data")))
+
+    result<boolean> copied = FileSystem.copy("_test_copy_src.txt", "_test_copy_dst.txt")
+
+    assert(Result.is_success(copied))
+    assert(Result.unwrap(FileSystem.exists("_test_copy_dst.txt")))
+
+    result<boolean> renamed = FileSystem.rename("_test_copy_dst.txt", "_test_copy_moved.txt")
+
+    assert(Result.is_success(renamed))
+    assert(Result.unwrap(FileSystem.exists("_test_copy_moved.txt")))
+    assert(!Result.unwrap(FileSystem.exists("_test_copy_dst.txt")))
+
+    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_copy_src.txt"), false)
+
+    _ = Result.unwrap_or(FileSystem.delete("_test_copy_moved.txt"), false)
+}
+
+@test
+function void test_filesystem_extension() {
+    assert(FileSystem.extension("file.luma") == ".luma")
+    assert(FileSystem.extension("archive.tar.gz") == ".gz")
+    assert(FileSystem.extension("noext") == "")
+}
+
+@test
+function void test_filesystem_name_and_parent() {
+    assert(FileSystem.name("src/main.cpp") == "main.cpp")
+    assert(FileSystem.parent("src/main.cpp") == "src")
+}
+
+@test
+function void test_filesystem_is_directory_and_is_file() {
+    assert(Result.is_success(FileSystem.create_directory("_test_isdir_tmp")))
+    assert(Result.is_success(FileSystem.write_file("_test_isfile_tmp.txt", "data")))
+
+    assert(Result.unwrap(FileSystem.is_directory("_test_isdir_tmp")))
+    assert(!Result.unwrap(FileSystem.is_directory("_nonexistent_xyz")))
+    assert(Result.unwrap(FileSystem.is_file("_test_isfile_tmp.txt")))
+    assert(!Result.unwrap(FileSystem.is_file("_test_isdir_tmp")))
+    assert(!Result.unwrap(FileSystem.is_file("_nonexistent_xyz.txt")))
+
+    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_isdir_tmp"), false)
+
+    _ = Result.unwrap_or(FileSystem.delete("_test_isfile_tmp.txt"), false)
+}
+
+@test
+function void test_filesystem_list_files() {
+    assert(Result.is_success(FileSystem.create_directory("_test_listfiles_tmp")))
+    assert(Result.is_success(FileSystem.write_file("_test_listfiles_tmp/a.txt", "a")))
+    assert(Result.is_success(FileSystem.write_file("_test_listfiles_tmp/b.txt", "b")))
+
+    result<array<string>> files = FileSystem.list_files("_test_listfiles_tmp")
+
+    assert(Result.is_success(files))
+
+    array<string> file_list = Result.unwrap(files)
+
+    assert(Array.length(file_list) == 2)
+
+    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_listfiles_tmp/a.txt"), false)
+
+    _ = Result.unwrap_or(FileSystem.delete("_test_listfiles_tmp/b.txt"), false)
+    _ = Result.unwrap_or(FileSystem.delete("_test_listfiles_tmp"), false)
+}
+
+@test
+function void test_filesystem_size() {
+    assert(Result.is_success(FileSystem.write_file("_test_size_tmp.txt", "hello")))
+
+    result<integer> file_size = FileSystem.size("_test_size_tmp.txt")
+
+    assert(Result.is_success(file_size))
+    assert(Result.unwrap(file_size) == 5)
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_size_tmp.txt"), false)
+}
+
+# ─── Path Functions ───
+
+@test
+function void test_filesystem_join() {
+    string joined_path = FileSystem.join("src", "stdlib")
+
+    assert("src" in joined_path)
+    assert("stdlib" in joined_path)
+}
+
+@test
+function void test_filesystem_stem() {
+    assert(FileSystem.stem("hello.txt") == "hello")
+    assert(FileSystem.stem("archive.tar.gz") == "archive.tar")
+    assert(FileSystem.stem("noext") == "noext")
+}
+
+@test
+function void test_filesystem_normalize() {
+    string normalized_path = FileSystem.normalize("a/b/../c")
+
+    assert("a" in normalized_path)
+    assert("c" in normalized_path)
+}
+
+@test
+function void test_filesystem_is_absolute_and_relative() {
+    assert(FileSystem.is_relative("hello.txt"))
+    assert(!FileSystem.is_absolute("hello.txt"))
+}
+
+@test
+function void test_filesystem_relative() {
+    string relative_path = FileSystem.relative("a/b/c", "a")
+
+    assert("b" in relative_path)
+    assert("c" in relative_path)
+}
+
+# ─── delete_directory / rename_directory ───
+
+@test
+function void test_filesystem_delete_directory() {
+    assert(Result.is_success(FileSystem.create_directory("_test_del_dir_tmp")))
+    assert(Result.unwrap(FileSystem.is_directory("_test_del_dir_tmp")))
+
+    result<boolean> del_result = FileSystem.delete_directory("_test_del_dir_tmp")
+
+    assert(Result.is_success(del_result))
+    assert(!Result.unwrap(FileSystem.exists("_test_del_dir_tmp")))
+}
+
+@test
+function void test_filesystem_delete_directory_not_a_dir() {
+    assert(Result.is_success(FileSystem.write_file("_test_del_dir_file.txt", "data")))
+
+    result<boolean> del_result = FileSystem.delete_directory("_test_del_dir_file.txt")
+
+    assert(Result.is_failure(del_result))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_del_dir_file.txt"), false)
+}
+
+@test
+function void test_filesystem_rename_directory() {
+    assert(Result.is_success(FileSystem.create_directory("_test_ren_dir_old")))
+
+    result<boolean> ren_result = FileSystem.rename_directory(
+        "_test_ren_dir_old", "_test_ren_dir_new"
+    )
+
+    assert(Result.is_success(ren_result))
+    assert(!Result.unwrap(FileSystem.exists("_test_ren_dir_old")))
+    assert(Result.unwrap(FileSystem.is_directory("_test_ren_dir_new")))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_ren_dir_new"), false)
+}
+
+@test
+function void test_filesystem_rename_directory_not_a_dir() {
+    assert(Result.is_success(FileSystem.write_file("_test_ren_dir_file.txt", "data")))
+
+    result<boolean> ren_result = FileSystem.rename_directory(
+        "_test_ren_dir_file.txt", "_test_ren_dir_new2"
+    )
+
+    assert(Result.is_failure(ren_result))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_ren_dir_file.txt"), false)
+}
+
+@test
+function void test_filesystem_absolute_path() {
+    result<string> r = FileSystem.absolute_path("some_file.txt")
+
+    assert(Result.is_success(r))
+
+    string abs = Result.unwrap(r)
+
+    assert(FileSystem.is_absolute(abs))
+    assert(String.length(abs) > String.length("some_file.txt"))
+}
+
+@test
+function void test_filesystem_absolute_path_already_absolute() {
+    result<string> r = FileSystem.absolute_path("/usr/bin")
+
+    assert(Result.is_success(r))
+}
+
+# ─── Negative tests ──────────────────────────────────────
+
+@test
+function void test_filesystem_delete_nonexistent_is_idempotent() {
+    # Deleting a non-existent file succeeds (idempotent).
+    result<boolean> r = FileSystem.delete("_no_such_file_xyz.txt")
+
+    assert(Result.is_success(r))
+}
+
+@test
+function void test_filesystem_rename_nonexistent() {
+    result<boolean> r = FileSystem.rename("_no_such_file_xyz.txt", "_dest.txt")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_filesystem_copy_nonexistent() {
+    result<boolean> r = FileSystem.copy("_no_such_file_xyz.txt", "_dest.txt")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_filesystem_size_nonexistent() {
+    result<integer> r = FileSystem.size("_no_such_file_xyz.txt")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_filesystem_list_files_nonexistent() {
+    result<array<string>> r = FileSystem.list_files("_no_such_dir_xyz")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_filesystem_list_directories_nonexistent() {
+    result<array<string>> r = FileSystem.list_directories("_no_such_dir_xyz")
+
+    assert(Result.is_failure(r))
+}
+
+# ─── FileSystem.home_directory ───────────────────────────
+
+@test
+function void test_filesystem_home_directory() {
+    result<string> r = FileSystem.home_directory()
+
+    assert(Result.is_success(r))
+    string home = Result.unwrap(r)
+    assert(String.length(home) > 0, "home directory should not be empty")
+}
+
+# ─── FileSystem.write_file / read_file / append_file ────
+
+@test
+function void test_filesystem_write_and_read_file() {
+    result<boolean> write_result = FileSystem.write_file("_test_io_tmp.txt", "hello luma")
+
+    assert(Result.is_success(write_result))
+    assert(Result.unwrap(FileSystem.exists("_test_io_tmp.txt")))
+
+    result<string> content = FileSystem.read_file("_test_io_tmp.txt")
+
+    assert(Result.is_success(content))
+    assert(Result.unwrap(content) == "hello luma")
+
+    result<boolean> append_result = FileSystem.append_file("_test_io_tmp.txt", " world")
+
+    assert(Result.is_success(append_result))
+
+    result<string> appended_content = FileSystem.read_file("_test_io_tmp.txt")
+
+    assert(Result.is_success(appended_content))
+    assert(Result.unwrap(appended_content) == "hello luma world")
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_io_tmp.txt"), false)
+}
+
+@test
+function void test_filesystem_file_not_found() {
+    result<string> read_result = FileSystem.read_file("_nonexistent_file_xyz.txt")
+
+    assert(!Result.is_success(read_result))
+}
+
+# ─── FileSystem.read_file_limited ───────────────────────
+
+@test
+function void test_filesystem_read_file_limited() {
+    result<boolean> write_result = FileSystem.write_file("_test_io_limited.txt", "hello luma")
+
+    assert(Result.is_success(write_result))
+
+    # Read within limit succeeds.
+    result<string> ok_result = FileSystem.read_file_limited("_test_io_limited.txt", 1048576)
+
+    assert(Result.is_success(ok_result))
+    assert(Result.unwrap(ok_result) == "hello luma")
+
+    # Read with limit smaller than file size fails.
+    result<string> fail_result = FileSystem.read_file_limited("_test_io_limited.txt", 3)
+
+    assert(Result.is_failure(fail_result))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_io_limited.txt"), false)
+}
+
+# ─── FileSystem.write_lines / read_lines ────────────────
+
+@test
+function void test_filesystem_read_and_write_lines() {
+    array<string> lines = ["line one", "line two", "line three"]
+
+    result<boolean> write_result = FileSystem.write_lines("_test_lines_tmp.txt", lines)
+
+    assert(Result.is_success(write_result))
+
+    result<array<string>> read_result = FileSystem.read_lines("_test_lines_tmp.txt")
+
+    assert(Result.is_success(read_result))
+
+    array<string> read_back = Result.unwrap(read_result)
+
+    assert(Array.length(read_back) == 3)
+    assert(read_back[0] == "line one")
+    assert(read_back[2] == "line three")
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_lines_tmp.txt"), false)
+}
+
+# ───────────────────────────────────────────────────────────
+# get_modified_time, is_symlink, list_recursively
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_filesystem_get_modified_time() {
+    assert(Result.is_success(FileSystem.write_file("_test_mtime.txt", "data")))
+
+    result<number> mtime = FileSystem.get_modified_time("_test_mtime.txt")
+
+    assert(Result.is_success(mtime))
+    assert(Result.unwrap(mtime) > 0.0)
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_mtime.txt"), false)
+}
+
+@test
+function void test_filesystem_is_symlink() {
+    assert(Result.is_success(FileSystem.write_file("_test_symlink.txt", "data")))
+
+    assert(!Result.unwrap(FileSystem.is_symlink("_test_symlink.txt")))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_symlink.txt"), false)
+}
+
+@test
+function void test_filesystem_list_recursively() {
+    assert(Result.is_success(FileSystem.create_directory("_test_rec_dir")))
+    assert(Result.is_success(FileSystem.write_file("_test_rec_dir/inner.txt", "data")))
+
+    result<array<string>> listing = FileSystem.list_recursively("_test_rec_dir")
+
+    assert(Result.is_success(listing))
+    assert(Array.length(Result.unwrap(listing)) >= 1)
+
+    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_rec_dir/inner.txt"), false)
+
+    _ = Result.unwrap_or(FileSystem.delete("_test_rec_dir"), false)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Negative tests — sandbox-escape rejection
+#
+# Every FileSystem function validates its path against the current
+# working directory. A path that escapes the sandbox raises a
+# catchable runtime error rather than touching the filesystem.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_filesystem_read_file_rejects_traversal() {
+    mutable string caught = ""
+
+    try {
+        result<string> _ = FileSystem.read_file("../_outside_read.txt")
+    } catch(err) {
+        caught = err
+    }
+
+    assert(
+        String.contains(caught, "outside the working directory"),
+        "read_file must reject paths that escape the working directory"
+    )
+}
+
+@test
+function void test_filesystem_write_file_rejects_traversal() {
+    mutable string caught = ""
+
+    try {
+        result<boolean> _ = FileSystem.write_file("../_outside_write.txt", "data")
+    } catch(err) {
+        caught = err
+    }
+
+    assert(
+        String.contains(caught, "outside the working directory"),
+        "write_file must reject paths that escape the working directory"
+    )
+}
+
+@test
+function void test_filesystem_delete_rejects_traversal() {
+    mutable string caught = ""
+
+    try {
+        result<boolean> _ = FileSystem.delete("../_outside_delete.txt")
+    } catch(err) {
+        caught = err
+    }
+
+    assert(
+        String.contains(caught, "outside the working directory"),
+        "delete must reject paths that escape the working directory"
+    )
+}
+
+@test
+function void test_filesystem_join_rejects_escape() {
+    mutable string caught = ""
+
+    try {
+        string _ = FileSystem.join("a", "..", "..", "b")
+    } catch(err) {
+        caught = err
+    }
+
+    assert(
+        String.contains(caught, "outside the working directory"),
+        "join must reject a result that escapes the working directory"
+    )
+}
+
+@test
+function void test_filesystem_absolute_path_outside_rejected() {
+    # An absolute path outside the working directory is rejected.
+    mutable string caught = ""
+
+    try {
+        result<boolean> _ = FileSystem.exists("/etc/passwd")
+    } catch(err) {
+        caught = err
+    }
+
+    assert(
+        String.contains(caught, "outside the working directory"),
+        "absolute paths outside the working directory must be rejected"
+    )
+}
+
+# ─── read_file_limited boundary behaviour ────────────────
+
+@test
+function void test_filesystem_read_file_limited_negative_max_bytes() {
+    assert(Result.is_success(FileSystem.write_file("_test_rl_neg.txt", "data")))
+
+    # A negative byte limit is invalid and yields a failure.
+    result<string> r = FileSystem.read_file_limited("_test_rl_neg.txt", -1)
+
+    assert(Result.is_failure(r))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_rl_neg.txt"), false)
+}
+
+@test
+function void test_filesystem_read_file_limited_exact_boundary() {
+    assert(Result.is_success(FileSystem.write_file("_test_rl_exact.txt", "hello")))
+
+    # A limit exactly equal to the file size succeeds.
+    result<string> r = FileSystem.read_file_limited("_test_rl_exact.txt", 5)
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == "hello")
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_rl_exact.txt"), false)
+}
+
+@test
+function void test_filesystem_list_directories_contains_created() {
+    assert(Result.is_success(FileSystem.create_directory("_test_ld_parent/_child")))
+
+    result<array<string>> dirs = FileSystem.list_directories("_test_ld_parent")
+
+    assert(Result.is_success(dirs))
+    assert(Array.contains(Result.unwrap(dirs), "_child"))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete_directory("_test_ld_parent"), false)
+}
+

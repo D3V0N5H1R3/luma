@@ -1,0 +1,44 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Include Helper
+#
+# Helper file included by include.luma.
+# ═══════════════════════════════════════════════════════════
+
+function integer add(integer left, integer right) {
+    return left + right
+}
+
+record Color {
+    integer red,
+    integer green,
+    integer blue
+}
+
+choice Direction {
+    North
+    South
+    East
+    West
+}
+
+function<T> T pick(T value) {
+    return value
+}
+
+choice Shape {
+    Circle(number radius)
+    Square(number side)
+}
+
+interface Named {
+    string name
+}
+
+record Animal {
+    string name,
+    integer legs
+}
+
+function string name_of(Named entity) {
+    return entity.name
+}

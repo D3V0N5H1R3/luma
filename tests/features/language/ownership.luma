@@ -1,0 +1,261 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Ownership (unique and borrow)
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+function string consume_value(string s) {
+    return "consumed: ${s}"
+}
+
+function unique string make_handle(string name) {
+    return "handle:${name}"
+}
+
+record Account {
+    string owner,
+    integer balance
+}
+
+function integer account_balance(borrow Account a) {
+    return a.balance
+}
+
+# ─── Unique variables ───
+
+@test
+function void test_unique_variable_consumed() {
+    unique string handle = "resource"
+
+    string output = consume_value(handle)
+
+    assert(output == "consumed: resource")
+}
+
+@test
+function void test_underscore_suppresses_unused_warning() {
+    unique string _ignored = "not used"
+
+    assert(true)
+}
+
+# ─── Borrow variables ───
+
+@test
+function void test_borrow_variable_readable() {
+    borrow string name = "hello"
+
+    assert(name == "hello")
+}
+
+@test
+function void test_borrow_variable_multiple_reads() {
+    borrow string msg = "world"
+
+    assert(msg == "world")
+    assert(String.length(msg) == 5)
+}
+
+# ─── Unique parameters ───
+
+function string process_unique(unique string s) {
+    return "processed: ${s}"
+}
+
+@test
+function void test_unique_parameter_consumed() {
+    unique string handle = "resource"
+
+    string output = process_unique(handle)
+
+    assert(output == "processed: resource")
+}
+
+# ─── Borrow parameters ───
+
+function string peek_borrow(borrow string s) {
+    return "peeked: ${s}"
+}
+
+@test
+function void test_borrow_parameter_readable() {
+    string data = "data"
+    string output = peek_borrow(data)
+
+    assert(output == "peeked: data")
+}
+
+@test
+function void test_borrow_parameter_multiple_uses() {
+    borrow string name = "Alice"
+
+    string a = peek_borrow(name)
+    string b = peek_borrow(name)
+
+    assert(a == "peeked: Alice")
+    assert(b == "peeked: Alice")
+}
+
+# ─── Ownership with control flow ───
+
+@test
+function void test_unique_consumed_in_both_branches() {
+    unique string handle = "resource"
+
+    string output = if true {
+        consume_value(handle)
+    } else {
+        consume_value(handle)
+    }
+
+    assert(output == "consumed: resource")
+}
+
+# ─── Unique passed to borrow parameter (no consumption) ───
+
+@test
+function void test_unique_passed_to_borrow_param() {
+    unique string _handle = "resource"
+
+    string a = peek_borrow(_handle)
+    string b = peek_borrow(_handle)
+
+    assert(a == "peeked: resource")
+    assert(b == "peeked: resource")
+}
+
+# ─── Pipe with borrow parameter ───
+
+@test
+function void test_pipe_to_borrow_param() {
+    unique string _handle = "resource"
+
+    string a = _handle |> peek_borrow()
+    string b = _handle |> peek_borrow()
+
+    assert(a == "peeked: resource")
+    assert(b == "peeked: resource")
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional ownership tests
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_borrow_in_array_map() {
+    borrow string prefix = "item"
+    array<integer> ids = [1, 2, 3]
+
+    mutable string result_str = ""
+
+    for id in ids {
+        result_str = result_str + "${prefix}_${id} "
+    }
+
+    assert(String.contains(result_str, "item_1"))
+    assert(String.contains(result_str, "item_3"))
+}
+
+@test
+function void test_unique_consumed_in_function_chain() {
+    unique string handle = "data"
+
+    string step1 = consume_value(handle)
+
+    assert(String.contains(step1, "data"))
+}
+
+@test
+function void test_borrow_string_operations() {
+    borrow string text = "Hello, World"
+
+    assert(String.length(text) == 12)
+    assert(String.contains(text, "World"))
+    assert(String.starts_with(text, "Hello"))
+}
+
+@test
+function void test_unique_in_if_expression() {
+    unique string _handle = "res"
+    boolean condition = true
+
+    string result_value = if condition {
+        peek_borrow(_handle)
+    } else {
+        "fallback"
+    }
+
+    assert(result_value == "peeked: res")
+}
+
+@test
+function void test_borrow_parameter_does_not_consume() {
+    string original = "immutable_data"
+
+    # Passing to borrow param multiple times should work.
+    string r1 = peek_borrow(original)
+    string r2 = peek_borrow(original)
+    string r3 = peek_borrow(original)
+
+    assert(r1 == r2)
+    assert(r2 == r3)
+}
+
+# ─── Returning unique values ───
+
+@test
+function void test_function_returns_unique_value() {
+    unique string handle = make_handle("file_a")
+
+    string output = consume_value(handle)
+
+    assert(output == "consumed: handle:file_a")
+}
+
+# ─── Consuming in a match arm ───
+
+@test
+function void test_unique_consumed_in_match_arm() {
+    unique string handle = "resource"
+    boolean flag = true
+
+    string output = match flag {
+    case true  { consume_value(handle) }
+    case false { "unreached" }
+    }
+
+    assert(output == "consumed: resource")
+}
+
+# ─── Borrowing records and arrays (read-only) ───
+
+@test
+function void test_borrow_record_field_read() {
+    Account acc = Account { owner = "Alice", balance = 100 }
+    borrow Account view = acc
+
+    assert(view.owner == "Alice")
+    assert(view.balance == 100)
+}
+
+@test
+function void test_borrow_record_parameter() {
+    Account acc = Account { owner = "Bob", balance = 250 }
+
+    integer b1 = account_balance(acc)
+    integer b2 = account_balance(acc)
+
+    assert(b1 == 250)
+    assert(b2 == b1)
+}
+
+@test
+function void test_borrow_array_read() {
+    array<integer> nums = [10, 20, 30]
+    borrow array<integer> view = nums
+
+    assert(Array.length(view) == 3)
+    assert(view[0] == 10)
+    assert(view[2] == 30)
+}

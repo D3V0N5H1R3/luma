@@ -1,0 +1,32 @@
+# ═══════════════════════════════════════════════════════════════════
+# Luma Highlight Test — Keywords and Control Flow
+# ═══════════════════════════════════════════════════════════════════
+
+# Keywords: function, record, choice, interface, namespace
+# Control: if, else, for, while, in, break, continue, return, match, case
+# Modifiers: mutable, unique, borrow, internal
+# Other: with, try, catch, finally, spawn, await, task_scope, include, use
+
+@main
+function void main() {
+    mutable integer count = 0
+
+    if count == 0 {
+        count = 1
+    } else {
+        count = 2
+    }
+
+    for item in [1, 2, 3] {
+        if item > 2 {
+            break
+        }
+        continue
+    }
+
+    while count < 10 {
+        count++
+    }
+
+    return
+}

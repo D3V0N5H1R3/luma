@@ -1,0 +1,170 @@
+# String benchmarks: concatenation, interpolation, split, replace, searching,
+# case conversion, trimming, slicing, decomposition, distance, and templating.
+
+function BenchResult run_string_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    st = time_it(st, "string concatenation", 10000, () -> {
+        mutable string s = ""
+        s = s + "hello"
+        s = s + " "
+        s = s + "world"
+    })
+
+    st = time_it(st, "string interpolation", 10000, () -> {
+        integer value = 42
+        string _s = "the answer is ${value}"
+    })
+
+    # Several string literal segments plus mixed operands exercise the
+    # already-string fast path in the interpolation concat loop.
+    st = time_it(st, "string interpolation (multi-part)", 20000, () -> {
+        string a = "alpha"
+        string b = "bravo"
+        string c = "charlie"
+        string _s = "The quick brown fox ${a} jumps over the lazy dog ${b} while the sun sets slowly ${c} beyond the distant hills."
+    })
+
+    st = time_it(st, "String.split", 10000, () -> {
+        array<string> _parts = String.split("one,two,three,four,five", ",")
+    })
+
+    st = time_it(st, "String.replace_all", 10000, () -> {
+        string _result = String.replace_all("hello world hello world hello", "hello", "hi")
+    })
+
+    st = time_it(st, "String searching", 10000, () -> {
+        string text = "the quick brown fox jumps over the lazy dog"
+        result<integer> _i = String.index_of(text, "fox")
+        boolean _c = String.contains(text, "lazy")
+        boolean _s = String.starts_with(text, "the")
+    })
+
+    st = time_it(st, "String.uppercase", 10000, () -> {
+        string _u = String.uppercase("the quick brown fox jumps over the lazy dog")
+    })
+
+    st = time_it(st, "String.lowercase", 10000, () -> {
+        string _l = String.lowercase("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG")
+    })
+
+    st = time_it(st, "String.trim", 10000, () -> {
+        string _t = String.trim("    padded text with surrounding spaces    ")
+    })
+
+    st = time_it(st, "String.reverse", 10000, () -> {
+        string _r = String.reverse("the quick brown fox jumps over the lazy dog")
+    })
+
+    st = time_it(st, "String.title_case", 10000, () -> {
+        string _t = String.title_case("the quick brown fox jumps over the lazy dog")
+    })
+
+    # Operand hoisted so this measures the join, not array construction.
+    array<string> join_parts = ["one", "two", "three", "four", "five"]
+    st = time_it(st, "String.join", 10000, () -> {
+        string _j = String.join(join_parts, ", ")
+    })
+
+    # Large join stresses buffer growth: exercises the result reserve and the
+    # per-element string-append path across many string operands.
+    array<string> big_join_parts = Array.range(0, 128)
+    |> Result.unwrap_or([])
+    |> Array.map((integer i) -> "item_${i}")
+    |> Result.unwrap_or([])
+    st = time_it(st, "String.join (large)", 20000, () -> {
+        string _j = String.join(big_join_parts, ", ")
+    })
+
+    st = time_it(st, "String.repeat", 10000, () -> {
+        string _r = Result.unwrap_or(String.repeat("ab", 16), "")
+    })
+
+    st = time_it(st, "String.pad_left", 10000, () -> {
+        string _p = Result.unwrap_or(String.pad_left("42", 16, "0"), "")
+    })
+
+    st = time_it(st, "String.substring", 10000, () -> {
+        string _s = String.substring("the quick brown fox jumps over the lazy dog", 4, 19)
+    })
+
+    st = time_it(st, "String.characters", 10000, () -> {
+        array<string> _c = String.characters("the quick brown fox")
+    })
+
+    st = time_it(st, "String.to_codepoints", 10000, () -> {
+        array<integer> _c = String.to_codepoints("the quick brown fox")
+    })
+
+    st = time_it(st, "String.to_snake_case", 10000, () -> {
+        string _s = String.to_snake_case("theQuickBrownFoxJumpsOver")
+    })
+
+    st = time_it(st, "String.levenshtein_distance", 10000, () -> {
+        integer _d = String.levenshtein_distance("kitten", "sitting")
+    })
+
+    # Operand hoisted so this measures templating, not dict construction.
+    dictionary<string> template_vars = {"name": "World", "place": "Luma"}
+    st = time_it(st, "String.template", 10000, () -> {
+        string _t = String.template("Hello {name}, welcome to {place}!", template_vars)
+    })
+
+    # Many occurrences in a long subject exercise the per-occurrence work; a
+    # naive in-place replace shifts the whole tail on every hit (quadratic),
+    # so this case makes the single-pass builder win visible. Operands hoisted.
+    string template_big = Result.unwrap_or(String.repeat("item {x} done ", 200), "")
+    dictionary<string> template_one = {"x": "Z"}
+    st = time_it(st, "String.template (200 occurrences)", 1000, () -> {
+        string _tb = String.template(template_big, template_one)
+    })
+
+    st = time_it(st, "String.format_number", 10000, () -> {
+        string _f = String.format_number(3.14159265, 3)
+    })
+
+    st = time_it(st, "String.split_n", 10000, () -> {
+        array<string> _parts = String.split_n("one,two,three,four,five", ",", 3)
+    })
+
+    st = time_it(st, "String.replace", 10000, () -> {
+        string _result = String.replace("hello world hello world", "hello", "hi")
+    })
+
+    st = time_it(st, "String.chunk", 10000, () -> {
+        array<string> _c = String.chunk("the quick brown fox", 3)
+    })
+
+    # ── UTF-8 / multibyte codepoint-walking path ──────────────────────────
+    # The codepoint-aware helpers (length, reverse, characters, substring,
+    # character_at) walk the string one UTF-8 codepoint at a time, a distinct
+    # and costlier path than the byte-oriented ASCII operations above.  Build
+    # the multibyte input once, outside the timed bodies.
+    string mb = Result.unwrap(
+        String.from_codepoints([
+            104, 233, 108, 108, 111, 32, 119, 246, 114, 108, 100, 32,
+            99, 97, 102, 233, 32, 19990, 30028, 32, 128640
+        ]))
+
+    st = time_it(st, "String.length (multibyte)", 10000, () -> {
+        integer _n = String.length(mb)
+    })
+
+    st = time_it(st, "String.reverse (multibyte)", 10000, () -> {
+        string _r = String.reverse(mb)
+    })
+
+    st = time_it(st, "String.characters (multibyte)", 10000, () -> {
+        array<string> _c = String.characters(mb)
+    })
+
+    st = time_it(st, "String.substring (multibyte)", 10000, () -> {
+        string _s = String.substring(mb, 3, 12)
+    })
+
+    st = time_it(st, "String.to_codepoints (multibyte)", 10000, () -> {
+        array<integer> _c = String.to_codepoints(mb)
+    })
+
+    return st
+}

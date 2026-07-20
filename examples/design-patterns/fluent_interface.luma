@@ -1,0 +1,145 @@
+# ═══════════════════════════════════════════════════════════
+# Fluent Interface Pattern
+#
+# Builds complex values step by step through functions that
+# each accept a value, augment it, and return a new copy.
+# The caller chains these calls to express intent clearly.
+#
+# Usage: luma examples/design-patterns/fluent_interface.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Query builder ────────────────────────────────────────
+
+record Query {
+    string table,
+    array<string> columns,
+    string filter,
+    string order,
+    number limit
+}
+
+function Query from(string table) {
+    return Query {
+        table = table,
+        columns = [],
+        filter = "",
+        order = "",
+        limit = 0
+    }
+}
+
+function Query select(Query query, array<string> columns) {
+    return query with { columns = columns }
+}
+
+function Query where(Query query, string condition) {
+    return query with { filter = condition }
+}
+
+function Query order_by(Query query, string column) {
+    return query with { order = column }
+}
+
+function Query take(Query query, number limit) {
+    return query with { limit = limit }
+}
+
+function string to_sql(Query query) {
+    integer col_count = Array.length(query.columns)
+
+    string cols = if col_count == 0 {
+        "*"
+    } else {
+        Array.join(query.columns, ", ")
+    }
+
+    mutable string sql = "SELECT ${cols} FROM ${query.table}"
+
+    if query.filter != "" {
+        sql = "${sql} WHERE ${query.filter}"
+    }
+
+    if query.order != "" {
+        sql = "${sql} ORDER BY ${query.order}"
+    }
+
+    if query.limit > 0 {
+        sql = "${sql} LIMIT ${query.limit}"
+    }
+
+    return sql
+}
+
+# ─── HTML builder ─────────────────────────────────────────
+
+record Html {
+    array<string> parts
+}
+
+function Html html() {
+    return Html { parts = [] }
+}
+
+function Html tag(Html doc, string name, string content) {
+    string element = "<${name}>${content}</${name}>"
+
+    return doc with {
+        parts = Array.push(doc.parts, element)
+    }
+}
+
+function Html heading(Html doc, string text) {
+    return tag(doc, "h1", text)
+}
+
+function Html paragraph(Html doc, string text) {
+    return tag(doc, "p", text)
+}
+
+function Html bold(Html doc, string text) {
+    return tag(doc, "strong", text)
+}
+
+function string render(Html doc) {
+    return Array.join(doc.parts, "\n")
+}
+
+# ─── Main ─────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("=== Fluent Interface Pattern ===")
+    print("")
+
+    # SQL query built step by step — each call returns a new query
+    print("--- Query Builder ---")
+
+    Query users = from("users")
+        |> select(columns: ["name", "email", "age"])
+        |> where(condition: "age >= 18")
+        |> order_by(column: "name")
+        |> take(limit: 10)
+
+    print(to_sql(users))
+
+    print("")
+
+    Query orders = from("orders")
+        |> where(condition: "status = 'pending'")
+        |> order_by(column: "created_at")
+
+    print(to_sql(orders))
+
+    print("")
+
+    # HTML built step by step
+    print("--- HTML Builder ---")
+
+    Html page = html()
+        |> heading(text: "Welcome")
+        |> paragraph(text: "This page was built with the fluent pattern.")
+        |> bold(text: "Luma")
+        |> paragraph(text: "Enjoy the fluent interface pattern!")
+
+    print(render(page))
+}

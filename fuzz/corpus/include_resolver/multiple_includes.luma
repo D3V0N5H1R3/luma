@@ -1,0 +1,10 @@
+# Include resolver: multiple includes and path variations
+include "a.luma"
+include "b.luma"
+include "../c.luma"
+include "subdir/d.luma"
+include "./e.luma"
+
+function main() {
+    print("test")
+}

@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "bash": "python3 scripts/agent-hooks/protect_vendored_paths.py",
+        "powershell": "python scripts/agent-hooks/protect_vendored_paths.py",
+        "timeout": 10
+      }
+    ]
+  }
+}

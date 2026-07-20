@@ -1,0 +1,7 @@
+.x {
+    width: expression(alert(1));
+    behavior: url(xss.htc);
+    color: evil-function(1, 2, nested(3));
+}
+/* comment with <fake tag> and url(javascript:1) */
+.y { -moz-binding: url(x.xml#e); }

@@ -1,0 +1,21 @@
+# Structured value test — records and choice types produce expandable
+# variables in the debugger's variable view.
+
+record Point { integer x, integer y }
+
+choice Shape {
+    Circle(number radius)
+    Rectangle(Point origin, Point extent)
+}
+
+@main
+function void main() {
+    Point origin = Point { x = 0, y = 0 }
+    Point corner = Point { x = 10, y = 20 }
+
+    Shape circle = Shape.Circle(2.5)
+    Shape box = Shape.Rectangle(origin, corner)
+
+    print("Structured circle value: ${circle}")
+    print("Structured box value: ${box}")
+}

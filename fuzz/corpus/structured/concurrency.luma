@@ -1,0 +1,39 @@
+# Structured-fuzzer seed: byte entropy for the source generator's concurrency
+# branch.  Also a valid, deadlock-free program exercising more Task combinators.
+function integer double_it(integer n) {
+    return n * 2
+}
+
+@main
+function void main() {
+    task_scope {
+        task<integer> a = spawn double_it(10)
+        task<integer> b = spawn double_it(20)
+
+        integer winner = Result.unwrap_or(Task.race([a, b]), 0)
+        print(winner)
+    }
+
+    # Each combinator consumes its tasks, so use a fresh scope per combinator.
+    task_scope {
+        task<integer> c = spawn double_it(5)
+        integer mapped = Result.unwrap_or(Task.map(c, (integer x) -> x + 1), 0)
+        print(mapped)
+    }
+
+    task_scope {
+        task<integer> d = spawn double_it(7)
+        task<integer> e = spawn double_it(8)
+        integer either = Result.unwrap_or(Task.any([d, e]), 0)
+        print(either)
+    }
+
+    channel<integer> ch = Channel.new_buffered(2)
+    result<boolean> sent = Channel.send_timeout(ch, 7, 100)
+    print(Result.unwrap_or(sent, false))
+
+    result<integer> got = Channel.receive_timeout(ch, 100)
+    print(Result.unwrap_or(got, -1))
+    print(Channel.length(ch))
+    print(Channel.is_empty(ch))
+}

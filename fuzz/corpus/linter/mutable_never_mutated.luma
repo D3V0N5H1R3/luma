@@ -1,0 +1,5 @@
+@main
+function void main() {
+    mutable integer count = 0
+    print(count)
+}

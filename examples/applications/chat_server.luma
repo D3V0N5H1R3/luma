@@ -1,0 +1,358 @@
+# ═══════════════════════════════════════════════════════════
+# Chat Room Server
+#
+# Demonstrates structured concurrency with task_scope, channels
+# for message passing, choice types for a protocol, and pattern
+# matching.
+#
+# Architecture:
+#   - A dispatcher task reads from a central channel and
+#     broadcasts messages to all connected clients.
+#   - Each simulated client spawns a task that feeds the
+#     central channel.
+#   - Graceful shutdown via a Shutdown message that stops the
+#     dispatcher loop.
+#
+# Usage: luma examples/applications/chat_server.luma
+# Tests: luma --test examples/applications/chat_server.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Protocol ────────────────────────────────────────────
+
+choice Message {
+    Join(string username)
+    Leave(string username)
+    Chat(string username, string text)
+    ServerNotice(string text)
+    Shutdown
+}
+
+record Client {
+    string username,
+    number id,
+    channel<string> outbox
+}
+
+# ─── Message Formatting ─────────────────────────────────
+
+function string format_message(Message msg) {
+    return match msg {
+    case Message.Join(user)       { "*** ${user} joined the chat ***" }
+    case Message.Leave(user)      { "*** ${user} left the chat ***" }
+    case Message.Chat(user, text) { "[${user}] ${text}" }
+    case Message.ServerNotice(t)  { ">> ${t}" }
+    case Message.Shutdown         { ">> Server shutting down..." }
+    }
+}
+
+function string timestamp() {
+    return Result.unwrap_or(DateTime.now_iso_string(), "??:??:??")
+}
+
+function string format_with_time(Message msg) {
+    return "(${timestamp()}) ${format_message(msg)}"
+}
+
+# ─── Client Registry ────────────────────────────────────
+
+function array<Client> add_client(array<Client> clients, Client client) {
+    return Array.push(clients, client)
+}
+
+function array<Client> remove_client(array<Client> clients, string username) {
+    return clients
+    |> Array.filter((Client c) -> c.username != username)
+    |> Result.unwrap_or([])
+}
+
+function optional<Client> find_client(array<Client> clients, string username) {
+    for client in clients {
+        if client.username == username {
+            return some(client)
+        }
+    }
+
+    return none
+}
+
+function array<string> list_usernames(array<Client> clients) {
+    return clients
+    |> Array.map((Client c) -> c.username)
+    |> Result.unwrap_or([])
+}
+
+# ─── Broadcast ───────────────────────────────────────────
+
+function void broadcast(array<Client> clients, string text) {
+    for client in clients {
+        boolean _ = Channel.send(client.outbox, text)
+    }
+}
+
+function void broadcast_except(array<Client> clients, string exclude, string text) {
+    for client in clients {
+        if client.username != exclude {
+            boolean _ = Channel.send(client.outbox, text)
+        }
+    }
+}
+
+# ─── Dispatcher ──────────────────────────────────────────
+
+function void run_dispatcher(
+    channel<Message> inbox,
+    channel<string> log_channel
+) {
+    mutable array<Client> clients = []
+    mutable boolean is_running = true
+    mutable number next_id = 1
+
+    while is_running {
+        result<Message> received = Channel.receive(inbox)
+
+        match received {
+        success(msg) {
+            match msg {
+            case Message.Join(username) {
+                channel<string> outbox = Channel.new_buffered(50)
+                Client new_client = Client {
+                    username = username,
+                    id = next_id,
+                    outbox = outbox
+                }
+
+                next_id += 1
+                clients = add_client(clients, new_client)
+
+                string announcement = format_with_time(msg)
+
+                broadcast(clients, announcement)
+                boolean _ = Channel.send(log_channel, announcement)
+
+                # Send welcome message to the joining client
+                array<string> names = list_usernames(clients)
+                string who = Array.join(names, ", ")
+                boolean _welcome = Channel.send(outbox,
+                    format_with_time(Message.ServerNotice("Welcome! Online: ${who}"))
+                )
+            }
+            case Message.Leave(username) {
+                string announcement = format_with_time(msg)
+
+                clients = remove_client(clients, username)
+
+                broadcast(clients, announcement)
+                boolean _ = Channel.send(log_channel, announcement)
+            }
+            case Message.Chat(username, _) {
+                string formatted = format_with_time(msg)
+
+                broadcast_except(clients, username, formatted)
+                boolean _logged = Channel.send(log_channel, formatted)
+            }
+            case Message.ServerNotice(_) {
+                string formatted = format_with_time(msg)
+
+                broadcast(clients, formatted)
+                boolean _logged = Channel.send(log_channel, formatted)
+            }
+            case Message.Shutdown {
+                string notice = format_with_time(msg)
+
+                broadcast(clients, notice)
+                boolean _ = Channel.send(log_channel, notice)
+
+                # Close all client outboxes
+                for client in clients {
+                    Channel.close(client.outbox)
+                }
+
+                clients = []
+                is_running = false
+            }
+            }
+        }
+        failure(_) {
+            is_running = false
+        }
+        }
+    }
+
+    Channel.close(log_channel)
+}
+
+# ─── Simulated Client ───────────────────────────────────
+
+function array<string> simulate_client(
+    channel<Message> server_inbox,
+    string username,
+    array<string> script
+) {
+    # Join
+    boolean _ = Channel.send(server_inbox, Message.Join(username))
+
+    # Send scripted messages with small pauses between
+    for line in script {
+        boolean _ = Channel.send(server_inbox, Message.Chat(username, line))
+    }
+
+    # Leave
+    boolean _leave = Channel.send(server_inbox, Message.Leave(username))
+
+    return ["${username}: done"]
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+@test
+function void test_format_join() {
+    string msg = format_message(Message.Join("Alice"))
+
+    assert("Alice" in msg, "should contain username")
+    assert("joined" in msg, "should contain 'joined'")
+}
+
+@test
+function void test_format_chat() {
+    string msg = format_message(Message.Chat("Bob", "Hello!"))
+
+    assert("[Bob]" in msg, "should contain [Bob]")
+    assert("Hello!" in msg, "should contain message")
+}
+
+@test
+function void test_format_leave() {
+    string msg = format_message(Message.Leave("Carol"))
+
+    assert("Carol" in msg, "should contain username")
+    assert("left" in msg, "should contain 'left'")
+}
+
+@test
+function void test_add_remove_client() {
+    channel<string> ch = Channel.new_buffered(1)
+    Client c = Client { username = "test", id = 1, outbox = ch }
+
+    array<Client> clients = add_client([], c)
+
+    assert(Array.length(clients) == 1, "expected 1 client")
+
+    array<Client> after_remove = remove_client(clients, "test")
+
+    assert(Array.length(after_remove) == 0, "expected 0 clients")
+
+    Channel.close(ch)
+}
+
+@test
+function void test_find_client() {
+    channel<string> ch = Channel.new_buffered(1)
+    Client c = Client { username = "alice", id = 1, outbox = ch }
+    array<Client> clients = [c]
+
+    optional<Client> found = find_client(clients, "alice")
+    optional<Client> missing = find_client(clients, "bob")
+
+    assert(found != none, "expected to find alice")
+    assert(missing == none, "expected not to find bob")
+
+    Channel.close(ch)
+}
+
+@test
+function void test_list_usernames() {
+    channel<string> ch1 = Channel.new_buffered(1)
+    channel<string> ch2 = Channel.new_buffered(1)
+
+    array<Client> clients = [
+        Client { username = "Alice", id = 1, outbox = ch1 },
+        Client { username = "Bob", id = 2, outbox = ch2 }
+    ]
+
+    array<string> names = list_usernames(clients)
+
+    assert(Array.length(names) == 2, "expected 2 names")
+    assert(names[0] == "Alice", "expected Alice first")
+    assert(names[1] == "Bob", "expected Bob second")
+
+    Channel.close(ch1)
+    Channel.close(ch2)
+}
+
+@test
+function void test_message_round_trip() {
+    # Verify all message variants format without error
+    array<Message> messages = [
+        Message.Join("user1"),
+        Message.Leave("user2"),
+        Message.Chat("user3", "hello"),
+        Message.ServerNotice("notice"),
+        Message.Shutdown
+    ]
+
+    for msg in messages {
+        string formatted = format_message(msg)
+
+        assert(String.length(formatted) > 0, "message should not be empty")
+    }
+}
+
+# ─── Entry Point ─────────────────────────────────────────
+
+@main
+function void main() {
+    print("═══════════════════════════════════════")
+    print("   Luma Chat Server — Simulation")
+    print("═══════════════════════════════════════")
+    print("")
+
+    channel<Message> server_inbox = Channel.new_buffered(200)
+    channel<string> log_channel = Channel.new_buffered(200)
+
+    # Start the dispatcher in a task scope
+    task_scope {
+        # Start dispatcher
+        spawn run_dispatcher(server_inbox, log_channel)
+
+        # Simulate three clients chatting concurrently
+        task_scope {
+            spawn simulate_client(server_inbox, "Alice", [
+                "Hey everyone!",
+                "Anyone working on something cool?",
+                "Gotta go, bye!"
+            ])
+
+            spawn simulate_client(server_inbox, "Bob", [
+                "Hi Alice!",
+                "I'm building a chat server in Luma.",
+                "It uses channels and tasks!"
+            ])
+
+            spawn simulate_client(server_inbox, "Carol", [
+                "Hello!",
+                "That sounds awesome, Bob.",
+                "Luma's concurrency model is great."
+            ])
+        }
+
+        # All clients finished — tell the dispatcher to shut down
+        boolean _ = Channel.send(server_inbox, Message.Shutdown)
+    }
+
+    # Collect log
+    print("─── Chat Log ───")
+
+    mutable boolean is_collecting = true
+
+    while is_collecting {
+        result<string> entry = Channel.receive(log_channel)
+
+        match entry {
+            success(line) { print(line) }
+            failure(_) { is_collecting = false }
+        }
+    }
+
+    print("")
+    print("Server shut down cleanly.")
+}

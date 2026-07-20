@@ -1,0 +1,6 @@
+@main
+function void main() {
+    integer x = 2 + 3 * 4
+    integer y = 100 / 5 - 10
+    print(x + y)
+}

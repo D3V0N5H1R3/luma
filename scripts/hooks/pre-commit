@@ -1,0 +1,73 @@
+#!/bin/sh
+# Luma pre-commit hook
+# Runs clang-format (and optionally clang-tidy) on staged C++ files.
+
+# Staged C++ files for clang-format — translation units and headers — emitted
+# NUL-delimited so that paths containing spaces or other whitespace stay intact.
+staged_format_files() {
+    git diff --cached --name-only -z --diff-filter=ACM -- '*.cpp' '*.hpp'
+}
+
+# Staged translation units for clang-tidy (*.cpp only). Headers are not part of
+# compile_commands.json, so tidying them directly is unreliable; this matches
+# cmake/LumaRunClangTool.cmake, which likewise tidies only *.cpp.
+staged_tidy_files() {
+    git diff --cached --name-only -z --diff-filter=ACM -- '*.cpp'
+}
+
+# Nothing staged to check. (Newline-delimited here so the command substitution
+# never embeds a NUL byte; the NUL-delimited lists are only piped to xargs.)
+if [ -z "$(git diff --cached --name-only --diff-filter=ACM -- '*.cpp' '*.hpp')" ]; then
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# clang-format check
+# ---------------------------------------------------------------------------
+
+# Locate clang-format and verify the version is 18+.
+CLANG_FORMAT="$(command -v clang-format 2>/dev/null || true)"
+
+if [ -z "$CLANG_FORMAT" ]; then
+    echo "Warning: clang-format not found — skipping format check." >&2
+else
+    CF_VERSION="$("$CLANG_FORMAT" --version 2>/dev/null | grep -oE '[0-9]+' | head -1)"
+    if [ -n "$CF_VERSION" ] && [ "$CF_VERSION" -lt 18 ] 2>/dev/null; then
+        echo "Warning: clang-format version ${CF_VERSION} found, 18+ required — skipping format check." >&2
+        CLANG_FORMAT=""
+    fi
+fi
+
+if [ -n "$CLANG_FORMAT" ]; then
+    if ! staged_format_files | xargs -0 "$CLANG_FORMAT" --dry-run --Werror; then
+        echo "" >&2
+        echo "Commit blocked: clang-format found formatting issues (listed above)." >&2
+        echo "Run 'clang-format -i <file>' on the affected files to fix them," >&2
+        echo "then stage the changes and try again." >&2
+        exit 1
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# clang-tidy check (optional — only if compile_commands.json exists)
+# ---------------------------------------------------------------------------
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+COMPILE_DB="$REPO_ROOT/build/compile_commands.json"
+
+# Only run clang-tidy when a compile database exists and at least one *.cpp is
+# staged (an all-header change has no translation unit to tidy). The explicit
+# *.cpp check also keeps xargs from running with empty input on GNU systems.
+if [ -f "$COMPILE_DB" ] && [ -n "$(git diff --cached --name-only --diff-filter=ACM -- '*.cpp')" ]; then
+    CLANG_TIDY="$(command -v clang-tidy 2>/dev/null || true)"
+    if [ -n "$CLANG_TIDY" ]; then
+        if ! staged_tidy_files | xargs -0 "$CLANG_TIDY" -p "$REPO_ROOT/build" --quiet; then
+            echo "" >&2
+            echo "Commit blocked: clang-tidy found issues (listed above)." >&2
+            echo "Fix the reported problems and try again." >&2
+            exit 1
+        fi
+    fi
+fi
+
+exit 0

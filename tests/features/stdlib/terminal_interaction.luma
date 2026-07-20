@@ -1,0 +1,229 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Terminal Interaction Testing
+#
+# Exercises the headless interaction-testing API (Terminal.test_*), which
+# drives an imperative Terminal/TUI program without a real terminal so its
+# input loop and rendering can be verified by feeding scripted input and
+# asserting on captured output:
+#   - test_start(keys)  : begin a session, queue scripted key/mouse input,
+#                         capture output, and report raw mode / is_terminal
+#                         as an active terminal
+#   - test_feed(keys)   : append more scripted input mid-session
+#   - test_output()     : read everything captured so far
+#   - test_remaining()  : count scripted keys not yet consumed
+#   - test_stop()       : end the session and return the final captured output
+#
+# Inside a session read_key / read_key_timeout / get_input consume the queued
+# keys in order, then report end-of-input once drained — exactly how the
+# raw-mode examples self-terminate on EOF.
+# ═══════════════════════════════════════════════════════════
+
+# ─── Programs under test (mirror the real example loops) ────
+
+# A key logger that echoes every key and records the sequence, looping until
+# input drains (read_key fails -> "" sentinel), like mouse_draw / editor.
+function string run_key_logger() {
+    mutable string log = ""
+    mutable boolean running = true
+
+    while running {
+        string key = Result.unwrap_or(Terminal.read_key(), "")
+
+        if key == "" {
+            running = false
+        } else {
+            Terminal.write("<${key}>")
+            log = log + key + ","
+        }
+    }
+
+    return log
+}
+
+# A counter driven by "+" / "-" keys, quitting on "q" (leaving any later keys
+# unconsumed) or when input drains.
+function integer run_counter(integer start) {
+    mutable integer count = start
+    mutable boolean running = true
+
+    while running {
+        string key = Result.unwrap_or(Terminal.read_key(), "")
+
+        if key == "" {
+            running = false
+        } else if key == "+" {
+            count = count + 1
+        } else if key == "-" {
+            count = count - 1
+        } else if key == "q" {
+            running = false
+        }
+    }
+
+    return count
+}
+
+# Read one structured input event and describe it (modifiers + key), mirroring
+# the process_and_terminal example's get_input() handling.
+function string describe_event() {
+    mutable string described = "none"
+
+    match Terminal.get_input() {
+        success(event) {
+            mutable string modifiers = ""
+
+            if event.ctrl {
+                modifiers = "${modifiers}ctrl+"
+            }
+
+            if event.shift {
+                modifiers = "${modifiers}shift+"
+            }
+
+            if event.alt {
+                modifiers = "${modifiers}alt+"
+            }
+
+            described = "${modifiers}${event.key}"
+        }
+        failure(_) {
+            described = "none"
+        }
+    }
+
+    return described
+}
+
+# ─── test_start / read_key ─────────────────────────────────
+
+@test
+function void test_scripted_keys_consumed_in_order() {
+    Terminal.test_start(["h", "e", "l", "l", "o"])
+    string log = run_key_logger()
+    string output = Terminal.test_stop()
+
+    assert(log == "h,e,l,l,o,")
+    assert(output == "<h><e><l><l><o>")
+}
+
+@test
+function void test_drained_input_reports_end() {
+    array<string> no_keys = []
+    Terminal.test_start(no_keys)
+    string key = Result.unwrap_or(Terminal.read_key(), "")
+    string output = Terminal.test_stop()
+
+    assert(key == "")
+    assert(output == "")
+}
+
+# ─── A realistic counter TUI ───────────────────────────────
+
+@test
+function void test_counter_driven_by_keys() {
+    Terminal.test_start(["+", "+", "+", "-", "q"])
+    integer total = run_counter(10)
+    string output = Terminal.test_stop()
+
+    assert(total == 12)
+    assert(output == "")
+}
+
+@test
+function void test_quit_leaves_unconsumed_keys() {
+    Terminal.test_start(["+", "q", "+", "+"])
+    integer total = run_counter(0)
+    integer remaining = Terminal.test_remaining()
+    string output = Terminal.test_stop()
+
+    assert(total == 1)
+    assert(remaining == 2)
+    assert(output == "")
+}
+
+# ─── get_input: modifiers and mouse events ─────────────────
+
+@test
+function void test_get_input_parses_modifiers() {
+    Terminal.test_start(["ctrl+c", "shift+tab", "alt+x", "z"])
+    string first = describe_event()
+    string second = describe_event()
+    string third = describe_event()
+    string fourth = describe_event()
+    string output = Terminal.test_stop()
+
+    assert(first == "ctrl+c")
+    assert(second == "shift+tab")
+    assert(third == "alt+x")
+    assert(fourth == "z")
+    assert(output == "")
+}
+
+@test
+function void test_get_input_delivers_mouse_event() {
+    Terminal.test_start(["mouse:left_press:3:7"])
+    string event = describe_event()
+    string output = Terminal.test_stop()
+
+    assert(event == "mouse:left_press:3:7")
+    assert(output == "")
+}
+
+# ─── test_feed / test_remaining ────────────────────────────
+
+@test
+function void test_feed_appends_more_input() {
+    Terminal.test_start(["a", "b"])
+    string first = Result.unwrap_or(Terminal.read_key(), "")
+    integer after_one = Terminal.test_remaining()
+    Terminal.test_feed(["c"])
+    integer after_feed = Terminal.test_remaining()
+    string output = Terminal.test_stop()
+
+    assert(first == "a")
+    assert(after_one == 1)
+    assert(after_feed == 2)
+    assert(output == "")
+}
+
+# ─── output capture ────────────────────────────────────────
+
+@test
+function void test_output_is_captured() {
+    array<string> no_keys = []
+    Terminal.test_start(no_keys)
+    Terminal.write("line-1")
+    Terminal.write(" line-2")
+    string output = Terminal.test_stop()
+
+    assert(output == "line-1 line-2")
+}
+
+@test
+function void test_output_readable_mid_session() {
+    array<string> no_keys = []
+    Terminal.test_start(no_keys)
+    Terminal.write("AB")
+    string mid = Terminal.test_output()
+    Terminal.write("CD")
+    string final = Terminal.test_stop()
+
+    assert(mid == "AB")
+    assert(final == "ABCD")
+}
+
+# ─── headless session state ────────────────────────────────
+
+@test
+function void test_session_reports_active_terminal() {
+    Terminal.test_start(["x"])
+    boolean is_term = Terminal.is_terminal()
+    boolean is_raw = Terminal.is_in_raw_mode()
+    string output = Terminal.test_stop()
+    boolean raw_after = Terminal.is_in_raw_mode()
+
+    assert(is_term)
+    assert(is_raw)
+    assert(!raw_after)
+    assert(output == "")
+}

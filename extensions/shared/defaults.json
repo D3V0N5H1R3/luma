@@ -1,0 +1,156 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$comment": "Shared default settings for all Luma editor extensions. Each extension maps these canonical keys to its native configuration format. A setting carries a 'vscode' object iff it is surfaced in VS Code's contributes.configuration (generators emit it into vscode/package.json). The 'generated' flag (default true) controls whether a setting is emitted to the editor constant files (config.ts/rs). See extensions/shared/download-spec.md for the download protocol and extensions/shared/error-handling.md for the error severity contract.",
+
+    "github_repo": "d3v0n5h1r3/luma",
+
+    "binaries": {
+        "lsp": "luma_lsp",
+        "dap": "luma_dap",
+        "interpreter": "luma"
+    },
+
+    "settings": {
+        "lsp.path": {
+            "type": "string",
+            "default": "",
+            "description": "Absolute path to the luma_lsp binary. If empty, the extension downloads it automatically or searches PATH.",
+            "examples": ["/usr/local/bin/luma_lsp", "C:\\Program Files\\Luma\\luma_lsp.exe"],
+            "vscode": {
+                "markdownDescription": "Absolute path to the `luma_lsp` binary. If empty, the extension downloads it automatically or searches `PATH`. Supports `${workspaceFolder}` and `${workspaceFolder:name}` variables."
+            }
+        },
+        "lsp.autoUpdate": {
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically check for language server updates on extension activation.",
+            "vscode": {
+                "markdownDescription": "Automatically check for language server updates on activation."
+            }
+        },
+        "lsp.enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable or disable the Luma language server integration.",
+            "generated": false
+        },
+        "lsp.trace": {
+            "type": "string",
+            "default": "off",
+            "enum": ["off", "messages", "verbose"],
+            "description": "Trace level for language server communication. 'messages' logs request/response summaries; 'verbose' logs full payloads.",
+            "generated": false
+        },
+        "interpreter.path": {
+            "type": "string",
+            "default": "",
+            "description": "Absolute path to the luma interpreter binary. If empty, the extension searches PATH.",
+            "examples": ["/usr/local/bin/luma", "C:\\Program Files\\Luma\\luma.exe"],
+            "vscode": {
+                "key": "luma.path",
+                "markdownDescription": "Absolute path to the `luma` interpreter binary. If empty, the extension searches `PATH`. Supports `${workspaceFolder}` and `${workspaceFolder:name}` variables."
+            }
+        },
+        "dap.path": {
+            "type": "string",
+            "default": "",
+            "description": "Absolute path to the luma_dap debug adapter binary. If empty, the extension searches PATH.",
+            "examples": ["/usr/local/bin/luma_dap", "C:\\Program Files\\Luma\\luma_dap.exe"],
+            "vscode": {
+                "markdownDescription": "Absolute path to the `luma_dap` debug adapter binary. If empty, the extension searches `PATH`. Supports `${workspaceFolder}` and `${workspaceFolder:name}` variables."
+            }
+        },
+        "dap.enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable or disable the Luma debug adapter integration.",
+            "generated": false
+        },
+        "diagnostics.onSave": {
+            "type": "boolean",
+            "default": false,
+            "description": "Only report linter warnings on save (not while typing). Syntax and type errors are always reported immediately.",
+            "vscode": {
+                "markdownDescription": "When enabled, only report linter warnings on save (not while typing). Syntax and type errors are always reported immediately."
+            }
+        },
+        "diagnostics.maxFileSize": {
+            "type": "integer",
+            "default": 1048576,
+            "minimum": 1024,
+            "maximum": 104857600,
+            "description": "Maximum file size in bytes for which analysis is performed. Files exceeding this limit are skipped to avoid performance issues.",
+            "generated": false
+        },
+        "inlayHints.enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show inferred type annotations as inlay hints in the editor.",
+            "vscode": {
+                "markdownDescription": "Show inferred type annotations as inlay hints."
+            }
+        },
+        "codeLens.enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Show reference counts above functions and types as code lenses.",
+            "vscode": {
+                "markdownDescription": "Show reference counts above functions and types."
+            }
+        },
+        "autoDownload.enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically download pre-built binaries (luma_lsp, luma_dap) when not found locally.",
+            "generated": false,
+            "$comment": "Schema-only setting. Per-editor defaults are in auto_download.enabled below."
+        },
+        "autoDownload.version": {
+            "type": "string",
+            "default": "latest",
+            "description": "Version tag to download. Use 'latest' for the most recent release, or a specific tag like 'v0.5.0'.",
+            "examples": ["latest", "v0.5.0"],
+            "generated": false
+        },
+        "playground.enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable the Luma playground for interactive code execution.",
+            "generated": false,
+            "vscode": {
+                "markdownDescription": "Enable the Luma Playground for interactive code execution."
+            }
+        },
+        "playground.timeout": {
+            "type": "integer",
+            "default": 10000,
+            "minimum": 1000,
+            "maximum": 120000,
+            "description": "Maximum execution time in milliseconds for playground snippets.",
+            "generated": false,
+            "vscode": {
+                "markdownDescription": "Maximum execution time (in milliseconds) for playground snippets."
+            }
+        },
+        "playground.maxOutputSize": {
+            "type": "integer",
+            "default": 1048576,
+            "minimum": 1024,
+            "maximum": 10485760,
+            "description": "Maximum output buffer size in bytes for playground snippets.",
+            "generated": false,
+            "vscode": {
+                "markdownDescription": "Maximum output buffer size (in bytes) for playground snippets."
+            }
+        }
+    },
+
+    "auto_download": {
+        "$comment": "Per-editor auto-download defaults. The download version is a single setting (autoDownload.version above), not an editor-specific default, so it lives there only.",
+        "enabled": {
+            "vscode": true,
+            "zed": true,
+            "$comment": "VS Code and Zed auto-download by default."
+        }
+    }
+}

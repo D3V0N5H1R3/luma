@@ -1,0 +1,256 @@
+# Collection benchmarks: array, dictionary, set, queue, stack.
+#
+# Operation benchmarks (map, filter, reduce, lookup, set algebra) reuse inputs
+# built once outside the timed body. Construction benchmarks (push, insert, and
+# the enqueue/push pipes) build inside the body on purpose.
+
+function BenchResult run_collection_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # --- Array ---
+
+    st = time_it(st, "array push (100 elements)", 100, () -> {
+        mutable array<integer> arr = []
+        for i in 0 .. 100 {
+            arr = Array.push(arr, i)
+        }
+    })
+
+    array<integer> numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    st = time_it(st, "array map", 5000, () -> {
+        array<integer> _result = numbers
+        |> Array.map((integer x) -> x * 2)
+        |> Result.unwrap_or([])
+    })
+
+    st = time_it(st, "array filter", 5000, () -> {
+        array<integer> _result = numbers
+        |> Array.filter((integer x) -> x > 5)
+        |> Result.unwrap_or([])
+    })
+
+    st = time_it(st, "array reduce", 5000, () -> {
+        integer _result = numbers
+        |> Array.reduce(0, (integer acc, integer x) -> acc + x)
+        |> Result.unwrap_or(0)
+    })
+
+    # Inputs reused across the operation benchmarks below (built once, outside
+    # the timed body).
+    array<integer> unsorted = [5, 3, 8, 1, 9, 2, 7, 4, 6, 0, 15, 11, 13, 12, 14, 10]
+    array<array<integer>> nested = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+
+    st = time_it(st, "array sort", 5000, () -> {
+        array<integer> _sorted = unsorted
+        |> Array.sort((integer a, integer b) -> a - b)
+        |> Result.unwrap_or([])
+    })
+
+    st = time_it(st, "array concat", 5000, () -> {
+        array<integer> _joined = Array.concat(numbers, numbers)
+    })
+
+    st = time_it(st, "array flatten", 5000, () -> {
+        array<integer> _flat = Array.flatten(nested)
+    })
+
+    st = time_it(st, "array slice", 5000, () -> {
+        array<integer> _sliced = unsorted[2 .. 8]
+    })
+
+    array<integer> with_dups = [1, 2, 2, 3, 3, 3, 4, 5, 5, 6, 1, 2, 7, 8, 8, 9]
+    st = time_it(st, "array unique", 5000, () -> {
+        array<integer> _u = Array.unique(with_dups)
+    })
+
+    array<integer> sorted_input = Array.range(0, 100) |> Result.unwrap_or([])
+    st = time_it(st, "array binary_search", 10000, () -> {
+        integer _idx = sorted_input
+        |> Array.binary_search(64)
+        |> Result.unwrap_or(-1)
+    })
+
+    st = time_it(st, "array group_by", 5000, () -> {
+        dictionary<array<integer>> _groups = unsorted
+        |> Array.group_by((integer x) -> Converter.to_string(x % 2))
+        |> Result.unwrap_or({})
+    })
+
+    # --- Dictionary ---
+
+    st = time_it(st, "dictionary insert (50 keys)", 100, () -> {
+        mutable dictionary<integer> d = {}
+        for i in 0 .. 50 {
+            d = Dictionary.set(d, Converter.to_string(i), i)
+        }
+    })
+
+    dictionary<integer> lookup_dict = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5}
+    st = time_it(st, "dictionary lookup", 10000, () -> {
+        integer _v = Dictionary.get_or(lookup_dict, "c", 0)
+    })
+
+    # Inputs reused across the dictionary operation benchmarks below (built once,
+    # outside the timed body).
+    dictionary<integer> ops_dict = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5,
+                                    "f": 6, "g": 7, "h": 8, "i": 9, "j": 10}
+    dictionary<integer> merge_other = {"k": 11, "l": 12, "m": 13, "n": 14, "o": 15}
+
+    st = time_it(st, "dictionary has", 10000, () -> {
+        boolean _h = Dictionary.has(ops_dict, "e")
+    })
+
+    st = time_it(st, "dictionary merge", 5000, () -> {
+        dictionary<integer> _m = Dictionary.merge(ops_dict, merge_other)
+    })
+
+    st = time_it(st, "dictionary remove", 5000, () -> {
+        dictionary<integer> _r = Dictionary.remove(ops_dict, "e")
+    })
+
+    st = time_it(st, "dictionary keys", 5000, () -> {
+        array<string> _k = Dictionary.keys(ops_dict)
+    })
+
+    st = time_it(st, "dictionary values", 5000, () -> {
+        array<integer> _vals = Dictionary.values(ops_dict)
+    })
+
+    st = time_it(st, "dictionary map", 5000, () -> {
+        dictionary<integer> _mapped = ops_dict
+        |> Dictionary.map((string _k, integer v) -> v * 2)
+        |> Result.unwrap_or({})
+    })
+
+    st = time_it(st, "dictionary filter", 5000, () -> {
+        dictionary<integer> _filtered = ops_dict
+        |> Dictionary.filter((string _k, integer v) -> v > 5)
+        |> Result.unwrap_or({})
+    })
+
+    st = time_it(st, "dictionary reduce", 5000, () -> {
+        integer _sum = ops_dict
+        |> Dictionary.reduce(0, (integer acc, string _k, integer v) -> acc + v)
+        |> Result.unwrap_or(0)
+    })
+
+    # deep_merge recurses into nested dictionaries, so it is benchmarked on a
+    # two-level structure to exercise the recursive merge path.
+    dictionary<dictionary<integer>> dm_base = {"a": {"x": 1, "y": 2}, "b": {"x": 3}}
+    dictionary<dictionary<integer>> dm_over = {"a": {"y": 9, "z": 4}, "c": {"w": 5}}
+    st = time_it(st, "dictionary deep_merge", 5000, () -> {
+        dictionary<dictionary<integer>> _dm = Dictionary.deep_merge(dm_base, dm_over)
+    })
+
+    # --- Set ---
+    # Set stores elements in an ordered array and uses linear scans, so
+    # membership and set algebra are O(n)/O(n²). The operand sets are built once
+    # outside the timed body and the operations are measured on the prebuilt
+    # sets; from_array construction is timed separately because it builds on
+    # purpose.
+
+    set set_a = Set.from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    set set_b = Set.from_array([5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
+
+    st = time_it(st, "Set.from_array (10 elem)", 5000, () -> {
+        set _s = Set.from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    })
+
+    st = time_it(st, "Set.contains (hit + miss)", 10000, () -> {
+        boolean _hit = Set.contains(set_a, 7)
+        boolean _miss = Set.contains(set_a, 99)
+    })
+
+    st = time_it(st, "Set.add", 5000, () -> {
+        set _bigger = Set.add(set_a, 11)
+    })
+
+    st = time_it(st, "Set.remove", 5000, () -> {
+        set _smaller = Set.remove(set_a, 5)
+    })
+
+    st = time_it(st, "Set set algebra", 1000, () -> {
+        integer _union_len = Set.union(set_a, set_b) |> Set.length()
+        integer _inter_len = Set.intersection(set_a, set_b) |> Set.length()
+        integer _diff_len = Set.difference(set_a, set_b) |> Set.length()
+        integer _sym_len = Set.symmetric_difference(set_a, set_b) |> Set.length()
+    })
+
+    st = time_it(st, "Set predicates", 5000, () -> {
+        boolean _sub = Set.is_subset(set_a, set_b)
+        boolean _dis = Set.is_disjoint(set_a, set_b)
+    })
+
+    # --- HashSet ---
+    # HashSet uses bucket-based hashing for O(1) average-case membership, so the
+    # input sets are built once outside the timed body and the operations
+    # (membership and set algebra) are measured on the prebuilt sets. The
+    # from_array construction is timed separately because it builds on purpose.
+
+    hash_set hashset_a = HashSet.from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    hash_set hashset_b = HashSet.from_array([5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
+
+    st = time_it(st, "HashSet.from_array (10 elem)", 5000, () -> {
+        hash_set _hs = HashSet.from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    })
+
+    st = time_it(st, "HashSet.contains (hit + miss)", 10000, () -> {
+        boolean _hit = HashSet.contains(hashset_a, 7)
+        boolean _miss = HashSet.contains(hashset_a, 99)
+    })
+
+    st = time_it(st, "HashSet.add", 5000, () -> {
+        hash_set _bigger = HashSet.add(hashset_a, 11)
+    })
+
+    st = time_it(st, "HashSet set algebra", 1000, () -> {
+        integer _union_len = HashSet.union(hashset_a, hashset_b) |> HashSet.length()
+        integer _inter_len = HashSet.intersection(hashset_a, hashset_b) |> HashSet.length()
+        integer _diff_len = HashSet.difference(hashset_a, hashset_b) |> HashSet.length()
+    })
+
+    # --- Queue ---
+
+    st = time_it(st, "Queue enqueue pipe (3 elem)", 5000, () -> {
+        integer _len = Queue.new()
+        |> Queue.enqueue(1)
+        |> Queue.enqueue(2)
+        |> Queue.enqueue(3)
+        |> Queue.length()
+    })
+
+    # Dequeue rebuilds the backing store (O(n)); drain a prebuilt queue so the
+    # timed body measures dequeue rather than construction.
+    queue<integer> queue_seed = Queue.from_array(Array.range(0, 50) |> Result.unwrap())
+    st = time_it(st, "Queue dequeue drain (50 elem)", 1000, () -> {
+        mutable queue<integer> q = queue_seed
+        for _ in 0 .. 50 {
+            (integer _value, queue<integer> rest) = q |> Queue.dequeue() |> Result.unwrap()
+            q = rest
+        }
+    })
+
+    # --- Stack ---
+
+    st = time_it(st, "Stack push pipe (3 elem)", 5000, () -> {
+        integer _len = Stack.new()
+        |> Stack.push(1)
+        |> Stack.push(2)
+        |> Stack.push(3)
+        |> Stack.length()
+    })
+
+    # Pop rebuilds the backing store (O(n)); drain a prebuilt stack so the
+    # timed body measures pop rather than construction.
+    stack<integer> stack_seed = Stack.from_array(Array.range(0, 50) |> Result.unwrap())
+    st = time_it(st, "Stack pop drain (50 elem)", 1000, () -> {
+        mutable stack<integer> s = stack_seed
+        for _ in 0 .. 50 {
+            (integer _value, stack<integer> rest) = s |> Stack.pop() |> Result.unwrap()
+            s = rest
+        }
+    })
+
+    return st
+}

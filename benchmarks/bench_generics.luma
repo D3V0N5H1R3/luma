@@ -1,0 +1,105 @@
+# Generics path benchmarks: generic functions, generic records, turbofish,
+# bounded parameters, and runtime narrowing (downcast / is / trusted_downcast).
+
+# --- Helper types ---
+
+interface BenchHasId { integer id }
+
+interface BenchHasValue { integer value }
+
+record BenchBox<T> {
+    T value
+}
+
+record BenchUser {
+    integer id,
+    string name
+}
+
+record BenchValued {
+    integer value
+}
+
+# --- Helper generic functions ---
+
+function<T> T bench_identity(T value) {
+    return value
+}
+
+function<T, U> (U, T) bench_swap(T a, U b) {
+    return (b, a)
+}
+
+function<T> BenchBox<T> bench_wrap_box(T value) {
+    return BenchBox<T> { value = value }
+}
+
+function<T> array<T> bench_wrap_array(T value) {
+    return [value]
+}
+
+function<T: BenchHasValue> integer bench_extract(T item) {
+    return item.value
+}
+
+# --- Benchmarks ---
+
+function BenchResult run_generics_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    st = time_it(st, "generic identity (integer)", 10000, () -> {
+        integer _n = bench_identity(42)
+    })
+
+    st = time_it(st, "generic identity (string)", 10000, () -> {
+        string _s = bench_identity("hello")
+    })
+
+    st = time_it(st, "generic two-param swap", 10000, () -> {
+        (string, integer) _p = bench_swap(1, "hi")
+    })
+
+    st = time_it(st, "generic record construct + access", 10000, () -> {
+        BenchBox<integer> b = BenchBox<integer> { value = 42 }
+        integer _v = b.value
+    })
+
+    st = time_it(st, "generic record nested", 10000, () -> {
+        BenchBox<BenchBox<integer>> b =
+        BenchBox<BenchBox<integer>> { value = BenchBox<integer> { value = 7 } }
+        integer _v = b.value.value
+    })
+
+    st = time_it(st, "generic constructor function", 10000, () -> {
+        BenchBox<integer> _b = bench_wrap_box(99)
+    })
+
+    st = time_it(st, "generic function returns array", 10000, () -> {
+        array<integer> _a = bench_wrap_array(5)
+    })
+
+    st = time_it(st, "turbofish call", 10000, () -> {
+        integer _n = bench_identity::<integer>(7)
+    })
+
+    st = time_it(st, "bounded generic call", 10000, () -> {
+        integer _v = bench_extract(BenchValued { value = 3 })
+    })
+
+    st = time_it(st, "downcast interface to record", 10000, () -> {
+        BenchHasId thing = BenchUser { id = 1, name = "Ada" }
+        result<BenchUser> _r = downcast<BenchUser>(thing)
+    })
+
+    st = time_it(st, "is<T> on interface value", 10000, () -> {
+        BenchHasId thing = BenchUser { id = 1, name = "Ada" }
+        boolean _b = is<BenchUser>(thing)
+    })
+
+    st = time_it(st, "trusted_downcast interface to record", 10000, () -> {
+        BenchHasId thing = BenchUser { id = 1, name = "Ada" }
+        BenchUser _u = trusted_downcast<BenchUser>(thing)
+    })
+
+    return st
+}

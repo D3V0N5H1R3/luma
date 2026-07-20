@@ -1,0 +1,8 @@
+@main
+function void main() {
+    try {
+        integer x = 1
+        print(x)
+    } catch(err) {
+    }
+}

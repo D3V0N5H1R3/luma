@@ -1,0 +1,142 @@
+# Tuple and interface benchmarks: construction, access, dispatch.
+
+# --- Interface definitions ---
+
+interface BenchDrawable {
+    string shape_name,
+    number size
+}
+
+record BenchCircle {
+    string shape_name,
+    number size
+}
+
+record BenchSquare {
+    string shape_name,
+    number size,
+    integer corners
+}
+
+function string bench_describe_drawable(BenchDrawable d) {
+    return "${d.shape_name}: ${d.size}"
+}
+
+function number bench_total_size(BenchDrawable a, BenchDrawable b) {
+    return a.size + b.size
+}
+
+# --- Generic interface for dispatch benchmark ---
+
+interface BenchContainer<T> {
+    T contained
+}
+
+record BenchIntBox {
+    integer contained
+}
+
+function integer bench_get_contained(BenchContainer<integer> c) {
+    return c.contained
+}
+
+# --- Interface-to-interface assignability benchmark ---
+
+interface BenchNamed {
+    string shape_name
+}
+
+function string bench_named_label(BenchNamed n) {
+    return n.shape_name
+}
+
+# --- Benchmarks ---
+
+function BenchResult run_tuple_interface_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # --- Tuples ---
+
+    st = time_it(st, "tuple (2-elem) construction", 50000, () -> {
+        (integer, string) _pair = (42, "hello")
+    })
+
+    st = time_it(st, "tuple (3-elem) construction", 50000, () -> {
+        (integer, string, number) _triple = (1, "two", 3.0)
+    })
+
+    st = time_it(st, "tuple field access", 50000, () -> {
+        (integer, string, number) t = (10, "hi", 2.5)
+        integer _a = t.0
+        string _b = t.1
+        number _c = t.2
+    })
+
+    st = time_it(st, "tuple destructuring", 10000, () -> {
+        (integer a, string b) = (42, "hello")
+        integer _x = a
+        string _y = b
+    })
+
+    st = time_it(st, "tuple as return value", 10000, () -> {
+        (integer, string) _pair = bench_make_pair()
+    })
+
+    st = time_it(st, "tuple (4-elem) construction", 50000, () -> {
+        (integer, string, number, boolean) _quad = (1, "two", 3.0, true)
+    })
+
+    st = time_it(st, "tuple structural equality", 50000, () -> {
+        (integer, string, number) a = (1, "hi", 2.5)
+        (integer, string, number) b = (1, "hi", 2.5)
+        boolean _eq = a == b
+    })
+
+    st = time_it(st, "nested tuple construction + access", 20000, () -> {
+        ((integer, integer), string) nested = ((1, 2), "pair")
+        integer _inner = nested[0][1]
+    })
+
+    # --- Interfaces ---
+
+    st = time_it(st, "interface dispatch (circle)", 10000, () -> {
+        BenchCircle c = BenchCircle { shape_name = "circle", size = 5.0 }
+        string _s = bench_describe_drawable(c)
+    })
+
+    st = time_it(st, "interface dispatch (square)", 10000, () -> {
+        BenchSquare sq = BenchSquare { shape_name = "square", size = 4.0, corners = 4 }
+        string _s = bench_describe_drawable(sq)
+    })
+
+    st = time_it(st, "interface two args", 5000, () -> {
+        BenchCircle c = BenchCircle { shape_name = "circle", size = 3.0 }
+        BenchSquare s = BenchSquare { shape_name = "square", size = 7.0, corners = 4 }
+        number _total = bench_total_size(c, s)
+    })
+
+    st = time_it(st, "interface + record creation", 5000, () -> {
+        BenchCircle c = BenchCircle { shape_name = "circle", size = 7.0 }
+        BenchSquare s = BenchSquare { shape_name = "square", size = 3.0, corners = 4 }
+        string _d1 = bench_describe_drawable(c)
+        string _d2 = bench_describe_drawable(s)
+    })
+
+    st = time_it(st, "generic interface dispatch", 10000, () -> {
+        BenchIntBox b = BenchIntBox { contained = 42 }
+        integer _v = bench_get_contained(b)
+    })
+
+    st = time_it(st, "interface-to-interface assignment", 10000, () -> {
+        BenchCircle c = BenchCircle { shape_name = "circle", size = 5.0 }
+        BenchDrawable d = c
+        BenchNamed n = d
+        string _label = bench_named_label(n)
+    })
+
+    return st
+}
+
+function (integer, string) bench_make_pair() {
+    return (42, "answer")
+}

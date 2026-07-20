@@ -1,0 +1,304 @@
+# ═══════════════════════════════════════════════════════════
+# Maze Solver — Breadth-First Shortest Path
+#
+# Finds the shortest route through an ASCII maze with a
+# breadth-first search. Demonstrates the Queue standard-library
+# module used as the BFS frontier (new, enqueue, dequeue, peek,
+# is_empty), tuple destructuring of dequeue's (value, queue)
+# result, Set membership for rendering, optional<T> for "is the
+# exit reachable", and @test annotations.
+#
+# The maze is an array of equal-length rows. Each open cell is
+# identified by a "row,col" string. '#' marks walls, 'S' the
+# start and 'E' the exit. BFS explores cells in order of
+# distance, so the first route that reaches 'E' is the shortest.
+#
+# Usage: luma examples/applications/maze_solver.luma
+# Tests: luma --test examples/applications/maze_solver.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Grid Helpers ────────────────────────────────────────
+
+function array<array<string>> to_grid(array<string> rows) {
+    return rows
+    |> Array.map((string row) -> String.characters(row))
+    |> Result.unwrap_or([])
+}
+
+function integer rows_of(array<array<string>> grid) {
+    return Array.length(grid)
+}
+
+function integer cols_of(array<array<string>> grid) {
+    return Array.length(grid[0])
+}
+
+function integer abs_int(integer value) {
+    return if value < 0 { -value } else { value }
+}
+
+function string cell_name(integer row, integer col) {
+    return "${row},${col}"
+}
+
+function integer row_of(string name) {
+    array<string> parts = String.split(name, ",")
+    return Result.unwrap_or(Converter.to_integer(parts[0]), -1)
+}
+
+function integer col_of(string name) {
+    array<string> parts = String.split(name, ",")
+    return Result.unwrap_or(Converter.to_integer(parts[1]), -1)
+}
+
+function string find_marker(array<array<string>> grid, string marker) {
+    for row in 0..rows_of(grid) {
+        for col in 0..cols_of(grid) {
+            if grid[row][col] == marker {
+                return cell_name(row, col)
+            }
+        }
+    }
+    return ""
+}
+
+function array<string> neighbours(array<array<string>> grid, string name) {
+    integer row = row_of(name)
+    integer col = col_of(name)
+    array<array<integer>> deltas = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+    mutable array<string> open = []
+    for delta in deltas {
+        integer next_row = row + delta[0]
+        integer next_col = col + delta[1]
+        boolean inside = next_row >= 0 && next_row < rows_of(grid) &&
+                         next_col >= 0 && next_col < cols_of(grid)
+        if inside && grid[next_row][next_col] != "#" {
+            open = Array.push(open, cell_name(next_row, next_col))
+        }
+    }
+    return open
+}
+
+function integer open_cell_count(array<array<string>> grid) {
+    mutable integer count = 0
+    for row in 0..rows_of(grid) {
+        for col in 0..cols_of(grid) {
+            if grid[row][col] != "#" {
+                count = count + 1
+            }
+        }
+    }
+    return count
+}
+
+# ─── Breadth-First Search ────────────────────────────────
+
+function optional<array<string>> solve(array<array<string>> grid) {
+    string start = find_marker(grid, "S")
+    string goal = find_marker(grid, "E")
+    if start == "" || goal == "" {
+        return none
+    }
+
+    mutable queue<array<string>> frontier = Queue.new()
+    frontier = Queue.enqueue(frontier, [start])
+    # A hash_set gives O(1) membership tests; a plain array would rescan every
+    # visited cell on each step, making the search O(V²) in the cell count.
+    mutable hash_set visited = HashSet.from_array([start])
+
+    while !Queue.is_empty(frontier) {
+        array<string> path = Result.unwrap(Queue.peek(frontier))
+        frontier = Result.unwrap(Queue.dequeue(frontier)).1
+        string current = path[Array.length(path) - 1]
+
+        if current == goal {
+            return some(path)
+        }
+
+        for next in neighbours(grid, current) {
+            if !HashSet.contains(visited, next) {
+                visited = HashSet.add(visited, next)
+                frontier = Queue.enqueue(frontier, Array.push(path, next))
+            }
+        }
+    }
+    return none
+}
+
+# ─── Rendering ───────────────────────────────────────────
+
+# The glyph shown for one cell: start/end and walls keep their mark, path cells
+# become "*", everything else is blank.
+function string cell_glyph(array<array<string>> grid, set on_path, integer row, integer col) {
+    string original = grid[row][col]
+
+    return if original == "S" || original == "E" {
+        original
+    } else if original == "#" {
+        "#"
+    } else if Set.contains(on_path, cell_name(row, col)) {
+        "*"
+    } else {
+        " "
+    }
+}
+
+function void print_maze(array<array<string>> grid, array<string> path) {
+    set on_path = Set.from_array(path)
+    for row in 0..rows_of(grid) {
+        # Build each row with one native map pass instead of pushing cells one
+        # at a time onto a growing array.
+        string line = Array.range(0, cols_of(grid))
+        |> Result.unwrap_or([])
+        |> Array.map((integer col) -> cell_glyph(grid, on_path, row, col))
+        |> Result.unwrap_or([])
+        |> String.join("")
+
+        print("  ${line}")
+    }
+}
+
+# ─── Demo ────────────────────────────────────────────────
+
+function array<string> sample_maze() {
+    return [
+        "#########",
+        "#S#     #",
+        "# # # # #",
+        "# #   # #",
+        "# ### # #",
+        "#     #E#",
+        "#########",
+    ]
+}
+
+@main
+function void main() {
+    print("═══════════════════════════════════════════════════")
+    print("   Maze Solver — Breadth-First Shortest Path")
+    print("═══════════════════════════════════════════════════")
+
+    array<array<string>> grid = to_grid(sample_maze())
+
+    print("")
+    print("Maze (${open_cell_count(grid)} open cells):")
+    print("Legend: S start, E exit, # wall, * shortest path")
+    print("")
+
+    print("Solving with breadth-first search...")
+    print("")
+
+    match solve(grid) {
+    case some(path) {
+        print_maze(grid, path)
+        print("")
+        print("Shortest route is ${Array.length(path)} cells.")
+        print("Path: ${String.join(path, " -> ")}")
+    }
+    case none {
+        print("The exit cannot be reached from the start.")
+    }
+    }
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+@test
+function void test_start_and_exit_located() {
+    array<array<string>> grid = to_grid(sample_maze())
+    assert(find_marker(grid, "S") == "1,1", "start sits at row 1 column 1")
+    assert(find_marker(grid, "E") == "5,7", "exit sits at row 5 column 7")
+}
+
+@test
+function void test_neighbours_excludes_walls() {
+    array<array<string>> grid = to_grid(sample_maze())
+    array<string> open = neighbours(grid, "1,1")
+    assert(Array.length(open) == 1, "the start only opens downward")
+    assert(Array.contains(open, "2,1"), "its single neighbour is below it")
+}
+
+@test
+function void test_path_starts_and_ends_correctly() {
+    array<array<string>> grid = to_grid(sample_maze())
+    match solve(grid) {
+    case some(path) {
+        assert(path[0] == "1,1", "path begins at the start")
+        assert(path[Array.length(path) - 1] == "5,7", "path ends at the exit")
+    }
+    case none {
+        assert(false, "the sample maze is solvable")
+    }
+    }
+}
+
+@test
+function void test_path_visits_only_open_cells() {
+    array<array<string>> grid = to_grid(sample_maze())
+    match solve(grid) {
+    case some(path) {
+        mutable boolean clear = true
+        for name in path {
+            if grid[row_of(name)][col_of(name)] == "#" {
+                clear = false
+            }
+        }
+        assert(clear, "no step lands on a wall")
+    }
+    case none {
+        assert(false, "the sample maze is solvable")
+    }
+    }
+}
+
+@test
+function void test_path_steps_are_adjacent() {
+    array<array<string>> grid = to_grid(sample_maze())
+    match solve(grid) {
+    case some(path) {
+        mutable boolean adjacent = true
+        for index in 1..Array.length(path) {
+            integer step = abs_int(row_of(path[index]) - row_of(path[index - 1])) +
+                           abs_int(col_of(path[index]) - col_of(path[index - 1]))
+            if step != 1 {
+                adjacent = false
+            }
+        }
+        assert(adjacent, "consecutive cells are always neighbours")
+    }
+    case none {
+        assert(false, "the sample maze is solvable")
+    }
+    }
+}
+
+@test
+function void test_blocked_maze_has_no_path() {
+    array<array<string>> grid = to_grid([
+        "#####",
+        "#S# #",
+        "# # #",
+        "# #E#",
+        "#####",
+    ])
+    assert(Optional.is_none(solve(grid)), "a walled-off exit is unreachable")
+}
+
+@test
+function void test_open_room_uses_manhattan_distance() {
+    array<array<string>> grid = to_grid([
+        "#####",
+        "#S  #",
+        "#   #",
+        "#  E#",
+        "#####",
+    ])
+    match solve(grid) {
+    case some(path) {
+        assert(Array.length(path) == 5, "an open room needs 4 steps, so 5 cells")
+    }
+    case none {
+        assert(false, "the open room is solvable")
+    }
+    }
+}

@@ -1,0 +1,220 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Queue Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_queue_new_is_empty() {
+    assert(Queue.new() |> Queue.is_empty())
+    assert((Queue.new() |> Queue.length()) == 0)
+}
+
+@test
+function void test_queue_enqueue_and_length() {
+    integer len = Queue.new()
+    |> Queue.enqueue(1)
+    |> Queue.enqueue(2)
+    |> Queue.enqueue(3)
+    |> Queue.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_queue_dequeue_fifo() {
+    # Dequeue returns a result containing (value, remaining_queue).
+    (integer front, queue remaining) = Queue.from_array([10, 20, 30])
+    |> Queue.dequeue()
+    |> Result.unwrap()
+
+    assert(front == 10)
+    assert(Queue.length(remaining) == 2)
+}
+
+@test
+function void test_queue_peek() {
+    integer front = Queue.from_array([42, 99])
+    |> Queue.peek()
+    |> Result.unwrap()
+
+    assert(front == 42)
+}
+
+@test
+function void test_queue_dequeue_preserves_fifo_order() {
+    # Two consecutive dequeues must return elements in insertion order.
+    (integer first, queue after_first) = Queue.from_array([10, 20, 30])
+    |> Queue.dequeue()
+    |> Result.unwrap()
+
+    (integer second, queue after_second) = after_first
+    |> Queue.dequeue()
+    |> Result.unwrap()
+
+    assert(first == 10)
+    assert(second == 20)
+    assert(Queue.length(after_second) == 1)
+}
+
+@test
+function void test_queue_enqueue_is_immutable() {
+    # Enqueue is persistent: it returns a new queue and leaves the source intact.
+    queue original = Queue.from_array([1, 2])
+    queue extended = Queue.enqueue(original, 3)
+
+    assert(Queue.length(original) == 2)
+    assert(Queue.length(extended) == 3)
+}
+
+@test
+function void test_queue_peek_does_not_remove() {
+    # Peek inspects the front element without consuming it.
+    queue q = Queue.from_array([10, 20])
+    integer front = Queue.peek(q) |> Result.unwrap()
+
+    assert(front == 10)
+    assert(Queue.length(q) == 2)
+}
+
+@test
+function void test_queue_to_array() {
+    array<integer> arr = Queue.from_array([1, 2, 3]) |> Queue.to_array()
+
+    assert(Array.length(arr) == 3)
+    assert(arr[0] == 1)
+    assert(arr[2] == 3)
+}
+
+@test
+function void test_queue_from_array_length() {
+    integer len = Queue.from_array([10, 20, 30]) |> Queue.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_queue_dequeue_empty_fails() {
+    assert(Queue.new() |> Queue.dequeue() |> Result.is_failure())
+}
+
+@test
+function void test_queue_peek_empty_fails() {
+    assert(Queue.new() |> Queue.peek() |> Result.is_failure())
+}
+
+@test
+function void test_queue_dequeue_until_empty_then_fails() {
+    # Draining the final element succeeds; dequeuing the now-empty queue fails.
+    (integer only, queue emptied) = Queue.from_array([42])
+    |> Queue.dequeue()
+    |> Result.unwrap()
+
+    assert(only == 42)
+    assert(Queue.is_empty(emptied))
+    assert(emptied |> Queue.dequeue() |> Result.is_failure())
+}
+
+# ─── Higher-order Queue operations ───────────────────────
+
+@test
+function void test_queue_map() {
+    array<integer> arr = Queue.from_array([1, 2, 3])
+    |> Queue.map((integer i) -> i * 10)
+    |> Result.unwrap()
+    |> Queue.to_array()
+
+    assert(arr[0] == 10)
+    assert(arr[1] == 20)
+    assert(arr[2] == 30)
+}
+
+@test
+function void test_queue_filter() {
+    array<integer> arr = Queue.from_array([1, 2, 3, 4])
+    |> Queue.filter((integer i) -> i > 2)
+    |> Result.unwrap()
+    |> Queue.to_array()
+
+    assert(Array.length(arr) == 2)
+    assert(arr[0] == 3)
+    assert(arr[1] == 4)
+}
+
+@test
+function void test_queue_reduce() {
+    integer total = Queue.from_array([1, 2, 3])
+    |> Queue.reduce(0, (integer acc, integer i) -> acc + i)
+    |> Result.unwrap()
+
+    assert(total == 6)
+}
+
+@test
+function void test_queue_each_success() {
+    result<none> r = Queue.from_array([1, 2, 3])
+    |> Queue.each((integer i) -> { assert(i > 0) })
+
+    assert(Result.is_success(r))
+}
+
+# ─── Queue.concat ─────────────────────────────────────────
+
+@test
+function void test_queue_concat_basic() {
+    queue q = Queue.concat(
+        Queue.from_array([1, 2]),
+        Queue.from_array([3, 4]))
+
+    assert(Queue.length(q) == 4)
+}
+
+@test
+function void test_queue_concat_empty_left() {
+    queue q = Queue.concat(Queue.new(), Queue.from_array([1, 2]))
+
+    assert(Queue.length(q) == 2)
+}
+
+@test
+function void test_queue_concat_both_empty() {
+    queue q = Queue.concat(Queue.new(), Queue.new())
+
+    assert(Queue.is_empty(q))
+}
+
+# ─── Queue.partition ──────────────────────────────────────
+
+@test
+function void test_queue_partition_basic() {
+    result<(queue, queue)> r = Queue.from_array([1, 2, 3, 4, 5])
+    |> Queue.partition((integer x) -> x > 3)
+
+    assert(Result.is_success(r))
+
+    (queue matches, queue rest) = Result.unwrap(r)
+
+    assert(Queue.length(matches) == 2)
+    assert(Queue.length(rest) == 3)
+}
+
+@test
+function void test_queue_partition_none_match() {
+    (queue matches, queue rest) = Queue.from_array([1, 2, 3])
+    |> Queue.partition((integer x) -> x > 10)
+    |> Result.unwrap()
+
+    assert(Queue.is_empty(matches))
+    assert(Queue.length(rest) == 3)
+}
+
+@test
+function void test_queue_partition_all_match() {
+    (queue matches, queue rest) = Queue.from_array([1, 2, 3])
+    |> Queue.partition((integer x) -> x > 0)
+    |> Result.unwrap()
+
+    assert(Queue.length(matches) == 3)
+    assert(Queue.is_empty(rest))
+}

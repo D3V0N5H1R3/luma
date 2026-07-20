@@ -1,0 +1,96 @@
+# Maintenance Scripts
+
+Build, test, benchmarking, and developer-tooling helpers that support the Luma project. Each script is a small, focused wrapper invoked either by hand during development or by a CI workflow, keeping the root build, the workflows, and the contributor setup consistent across platforms.
+
+For the build workflow — presets, sanitizers, and coverage — see [build.instructions.md](../instructions/build.instructions.md). For the Python style these scripts follow, see [python.instructions.md](../instructions/python.instructions.md). The directory is also summarised in the source tree in [Luma_Software_Architecture.md](../documents/Luma_Software_Architecture.md).
+
+## Structure
+
+Each script carries a module-level docstring describing its full behaviour and options; the table below is a quick index.
+
+| Script                                                     | Purpose                                                                                              | Runs from                                                  |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [`configure.py`](configure.py)                             | Wrap `cmake --preset`: list presets, optionally build, enable Git hooks.                             | Manual                                                     |
+| [`container-build.sh`](container-build.sh)                 | Configure, build, and run the full CTest suite using `$CC` / `$CXX`.                                 | CI container matrix                                        |
+| [`run_luma_tests.py`](run_luma_tests.py)                   | Discover `.luma` files under a directory and run each in `--test` mode.                              | Manual; editor tasks                                       |
+| [`run_examples.py`](run_examples.py)                       | Run and verify every `examples/` program headlessly, including `@test` blocks.                       | [CI](../.github/workflows/ci.yml); manual                  |
+| [`parse_benchmark_results.py`](parse_benchmark_results.py) | Parse `benchmarks/suite.luma` output into a JSON map of per-iteration timings.                       | [Benchmark CI](../.github/workflows/benchmark.yml); manual |
+| [`compare_benchmarks.py`](compare_benchmarks.py)           | Compare benchmark JSON to a baseline; fail on regressions over the threshold.                        | [Benchmark CI](../.github/workflows/benchmark.yml); manual |
+| [`check_benchmark_suite.py`](check_benchmark_suite.py)     | Verify `benchmarks/suite.luma` includes and runs every `bench_*.luma` module.                        | [Benchmark CI](../.github/workflows/benchmark.yml); manual |
+| [`lint.py`](lint.py)                                       | Run every language's lint/format **check** locally, mirroring CI; skips missing tools.               | Manual; editor tasks                                       |
+| [`format.py`](format.py)                                   | Apply every auto-formatter and safe auto-fix; the writing companion to `lint.py`.                    | Manual; editor tasks                                       |
+| [`check_warning_sync.py`](check_warning_sync.py)           | Keep [`LumaCompilerFlags.cmake`](../cmake/LumaCompilerFlags.cmake) flags aligned with `.clang-tidy`. | [CI](../.github/workflows/ci.yml) (`--strict`); manual     |
+| [`run_psscriptanalyzer.ps1`](run_psscriptanalyzer.ps1)     | Lint first-party PowerShell scripts with PSScriptAnalyzer using the repo settings.                   | [CI](../.github/workflows/ci-powershell.yml); manual       |
+| [`pipeline/Invoke-LumaAudit.ps1`](pipeline/Invoke-LumaAudit.ps1) | Run the read-only improvement-prompt audits via an agent CLI and save ranked reports.          | Manual                                                     |
+| [`pipeline/Invoke-LumaFix.ps1`](pipeline/Invoke-LumaFix.ps1) | Apply the fixer prompts via an agent CLI, gated on build + test with git checkpoints.             | Manual                                                     |
+| [`pipeline/Invoke-LumaConformance.ps1`](pipeline/Invoke-LumaConformance.ps1) | Review and fix files against their coding-standard guides, one agent session per file.       | Manual                                                     |
+| [`pipeline/Invoke-LumaAll.ps1`](pipeline/Invoke-LumaAll.ps1) | Run the audit, then the fix (optionally conformance), in one command.                                        | Manual                                                     |
+| [`pipeline/Invoke-LumaDiscover.ps1`](pipeline/Invoke-LumaDiscover.ps1) | Survey the language + stdlib for candidate additions via an agent CLI (read-only) and save a ranked report. | Manual                                     |
+| [`pipeline/Invoke-LumaEvolve.ps1`](pipeline/Invoke-LumaEvolve.ps1) | Implement language-evolution candidates (function/type/module/feature) via an agent CLI, gated and checkpointed. | Manual                             |
+| [`pipeline/luma-audit.sh`](pipeline/luma-audit.sh)         | Shell (macOS/Linux) counterpart of `Invoke-LumaAudit.ps1`.                                           | Manual                                                     |
+| [`pipeline/luma-fix.sh`](pipeline/luma-fix.sh)             | Shell (macOS/Linux) counterpart of `Invoke-LumaFix.ps1`.                                           | Manual                                                     |
+| [`pipeline/luma-conformance.sh`](pipeline/luma-conformance.sh) | Shell (macOS/Linux) counterpart of `Invoke-LumaConformance.ps1`.                               | Manual                                                     |
+| [`pipeline/luma-all.sh`](pipeline/luma-all.sh) | Shell (macOS/Linux) counterpart of `Invoke-LumaAll.ps1`.                                                       | Manual                                                     |
+| [`pipeline/luma-discover.sh`](pipeline/luma-discover.sh)   | Shell (macOS/Linux) counterpart of `Invoke-LumaDiscover.ps1`.                                       | Manual                                                     |
+| [`pipeline/luma-evolve.sh`](pipeline/luma-evolve.sh)       | Shell (macOS/Linux) counterpart of `Invoke-LumaEvolve.ps1`.                                         | Manual                                                     |
+| [`generate_coverage.py`](generate_coverage.py)             | Configure a coverage build, run the tests, and emit an HTML report.                                  | Manual                                                     |
+| [`generate_gui_assets.mjs`](generate_gui_assets.mjs)       | Regenerate `graphicalui_assets.hpp` from the vendored GUI libraries.                                 | Manual (Node)                                              |
+| [`generate_prelude_asset.mjs`](generate_prelude_asset.mjs) | Regenerate `gui_prelude_generated.hpp` from `gui_prelude.luma` (the Solaris prelude).                | Manual (Node)                                              |
+| [`install_hooks.py`](install_hooks.py)                     | Point `core.hooksPath` at `hooks/` so tracked hooks run on every commit.                             | Manual; via `configure.py`                                 |
+| [`hooks/pre-commit`](hooks/pre-commit)                     | Run clang-format (and clang-tidy when available) over staged C++ files.                              | Git (`core.hooksPath`)                                     |
+| [`hooks/commit-msg`](hooks/commit-msg)                     | Enforce the project's Conventional Commits message format.                                           | Git (`core.hooksPath`)                                     |
+| [`agent-hooks/format_cpp_on_edit.py`](agent-hooks/format_cpp_on_edit.py)   | clang-format the `.cpp`/`.hpp` file the AI agent just edited (`PostToolUse`).                        | Agent hook ([`.github/hooks/`](../.github/hooks))          |
+| [`agent-hooks/protect_vendored_paths.py`](agent-hooks/protect_vendored_paths.py) | Block AI-agent edits to vendored code under `external/` (`PreToolUse`).                          | Agent hook ([`.github/hooks/`](../.github/hooks))          |
+| [`_gates.py`](_gates.py)                                   | Shared gate runner for `lint.py` / `format.py`: tool discovery, driver, summary.                     | Imported by scripts                                        |
+| [`_common.py`](_common.py)                                 | Shared helpers: version gate, repo-root resolution, `run()` wrapper.                                 | Imported by scripts                                        |
+| [`tsan_suppressions.txt`](tsan_suppressions.txt)           | ThreadSanitizer suppression rules (data, not a script).                                              | [CI](../.github/workflows/ci.yml) (`TSAN_OPTIONS`)         |
+
+## Conventions
+
+- **Python 3.10+.** The Python scripts share a single version gate in [`_common.py`](_common.py); importing it early (which the other scripts do) aborts with a clear message on older interpreters. `_common.py` also exposes `REPO_ROOT` and a `run()` wrapper, so the scripts resolve paths and invoke subprocesses the same way. The agent hooks in [`agent-hooks/`](agent-hooks) are the deliberate exception: they import only the standard library so they stay dependency-free and fail open (see [Agent Hooks](#agent-hooks)).
+- **Mixed toolchain.** The directory is predominantly Python; the non-Python helpers are [`generate_gui_assets.mjs`](generate_gui_assets.mjs) and [`generate_prelude_asset.mjs`](generate_prelude_asset.mjs) (Node), [`container-build.sh`](container-build.sh) (POSIX shell, kept free of bashisms for CI containers), [`run_psscriptanalyzer.ps1`](run_psscriptanalyzer.ps1) and the [`pipeline/`](pipeline) prompt runners (PowerShell `*.ps1` plus their bash `*.sh` counterparts), and the [`hooks/`](hooks) Git hooks.
+- **Run from the repository root.** Paths are resolved relative to the repository root (via `_common.py`), so invoke the scripts as `python scripts/<name>.py` rather than from inside this directory.
+
+## Linting and Formatting
+
+Every language in the repository has a dedicated linter or formatter, each enforced by its own CI workflow (see [CONTRIBUTING.md](../CONTRIBUTING.md#linters-and-formatters)). [`lint.py`](lint.py) and [`format.py`](format.py) run that whole surface locally from a single command, so a contributor can reproduce the CI lint result — or auto-fix most of it — before pushing.
+
+```bash
+python scripts/lint.py            # run every check gate, mirroring CI
+python scripts/format.py          # apply every auto-formatter and safe auto-fix
+python scripts/lint.py --list     # show the gates and which are available
+python scripts/lint.py --skip clang-tidy    # skip the slowest gate
+python scripts/lint.py --only ruff,shellcheck
+```
+
+Both scripts run each tool the way its workflow does and print a single pass/fail summary. A gate whose tool (or prerequisite — a configured `build/` for clang-tidy, `extensions/vscode/node_modules` for the extension gates) is missing is reported as *skipped* rather than failing, so the runners are useful with a full toolchain or only part of one. `lint.py` only checks; `format.py` writes. Both share the gate infrastructure in [`_gates.py`](_gates.py).
+
+## Git Hooks
+
+The hooks in [`hooks/`](hooks) are version-controlled rather than copied into `.git/hooks`, so they update on `git pull` and a repository-local `core.hooksPath` reliably overrides any global hooks directory. Two hooks are tracked: [`pre-commit`](hooks/pre-commit) checks staged C++ files with clang-format (and clang-tidy when a compile database exists), and [`commit-msg`](hooks/commit-msg) enforces the [Conventional Commits](https://www.conventionalcommits.org/) format documented in [CONTRIBUTING.md](../CONTRIBUTING.md#commit-messages). Enable them once per clone:
+
+```bash
+python scripts/install_hooks.py
+```
+
+`python scripts/configure.py <preset>` also enables the hooks as part of configuring a build, so a contributor who configures through that helper gets them automatically. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full contributor setup.
+
+## Agent Hooks
+
+The scripts in [`agent-hooks/`](agent-hooks) are AI-agent lifecycle hooks rather than build tooling: the agent runtime runs them around its tool calls to clang-format C++ the moment it is edited and to block edits to vendored `external/` code. They are registered by the JSON files in [`.github/hooks/`](../.github/hooks) and documented in full — rationale, scope, and how to test them — in [.github/hooks/README.md](../.github/hooks/README.md). Unlike the other scripts here they are standalone and dependency-free (no `_common.py`) and always fail open, so a missing interpreter or unexpected input is a clean no-op rather than a blocked agent. They complement the Git hooks above: the agent hooks act as the agent edits, the Git hooks act at commit time.
+
+## Prompt Pipeline
+
+The [`pipeline/`](pipeline) directory drives the repository's improvement prompts ([`.github/prompts/`](../.github/prompts)) through an agentic CLI — the [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference) (default) or the [Claude Code CLI](https://code.claude.com/docs/en/cli-reference), selected per run with `-Agent` / `--agent` — in a repeatable order via two runners — an **audit** runner that runs the read-only audits and saves ranked reports, and a **fix** runner that applies the fixer prompts on a dedicated branch, gating each phase on `cmake --build` + `ctest` and checkpointing only a green tree. Each is provided for both PowerShell ([`Invoke-LumaAudit.ps1`](pipeline/Invoke-LumaAudit.ps1), [`Invoke-LumaFix.ps1`](pipeline/Invoke-LumaFix.ps1)) and bash ([`luma-audit.sh`](pipeline/luma-audit.sh), [`luma-fix.sh`](pipeline/luma-fix.sh)), sharing [`LumaPipeline.psm1`](pipeline/LumaPipeline.psm1) and [`luma-pipeline.sh`](pipeline/luma-pipeline.sh) respectively; both support `-List` / `--list` and `-DryRun` / `--dry-run` so the planned agent / `cmake` / `git` commands can be inspected without invoking anything. A convenience wrapper — [`Invoke-LumaAll.ps1`](pipeline/Invoke-LumaAll.ps1) / [`luma-all.sh`](pipeline/luma-all.sh) — runs the audit and then the fix in a single command, optionally chaining the conformance pass with `-IncludeConformance` / `--include-conformance`. Run artifacts land in the git-ignored `pipeline-artifacts/` directory.
+
+A third **conformance** runner ([`Invoke-LumaConformance.ps1`](pipeline/Invoke-LumaConformance.ps1) / [`luma-conformance.sh`](pipeline/luma-conformance.sh)) works on a different axis: instead of driving the shared improvement prompts across the whole tree, it enumerates every tracked file of a given type (C++, CSS, CMake, GitHub Actions, JavaScript, Luma, Markdown, PowerShell, Python, Rust, Shell, or TypeScript) and runs one agent session **per file** to make that file conform to its coding-standard guides and fix every issue found. It reuses the fix runner's shared helpers and safety model — clean tree, dedicated branch, per-file commit, build + test gate for the `cpp` and `cmake` targets, and no push. See [pipeline/README.md](pipeline/README.md) for the full ordering rationale, safety model, and options.
+
+A fourth **discover → evolve** pair ([`Invoke-LumaDiscover.ps1`](pipeline/Invoke-LumaDiscover.ps1) / [`luma-discover.sh`](pipeline/luma-discover.sh) and [`Invoke-LumaEvolve.ps1`](pipeline/Invoke-LumaEvolve.ps1) / [`luma-evolve.sh`](pipeline/luma-evolve.sh)) drives the language-evolution prompts (`new-requirements` and the four `new-*` implementers) rather than the improvement prompts: where audit → fix improves existing code, discover → evolve grows the language. **Discover** runs read-only and saves a ranked report of candidate additions — new stdlib functions, types, modules, or language features. **Evolve** implements the ones you pick: each candidate is a `(kind, goal)` pair whose kind deterministically routes it to an implementer prompt, gated on build + test + lint and checkpointed on a dedicated branch exactly like the fix runner. Because it needs a human-seeded goal (via `-Goal` / `-Kind` or a `-GoalsFile`), evolve is deliberately kept out of the combined `Invoke-LumaAll.ps1` / `luma-all.sh` wrapper. See [pipeline/README.md](pipeline/README.md) for kinds, seeding, and options.
+
+## Related Documentation
+
+- [build.instructions.md](../instructions/build.instructions.md) — Build workflow, presets, sanitizers, and coverage.
+- [python.instructions.md](../instructions/python.instructions.md) — Python style and conventions these scripts follow.
+- [benchmarks/README.md](../benchmarks/README.md) — How the benchmark suite and its parse/compare scripts fit together.
+- [CONTRIBUTING.md](../CONTRIBUTING.md) — Contributor setup, including the Git hooks and feature-test runner.
+- [Luma_Software_Architecture.md](../documents/Luma_Software_Architecture.md) — Project source tree, including this directory.

@@ -1,0 +1,6 @@
+# Include resolver: empty, dot, and whitespace include paths
+include ""
+include "."
+include "./local.luma"
+include "   "
+include ".."

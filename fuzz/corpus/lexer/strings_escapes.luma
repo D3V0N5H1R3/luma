@@ -1,0 +1,12 @@
+string all_escapes = "tab\tcr\rnl\nnull\0backslash\\quote\"dollar\$"
+string escaped_interp = "literal \${not interpolated} here"
+string adjacent = "${1}${2}${3}"
+string deep_nest = "a ${"b ${"c ${4} d"} e"} f"
+string with_calls = "len=${String.length("hello")} up=${String.uppercase("hi")}"
+string triple = """
+    line one
+    line two with ${1 + 2}
+    line three
+    """
+string triple_quotes_inside = """He said "hi" and left"""
+string unicode_mix = "ascii 世界 🌍 café"

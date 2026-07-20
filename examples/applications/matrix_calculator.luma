@@ -1,0 +1,194 @@
+# ═══════════════════════════════════════════════════════════
+# Matrix Calculator — Linear Algebra
+#
+# A small linear-algebra workbench built on the LinearAlgebra
+# standard-library module. Demonstrates matrices as
+# array<array<number>> and vectors as array<number>, the
+# multiply / transpose / determinant / inverse / solve
+# operations, result<T> error handling for singular systems,
+# Math.approximately_equal for floating-point comparisons (the
+# language forbids '==' on numbers), and @test annotations.
+#
+# Usage: luma examples/applications/matrix_calculator.luma
+# Tests: luma --test examples/applications/matrix_calculator.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Comparison Helpers ──────────────────────────────────
+
+function boolean numbers_close(number a, number b) {
+    return Math.approximately_equal(a, b, 0.0001)
+}
+
+function boolean vectors_close(array<number> a, array<number> b) {
+    if Array.length(a) != Array.length(b) {
+        return false
+    }
+    for index in 0..Array.length(a) {
+        if !numbers_close(a[index], b[index]) {
+            return false
+        }
+    }
+    return true
+}
+
+function boolean matrices_close(array<array<number>> a, array<array<number>> b) {
+    if Array.length(a) != Array.length(b) {
+        return false
+    }
+    for row in 0..Array.length(a) {
+        if !vectors_close(a[row], b[row]) {
+            return false
+        }
+    }
+    return true
+}
+
+# ─── Rendering ───────────────────────────────────────────
+
+function string show_number(number value) {
+    integer scaled = Result.unwrap_or(Math.round(value * 1000000.0), 0)
+    number restored = Result.unwrap_or(Converter.to_number(scaled), value) / 1000000.0
+    return Converter.to_string(restored)
+}
+
+function void print_matrix(string label, array<array<number>> matrix) {
+    print("${label}")
+    for row in matrix {
+        mutable array<string> cells = []
+        for value in row {
+            cells = Array.push(cells, show_number(value))
+        }
+        print("  [ ${String.join(cells, ", ")} ]")
+    }
+}
+
+function void print_vector(string label, array<number> vector) {
+    mutable array<string> cells = []
+    for value in vector {
+        cells = Array.push(cells, show_number(value))
+    }
+    print("${label} [ ${String.join(cells, ", ")} ]")
+}
+
+# ─── Demo ────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("═══════════════════════════════════════════════════")
+    print("   Matrix Calculator — Linear Algebra")
+    print("═══════════════════════════════════════════════════")
+
+    array<array<number>> a = [[1.0, 2.0], [3.0, 4.0]]
+    array<array<number>> b = [[5.0, 6.0], [7.0, 8.0]]
+
+    print("")
+    print_matrix("A =", a)
+    print_matrix("B =", b)
+
+    print("")
+    print_matrix("Aᵀ (transpose) =", LinearAlgebra.transpose(a))
+    print_matrix("A · B (product) =", Result.unwrap_or(LinearAlgebra.multiply(a, b), []))
+
+    number determinant = Result.unwrap_or(LinearAlgebra.determinant(a), 0.0)
+    print("")
+    print("det(A) = ${show_number(determinant)}")
+
+    array<array<number>> inverse = Result.unwrap_or(LinearAlgebra.inverse(a), [])
+    print_matrix("A⁻¹ (inverse) =", inverse)
+    print_matrix("A · A⁻¹ (should be identity) =",
+                 Result.unwrap_or(LinearAlgebra.multiply(a, inverse), []))
+
+    print("")
+    print("Solving the system  A·x = b  for")
+    array<array<number>> system = [
+        [2.0, 1.0, -1.0],
+        [-3.0, -1.0, 2.0],
+        [-2.0, 1.0, 2.0],
+    ]
+    array<number> constants = [8.0, -11.0, -3.0]
+    print_matrix("A =", system)
+    print_vector("b =", constants)
+
+    array<number> solution = Result.unwrap_or(LinearAlgebra.solve(system, constants), [])
+    if Array.length(solution) > 0 {
+        print_vector("x =", solution)
+        array<number> check = Result.unwrap_or(LinearAlgebra.multiply_vector(system, solution), [])
+        string verified = if vectors_close(check, constants) { "yes" } else { "no" }
+        print("Verified A·x = b: ${verified}")
+    } else {
+        print("The system has no unique solution.")
+    }
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+@test
+function void test_transpose() {
+    array<array<number>> wide = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    array<array<number>> expected = [[1.0, 4.0], [2.0, 5.0], [3.0, 6.0]]
+    assert(matrices_close(LinearAlgebra.transpose(wide), expected), "rows become columns")
+}
+
+@test
+function void test_multiply() {
+    array<array<number>> a = [[1.0, 2.0], [3.0, 4.0]]
+    array<array<number>> b = [[5.0, 6.0], [7.0, 8.0]]
+    array<array<number>> product = Result.unwrap_or(LinearAlgebra.multiply(a, b), [])
+    array<array<number>> expected = [[19.0, 22.0], [43.0, 50.0]]
+    assert(matrices_close(product, expected), "matrix product matches the hand calculation")
+}
+
+@test
+function void test_determinant() {
+    array<array<number>> matrix = [[4.0, 7.0], [2.0, 6.0]]
+    number value = Result.unwrap_or(LinearAlgebra.determinant(matrix), 0.0)
+    assert(numbers_close(value, 10.0), "determinant of [[4,7],[2,6]] is 10")
+}
+
+@test
+function void test_inverse_values() {
+    array<array<number>> matrix = [[4.0, 7.0], [2.0, 6.0]]
+    array<array<number>> inverse = Result.unwrap_or(LinearAlgebra.inverse(matrix), [])
+    array<array<number>> expected = [[0.6, -0.7], [-0.2, 0.4]]
+    assert(matrices_close(inverse, expected), "inverse matches the closed-form result")
+}
+
+@test
+function void test_inverse_times_original_is_identity() {
+    array<array<number>> matrix = [[4.0, 7.0], [2.0, 6.0]]
+    array<array<number>> inverse = Result.unwrap_or(LinearAlgebra.inverse(matrix), [])
+    array<array<number>> product = Result.unwrap_or(LinearAlgebra.multiply(matrix, inverse), [])
+    assert(matrices_close(product, LinearAlgebra.identity(2)), "a matrix times its inverse is I")
+}
+
+@test
+function void test_solve_linear_system() {
+    array<array<number>> system = [
+        [2.0, 1.0, -1.0],
+        [-3.0, -1.0, 2.0],
+        [-2.0, 1.0, 2.0],
+    ]
+    array<number> constants = [8.0, -11.0, -3.0]
+    array<number> solution = Result.unwrap_or(LinearAlgebra.solve(system, constants), [])
+    assert(vectors_close(solution, [2.0, 3.0, -1.0]), "the system resolves to (2, 3, -1)")
+}
+
+@test
+function void test_solution_satisfies_system() {
+    array<array<number>> system = [
+        [2.0, 1.0, -1.0],
+        [-3.0, -1.0, 2.0],
+        [-2.0, 1.0, 2.0],
+    ]
+    array<number> constants = [8.0, -11.0, -3.0]
+    array<number> solution = Result.unwrap_or(LinearAlgebra.solve(system, constants), [])
+    array<number> reconstructed = Result.unwrap_or(
+        LinearAlgebra.multiply_vector(system, solution), [])
+    assert(vectors_close(reconstructed, constants), "substituting x back reproduces b")
+}
+
+@test
+function void test_singular_matrix_has_no_inverse() {
+    array<array<number>> singular = [[1.0, 2.0], [2.0, 4.0]]
+    assert(Result.is_failure(LinearAlgebra.inverse(singular)), "a singular matrix is not invertible")
+}

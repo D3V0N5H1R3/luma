@@ -1,0 +1,331 @@
+# GraphicalUi Calendar — a month view with previous / next navigation and day
+# selection. Demonstrates the DateTime module (days_in_month, from_parts and
+# day_of_week) driving a 7-column grid whose leading blanks align the first day
+# under the correct weekday, plus month/year roll-over arithmetic.
+#
+# The model starts on a fixed month (February 2024) so the rendered grid and the
+# @test assertions are completely deterministic.
+
+# ─── Date helpers (DateTime-backed, deterministic) ─────────
+
+function array<string> month_names() {
+    return [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ]
+}
+
+function string month_name(integer month) {
+    array<string> names = month_names()
+    return names[month - 1]
+}
+
+function integer days_count(integer year, integer month) {
+    return Result.unwrap(DateTime.days_in_month(year, month))
+}
+
+# Weekday of the 1st: 0 = Sunday … 6 = Saturday. Built at noon so the result is
+# independent of any time-of-day rounding.
+function integer first_weekday(integer year, integer month) {
+    number timestamp = Result.unwrap(DateTime.from_parts(year, month, 1, 12, 0, 0))
+    return Result.unwrap(DateTime.day_of_week(timestamp))
+}
+
+# A flat list of grid cells: leading blanks (0) to reach the first weekday,
+# followed by the day numbers 1..n.
+function array<integer> build_cells(integer year, integer month) {
+    integer leading = first_weekday(year, month)
+    integer total = days_count(year, month)
+    mutable array<integer> cells = []
+    mutable integer blank = 0
+    while blank < leading {
+        cells = Array.push(cells, 0)
+        blank = blank + 1
+    }
+    mutable integer day = 1
+    while day <= total {
+        cells = Array.push(cells, day)
+        day = day + 1
+    }
+    return cells
+}
+
+# ─── Model + transitions (pure, fully testable) ────────────
+
+function dictionary calendar_initial() {
+    mutable dictionary model = {"year": 2024}
+    model["month"] = 2
+    model["selected"] = 0
+    number today = DateTime.now_unix()
+    model["today_year"] = Result.unwrap(DateTime.year(today))
+    model["today_month"] = Result.unwrap(DateTime.month(today))
+    model["today_day"] = Result.unwrap(DateTime.day_of_month(today))
+    return model
+}
+
+function dictionary next_month(dictionary model) {
+    integer year = Dictionary.get_or(model, "year", 2024)
+    integer month = Dictionary.get_or(model, "month", 1) + 1
+    mutable dictionary updated = model
+    if month > 12 {
+        updated["month"] = 1
+        updated["year"] = year + 1
+    } else {
+        updated["month"] = month
+    }
+    updated["selected"] = 0
+    return updated
+}
+
+function dictionary prev_month(dictionary model) {
+    integer year = Dictionary.get_or(model, "year", 2024)
+    integer month = Dictionary.get_or(model, "month", 1) - 1
+    mutable dictionary updated = model
+    if month < 1 {
+        updated["month"] = 12
+        updated["year"] = year - 1
+    } else {
+        updated["month"] = month
+    }
+    updated["selected"] = 0
+    return updated
+}
+
+function dictionary select_day(dictionary model, integer day) {
+    mutable dictionary updated = model
+    updated["selected"] = day
+    return GraphicalUi.with_command(updated, GraphicalUi.announce(selection_text(updated)))
+}
+
+# Wraps a post-navigation model with a polite announcement of the month now in
+# view. Applied at the update() layer (not inside prev_month/next_month) so the
+# pure transition helpers stay directly unit-testable as plain dictionaries.
+function dictionary announce_month(dictionary updated) {
+    return GraphicalUi.with_command(updated, GraphicalUi.announce("Showing ${title_text(updated)}."))
+}
+
+function string title_text(dictionary model) {
+    integer month = Dictionary.get_or(model, "month", 1)
+    return "${month_name(month)} ${Dictionary.get_or(model, "year", 2024)}"
+}
+
+function string selection_text(dictionary model) {
+    integer selected = Dictionary.get_or(model, "selected", 0)
+    if selected <= 0 {
+        return "No date selected"
+    }
+    integer month = Dictionary.get_or(model, "month", 1)
+    return "Selected: ${selected} ${month_name(month)} ${Dictionary.get_or(model, "year", 2024)}"
+}
+
+# ─── View ──────────────────────────────────────────────────
+
+function dictionary<string> nav_style(string id) {
+    return {
+        "id": id,
+        "min_width": "44px",
+        "variant": GraphicalUi.GHOST,
+        "font_weight": "700"
+    }
+}
+
+function widget view_weekday_header() {
+    array<widget> labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        |> Array.map((string name) -> GraphicalUi.label(name, {
+            "width": "44px",
+            "text_align": "center",
+            "font_size": "11px",
+            "font_weight": "700",
+            "color": GraphicalUi.VAR_DISABLED_FG
+        }))
+        |> Result.unwrap()
+    return GraphicalUi.grid(7, labels, GraphicalUi.spacing(4))
+}
+
+function widget view_cell(dictionary model, integer day) {
+    if day == 0 {
+        return GraphicalUi.label("", {"width": "44px", "height": "40px"})
+    }
+    integer year = Dictionary.get_or(model, "year", 2024)
+    integer month = Dictionary.get_or(model, "month", 1)
+    boolean selected = Dictionary.get_or(model, "selected", 0) == day
+    boolean today = Dictionary.get_or(model, "today_year", 0) == year
+        && Dictionary.get_or(model, "today_month", 0) == month
+        && Dictionary.get_or(model, "today_day", 0) == day
+    string background = if selected { GraphicalUi.VAR_PRIMARY } else { "transparent" }
+    string color = if selected { "white" } else { GraphicalUi.VAR_FG }
+    string marker = if selected { "✓ " } else if today { "• " } else { "" }
+    mutable string aria_label = "${day} ${month_name(month)} ${year}"
+    if selected {
+        aria_label = "${aria_label} (selected)"
+    }
+    if today {
+        aria_label = "${aria_label} (today)"
+    }
+    return GraphicalUi.accessible(GraphicalUi.button("${marker}${day}", () -> select_day(model, day), {
+        "id": "day-${day}",
+        "width": "44px",
+        "height": "40px",
+        "background_color": background,
+        "color": color,
+        "border": if selected { "2px solid ${GraphicalUi.VAR_PRIMARY}" } else if today {
+            "2px dashed ${GraphicalUi.VAR_WARNING}"
+        } else { "1px solid ${GraphicalUi.VAR_BORDER}" },
+        "border_radius": GraphicalUi.VAR_RADIUS,
+        "box_shadow": if selected { "0 0 0 2px var(--gui-primary-subtle-bg)" } else { "none" },
+        "font_weight": if selected || today { "700" } else { "500" },
+        "hover_background_color": "var(--gui-primary-subtle-bg)"
+    }), {"aria_label": aria_label})
+}
+
+function widget view_grid(dictionary model) {
+    integer year = Dictionary.get_or(model, "year", 2024)
+    integer month = Dictionary.get_or(model, "month", 1)
+    array<widget> cells = build_cells(year, month)
+        |> Array.map((integer day) -> view_cell(model, day))
+        |> Result.unwrap()
+    return GraphicalUi.grid(7, cells, GraphicalUi.spacing(4))
+}
+
+function widget view_calendar(dictionary model) {
+    return GraphicalUi.column([
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("calendar", 20),
+            GraphicalUi.heading("Calendar", 1)
+        ]),
+        GraphicalUi.row([
+            GraphicalUi.accessible(
+                GraphicalUi.button("‹", () -> "prev", nav_style("btn-prev")),
+                {"aria_label": "Previous month"}
+            ),
+            GraphicalUi.label(title_text(model), {
+                "id": "title",
+                "min_width": "200px",
+                "text_align": "center",
+                "font_size": GraphicalUi.VAR_TEXT_LG,
+                "font_weight": "600"
+            }),
+            GraphicalUi.accessible(
+                GraphicalUi.button("›", () -> "next", nav_style("btn-next")),
+                {"aria_label": "Next month"}
+            )
+        ], GraphicalUi.merge_styles(GraphicalUi.center_x(), GraphicalUi.spacing(8))),
+        view_weekday_header(),
+        view_grid(model),
+        GraphicalUi.label(selection_text(model), {
+            "id": "selection",
+            "text_align": "center",
+            "font_size": GraphicalUi.VAR_TEXT_SM,
+            "color": GraphicalUi.VAR_PRIMARY
+        })
+    ], GraphicalUi.merge_styles(GraphicalUi.spacing(16), GraphicalUi.padding(16)))
+}
+
+@main
+function void main() {
+    GraphicalUi.app(calendar_config())
+}
+
+# Exposed as a named function (rather than inlined in main) so the example's
+# behaviour can be driven and verified by the @test blocks without a window.
+function dictionary calendar_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Luma Calendar"
+    config["width"] = 380
+    config["height"] = 460
+    config["min_width"] = 360
+    config["min_height"] = 420
+    config["model"] = calendar_initial()
+    config["view"] = view_calendar
+    config["update"] = (dictionary model, string msg) -> match msg {
+        case == "prev" { announce_month(prev_month(model)) }
+        case == "next" { announce_month(next_month(model)) }
+        else { model }
+    }
+    return config
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+# Date maths is verified through the pure helpers; navigation and selection are
+# driven through the real buttons with test_click.
+
+@test
+function void test_days_in_month_uses_datetime() {
+    assert(days_count(2024, 2) == 29)
+    assert(days_count(2025, 2) == 28)
+    assert(days_count(2024, 1) == 31)
+    assert(days_count(2024, 4) == 30)
+}
+
+@test
+function void test_first_weekday_of_february_2024() {
+    # 1 February 2024 was a Thursday (Sunday = 0).
+    assert(first_weekday(2024, 2) == 4)
+}
+
+@test
+function void test_cells_have_leading_blanks_then_days() {
+    array<integer> cells = build_cells(2024, 2)
+    assert(cells[0] == 0)
+    assert(cells[3] == 0)
+    assert(cells[4] == 1)
+    assert(Array.length(cells) == 33)
+    assert(cells[32] == 29)
+}
+
+@test
+function void test_next_month_advances() {
+    dictionary model = next_month(calendar_initial())
+    assert(Dictionary.get_or(model, "month", -1) == 3)
+    assert(Dictionary.get_or(model, "year", -1) == 2024)
+}
+
+@test
+function void test_next_month_rolls_over_the_year() {
+    mutable dictionary december = calendar_initial()
+    december["month"] = 12
+    dictionary model = next_month(december)
+    assert(Dictionary.get_or(model, "month", -1) == 1)
+    assert(Dictionary.get_or(model, "year", -1) == 2025)
+}
+
+@test
+function void test_prev_month_rolls_back_the_year() {
+    mutable dictionary january = calendar_initial()
+    january["month"] = 1
+    dictionary model = prev_month(january)
+    assert(Dictionary.get_or(model, "month", -1) == 12)
+    assert(Dictionary.get_or(model, "year", -1) == 2023)
+}
+
+@test
+function void test_next_button_changes_the_title() {
+    dictionary config = calendar_config()
+    dictionary model = GraphicalUi.test_click(config, calendar_initial(), "btn-next")
+    dictionary title = GraphicalUi.test_find(config, model, "title")
+    assert(Dictionary.get_or(title, "text", "") == "March 2024")
+}
+
+@test
+function void test_clicking_a_day_selects_it() {
+    dictionary config = calendar_config()
+    dictionary model = GraphicalUi.test_click(config, calendar_initial(), "day-14")
+    assert(Dictionary.get_or(model, "selected", -1) == 14)
+    dictionary selection = GraphicalUi.test_find(config, model, "selection")
+    assert(Dictionary.get_or(selection, "text", "") == "Selected: 14 February 2024")
+}
+
+@test
+function void test_navigation_clears_the_selection() {
+    dictionary config = calendar_config()
+    dictionary selected = GraphicalUi.test_click(config, calendar_initial(), "day-10")
+    dictionary navigated = GraphicalUi.test_click(config, selected, "btn-next")
+    assert(Dictionary.get_or(navigated, "selected", -1) == 0)
+}
+
+@test
+function void test_title_renders_initial_month() {
+    dictionary config = calendar_config()
+    dictionary title = GraphicalUi.test_find(config, calendar_initial(), "title")
+    assert(Dictionary.get_or(title, "text", "") == "February 2024")
+}

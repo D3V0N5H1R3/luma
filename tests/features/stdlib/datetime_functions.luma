@@ -1,0 +1,477 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — DateTime Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_datetime_now_ms() {
+    number current_ms = DateTime.milliseconds_since_start()
+
+    assert(current_ms >= 0)
+}
+
+@test
+function void test_datetime_now_unix() {
+    number current_unix = DateTime.now_unix()
+
+    assert(current_unix > 1577836800)
+}
+
+@test
+function void test_datetime_difference() {
+    number start_ms = DateTime.milliseconds_since_start()
+    number end_ms = start_ms + 100.0
+
+    assert(Math.approximately_equal(DateTime.difference_milliseconds(start_ms, end_ms), 100.0, 0.001))
+}
+
+@test
+function void test_datetime_add_ms() {
+    number timestamp = 1000.0
+
+    assert(Math.approximately_equal(DateTime.add_milliseconds(timestamp, 500), 1500.0, 0.001))
+}
+
+@test
+function void test_datetime_from_parts_and_components() {
+    # 2024-03-15 10:30:00 UTC
+    number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 30, 0))
+
+    assert(Result.unwrap(DateTime.year(timestamp)) == 2024)
+    assert(Result.unwrap(DateTime.month(timestamp)) == 3)
+    assert(Result.unwrap(DateTime.day_of_month(timestamp)) == 15)
+    assert(Result.unwrap(DateTime.hour(timestamp)) == 10)
+    assert(Result.unwrap(DateTime.minute(timestamp)) == 30)
+    assert(Result.unwrap(DateTime.second(timestamp)) == 0)
+}
+
+@test
+function void test_datetime_day_of_week() {
+    # 2024-03-15 is a Friday = 5
+    number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+
+    integer day_of_week = Result.unwrap(DateTime.day_of_week(timestamp))
+
+    assert(day_of_week == 5)
+}
+
+@test
+function void test_datetime_is_leap_year() {
+    assert(DateTime.is_leap_year(2024))
+    assert(!DateTime.is_leap_year(2023))
+    assert(DateTime.is_leap_year(2000))
+    assert(!DateTime.is_leap_year(1900))
+}
+
+@test
+function void test_datetime_days_in_month() {
+    assert(Result.unwrap(DateTime.days_in_month(2024, 2)) == 29)
+    assert(Result.unwrap(DateTime.days_in_month(2023, 2)) == 28)
+    assert(Result.unwrap(DateTime.days_in_month(2024, 1)) == 31)
+    assert(Result.unwrap(DateTime.days_in_month(2024, 4)) == 30)
+}
+
+@test
+function void test_datetime_to_parts() {
+    number timestamp = Result.unwrap(DateTime.from_parts(2024, 6, 15, 12, 30, 45))
+
+    assert(Result.unwrap(DateTime.to_parts(timestamp)).year == 2024)
+    assert(Result.unwrap(DateTime.to_parts(timestamp)).month == 6)
+    assert(Result.unwrap(DateTime.to_parts(timestamp)).day == 15)
+    assert(Result.unwrap(DateTime.to_parts(timestamp)).hour == 12)
+    assert(Result.unwrap(DateTime.to_parts(timestamp)).minute == 30)
+    assert(Result.unwrap(DateTime.to_parts(timestamp)).second == 45)
+}
+
+@test
+function void test_datetime_iso_string_roundtrip() {
+    number timestamp = Result.unwrap(DateTime.from_parts(2026, 4, 8, 14, 30, 0))
+
+    string iso_string = Result.unwrap(DateTime.to_iso_string(timestamp))
+
+    assert(String.starts_with(iso_string, "2026-04-08"))
+
+    result<number> parsed = DateTime.from_iso_string("2026-04-08")
+
+    assert(Result.is_success(parsed))
+}
+
+@test
+function void test_datetime_from_parts_invalid() {
+    result<number> bad_month  = DateTime.from_parts(2024, 0, 1, 0, 0, 0)
+    result<number> bad_month2 = DateTime.from_parts(2024, 13, 1, 0, 0, 0)
+    result<number> bad_day    = DateTime.from_parts(2024, 1, 0, 0, 0, 0)
+    result<number> bad_hour   = DateTime.from_parts(2024, 1, 1, 24, 0, 0)
+    result<number> bad_minute = DateTime.from_parts(2024, 1, 1, 0, 60, 0)
+    result<number> bad_second = DateTime.from_parts(2024, 1, 1, 0, 0, 61)
+
+    assert(Result.is_failure(bad_month),  "month 0 should fail")
+    assert(Result.is_failure(bad_month2), "month 13 should fail")
+    assert(Result.is_failure(bad_day),    "day 0 should fail")
+    assert(Result.is_failure(bad_hour),   "hour 24 should fail")
+    assert(Result.is_failure(bad_minute), "minute 60 should fail")
+    assert(Result.is_failure(bad_second), "second 61 should fail")
+}
+
+# ─── now_iso_string ───
+
+@test
+function void test_datetime_now_iso_string() {
+    result<string> iso = DateTime.now_iso_string()
+
+    assert(Result.is_success(iso))
+    assert("T" in Result.unwrap(iso))
+    assert("Z" in Result.unwrap(iso))
+}
+
+# ─── difference_seconds / hours / days ───
+
+@test
+function void test_datetime_difference_seconds() {
+    number t1 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 30, 0))
+    number t2 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 31, 40))
+
+    assert(Math.approximately_equal(DateTime.difference_seconds(t1, t2), 100.0, 0.001))
+}
+
+@test
+function void test_datetime_difference_hours() {
+    number t1 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 0, 0))
+    number t2 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 13, 0, 0))
+
+    assert(Math.approximately_equal(DateTime.difference_hours(t1, t2), 3.0, 0.001))
+}
+
+@test
+function void test_datetime_difference_days() {
+    number t1 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    number t2 = Result.unwrap(DateTime.from_parts(2024, 3, 17, 0, 0, 0))
+
+    assert(Math.approximately_equal(DateTime.difference_days(t1, t2), 2.0, 0.001))
+}
+
+# ─── difference_months / years ───
+
+@test
+function void test_datetime_difference_months() {
+    number t1 = Result.unwrap(DateTime.from_parts(2024, 1, 15, 0, 0, 0))
+    number t2 = Result.unwrap(DateTime.from_parts(2024, 4, 15, 0, 0, 0))
+
+    assert(Result.unwrap(DateTime.difference_months(t1, t2)) == 3)
+}
+
+@test
+function void test_datetime_difference_years() {
+    number t1 = Result.unwrap(DateTime.from_parts(2020, 6, 1, 0, 0, 0))
+    number t2 = Result.unwrap(DateTime.from_parts(2024, 6, 1, 0, 0, 0))
+
+    assert(Result.unwrap(DateTime.difference_years(t1, t2)) == 4)
+}
+
+# ─── add_seconds / hours / days ───
+
+@test
+function void test_datetime_add_seconds() {
+    number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 30, 0))
+    number added = DateTime.add_seconds(base, 60.0)
+
+    assert(Result.unwrap(DateTime.minute(added)) == 31)
+}
+
+@test
+function void test_datetime_add_hours() {
+    number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 0, 0))
+    number added = DateTime.add_hours(base, 5.0)
+
+    assert(Result.unwrap(DateTime.hour(added)) == 15)
+}
+
+@test
+function void test_datetime_add_days() {
+    number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    number added = DateTime.add_days(base, 3.0)
+
+    assert(Result.unwrap(DateTime.day_of_month(added)) == 18)
+}
+
+# ─── add_months / years ───
+
+@test
+function void test_datetime_add_months() {
+    number base = Result.unwrap(DateTime.from_parts(2024, 1, 31, 0, 0, 0))
+    number added = Result.unwrap(DateTime.add_months(base, 1))
+
+    # Jan 31 + 1 month → Feb 29 (2024 is a leap year, day clamped)
+    assert(Result.unwrap(DateTime.month(added)) == 2)
+    assert(Result.unwrap(DateTime.day_of_month(added)) == 29)
+}
+
+@test
+function void test_datetime_add_years() {
+    number base = Result.unwrap(DateTime.from_parts(2024, 2, 29, 12, 0, 0))
+    number added = Result.unwrap(DateTime.add_years(base, 1))
+
+    # Feb 29 + 1 year → Feb 28 (2025 is not a leap year)
+    assert(Result.unwrap(DateTime.year(added)) == 2025)
+    assert(Result.unwrap(DateTime.day_of_month(added)) == 28)
+}
+
+@test
+function void test_datetime_add_months_negative() {
+    number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    number subtracted = Result.unwrap(DateTime.add_months(base, -2))
+
+    assert(Result.unwrap(DateTime.month(subtracted)) == 1)
+    assert(Result.unwrap(DateTime.year(subtracted)) == 2024)
+}
+
+# ─── timezone (fixed UTC offset) ───
+
+@test
+function void test_datetime_offset_hours() {
+    assert(Math.approximately_equal(DateTime.offset_hours(5.5), 330.0, 0.001))
+    assert(Math.approximately_equal(DateTime.offset_hours(-5.0), -300.0, 0.001))
+    assert(Math.approximately_equal(DateTime.offset_hours(0.0), 0.0, 0.001))
+}
+
+@test
+function void test_datetime_to_offset() {
+    # 2024-03-15 14:30:00 UTC
+    number utc_ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
+    number offset = DateTime.offset_hours(2.0)
+    number local_ts = Result.unwrap(DateTime.to_offset(utc_ts, offset))
+
+    # Local time should be 2 hours ahead → 16:30
+    assert(Result.unwrap(DateTime.hour(local_ts)) == 16)
+    assert(Result.unwrap(DateTime.minute(local_ts)) == 30)
+}
+
+@test
+function void test_datetime_from_offset() {
+    # Given a local timestamp at UTC+05:30, recover the UTC timestamp.
+    number utc_ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
+    number offset = DateTime.offset_hours(5.5)
+    number local_ts = Result.unwrap(DateTime.to_offset(utc_ts, offset))
+    number recovered = Result.unwrap(DateTime.from_offset(local_ts, offset))
+
+    assert(Math.approximately_equal(recovered, utc_ts, 0.001))
+}
+
+@test
+function void test_datetime_to_offset_invalid() {
+    number utc_ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
+
+    # Offset of +15 hours (900 minutes) exceeds the valid range.
+    assert(Result.is_failure(DateTime.to_offset(utc_ts, 900.0)))
+    assert(Result.is_failure(DateTime.to_offset(utc_ts, -800.0)))
+}
+
+@test
+function void test_datetime_to_iso_string_offset() {
+    number utc_ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 0))
+
+    # UTC+05:30 → 20:00 local
+    string iso_plus = Result.unwrap(DateTime.to_iso_string_offset(utc_ts, 330.0))
+
+    assert(iso_plus == "2024-03-15T20:00:00+05:30")
+
+    # UTC-05:00 → 09:30 local
+    string iso_minus = Result.unwrap(DateTime.to_iso_string_offset(utc_ts, -300.0))
+
+    assert(iso_minus == "2024-03-15T09:30:00-05:00")
+
+    # Zero offset → "Z" suffix
+    string iso_z = Result.unwrap(DateTime.to_iso_string_offset(utc_ts, 0.0))
+
+    assert("Z" in iso_z)
+}
+
+@test
+function void test_datetime_from_parts_offset() {
+    # Build 2024-03-15 20:00:00 at UTC+05:30 → should equal 14:30 UTC
+    number utc_ts = Result.unwrap(DateTime.from_parts_offset(2024, 3, 15, 20, 0, 0, 330.0))
+
+    assert(Result.unwrap(DateTime.hour(utc_ts)) == 14)
+    assert(Result.unwrap(DateTime.minute(utc_ts)) == 30)
+}
+
+@test
+function void test_datetime_from_parts_offset_invalid() {
+    # Invalid offset
+    assert(Result.is_failure(DateTime.from_parts_offset(2024, 3, 15, 12, 0, 0, 900.0)))
+    # Invalid month
+    assert(Result.is_failure(DateTime.from_parts_offset(2024, 13, 15, 12, 0, 0, 60.0)))
+}
+
+@test
+function void test_datetime_from_iso_string_with_offset() {
+    # Parse ISO string with positive offset
+    number ts_plus = Result.unwrap(DateTime.from_iso_string("2024-03-15T20:00:00+05:30"))
+
+    assert(Result.unwrap(DateTime.hour(ts_plus)) == 14)
+    assert(Result.unwrap(DateTime.minute(ts_plus)) == 30)
+
+    # Parse ISO string with negative offset
+    number ts_minus = Result.unwrap(DateTime.from_iso_string("2024-03-15T09:30:00-05:00"))
+
+    assert(Result.unwrap(DateTime.hour(ts_minus)) == 14)
+    assert(Result.unwrap(DateTime.minute(ts_minus)) == 30)
+
+    # Parse ISO string with Z (should behave as before)
+    number ts_z = Result.unwrap(DateTime.from_iso_string("2024-03-15T14:30:00Z"))
+
+    assert(Result.unwrap(DateTime.hour(ts_z)) == 14)
+    assert(Result.unwrap(DateTime.minute(ts_z)) == 30)
+}
+
+# ─── Additional negative tests ───────────────────────────
+
+@test
+function void test_datetime_days_in_month_invalid_month() {
+    # Month 0 and 13 are invalid.
+    assert(Result.is_failure(DateTime.days_in_month(2024, 0)), "month 0 should fail")
+    assert(Result.is_failure(DateTime.days_in_month(2024, 13)), "month 13 should fail")
+}
+
+@test
+function void test_datetime_from_iso_string_invalid_format() {
+    # Completely invalid ISO string should fail.
+    assert(Result.is_failure(DateTime.from_iso_string("not-a-date")))
+}
+
+@test
+function void test_datetime_from_parts_feb_29_non_leap_year() {
+    # 2023 is not a leap year — February 29 should fail.
+    result<number> r = DateTime.from_parts(2023, 2, 29, 0, 0, 0)
+
+    assert(Result.is_failure(r), "Feb 29 on non-leap year should fail")
+}
+
+@test
+function void test_datetime_from_parts_feb_29_leap_year() {
+    # 2024 is a leap year — February 29 should succeed.
+    result<number> r = DateTime.from_parts(2024, 2, 29, 0, 0, 0)
+
+    assert(Result.is_success(r), "Feb 29 on leap year should succeed")
+}
+
+# ─── DateTime.format ─────────────────────────────────────
+
+@test
+function void test_datetime_format_basic() {
+    # 2024-01-15 10:30:45 UTC
+    number ts = Result.unwrap(DateTime.from_parts(2024, 1, 15, 10, 30, 45))
+    result<string> r = DateTime.format(ts, "YYYY-MM-DD hh:mm:ss")
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == "2024-01-15 10:30:45")
+}
+
+# ─── DateTime.is_before / DateTime.is_after ──────────────
+
+@test
+function void test_datetime_is_before() {
+    number a = Result.unwrap(DateTime.from_parts(2024, 1, 1, 0, 0, 0))
+    number b = Result.unwrap(DateTime.from_parts(2024, 6, 15, 0, 0, 0))
+
+    assert(DateTime.is_before(a, b))
+    assert(!DateTime.is_before(b, a))
+    assert(!DateTime.is_before(a, a))
+}
+
+@test
+function void test_datetime_is_after() {
+    number a = Result.unwrap(DateTime.from_parts(2024, 1, 1, 0, 0, 0))
+    number b = Result.unwrap(DateTime.from_parts(2024, 6, 15, 0, 0, 0))
+
+    assert(DateTime.is_after(b, a))
+    assert(!DateTime.is_after(a, b))
+    assert(!DateTime.is_after(a, a))
+}
+
+# ─── from_iso_string: full round-trip ────────────────────
+
+@test
+function void test_datetime_iso_string_full_roundtrip() {
+    # A full date-time formatted by to_iso_string must parse back to the
+    # same instant via from_iso_string (the codec round-trip property).
+    number ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 45))
+    string iso = Result.unwrap(DateTime.to_iso_string(ts))
+
+    assert("T" in iso, "full ISO string contains a 'T' separator")
+    assert("Z" in iso, "UTC ISO string ends with 'Z'")
+
+    number recovered = Result.unwrap(DateTime.from_iso_string(iso))
+
+    assert(Math.approximately_equal(recovered, ts, 0.001))
+}
+
+# ─── from_iso_string: malformed input (never crashes, returns failure) ───
+
+@test
+function void test_datetime_from_iso_string_malformed() {
+    # Empty, non-numeric, year-only, truncated time, and a malformed offset
+    # must all be rejected rather than crash or silently succeed.
+    assert(Result.is_failure(DateTime.from_iso_string("")), "empty string should fail")
+    assert(Result.is_failure(DateTime.from_iso_string("nonsense")), "non-numeric should fail")
+    assert(Result.is_failure(DateTime.from_iso_string("2024")), "year only should fail")
+    assert(Result.is_failure(DateTime.from_iso_string("2024-03-15T14:30")),
+        "missing seconds should fail")
+    assert(Result.is_failure(DateTime.from_iso_string("2024-03-15T14:30:00+05")),
+        "offset without minutes should fail")
+}
+
+# ─── from_iso_string: out-of-range calendar fields ───
+
+@test
+function void test_datetime_from_iso_string_out_of_range() {
+    # Year and month outside the supported 0001-9999 / 1-12 ranges are rejected
+    # (also guards the year-1900 / month-1 conversions against integer overflow).
+    assert(Result.is_failure(DateTime.from_iso_string("0000-01-01")), "year 0 should fail")
+    assert(Result.is_failure(DateTime.from_iso_string("10000-01-01")), "year 10000 should fail")
+    assert(Result.is_failure(DateTime.from_iso_string("2024-00-15")), "month 0 should fail")
+    assert(Result.is_failure(DateTime.from_iso_string("2024-13-15")), "month 13 should fail")
+}
+
+# ─── component accessors / format / to_parts on out-of-range instant ───
+
+@test
+function void test_datetime_components_out_of_range() {
+    # A timestamp far outside the year 0001-9999 window must fail every
+    # decomposition rather than read out-of-range calendar data.
+    number bad = -99999999999.0
+
+    assert(Result.is_failure(DateTime.year(bad)), "year out of range")
+    assert(Result.is_failure(DateTime.month(bad)), "month out of range")
+    assert(Result.is_failure(DateTime.day_of_month(bad)), "day_of_month out of range")
+    assert(Result.is_failure(DateTime.hour(bad)), "hour out of range")
+    assert(Result.is_failure(DateTime.minute(bad)), "minute out of range")
+    assert(Result.is_failure(DateTime.second(bad)), "second out of range")
+    assert(Result.is_failure(DateTime.day_of_week(bad)), "day_of_week out of range")
+}
+
+@test
+function void test_datetime_format_and_to_parts_out_of_range() {
+    number bad = -99999999999.0
+
+    assert(Result.is_failure(DateTime.format(bad, "YYYY-MM-DD")), "format out of range")
+    assert(Result.is_failure(DateTime.to_parts(bad)), "to_parts out of range")
+    assert(Result.is_failure(DateTime.to_iso_string(bad)), "to_iso_string out of range")
+}
+
+@test
+function void test_datetime_non_finite_input() {
+    # Infinity and NaN are reachable IEEE-754 number values.  Every decomposition
+    # must reject them cleanly rather than convert them to time_t (undefined
+    # behaviour) when reading calendar fields.
+    number inf_val = Math.infinity
+    number nan_val = Math.infinity - Math.infinity
+
+    assert(Result.is_failure(DateTime.year(inf_val)), "year(inf) should fail")
+    assert(Result.is_failure(DateTime.to_iso_string(inf_val)), "to_iso_string(inf) should fail")
+    assert(Result.is_failure(DateTime.year(nan_val)), "year(nan) should fail")
+    assert(Result.is_failure(DateTime.to_parts(nan_val)), "to_parts(nan) should fail")
+    assert(Result.is_failure(DateTime.format(nan_val, "YYYY")), "format(nan) should fail")
+}

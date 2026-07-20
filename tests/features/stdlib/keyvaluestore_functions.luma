@@ -1,0 +1,468 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — KeyValueStore Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_keyvaluestore_open_set_get() {
+    string val = KeyValueStore.open("test_kv_luma1.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("greeting", "hello")
+    |> Result.unwrap()
+    |> KeyValueStore.get("greeting")
+    |> Result.unwrap()
+
+    assert(val == "hello")
+}
+
+@test
+function void test_keyvaluestore_has() {
+    boolean found = KeyValueStore.open("test_kv_luma2.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("x", "1")
+    |> Result.unwrap()
+    |> KeyValueStore.has("x")
+
+    assert(found)
+}
+
+@test
+function void test_keyvaluestore_has_missing() {
+    boolean found = KeyValueStore.open("test_kv_luma3.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.has("missing")
+
+    assert(!found)
+}
+
+@test
+function void test_keyvaluestore_remove() {
+    boolean found = KeyValueStore.open("test_kv_luma4.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("k", "v")
+    |> Result.unwrap()
+    |> KeyValueStore.remove("k")
+    |> Result.unwrap()
+    |> KeyValueStore.has("k")
+
+    assert(!found)
+}
+
+@test
+function void test_keyvaluestore_count() {
+    integer n = KeyValueStore.open("test_kv_luma5.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("a", "1")
+    |> Result.unwrap()
+    |> KeyValueStore.set("b", "2")
+    |> Result.unwrap()
+    |> KeyValueStore.count()
+
+    assert(n == 2)
+}
+
+@test
+function void test_keyvaluestore_clear() {
+    integer n = KeyValueStore.open("test_kv_luma6.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("a", "1")
+    |> Result.unwrap()
+    |> KeyValueStore.set("b", "2")
+    |> Result.unwrap()
+    |> KeyValueStore.clear()
+    |> Result.unwrap()
+    |> KeyValueStore.count()
+
+    assert(n == 0)
+}
+
+@test
+function void test_keyvaluestore_keys() {
+    array<string> k = KeyValueStore.open("test_kv_luma7.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("x", "1")
+    |> Result.unwrap()
+    |> KeyValueStore.set("y", "2")
+    |> Result.unwrap()
+    |> KeyValueStore.keys()
+
+    assert(Array.length(k) == 2)
+}
+
+@test
+function void test_keyvaluestore_values() {
+    array<string> v = KeyValueStore.open("test_kv_luma8.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("a", "10")
+    |> Result.unwrap()
+    |> KeyValueStore.values()
+
+    assert(Array.length(v) == 1)
+    assert(v[0] == "10")
+}
+
+@test
+function void test_keyvaluestore_to_dictionary() {
+    dictionary<string> d = KeyValueStore.open("test_kv_luma9.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("k", "v")
+    |> Result.unwrap()
+    |> KeyValueStore.to_dictionary()
+
+    assert(d["k"] == "v")
+}
+
+@test
+function void test_keyvaluestore_get_missing() {
+    result<string> r = KeyValueStore.open("test_kv_luma10.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.get("missing")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_keyvaluestore_set_many() {
+    integer n = KeyValueStore.open("test_kv_luma11.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set_many({"a": "1", "b": "2", "c": "3"})
+    |> Result.unwrap()
+    |> KeyValueStore.count()
+
+    assert(n == 3)
+}
+
+# ─── get_many ────────────────────────────────────────────
+
+@test
+function void test_keyvaluestore_get_many() {
+    dictionary<string> results = KeyValueStore.open("test_kv_luma12.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("x", "10")
+    |> Result.unwrap()
+    |> KeyValueStore.set("y", "20")
+    |> Result.unwrap()
+    |> KeyValueStore.set("z", "30")
+    |> Result.unwrap()
+    |> KeyValueStore.get_many(["x", "z"])
+
+    assert(results["x"] == "10")
+    assert(results["z"] == "30")
+    assert(!Dictionary.has(results, "y"))
+}
+
+@test
+function void test_keyvaluestore_get_many_missing_keys_skipped() {
+    dictionary<string> results = KeyValueStore.open("test_kv_luma13.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("a", "1")
+    |> Result.unwrap()
+    |> KeyValueStore.get_many(["a", "missing"])
+
+    assert(Dictionary.length(results) == 1)
+    assert(results["a"] == "1")
+}
+
+# ─── save / reload ───────────────────────────────────────
+
+@test
+function void test_keyvaluestore_save_and_reload() {
+    result<string> save_result = KeyValueStore.open("test_kv_luma14.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("persisted", "yes")
+    |> Result.unwrap()
+    |> KeyValueStore.save()
+
+    assert(Result.is_success(save_result))
+
+    string val = KeyValueStore.open("test_kv_luma14.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.get("persisted")
+    |> Result.unwrap()
+
+    assert(val == "yes")
+
+    # Clean up
+    result<string> _cleanup = KeyValueStore.open("test_kv_luma14.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.destroy()
+}
+
+# ─── destroy ─────────────────────────────────────────────
+
+@test
+function void test_keyvaluestore_destroy() {
+    result<string> save_result = KeyValueStore.open("test_kv_luma15.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("tmp", "data")
+    |> Result.unwrap()
+    |> KeyValueStore.save()
+
+    assert(Result.is_success(save_result))
+
+    result<string> destroy_result = KeyValueStore.open("test_kv_luma15.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.destroy()
+
+    assert(Result.is_success(destroy_result))
+
+    # File should no longer exist
+    assert(!Result.unwrap(FileSystem.exists("test_kv_luma15.kv")))
+}
+
+# ─── find_by_pattern ─────────────────────────────────────
+
+@test
+function void test_keyvaluestore_find_by_pattern_wildcard() {
+    dictionary<string> results = KeyValueStore.open("test_kv_luma16.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("user_alice", "admin")
+    |> Result.unwrap()
+    |> KeyValueStore.set("user_bob", "editor")
+    |> Result.unwrap()
+    |> KeyValueStore.set("session_1", "active")
+    |> Result.unwrap()
+    |> KeyValueStore.find_by_pattern("user_*")
+
+    assert(Dictionary.length(results) == 2)
+    assert(results["user_alice"] == "admin")
+    assert(results["user_bob"] == "editor")
+}
+
+@test
+function void test_keyvaluestore_find_by_pattern_question_mark() {
+    dictionary<string> results = KeyValueStore.open("test_kv_luma17.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("a1", "x")
+    |> Result.unwrap()
+    |> KeyValueStore.set("a2", "y")
+    |> Result.unwrap()
+    |> KeyValueStore.set("b1", "z")
+    |> Result.unwrap()
+    |> KeyValueStore.find_by_pattern("a?")
+
+    assert(Dictionary.length(results) == 2)
+    assert(results["a1"] == "x")
+    assert(results["a2"] == "y")
+}
+
+@test
+function void test_keyvaluestore_find_by_pattern_no_match() {
+    dictionary<string> results = KeyValueStore.open("test_kv_luma18.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("hello", "world")
+    |> Result.unwrap()
+    |> KeyValueStore.find_by_pattern("no_match_*")
+
+    assert(Dictionary.length(results) == 0)
+}
+
+# ─── open_read_only / is_read_only ───────────────────────
+
+@test
+function void test_keyvaluestore_open_read_only() {
+    # Write data first
+    result<string> _save = KeyValueStore.open("test_kv_luma19.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("key", "value")
+    |> Result.unwrap()
+    |> KeyValueStore.save()
+
+    # Open read-only and verify reads work
+    key_value_store ro_store = KeyValueStore.open_read_only("test_kv_luma19.kv")
+    |> Result.unwrap()
+
+    assert(KeyValueStore.is_read_only(ro_store))
+    assert(KeyValueStore.has(ro_store, "key"))
+    assert(Result.unwrap(KeyValueStore.get(ro_store, "key")) == "value")
+
+    # Clean up
+    result<string> _cleanup = KeyValueStore.open("test_kv_luma19.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.destroy()
+}
+
+@test
+function void test_keyvaluestore_is_read_only_false_for_normal() {
+    key_value_store store = KeyValueStore.open("test_kv_luma20.kv")
+    |> Result.unwrap()
+
+    assert(!KeyValueStore.is_read_only(store))
+}
+
+# ───────────────────────────────────────────────────────────
+# reload
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_keyvaluestore_reload() {
+    # Persist a value to disk so reload has something to read back.
+    result<string> saved = KeyValueStore.open("test_kv_reload.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("k", "v")
+    |> Result.unwrap()
+    |> KeyValueStore.save()
+
+    assert(Result.is_success(saved))
+
+    # reload() returns a store reflecting the on-disk contents.
+    string value = KeyValueStore.open("test_kv_reload.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.reload()
+    |> Result.unwrap()
+    |> KeyValueStore.get("k")
+    |> Result.unwrap()
+
+    assert(value == "v")
+
+    # Clean up the persisted file.
+    result<string> _cleanup = KeyValueStore.open("test_kv_reload.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.destroy()
+}
+
+# ───────────────────────────────────────────────────────────
+# set overwrites an existing key
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_keyvaluestore_set_overwrites() {
+    string val = KeyValueStore.open("test_kv_luma21.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("k", "first")
+    |> Result.unwrap()
+    |> KeyValueStore.set("k", "second")
+    |> Result.unwrap()
+    |> KeyValueStore.get("k")
+    |> Result.unwrap()
+
+    assert(val == "second")
+}
+
+# ───────────────────────────────────────────────────────────
+# special characters survive a save/reload round-trip
+#
+# Tab, newline and backslash are escaped on write and unescaped
+# on read, so a value containing all three must come back intact.
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_keyvaluestore_special_chars_persist() {
+    result<string> saved = KeyValueStore.open("test_kv_luma22.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("k", "a\tb\nc\\d")
+    |> Result.unwrap()
+    |> KeyValueStore.save()
+
+    assert(Result.is_success(saved))
+
+    string val = KeyValueStore.open("test_kv_luma22.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.get("k")
+    |> Result.unwrap()
+
+    assert(val == "a\tb\nc\\d")
+
+    # Clean up
+    result<string> _cleanup = KeyValueStore.open("test_kv_luma22.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.destroy()
+}
+
+# ───────────────────────────────────────────────────────────
+# find_by_pattern with a literal (wildcard-free) pattern
+# matches a key exactly and not its prefixes
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_keyvaluestore_find_by_pattern_exact() {
+    dictionary<string> results = KeyValueStore.open("test_kv_luma23.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("exact", "hit")
+    |> Result.unwrap()
+    |> KeyValueStore.set("exact_longer", "miss")
+    |> Result.unwrap()
+    |> KeyValueStore.find_by_pattern("exact")
+
+    assert(Dictionary.length(results) == 1)
+    assert(results["exact"] == "hit")
+}
+
+# ───────────────────────────────────────────────────────────
+# get_many with no keys returns an empty dictionary
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_keyvaluestore_get_many_empty_keys() {
+    array<string> no_keys = []
+
+    dictionary<string> results = KeyValueStore.open("test_kv_luma24.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("a", "1")
+    |> Result.unwrap()
+    |> KeyValueStore.get_many(no_keys)
+
+    assert(Dictionary.length(results) == 0)
+}
+
+# ───────────────────────────────────────────────────────────
+# negative: every mutating operation is rejected on a
+# read-only store, returning a failure result rather than
+# mutating state or raising
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_keyvaluestore_set_read_only_fails() {
+    result<key_value_store> r = KeyValueStore.open_read_only("test_kv_luma_ro1.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("k", "v")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_keyvaluestore_remove_read_only_fails() {
+    result<key_value_store> r = KeyValueStore.open_read_only("test_kv_luma_ro2.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.remove("k")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_keyvaluestore_clear_read_only_fails() {
+    result<key_value_store> r = KeyValueStore.open_read_only("test_kv_luma_ro3.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.clear()
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_keyvaluestore_set_many_read_only_fails() {
+    result<key_value_store> r = KeyValueStore.open_read_only("test_kv_luma_ro4.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set_many({"a": "1"})
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_keyvaluestore_save_read_only_fails() {
+    result<string> r = KeyValueStore.open_read_only("test_kv_luma_ro5.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.save()
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_keyvaluestore_destroy_read_only_fails() {
+    result<string> r = KeyValueStore.open_read_only("test_kv_luma_ro6.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.destroy()
+
+    assert(!Result.is_success(r))
+}

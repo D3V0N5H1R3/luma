@@ -1,0 +1,165 @@
+# ═══════════════════════════════════════════════════════════
+# Operators and Literals
+#
+# Demonstrates integer literal formats (hex, binary),
+# bitwise operators, compound assignment, increment/
+# decrement, the membership operator (in), string
+# slicing, and inclusive ranges.
+# ═══════════════════════════════════════════════════════════
+
+# ── Integer literal formats ──
+function void demo_integer_literals() {
+    print("=== Integer literals ===")
+
+    integer decimal    = 255
+    integer hex        = 0xFF
+    integer binary     = 0b11111111
+
+    print("decimal  = ${decimal}")
+    print("hex      = ${hex}")
+    print("binary   = ${binary}")
+    print("all equal: ${decimal == hex && hex == binary}")
+}
+
+# ── Bitwise operators ──
+function void demo_bitwise_operators() {
+    print("")
+    print("=== Bitwise operators ===")
+
+    integer a = 0b1100
+    integer b = 0b1010
+
+    print("a        = ${a}")
+    print("b        = ${b}")
+    print("a & b    = ${a & b}")       # AND → 0b1000 = 8
+    print("a | b    = ${a | b}")       # OR  → 0b1110 = 14
+    print("a ^ b    = ${a ^ b}")       # XOR → 0b0110 = 6
+    print("~0       = ${~0}")          # NOT → -1
+    print("1 << 3   = ${1 << 3}")      # left shift  → 8
+    print("16 >> 2  = ${16 >> 2}")     # right shift → 4
+
+    # Practical example: using bits as flags
+    integer read_flag    = 1 << 0   # 1
+    integer write_flag   = 1 << 1   # 2
+    integer execute_flag = 1 << 2   # 4
+
+    integer permissions = read_flag | write_flag
+    print("")
+    print("permissions after granting read+write: ${permissions}")
+
+    boolean can_read = (permissions & read_flag) != 0
+    boolean can_exec = (permissions & execute_flag) != 0
+    print("can read: ${can_read}, can execute: ${can_exec}")
+}
+
+# ── Compound assignment operators ──
+function void demo_compound_assignment() {
+    print("")
+    print("=== Compound assignment ===")
+
+    mutable number x = 10
+    x += 5
+    print("10 += 5  → ${x}")
+    x -= 3
+    print("   -= 3  → ${x}")
+    x *= 2
+    print("   *= 2  → ${x}")
+    x /= 4
+    print("   /= 4  → ${x}")
+
+    mutable integer n = 17
+    n //= 5
+    print("17 //= 5 → ${n}")
+
+    n %= 2
+    print("   %= 2  → ${n}")
+
+    mutable integer flags = 0
+    flags |= 4
+    print("flags |= 4  → ${flags}")
+    flags &= ~4
+    print("flags &= ~4 → ${flags}")
+    flags ^= 2
+    print("flags ^= 2  → ${flags}")
+    flags <<= 1
+    print("flags <<= 1 → ${flags}")
+    flags >>= 1
+    print("flags >>= 1 → ${flags}")
+
+    mutable string msg = "hello"
+    msg += ", world"
+    print("string += : ${msg}")
+}
+
+# ── Increment and decrement ──
+function void demo_increment_decrement() {
+    print("")
+    print("=== Increment / decrement ===")
+
+    mutable integer counter = 0
+    counter++
+    counter++
+    counter++
+    print("after 3x increment: ${counter}")
+    counter--
+    print("after 1x decrement: ${counter}")
+}
+
+# ── Membership operator (in) ──
+function void demo_membership_operator() {
+    print("")
+    print("=== Membership operator ===")
+
+    boolean contains_42 = 42 in [1, 42, 3]
+    print("42 in [1, 42, 3]:  ${contains_42}")
+
+    boolean contains_5 = 5 in [1, 2, 3]
+    print("5  in [1, 2, 3]:   ${contains_5}")
+
+    dictionary<integer> scores = {"alice": 95, "bob": 87}
+    print("\"alice\" in scores: ${"alice" in scores}")
+    print("\"eve\"   in scores: ${"eve" in scores}")
+
+    print("\"ell\" in \"hello\": ${"ell" in "hello"}")
+    print("\"xyz\" in \"hello\": ${"xyz" in "hello"}")
+}
+
+# ── String slicing ──
+function void demo_string_slicing() {
+    print("")
+    print("=== String slicing ===")
+
+    string s = "hello, world"
+    print("s       = ${s}")
+    print("s[0]    = ${s[0]}")
+    print("s[7..12] = ${s[7 .. 12]}")
+}
+
+# ── Inclusive ranges ──
+function void demo_inclusive_ranges() {
+    print("")
+    print("=== Inclusive ranges ===")
+
+    print("Exclusive 1..5:")
+
+    for i in 1 .. 5 {
+        print("  ${i}")
+    }
+
+    print("Inclusive 1..=5:")
+
+    for i in 1 ..= 5 {
+        print("  ${i}")
+    }
+}
+
+@main
+function void main() {
+    demo_integer_literals()
+    demo_bitwise_operators()
+    demo_compound_assignment()
+    demo_increment_decrement()
+    demo_membership_operator()
+    demo_string_slicing()
+    demo_inclusive_ranges()
+}

@@ -1,0 +1,140 @@
+# Graph benchmarks: construction, traversal, shortest path, cycle detection.
+#
+# Construction benchmarks build the graph inside the timed body (that is the
+# work being measured). Query, traversal, cycle, and adjacency benchmarks build
+# their fixture once outside the timed body so they measure only the operation,
+# not repeated graph construction.
+#
+# Note: most fixtures below are built once with bench_build_chain_graph and bound
+# immutably. The `mst_graph` fixture is the exception — it is held in a
+# `mutable` binding because it is extended with extra cross edges (via repeated
+# Graph.add_edge calls) after the initial chain is built. That reassignment also
+# satisfies the linter's "declared mutable but never mutated" check.
+
+# Builds a chain graph: vertices "0".."n-1" joined by edges i -> i+1 (weight 1.0).
+function graph bench_build_chain_graph(boolean directed, integer vertices) {
+    mutable graph g = if directed { Graph.directed() } else { Graph.undirected() }
+
+    for i in 0 .. vertices {
+        g = Graph.add_vertex(g, Converter.to_string(i))
+    }
+    for i in 0 .. vertices - 1 {
+        g = Graph.add_edge(g, Converter.to_string(i), Converter.to_string(i + 1), 1.0)
+    }
+
+    return g
+}
+
+function BenchResult run_graph_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # --- Construction ---
+
+    st = time_it(st, "Graph directed (20 vertices)", 500, () -> {
+        graph _g = bench_build_chain_graph(true, 20)
+    })
+
+    st = time_it(st, "Graph undirected (20 vertices)", 500, () -> {
+        graph _g = bench_build_chain_graph(false, 20)
+    })
+
+    # --- Queries ---
+
+    graph query_graph = bench_build_chain_graph(true, 10)
+    st = time_it(st, "Graph has_vertex/has_edge", 2000, () -> {
+        boolean _hv = Graph.has_vertex(query_graph, "5")
+        boolean _he = Graph.has_edge(query_graph, "3", "4")
+        integer _vc = Graph.vertex_count(query_graph)
+        integer _ec = Graph.edge_count(query_graph)
+    })
+
+    # --- Traversal ---
+
+    graph traversal_graph = bench_build_chain_graph(true, 15)
+    st = time_it(st, "Graph BFS (15 vertices)", 500, () -> {
+        array<string> _path = Graph.breadth_first_search(traversal_graph, "0") |> Result.unwrap()
+    })
+
+    st = time_it(st, "Graph DFS (15 vertices)", 500, () -> {
+        array<string> _path = Graph.depth_first_search(traversal_graph, "0") |> Result.unwrap()
+    })
+
+    # --- Shortest path ---
+
+    st = time_it(st, "Graph shortest_path (15 vtx)", 500, () -> {
+        result<array<string>> _sp = Graph.shortest_path(traversal_graph, "0", "14")
+    })
+
+    # --- Cycle detection ---
+
+    graph cyclic_graph = Graph.add_edge(bench_build_chain_graph(true, 15), "14", "0", 1.0)
+    st = time_it(st, "Graph has_cycle (15 vtx)", 500, () -> {
+        boolean _cycle = Graph.has_cycle(cyclic_graph)
+    })
+
+    # --- Adjacency list ---
+
+    graph adjacency_graph = bench_build_chain_graph(false, 10)
+    st = time_it(st, "Graph to_adjacency_list", 500, () -> {
+        dictionary<array<string>> _adj = Graph.to_adjacency_list(adjacency_graph)
+    })
+
+    # --- Degree and neighbours ---
+
+    st = time_it(st, "Graph degree/neighbors (10 vtx)", 2000, () -> {
+        integer _d = Graph.degree(query_graph, "5") |> Result.unwrap()
+        array<string> _n = Graph.neighbors(query_graph, "5") |> Result.unwrap()
+    })
+
+    # --- Mutation (copy-on-write remove) ---
+
+    st = time_it(st, "Graph remove_vertex/remove_edge", 500, () -> {
+        mutable graph _g = Graph.remove_edge(query_graph, "3", "4")
+        _g = Graph.remove_vertex(query_graph, "5")
+    })
+
+    # --- Topological sort (Kahn, directed DAG) ---
+
+    st = time_it(st, "Graph topological_sort (15 vtx)", 500, () -> {
+        array<string> _ts = Graph.topological_sort(traversal_graph) |> Result.unwrap()
+    })
+
+    # --- Connected components (undirected) ---
+
+    graph components_graph = bench_build_chain_graph(false, 15)
+    st = time_it(st, "Graph connected_components (15)", 500, () -> {
+        array<array<string>> _cc = Graph.connected_components(components_graph) |> Result.unwrap()
+    })
+
+    # --- Strongly connected components (Tarjan, directed) ---
+    #
+    # cyclic_graph is a 15-vertex ring, so it forms a single large SCC.
+
+    st = time_it(st, "Graph strongly_connected_components", 500, () -> {
+        array<array<string>> _scc = Graph.strongly_connected_components(cyclic_graph) |> Result.unwrap()
+    })
+
+    # --- Minimum spanning tree (Kruskal, undirected) ---
+    #
+    # A chain plus a few cross edges so Kruskal's edge sort and union-find see
+    # more than a trivial spanning tree.
+
+    mutable graph mst_graph = bench_build_chain_graph(false, 12)
+    mst_graph = Graph.add_edge(mst_graph, "0", "6", 5.0)
+    mst_graph = Graph.add_edge(mst_graph, "3", "9", 4.0)
+    mst_graph = Graph.add_edge(mst_graph, "2", "11", 7.0)
+    st = time_it(st, "Graph minimum_spanning_tree (12)", 500, () -> {
+        result<graph> _mst = Graph.minimum_spanning_tree(mst_graph)
+    })
+
+    # --- All-pairs shortest paths (Floyd-Warshall, O(V^3)) ---
+    #
+    # Cubic in the vertex count, so it uses fewer iterations than the
+    # near-linear traversals above.
+
+    st = time_it(st, "Graph all_pairs_shortest_paths (12)", 200, () -> {
+        dictionary<dictionary<number>> _apsp = Graph.all_pairs_shortest_paths(mst_graph) |> Result.unwrap()
+    })
+
+    return st
+}

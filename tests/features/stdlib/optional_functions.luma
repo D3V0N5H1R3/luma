@@ -1,0 +1,224 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Optional Module Functions
+#
+# Covers the Optional stdlib module (map / flat_map / filter /
+# and_then / zip / tap / …). The language-level behaviour of the
+# optional<T> type and match is covered by language/optional.luma;
+# this suite exercises the module functions from user code.
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+# ─── is_some / is_none ───────────────────────────────────
+
+@test
+function void test_optional_is_some_and_is_none() {
+    assert(Optional.is_some(some(42)))
+    assert(!Optional.is_some(none))
+    assert(Optional.is_none(none))
+    assert(!Optional.is_none(some(42)))
+}
+
+# ─── unwrap / unwrap_or ──────────────────────────────────
+
+@test
+function void test_optional_unwrap_some() {
+    assert(Optional.unwrap(some(99)) == 99)
+}
+
+@test
+function void test_optional_unwrap_none_throws() {
+    optional<integer> empty = none
+    mutable boolean caught = false
+
+    try {
+        integer _v = Optional.unwrap(empty)
+    } catch(_e) {
+        caught = true
+    }
+
+    assert(caught)
+}
+
+@test
+function void test_optional_unwrap_or() {
+    optional<integer> empty = none
+
+    assert(Optional.unwrap_or(empty, 7) == 7)
+    assert(Optional.unwrap_or(some(3), 7) == 3)
+}
+
+# ─── map / flat_map ──────────────────────────────────────
+
+@test
+function void test_optional_map_some() {
+    optional<integer> doubled = Optional.map(some(5), (integer x) -> x * 2)
+
+    assert(Optional.unwrap(doubled) == 10)
+}
+
+@test
+function void test_optional_map_none_stays_none() {
+    optional<integer> empty = none
+    optional<integer> mapped = Optional.map(empty, (integer x) -> x * 2)
+
+    assert(Optional.is_none(mapped))
+}
+
+@test
+function void test_optional_map_returning_none_throws() {
+    # map must not collapse to none — that is what flat_map is for.
+    mutable boolean caught = false
+
+    try {
+        optional<integer> _r = Optional.map(some(5), (integer _x) -> none)
+    } catch(_e) {
+        caught = true
+    }
+
+    assert(caught)
+}
+
+@test
+function void test_optional_flat_map() {
+    optional<integer> r = Optional.flat_map(some(5), (integer x) -> some(x + 1))
+
+    assert(Optional.unwrap(r) == 6)
+}
+
+@test
+function void test_optional_flat_map_may_return_none() {
+    optional<integer> r = Optional.flat_map(some(5), (integer _x) -> none)
+
+    assert(Optional.is_none(r))
+}
+
+# ─── filter ──────────────────────────────────────────────
+
+@test
+function void test_optional_filter_keeps_matching() {
+    optional<integer> kept = Optional.filter(some(10), (integer x) -> x > 5)
+
+    assert(Optional.unwrap(kept) == 10)
+}
+
+@test
+function void test_optional_filter_drops_non_matching() {
+    optional<integer> dropped = Optional.filter(some(3), (integer x) -> x > 5)
+
+    assert(Optional.is_none(dropped))
+}
+
+# ─── or ──────────────────────────────────────────────────
+
+@test
+function void test_optional_or_uses_fallback() {
+    optional<integer> empty = none
+
+    assert(Optional.unwrap(Optional.or(empty, some(42))) == 42)
+    assert(Optional.unwrap(Optional.or(some(1), some(42))) == 1)
+}
+
+# ─── tap ─────────────────────────────────────────────────
+
+@test
+function void test_optional_tap_returns_original() {
+    reference<integer> seen = Reference.new(0)
+
+    optional<integer> passed = Optional.tap(some(42), (integer x) -> {
+        Reference.set(seen, x)
+        return x
+    })
+
+    assert(Optional.unwrap(passed) == 42)
+    assert(Reference.get(seen) == 42)
+}
+
+@test
+function void test_optional_tap_none_skips_callback() {
+    reference<integer> seen = Reference.new(0)
+    optional<integer> empty = none
+
+    optional<integer> passed = Optional.tap(empty, (integer x) -> {
+        Reference.set(seen, x)
+        return x
+    })
+
+    assert(Optional.is_none(passed))
+    assert(Reference.get(seen) == 0)
+}
+
+# ─── flatten ─────────────────────────────────────────────
+
+@test
+function void test_optional_flatten() {
+    optional<optional<integer>> nested = some(some(42))
+
+    assert(Optional.unwrap(Optional.flatten(nested)) == 42)
+
+    optional<optional<integer>> nested_none = none
+
+    assert(Optional.is_none(Optional.flatten(nested_none)))
+}
+
+# ─── to_result ───────────────────────────────────────────
+
+@test
+function void test_optional_to_result_success() {
+    result<integer> r = Optional.to_result(some(42), "missing")
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == 42)
+}
+
+@test
+function void test_optional_to_result_failure() {
+    optional<integer> empty = none
+    result<integer> r = Optional.to_result(empty, "missing")
+
+    assert(Result.is_failure(r))
+    assert(Result.error(r) == "missing")
+}
+
+# ─── zip ─────────────────────────────────────────────────
+
+@test
+function void test_optional_zip_both_some() {
+    optional<(integer, integer)> zipped = Optional.zip(some(1), some(2))
+    (integer, integer) pair = Optional.unwrap(zipped)
+
+    assert(pair.0 == 1)
+    assert(pair.1 == 2)
+}
+
+@test
+function void test_optional_zip_any_none() {
+    optional<integer> empty = none
+
+    assert(Optional.is_none(Optional.zip(empty, some(2))))
+    assert(Optional.is_none(Optional.zip(some(1), empty)))
+}
+
+# ─── and_then ────────────────────────────────────────────
+
+@test
+function void test_optional_and_then() {
+    optional<integer> empty = none
+
+    assert(Optional.unwrap(Optional.and_then(some(5), (integer x) -> some(x * 2))) == 10)
+    assert(Optional.is_none(Optional.and_then(some(5), (integer _x) -> none)))
+    assert(Optional.is_none(Optional.and_then(empty, (integer x) -> some(x * 2))))
+}
+
+# ─── contains ────────────────────────────────────────────
+
+@test
+function void test_optional_contains() {
+    optional<integer> empty = none
+
+    assert(Optional.contains(some(42), 42))
+    assert(!Optional.contains(some(42), 99))
+    assert(!Optional.contains(empty, 42))
+    assert(Optional.contains(some("hi"), "hi"))
+}

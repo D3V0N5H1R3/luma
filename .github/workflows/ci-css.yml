@@ -1,0 +1,67 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — CSS Lint Workflow
+#
+# Runs Stylelint over the project's first-party CSS on every push and
+# PR targeting main that touches CSS files or the lint configuration.
+# Rule configuration lives in stylelint.config.mjs; vendored minified
+# stylesheets (*.min.css) are excluded.
+# ─────────────────────────────────────────────────────────────
+
+name: CI — CSS
+
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - ".github/workflows/ci-css.yml"
+      - "stylelint.config.mjs"
+      - "**/*.css"
+  pull_request:
+    branches: [main]
+    paths: *paths
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stylelint:
+    name: stylelint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "20"
+
+      # Stylelint resolves its shared config (stylelint-config-standard) from a
+      # node_modules adjacent to stylelint.config.mjs, so install both into the
+      # workspace root. The throwaway package.json keeps npm from walking up the
+      # tree, and neither it nor node_modules is tracked by git.
+      - name: Install Stylelint
+        run: |
+          echo '{ "private": true }' > package.json
+          npm install --no-save --no-audit --no-fund \
+            stylelint@17.13.0 stylelint-config-standard@40.0.0
+
+      - name: Run Stylelint
+        run: |
+          # Lint first-party CSS only (vendored *.min.css is excluded by config).
+          mapfile -t files < <(git ls-files '*.css' ':!:*.min.css')
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "No CSS files to lint."
+            exit 0
+          fi
+          printf 'Linting %d CSS file(s):\n' "${#files[@]}"
+          printf '  %s\n' "${files[@]}"
+          npx stylelint "${files[@]}"

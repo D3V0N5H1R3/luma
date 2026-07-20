@@ -1,0 +1,51 @@
+# VM: LinkedList construction, access, mutation, and transformations.
+@main
+function void main() {
+    linked_list base = LinkedList.from_array([5, 3, 7, 1, 9, 2, 8, 4, 6])
+
+    linked_list grown = LinkedList.new()
+    |> LinkedList.append(1)
+    |> LinkedList.prepend(0)
+    |> LinkedList.push(2)
+    |> LinkedList.concat(base)
+
+    integer _len = LinkedList.length(grown)
+    boolean _empty = LinkedList.is_empty(grown)
+    boolean _has = LinkedList.contains(grown, 7)
+
+    integer _first = LinkedList.first(grown) |> Result.unwrap_or(-1)
+    integer _last = LinkedList.last(grown) |> Result.unwrap_or(-1)
+    integer _at = LinkedList.at(grown, 3) |> Result.unwrap_or(-1)
+
+    linked_list _inserted = LinkedList.insert_at(grown, 2, 99) |> Result.unwrap_or(LinkedList.new())
+    linked_list _removed_at = LinkedList.remove_at(grown, 2) |> Result.unwrap_or(LinkedList.new())
+    linked_list _removed_first = LinkedList.remove_first(grown) |> Result.unwrap_or(LinkedList.new())
+    linked_list _removed_last = LinkedList.remove_last(grown) |> Result.unwrap_or(LinkedList.new())
+
+    linked_list _reversed = LinkedList.reverse(grown)
+    linked_list _unique = LinkedList.unique(LinkedList.from_array([1, 1, 2, 3, 3, 3, 4]))
+    array<integer> _arr = LinkedList.to_array(grown)
+
+    linked_list _doubled = grown
+    |> LinkedList.map((integer x) -> x * 2)
+    |> Result.unwrap_or(LinkedList.new())
+
+    linked_list _evens = grown
+    |> LinkedList.filter((integer x) -> x % 2 == 0)
+    |> Result.unwrap_or(LinkedList.new())
+
+    result<null> _each = LinkedList.each(grown, (integer x) -> x)
+
+    integer _sum = grown
+    |> LinkedList.reduce(0, (integer acc, integer x) -> acc + x)
+    |> Result.unwrap_or(0)
+
+    result<(linked_list, linked_list)> _parts = LinkedList.partition(grown, (integer x) -> x > 4)
+
+    integer _found = LinkedList.find(grown, (integer x) -> x == 7) |> Result.unwrap_or(-1)
+
+    linked_list _zipped = LinkedList.zip(base, LinkedList.from_array([10, 20, 30]))
+
+    linked_list _sorted = LinkedList.sort(base, (integer a, integer b) -> a < b)
+    |> Result.unwrap_or(LinkedList.new())
+}

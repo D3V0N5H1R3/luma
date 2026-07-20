@@ -1,0 +1,91 @@
+# VM: comprehensive array coverage — literals, indexing, slicing, mutation,
+# nested arrays, and the Array stdlib (access, functional, transform, query).
+@main
+function void main() {
+    # ── Literals, indexing, slicing ──────────────────────────────
+    array<integer> nums = [5, 3, 8, 1, 9, 2, 7, 4, 6, 0]
+    integer _first = nums[0]
+    integer _last = nums[9]
+    array<integer> _head = nums[0 .. 3]
+    array<integer> _tail = nums[7 ..= 9]
+    array<integer> _empty_slice = nums[2 .. 2]
+
+    # ── Nested arrays ────────────────────────────────────────────
+    array<array<integer>> grid = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    integer _cell = grid[1][2]
+    array<integer> _row = grid[0]
+
+    # ── Mutation (immutable inputs, rebind results) ──────────────
+    mutable array<integer> acc = []
+    for n in nums {
+        acc = Array.push(acc, n * 2)
+    }
+    array<integer> _appended = Array.append(acc, 99)
+    array<integer> _inserted = Array.insert_at([1, 2, 3], 1, 99) |> Result.unwrap_or([])
+    array<integer> _updated = Array.set([10, 20, 30], 1, 0) |> Result.unwrap_or([])
+    result<(array<integer>, integer)> _popped = Array.pop(nums)
+    result<(array<integer>, integer)> _removed = Array.remove_at(nums, 0)
+
+    # ── Access ───────────────────────────────────────────────────
+    integer _len = Array.length(nums)
+    boolean _is_empty = Array.is_empty(nums)
+    integer _f = Array.first(nums) |> Result.unwrap_or(-1)
+    integer _l = Array.last(nums) |> Result.unwrap_or(-1)
+    integer _g = Array.get(nums, 3) |> Result.unwrap_or(-1)
+    array<integer> _compacted = Array.compact([some(1), none, some(3)])
+
+    # ── Functional ───────────────────────────────────────────────
+    array<integer> _doubled = Array.map(nums, (integer x) -> x * 2) |> Result.unwrap_or([])
+    array<integer> _evens = Array.filter(nums, (integer x) -> x % 2 == 0) |> Result.unwrap_or([])
+    integer _total = Array.reduce(nums, 0, (integer a, integer x) -> a + x) |> Result.unwrap_or(0)
+    result<none> _each = Array.each(nums, (integer x) -> print(x))
+    integer _found = Array.find(nums, (integer x) -> x > 7) |> Result.unwrap_or(-1)
+    integer _idx = Array.find_index(nums, (integer x) -> x == 9) |> Result.unwrap_or(-1)
+    boolean _all = Array.all(nums, (integer x) -> x >= 0) |> Result.unwrap_or(false)
+    boolean _any = Array.any(nums, (integer x) -> x > 8) |> Result.unwrap_or(false)
+    integer _cnt = Array.count(nums, (integer x) -> x % 2 == 0) |> Result.unwrap_or(0)
+    array<integer> _taken_w = Array.take_while(nums, (integer x) -> x > 0) |> Result.unwrap_or([])
+    array<integer> _dropped_w = Array.drop_while(nums, (integer x) -> x > 0) |> Result.unwrap_or([])
+    array<integer> _flat_mapped = Array.flat_map(nums, (integer x) -> [x, x]) |> Result.unwrap_or([])
+    array<integer> _scanned = Array.scan(nums, 0, (integer a, integer x) -> a + x) |> Result.unwrap_or([])
+    result<(array<integer>, array<integer>)> _parts = Array.partition(nums, (integer x) -> x % 2 == 0)
+    dictionary<array<integer>> _groups = Result.unwrap(
+        Array.group_by(nums, (integer x) -> Converter.to_string(x % 2))
+    )
+    integer _last_match = Array.find_last(nums, (integer x) -> x < 5) |> Result.unwrap_or(-1)
+
+    # ── Transform / query ────────────────────────────────────────
+    array<integer> _reversed = Array.reverse(nums)
+    array<integer> _sorted = Array.sort(nums, (integer a, integer b) -> a - b) |> Result.unwrap_or([])
+    array<integer> _sorted_by = Array.sort_by(nums, (integer x) -> -x) |> Result.unwrap_or([])
+    array<integer> _unique = Array.unique([1, 1, 2, 3, 3])
+    array<integer> _flattened = Array.flatten(grid)
+    array<(integer, string)> _zipped = Array.zip([1, 2, 3], ["a", "b", "c"])
+    integer _sum = Array.sum(nums) |> Result.unwrap_or(0)
+    integer _min = Array.min(nums) |> Result.unwrap_or(0)
+    integer _max = Array.max(nums) |> Result.unwrap_or(0)
+    array<integer> _slice = Array.slice(nums, 1, 4) |> Result.unwrap_or([])
+    integer _index_of = Array.index_of(nums, 8) |> Result.unwrap_or(-1)
+    array<array<integer>> _chunks = Array.chunk(nums, 3) |> Result.unwrap_or([])
+    array<integer> _take = Array.take(nums, 3)
+    array<integer> _drop = Array.drop(nums, 3)
+    array<(integer, integer)> _enumerated = Array.enumerate(nums)
+    string _joined = Array.join(["a", "b", "c"], "-")
+    boolean _has = Array.contains(nums, 5)
+    array<integer> _concat = Array.concat([1, 2], [3, 4])
+    array<integer> _range = Array.range(0, 5) |> Result.unwrap_or([])
+    array<integer> _repeated = Array.repeat(7, 3) |> Result.unwrap_or([])
+    array<array<integer>> _windows = Array.windows(nums, 3) |> Result.unwrap_or([])
+    array<integer> _interspersed = Array.intersperse([1, 2, 3], 0)
+    array<integer> _rotated = Array.rotate(nums, 2)
+    array<array<integer>> _transposed = Array.transpose([[1, 2], [3, 4]]) |> Result.unwrap_or([])
+    integer _bsearch = Array.binary_search([1, 2, 3, 4, 5], 3) |> Result.unwrap_or(-1)
+
+    # ── Equality and iteration ───────────────────────────────────
+    boolean _eq = [1, 2, 3] == [1, 2, 3]
+    mutable integer total_sum = 0
+    for v in nums {
+        total_sum = total_sum + v
+    }
+    print(total_sum)
+}

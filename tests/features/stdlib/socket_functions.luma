@@ -1,0 +1,386 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Socket Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_udp_create_and_close() {
+    result<socket> socket_result = Socket.udp_create()
+
+    match socket_result {
+        success(socket_handle) {
+            assert(Socket.is_connected(socket_handle), "UDP socket should be valid")
+
+            Socket.close(socket_handle)
+
+            assert(!Socket.is_connected(socket_handle), "closed socket should not be connected")
+        }
+        failure(error_message) {
+            assert(false, "failed to create UDP socket: ${error_message}")
+        }
+    }
+}
+
+@test
+function void test_tcp_listen_and_close() {
+    result<socket> socket_result = Socket.listen("127.0.0.1", 0)
+
+    match socket_result {
+        success(socket_handle) {
+            assert(Socket.is_connected(socket_handle), "server socket should be valid")
+
+            result<string> address_result = Socket.local_address(socket_handle)
+
+            match address_result {
+                success(address_string) {
+                    assert(String.length(address_string) > 0, "local address should not be empty")
+                }
+                failure(error_message) {
+                    assert(false, "failed to get local address: ${error_message}")
+                }
+            }
+
+            Socket.close(socket_handle)
+
+            assert(!Socket.is_connected(socket_handle), "closed socket should not be connected")
+        }
+        failure(error_message) {
+            assert(false, "failed to listen: ${error_message}")
+        }
+    }
+}
+
+@test
+function void test_connect_invalid_port() {
+    result<socket> connection_result = Socket.connect("127.0.0.1", 99999)
+
+    match connection_result {
+        success(socket_handle) {
+            Socket.close(socket_handle)
+
+            assert(false, "should not connect to invalid port")
+        }
+        failure(error_message) {
+            assert(String.length(error_message) > 0, "error message should not be empty")
+        }
+    }
+}
+
+@test
+function void test_socket_set_timeout() {
+    result<socket> socket_result = Socket.udp_create()
+
+    match socket_result {
+        success(socket_handle) {
+            result<boolean> timeout_result = Socket.set_timeout(socket_handle, 1000)
+
+            match timeout_result {
+                success(is_success) {
+                    assert(is_success, "set_timeout should succeed")
+                }
+                failure(error_message) {
+                    assert(false, "failed to set timeout: ${error_message}")
+                }
+            }
+
+            Socket.close(socket_handle)
+        }
+        failure(error_message) {
+            assert(false, "failed to create UDP socket: ${error_message}")
+        }
+    }
+}
+
+@test
+function void test_socket_type_of() {
+    result<socket> socket_result = Socket.udp_create()
+
+    match socket_result {
+        success(socket_handle) {
+            assert(type_of(socket_handle) == "socket", "type_of socket should be 'socket'")
+
+            Socket.close(socket_handle)
+        }
+        failure(error_message) {
+            assert(false, "failed to create UDP socket: ${error_message}")
+        }
+    }
+}
+
+# ─── UDP send / receive ───
+
+@test
+function void test_udp_send_and_receive() {
+    # Create and bind two UDP sockets, send a message between them.
+    socket sender = Result.unwrap(Socket.udp_create())
+    result<boolean> _sb = Socket.udp_bind(sender, "127.0.0.1", 0)
+
+    socket receiver = Result.unwrap(Socket.udp_create())
+    result<boolean> _rb = Socket.udp_bind(receiver, "127.0.0.1", 0)
+
+    # Get the receiver's bound address to extract port.
+    string receiver_addr = Result.unwrap(Socket.local_address(receiver))
+
+    # Parse host:port from local_address.
+    array<string> parts = String.split(receiver_addr, ":")
+    string host = parts[0]
+    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+
+    # Short timeout to avoid hanging.
+    result<boolean> _t = Socket.set_timeout(receiver, 2000)
+
+    # Send a message.
+    result<integer> send_result = Socket.udp_send(sender, "hello", host, port)
+
+    assert(Result.is_success(send_result), "udp_send should succeed")
+
+    # Receive it.
+    result<any> recv_result = Socket.udp_receive(receiver, 1024)
+
+    assert(Result.is_success(recv_result), "udp_receive should succeed")
+
+    Socket.close(sender)
+    Socket.close(receiver)
+}
+
+# ─── Negative tests ───
+
+@test
+function void test_socket_send_on_closed() {
+    socket s = Result.unwrap(Socket.udp_create())
+
+    Socket.close(s)
+
+    result<integer> r = Socket.udp_send(s, "data", "127.0.0.1", 9999)
+
+    assert(Result.is_failure(r), "send on closed socket should fail")
+}
+
+@test
+function void test_socket_receive_on_closed() {
+    socket s = Result.unwrap(Socket.udp_create())
+
+    Socket.close(s)
+
+    result<any> r = Socket.udp_receive(s, 1024)
+
+    assert(Result.is_failure(r), "receive on closed socket should fail")
+}
+
+@test
+function void test_socket_connect_refused() {
+    # Connecting to a port with no listener should fail.
+    result<socket> r = Socket.connect("127.0.0.1", 1)
+
+    assert(Result.is_failure(r), "connection to refused port should fail")
+}
+
+@test
+function void test_udp_bind() {
+    result<socket> socket_result = Socket.udp_create()
+
+    match socket_result {
+        success(socket_handle) {
+            result<boolean> bind_result = Socket.udp_bind(socket_handle, "127.0.0.1", 0)
+
+            match bind_result {
+                success(is_success) {
+                    assert(is_success, "bind should succeed")
+                }
+                failure(error_message) {
+                    assert(false, "failed to bind: ${error_message}")
+                }
+            }
+
+            Socket.close(socket_handle)
+        }
+        failure(error_message) {
+            assert(false, "failed to create UDP socket: ${error_message}")
+        }
+    }
+}
+
+# ─── TCP send / receive (single-threaded loopback) ───
+
+@test
+function void test_tcp_send_and_receive() {
+    # Bind a server, self-connect, accept the queued peer, and exchange a
+    # message. Reliable on loopback: connect() completes the handshake in-kernel
+    # and queues the connection, so accept() returns it without a second thread.
+    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
+
+    string server_addr = Result.unwrap(Socket.local_address(server))
+    array<string> parts = String.split(server_addr, ":")
+    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+
+    socket client = Result.unwrap(Socket.connect("127.0.0.1", port))
+    socket connection = Result.unwrap(Socket.accept(server))
+
+    result<boolean> _t = Socket.set_timeout(connection, 2000)
+
+    result<integer> send_result = Socket.send(client, "hello")
+    assert(Result.is_success(send_result), "send should succeed")
+
+    string received = Result.unwrap(Socket.receive(connection, 1024))
+    assert(received == "hello", "received data should match the sent data")
+
+    Socket.close(client)
+    Socket.close(connection)
+    Socket.close(server)
+}
+
+@test
+function void test_tcp_remote_address_matches_server() {
+    # After a loopback handshake, the client's remote address must equal the
+    # server's local (listening) address.
+    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
+
+    string server_addr = Result.unwrap(Socket.local_address(server))
+    array<string> parts = String.split(server_addr, ":")
+    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+
+    socket client = Result.unwrap(Socket.connect("127.0.0.1", port))
+    socket connection = Result.unwrap(Socket.accept(server))
+
+    string client_remote = Result.unwrap(Socket.remote_address(client))
+    assert(client_remote == server_addr,
+        "client's remote address should equal the server's listening address")
+
+    Socket.close(client)
+    Socket.close(connection)
+    Socket.close(server)
+}
+
+@test
+function void test_local_address_has_loopback_host() {
+    # listen("127.0.0.1", 0) binds to the loopback host on a kernel-assigned
+    # ephemeral port; the reported address must reflect both.
+    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
+
+    string address = Result.unwrap(Socket.local_address(server))
+    assert(String.starts_with(address, "127.0.0.1:"),
+        "local address should be on the loopback host")
+    assert(address != "127.0.0.1:0", "listen on port 0 should assign a real port")
+
+    Socket.close(server)
+}
+
+# ─── UDP packet fields ───
+
+@test
+function void test_udp_receive_packet_fields() {
+    # The UdpPacket record returned by udp_receive must expose the payload, the
+    # sender host, and the sender port.
+    socket sender = Result.unwrap(Socket.udp_create())
+    result<boolean> _sb = Socket.udp_bind(sender, "127.0.0.1", 0)
+
+    socket receiver = Result.unwrap(Socket.udp_create())
+    result<boolean> _rb = Socket.udp_bind(receiver, "127.0.0.1", 0)
+
+    array<string> parts = String.split(Result.unwrap(Socket.local_address(receiver)), ":")
+    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+
+    result<boolean> _t = Socket.set_timeout(receiver, 2000)
+    result<integer> _s = Socket.udp_send(sender, "ping", parts[0], port)
+
+    Socket.UdpPacket packet = Result.unwrap(Socket.udp_receive(receiver, 1024))
+    assert(packet.data == "ping", "packet data should match the sent payload")
+    assert(packet.host == "127.0.0.1", "packet host should be the loopback sender")
+    assert(packet.port > 0, "packet port should be the sender's ephemeral port")
+
+    Socket.close(sender)
+    Socket.close(receiver)
+}
+
+# ─── Additional negative tests ───
+
+@test
+function void test_receive_rejects_non_positive_max_bytes() {
+    socket s = Result.unwrap(Socket.udp_create())
+
+    result<string> r = Socket.receive(s, 0)
+    assert(Result.is_failure(r), "receive with non-positive max_bytes should fail")
+
+    Socket.close(s)
+}
+
+@test
+function void test_udp_receive_rejects_non_positive_max_bytes() {
+    socket s = Result.unwrap(Socket.udp_create())
+
+    result<any> r = Socket.udp_receive(s, -1)
+    assert(Result.is_failure(r), "udp_receive with non-positive max_bytes should fail")
+
+    Socket.close(s)
+}
+
+@test
+function void test_set_timeout_on_closed() {
+    socket s = Result.unwrap(Socket.udp_create())
+
+    Socket.close(s)
+
+    result<boolean> r = Socket.set_timeout(s, 1000)
+    assert(Result.is_failure(r), "set_timeout on a closed socket should fail")
+}
+
+@test
+function void test_accept_on_non_server() {
+    # A UDP socket is valid but not a listening server socket.
+    socket s = Result.unwrap(Socket.udp_create())
+
+    result<socket> r = Socket.accept(s)
+    assert(Result.is_failure(r), "accept on a non-server socket should fail")
+
+    Socket.close(s)
+}
+
+@test
+function void test_listen_invalid_port() {
+    result<socket> r = Socket.listen("127.0.0.1", 99999)
+    assert(Result.is_failure(r), "listen on an out-of-range port should fail")
+}
+
+@test
+function void test_udp_send_invalid_port() {
+    socket s = Result.unwrap(Socket.udp_create())
+
+    result<integer> r = Socket.udp_send(s, "data", "127.0.0.1", 99999)
+    assert(Result.is_failure(r), "udp_send to an out-of-range port should fail")
+
+    Socket.close(s)
+}
+
+@test
+function void test_remote_address_on_unconnected() {
+    socket s = Result.unwrap(Socket.udp_create())
+
+    result<string> r = Socket.remote_address(s)
+    assert(Result.is_failure(r), "remote_address on an unconnected socket should fail")
+
+    Socket.close(s)
+}
+
+@test
+function void test_connect_reports_host_resolution_failure() {
+    # A hostname longer than the DNS limit (253 bytes, RFC 1035) fails
+    # resolution deterministically with no network access, so this test is
+    # hermetic. The failure must carry the shared "failed to resolve host"
+    # wording produced by the single resolve_host_failure helper.
+    string long_host = Result.unwrap(String.repeat("a", 300))
+
+    result<socket> r = Socket.connect(long_host, 80)
+
+    match r {
+        success(socket_handle) {
+            Socket.close(socket_handle)
+            assert(false, "an over-long host must not resolve")
+        }
+        failure(error_message) {
+            assert(String.contains(error_message, "failed to resolve host"),
+                "connect failure should report host resolution: ${error_message}")
+        }
+    }
+}

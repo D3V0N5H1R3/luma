@@ -1,0 +1,803 @@
+# ═══════════════════════════════════════════════════════════
+# Luma Editor — A minimal vim-like text editor
+#
+# Demonstrates the Terminal module's TUI capabilities:
+# raw mode, cursor control, colors, alternate screen buffer.
+#
+# Usage: luma examples/applications/editor.luma [file]
+#
+# Keys: i = insert mode, Escape = normal mode,
+#       arrows/hjkl = navigate, :w <file> = save,
+#       :e <file> = open, :q = quit
+# ═══════════════════════════════════════════════════════════
+
+# Split a line at a column into the text before it and from it onward. This
+# before/after slice is the shared basis for the editor's cursor-relative edits.
+function (string, string) split_at(string line, integer col) {
+    integer line_length = String.length(line)
+    string before = String.substring(line, 0, col)
+    string after = String.substring(line, col, line_length)
+
+    return (before, after)
+}
+
+# Remove the single character at a column, re-joining the surrounding text.
+function string remove_char_at(string line, integer col) {
+    integer line_length = String.length(line)
+    string before = String.substring(line, 0, col)
+    string after = String.substring(line, col + 1, line_length)
+
+    return "${before}${after}"
+}
+
+function string insert_into_line(string line, integer col, string text) {
+    (string before, string after) = split_at(line, col)
+
+    return "${before}${text}${after}"
+}
+
+function (array<string>, string) load_file(string path) {
+    return match FileSystem.read_file(path) {
+        success(text) {
+            mutable array<string> loaded = [""]
+
+            if String.length(text) > 0 {
+                loaded = String.split(text, "\n")
+            }
+
+            integer line_count = Array.length(loaded)
+
+            (loaded, "\"${path}\" ${line_count}L")
+        }
+        failure(_) {
+            ([""], "New file: ${path}")
+        }
+    }
+}
+
+function string render_status_bar(string mode, boolean is_modified, string filename,
+                                  integer cursor_row, integer cursor_col,
+                                  array<string> lines, integer cols) {
+    string mode_label = String.uppercase(mode)
+    string mod_flag = if is_modified { "[+] " } else { "" }
+    string display_name = if String.length(filename) == 0 { "[No Name]" } else { filename }
+    integer line_count = Array.length(lines)
+    string left = " ${mode_label} | ${mod_flag}${display_name}"
+    string right = "${cursor_row + 1}:${cursor_col + 1} / ${line_count}L "
+    number raw_padding = cols - String.length(left) - String.length(right)
+    number padding = if raw_padding < 0 { 0 } else { raw_padding }
+    integer int_padding = Result.unwrap_or(Converter.to_integer(padding), 0)
+
+    return "${left}${String.repeat(" ", int_padding)}${right}"
+}
+
+function (integer, integer) clamp_cursor(array<string> lines, integer cursor_row,
+                                         integer cursor_col, boolean allow_end) {
+    mutable integer row = cursor_row
+    mutable integer col = cursor_col
+    integer max_row = Array.length(lines) - 1
+
+    if row > max_row { row = max_row }
+    if row < 0 { row = 0 }
+
+    integer current_line_length = String.length(lines[row])
+
+    if allow_end {
+        if col > current_line_length { col = current_line_length }
+    } else {
+        if current_line_length > 0 {
+            if col > current_line_length - 1 { col = current_line_length - 1 }
+        } else {
+            col = 0
+        }
+    }
+
+    if col < 0 { col = 0 }
+
+    return (row, col)
+}
+
+function (boolean, string) save_buffer(array<string> lines, string path) {
+    string file_content = String.join(lines, "\n")
+
+    return match FileSystem.write_file(path, file_content) {
+        success(_) {
+            integer written_count = Array.length(lines)
+            (true, "\"${path}\" ${written_count}L written")
+        }
+        failure(error_message) {
+            (false, "Could not save \"${path}\": ${error_message}. Check name/permissions.")
+        }
+    }
+}
+
+record EditorState {
+    array<string> lines,
+    integer cursor_row,
+    integer cursor_col,
+    integer scroll_offset,
+    string mode,
+    string status_message,
+    string filename,
+    boolean is_modified,
+    boolean is_running,
+    string command_buffer
+}
+
+choice Command {
+    Quit
+    ForceQuit
+    Save
+    SaveQuit
+    SaveAs(string path)
+    ForceOpen(string path)
+    Open(string path)
+    Unknown
+}
+
+function Command parse_command(string buffer) {
+    if buffer == "q" {
+        return Command.Quit
+    }
+    if buffer == "q!" {
+        return Command.ForceQuit
+    }
+    if buffer == "w" {
+        return Command.Save
+    }
+    if buffer == "wq" || buffer == "x" {
+        return Command.SaveQuit
+    }
+    if String.starts_with(buffer, "w ") {
+        return Command.SaveAs(String.trim(String.substring(buffer, 2, String.length(buffer))))
+    }
+    if String.starts_with(buffer, "e! ") {
+        return Command.ForceOpen(String.trim(String.substring(buffer, 3, String.length(buffer))))
+    }
+    if String.starts_with(buffer, "e ") {
+        return Command.Open(String.trim(String.substring(buffer, 2, String.length(buffer))))
+    }
+    return Command.Unknown
+}
+
+# --- Edit primitives ---------------------------------------
+# Each returns a fresh line array; the mutable-rebuild pattern lives here
+# instead of being repeated inside the key handlers.
+
+function array<string> split_line_at(array<string> lines, integer row, integer col) {
+    string current_line = lines[row]
+    (string text_before_cursor, string text_after_cursor) = split_at(current_line, col)
+
+    mutable array<string> new_lines = []
+
+    for line_index in 0 .. Array.length(lines) {
+        if line_index == row {
+            new_lines = Array.push(new_lines, text_before_cursor)
+            new_lines = Array.push(new_lines, text_after_cursor)
+        } else {
+            new_lines = Array.push(new_lines, lines[line_index])
+        }
+    }
+
+    return new_lines
+}
+
+function array<string> insert_line_at(array<string> lines, integer row, string text) {
+    return Result.unwrap_or(Array.insert_at(lines, row + 1, text), lines)
+}
+
+function array<string> remove_line_at(array<string> lines, integer row) {
+    (array<string> new_lines, string _removed) =
+        Result.unwrap_or(Array.remove_at(lines, row), (lines, ""))
+
+    return new_lines
+}
+
+function array<string> merge_line_with_previous(array<string> lines, integer row) {
+    string previous_line = lines[row - 1]
+    string current_line = lines[row]
+
+    mutable array<string> new_lines = []
+
+    for line_index in 0 .. Array.length(lines) {
+        if line_index == row - 1 {
+            new_lines = Array.push(new_lines, "${previous_line}${current_line}")
+        } else if line_index != row {
+            new_lines = Array.push(new_lines, lines[line_index])
+        }
+    }
+
+    return new_lines
+}
+# --- Command execution -------------------------------------
+
+function EditorState execute_command(EditorState state) {
+    mutable EditorState updated = state
+
+    match parse_command(updated.command_buffer) {
+        case Command.Quit {
+            if updated.is_modified {
+                updated.status_message = "No write since last change (use :q! to override)"
+                updated.mode = "normal"
+            } else {
+                updated.is_running = false
+            }
+        }
+        case Command.ForceQuit {
+            updated.is_running = false
+        }
+        case Command.Save {
+            if String.length(updated.filename) == 0 {
+                updated.status_message = "No filename (use :w <filename>)"
+                updated.mode = "normal"
+            } else {
+                (boolean saved, string save_status) = save_buffer(updated.lines, updated.filename)
+
+                if saved { updated.is_modified = false }
+
+                updated.status_message = save_status
+                updated.mode = "normal"
+            }
+        }
+        case Command.SaveQuit {
+            if String.length(updated.filename) > 0 {
+                (boolean saved, string save_status) = save_buffer(updated.lines, updated.filename)
+
+                if saved { updated.is_running = false } else { updated.status_message = save_status }
+            } else {
+                updated.status_message = "No filename (use :w <filename> first)"
+                updated.mode = "normal"
+            }
+        }
+        case Command.SaveAs(path) {
+            (boolean saved, string save_status) = save_buffer(updated.lines, path)
+
+            updated.filename = path
+
+            if saved { updated.is_modified = false }
+
+            updated.status_message = save_status
+            updated.mode = "normal"
+        }
+        case Command.ForceOpen(path) {
+            updated.filename = path
+            updated.cursor_row = 0
+            updated.cursor_col = 0
+            updated.scroll_offset = 0
+            updated.is_modified = false
+
+            (array<string> loaded, string status) = load_file(path)
+
+            updated.lines = loaded
+            updated.status_message = status
+            updated.mode = "normal"
+        }
+        case Command.Open(path) {
+            if updated.is_modified {
+                updated.status_message = "No write since last change (use :e! <file> to discard)"
+                updated.mode = "normal"
+            } else {
+                updated.filename = path
+                updated.cursor_row = 0
+                updated.cursor_col = 0
+                updated.scroll_offset = 0
+
+                (array<string> loaded, string status) = load_file(path)
+
+                updated.lines = loaded
+                updated.status_message = status
+                updated.mode = "normal"
+            }
+        }
+        case Command.Unknown {
+            updated.status_message = "Unknown command: :${updated.command_buffer}"
+            updated.mode = "normal"
+        }
+    }
+
+    return updated
+}
+
+# --- Per-mode key handlers ---------------------------------
+
+function EditorState handle_normal_key(EditorState state, string key, integer editor_rows) {
+    mutable EditorState updated = state
+    updated.status_message = ""
+
+    if key == "i" {
+        updated.mode = "insert"
+        updated.status_message = "-- INSERT --"
+    } else if key == "a" {
+        updated.mode = "insert"
+
+        number current_line_length = String.length(updated.lines[updated.cursor_row])
+
+        if updated.cursor_col < current_line_length {
+            updated.cursor_col += 1
+        }
+
+        updated.status_message = "-- INSERT --"
+    } else if key == "o" {
+        updated.lines = insert_line_at(updated.lines, updated.cursor_row, "")
+        updated.cursor_row += 1
+        updated.cursor_col = 0
+        updated.mode = "insert"
+        updated.is_modified = true
+        updated.status_message = "-- INSERT --"
+    } else if key == ":" {
+        updated.mode = "command"
+        updated.command_buffer = ""
+    } else if key == "h" || key == "left" {
+        updated.cursor_col -= 1
+    } else if key == "l" || key == "right" {
+        updated.cursor_col += 1
+    } else if key == "k" || key == "up" {
+        updated.cursor_row -= 1
+    } else if key == "j" || key == "down" {
+        updated.cursor_row += 1
+    } else if key == "0" || key == "home" {
+        updated.cursor_col = 0
+    } else if key == "$" || key == "end" {
+        integer current_line_length = String.length(updated.lines[updated.cursor_row])
+
+        if current_line_length > 0 {
+            updated.cursor_col = current_line_length - 1
+        }
+    } else if key == "g" {
+        updated.cursor_row = 0
+        updated.cursor_col = 0
+    } else if key == "G" {
+        updated.cursor_row = Array.length(updated.lines) - 1
+        updated.cursor_col = 0
+    } else if key == "x" {
+        string current_line = updated.lines[updated.cursor_row]
+        integer current_line_length = String.length(current_line)
+
+        if current_line_length > 0 && updated.cursor_col < current_line_length {
+            updated.lines[updated.cursor_row] = remove_char_at(current_line, updated.cursor_col)
+            updated.is_modified = true
+        }
+    } else if key == "d" {
+        if Array.length(updated.lines) > 1 {
+            updated.lines = remove_line_at(updated.lines, updated.cursor_row)
+            updated.is_modified = true
+        } else {
+            updated.lines[0] = ""
+            updated.is_modified = true
+        }
+    } else if key == "page_up" || key == "ctrl+u" {
+        updated.cursor_row -= editor_rows
+    } else if key == "page_down" || key == "ctrl+d" {
+        updated.cursor_row += editor_rows
+    }
+
+    (integer clamped_row, integer clamped_col) = clamp_cursor(
+        updated.lines, updated.cursor_row, updated.cursor_col, false)
+    updated.cursor_row = clamped_row
+    updated.cursor_col = clamped_col
+
+    return updated
+}
+function EditorState handle_insert_key(EditorState state, string key) {
+    mutable EditorState updated = state
+
+    if key == "escape" {
+        updated.mode = "normal"
+
+        if updated.cursor_col > 0 { updated.cursor_col -= 1 }
+
+        updated.status_message = ""
+    } else if key == "enter" {
+        updated.lines = split_line_at(updated.lines, updated.cursor_row, updated.cursor_col)
+        updated.cursor_row += 1
+        updated.cursor_col = 0
+        updated.is_modified = true
+    } else if key == "backspace" {
+        if updated.cursor_col > 0 {
+            string current_line = updated.lines[updated.cursor_row]
+            updated.lines[updated.cursor_row] = remove_char_at(current_line, updated.cursor_col - 1)
+            updated.cursor_col -= 1
+            updated.is_modified = true
+        } else if updated.cursor_row > 0 {
+            integer new_cursor_col = String.length(updated.lines[updated.cursor_row - 1])
+
+            updated.lines = merge_line_with_previous(updated.lines, updated.cursor_row)
+            updated.cursor_row -= 1
+            updated.cursor_col = new_cursor_col
+            updated.is_modified = true
+        }
+    } else if key == "delete" {
+        string current_line = updated.lines[updated.cursor_row]
+        integer current_line_length = String.length(current_line)
+
+        if updated.cursor_col < current_line_length {
+            updated.lines[updated.cursor_row] = remove_char_at(current_line, updated.cursor_col)
+            updated.is_modified = true
+        }
+    } else if key == "left" {
+        if updated.cursor_col > 0 { updated.cursor_col -= 1 }
+    } else if key == "right" {
+        number current_line_length = String.length(updated.lines[updated.cursor_row])
+
+        if updated.cursor_col < current_line_length { updated.cursor_col += 1 }
+    } else if key == "up" {
+        if updated.cursor_row > 0 { updated.cursor_row -= 1 }
+    } else if key == "down" {
+        if updated.cursor_row < Array.length(updated.lines) - 1 { updated.cursor_row += 1 }
+    } else if key == "space" {
+        updated.lines[updated.cursor_row] = insert_into_line(updated.lines[updated.cursor_row], updated.cursor_col, " ")
+        updated.cursor_col += 1
+        updated.is_modified = true
+    } else if key == "tab" {
+        updated.lines[updated.cursor_row] = insert_into_line(updated.lines[updated.cursor_row], updated.cursor_col, "    ")
+        updated.cursor_col += 4
+        updated.is_modified = true
+    } else if String.length(key) == 1 {
+        updated.lines[updated.cursor_row] = insert_into_line(updated.lines[updated.cursor_row], updated.cursor_col, key)
+        updated.cursor_col += 1
+        updated.is_modified = true
+    }
+
+    (integer clamped_row, integer clamped_col) = clamp_cursor(
+        updated.lines, updated.cursor_row, updated.cursor_col, true)
+    updated.cursor_row = clamped_row
+    updated.cursor_col = clamped_col
+
+    return updated
+}
+
+function EditorState handle_command_key(EditorState state, string key) {
+    mutable EditorState updated = state
+
+    if key == "escape" {
+        updated.mode = "normal"
+        updated.command_buffer = ""
+        updated.status_message = ""
+    } else if key == "enter" {
+        updated = execute_command(updated)
+        updated.command_buffer = ""
+    } else if key == "backspace" {
+        if String.length(updated.command_buffer) > 0 {
+            updated.command_buffer = String.substring(updated.command_buffer, 0,
+                String.length(updated.command_buffer) - 1)
+        } else {
+            updated.mode = "normal"
+        }
+    } else if key == "space" {
+        updated.command_buffer = "${updated.command_buffer} "
+    } else if String.length(key) == 1 {
+        updated.command_buffer = "${updated.command_buffer}${key}"
+    }
+
+    return updated
+}
+
+# --- Render ------------------------------------------------
+
+function void render_editor(EditorState state, integer cols, integer rows, integer editor_rows) {
+    Terminal.hide_cursor()
+    Result.unwrap(Terminal.move_to(1, 1))
+
+    for visible_row_index in 0 .. editor_rows {
+        integer line_index = state.scroll_offset + visible_row_index
+
+        Result.unwrap(Terminal.move_to(visible_row_index + 1, 1))
+        Terminal.clear_to_end_of_line()
+
+        if line_index < Array.length(state.lines) {
+            string line_number = "${line_index + 1}"
+            string gutter = Terminal.dim(Result.unwrap_or(String.pad_left(line_number, 4, " "), line_number))
+
+            Terminal.write("${gutter} ")
+
+            integer max_width = cols - 6
+            string raw_line = state.lines[line_index]
+
+            string line = if String.length(raw_line) > max_width {
+                String.substring(raw_line, 0, max_width)
+            } else {
+                raw_line
+            }
+
+            Terminal.write(line)
+        } else {
+            Terminal.write(Terminal.dim("~"))
+        }
+    }
+
+    Result.unwrap(Terminal.move_to(rows - 1, 1))
+
+    string bar = render_status_bar(state.mode, state.is_modified, state.filename,
+                                   state.cursor_row, state.cursor_col, state.lines, cols)
+
+    bar
+    |> String.pad_right(cols, " ")
+    |> Terminal.inverse()
+    |> Terminal.write()
+
+    Result.unwrap(Terminal.move_to(rows, 1))
+    Terminal.clear_to_end_of_line()
+
+    if state.mode == "command" {
+        Terminal.write(":${state.command_buffer}")
+    } else if String.length(state.status_message) > 0 {
+        Terminal.write(state.status_message)
+    } else {
+        Terminal.write(Terminal.dim(
+            "i insert  Esc normal  :w save  :q quit  hjkl/arrows move"))
+    }
+
+    number display_row = state.cursor_row - state.scroll_offset + 1
+    number display_col = state.cursor_col + 6
+
+    integer int_display_row = Result.unwrap_or(Converter.to_integer(display_row), 1)
+    integer int_display_col = Result.unwrap_or(Converter.to_integer(display_col), 1)
+    Result.unwrap(Terminal.move_to(int_display_row, int_display_col))
+    Terminal.show_cursor()
+}
+
+# --- Main loop ---------------------------------------------
+# Renders, reads one key, dispatches by mode, then re-clamps scroll. All
+# editor state lives in EditorState so the loop is drivable head-lessly.
+
+function EditorState run_editor(EditorState initial) {
+    mutable EditorState state = initial
+
+    while state.is_running {
+        integer cols = Terminal.columns()
+        integer rows = Terminal.rows()
+        integer editor_rows = rows - 2
+
+        render_editor(state, cols, rows, editor_rows)
+
+        string key = Result.unwrap_or(Terminal.read_key(), "")
+
+        if key == "" { state.is_running = false }
+
+        if state.mode == "normal" {
+            state = handle_normal_key(state, key, editor_rows)
+        } else if state.mode == "insert" {
+            state = handle_insert_key(state, key)
+        } else if state.mode == "command" {
+            state = handle_command_key(state, key)
+        }
+
+        integer visible_rows = Terminal.rows() - 2
+
+        if state.cursor_row < state.scroll_offset {
+            state.scroll_offset = state.cursor_row
+        }
+        if state.cursor_row >= state.scroll_offset + visible_rows {
+            state.scroll_offset = state.cursor_row - visible_rows + 1
+        }
+    }
+
+    return state
+}
+
+function EditorState new_editor(array<string> lines) {
+    return EditorState {
+        lines = lines,
+        cursor_row = 0,
+        cursor_col = 0,
+        scroll_offset = 0,
+        mode = "normal",
+        status_message = "Editor | i: insert  :e open  :w save  :q quit",
+        filename = "",
+        is_modified = false,
+        is_running = true,
+        command_buffer = ""
+    }
+}
+
+@main
+function void main() {
+    mutable EditorState state = new_editor([""])
+
+    array<string> cli_args = Process.get_arguments()
+
+    if Array.length(cli_args) > 0 {
+        state.filename = cli_args[0]
+
+        (array<string> loaded, string status) = load_file(state.filename)
+
+        state.lines = loaded
+        state.status_message = status
+    }
+
+    result<void> _ = Terminal.enable_raw_mode()
+
+    Terminal.enter_alternate_screen()
+    Terminal.clear_screen()
+
+    EditorState _final = run_editor(state)
+
+    Terminal.leave_alternate_screen()
+    Terminal.disable_raw_mode()
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+# The editor's text-manipulation helpers are pure, so they can be asserted
+# directly without a terminal; save / load round-trips through a temp file.
+
+@test
+function void test_insert_into_line_at_positions() {
+    assert(insert_into_line("hello", 0, "X") == "Xhello")
+    assert(insert_into_line("hello", 5, "!") == "hello!")
+    assert(insert_into_line("hello", 2, "__") == "he__llo")
+}
+
+@test
+function void test_clamp_cursor_clamps_to_bounds() {
+    array<string> lines = ["abc", "de"]
+    (integer row1, integer col1) = clamp_cursor(lines, 5, 10, true)
+    assert(row1 == 1)
+    assert(col1 == 2)
+    (integer row2, integer col2) = clamp_cursor(lines, -3, -7, true)
+    assert(row2 == 0)
+    assert(col2 == 0)
+}
+
+@test
+function void test_clamp_cursor_normal_mode_excludes_line_end() {
+    array<string> lines = ["abc"]
+    (integer row, integer col) = clamp_cursor(lines, 0, 10, false)
+    assert(row == 0)
+    assert(col == 2)
+}
+
+@test
+function void test_render_status_bar_shows_mode_flag_and_position() {
+    array<string> lines = ["one", "two", "three"]
+    string bar = render_status_bar("insert", true, "notes.txt", 1, 4, lines, 80)
+    assert(String.contains(bar, "INSERT"))
+    assert(String.contains(bar, "[+]"))
+    assert(String.contains(bar, "notes.txt"))
+    assert(String.contains(bar, "2:5"))
+    assert(String.contains(bar, "3L"))
+}
+
+@test
+function void test_render_status_bar_uses_no_name_placeholder() {
+    array<string> lines = [""]
+    string bar = render_status_bar("normal", false, "", 0, 0, lines, 40)
+    assert(String.contains(bar, "[No Name]"))
+    assert(String.contains(bar, "NORMAL"))
+}
+
+@test
+function void test_save_and_load_round_trip() {
+    # The FileSystem sandbox confines paths to the working directory, so the
+    # round-trip uses a uniquely named temp file there and removes it before
+    # asserting (so nothing is left behind even if an assertion fails).
+    string path = "__luma_editor_roundtrip.txt"
+    array<string> lines = ["alpha", "beta", "gamma"]
+
+    (boolean saved, string save_status) = save_buffer(lines, path)
+    (array<string> loaded, string load_status) = load_file(path)
+    result<boolean> _cleanup = FileSystem.delete(path)
+
+    assert(saved)
+    assert(String.contains(save_status, "3L written"))
+    assert(Array.length(loaded) == 3)
+    assert(loaded[0] == "alpha")
+    assert(loaded[2] == "gamma")
+    assert(String.contains(load_status, "3L"))
+}
+
+# ─── Characterization tests for the input loop ─────────────
+# These drive run_editor head-lessly via the Terminal test harness: scripted
+# keys feed read_key, and assertions pin the resulting EditorState so the
+# per-mode handlers and command dispatch stay behaviour-compatible.
+
+@test
+function void test_loop_insert_typing_updates_line() {
+    Terminal.test_start(["i", "H", "i", "escape", ":", "q", "!", "enter"])
+    EditorState final_state = run_editor(new_editor([""]))
+    string _output = Terminal.test_stop()
+
+    assert(final_state.lines[0] == "Hi")
+    assert(final_state.is_modified)
+    assert(!final_state.is_running)
+}
+
+@test
+function void test_loop_normal_x_deletes_char() {
+    Terminal.test_start(["x", ":", "q", "!", "enter"])
+    EditorState final_state = run_editor(new_editor(["abc"]))
+    string _output = Terminal.test_stop()
+
+    assert(final_state.lines[0] == "bc")
+    assert(!final_state.is_running)
+}
+
+@test
+function void test_loop_normal_d_removes_line() {
+    Terminal.test_start(["d", ":", "q", "!", "enter"])
+    EditorState final_state = run_editor(new_editor(["one", "two"]))
+    string _output = Terminal.test_stop()
+
+    assert(Array.length(final_state.lines) == 1)
+    assert(final_state.lines[0] == "two")
+}
+
+@test
+function void test_loop_open_line_below() {
+    Terminal.test_start(["o", "escape", ":", "q", "!", "enter"])
+    EditorState final_state = run_editor(new_editor(["hello"]))
+    string _output = Terminal.test_stop()
+
+    assert(Array.length(final_state.lines) == 2)
+    assert(final_state.lines[0] == "hello")
+    assert(final_state.lines[1] == "")
+    assert(final_state.is_modified)
+}
+
+@test
+function void test_loop_insert_enter_splits_line() {
+    Terminal.test_start(["l", "l", "i", "enter", "escape", ":", "q", "!", "enter"])
+    EditorState final_state = run_editor(new_editor(["abcd"]))
+    string _output = Terminal.test_stop()
+
+    assert(Array.length(final_state.lines) == 2)
+    assert(final_state.lines[0] == "ab")
+    assert(final_state.lines[1] == "cd")
+}
+
+@test
+function void test_loop_quit_guarded_when_modified() {
+    # :q with unsaved changes must be refused; the editor stays in normal mode,
+    # so the following 'x' still deletes a character before :q! force-quits.
+    Terminal.test_start(["i", "z", "escape", ":", "q", "enter", "x", ":", "q", "!", "enter"])
+    EditorState final_state = run_editor(new_editor([""]))
+    string _output = Terminal.test_stop()
+
+    assert(final_state.lines[0] == "")
+    assert(final_state.is_modified)
+}
+
+@test
+function void test_parse_command_classifies_verbs() {
+    assert(command_label(parse_command("q")) == "quit")
+    assert(command_label(parse_command("q!")) == "force_quit")
+    assert(command_label(parse_command("w")) == "save")
+    assert(command_label(parse_command("wq")) == "save_quit")
+    assert(command_label(parse_command("x")) == "save_quit")
+    assert(command_label(parse_command("zz")) == "unknown")
+}
+
+@test
+function void test_parse_command_extracts_and_trims_paths() {
+    assert(command_label(parse_command("w  notes.txt ")) == "save_as:notes.txt")
+    assert(command_label(parse_command("e! old.txt")) == "force_open:old.txt")
+    assert(command_label(parse_command("e  new.txt")) == "open:new.txt")
+}
+
+function string command_label(Command command) {
+    match command {
+        case Command.Quit {
+            return "quit"
+        }
+        case Command.ForceQuit {
+            return "force_quit"
+        }
+        case Command.Save {
+            return "save"
+        }
+        case Command.SaveQuit {
+            return "save_quit"
+        }
+        case Command.SaveAs(path) {
+            return "save_as:${path}"
+        }
+        case Command.ForceOpen(path) {
+            return "force_open:${path}"
+        }
+        case Command.Open(path) {
+            return "open:${path}"
+        }
+        case Command.Unknown {
+            return "unknown"
+        }
+    }
+}

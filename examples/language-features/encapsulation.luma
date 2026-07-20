@@ -1,0 +1,43 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Example: Namespace Encapsulation with 'internal'
+#
+# Demonstrates how to use the 'internal' keyword to hide
+# implementation details inside a namespace while exposing
+# a clean public API.
+# ═══════════════════════════════════════════════════════════
+
+namespace StringFormatter {
+    # ── Public API ──────────────────────────────────────────
+
+    function string format_title(string text) {
+        string cleaned = StringFormatter.strip_and_normalise(text)
+
+        return StringFormatter.capitalise_words(cleaned)
+    }
+
+    function string format_slug(string text) {
+        string lower_text = String.lowercase(text)
+        string cleaned = StringFormatter.strip_and_normalise(lower_text)
+
+        return String.replace_all(cleaned, " ", "-")
+    }
+
+    # ── Internal helpers (not accessible from outside) ──────
+
+    internal function string strip_and_normalise(string text) {
+        return String.trim(text)
+    }
+
+    internal function string capitalise_words(string text) {
+        return String.title_case(text)
+    }
+}
+
+@main
+function void main() {
+    string title = StringFormatter.format_title("  the quick brown fox  ")
+    string slug  = StringFormatter.format_slug("  The Quick Brown Fox  ")
+
+    print("Title: ${title}")
+    print("Slug:  ${slug}")
+}

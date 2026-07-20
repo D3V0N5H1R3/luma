@@ -1,0 +1,32 @@
+# ═══════════════════════════════════════════════════════════
+# Multi-File Program
+#
+# Demonstrates the include directive for splitting a program
+# across multiple files. Shared records, choice types, and
+# functions are defined in multi_file_utils.luma.
+# ═══════════════════════════════════════════════════════════
+
+include "multi_file_utils.luma"
+
+@main
+function void main() {
+    # Use the Measurement record from the included file
+    array<Measurement> readings = [
+        Measurement { label = "Temperature", value = 23.456, unit = "°C" },
+        Measurement { label = "Humidity", value = 67.8, unit = "%" },
+        Measurement { label = "Pressure", value = 1013.25, unit = "hPa" }
+    ]
+
+    print(_log_message(Severity.Info, "Starting sensor report"))
+    print("")
+
+    for reading in readings {
+        print("  ${_format_measurement(reading)}")
+    }
+
+    print("")
+
+    # Use the Severity choice from the included file
+    print(_log_message(Severity.Warning, "Humidity above 60%"))
+    print(_log_message(Severity.Info, "Report complete"))
+}

@@ -1,0 +1,62 @@
+# ─────────────────────────────────────────────────────────────
+# Composite action: build-zed-extension
+#
+# Installs the Rust WASM toolchain, restores the Cargo cache, and
+# checks, lints, tests, and builds the Zed extension. Shared by the
+# Zed CI and release workflows.
+# ─────────────────────────────────────────────────────────────
+
+name: Build Zed Extension
+description: Install the Rust WASM toolchain and check, lint, test, and build the Zed extension.
+
+inputs:
+  working-directory:
+    description: Path to the Zed extension directory.
+    required: false
+    default: extensions/zed
+
+runs:
+  using: composite
+  steps:
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable (1.94.1)
+      with:
+        toolchain: stable
+        targets: wasm32-wasip1
+        components: clippy,rustfmt
+
+    - name: Cache Cargo registry and build
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          ${{ inputs.working-directory }}/target
+        key: cargo-zed-${{ hashFiles(format('{0}/Cargo.toml', inputs.working-directory)) }}
+        restore-keys: |
+          cargo-zed-
+
+    - name: Check formatting
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: cargo fmt --check
+
+    - name: Check compilation
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: cargo check --target wasm32-wasip1
+
+    - name: Run Clippy
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: cargo clippy --target wasm32-wasip1 -- -D warnings
+
+    - name: Run tests
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: cargo test
+
+    - name: Build release WASM
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: cargo build --release --target wasm32-wasip1

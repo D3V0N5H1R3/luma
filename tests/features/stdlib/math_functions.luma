@@ -1,0 +1,613 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Math Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_math_constants() {
+    assert(Math.pi > 3.14)
+    assert(Math.pi < 3.15)
+    assert(Math.e > 2.71)
+    assert(Math.e < 2.72)
+    assert(Math.tau > 6.28)
+    assert(Math.tau < 6.29)
+}
+
+@test
+function void test_math_floor_ceil_round() {
+    assert(Result.unwrap(Math.floor(3.7)) == 3)
+    assert(Result.unwrap(Math.floor(-1.2)) == -2)
+    assert(Result.unwrap(Math.ceil(3.2)) == 4)
+    assert(Result.unwrap(Math.ceil(-1.8)) == -1)
+    assert(Result.unwrap(Math.round(3.5)) == 4)
+    assert(Result.unwrap(Math.round(3.4)) == 3)
+}
+
+@test
+function void test_math_absolute() {
+    assert(Result.unwrap(Math.absolute(-5)) == 5)
+    assert(Result.unwrap(Math.absolute(5)) == 5)
+    assert(Math.approximately_equal(Result.unwrap(Math.absolute(-3.14)), 3.14))
+}
+
+@test
+function void test_math_power() {
+    assert(Math.approximately_equal(Result.unwrap(Math.power(2, 10)), 1024.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.power(3, 0)), 1.0))
+}
+
+@test
+function void test_math_square_root() {
+    result<number> sqrt_result = Math.square_root(16.0)
+
+    assert(Result.is_success(sqrt_result))
+    assert(Math.approximately_equal(Result.unwrap(sqrt_result), 4.0))
+
+    result<number> negative_result = Math.square_root(-1.0)
+
+    assert(!Result.is_success(negative_result))
+}
+
+@test
+function void test_math_log_e() {
+    result<number> log_e_result = Math.log_e(Math.e)
+
+    assert(Result.is_success(log_e_result))
+
+    number log_e_value = Result.unwrap(log_e_result)
+
+    assert(log_e_value > 0.99)
+    assert(log_e_value < 1.01)
+}
+
+@test
+function void test_math_log_10() {
+    result<number> log_10_result = Math.log_10(100.0)
+
+    assert(Result.is_success(log_10_result))
+    assert(Math.approximately_equal(Result.unwrap(log_10_result), 2.0))
+
+    result<number> invalid_result = Math.log_10(-1.0)
+
+    assert(!Result.is_success(invalid_result))
+}
+
+@test
+function void test_math_factorial() {
+    assert(Result.unwrap(Math.factorial(0)) == 1)
+    assert(Result.unwrap(Math.factorial(1)) == 1)
+    assert(Result.unwrap(Math.factorial(5)) == 120)
+    assert(Result.unwrap(Math.factorial(10)) == 3628800)
+    assert(Result.unwrap(Math.factorial(20)) == 2432902008176640000)
+}
+
+@test
+function void test_math_gcd() {
+    assert(Result.unwrap(Math.greatest_common_divisor(12, 8)) == 4)
+    assert(Result.unwrap(Math.greatest_common_divisor(7, 13)) == 1)
+}
+
+@test
+function void test_math_lcm() {
+    assert(Result.unwrap(Math.least_common_multiple(4, 6)) == 12)
+    assert(Result.unwrap(Math.least_common_multiple(0, 5)) == 0)
+}
+
+@test
+function void test_math_is_prime() {
+    assert(!Math.is_prime(0))
+    assert(!Math.is_prime(1))
+    assert(Math.is_prime(2))
+    assert(Math.is_prime(3))
+    assert(!Math.is_prime(4))
+    assert(Math.is_prime(17))
+    assert(!Math.is_prime(100))
+}
+
+@test
+function void test_math_clamp() {
+    assert(Math.approximately_equal(Result.unwrap(Math.clamp(5, 0, 10)), 5.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.clamp(-5, 0, 10)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.clamp(15, 0, 10)), 10.0))
+    assert(Result.is_failure(Math.clamp(5, 10, 0)))
+}
+
+@test
+function void test_math_lerp() {
+    assert(Math.approximately_equal(Result.unwrap(Math.lerp(0, 10, 0.5)), 5.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.lerp(0, 10, 0.0)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.lerp(0, 10, 1.0)), 10.0))
+    assert(Result.is_failure(Math.lerp(0, 10, 1.5)))
+}
+
+@test
+function void test_math_sign() {
+    assert(Math.sign(-5) == -1)
+    assert(Math.sign(0) == 0)
+    assert(Math.sign(42) == 1)
+}
+
+@test
+function void test_math_trig() {
+    assert(Math.approximately_equal(Result.unwrap(Math.sine(0.0)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.cosine(0.0)), 1.0))
+}
+
+@test
+function void test_math_degrees() {
+    number pi_in_degrees = Math.degrees(Math.pi)
+
+    assert(pi_in_degrees > 179.99)
+    assert(pi_in_degrees < 180.01)
+}
+
+@test
+function void test_math_radians() {
+    number pi_in_radians = Math.radians(180.0)
+
+    assert(pi_in_radians > 3.14)
+    assert(pi_in_radians < 3.15)
+}
+
+@test
+function void test_math_mean() {
+    assert(Math.approximately_equal(Result.unwrap(Math.mean([1, 2, 3, 4, 5])), 3.0))
+    assert(Result.is_failure(Math.mean([])))
+}
+
+@test
+function void test_math_median() {
+    assert(Math.approximately_equal(Result.unwrap(Math.median([1, 2, 3, 4, 5])), 3.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.median([1, 2, 3, 4])), 2.5))
+    assert(Result.is_failure(Math.median([])))
+
+    # A NaN element must not trigger undefined behaviour in the internal sort.
+    # NaN is ordered last, so the statistic stays deterministic: sorting
+    # [nan, 1, 2, 3] yields [1, 2, 3, nan] and the even-length median is the
+    # mean of the two middle values, 2 and 3.
+    number nan = Math.infinity - Math.infinity
+    assert(Math.approximately_equal(Result.unwrap(Math.median([nan, 1.0, 2.0, 3.0])), 2.5))
+}
+
+@test
+function void test_math_arc_cosine() {
+    number arc_cosine_result = Result.unwrap(Math.arc_cosine(0.0))
+
+    assert(arc_cosine_result > 1.57)
+    assert(arc_cosine_result < 1.58)
+}
+
+@test
+function void test_math_arc_cosine_fail() {
+    result<number> r = Math.arc_cosine(2.0)
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_math_arc_sine() {
+    number arc_sine_result = Result.unwrap(Math.arc_sine(1.0))
+
+    assert(arc_sine_result > 1.57)
+    assert(arc_sine_result < 1.58)
+}
+
+@test
+function void test_math_arc_sine_fail() {
+    result<number> r = Math.arc_sine(-2.0)
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_math_arc_tangent() {
+    number arc_tangent_result = Result.unwrap(Math.arc_tangent(1.0))
+
+    assert(arc_tangent_result > 0.78)
+    assert(arc_tangent_result < 0.79)
+}
+
+@test
+function void test_math_exponential() {
+    number exponential_result = Result.unwrap(Math.exponential(1.0))
+
+    assert(exponential_result > 2.71)
+    assert(exponential_result < 2.72)
+}
+
+@test
+function void test_math_max() {
+    assert(Math.approximately_equal(Math.max(3.0, 7.0), 7.0))
+    assert(Math.approximately_equal(Math.max(-1.0, -5.0), -1.0))
+}
+
+@test
+function void test_math_min() {
+    assert(Math.approximately_equal(Math.min(3.0, 7.0), 3.0))
+    assert(Math.approximately_equal(Math.min(-1.0, -5.0), -5.0))
+}
+
+@test
+function void test_math_remainder() {
+    assert(Result.unwrap(Math.remainder(7, 3)) == 1)
+    assert(Result.unwrap(Math.remainder(10, 5)) == 0)
+}
+
+@test
+function void test_math_tangent() {
+    number tangent_result = Result.unwrap(Math.tangent(0.0))
+
+    assert(Math.approximately_equal(tangent_result, 0.0))
+}
+
+@test
+function void test_math_truncate() {
+    assert(Result.unwrap(Math.truncate(3.7)) == 3)
+    assert(Result.unwrap(Math.truncate(-3.7)) == -3)
+}
+
+# ─── Statistics Functions ───
+
+@test
+function void test_math_sum() {
+    assert(Math.approximately_equal(Result.unwrap(Math.sum([1.0, 2.0, 3.0, 4.0])), 10.0))
+    assert(Result.unwrap(Math.sum([])) == 0)
+    assert(Math.approximately_equal(Result.unwrap(Math.sum([-1.0, 1.0])), 0.0))
+    assert(Result.is_failure(Math.sum(["a", "b"])))
+}
+
+@test
+function void test_math_mode() {
+    assert(Math.approximately_equal(Result.unwrap(Math.mode([1, 2, 2, 3, 3, 3])), 3.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.mode([5])), 5.0))
+    assert(Result.is_failure(Math.mode([])))
+}
+
+@test
+function void test_math_variance() {
+    number variance_result = Result.unwrap(Math.variance([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]))
+
+    assert(variance_result > 3.9)
+    assert(variance_result < 4.1)
+    assert(Result.is_failure(Math.variance([])))
+}
+
+@test
+function void test_math_standard_deviation() {
+    number std_dev_result = Result.unwrap(
+        Math.standard_deviation([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])
+    )
+
+    assert(std_dev_result > 1.9)
+    assert(std_dev_result < 2.1)
+    assert(Result.is_failure(Math.standard_deviation([])))
+}
+
+@test
+function void test_math_percentile() {
+    assert(Math.approximately_equal(Result.unwrap(Math.percentile([1, 2, 3, 4, 5], 0.0)), 1.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.percentile([1, 2, 3, 4, 5], 100.0)), 5.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.percentile([1, 2, 3, 4, 5], 50.0)), 3.0))
+    assert(Result.is_failure(Math.percentile([], 50.0)))
+    assert(Result.is_failure(Math.percentile([1, 2, 3], 101.0)))
+}
+
+@test
+function void test_math_correlation() {
+    # Perfect positive correlation.
+    number correlation_result = Result.unwrap(Math.correlation([1, 2, 3, 4, 5], [2, 4, 6, 8, 10]))
+
+    assert(correlation_result > 0.99)
+    assert(correlation_result < 1.01)
+}
+
+@test
+function void test_math_log_2() {
+    result<number> log_2_result = Math.log_2(8.0)
+
+    assert(Result.is_success(log_2_result))
+
+    number log_2_value = Result.unwrap(log_2_result)
+
+    assert(log_2_value > 2.99)
+    assert(log_2_value < 3.01)
+}
+
+@test
+function void test_math_infinity() {
+    assert(Math.infinity > 999999999)
+    assert(Math.approximately_equal(1.0 / Math.infinity, 0.0))
+}
+
+@test
+function void test_math_is_infinite() {
+    assert(Math.is_infinite(Math.infinity))
+    assert(Math.is_infinite(-Math.infinity))
+    assert(!Math.is_infinite(3.14))
+    assert(!Math.is_infinite(0.0))
+}
+
+@test
+function void test_math_is_not_a_number() {
+    # Use integer / 0 produces a runtime error, but 0.0 / 0.0 is only
+    # possible through Math.infinity arithmetic.
+    number nan = Math.infinity - Math.infinity
+
+    assert(Math.is_not_a_number(nan))
+    assert(!Math.is_not_a_number(3.14))
+    assert(!Math.is_not_a_number(0.0))
+    assert(!Math.is_not_a_number(Math.infinity))
+}
+
+@test
+function void test_math_approximately_equal() {
+    # Default epsilon (1e-9).
+    assert(Math.approximately_equal(1.0, 1.0))
+    assert(Math.approximately_equal(1.0, 1.0000000001))
+    assert(!Math.approximately_equal(1.0, 1.001))
+
+    # Classic floating-point pitfall: 0.1 + 0.2 != 0.3 with tight epsilon
+    assert(!Math.approximately_equal(0.1 + 0.2, 0.3, 1e-17))
+    assert(Math.approximately_equal(0.1 + 0.2, 0.3))
+
+    # Custom epsilon.
+    assert(Math.approximately_equal(1.0, 1.05, 0.1))
+    assert(!Math.approximately_equal(1.0, 1.2, 0.1))
+    assert(Math.approximately_equal(0.0, 0.0, 0.0))
+}
+
+# ─── Negative / edge-case tests ───
+
+@test
+function void test_math_factorial_negative() {
+    result<integer> r = Math.factorial(-1)
+
+    assert(Result.is_failure(r), "factorial of negative should fail")
+}
+
+@test
+function void test_math_factorial_too_large() {
+    result<integer> r = Math.factorial(21)
+
+    assert(Result.is_failure(r), "factorial above 20 should fail")
+}
+
+@test
+function void test_math_remainder_zero_divisor() {
+    result<number> r = Math.remainder(7, 0)
+
+    assert(Result.is_failure(r), "remainder with zero divisor should fail")
+}
+
+@test
+function void test_math_log_e_negative() {
+    result<number> r = Math.log_e(-1.0)
+
+    assert(Result.is_failure(r), "log_e of negative should fail")
+}
+
+@test
+function void test_math_log_e_zero() {
+    result<number> r = Math.log_e(0.0)
+
+    assert(Result.is_failure(r), "log_e of zero should fail")
+}
+
+@test
+function void test_math_log_2_negative() {
+    result<number> r = Math.log_2(-5.0)
+
+    assert(Result.is_failure(r), "log_2 of negative should fail")
+}
+
+@test
+function void test_math_power_negative_fractional() {
+    # Negative base with fractional exponent is undefined in reals.
+    result<number> r = Math.power(-1.0, 0.5)
+
+    assert(Result.is_failure(r), "negative base with fractional exponent should fail")
+}
+
+# ─── Math.atan2 ────────────────────────────────────────
+
+@test
+function void test_math_atan2() {
+    number res = Result.unwrap(Math.atan2(1.0, 1.0))
+
+    assert(Math.approximately_equal(res, Math.pi / 4.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.atan2(0.0, 1.0)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.atan2(1.0, 0.0)), Math.pi / 2.0))
+}
+
+# ─── Math.hypot ────────────────────────────────────────
+
+@test
+function void test_math_hypot() {
+    assert(Math.approximately_equal(Math.hypot(3.0, 4.0), 5.0))
+    assert(Math.approximately_equal(Math.hypot(0.0, 0.0), 0.0))
+    assert(Math.approximately_equal(Math.hypot(5.0, 12.0), 13.0))
+}
+
+# ─── Math.log ──────────────────────────────────────────
+
+@test
+function void test_math_log() {
+    assert(Math.approximately_equal(Result.unwrap(Math.log(2.0, 8.0)), 3.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.log(10.0, 100.0)), 2.0))
+    assert(Result.is_failure(Math.log(1.0, 5.0)))
+    assert(Result.is_failure(Math.log(2.0, -1.0)))
+    assert(Result.is_failure(Math.log(-2.0, 8.0)))
+}
+
+# ─── Math.cube_root ───────────────────────────────────
+
+@test
+function void test_math_cube_root() {
+    assert(Math.approximately_equal(Math.cube_root(27.0), 3.0))
+    assert(Math.approximately_equal(Math.cube_root(-8.0), -2.0))
+    assert(Math.approximately_equal(Math.cube_root(0.0), 0.0))
+}
+
+# ─── Math.hyperbolic functions ─────────────────────────
+
+@test
+function void test_math_hyperbolic_sine() {
+    assert(Math.approximately_equal(Result.unwrap(Math.hyperbolic_sine(0.0)), 0.0))
+
+    number sinh1 = Result.unwrap(Math.hyperbolic_sine(1.0))
+
+    assert(sinh1 > 1.17)
+    assert(sinh1 < 1.18)
+}
+
+@test
+function void test_math_hyperbolic_cosine() {
+    assert(Math.approximately_equal(Result.unwrap(Math.hyperbolic_cosine(0.0)), 1.0))
+
+    number cosh1 = Result.unwrap(Math.hyperbolic_cosine(1.0))
+
+    assert(cosh1 > 1.54)
+    assert(cosh1 < 1.55)
+}
+
+@test
+function void test_math_hyperbolic_tangent() {
+    assert(Math.approximately_equal(Math.hyperbolic_tangent(0.0), 0.0))
+
+    number tanh1 = Math.hyperbolic_tangent(1.0)
+
+    assert(tanh1 > 0.76)
+    assert(tanh1 < 0.77)
+}
+
+# ───────────────────────────────────────────────────────────
+# remap, smooth_step
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_math_remap() {
+    assert(Math.approximately_equal(Result.unwrap(Math.remap(5.0, 0.0, 10.0, 0.0, 100.0)), 50.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.remap(0.0, 0.0, 10.0, 0.0, 100.0)), 0.0))
+}
+
+@test
+function void test_math_smooth_step() {
+    assert(Math.approximately_equal(Result.unwrap(Math.smooth_step(0.0, 1.0, 0.5)), 0.5))
+    assert(Math.approximately_equal(Result.unwrap(Math.smooth_step(0.0, 1.0, 0.0)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.smooth_step(0.0, 1.0, 1.0)), 1.0))
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional positive coverage
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_math_remainder_floating_point() {
+    # Floating-point operands take the fmod path rather than integer modulo.
+    assert(Math.approximately_equal(Result.unwrap(Math.remainder(5.5, 2.0)), 1.5))
+    assert(Math.approximately_equal(Result.unwrap(Math.remainder(-5.5, 2.0)), -1.5))
+}
+
+@test
+function void test_math_sum_integers() {
+    # An all-integer array sums to an integer, not a number.
+    result<number> r = Math.sum([1, 2, 3, 4])
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == 10)
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional negative / overflow coverage
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_math_least_common_multiple_overflow() {
+    result<integer> r = Math.least_common_multiple(9223372036854775807, 2)
+
+    assert(Result.is_failure(r), "lcm that overflows int64 should fail")
+}
+
+@test
+function void test_math_greatest_common_divisor_overflow() {
+    result<integer> r = Math.greatest_common_divisor(-9223372036854775807 - 1, 4)
+
+    assert(Result.is_failure(r), "gcd of INT64_MIN should fail")
+}
+
+@test
+function void test_math_absolute_overflow() {
+    result<integer> r = Math.absolute(-9223372036854775807 - 1)
+
+    assert(Result.is_failure(r), "absolute of INT64_MIN should fail")
+}
+
+@test
+function void test_math_exponential_overflow() {
+    result<number> r = Math.exponential(1000.0)
+
+    assert(Result.is_failure(r), "exponential that overflows to infinity should fail")
+}
+
+@test
+function void test_math_hyperbolic_sine_overflow() {
+    result<number> r = Math.hyperbolic_sine(1000.0)
+
+    assert(Result.is_failure(r), "hyperbolic_sine that overflows should fail")
+}
+
+@test
+function void test_math_hyperbolic_cosine_overflow() {
+    result<number> r = Math.hyperbolic_cosine(1000.0)
+
+    assert(Result.is_failure(r), "hyperbolic_cosine that overflows should fail")
+}
+
+@test
+function void test_math_rounding_out_of_integer_range() {
+    # 1e30 exceeds the int64 range for the whole rounding family.
+    assert(Result.is_failure(Math.floor(1e30)), "floor out of integer range should fail")
+    assert(Result.is_failure(Math.ceil(1e30)), "ceil out of integer range should fail")
+    assert(Result.is_failure(Math.round(1e30)), "round out of integer range should fail")
+    assert(Result.is_failure(Math.truncate(1e30)), "truncate out of integer range should fail")
+}
+
+@test
+function void test_math_trig_infinite_argument() {
+    # sin/cos/tan of infinity are NaN and must surface as failures.
+    assert(Result.is_failure(Math.sine(Math.infinity)), "sine of infinity should fail")
+    assert(Result.is_failure(Math.cosine(Math.infinity)), "cosine of infinity should fail")
+    assert(Result.is_failure(Math.tangent(Math.infinity)), "tangent of infinity should fail")
+}
+
+@test
+function void test_math_arc_tangent_not_a_number() {
+    number nan = Math.infinity - Math.infinity
+    result<number> r = Math.arc_tangent(nan)
+
+    assert(Result.is_failure(r), "arc_tangent of NaN should fail")
+}
+
+@test
+function void test_math_remap_zero_input_range() {
+    result<number> r = Math.remap(5.0, 3.0, 3.0, 0.0, 1.0)
+
+    assert(Result.is_failure(r), "remap with a zero input range should fail")
+}
+
+@test
+function void test_math_smooth_step_equal_edges() {
+    result<number> r = Math.smooth_step(5.0, 5.0, 0.5)
+
+    assert(Result.is_failure(r), "smooth_step with equal edges should fail")
+}
+
+@test
+function void test_math_correlation_failures() {
+    # Unequal lengths and fewer than two points are both errors.
+    assert(Result.is_failure(Math.correlation([1, 2], [1, 2, 3])), "unequal lengths should fail")
+    assert(Result.is_failure(Math.correlation([1], [1])), "fewer than two points should fail")
+}
+

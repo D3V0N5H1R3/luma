@@ -1,0 +1,12 @@
+@main
+function integer main() {
+    return sign(5)
+}
+
+function integer sign(integer x) {
+    if x > 0 {
+        return 1
+    } else {
+        return -1
+    }
+}

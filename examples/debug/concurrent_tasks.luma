@@ -1,0 +1,22 @@
+# Concurrent tasks test — task_scope with multiple tasks for thread debugging.
+
+function number compute(integer n) {
+    mutable number sum = 0
+
+    for i in 1 .. n + 1 {
+        sum += i
+    }
+
+    return sum
+}
+
+@main
+function void main() {
+    array<number> results = task_scope {
+        spawn compute(100)
+        spawn compute(200)
+    }
+
+    print("Task 1: ${Array.get(results, 0)}")
+    print("Task 2: ${Array.get(results, 1)}")
+}

@@ -1,0 +1,100 @@
+# ═══════════════════════════════════════════════════════════
+# Records
+#
+# Demonstrates record types: declaration, default field
+# values, construction, field access, mutation, value
+# semantics, structural equality, and copying with `with`.
+# ═══════════════════════════════════════════════════════════
+
+record Point {
+    integer x,
+    integer y
+}
+
+record Config {
+    string host = "localhost",
+    integer port = 8080,
+    boolean secure = false
+}
+
+record Line {
+    Point start,
+    Point finish
+}
+
+function string describe(Point p) {
+    return "(${p.x}, ${p.y})"
+}
+
+@main
+function void main() {
+    # ── Construction and field access ──
+    print("=== Construction ===")
+
+    Point p = Point { x = 3, y = 4 }
+    print("p = ${describe(p)}")
+    print("p.x = ${p.x}, p.y = ${p.y}")
+
+    # ── Default field values ──
+    print("")
+    print("=== Default fields ===")
+
+    Config defaults = Config {}
+    Config custom = Config { port = 443, secure = true }
+
+    print("defaults: ${defaults.host}:${defaults.port} secure=${defaults.secure}")
+    print("custom:   ${custom.host}:${custom.port} secure=${custom.secure}")
+
+    # ── Mutation (requires `mutable`) ──
+    print("")
+    print("=== Mutation ===")
+
+    mutable Point cursor = Point { x = 0, y = 0 }
+    cursor.x = 10
+    cursor.y = 20
+    print("cursor = ${describe(cursor)}")
+
+    # ── Value semantics: copies are independent ──
+    print("")
+    print("=== Value semantics ===")
+
+    # Assigning a record copies it; mutating the copy leaves
+    # the original untouched.
+    Point original = Point { x = 1, y = 1 }
+    mutable Point copy = original
+    copy.x = 99
+    print("original = ${describe(original)}")
+    print("copy     = ${describe(copy)}")
+
+    # ── Structural equality ──
+    print("")
+    print("=== Equality ===")
+
+    Point a = Point { x = 5, y = 5 }
+    Point b = Point { x = 5, y = 5 }
+    Point c = Point { x = 5, y = 6 }
+    print("a == b: ${a == b}")
+    print("a == c: ${a == c}")
+
+    # ── Copying with `with` overrides ──
+    print("")
+    print("=== `with` overrides ===")
+
+    Point base = Point { x = 1, y = 2 }
+    Point moved = base with { x = 10 }
+    Point shifted = base with { x = 10, y = 20 }
+
+    print("base    = ${describe(base)}")
+    print("moved   = ${describe(moved)}")
+    print("shifted = ${describe(shifted)}")
+
+    # ── Nested records ──
+    print("")
+    print("=== Nested records ===")
+
+    Line segment = Line {
+        start = Point { x = 0, y = 0 },
+        finish = Point { x = 3, y = 4 }
+    }
+    print("segment from ${describe(segment.start)} to ${describe(segment.finish)}")
+}

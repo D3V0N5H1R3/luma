@@ -1,0 +1,312 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Value-Block Operands
+#
+# Regression coverage for a compiler codegen bug where a
+# value-producing block (`match` / `if` used as an expression)
+# appearing as a non-first operand of a surrounding construct
+# corrupted the operand stack. The block declared its
+# subject/binding locals at absolute slots that ignored the
+# temporaries already pushed for the earlier operands (the
+# callee, prior arguments, a container, a left operand, a
+# dictionary key, …), so GetLocal/SetLocal addressed the wrong
+# stack positions and produced wrong results or runtime errors
+# such as "cannot call 'string'".
+#
+# Companion to value_block_assignment.luma, which covers the
+# assignment-target positions. This file covers call arguments,
+# collection literals, binary operands, string interpolation,
+# pipes, index expressions, ranges, record construction, and
+# compound assignment right-hand sides.
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+function string second(string _a, string b) {
+    return b
+}
+
+function string third(string _a, string _b, string c) {
+    return c
+}
+
+record Box {
+    string label,
+    string value
+}
+
+# ─── Value block as a (non-first) call argument ───
+
+@test
+function void test_call_arg_second() {
+    result<string> res = failure("cors")
+    string out = second("prefix", match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    })
+    assert(out == "fail:cors")
+}
+
+@test
+function void test_call_arg_third() {
+    result<string> res = success("ok")
+    string out = third("a", "b", match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    })
+    assert(out == "ok")
+}
+
+@test
+function void test_nested_call_args() {
+    result<string> a = failure("A")
+    result<string> b = success("B")
+    string out = second(match a {
+        success(x) { x }
+        failure(e) { "fail:${e}" }
+    }, match b {
+        success(x) { x }
+        failure(e) { "fail:${e}" }
+    })
+    assert(out == "B")
+}
+
+# ─── Value block as a collection-literal element/value ───
+
+@test
+function void test_array_element() {
+    result<string> res = failure("boom")
+    array<string> arr = ["p", match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    }]
+    assert(arr[0] == "p")
+    assert(arr[1] == "fail:boom")
+}
+
+@test
+function void test_dict_value() {
+    result<string> res = failure("nope")
+    dictionary<string> d = {"k": match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    }}
+    assert(d["k"] == "fail:nope")
+}
+
+@test
+function void test_tuple_element() {
+    result<string> res = success("yo")
+    (string, string) pair = ("p", match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    })
+    assert(pair.1 == "yo")
+}
+
+@test
+function void test_record_field() {
+    result<string> res = failure("rf")
+    Box b = Box {
+        label = "L",
+        value = match res {
+            success(body) { body }
+            failure(err) { "fail:${err}" }
+        }
+    }
+    assert(b.label == "L")
+    assert(b.value == "fail:rf")
+}
+
+@test
+function void test_record_with_override() {
+    result<string> res = failure("rw")
+    Box base = Box { label = "L", value = "old" }
+    Box updated = base with {
+        value = match res {
+            success(body) { body }
+            failure(err) { "fail:${err}" }
+        }
+    }
+    assert(updated.label == "L")
+    assert(updated.value == "fail:rw")
+}
+
+# ─── Value block as a binary operand / interpolation part ───
+
+@test
+function void test_binary_right_operand() {
+    result<string> res = failure("x")
+    string out = "p:" + match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    }
+    assert(out == "p:fail:x")
+}
+
+@test
+function void test_interpolation_part() {
+    result<string> res = failure("zz")
+    string label = "got"
+    string out = "${label}=${match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    }}!"
+    assert(out == "got=fail:zz!")
+}
+
+# ─── Value block as an index expression / range end ───
+
+@test
+function void test_index_expression() {
+    result<integer> res = failure("ie")
+    array<string> arr = ["zero", "one", "two"]
+    string out = arr[match res {
+        success(n) { n }
+        failure(_e) { 2 }
+    }]
+    assert(out == "two")
+}
+
+@test
+function void test_range_end() {
+    result<integer> res = failure("re")
+    mutable integer total = 0
+    for _ in 0 .. (match res {
+        success(n) { n }
+        failure(_e) { 3 }
+    }) {
+        total = total + 1
+    }
+    assert(total == 3)
+}
+
+# ─── Value block as a pipe call argument ───
+
+@test
+function void test_pipe_argument() {
+    result<string> res = failure("pp")
+    string out = "a" |> second(match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    })
+    assert(out == "fail:pp")
+}
+
+# ─── Value block as a compound-assignment right-hand side ───
+
+@test
+function void test_compound_assign_variable() {
+    result<string> res = failure("cv")
+    mutable string s = "p:"
+    s += match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    }
+    assert(s == "p:fail:cv")
+}
+
+@test
+function void test_compound_assign_index() {
+    result<string> res = failure("ci")
+    mutable dictionary<string> d = {"k": "p:"}
+    d["k"] += match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    }
+    assert(d["k"] == "p:fail:ci")
+}
+
+@test
+function void test_compound_assign_field() {
+    result<string> res = failure("cf")
+    mutable Box b = Box { label = "L", value = "p:" }
+    b.value += match res {
+        success(body) { body }
+        failure(err) { "fail:${err}" }
+    }
+    assert(b.value == "p:fail:cf")
+}
+
+# ─── Control: if value block as a call argument ───
+
+@test
+function void test_if_block_call_arg() {
+    boolean flag = true
+    string out = second("prefix", if flag {
+        string computed = "computed"
+        computed
+    } else {
+        "other"
+    })
+    assert(out == "computed")
+}
+
+# ─── Value block as a default parameter value ───
+#
+# The optional-parameter prologue emits GetLocal/None/Equal/JumpIfFalse to test
+# whether the argument was omitted. JumpIfFalse *peeks* its boolean condition
+# (it is popped only after the default assignment), so that boolean is a live
+# operand-stack temporary while the default value is compiled. A default value
+# that is itself a value block declares its subject/binding/body locals, so
+# without a reserved scratch slot those locals resolve one slot too low and
+# GetLocal/SetLocal read the leftover boolean instead of the intended value —
+# e.g. `v * 10` threw "cannot multiply 'boolean' and 'integer'".
+
+function integer default_match_binding(integer x = match some(5) {
+    case some(v) { v * 10 }
+    case none { 0 }
+}) {
+    return x
+}
+
+function integer default_match_body_local(integer x = match some(6) {
+    case some(v) {
+        integer doubled = v * 2
+        doubled + 1
+    }
+    case none { 0 }
+}) {
+    return x
+}
+
+function string default_match_string(string s = match some("hi") {
+    case some(v) { v + "!" }
+    case none { "none" }
+}) {
+    return s
+}
+
+function integer default_if_block(integer x = if 1 < 2 {
+    integer a = 3
+    integer b = 4
+    a * b
+} else {
+    0
+}) {
+    return x
+}
+
+@test
+function void test_default_match_binding() {
+    assert(default_match_binding() == 50)
+    assert(default_match_binding(7) == 7)
+}
+
+@test
+function void test_default_match_body_local() {
+    assert(default_match_body_local() == 13)
+    assert(default_match_body_local(2) == 2)
+}
+
+@test
+function void test_default_match_string() {
+    assert(default_match_string() == "hi!")
+    assert(default_match_string("yo") == "yo")
+}
+
+@test
+function void test_default_if_block() {
+    assert(default_if_block() == 12)
+    assert(default_if_block(99) == 99)
+}

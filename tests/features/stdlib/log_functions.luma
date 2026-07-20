@@ -1,0 +1,335 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Log Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────────
+# Log levels
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_log_set_and_get_level() {
+    Log.set_level(Log.Level.Warn)
+
+    assert(Log.get_level() == Log.Level.Warn)
+
+    Log.set_level(Log.Level.Debug)
+
+    assert(Log.get_level() == Log.Level.Debug)
+}
+
+@test
+function void test_log_set_level_off() {
+    Log.set_level(Log.Level.Off)
+
+    assert(Log.get_level() == Log.Level.Off)
+
+    # Reset to default.
+    Log.set_level(Log.Level.Debug)
+}
+
+@test
+function void test_log_level_info() {
+    Log.set_level(Log.Level.Info)
+
+    assert(Log.get_level() == Log.Level.Info)
+
+    Log.set_level(Log.Level.Debug)
+}
+
+@test
+function void test_log_level_error() {
+    Log.set_level(Log.Level.Error)
+
+    assert(Log.get_level() == Log.Level.Error)
+
+    Log.set_level(Log.Level.Debug)
+}
+
+# ───────────────────────────────────────────────────────────
+# Logging calls (verify no crash; output goes to stderr)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_log_debug_message() {
+    Log.set_level(Log.Level.Debug)
+    Log.debug("debug test message")
+
+    assert(true)
+}
+
+@test
+function void test_log_info_message() {
+    Log.set_level(Log.Level.Debug)
+    Log.info("info test message")
+
+    assert(true)
+}
+
+@test
+function void test_log_warn_message() {
+    Log.set_level(Log.Level.Debug)
+    Log.warn("warn test message")
+
+    assert(true)
+}
+
+@test
+function void test_log_error_message() {
+    Log.set_level(Log.Level.Debug)
+    Log.error("error test message")
+
+    assert(true)
+}
+
+@test
+function void test_log_filtered_by_level() {
+    # Set level to Error — debug/info/warn should be suppressed.
+    Log.set_level(Log.Level.Error)
+    Log.debug("should be filtered")
+    Log.info("should be filtered")
+    Log.warn("should be filtered")
+    Log.error("should appear")
+
+    # No crash — level filtering works.
+    assert(true)
+
+    Log.set_level(Log.Level.Debug)
+}
+
+# ───────────────────────────────────────────────────────────
+# Format and context
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_log_set_format() {
+    Log.set_format("[LOG] ")
+
+    # set_format returns null — verify no crash.
+    assert(true)
+}
+
+@test
+function void test_log_set_context() {
+    Log.set_context("module", "tests")
+
+    # set_context returns null — verify no crash.
+    Log.clear_context()
+
+    assert(true)
+}
+
+@test
+function void test_log_multiple_contexts() {
+    Log.set_context("module", "auth")
+    Log.set_context("user", "alice")
+
+    Log.info("context test")
+
+    Log.clear_context()
+
+    assert(true)
+}
+
+@test
+function void test_log_set_output() {
+    # set_output should accept "stderr" without error.
+    boolean ok = Log.set_output("stderr") |> Result.is_success()
+
+    assert(ok)
+}
+
+# ───────────────────────────────────────────────────────────
+# Negative tests
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_log_set_output_invalid_path() {
+    # A path in a non-existent directory should fail.
+    result<void> r = Log.set_output("/no/such/dir/log.txt")
+
+    assert(Result.is_failure(r))
+
+    # Restore default output.
+    result<void> _r1 = Log.set_output("stderr")
+}
+
+@test
+function void test_log_set_output_stdout() {
+    # "stdout" is a valid target.
+    boolean ok = Log.set_output("stdout") |> Result.is_success()
+
+    assert(ok)
+
+    # Restore default output.
+    result<void> _r2 = Log.set_output("stderr")
+}
+
+# ───────────────────────────────────────────────────────────
+# reset
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_log_reset_restores_default_level() {
+    Log.set_level(Log.Level.Error)
+    Log.reset()
+
+    assert(Log.get_level() == Log.Level.Info)
+
+    Log.set_level(Log.Level.Debug)
+}
+
+# ───────────────────────────────────────────────────────────
+# Output verification
+#
+# These tests route Log output to a private file and read it
+# back, so they assert the *content* of emitted lines — not
+# merely that a call did not crash.  capture_log() resets the
+# global log state before and after each run so configuration
+# never leaks between tests.  A literal "\${...}" escapes Luma
+# string interpolation, yielding the literal placeholder text
+# that Log's own formatter then substitutes.
+# ───────────────────────────────────────────────────────────
+
+function string capture_log(string label, function() -> none body) {
+    integer pid = Process.get_process_id()
+    string path = "__test_log_${label}_${pid}.log"
+
+    Log.reset()
+    result<void> _open = Log.set_output(path)
+
+    body()
+
+    # reset() closes the file sink (flushing the bytes) and restores defaults.
+    Log.reset()
+
+    result<string> content = FileSystem.read_file(path)
+    result<boolean> _delete = FileSystem.delete(path)
+
+    mutable string text = ""
+
+    match content {
+        success(s) { text = s }
+        failure(_e) { text = "<read-failed>" }
+    }
+
+    return text
+}
+
+@test
+function void test_log_output_substitutes_level_and_message() {
+    string out = capture_log("fmt", () -> {
+        Log.set_format("\${level}::\${message}")
+        Log.set_level(Log.Level.Debug)
+        Log.info("hello")
+    })
+
+    assert(String.contains(out, "INFO::hello"))
+}
+
+@test
+function void test_log_output_uses_default_format() {
+    string out = capture_log("deffmt", () -> {
+        Log.info("ready")
+    })
+
+    # Default format is "${timestamp} [${level}] ${message}".
+    assert(String.contains(out, "[INFO] ready"))
+}
+
+@test
+function void test_log_output_preserves_unknown_placeholder() {
+    string out = capture_log("unknownph", () -> {
+        Log.set_format("\${nope}")
+        Log.set_level(Log.Level.Debug)
+        Log.info("ignored")
+    })
+
+    assert(String.contains(out, "\${nope}"))
+}
+
+@test
+function void test_log_output_level_filtering() {
+    string out = capture_log("filter", () -> {
+        Log.set_format("\${message}")
+        Log.set_level(Log.Level.Error)
+        Log.debug("DBG")
+        Log.info("INF")
+        Log.warn("WRN")
+        Log.error("ERR")
+    })
+
+    assert(String.contains(out, "ERR"))
+    assert(!String.contains(out, "DBG"))
+    assert(!String.contains(out, "INF"))
+    assert(!String.contains(out, "WRN"))
+}
+
+@test
+function void test_log_output_level_off_silences_all() {
+    string out = capture_log("off", () -> {
+        Log.set_format("\${message}")
+        Log.set_level(Log.Level.Off)
+        Log.debug("DBG")
+        Log.error("ERR")
+    })
+
+    assert(!String.contains(out, "ERR"))
+}
+
+@test
+function void test_log_output_context_appended() {
+    string out = capture_log("ctx", () -> {
+        Log.set_format("\${message}")
+        Log.set_level(Log.Level.Debug)
+        Log.set_context("module", "auth")
+        Log.info("login")
+    })
+
+    assert(String.contains(out, "login | module=auth"))
+}
+
+@test
+function void test_log_output_context_updates_existing_key() {
+    string out = capture_log("ctxupd", () -> {
+        Log.set_format("\${message}")
+        Log.set_level(Log.Level.Debug)
+        Log.set_context("k", "v1")
+        Log.set_context("k", "v2")
+        Log.info("m")
+    })
+
+    assert(String.contains(out, "k=v2"))
+    assert(!String.contains(out, "k=v1"))
+}
+
+@test
+function void test_log_output_clear_context_removes_fields() {
+    string out = capture_log("ctxclear", () -> {
+        Log.set_format("\${message}")
+        Log.set_level(Log.Level.Debug)
+        Log.set_context("k", "v")
+        Log.clear_context()
+        Log.info("m")
+    })
+
+    assert(!String.contains(out, "k=v"))
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional negative tests
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_log_set_output_directory_fails() {
+    # An existing directory cannot be opened as a log file.
+    result<void> r = Log.set_output(".")
+
+    assert(Result.is_failure(r))
+
+    # Restore default output.
+    result<void> _restore = Log.set_output("stderr")
+}
+

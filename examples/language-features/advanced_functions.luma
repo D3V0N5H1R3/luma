@@ -1,0 +1,117 @@
+# ═══════════════════════════════════════════════════════════
+# Advanced Functions
+#
+# Demonstrates optional parameters with default values,
+# named arguments, mutable parameters, storing lambdas
+# in variables, multi-statement lambdas, and function
+# types.
+# ═══════════════════════════════════════════════════════════
+
+# ── Optional parameters (default values) ──
+
+function string greet(string name, string prefix = "Hello") {
+    return "${prefix}, ${name}!"
+}
+
+function string format_price(number amount, integer decimals = 2, string currency = "USD") {
+    return "${currency} ${String.format_number(amount, decimals)}"
+}
+
+# ── Named arguments ──
+
+function string create_tag(string name, string colour, boolean bold) {
+    string style = if bold { "bold" } else { "normal" }
+
+    return "[${name} colour=${colour} style=${style}]"
+}
+
+# ── Mutable parameters ──
+
+function integer count_down(mutable integer n) {
+    mutable integer steps = 0
+
+    while n > 0 {
+        n -= 1
+        steps++
+    }
+
+    return steps
+}
+
+function string describe_parity(integer n) {
+    string word = if n % 2 == 0 { "even" } else { "odd" }
+
+    return "${n} is ${word}"
+}
+
+@main
+function void main() {
+    # ── Optional parameters ──
+    print("=== Optional parameters ===")
+
+    print(greet("Alice"))
+    print(greet("Bob", "Hi"))
+    print(greet("Charlie", "Hey"))
+
+    print(format_price(9.99))
+    print(format_price(9.99, 0))
+    print(format_price(1234.5, 2, "EUR"))
+
+    # ── Named arguments ──
+    print("")
+    print("=== Named arguments ===")
+
+    # All named — any order.
+    string tag1 = create_tag(bold: true, colour: "red", name: "error")
+    print(tag1)
+
+    # Positional first, then named.
+    string tag2 = create_tag("info", bold: false, colour: "blue")
+    print(tag2)
+
+    # All positional (still works).
+    string tag3 = create_tag("warn", "yellow", true)
+    print(tag3)
+
+    # ── Mutable parameters ──
+    print("")
+    print("=== Mutable parameters ===")
+
+    integer steps = count_down(5)
+    print("count_down(5) took ${steps} steps")
+
+    # ── Storing lambdas in variables ──
+    print("")
+    print("=== Lambda variables ===")
+
+    function(number) -> boolean is_positive = (number x) -> x > 0
+    print("is_positive(5):  ${is_positive(5)}")
+    print("is_positive(-3): ${is_positive(-3)}")
+
+    function(number, number) -> number add = (number a, number b) -> a + b
+    print("add(3, 4): ${add(3, 4)}")
+
+    function() -> string say_hello = () -> "hello!"
+    print("say_hello(): ${say_hello()}")
+
+    # ── Multi-statement lambdas ──
+    print("")
+    print("=== Multi-statement lambdas ===")
+
+    array<integer> numbers = [1, 2, 3, 4, 5]
+
+    array<string> labels = (numbers |> Array.map(describe_parity)) ?? []
+
+    for label in labels {
+        print("  ${label}")
+    }
+
+    # ── Higher-order: passing lambda variables ──
+    print("")
+    print("=== Passing lambdas ===")
+
+    function(integer) -> boolean is_even = (integer x) -> x % 2 == 0
+
+    array<integer> evens = Result.unwrap(Array.filter(numbers, is_even))
+    print("evens from ${numbers}: ${evens}")
+}

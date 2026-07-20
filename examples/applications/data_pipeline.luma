@@ -1,0 +1,524 @@
+# ═══════════════════════════════════════════════════════════
+# Data Pipeline / ETL
+#
+# Demonstrates pipes as a core paradigm — every stage is a
+# pure function composed with |>. Also showcases Csv and Json
+# modules, result types with error propagation (?), dictionaries,
+# functional transforms, and @test annotations.
+#
+# Pipeline: CSV input → validate → transform → enrich →
+#           aggregate → JSON output
+#
+# Usage: luma examples/applications/data_pipeline.luma
+# Tests: luma --test examples/applications/data_pipeline.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Domain Types ────────────────────────────────────────
+
+record RawRecord {
+    string name,
+    string department,
+    string salary,
+    string start_date,
+    string status
+}
+
+record Employee {
+    string name,
+    string department,
+    number salary,
+    string start_date,
+    string status,
+    number tenure_years,
+    string salary_band
+}
+
+record DepartmentSummary {
+    string department,
+    number headcount,
+    number total_salary,
+    number average_salary,
+    number min_salary,
+    number max_salary
+}
+
+# ─── Stage 1: Parse CSV into raw records ─────────────────
+
+function string _sample_csv() {
+    return String.join([
+        "name,department,salary,start_date,status",
+        "Alice,Engineering,95000,2019-03-15,active",
+        "Bob,Marketing,72000,2020-07-01,active",
+        "Carol,Engineering,98000,2018-11-20,active",
+        "Dave,Marketing,,2021-01-10,active",
+        "Eve,Engineering,102000,2017-06-05,active",
+        "Frank,Sales,68000,2022-02-14,inactive",
+        "Grace,Engineering,91000,2020-09-30,active",
+        "Hank,Sales,74000,2019-12-01,active",
+        "Iris,Marketing,78000,2021-05-22,active",
+        "Jack,Engineering,invalid,2023-01-15,active"
+    ], "\n")
+}
+
+function array<RawRecord> parse_csv(string csv_data) {
+    array<dictionary<string>> records = Csv.deserialize_records(csv_data)
+    |> Result.unwrap_or([])
+
+    return records
+    |> Array.map((dictionary<string> rec) -> RawRecord {
+        name = Dictionary.get(rec, "name") |> Result.unwrap_or(""),
+        department = Dictionary.get(rec, "department") |> Result.unwrap_or(""),
+        salary = Dictionary.get(rec, "salary") |> Result.unwrap_or(""),
+        start_date = Dictionary.get(rec, "start_date") |> Result.unwrap_or(""),
+        status = Dictionary.get(rec, "status") |> Result.unwrap_or("")
+    })
+    |> Result.unwrap_or([])
+}
+
+# ─── Stage 2: Validate ──────────────────────────────────
+
+function result<RawRecord> validate_record(RawRecord rec) {
+    if String.is_empty(String.trim(rec.name)) {
+        return failure("missing name")
+    }
+
+    if String.is_empty(String.trim(rec.salary)) {
+        return failure("missing salary for ${rec.name}")
+    }
+
+    match String.parse_number(rec.salary) {
+        success(_) { return success(rec) }
+        failure(_) { return failure("invalid salary '${rec.salary}' for ${rec.name}") }
+    }
+}
+
+record ValidationOutcome {
+    array<RawRecord> valid,
+    array<string> errors
+}
+
+function string validation_error(RawRecord rec) {
+    match validate_record(rec) {
+        success(_) { return "" }
+        failure(message) { return message }
+    }
+}
+
+function ValidationOutcome validate_all(array<RawRecord> records) {
+    # Split the dataset in one native pass. Building "valid" and "errors" with
+    # Array.push inside a loop would copy each growing array on every append.
+    (array<RawRecord> valid, array<RawRecord> invalid) = records
+    |> Array.partition((RawRecord rec) -> Result.is_success(validate_record(rec)))
+    |> Result.unwrap_or(([], []))
+
+    array<string> errors = invalid
+    |> Array.map(validation_error)
+    |> Result.unwrap_or([])
+
+    return ValidationOutcome { valid = valid, errors = errors }
+}
+
+# ─── Stage 3: Transform ─────────────────────────────────
+
+function string compute_salary_band(number salary) {
+    if salary >= 100000.0 { return "Senior" }
+    if salary >= 85000.0  { return "Mid-Level" }
+    if salary >= 70000.0  { return "Junior" }
+
+    return "Entry"
+}
+
+function number compute_tenure(string start_date) {
+    # Simple year extraction: parse the year from "YYYY-MM-DD"
+    number current_year = 2026
+    string year_str = String.substring(start_date, 0, 4)
+
+    number start_year = match String.parse_integer(year_str) {
+        success(y) { y }
+        failure(_) { current_year }
+    }
+
+    return current_year - start_year
+}
+
+function Employee transform_record(RawRecord rec) {
+    number salary = String.parse_number(rec.salary) |> Result.unwrap_or(0.0)
+    number tenure = compute_tenure(rec.start_date)
+    string band = compute_salary_band(salary)
+
+    return Employee {
+        name = rec.name,
+        department = rec.department,
+        salary = salary,
+        start_date = rec.start_date,
+        status = rec.status,
+        tenure_years = tenure,
+        salary_band = band
+    }
+}
+
+function array<Employee> transform_all(array<RawRecord> records) {
+    return records
+    |> Array.map(transform_record)
+    |> Result.unwrap_or([])
+}
+
+# ─── Stage 4: Filter ────────────────────────────────────
+
+function array<Employee> filter_active(array<Employee> employees) {
+    return employees
+    |> Array.filter((Employee e) -> e.status == "active")
+    |> Result.unwrap_or([])
+}
+
+# ─── Stage 5: Aggregate ─────────────────────────────────
+
+function array<string> unique_departments(array<Employee> employees) {
+    return employees
+    |> Array.map((Employee e) -> e.department)
+    |> Result.unwrap_or([])
+    |> Array.unique()
+}
+
+function DepartmentSummary summarize_department(
+    array<Employee> all_employees,
+    string department
+) {
+    array<Employee> dept_employees = all_employees
+    |> Array.filter((Employee e) -> e.department == department)
+    |> Result.unwrap_or([])
+
+    array<number> salaries = dept_employees
+    |> Array.map((Employee e) -> e.salary)
+    |> Result.unwrap_or([])
+
+    number count = Array.length(dept_employees)
+
+    number total = salaries
+    |> Array.sum()
+    |> Result.unwrap_or(0.0)
+
+    number avg = if count > 0 { total / count } else { 0.0 }
+
+    number min_sal = salaries
+    |> Array.min()
+    |> Result.unwrap_or(0.0)
+
+    number max_sal = salaries
+    |> Array.max()
+    |> Result.unwrap_or(0.0)
+
+    return DepartmentSummary {
+        department = department,
+        headcount = count,
+        total_salary = total,
+        average_salary = avg,
+        min_salary = min_sal,
+        max_salary = max_sal
+    }
+}
+
+function array<DepartmentSummary> aggregate(array<Employee> employees) {
+    return unique_departments(employees)
+    |> Array.map((string dept) -> summarize_department(employees, dept))
+    |> Result.unwrap_or([])
+}
+
+# ─── Stage 6: Format Output ─────────────────────────────
+
+function string format_employee(Employee e) {
+    return "  ${e.name} | ${e.department} | ${String.format_number(e.salary, 0)} | ${e.salary_band} | ${e.tenure_years}y"
+}
+
+function string format_summary(DepartmentSummary s) {
+    return String.join([
+        "  ${s.department}:",
+        "    Headcount: ${s.headcount}",
+        "    Total:     ${String.format_number(s.total_salary, 0)}",
+        "    Average:   ${String.format_number(s.average_salary, 0)}",
+        "    Range:     ${String.format_number(s.min_salary, 0)} — ${String.format_number(s.max_salary, 0)}"
+    ], "\n")
+}
+
+function dictionary<string> _employee_to_dict(Employee e) {
+    return {
+        "name": e.name,
+        "department": e.department,
+        "salary": String.format_number(e.salary, 0),
+        "band": e.salary_band,
+        "tenure": "${e.tenure_years}"
+    }
+}
+
+function string to_json_report(
+    array<Employee> employees,
+    array<DepartmentSummary> _
+) {
+    array<dictionary<string>> emp_data = employees
+    |> Array.map(_employee_to_dict)
+    |> Result.unwrap_or([])
+
+    return Json.serialize_pretty(emp_data)
+}
+
+# ─── Stage printing helpers ──────────────────────────────
+
+function void print_stage_header(string title) {
+    print("\n─── ${title} ───")
+}
+
+function void print_validation_result(ValidationOutcome outcome) {
+    print("  Valid: ${Array.length(outcome.valid)}, Errors: ${Array.length(outcome.errors)}")
+
+    for err in outcome.errors {
+        print("  ⚠ ${err}")
+    }
+}
+
+function void print_department_summaries(array<DepartmentSummary> summaries) {
+    for s in summaries {
+        print(format_summary(s))
+    }
+}
+
+function void print_employee_report(array<Employee> active) {
+    print("  Name | Department | Salary | Band | Tenure")
+    print("  ${String.repeat("─", 50) |> Result.unwrap_or("")}")
+
+    for e in active {
+        print(format_employee(e))
+    }
+}
+
+function void print_pipeline_summary(
+    array<Employee> active,
+    array<DepartmentSummary> summaries,
+    array<string> errors
+) {
+    number total_payroll = active
+    |> Array.map((Employee e) -> e.salary)
+    |> Result.unwrap_or([])
+    |> Array.sum()
+    |> Result.unwrap_or(0.0)
+
+    number avg_tenure = active
+    |> Array.map((Employee e) -> e.tenure_years * 1.0)
+    |> Result.unwrap_or([])
+    |> Array.sum()
+    |> Result.unwrap_or(0.0)
+
+    number active_count = Array.length(active)
+    number tenure_avg = if active_count > 0 { avg_tenure / active_count } else { 0.0 }
+
+    print("  Total payroll:    ${String.format_number(total_payroll, 0)}")
+    print("  Average tenure:   ${String.format_number(tenure_avg, 1)} years")
+    print("  Departments:      ${Array.length(summaries)}")
+    print("  Records dropped:  ${Array.length(errors)}")
+}
+
+# ─── Full Pipeline ───────────────────────────────────────
+
+function void run_pipeline(string csv_data) {
+    print("═══════════════════════════════════════")
+    print("   ETL Data Pipeline")
+    print("═══════════════════════════════════════")
+
+    # Stage 1: Parse
+    print_stage_header("Stage 1: Parse CSV")
+
+    array<RawRecord> raw = parse_csv(csv_data)
+
+    print("  Parsed ${Array.length(raw)} raw records")
+
+    # Stage 2: Validate
+    print_stage_header("Stage 2: Validate")
+
+    ValidationOutcome outcome = validate_all(raw)
+
+    print_validation_result(outcome)
+
+    # Stage 3: Transform
+    print_stage_header("Stage 3: Transform")
+
+    array<Employee> employees = outcome.valid
+    |> transform_all()
+
+    print("  Transformed ${Array.length(employees)} records")
+
+    # Stage 4: Filter active
+    print_stage_header("Stage 4: Filter Active")
+
+    array<Employee> active = employees
+    |> filter_active()
+
+    print("  Active employees: ${Array.length(active)}")
+
+    # Stage 5: Aggregate
+    print_stage_header("Stage 5: Aggregate by Department")
+
+    array<DepartmentSummary> summaries = active
+    |> aggregate()
+
+    print_department_summaries(summaries)
+
+    # Stage 6: Output
+    print_stage_header("Stage 6: Employee Report")
+
+    print_employee_report(active)
+
+    # JSON export
+    print_stage_header("JSON Export")
+
+    string json = to_json_report(active, summaries)
+
+    print(json)
+
+    # Overall stats via pipes
+    print_stage_header("Pipeline Summary")
+
+    print_pipeline_summary(active, summaries, outcome.errors)
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+@test
+function void test_validate_valid_record() {
+    RawRecord rec = RawRecord {
+        name = "Test", department = "Dev",
+        salary = "80000", start_date = "2020-01-01", status = "active"
+    }
+    result<RawRecord> r = validate_record(rec)
+
+    assert(Result.is_success(r), "valid record should pass")
+}
+
+@test
+function void test_validate_missing_salary() {
+    RawRecord rec = RawRecord {
+        name = "Test", department = "Dev",
+        salary = "", start_date = "2020-01-01", status = "active"
+    }
+    result<RawRecord> r = validate_record(rec)
+
+    assert(!Result.is_success(r), "missing salary should fail")
+}
+
+@test
+function void test_validate_invalid_salary() {
+    RawRecord rec = RawRecord {
+        name = "Test", department = "Dev",
+        salary = "abc", start_date = "2020-01-01", status = "active"
+    }
+    result<RawRecord> r = validate_record(rec)
+
+    assert(!Result.is_success(r), "invalid salary should fail")
+}
+
+@test
+function void test_validate_missing_name() {
+    RawRecord rec = RawRecord {
+        name = "", department = "Dev",
+        salary = "80000", start_date = "2020-01-01", status = "active"
+    }
+    result<RawRecord> r = validate_record(rec)
+
+    assert(!Result.is_success(r), "missing name should fail")
+}
+
+@test
+function void test_salary_band_senior() {
+    assert(compute_salary_band(105000.0) == "Senior", "105k should be Senior")
+}
+
+@test
+function void test_salary_band_mid() {
+    assert(compute_salary_band(90000.0) == "Mid-Level", "90k should be Mid-Level")
+}
+
+@test
+function void test_salary_band_junior() {
+    assert(compute_salary_band(75000.0) == "Junior", "75k should be Junior")
+}
+
+@test
+function void test_salary_band_entry() {
+    assert(compute_salary_band(50000.0) == "Entry", "50k should be Entry")
+}
+
+@test
+function void test_compute_tenure() {
+    number t = compute_tenure("2020-06-15")
+
+    assert(t == 6, "expected 6 years tenure, got ${t}")
+}
+
+@test
+function void test_transform_record() {
+    RawRecord raw = RawRecord {
+        name = "Alice", department = "Eng",
+        salary = "95000", start_date = "2019-01-01", status = "active"
+    }
+    Employee e = transform_record(raw)
+
+    assert(e.name == "Alice", "name should match")
+    assert(Result.unwrap_or(Math.absolute(e.salary - 95000.0), 1.0) < 0.01, "salary should be 95000")
+    assert(e.salary_band == "Mid-Level", "95k should be Mid-Level")
+    assert(e.tenure_years == 7, "expected 7 years")
+}
+
+@test
+function void test_filter_active() {
+    array<Employee> employees = [
+        Employee { name = "A", department = "X", salary = 1.0,
+        start_date = "", status = "active", tenure_years = 0, salary_band = "" },
+        Employee { name = "B", department = "X", salary = 1.0,
+        start_date = "", status = "inactive", tenure_years = 0, salary_band = "" },
+        Employee { name = "C", department = "X", salary = 1.0,
+        start_date = "", status = "active", tenure_years = 0, salary_band = "" }
+    ]
+    array<Employee> active = filter_active(employees)
+
+    assert(Array.length(active) == 2, "expected 2 active employees")
+}
+
+@test
+function void test_aggregate_single_department() {
+    array<Employee> employees = [
+        Employee { name = "A", department = "Eng", salary = 80000.0,
+        start_date = "", status = "active", tenure_years = 3, salary_band = "" },
+        Employee { name = "B", department = "Eng", salary = 100000.0,
+        start_date = "", status = "active", tenure_years = 5, salary_band = "" }
+    ]
+    array<DepartmentSummary> summaries = aggregate(employees)
+
+    assert(Array.length(summaries) == 1, "expected 1 department")
+    assert(summaries[0].headcount == 2, "expected 2 employees")
+    assert(Result.unwrap_or(Math.absolute(summaries[0].total_salary - 180000.0), 1.0) < 0.01, "expected total 180k")
+    assert(Result.unwrap_or(Math.absolute(summaries[0].average_salary - 90000.0), 1.0) < 0.01, "expected avg 90k")
+}
+
+@test
+function void test_full_pipeline_parse() {
+    string csv = _sample_csv()
+    array<RawRecord> raw = parse_csv(csv)
+
+    assert(Array.length(raw) == 10, "expected 10 raw records from sample")
+}
+
+@test
+function void test_full_pipeline_validation() {
+    string csv = _sample_csv()
+    array<RawRecord> raw = parse_csv(csv)
+    ValidationOutcome outcome = validate_all(raw)
+
+    # Dave has empty salary, Jack has invalid salary
+    assert(Array.length(outcome.errors) == 2, "expected 2 validation errors, got ${Array.length(outcome.errors)}")
+    assert(Array.length(outcome.valid) == 8, "expected 8 valid records, got ${Array.length(outcome.valid)}")
+}
+
+# ─── Entry Point ─────────────────────────────────────────
+
+@main
+function void main() {
+    run_pipeline(_sample_csv())
+}

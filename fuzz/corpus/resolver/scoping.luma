@@ -1,0 +1,29 @@
+# Resolver: nested scopes and shadowing
+function integer outer() {
+    integer x = 10
+    function integer inner() {
+        integer x = 20
+        function integer innermost() {
+            return x + 1
+        }
+        return innermost()
+    }
+    return inner() + x
+}
+
+function integer shadow_test() {
+    integer x = 1
+    integer y = if true {
+        integer x = 2
+        x + 1
+    } else {
+        0
+    }
+    return x + y
+}
+
+function function() -> integer closure_capture() {
+    integer a = 10
+    integer b = 20
+    return () -> a + b
+}

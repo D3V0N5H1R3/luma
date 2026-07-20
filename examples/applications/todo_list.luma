@@ -1,0 +1,236 @@
+# ═══════════════════════════════════════════════════════════
+# Interactive Todo List
+#
+# A command-line todo manager demonstrating records, choice
+# types, arrays, match expressions, mutability, string
+# formatting, and interactive I/O.
+#
+# Usage: luma examples/applications/todo_list.luma
+# ═══════════════════════════════════════════════════════════
+
+choice Priority { Low  Medium  High }
+
+record Todo {
+    integer id,
+    string title,
+    boolean is_done,
+    Priority priority
+}
+
+# ─── Formatting ───
+
+function string get_priority_label(Priority priority) {
+    string label = match priority {
+    case Priority.High   { "HIGH" }
+    case Priority.Medium { "MED " }
+    case Priority.Low    { "LOW " }
+    }
+
+    if Terminal.is_terminal() {
+        return match priority {
+        case Priority.High   { Result.unwrap(Terminal.color("red", label)) }
+        case Priority.Medium { Result.unwrap(Terminal.color("yellow", label)) }
+        case Priority.Low    { Result.unwrap(Terminal.color("green", label)) }
+        }
+    }
+
+    return label
+}
+
+function string format_todo(Todo todo) {
+    string status = if todo.is_done { "[x]" } else { "[ ]" }
+    string label = get_priority_label(todo.priority)
+
+    return "  ${status} #${todo.id} ${label} ${todo.title}"
+}
+
+# ─── Commands ───
+
+function integer next_todo_id(array<Todo> todos) {
+    mutable integer max_id = 0
+
+    for todo in todos {
+        if todo.id > max_id {
+            max_id = todo.id
+        }
+    }
+
+    return max_id + 1
+}
+
+function array<Todo> add_todo(array<Todo> todos, string title, Priority priority) {
+    integer next_id = next_todo_id(todos)
+
+    Todo new_todo = Todo {
+        id = next_id,
+        title = title,
+        is_done = false,
+        priority = priority
+    }
+
+    return Array.push(todos, new_todo)
+}
+
+function array<Todo> toggle_todo(array<Todo> todos, integer id) {
+    return Result.unwrap_or(Array.map(todos, (Todo todo) -> {
+        if todo.id == id {
+            return todo with { is_done = !todo.is_done }
+        }
+
+        return todo
+    }), todos)
+}
+
+function array<Todo> remove_done(array<Todo> todos) {
+    return Result.unwrap_or(Array.filter(todos, (Todo todo) -> !todo.is_done), todos)
+}
+
+function boolean has_todo(array<Todo> todos, integer id) {
+    array<Todo> matches = Result.unwrap_or(
+        Array.filter(todos, (Todo todo) -> todo.id == id), [])
+    return !Array.is_empty(matches)
+}
+
+function number count_done(array<Todo> todos) {
+    array<Todo> completed = Result.unwrap_or(
+        Array.filter(todos, (Todo todo) -> todo.is_done), [])
+    return Array.length(completed)
+}
+
+function void show_todos(array<Todo> todos) {
+    if Array.is_empty(todos) {
+        print("  (no todos)")
+    } else {
+        array<Todo> pending = Result.unwrap_or(
+            Array.filter(todos, (Todo todo) -> !todo.is_done), []
+        )
+        array<Todo> completed = Result.unwrap_or(
+            Array.filter(todos, (Todo todo) -> todo.is_done), []
+        )
+
+        if !Array.is_empty(pending) {
+            print("  Pending:")
+
+            for todo in pending {
+                print(format_todo(todo))
+            }
+        }
+
+        if !Array.is_empty(completed) {
+            print("  Completed:")
+
+            for todo in completed {
+                print(format_todo(todo))
+            }
+        }
+
+        number total = Array.length(todos)
+        number done_count = Array.length(completed)
+
+        print("\n  ${done_count}/${total} completed")
+    }
+}
+
+function void show_help() {
+    print("\nCommands:")
+    print("  add <title>       Add a new todo (default: medium priority)")
+    print("  add! <title>      Add a high-priority todo")
+    print("  done <id>         Toggle a todo's completion")
+    print("  clean             Remove completed todos")
+    print("  list              Show all todos")
+    print("  help              Show this help")
+    print("  quit              Exit\n")
+}
+
+# ─── Main Loop ───
+
+@main
+function void main() {
+    print("===============================")
+    print("      Luma Todo List")
+    print("===============================")
+
+    show_help()
+
+    mutable array<Todo> todos = []
+
+    todos = add_todo(todos, "Learn Luma basics", Priority.High)
+    todos = add_todo(todos, "Write some examples", Priority.Medium)
+    todos = add_todo(todos, "Read the user manual", Priority.Low)
+
+    show_todos(todos)
+
+    mutable boolean is_running = true
+
+    while is_running {
+        string raw_input = Result.unwrap_or(Console.prompt("\n> "), "quit")
+        string line = String.trim(raw_input)
+        string lower = String.lowercase(line)
+
+        if String.starts_with(lower, "add! ") {
+            string title = String.trim(String.substring(line, 5, String.length(line)))
+
+            if String.is_empty(title) {
+                print("Please provide a task title, e.g. 'add! Buy milk'.")
+            } else {
+                todos = add_todo(todos, title, Priority.High)
+
+                print("Added: ${title} (high priority)")
+            }
+        } else if String.starts_with(lower, "add ") {
+            string title = String.trim(String.substring(line, 4, String.length(line)))
+
+            if String.is_empty(title) {
+                print("Please provide a task title, e.g. 'add Buy milk'.")
+            } else {
+                todos = add_todo(todos, title, Priority.Medium)
+
+                print("Added: ${title}")
+            }
+        } else if String.starts_with(lower, "done ") {
+            string id_text = String.trim(String.substring(line, 5, String.length(line)))
+
+            match String.parse_integer(id_text) {
+                success(id) {
+                    if has_todo(todos, id) {
+                        todos = toggle_todo(todos, id)
+
+                        print("Toggled #${id}")
+                    } else {
+                        print("No todo found with id #${id}.")
+                    }
+                }
+                failure(_) {
+                    print("Invalid id: ${id_text}")
+                }
+            }
+        } else if lower == "clean" {
+            number completed = count_done(todos)
+
+            if completed == 0 {
+                print("No completed todos to remove.")
+            } else {
+                string answer = Result.unwrap_or(
+                    Console.prompt("Remove ${completed} completed todos? (y/n): "), "n")
+
+                if String.lowercase(String.trim(answer)) == "y" {
+                    todos = remove_done(todos)
+
+                    print("Removed ${completed} completed todos")
+                } else {
+                    print("Kept all todos.")
+                }
+            }
+        } else if lower == "list" {
+            show_todos(todos)
+        } else if lower == "help" {
+            show_help()
+        } else if lower == "quit" || lower == "q" {
+            is_running = false
+        } else if String.length(line) > 0 {
+            print("Unknown command. Type 'help' for usage.")
+        }
+    }
+
+    print("Goodbye!")
+}

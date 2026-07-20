@@ -1,0 +1,60 @@
+# Record and choice type definitions with generic types
+record Point { number x, number y }
+
+record Line { Point start, Point end_point }
+
+record Config {
+    string host = "localhost",
+    number port = 8080,
+    boolean secure = false
+}
+
+choice Option<T> {
+    Some(T value)
+    None
+}
+
+choice List<T> {
+    Nil
+    Cons(T head, List<T> tail)
+}
+
+choice Result<T, E> {
+    Ok(T value)
+    Err(E error)
+}
+
+function<T, U> Option<U> map_option(Option<T> opt, function(T) -> U f) {
+    return match opt {
+    case Option.Some(v) { Option.Some(f(v)) }
+    case Option.None { Option.None }
+    }
+}
+
+# Generic functions, turbofish, bounds, type aliases, and narrowing syntax
+function<T> T identity(T value) { return value }
+
+function<T, U> (U, T) swap(T first, U second) { return (second, first) }
+
+interface Named { string name }
+
+interface Sized { integer size }
+
+function<T: Named> string label(T item) { return item.name }
+
+function<T: Named + Sized> string describe(T item) {
+    return "${item.name}/${item.size}"
+}
+
+type Twin<T> = (T, T)
+
+function void use_narrowing() {
+    integer a = identity::<integer>(1)
+    (string, integer) p = swap::<integer, string>(2, "x")
+    Twin<integer> t = (3, 4)
+
+    result<integer> r = downcast<integer>(a)
+    boolean b = is<string>("y")
+    integer c = trusted_downcast<integer>(a)
+}
+

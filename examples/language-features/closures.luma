@@ -1,0 +1,77 @@
+# ═══════════════════════════════════════════════════════════
+# Closures
+#
+# Demonstrates closures: lambdas that capture variables from
+# their enclosing scope, passing them to higher-order
+# functions, returning them from factories, and building a
+# stateful counter with the Reference module.
+# ═══════════════════════════════════════════════════════════
+
+# A factory that returns a closure capturing `base`. Each
+# call produces an independent closure with its own `base`.
+function function(integer) -> integer make_adder(integer base) {
+    return (integer x) -> base + x
+}
+
+# A counter backed by a mutable reference cell. The returned
+# closure keeps the cell alive between calls.
+function function() -> integer make_counter() {
+    reference<integer> count = Reference.new(0)
+
+    return () -> {
+        Reference.set(count, Reference.get(count) + 1)
+
+        return Reference.get(count)
+    }
+}
+
+@main
+function void main() {
+    # ── Capturing a local variable ──
+    print("=== Capture ===")
+
+    integer offset = 10
+    function(integer) -> integer add_offset = (integer x) -> x + offset
+    print("add_offset(5) = ${add_offset(5)}")
+
+    # ── Closures with higher-order functions ──
+    print("")
+    print("=== Higher-order ===")
+
+    integer threshold = 60
+    array<integer> scores = [55, 70, 45, 80, 90]
+    array<integer> passing = Result.unwrap(Array.filter(scores, (integer s) -> s >= threshold))
+    print("passing (>= ${threshold}): ${passing}")
+
+    integer factor = 3
+    array<integer> tripled = Result.unwrap(Array.map([1, 2, 3], (integer x) -> x * factor))
+    print("tripled by ${factor}: ${tripled}")
+
+    # ── Returning a closure (factory) ──
+    print("")
+    print("=== Factory ===")
+
+    function(integer) -> integer add5 = make_adder(5)
+    function(integer) -> integer add100 = make_adder(100)
+    print("add5(3)   = ${add5(3)}")
+    print("add100(3) = ${add100(3)}")
+
+    # ── Stateful counter via Reference ──
+    print("")
+    print("=== Stateful counter ===")
+
+    function() -> integer next = make_counter()
+    print("next() = ${next()}")
+    print("next() = ${next()}")
+    print("next() = ${next()}")
+
+    # ── Multiple captures ──
+    print("")
+    print("=== Multiple captures ===")
+
+    integer a = 10
+    integer b = 20
+    string prefix = "sum"
+    function() -> string report = () -> "${prefix}: ${a + b}"
+    print(report())
+}

@@ -1,0 +1,35 @@
+# ═══════════════════════════════════════════════════════════════════
+# Luma Highlight Test — Generics and Lambdas
+# ═══════════════════════════════════════════════════════════════════
+
+# Generic function.
+function array<string> stringify_all(array<integer> items) {
+    return Array.map(items, (integer x) -> Converter.to_string(x))
+}
+
+# Lambda expressions.
+@main
+function void main() {
+    array<integer> nums = [1, 2, 3, 4, 5]
+
+    # Simple lambda.
+    array<integer> doubled = Array.map(nums, (integer x) -> x * 2)
+
+    # Lambda with filter.
+    array<integer> evens = Array.filter(nums, (integer x) -> x % 2 == 0)
+
+    # Lambda with multiple operations.
+    array<string> labels = Array.map(nums, (integer x) -> "item_${Converter.to_string(x)}")
+
+    # Generic types in declarations.
+    optional<integer> maybe = some(42)
+    result<string> ok = success("hello")
+    dictionary<array<integer>> nested = {"primes": [2, 3, 5, 7]}
+
+    # Tuple type.
+    (integer, string) pair = (1, "one")
+
+    # Complex generic nesting.
+    array<optional<integer>> maybes = [some(1), none, some(3)]
+    result<array<string>> list_result = success(["a", "b", "c"])
+}

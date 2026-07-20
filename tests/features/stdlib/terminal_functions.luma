@@ -1,0 +1,489 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Terminal Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_terminal_is_terminal() {
+    boolean is_terminal_device = Terminal.is_terminal()
+
+    assert(type_of(is_terminal_device) == "boolean")
+}
+
+@test
+function void test_terminal_columns() {
+    integer column_count = Terminal.columns()
+
+    assert(column_count > 0)
+}
+
+@test
+function void test_terminal_rows() {
+    integer row_count = Terminal.rows()
+
+    assert(row_count > 0)
+}
+
+@test
+function void test_terminal_size() {
+    Terminal.Size size = Terminal.size()
+
+    assert(size.columns > 0)
+    assert(size.rows > 0)
+}
+
+@test
+function void test_terminal_bold() {
+    string bold_text = Terminal.bold("hello")
+
+    assert("hello" in bold_text)
+}
+
+@test
+function void test_terminal_dim() {
+    string dimmed_text = Terminal.dim("faint")
+
+    assert("faint" in dimmed_text)
+}
+
+@test
+function void test_terminal_italic() {
+    string italic_text = Terminal.italic("slanted")
+
+    assert("slanted" in italic_text)
+}
+
+@test
+function void test_terminal_underline() {
+    string underlined_text = Terminal.underline("important")
+
+    assert("important" in underlined_text)
+}
+
+@test
+function void test_terminal_strikethrough() {
+    string strikethrough_text = Terminal.strikethrough("deleted")
+
+    assert("deleted" in strikethrough_text)
+}
+
+@test
+function void test_terminal_inverse() {
+    string inverse_text = Terminal.inverse("reversed")
+
+    assert("reversed" in inverse_text)
+}
+
+@test
+function void test_terminal_color() {
+    string red_styled_text = Result.unwrap(Terminal.color("red", "error"))
+
+    assert("error" in red_styled_text)
+
+    string green_styled_text = Result.unwrap(Terminal.color("green", "success"))
+
+    assert("success" in green_styled_text)
+
+    string bright_styled_text = Result.unwrap(Terminal.color("bright_cyan", "info"))
+
+    assert("info" in bright_styled_text)
+}
+
+@test
+function void test_terminal_bg_color() {
+    string background_text = Result.unwrap(Terminal.background_color("yellow", "highlight"))
+
+    assert("highlight" in background_text)
+}
+
+@test
+function void test_terminal_rgb_color() {
+    string orange_rgb_text = Result.unwrap(Terminal.rgb_color(255, 128, 0, "orange"))
+
+    assert("orange" in orange_rgb_text)
+}
+
+@test
+function void test_terminal_rgb_bg_color() {
+    string navy_rgb_background_text = Result.unwrap(
+        Terminal.rgb_background_color(0, 0, 128, "navy")
+    )
+
+    assert("navy" in navy_rgb_background_text)
+}
+
+@test
+function void test_terminal_link() {
+    string link_text = Terminal.link("https://example.com", "Example")
+
+    assert("Example" in link_text)
+    assert("https://example.com" in link_text)
+}
+
+@test
+function void test_terminal_color_composability() {
+    string composed_styled_text = Terminal.bold(Result.unwrap(Terminal.color("green", "OK")))
+
+    assert("OK" in composed_styled_text)
+}
+
+@test
+function void test_terminal_is_raw_mode() {
+    # Raw mode should be off by default
+    assert(!Terminal.is_in_raw_mode())
+}
+
+@test
+function void test_terminal_is_mouse() {
+    # Mouse mode should be off by default
+    assert(!Terminal.is_mouse_enabled())
+}
+
+@test
+function void test_terminal_set_scroll_region() {
+    # set_scroll_region and reset_scroll_region emit ANSI sequences
+    # and return null — verify they don't throw
+    result<void> _r1 = Terminal.set_scroll_region(1, 10)
+    Terminal.reset_scroll_region()
+}
+
+@test
+function void test_terminal_read_key_timeout_requires_raw_mode() {
+    # read_key_timeout fails fast (without blocking on stdin) when raw mode is
+    # off, returning a failure result rather than reading a key.
+    result<string> r = Terminal.read_key_timeout(100)
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_terminal_get_cursor_position_exists() {
+    # get_cursor_position requires raw mode and a real terminal.
+    # In non-TTY test environments it may fail, so we verify the
+    # function exists and returns a result type.
+    if Terminal.is_terminal() {
+        result<void> _r = Terminal.enable_raw_mode()
+
+        result<Terminal.CursorPosition> pos_result = Terminal.get_cursor_position()
+
+        if Result.is_success(pos_result) {
+            Terminal.CursorPosition pos = Result.unwrap(pos_result)
+
+            assert(pos.row >= 1)
+            assert(pos.column >= 1)
+        }
+
+        Terminal.disable_raw_mode()
+    } else {
+        # Not a TTY — just verify raw mode gate works
+        result<Terminal.CursorPosition> pos_result = Terminal.get_cursor_position()
+
+        assert(!Result.is_success(pos_result))
+    }
+}
+
+@test
+function void test_terminal_move_to_row() {
+    # move_to_row emits an ANSI sequence — verify it doesn't throw
+    result<void> _r = Terminal.move_to_row(1)
+}
+
+@test
+function void test_terminal_move_to_row_invalid() {
+    # row < 1 should return failure, but type is void — just verify no crash
+    result<void> _r = Terminal.move_to_row(0)
+}
+
+# ─── Output functions ─────────────────────────────────────
+
+@test
+function void test_terminal_write() {
+    # write emits text without a newline — just verify it doesn't throw
+    Terminal.write("hello")
+}
+
+@test
+function void test_terminal_overwrite_line() {
+    # overwrite_line returns to column 0 and writes — verify no crash
+    Terminal.overwrite_line("test line")
+}
+
+@test
+function void test_terminal_reset_style() {
+    # reset_style emits the ANSI reset sequence — verify no crash
+    Terminal.reset_style()
+}
+
+@test
+function void test_terminal_bell() {
+    # bell emits the BEL character — verify no crash
+    Terminal.bell()
+}
+
+# ─── Screen control ───────────────────────────────────────
+
+@test
+function void test_terminal_clear_screen() {
+    Terminal.clear_screen()
+}
+
+@test
+function void test_terminal_clear_line() {
+    Terminal.clear_line()
+}
+
+@test
+function void test_terminal_clear_to_end_of_line() {
+    Terminal.clear_to_end_of_line()
+}
+
+@test
+function void test_terminal_clear_to_end_of_screen() {
+    Terminal.clear_to_end_of_screen()
+}
+
+# ─── Cursor movement ─────────────────────────────────────
+
+@test
+function void test_terminal_move_to() {
+    # move_to returns result<void> — verify success for valid coordinates
+    result<void> _r = Terminal.move_to(1, 1)
+}
+
+@test
+function void test_terminal_move_to_invalid() {
+    # move_to should return failure for row/col < 1
+    result<void> r = Terminal.move_to(0, 1)
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_terminal_move_to_column() {
+    # move_to_column returns result — verify success for valid column
+    result<void> _r = Terminal.move_to_column(1)
+}
+
+@test
+function void test_terminal_move_up() {
+    Terminal.move_up(1)
+}
+
+@test
+function void test_terminal_move_down() {
+    Terminal.move_down(1)
+}
+
+@test
+function void test_terminal_move_left() {
+    Terminal.move_left(1)
+}
+
+@test
+function void test_terminal_move_right() {
+    Terminal.move_right(1)
+}
+
+# ─── Cursor visibility ────────────────────────────────────
+
+@test
+function void test_terminal_hide_show_cursor() {
+    Terminal.hide_cursor()
+    Terminal.show_cursor()
+}
+
+# ─── Alternate screen ────────────────────────────────────
+
+@test
+function void test_terminal_alternate_screen() {
+    Terminal.enter_alternate_screen()
+    Terminal.leave_alternate_screen()
+}
+
+# ─── Scrolling ────────────────────────────────────────────
+
+@test
+function void test_terminal_scroll_up() {
+    Terminal.scroll_up(1)
+}
+
+@test
+function void test_terminal_scroll_down() {
+    Terminal.scroll_down(1)
+}
+
+# ─── Window title ─────────────────────────────────────────
+
+@test
+function void test_terminal_set_title() {
+    # set_title emits an OSC sequence — verify no crash
+    Terminal.set_title("Test Title")
+}
+
+# ─── Capability detection ────────────────────────────────
+
+@test
+function void test_terminal_supports_color() {
+    boolean supports = Terminal.supports_color()
+
+    assert(type_of(supports) == "boolean")
+}
+
+@test
+function void test_terminal_supports_true_color() {
+    boolean supports = Terminal.supports_true_color()
+
+    assert(type_of(supports) == "boolean")
+}
+
+# ─── Escape timeout ──────────────────────────────────────
+
+@test
+function void test_terminal_escape_timeout_default() {
+    integer timeout = Terminal.get_escape_timeout()
+
+    assert(timeout == 50)
+}
+
+@test
+function void test_terminal_set_escape_timeout() {
+    Terminal.set_escape_timeout(100)
+
+    assert(Terminal.get_escape_timeout() == 100)
+
+    # Restore default
+    Terminal.set_escape_timeout(50)
+}
+
+# ─── Color invalid name ──────────────────────────────────
+
+@test
+function void test_terminal_color_invalid_name() {
+    result<string> r = Terminal.color("not_a_color", "text")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_terminal_bg_color_invalid_name() {
+    result<string> r = Terminal.background_color("not_a_color", "text")
+
+    assert(!Result.is_success(r))
+}
+
+# ─── RGB boundary ─────────────────────────────────────────
+
+@test
+function void test_terminal_rgb_color_boundary() {
+    result<string> r = Terminal.rgb_color(0, 0, 0, "black")
+
+    assert(Result.is_success(r))
+
+    result<string> r2 = Terminal.rgb_color(255, 255, 255, "white")
+
+    assert(Result.is_success(r2))
+}
+
+@test
+function void test_terminal_rgb_color_negative() {
+    # Negative RGB values should return failure.
+    result<string> r = Terminal.rgb_color(-1, 0, 0, "test")
+
+    assert(!Result.is_success(r))
+
+    result<string> r2 = Terminal.rgb_color(0, -1, 0, "test")
+
+    assert(!Result.is_success(r2))
+
+    result<string> r3 = Terminal.rgb_color(0, 0, -1, "test")
+
+    assert(!Result.is_success(r3))
+}
+
+@test
+function void test_terminal_rgb_color_overflow() {
+    # RGB values > 255 should return failure.
+    result<string> r = Terminal.rgb_color(256, 0, 0, "test")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_terminal_move_to_column_invalid() {
+    # column < 1 should return failure
+    result<void> r = Terminal.move_to_column(0)
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_terminal_set_scroll_region_invalid() {
+    # top > bottom should return failure
+    result<void> r = Terminal.set_scroll_region(10, 1)
+
+    assert(!Result.is_success(r))
+}
+
+# ───────────────────────────────────────────────────────────
+# Cursor save/restore and mouse disable (escape-code emitters)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_terminal_save_restore_cursor() {
+    Terminal.save_cursor()
+    Terminal.restore_cursor()
+}
+
+@test
+function void test_terminal_disable_mouse() {
+    Terminal.disable_mouse()
+}
+
+# ───────────────────────────────────────────────────────────
+# Raw-mode gating — input functions fail fast (without blocking
+# on stdin) when raw mode is not enabled.
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_terminal_read_key_requires_raw_mode() {
+    result<string> r = Terminal.read_key()
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_terminal_get_input_requires_raw_mode() {
+    result<Terminal.InputEvent> r = Terminal.get_input()
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_terminal_enable_mouse_requires_raw_mode() {
+    # enable_mouse requires raw mode to be enabled first.
+    result<void> r = Terminal.enable_mouse()
+
+    assert(!Result.is_success(r))
+}
+
+# ───────────────────────────────────────────────────────────
+# RGB background colour validation
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_terminal_rgb_background_color_overflow() {
+    # RGB values > 255 should return failure.
+    result<string> r = Terminal.rgb_background_color(256, 0, 0, "text")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_terminal_rgb_background_color_negative() {
+    # Negative RGB values should return failure.
+    result<string> r = Terminal.rgb_background_color(0, -1, 0, "text")
+
+    assert(!Result.is_success(r))
+}

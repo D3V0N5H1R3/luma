@@ -1,0 +1,20 @@
+# VM: recursive functions
+function integer fib(integer n) {
+    if n <= 1 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+function integer factorial(integer n) {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+@main
+function void main() {
+    print("fib(10) = ${fib(10)}")
+    print("fact(10) = ${factorial(10)}")
+}

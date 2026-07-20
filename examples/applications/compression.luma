@@ -1,0 +1,62 @@
+# ═══════════════════════════════════════════════════════════
+# Compression
+#
+# Demonstrates the Compression module — deflate / inflate,
+# gzip / gunzip, and run-length encoding.
+# ═══════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # ── Deflate / Inflate ──
+    print("=== Deflate / Inflate ===")
+
+    string original = "AAAAAABBBCCCCDDDDDD the quick brown fox jumps over the lazy dog"
+
+    print("Original (${String.length(original)} chars): ${original}")
+
+    string compressed = original
+    |> Compression.deflate()
+
+    number comp_size = Compression.compressed_size(original)
+
+    print("Compressed size: ${comp_size} bytes")
+
+    string restored = compressed
+    |> Compression.inflate()
+    |> Result.unwrap()
+
+    print("Restored text: ${restored}")
+    print("Round-trip restored the original: ${if restored == original { "yes" } else { "no" }}")
+
+    # ── Gzip / Gunzip ──
+    print("\n=== Gzip / Gunzip ===")
+
+    string data = "Luma is a beginner-friendly programming language!"
+
+    string gzipped = data
+    |> Compression.gzip()
+
+    string ungzipped = gzipped
+    |> Compression.gunzip()
+    |> Result.unwrap()
+
+    print("Original:  ${data}")
+    print("Restored:  ${ungzipped}")
+    print("Gzip round-trip restored the original: ${if ungzipped == data { "yes" } else { "no" }}")
+
+    # ── Run-Length Encoding ──
+    print("\n=== Run-Length Encoding ===")
+
+    string rle_input = "aaabbbbccdd"
+    string encoded = Compression.encode_rle(rle_input)
+
+    print("Input:   ${rle_input}")
+    print("Encoded: ${encoded}")
+
+    string decoded = encoded
+    |> Compression.decode_rle()
+    |> Result.unwrap()
+
+    print("Decoded: ${decoded}")
+    print("Run-length round-trip restored the input: ${if decoded == rle_input { "yes" } else { "no" }}")
+}

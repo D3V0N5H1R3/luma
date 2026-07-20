@@ -1,0 +1,109 @@
+# ═══════════════════════════════════════════════════════════
+# Guess the Number
+#
+# An interactive number-guessing game that demonstrates
+# user input, random numbers, loops, match expressions,
+# and result handling.
+#
+# Usage: luma examples/applications/guess_the_number.luma
+# ═══════════════════════════════════════════════════════════
+
+function boolean play_round(number secret, integer max_guesses) {
+    mutable number attempts = 0
+
+    print("\nI'm thinking of a number between 1 and 100.")
+    print("You have ${max_guesses} guesses. Good luck!\n")
+
+    while attempts < max_guesses {
+        string raw = Result.unwrap_or(Console.prompt("Your guess (1-100, or 'q' to quit): "), "q")
+        string trimmed = String.trim(raw)
+
+        if String.lowercase(trimmed) == "q" || String.lowercase(trimmed) == "quit" {
+            print("\nNo problem — the number was ${secret}.")
+
+            return false
+        }
+
+        match String.parse_integer(trimmed) {
+            success(guess) {
+                # A guess only counts once it is a valid number, so typos are free.
+                attempts++
+
+                match guess {
+                case == secret {
+                    print("Correct! You got it in ${attempts} guesses!")
+
+                    return true
+                }
+                case < secret {
+                    print("Too low!")
+                }
+                else {
+                    print("Too high!")
+                }
+                }
+
+                number remaining = max_guesses - attempts
+
+                if remaining > 0 {
+                    print("(${remaining} guesses remaining)")
+                }
+            }
+            failure(_) {
+                print("Please enter a whole number from 1 to 100 (or 'q' to quit).")
+            }
+        }
+    }
+
+    print("\nOut of guesses! The number was ${secret}.")
+
+    return false
+}
+
+function boolean ask_yes_no(string question) {
+    while true {
+        string answer = String.lowercase(String.trim(
+            Result.unwrap_or(Console.prompt(question), "n")))
+
+        if answer == "y" || answer == "yes" {
+            return true
+        }
+
+        if answer == "n" || answer == "no" {
+            return false
+        }
+
+        print("Please answer 'y' or 'n'.")
+    }
+
+    return false
+}
+
+@main
+function void main() {
+    print("===============================")
+    print("   Guess the Number Game")
+    print("===============================")
+
+    mutable boolean is_playing = true
+    mutable number wins = 0
+    mutable number rounds = 0
+
+    while is_playing {
+        rounds++
+
+        number secret = Result.unwrap_or(Random.generate_integer(1, 100), 50)
+
+        if play_round(secret, 7) {
+            wins++
+        }
+
+        print("\nScore: ${wins}/${rounds}")
+
+        if !ask_yes_no("\nPlay again? (y/n): ") {
+            is_playing = false
+        }
+    }
+
+    print("\nThanks for playing! Final score: ${wins}/${rounds}")
+}

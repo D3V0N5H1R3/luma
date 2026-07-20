@@ -1,0 +1,54 @@
+# ═══════════════════════════════════════════════════════════
+# Numerical Calculus
+#
+# Demonstrates the Calculus module — numerical
+# differentiation, integration, root-finding, and
+# optimisation using built-in math functions.
+# ═══════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # ── Derivatives ──
+    print("=== Derivatives ===")
+
+    # d/dx sin(x) at x = 0 should be cos(0) = 1.0
+    number derivative_at_0 = Calculus.derivative(0.0, Math.sine)
+    print("d/dx sin(0) = ${String.format_number(derivative_at_0, 6)}")
+
+    # d/dx sin(x) at x = pi/2 should be cos(pi/2) = 0.0
+    number derivative_at_pi_2 = Calculus.derivative(Math.pi / 2.0, Math.sine)
+    print("d/dx sin(pi/2) = ${String.format_number(derivative_at_pi_2, 6)}")
+
+    # ── Integration ──
+    print("\n=== Integration ===")
+
+    # Integral of sin(x) from 0 to pi = 2.0
+    number integral_sin_0_to_pi = Calculus.integrate(0.0, Math.pi, Math.sine)
+    print("integral sin(x) dx [0, pi] = ${String.format_number(integral_sin_0_to_pi, 6)}")
+
+    # Integral of cos(x) from 0 to pi/2 = 1.0
+    number integral_cos_0_to_pi_2 = Calculus.integrate(0.0, Math.pi / 2.0, Math.cosine)
+    print("integral cos(x) dx [0, pi/2] = ${String.format_number(integral_cos_0_to_pi_2, 6)}")
+
+    # ── Root finding ──
+    print("\n=== Root Finding ===")
+
+    # Find root of sin(x) near pi using bisection.
+    number root_bisection = Calculus.root(3.0, 3.3, Math.sine) |> Result.unwrap()
+    print("bisection: sin(x) = 0 near pi => x = ${String.format_number(root_bisection, 8)}")
+
+    # Find root of sin(x) near pi using Newton's method.
+    number root_newton = Calculus.newton(3.0, Math.sine) |> Result.unwrap()
+    print("newton:    sin(x) = 0 near pi => x = ${String.format_number(root_newton, 8)}")
+
+    print("actual pi                     = ${String.format_number(Math.pi, 8)}")
+
+    # ── Series summation ──
+    print("\n=== Series ===")
+
+    # Sum 1/n^2 for n = 1..1000 ≈ pi^2/6
+    number series = Calculus.sum_series(1, 1000, (number n) -> 1.0 / (n * n))
+    number expected = Math.pi * Math.pi / 6.0
+    print("sum(1/n^2, n=1..1000) = ${String.format_number(series, 6)}")
+    print("pi^2/6                = ${String.format_number(expected, 6)}")
+}

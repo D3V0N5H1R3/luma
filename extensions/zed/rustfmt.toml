@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────
+# Luma — rustfmt Configuration
+#
+# Formatting settings for the Zed extension's Rust sources. Applied by the Zed
+# CI gate (`cargo fmt --check`, run from .github/actions/build-zed-extension)
+# and by editors / rust-analyzer.
+#
+# Values match rustfmt's stable defaults for this project's documented style
+# (instructions/rust.instructions.md and .editorconfig): 4-space indentation,
+# 100-column width, Rust 2021 edition. Pinning them here keeps formatting
+# deterministic across rustfmt releases and toolchains. Line endings are left
+# at rustfmt's default ("Auto") and are governed by .gitattributes /
+# .editorconfig, so the check stays portable on Windows checkouts.
+# ─────────────────────────────────────────────
+
+edition = "2021"
+max_width = 100
+tab_spaces = 4
+hard_tabs = false

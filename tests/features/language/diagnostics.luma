@@ -1,0 +1,241 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Diagnostics and Error Messages
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+# ─── Array Bounds ─────────────────────────────────────────
+
+@test
+function void test_array_out_of_bounds_error_message() {
+    mutable string caught = ""
+
+    try {
+        array<integer> values = [10, 20, 30]
+
+        integer _ = values[5]
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "out of bounds"))
+}
+
+@test
+function void test_array_negative_index_error_message() {
+    mutable string caught = ""
+
+    try {
+        array<integer> values = [10, 20, 30]
+
+        integer _ = values[-1]
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "out of bounds"))
+}
+
+# ─── Division by Zero ────────────────────────────────────
+
+@test
+function void test_division_by_zero_error() {
+    mutable string caught = ""
+
+    integer zero = 0
+
+    try {
+        integer _ = 42 / zero
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "division by zero"))
+}
+
+@test
+function void test_modulo_by_zero_error() {
+    mutable string caught = ""
+
+    integer zero = 0
+
+    try {
+        integer _ = 42 % zero
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "division by zero"))
+}
+
+@test
+function void test_integer_division_by_zero_error() {
+    mutable string caught = ""
+
+    integer zero = 0
+
+    try {
+        integer _ = 42 // zero
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "division by zero"))
+}
+
+# ─── String Interpolation ────────────────────────────────
+
+@test
+function void test_string_interpolation_expression() {
+    integer x = 42
+
+    string s = "value is ${x}"
+
+    assert(s == "value is 42")
+}
+
+@test
+function void test_string_interpolation_complex_expression() {
+    integer a = 10
+    integer b = 20
+
+    string s = "sum is ${a + b}"
+
+    assert(s == "sum is 30")
+}
+
+@test
+function void test_string_interpolation_with_function_call() {
+    string s = "length is ${String.length("hello")}"
+
+    assert(s == "length is 5")
+}
+
+# ─── Safe Array Access ───────────────────────────────────
+
+@test
+function void test_safe_array_access_success() {
+    array<integer> values = [10, 20, 30]
+
+    result<integer> r = Array.get(values, 1)
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == 20)
+}
+
+@test
+function void test_safe_array_access_out_of_bounds() {
+    array<integer> values = [10, 20, 30]
+
+    result<integer> r = Array.get(values, 10)
+
+    assert(!Result.is_success(r))
+}
+
+# ─── Range Bounds ────────────────────────────────────────
+
+@test
+function void test_range_in_for_loop() {
+    mutable integer total = 0
+
+    for i in 0 .. 5 {
+        total += i
+    }
+
+    assert(total == 10)
+}
+
+# ─── Result Error Propagation ────────────────────────────
+
+@test
+function void test_result_unwrap_failure_error() {
+    mutable string caught = ""
+
+    try {
+        result<integer> r = failure("something went wrong")
+
+        integer _ = Result.unwrap(r)
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "something went wrong"))
+}
+
+# ─── Numeric Overflow and Number Division ────────────────
+
+@test
+function void test_number_division_by_zero_error() {
+    mutable string caught = ""
+
+    number zero = 0.0
+
+    try {
+        number _ = 10.0 / zero
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "division by zero"))
+}
+
+@test
+function void test_number_overflow_error() {
+    mutable string caught = ""
+
+    number huge = 1.0e308
+
+    try {
+        number _ = huge * 10.0
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "overflow"))
+}
+
+# ─── Optional Unwrap on none ─────────────────────────────
+
+@test
+function void test_optional_unwrap_none_error() {
+    mutable string caught = ""
+
+    optional<integer> empty = none
+
+    try {
+        integer _ = Optional.unwrap(empty)
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "none"))
+}
+
+# ─── Assertion Failure ───────────────────────────────────
+
+@test
+function void test_assertion_failure_is_catchable() {
+    mutable string caught = ""
+
+    try {
+        assert(1 == 2)
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "assertion failed"))
+}
+
+@test
+function void test_assertion_failure_custom_message() {
+    mutable string caught = ""
+
+    try {
+        assert(1 == 2, "values differ")
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "values differ"))
+}

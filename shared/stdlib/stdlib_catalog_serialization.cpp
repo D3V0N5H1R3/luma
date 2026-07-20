@@ -1,0 +1,99 @@
+#include "stdlib/stdlib_catalog_internal.hpp"
+
+namespace luma::stdlib::detail {
+
+void register_json_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                             const ParamShorthands& p) {
+    append_specs(
+        specs,
+        {
+            m.fn("deserialize", 1, "(json: string)", R::result_any(), {p.string}),
+            m.fn("get", 2, "(json: string, key: string)", R::result_any(), {p.string, p.string}),
+            m.fn("get_path", 2, "(json: string, path: string)", R::result_any(),
+                 {p.string, p.string}),
+            m.fn("is_valid", 1, "(json: string)", R::boolean_type(), {p.string}),
+            m.fn("merge", 2, "(a: string, b: string)", R::result_string(), {p.string, p.string}),
+            m.fn("serialize", 1, "(value: T)", R::string_type(), {p.any}),
+            m.fn("serialize_pretty", 1, "(value: T)", R::string_type(), {p.any}),
+            m.fn("set", 3, "(json: string, key: string, value: T)", R::result_string(),
+                 {p.string, p.string, p.any}),
+            m.fn("set_path", 3, "(json: string, path: string, value: T)", R::result_string(),
+                 {p.string, p.string, p.any}),
+        });
+}
+
+void register_csv_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                            const ParamShorthands& p) {
+    append_specs(
+        specs,
+        {
+            m.fn("count_rows", 1, "(csv: string)", R::result_integer(), {p.string}),
+            m.fn("deserialize", 1, "(csv: string)", R::result(R::array(R::array(R::string_type()))),
+                 {p.string}),
+            m.fn("deserialize_records", 1, "(csv: string)",
+                 R::result(R::array(R::dict(R::string_type()))), {p.string}),
+            m.fn("header", 1, "(csv: string)", R::result(R::array(R::string_type())), {p.string}),
+            m.fn("deserialize_with", 2, "(csv: string, options: dictionary<string>)",
+                 R::result(R::array(R::array(R::string_type()))), {p.string, p.dict_any}),
+            m.fn("read_file", 1, "(path: string)", R::result(R::array(R::dict(R::string_type()))),
+                 {p.string}, Capability::FileSystem),
+            m.fn("serialize", 1, "(rows: array<array<string>>)", R::result_string(), {p.array_any}),
+            m.fn("serialize_records", 1, "(records: array<dictionary<string>>)", R::string_type(),
+                 {p.array_any}),
+            m.fn("serialize_with", 2, "(rows: array<array<string>>, options: dictionary<string>)",
+                 R::result_string(), {p.array_any, p.dict_any}),
+            m.fn("write_file", 2, "(path: string, records: array<dictionary<string>>)",
+                 R::result_boolean(), {p.string, p.array_any}, Capability::FileSystem),
+        });
+}
+
+void register_xml_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                            const ParamShorthands& p) {
+    append_specs(
+        specs,
+        {
+            m.fn("add_child", 2, "(parent: xml, child: xml)", named::xml(), {p.xml, p.xml}),
+            m.fn("add_comment", 2, "(node: xml, comment: string)", named::xml(), {p.xml, p.string}),
+            m.fn("at", 2, "(node: xml, path: string)", R::result(named::xml()), {p.xml, p.string}),
+            m.fn("attribute", 2, "(node: xml, name: string)", R::result_string(),
+                 {p.xml, p.string}),
+            m.fn("attributes", 1, "(node: xml)", R::dict_string(), {p.xml}),
+            m.fn("child_count", 1, "(node: xml)", R::integer_type(), {p.xml}),
+            m.fn("children", 1, "(node: xml)", R::array(named::xml()), {p.xml}),
+            m.fn("children_by_tag", 2, "(node: xml, tag: string)", R::array(named::xml()),
+                 {p.xml, p.string}),
+            m.fn("deserialize", 1, "(xml: string)", R::result(named::xml()), {p.string}),
+            m.fn("deserialize_file", 1, "(path: string)", R::result(named::xml()), {p.string},
+                 Capability::FileSystem),
+            m.fn("element", 1, "(tag: string)", named::xml(), {p.string}),
+            m.fn("find", 2, "(node: xml, tag: string)", R::result(named::xml()), {p.xml, p.string}),
+            m.fn("find_all", 2, "(node: xml, tag: string)", R::array(named::xml()),
+                 {p.xml, p.string}),
+            m.fn("find_by_attribute", 3, "(node: xml, attr: string, value: string)",
+                 R::result(named::xml()), {p.xml, p.string, p.string}),
+            m.fn("from_dictionary", 2, "(tag: string, dict: dictionary)", named::xml(),
+                 {p.string, p.dict_any}),
+            m.fn("has_attribute", 2, "(node: xml, name: string)", R::boolean_type(),
+                 {p.xml, p.string}),
+            m.fn("has_child", 2, "(node: xml, tag: string)", R::boolean_type(), {p.xml, p.string}),
+            m.fn("is_leaf", 1, "(node: xml)", R::boolean_type(), {p.xml}),
+            m.fn("is_valid", 1, "(xml: string)", R::boolean_type(), {p.string}),
+            m.fn("remove_attribute", 2, "(node: xml, name: string)", named::xml(),
+                 {p.xml, p.string}),
+            m.fn("serialize", 1, "(node: xml)", R::string_type(), {p.xml}),
+            m.fn("serialize_pretty", 1, "(node: xml)", R::string_type(), {p.xml}),
+            m.fn("set_attribute", 3, "(node: xml, name: string, value: string)", named::xml(),
+                 {p.xml, p.string, p.string}),
+            m.fn("set_cdata", 2, "(node: xml, cdata: string)", named::xml(), {p.xml, p.string}),
+            m.fn("set_tag", 2, "(node: xml, tag: string)", named::xml(), {p.xml, p.string}),
+            m.fn("set_text", 2, "(node: xml, text: string)", named::xml(), {p.xml, p.string}),
+            m.fn("tag", 1, "(node: xml)", R::string_type(), {p.xml}),
+            m.fn("text", 1, "(node: xml)", R::result_string(), {p.xml}),
+            m.fn("text_at", 2, "(node: xml, path: string)", R::result_string(), {p.xml, p.string}),
+            m.fn("to_dictionary", 1, "(node: xml)", R::dict_string(), {p.xml}),
+            m.fn("write_file", 2, "(path: string, node: xml)", R::result_void(), {p.string, p.xml},
+                 Capability::FileSystem),
+        });
+}
+
+} // namespace luma::stdlib::detail

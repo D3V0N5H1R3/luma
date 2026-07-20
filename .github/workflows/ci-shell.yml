@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — Shell Script Lint Workflow
+#
+# Runs ShellCheck on all shell scripts (*.sh and the pre-commit
+# hook) on every push and PR targeting main that touches them.
+# ShellCheck is pre-installed on GitHub-hosted ubuntu runners.
+# ─────────────────────────────────────────────────────────────
+
+name: CI — Shell
+
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - ".github/workflows/ci-shell.yml"
+      - "**/*.sh"
+      - "**/*.bash"
+      - "scripts/hooks/pre-commit"
+  pull_request:
+    branches: [main]
+    paths: *paths
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run ShellCheck
+        run: |
+          # Discover every tracked shell script (excluding vendored external/),
+          # then append the extensionless git hook that no glob would match.
+          mapfile -t scripts < <(git ls-files '*.sh' '*.bash' ':!:external/**')
+          [[ -f scripts/hooks/pre-commit ]] && scripts+=(scripts/hooks/pre-commit)
+          printf 'Linting %d shell script(s):\n' "${#scripts[@]}"
+          printf '  %s\n' "${scripts[@]}"
+          shellcheck "${scripts[@]}"

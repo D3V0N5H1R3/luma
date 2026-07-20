@@ -1,0 +1,353 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "_base",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "_base-single-config",
+            "hidden": true,
+            "inherits": "_base"
+        },
+        {
+            "name": "_base-release",
+            "hidden": true,
+            "inherits": "_base-single-config",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "_base-debug",
+            "hidden": true,
+            "inherits": "_base-single-config",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "default",
+            "displayName": "Default (Release)",
+            "description": "Default build configuration for all platforms",
+            "inherits": "_base-release",
+            "binaryDir": "${sourceDir}/build"
+        },
+        {
+            "name": "debug",
+            "displayName": "Debug",
+            "description": "Debug build with full symbols",
+            "inherits": "_base-debug",
+            "binaryDir": "${sourceDir}/build-debug"
+        },
+        {
+            "name": "msvc",
+            "displayName": "MSVC (Visual Studio)",
+            "description": "Visual Studio multi-config generator",
+            "inherits": "_base",
+            "binaryDir": "${sourceDir}/build-msvc",
+            "generator": "Visual Studio 17 2022",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "xcode",
+            "displayName": "Xcode",
+            "description": "Xcode multi-config generator",
+            "inherits": "_base",
+            "binaryDir": "${sourceDir}/build-xcode",
+            "generator": "Xcode",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "sanitize",
+            "displayName": "Debug + Sanitizers",
+            "description": "Debug build with AddressSanitizer and UndefinedBehaviorSanitizer",
+            "inherits": "_base-debug",
+            "binaryDir": "${sourceDir}/build-sanitize",
+            "cacheVariables": {
+                "LUMA_FEATURE_SANITIZERS": "ON"
+            },
+            "condition": {
+                "type": "notEquals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "relwithdebinfo",
+            "displayName": "Release with Debug Info",
+            "description": "Optimised build that retains debug symbols for profiling",
+            "inherits": "_base-single-config",
+            "binaryDir": "${sourceDir}/build-relwithdebinfo",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "coverage",
+            "displayName": "Debug + Coverage",
+            "description": "Debug build with lcov code coverage instrumentation",
+            "inherits": "_base-debug",
+            "binaryDir": "${sourceDir}/build-coverage",
+            "cacheVariables": {
+                "LUMA_FEATURE_COVERAGE": "ON"
+            },
+            "condition": {
+                "type": "notEquals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "lto",
+            "displayName": "Release + LTO",
+            "description": "Release build with link-time optimisation",
+            "inherits": "_base-release",
+            "binaryDir": "${sourceDir}/build-lto",
+            "cacheVariables": {
+                "LUMA_FEATURE_LTO": "ON"
+            }
+        },
+        {
+            "name": "ninja",
+            "displayName": "Ninja (Release)",
+            "description": "Ninja generator for fast parallel builds",
+            "inherits": "_base-release",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build-ninja"
+        },
+        {
+            "name": "arm64-cross",
+            "displayName": "ARM64 Cross-compilation",
+            "description": "Cross-compile for ARM64 (aarch64-linux-gnu)",
+            "inherits": "_base",
+            "binaryDir": "${sourceDir}/build-arm64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_SYSTEM_NAME": "Linux",
+                "CMAKE_SYSTEM_PROCESSOR": "aarch64",
+                "CMAKE_C_COMPILER": "aarch64-linux-gnu-gcc",
+                "CMAKE_CXX_COMPILER": "aarch64-linux-gnu-g++"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "release-no-tests",
+            "displayName": "Release (no tests)",
+            "description": "Release build with tests disabled for production deployment",
+            "inherits": "default",
+            "binaryDir": "${sourceDir}/build-release-no-tests",
+            "cacheVariables": {
+                "LUMA_BUILD_TESTS": "OFF"
+            }
+        },
+        {
+            "name": "windows-arm64",
+            "displayName": "Windows ARM64",
+            "description": "MSVC build targeting ARM64 on Windows",
+            "inherits": "_base",
+            "binaryDir": "${sourceDir}/build-windows-arm64",
+            "generator": "Visual Studio 17 2022",
+            "architecture": "ARM64",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "macos-universal",
+            "displayName": "macOS Universal Binary",
+            "description": "Xcode build producing a universal binary (x86_64 + arm64)",
+            "inherits": "_base",
+            "binaryDir": "${sourceDir}/build-macos-universal",
+            "generator": "Xcode",
+            "cacheVariables": {
+                "CMAKE_OSX_ARCHITECTURES": "x86_64;arm64"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "_base-build",
+            "hidden": true,
+            "jobs": 0
+        },
+        {
+            "name": "default",
+            "inherits": "_base-build",
+            "configurePreset": "default",
+            "configuration": "Release"
+        },
+        {
+            "name": "debug",
+            "inherits": "_base-build",
+            "configurePreset": "debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "msvc-release",
+            "inherits": "_base-build",
+            "configurePreset": "msvc",
+            "configuration": "Release"
+        },
+        {
+            "name": "msvc-debug",
+            "inherits": "_base-build",
+            "configurePreset": "msvc",
+            "configuration": "Debug"
+        },
+        {
+            "name": "xcode-release",
+            "inherits": "_base-build",
+            "configurePreset": "xcode",
+            "configuration": "Release"
+        },
+        {
+            "name": "xcode-debug",
+            "inherits": "_base-build",
+            "configurePreset": "xcode",
+            "configuration": "Debug"
+        },
+        {
+            "name": "sanitize",
+            "inherits": "_base-build",
+            "configurePreset": "sanitize",
+            "configuration": "Debug"
+        },
+        {
+            "name": "relwithdebinfo",
+            "inherits": "_base-build",
+            "configurePreset": "relwithdebinfo",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "coverage",
+            "inherits": "_base-build",
+            "configurePreset": "coverage",
+            "configuration": "Debug"
+        },
+        {
+            "name": "lto",
+            "inherits": "_base-build",
+            "configurePreset": "lto",
+            "configuration": "Release"
+        },
+        {
+            "name": "ninja",
+            "inherits": "_base-build",
+            "configurePreset": "ninja",
+            "configuration": "Release"
+        },
+        {
+            "name": "arm64-cross",
+            "inherits": "_base-build",
+            "configurePreset": "arm64-cross",
+            "configuration": "Release"
+        },
+        {
+            "name": "release-no-tests",
+            "inherits": "_base-build",
+            "configurePreset": "release-no-tests",
+            "configuration": "Release"
+        },
+        {
+            "name": "windows-arm64",
+            "inherits": "_base-build",
+            "configurePreset": "windows-arm64",
+            "configuration": "Release"
+        },
+        {
+            "name": "macos-universal",
+            "inherits": "_base-build",
+            "configurePreset": "macos-universal",
+            "configuration": "Release"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "_base-test",
+            "hidden": true,
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "default",
+            "inherits": "_base-test",
+            "configurePreset": "default",
+            "configuration": "Release"
+        },
+        {
+            "name": "debug",
+            "inherits": "_base-test",
+            "configurePreset": "debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "msvc",
+            "inherits": "_base-test",
+            "configurePreset": "msvc",
+            "configuration": "Release"
+        },
+        {
+            "name": "xcode",
+            "inherits": "_base-test",
+            "configurePreset": "xcode",
+            "configuration": "Release"
+        },
+        {
+            "name": "sanitize",
+            "inherits": "_base-test",
+            "configurePreset": "sanitize"
+        },
+        {
+            "name": "relwithdebinfo",
+            "inherits": "_base-test",
+            "configurePreset": "relwithdebinfo"
+        },
+        {
+            "name": "coverage",
+            "inherits": "_base-test",
+            "configurePreset": "coverage"
+        },
+        {
+            "name": "lto",
+            "inherits": "_base-test",
+            "configurePreset": "lto"
+        },
+        {
+            "name": "ninja",
+            "inherits": "_base-test",
+            "configurePreset": "ninja"
+        }
+    ]
+}

@@ -1,0 +1,204 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Hash Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_hash_md5() {
+    assert(Hash.md5("") == "d41d8cd98f00b204e9800998ecf8427e")
+    assert(Hash.md5("hello") == "5d41402abc4b2a76b9719d911017c592")
+    assert(Hash.md5("abc") == "900150983cd24fb0d6963f7d28e17f72")
+}
+
+@test
+function void test_hash_sha1() {
+    assert(Hash.sha1("") == "da39a3ee5e6b4b0d3255bfef95601890afd80709")
+    assert(Hash.sha1("abc") == "a9993e364706816aba3e25717850c26c9cd0d89d")
+}
+
+@test
+function void test_hash_sha256() {
+    string empty_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+    assert(Hash.sha256("") == empty_hash)
+
+    string hello_hash = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+    assert(Hash.sha256("hello") == hello_hash)
+
+    # FIPS 180 test vector.
+    string abc_hash = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+
+    assert(Hash.sha256("abc") == abc_hash)
+}
+
+@test
+function void test_hash_sha512() {
+    string hash = Hash.sha512("")
+
+    assert(String.starts_with(hash, "cf83e1357eefb8bd"))
+    assert(String.length(hash) == 128)
+
+    # FIPS 180 test vector for the full digest.
+    string abc_hash = "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+
+    assert(Hash.sha512("abc") == abc_hash)
+}
+
+@test
+function void test_hash_deterministic_and_distinct() {
+    # The same input always yields the same digest; distinct inputs differ.
+    assert(Hash.sha256("repeatable") == Hash.sha256("repeatable"))
+    assert(Hash.sha256("input-a") != Hash.sha256("input-b"))
+    assert(Hash.md5("hello") != Hash.md5("hellp"))
+}
+
+@test
+function void test_hash_crc32() {
+    assert(Hash.crc32("hello") == 907060870)
+    assert(Hash.crc32("") == 0)
+}
+
+@test
+function void test_hash_crc32_known_vectors() {
+    # CRC-32/ISO-HDLC canonical check value: crc32("123456789") == 0xCBF43926.
+    assert(Hash.crc32("123456789") == 3421780262)
+
+    # Second well-known vector (0x414FA339).
+    assert(Hash.crc32("The quick brown fox jumps over the lazy dog") == 1095738169)
+}
+
+@test
+function void test_hash_hmac_sha256() {
+    string hmac = Hash.hmac_sha256("key", "message")
+
+    assert(String.length(hmac) == 64)
+}
+
+@test
+function void test_hash_hmac_sha256_known_vectors() {
+    # Canonical HMAC-SHA256 example: key "key", the pangram message.
+    string fox = "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"
+
+    assert(Hash.hmac_sha256("key", "The quick brown fox jumps over the lazy dog") == fox)
+
+    # RFC 4231 Test Case 2.
+    string jefe = "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+
+    assert(Hash.hmac_sha256("Jefe", "what do ya want for nothing?") == jefe)
+}
+
+@test
+function void test_hash_hmac_sha512() {
+    string hmac = Hash.hmac_sha512("key", "message")
+
+    assert(String.length(hmac) == 128)
+}
+
+@test
+function void test_hash_hmac_sha512_known_vector() {
+    # RFC 4231 Test Case 2 for HMAC-SHA512.
+    string jefe = "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737"
+
+    assert(Hash.hmac_sha512("Jefe", "what do ya want for nothing?") == jefe)
+}
+
+@test
+function void test_hash_verify() {
+    string digest = Hash.sha256("hello")
+
+    assert(Hash.verify("sha256", "hello", digest))
+    assert(!Hash.verify("sha256", "hello", "wrong"))
+    assert(Hash.verify("md5", "hello", Hash.md5("hello")))
+}
+
+@test
+function void test_hash_verify_all_algorithms() {
+    # verify round-trips against every digest algorithm it accepts.
+    assert(Hash.verify("md5", "hello", Hash.md5("hello")))
+    assert(Hash.verify("sha1", "hello", Hash.sha1("hello")))
+    assert(Hash.verify("sha256", "hello", Hash.sha256("hello")))
+    assert(Hash.verify("sha512", "hello", Hash.sha512("hello")))
+}
+
+@test
+function void test_hash_verify_rejects_mismatches() {
+    # A length mismatch and a digest from the wrong algorithm both fail safely.
+    assert(!Hash.verify("sha256", "hello", "abc"))
+    assert(!Hash.verify("sha256", "hello", Hash.md5("hello")))
+    assert(!Hash.verify("sha256", "hello", Hash.sha256("goodbye")))
+}
+
+@test
+function void test_hash_verify_unknown_algorithm_throws() {
+    # An unrecognised algorithm name is a runtime error, not a false result.
+    mutable boolean has_thrown = false
+    mutable string message = ""
+
+    try {
+        boolean _ = Hash.verify("sha999", "input", "expected")
+    } catch(err) {
+        has_thrown = true
+        message = err
+    }
+
+    assert(has_thrown, "Hash.verify throws on an unknown algorithm")
+    assert(String.contains(message, "unknown algorithm"),
+        "the error names the unknown algorithm")
+}
+
+@test
+function void test_hash_algorithms() {
+    array<string> algos = Hash.algorithms()
+
+    assert(Array.length(algos) == 5)
+    assert(algos[0] == "md5")
+    assert(algos[4] == "crc32")
+}
+
+@test
+function void test_hash_sha256_file() {
+    result<string> r = Hash.sha256_file("nonexistent_file.bin")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_hash_sha512_file() {
+    result<string> r = Hash.sha512_file("nonexistent_file.bin")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_hash_sha256_file_success() {
+    # Hashing a file's contents agrees with hashing the same bytes directly.
+    string path = "_test_hash_sha256_feature.bin"
+    string content = "feature test content"
+
+    assert(Result.is_success(FileSystem.write_file(path, content)))
+
+    result<string> r = Hash.sha256_file(path)
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == Hash.sha256(content))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete(path), false)
+}
+
+@test
+function void test_hash_sha512_file_success() {
+    string path = "_test_hash_sha512_feature.bin"
+    string content = "feature test content"
+
+    assert(Result.is_success(FileSystem.write_file(path, content)))
+
+    result<string> r = Hash.sha512_file(path)
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == Hash.sha512(content))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete(path), false)
+}

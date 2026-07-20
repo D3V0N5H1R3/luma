@@ -1,0 +1,17 @@
+# Caught exception test — a try/catch block catches a division-by-zero.
+# Enable the 'caught' exception filter to pause before the catch runs.
+
+@main
+function void main() {
+    integer divisor = 0
+    mutable string status = "start"
+
+    try {
+        integer quotient = 10 / divisor
+        status = "quotient: ${quotient}"
+    } catch(err) {
+        status = "caught: ${err}"
+    }
+
+    print("Caught exception result: ${status}")
+}

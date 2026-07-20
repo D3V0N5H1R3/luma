@@ -1,0 +1,34 @@
+# ═══════════════════════════════════════════════════════════
+# Utilities — included by multi_file.luma
+#
+# Demonstrates how shared code can live in a separate file
+# and be included by other programs.
+# ═══════════════════════════════════════════════════════════
+
+record Measurement {
+    string label,
+    number value,
+    string unit
+}
+
+choice Severity {
+    Info
+    Warning
+    Error
+}
+
+function string _format_measurement(Measurement m) {
+    return "${m.label}: ${String.format_number(m.value, 2)} ${m.unit}"
+}
+
+function string severity_prefix(Severity sev) {
+    return match sev {
+    case Severity.Info    { "[INFO]" }
+    case Severity.Warning { "[WARN]" }
+    case Severity.Error   { "[ERR ]" }
+    }
+}
+
+function string _log_message(Severity sev, string msg) {
+    return "${severity_prefix(sev)} ${msg}"
+}

@@ -1,0 +1,150 @@
+# ═══════════════════════════════════════════════════════════
+# String Functions
+#
+# Demonstrates the String standard library module:
+# trimming, case conversion, splitting, joining,
+# searching, replacement, padding, templates, and
+# parsing.
+# ═══════════════════════════════════════════════════════════
+
+# ── Trimming ──
+function void demo_trimming() {
+    print("=== Trimming ===")
+
+    string padded = "   hello, world   "
+    print("original:   '${padded}'")
+    print("trim:       '${String.trim(padded)}'")
+    print("trim_start: '${String.trim_start(padded)}'")
+    print("trim_end:   '${String.trim_end(padded)}'")
+}
+
+# ── Case conversion ──
+function void demo_case_conversion() {
+    print("")
+    print("=== Case conversion ===")
+
+    string greeting = "Hello, World!"
+    print("uppercase: ${String.uppercase(greeting)}")
+    print("lowercase: ${String.lowercase(greeting)}")
+}
+
+# ── Splitting and joining ──
+function void demo_split_and_join() {
+    print("")
+    print("=== Split and join ===")
+
+    string csv = "apple,banana,cherry,date"
+    array<string> fruits = String.split(csv, ",")
+    print("split: ${fruits}")
+
+    string rejoined = String.join(fruits, " | ")
+    print("join:  ${rejoined}")
+}
+
+# ── Searching ──
+function void demo_searching() {
+    print("")
+    print("=== Searching ===")
+
+    string haystack = "The quick brown fox"
+    print("contains 'quick': ${String.contains(haystack, "quick")}")
+    print("contains 'slow':  ${String.contains(haystack, "slow")}")
+    print("starts_with 'The': ${String.starts_with(haystack, "The")}")
+    print("ends_with 'fox':   ${String.ends_with(haystack, "fox")}")
+}
+
+# ── Replacement ──
+function void demo_replacement() {
+    print("")
+    print("=== Replacement ===")
+
+    string text = "aaa-bbb-aaa-ccc"
+    print("original:    ${text}")
+    print("replace:     ${String.replace(text, "aaa", "XXX")}")
+    print("replace_all: ${String.replace_all(text, "aaa", "XXX")}")
+}
+
+# ── Padding ──
+function void demo_padding() {
+    print("")
+    print("=== Padding ===")
+
+    string id = "42"
+    print("pad_left(5, '0'):  '${Result.unwrap(String.pad_left(id, 5, "0"))}'")
+    print("pad_right(8, '.'): '${Result.unwrap(String.pad_right(id, 8, "."))}'")
+}
+
+# ── Characters ──
+function void demo_characters() {
+    print("")
+    print("=== Characters ===")
+
+    string word = "Luma"
+    array<string> chars = String.characters(word)
+    print("characters: ${chars}")
+    print("length:     ${String.length(word)}")
+}
+
+# ── Parsing and formatting numbers ──
+function void demo_number_parsing_formatting() {
+    print("")
+    print("=== Number parsing & formatting ===")
+
+    match String.parse_number("3.14159") {
+        success(value) { print("parse '3.14159': ${value}") }
+        failure(error) { print("parse '3.14159': error: ${error}") }
+    }
+
+    match String.parse_number("not_a_number") {
+        success(value) { print("parse 'not...':  ${value}") }
+        failure(error) { print("parse 'not...':  error: ${error}") }
+    }
+
+    number pi = 3.14159265
+    print("format_number(pi, 2): ${String.format_number(pi, 2)}")
+    print("format_number(pi, 4): ${String.format_number(pi, 4)}")
+}
+
+# ── Templates ──
+function void demo_templates() {
+    print("")
+    print("=== Templates ===")
+
+    string tmpl = "Hello, {name}! You have {count} messages."
+    dictionary<string> vars = {"name": "Alice", "count": "5"}
+    string rendered = String.template(tmpl, vars)
+    print(rendered)
+}
+
+# ── Repeat and reverse ──
+function void demo_repeat_and_reverse() {
+    print("")
+    print("=== Repeat and reverse ===")
+
+    print("repeat '-' x10: ${Result.unwrap(String.repeat("-", 10))}")
+    print("reverse 'Luma': ${String.reverse("Luma")}")
+}
+
+# ── Substring check with in ──
+function void demo_substring_membership() {
+    print("")
+    print("=== Substring membership ===")
+
+    print("'ell' in 'hello': ${"ell" in "hello"}")
+    print("'xyz' in 'hello': ${"xyz" in "hello"}")
+}
+
+@main
+function void main() {
+    demo_trimming()
+    demo_case_conversion()
+    demo_split_and_join()
+    demo_searching()
+    demo_replacement()
+    demo_padding()
+    demo_characters()
+    demo_number_parsing_formatting()
+    demo_templates()
+    demo_repeat_and_reverse()
+    demo_substring_membership()
+}

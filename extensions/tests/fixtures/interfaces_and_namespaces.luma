@@ -1,0 +1,63 @@
+# ═══════════════════════════════════════════════════════════════════
+# Luma Highlight Test — Interfaces and Namespaces
+# ═══════════════════════════════════════════════════════════════════
+
+# Interface with method signatures.
+interface Printable {
+    string name
+}
+
+interface Measurable {
+    number size
+}
+
+# Record implementing an interface.
+record Document {
+    string name,
+    string content,
+    number size
+}
+
+# Namespace with functions.
+namespace StringUtils {
+    function string repeat(string s, integer n) {
+        mutable string output = ""
+        for i in 1 .. n {
+            output = output + s
+        }
+        return output
+    }
+
+    function boolean is_empty(string s) {
+        return String.length(s) == 0
+    }
+}
+
+# Nested namespace.
+namespace Geometry {
+    namespace TwoD {
+        record Point {
+            number x,
+            number y
+        }
+
+        function number distance(Point a, Point b) {
+            number dx = a.x - b.x
+            number dy = a.y - b.y
+            return Math.sqrt(dx * dx + dy * dy)
+        }
+    }
+
+    namespace ThreeD {
+        record Point {
+            number x,
+            number y,
+            number z
+        }
+    }
+}
+
+# Type alias.
+type Identifier = string
+type Pair = (integer, string)
+type NumberList = array<number>

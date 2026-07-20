@@ -1,0 +1,36 @@
+# Task stress fixture — many short-lived task spawn/exit cycles.
+#
+# Repeatedly opens task_scope blocks that spawn several short tasks, producing a
+# rapid churn of thread-started / thread-exited events. The concurrency stress
+# regression test inspects these task threads (stackTrace / scopes / variables)
+# while they finish, exercising the task-VM teardown path that once left a
+# dangling ThreadState::vm pointer (use-after-free) when the task's local VM was
+# destroyed before its exit hook nulled the pointer.
+
+function integer work(integer n) {
+    mutable integer sum = 0
+
+    for i in 1 .. n + 1 {
+        sum += i
+    }
+
+    return sum
+}
+
+@main
+function void main() {
+    mutable integer completed = 0
+
+    for _round in 1 .. 31 {
+        array<integer> batch = task_scope {
+            spawn work(400)
+            spawn work(500)
+            spawn work(600)
+            spawn work(700)
+        }
+
+        completed += Array.length(batch)
+    }
+
+    print("stress done: ${completed}")
+}

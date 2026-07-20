@@ -1,0 +1,173 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Encoder Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_encoder_base64_encode() {
+    assert(Result.unwrap(Encoder.encode_base64("hello")) == "aGVsbG8=")
+    assert(Result.unwrap(Encoder.encode_base64("")) == "")
+    assert(Result.unwrap(Encoder.encode_base64("a")) == "YQ==")
+    assert(Result.unwrap(Encoder.encode_base64("ab")) == "YWI=")
+    assert(Result.unwrap(Encoder.encode_base64("abc")) == "YWJj")
+}
+
+@test
+function void test_encoder_base64_decode() {
+    result<string> decode_result = Encoder.decode_base64("aGVsbG8=")
+
+    assert(Result.is_success(decode_result))
+    assert(Result.unwrap(decode_result) == "hello")
+
+    result<string> empty_decode_result = Encoder.decode_base64("")
+
+    assert(Result.is_success(empty_decode_result))
+    assert(Result.unwrap(empty_decode_result) == "")
+
+    result<string> invalid_result = Encoder.decode_base64("!!!")
+
+    assert(!Result.is_success(invalid_result))
+}
+
+@test
+function void test_encoder_roundtrip() {
+    string original = "Hello, Luma! 🎉"
+
+    result<string> encoded = Encoder.encode_base64(original)
+    result<string> decoded = Encoder.decode_base64(Result.unwrap(encoded))
+
+    assert(Result.is_success(decoded))
+    assert(Result.unwrap(decoded) == original)
+}
+
+# ─── Base64 URL-safe encoding ───
+
+@test
+function void test_encoder_base64url_encode() {
+    assert(Result.unwrap(Encoder.encode_base64url("hello")) == "aGVsbG8")
+    assert(Result.unwrap(Encoder.encode_base64url("")) == "")
+    assert(Result.unwrap(Encoder.encode_base64url("a")) == "YQ")
+}
+
+@test
+function void test_encoder_base64url_decode() {
+    result<string> decode_result = Encoder.decode_base64url("aGVsbG8")
+
+    assert(Result.is_success(decode_result))
+    assert(Result.unwrap(decode_result) == "hello")
+
+    result<string> invalid_result = Encoder.decode_base64url("!!!")
+
+    assert(Result.is_failure(invalid_result))
+}
+
+@test
+function void test_encoder_base64url_roundtrip() {
+    string original = "Hello, Luma! 🎉"
+
+    result<string> encoded = Encoder.encode_base64url(original)
+    result<string> decoded = Encoder.decode_base64url(Result.unwrap(encoded))
+
+    assert(Result.is_success(decoded))
+    assert(Result.unwrap(decoded) == original)
+}
+
+# ─── URL encoding ───
+
+@test
+function void test_encoder_encode_url() {
+    assert(Result.unwrap(Encoder.encode_url("hello world")) == "hello%20world")
+    assert(Result.unwrap(Encoder.encode_url("a=b&c=d")) == "a%3Db%26c%3Dd")
+    assert(Result.unwrap(Encoder.encode_url("safe-text_here.ok~")) == "safe-text_here.ok~")
+}
+
+@test
+function void test_encoder_decode_url() {
+    result<string> decoded = Encoder.decode_url("hello%20world")
+
+    assert(Result.is_success(decoded))
+    assert(Result.unwrap(decoded) == "hello world")
+}
+
+@test
+function void test_encoder_decode_url_plus_as_space() {
+    result<string> decoded = Encoder.decode_url("hello+world")
+
+    assert(Result.is_success(decoded))
+    assert(Result.unwrap(decoded) == "hello world")
+}
+
+@test
+function void test_encoder_decode_url_invalid() {
+    result<string> bad_hex = Encoder.decode_url("hello%GG")
+
+    assert(Result.is_failure(bad_hex))
+
+    result<string> truncated = Encoder.decode_url("hello%2")
+
+    assert(Result.is_failure(truncated))
+}
+
+@test
+function void test_encoder_url_roundtrip() {
+    string original = "key=value&name=Hello World!"
+
+    string encoded = Result.unwrap(Encoder.encode_url(original))
+    string decoded = Result.unwrap(Encoder.decode_url(encoded))
+
+    assert(decoded == original)
+}
+
+# ─── Edge cases: special alphabet, unpadded input, control bytes ───
+
+@test
+function void test_encoder_base64_special_chars() {
+    # Bytes mapping to alphabet slots 62 and 63: standard uses '+' and '/',
+    # URL-safe uses '-' and '_'.
+    assert(Result.unwrap(Encoder.encode_base64(">>>")) == "Pj4+")
+    assert(Result.unwrap(Encoder.encode_base64("???")) == "Pz8/")
+    assert(Result.unwrap(Encoder.encode_base64url(">>>")) == "Pj4-")
+    assert(Result.unwrap(Encoder.encode_base64url("???")) == "Pz8_")
+}
+
+@test
+function void test_encoder_base64_decode_unpadded() {
+    # The standard decoder accepts input whose '=' padding has been stripped.
+    assert(Result.unwrap(Encoder.decode_base64("YQ")) == "a")
+    assert(Result.unwrap(Encoder.decode_base64("YWI")) == "ab")
+}
+
+@test
+function void test_encoder_base64_decode_invalid() {
+    # A stray non-alphabet character fails.
+    assert(Result.is_failure(Encoder.decode_base64("ab*d")))
+
+    # Input too short to form even a single decoded byte fails.
+    assert(Result.is_failure(Encoder.decode_base64("Q")))
+}
+
+@test
+function void test_encoder_base64_control_bytes_roundtrip() {
+    string original = "tab\tcr\rlf\nend >>> ??? 🎉"
+
+    result<string> encoded = Encoder.encode_base64(original)
+    result<string> decoded = Encoder.decode_base64(Result.unwrap(encoded))
+
+    assert(Result.is_success(decoded))
+    assert(Result.unwrap(decoded) == original)
+}
+
+@test
+function void test_encoder_url_encode_control_chars() {
+    # Tab and newline are not unreserved, so they become uppercase %XX escapes.
+    assert(Result.unwrap(Encoder.encode_url("a\tb\nc")) == "a%09b%0Ac")
+}
+
+@test
+function void test_encoder_url_trailing_percent_invalid() {
+    # A lone '%' with no following hex digits is malformed.
+    assert(Result.is_failure(Encoder.decode_url("%")))
+    assert(Result.is_failure(Encoder.decode_url("abc%2")))
+}

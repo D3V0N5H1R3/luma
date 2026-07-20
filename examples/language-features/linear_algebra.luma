@@ -1,0 +1,85 @@
+# ═══════════════════════════════════════════════════════════
+# Linear Algebra
+#
+# Demonstrates the LinearAlgebra module — vector arithmetic,
+# matrix operations, and solving linear systems.
+# ═══════════════════════════════════════════════════════════
+
+function void print_vector(string label, array<number> v) {
+    array<string> parts = (v |> Array.map((number x) -> String.format_number(x, 2))) ?? []
+    string formatted = String.join(parts, ", ")
+
+    print("${label} = [${formatted}]")
+}
+
+function void print_matrix(string label, array<array<number>> m) {
+    print("${label}:")
+
+    result<none> _ = m |> Array.each((array<number> row) -> {
+        array<string> parts = (row |> Array.map((number x) -> String.format_number(x, 4))) ?? []
+        string formatted = String.join(parts, "  ")
+
+        print("  [${formatted}]")
+    })
+}
+
+@main
+function void main() {
+    # ── Vector operations ──
+    print("=== Vectors ===")
+
+    array<number> a = [1.0, 2.0, 3.0]
+    array<number> b = [4.0, 5.0, 6.0]
+
+    print_vector("a", a)
+    print_vector("b", b)
+
+    array<number> sum = LinearAlgebra.add(a, b) |> Result.unwrap()
+    print_vector("a + b", sum)
+
+    number dot_product = LinearAlgebra.dot(a, b) |> Result.unwrap()
+    print("dot(a, b) = ${String.format_number(dot_product, 1)}")
+
+    array<number> cross = LinearAlgebra.cross(a, b) |> Result.unwrap()
+    print_vector("cross(a, b)", cross)
+
+    number norm_a = LinearAlgebra.norm(a)
+    print("||a|| = ${String.format_number(norm_a, 4)}")
+
+    array<number> unit = LinearAlgebra.normalize(a) |> Result.unwrap()
+    print_vector("unit(a)", unit)
+
+    # ── Matrix operations ──
+    print("\n=== Matrices ===")
+
+    array<array<number>> m = [[1.0, 2.0], [3.0, 4.0]]
+    print_matrix("M", m)
+
+    array<array<number>> m_transpose = LinearAlgebra.transpose(m)
+    print_matrix("M^T", m_transpose)
+
+    number det = LinearAlgebra.determinant(m) |> Result.unwrap()
+    print("det(M) = ${String.format_number(det, 1)}")
+
+    array<array<number>> inv = LinearAlgebra.inverse(m) |> Result.unwrap()
+    print_matrix("M^-1", inv)
+
+    # ── Solve a linear system ──
+    print("\n=== Solve Ax = b ===")
+
+    # 2x +  y =  5
+    #  x + 3y = 10
+    array<array<number>> coeff = [[2.0, 1.0], [1.0, 3.0]]
+    array<number> rhs = [5.0, 10.0]
+
+    print_matrix("A", coeff)
+    print_vector("b", rhs)
+
+    array<number> x = LinearAlgebra.solve(coeff, rhs) |> Result.unwrap()
+    print_vector("x", x)
+
+    string x0 = String.format_number(x[0], 1)
+    string x1 = String.format_number(x[1], 1)
+    string check = String.format_number(2.0 * x[0] + x[1], 1)
+    print("Verify: 2*${x0} + ${x1} = ${check}")
+}

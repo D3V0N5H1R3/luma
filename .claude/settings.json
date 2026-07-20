@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/agent-hooks/protect_vendored_paths.py || python scripts/agent-hooks/protect_vendored_paths.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/agent-hooks/format_cpp_on_edit.py || python scripts/agent-hooks/format_cpp_on_edit.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

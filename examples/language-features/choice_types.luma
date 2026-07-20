@@ -1,0 +1,177 @@
+# ═══════════════════════════════════════════════════════════
+# Choice Types (Algebraic Data Types)
+#
+# Demonstrates choice types with unit and data variants,
+# exhaustive pattern matching, destructuring, and using
+# choice types to model domain logic.
+#
+# Usage: luma examples/language-features/choice_types.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Shape calculator ───
+
+choice Shape {
+    Circle(number radius)
+    Rectangle(number width, number height)
+    Triangle(number base, number height)
+    Point
+}
+
+function number area(Shape s) {
+    return match s {
+    case Shape.Circle(r)       { 3.14159265 * r * r }
+    case Shape.Rectangle(w, h) { w * h }
+    case Shape.Triangle(b, h)  { 0.5 * b * h }
+    case Shape.Point           { 0.0 }
+    }
+}
+
+function string describe(Shape s) {
+    return match s {
+    case Shape.Circle(r)       { "circle (r=${r})" }
+    case Shape.Rectangle(w, h) { "${w}x${h} rectangle" }
+    case Shape.Triangle(b, h)  { "triangle (b=${b}, h=${h})" }
+    case Shape.Point           { "point" }
+    }
+}
+
+# ─── Expression evaluator ───
+
+choice Expr {
+    Num(number value)
+    Add(number left, number right)
+    Mul(number left, number right)
+    Neg(number operand)
+}
+
+function number eval(Expr e) {
+    return match e {
+    case Expr.Num(v)    { v }
+    case Expr.Add(a, b) { a + b }
+    case Expr.Mul(a, b) { a * b }
+    case Expr.Neg(x)    { -x }
+    }
+}
+
+# ─── Traffic light state machine ───
+
+choice Light { Red Yellow Green }
+
+function Light next_light(Light current) {
+    return match current {
+    case Light.Red    { Light.Green }
+    case Light.Green  { Light.Yellow }
+    case Light.Yellow { Light.Red }
+    }
+}
+
+function string light_label(Light l) {
+    return match l {
+    case Light.Red    { "RED    — Stop" }
+    case Light.Green  { "GREEN  — Go" }
+    case Light.Yellow { "YELLOW — Caution" }
+    }
+}
+
+# ─── Recursive ADTs ───
+
+# Non-generic recursive choice: expression tree
+choice MathExpr {
+    Lit(number value)
+    Plus(MathExpr left, MathExpr right)
+    Times(MathExpr left, MathExpr right)
+}
+
+function number evaluate(MathExpr e) {
+    return match e {
+    case MathExpr.Lit(v)      { v }
+    case MathExpr.Plus(l, r)  { evaluate(l) + evaluate(r) }
+    case MathExpr.Times(l, r) { evaluate(l) * evaluate(r) }
+    }
+}
+
+# Generic recursive choice: linked list
+choice List<T> {
+    Nil
+    Cons(T head, List<T> tail)
+}
+
+function<T> number length(List<T> xs) {
+    return match xs {
+    case List.Nil         { 0 }
+    case List.Cons(_h, t) { 1 + length(t) }
+    }
+}
+
+function string list_to_string(List<number> xs) {
+    return match xs {
+    case List.Nil        { "[]" }
+    case List.Cons(h, t) { "${h} :: ${list_to_string(t)}" }
+    }
+}
+
+@main
+function void main() {
+    # ── Shapes ──
+    print("=== Shape Calculator ===")
+
+    array<Shape> shapes = [
+        Shape.Circle(5.0),
+        Shape.Rectangle(3.0, 4.0),
+        Shape.Triangle(6.0, 2.5),
+        Shape.Point
+    ]
+
+    for s in shapes {
+        print("  ${describe(s)}: area = ${area(s)}")
+    }
+
+    # ── Expressions ──
+    print("")
+    print("=== Expression Evaluator ===")
+
+    array<Expr> expressions = [
+        Expr.Num(42.0),
+        Expr.Add(10.0, 32.0),
+        Expr.Mul(6.0, 7.0),
+        Expr.Neg(99.0)
+    ]
+
+    for e in expressions {
+        print("  result = ${eval(e)}")
+    }
+
+    # ── Traffic light ──
+    print("")
+    print("=== Traffic Light ===")
+
+    mutable Light light = Light.Red
+
+    integer cycles = 6
+
+    for _ in 0 .. cycles {
+        print("  ${light_label(light)}")
+
+        light = next_light(light)
+    }
+
+    # ── Recursive ADTs ──
+    print("")
+    print("=== Recursive Expression Tree ===")
+
+    # (2 + 3) * (4 + 1) = 25
+    MathExpr expr = MathExpr.Times(
+        MathExpr.Plus(MathExpr.Lit(2), MathExpr.Lit(3)),
+        MathExpr.Plus(MathExpr.Lit(4), MathExpr.Lit(1))
+    )
+
+    print("  (2 + 3) * (4 + 1) = ${evaluate(expr)}")
+
+    print("")
+    print("=== Generic Linked List ===")
+
+    List<number> nums = List.Cons(1, List.Cons(2, List.Cons(3, List.Nil)))
+
+    print("  list   = ${list_to_string(nums)}")
+    print("  length = ${length(nums)}")
+}

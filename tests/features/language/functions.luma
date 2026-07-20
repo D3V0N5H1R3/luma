@@ -1,0 +1,301 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+function number add_numbers(number a, number b) {
+    return a + b
+}
+
+function void modify_local() {
+    mutable integer local_value = 1
+
+    local_value++
+
+    assert(local_value == 2)
+}
+
+# ─── Optional parameters ───
+function string greet(string name, string prefix = "Hello") {
+    return "${prefix}, ${name}!"
+}
+
+# ─── Recursion ───
+function integer compute_fibonacci(integer n) {
+    if n <= 1 { return n }
+
+    return compute_fibonacci(n - 1) + compute_fibonacci(n - 2)
+}
+
+# ─── Named arguments ───
+function string create_user(string name, integer age, boolean is_active) {
+    return "${name} (${age}, active=${is_active})"
+}
+
+@test
+function void test_function_call_and_return() {
+    number sum = add_numbers(3.0, 4.0)
+
+    assert(Math.approximately_equal(sum, 7.0))
+}
+
+@test
+function void test_function_void_return() {
+    modify_local()
+}
+
+@test
+function void test_optional_parameters() {
+    assert(greet("Alice") == "Hello, Alice!")
+    assert(greet("Bob", "Hi") == "Hi, Bob!")
+}
+
+@test
+function void test_recursion() {
+    assert(compute_fibonacci(0) == 0)
+    assert(compute_fibonacci(1) == 1)
+    assert(compute_fibonacci(2) == 1)
+    assert(compute_fibonacci(10) == 55)
+}
+
+@test
+function void test_named_arguments_all() {
+    string user_info = create_user(name: "Alice", age: 30, is_active: true)
+
+    assert("Alice" in user_info)
+    assert("30" in user_info)
+}
+
+@test
+function void test_named_arguments_mixed() {
+    string user_info = create_user("Alice", is_active: true, age: 30)
+
+    assert("Alice" in user_info)
+    assert("30" in user_info)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Negative tests — runtime function error conditions
+# ═══════════════════════════════════════════════════════════
+
+# ─── Recursion depth limit ───
+
+function integer infinite_recurse(integer n) {
+    return 1 + infinite_recurse(n + 1)
+}
+
+@test
+function void test_recursion_depth_limit_throws() {
+    mutable string caught = ""
+
+    try {
+        integer _ = infinite_recurse(0)
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.length(caught) > 0, "recursion depth limit should throw")
+}
+
+# ─── Function returning wrong result at runtime (via result type) ───
+
+function result<integer> may_fail(boolean fail) {
+    if fail {
+        return failure("intentional failure")
+    }
+
+    return success(42)
+}
+
+@test
+function void test_function_result_failure_propagation() {
+    result<integer> r = may_fail(true)
+
+    assert(Result.is_failure(r), "function should return failure")
+
+    result<integer> s = may_fail(false)
+
+    assert(Result.is_success(s), "function should return success")
+    assert(Result.unwrap(s) == 42)
+}
+
+# ─── Nested function calls ───
+
+function integer outer_func() {
+    return inner_func() + 1
+}
+
+function integer inner_func() {
+    return 10
+}
+
+@test
+function void test_nested_function_call_chain() {
+    assert(outer_func() == 11)
+}
+
+# ─── Additional function tests ───
+
+# ─── Mutable parameters ───
+
+function integer accumulate(mutable integer total, integer add_value) {
+    total += add_value
+    return total
+}
+
+@test
+function void test_mutable_parameter() {
+    integer result_value = accumulate(10, 5)
+
+    assert(result_value == 15)
+}
+
+# ─── Default parameters combined ───
+
+function string format_greeting(string name, string prefix = "Dear", string suffix = "!") {
+    return "${prefix} ${name}${suffix}"
+}
+
+@test
+function void test_default_params_all_defaults() {
+    assert(format_greeting("Alice") == "Dear Alice!")
+}
+
+@test
+function void test_default_params_override_one() {
+    assert(format_greeting("Bob", "Hi") == "Hi Bob!")
+}
+
+@test
+function void test_default_params_override_all() {
+    assert(format_greeting("Eve", "Hey", ".") == "Hey Eve.")
+}
+
+# ─── Higher-order functions ───
+
+function integer apply_twice(function(integer) -> integer f, integer x) {
+    return f(f(x))
+}
+
+@test
+function void test_higher_order_function() {
+    integer result_value = apply_twice((integer n) -> n * 2, 3)
+
+    assert(result_value == 12)
+}
+
+# ─── Function returning tuple ───
+
+function (string, integer) describe_item(string name, integer count) {
+    return (name, count * 2)
+}
+
+@test
+function void test_function_returns_tuple() {
+    (string label, integer doubled) = describe_item("widgets", 5)
+
+    assert(label == "widgets")
+    assert(doubled == 10)
+}
+
+# ─── Deep recursion (tail-call style) ───
+
+function integer count_down(integer n) {
+    if n <= 0 {
+        return 0
+    }
+    return count_down(n - 1)
+}
+
+@test
+function void test_deep_recursion() {
+    # Should handle moderate recursion depth without stack overflow.
+    assert(count_down(200) == 0)
+}
+
+# ─── Tail call optimization (depth beyond the 256-frame limit) ───
+
+function integer tail_count_down(integer n) {
+    if n <= 0 {
+        return 0
+    }
+    return tail_count_down(n - 1)
+}
+
+function integer tail_sum(integer n, integer acc) {
+    if n <= 0 {
+        return acc
+    }
+    return tail_sum(n - 1, acc + n)
+}
+
+@test
+function void test_tail_call_deep_recursion() {
+    # 500000 frames far exceeds the 256-frame recursion limit; only tail-call
+    # optimization (constant stack usage) lets this complete without overflow.
+    assert(tail_count_down(500000) == 0)
+}
+
+@test
+function void test_tail_call_with_accumulator() {
+    # Tail-recursive summation of 1..10000 (depth 10000, well past the frame
+    # limit). 10000 * 10001 / 2 == 50005000.
+    assert(tail_sum(10000, 0) == 50005000)
+}
+
+# ─── Cross-function tail call invalidates the caller's global cache ───
+# A tail call reuses the caller's stack frame for the callee.  Each frame
+# lazily caches a per-function vector of resolved global bindings, sized to the
+# *running* function's name table.  When the frame is handed to the tail-called
+# function it must resolve its own globals against a freshly sized cache — if
+# the caller's (smaller) cache is left in place, the callee indexes it with its
+# own, larger global-name handles, reading out of bounds and corrupting memory.
+# `build_grid_row` references four stdlib globals (String, Converter, Result,
+# Array); `relay_to_build_grid_row` references only `build_grid_row`, so its
+# name table is far smaller — the exact shape that surfaced the bug.
+
+function array<integer> build_grid_row(string text) {
+    mutable array<integer> row = []
+    for ch in String.characters(text) {
+        integer digit = Result.unwrap_or(Converter.to_integer(ch), 0)
+        row = Array.push(row, digit)
+    }
+    return row
+}
+
+function array<integer> relay_to_build_grid_row() {
+    return build_grid_row("530070000")
+}
+
+@test
+function void test_cross_function_tail_call_global_cache() {
+    # relay_to_build_grid_row tail-calls build_grid_row, whose globals must
+    # resolve against its own binding cache rather than the caller's smaller one.
+    array<integer> row = relay_to_build_grid_row()
+
+    assert(Array.length(row) == 9)
+    assert(row[0] == 5)
+    assert(row[1] == 3)
+    assert(row[2] == 0)
+    assert(row[8] == 0)
+}
+
+# ─── Mutable parameter value semantics ───
+
+function integer add_hundred(mutable integer n) {
+    n += 100
+    return n
+}
+
+@test
+function void test_mutable_parameter_value_semantics() {
+    integer original = 5
+    integer bumped = add_hundred(original)
+
+    # Arguments are passed by value: the caller's variable is unchanged even
+    # though the function reassigned its own (mutable) parameter copy.
+    assert(original == 5)
+    assert(bumped == 105)
+}

@@ -1,0 +1,99 @@
+# Compilation / startup benchmarks: measures process launch + compile + run overhead.
+#
+# The luma binary lives at different paths locally and on CI, so probe the known
+# build-output locations and use the first that exists. Each case runs a real
+# (tiny) program written to a temporary, process-unique file. If no binary is
+# found, the startup benchmarks are skipped rather than reporting misleading
+# timings (the previous version invoked a non-existent "-e" flag against a
+# hardcoded path, so it only ever measured process-launch error latency).
+
+function optional<string> bench_resolve_luma_binary() {
+    array<string> candidates = [
+        "build/luma",
+        "build/luma.exe",
+        "build/Release/luma.exe",
+        "build/core/runtime/luma",
+        "build/core/runtime/luma.exe",
+        "build/core/runtime/Release/luma.exe"
+    ]
+
+    for candidate in candidates {
+        if Result.unwrap_or(FileSystem.exists(candidate), false) {
+            return some(candidate)
+        }
+    }
+
+    return none
+}
+
+function BenchResult run_startup_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    optional<string> binary = bench_resolve_luma_binary()
+    if Optional.is_none(binary) {
+        print("startup benchmarks skipped: luma binary not found in build/")
+        return st
+    }
+
+    string luma = Optional.unwrap(binary)
+    integer pid = Process.get_process_id()
+    string empty_program = "__bench_startup_${pid}_empty.luma"
+    string hello_program = "__bench_startup_${pid}_hello.luma"
+    string arith_program = "__bench_startup_${pid}_arith.luma"
+    string include_helper = "__bench_startup_${pid}_inc_helper.luma"
+    string include_program = "__bench_startup_${pid}_inc_main.luma"
+
+    result<boolean> _we = FileSystem.write_file(empty_program,
+        "@main\nfunction void main() {}\n")
+    result<boolean> _wh = FileSystem.write_file(hello_program,
+        "@main\nfunction void main() { print(\"hello world\") }\n")
+    result<boolean> _wa = FileSystem.write_file(arith_program,
+        "@main\nfunction void main() { print(1 + 2 + 3) }\n")
+
+    # Include resolution: a main program that pulls in a helper file, so the
+    # measured startup also exercises the lex → parse → include-resolution path.
+    result<boolean> _wih = FileSystem.write_file(include_helper,
+        "function integer inc_add(integer a, integer b) { return a + b }\n")
+    result<boolean> _wim = FileSystem.write_file(include_program,
+        "include \"${include_helper}\"\n@main\nfunction void main() { print(inc_add(1, 2)) }\n")
+
+    st = time_it(st, "Process.run: luma empty program", 5, () -> {
+        result<Process.ProcessResult> _r = Process.run("\"${luma}\" \"${empty_program}\"")
+    })
+
+    st = time_it(st, "Process.run: luma hello world", 5, () -> {
+        result<Process.ProcessResult> _r = Process.run("\"${luma}\" \"${hello_program}\"")
+    })
+
+    st = time_it(st, "Process.run: luma arithmetic", 5, () -> {
+        result<Process.ProcessResult> _r = Process.run("\"${luma}\" \"${arith_program}\"")
+    })
+
+    st = time_it(st, "Process.run: luma include", 5, () -> {
+        result<Process.ProcessResult> _r = Process.run("\"${luma}\" \"${include_program}\"")
+    })
+
+    # Analysis-only path: --check runs lex → parse → type-check → lint (and the
+    # --strict gate) but skips compilation and VM execution. Benchmarking it
+    # alongside the full "hello world" run isolates the front-end/linter cost
+    # that `luma --check` and `luma --strict --check` pay.
+    st = time_it(st, "Process.run: luma --check (analysis + lint)", 5, () -> {
+        result<Process.ProcessResult> _r = Process.run("\"${luma}\" --check \"${hello_program}\"")
+    })
+
+    # Pure CLI dispatch: --version parses the arguments and prints the version
+    # without loading, compiling, or executing a program. This isolates the
+    # fixed process-launch + argument-parse + dispatch cost that every luma
+    # invocation pays, independent of compilation and VM execution.
+    st = time_it(st, "Process.run: luma --version (cli dispatch)", 5, () -> {
+        result<Process.ProcessResult> _r = Process.run("\"${luma}\" --version")
+    })
+
+    result<boolean> _de = FileSystem.delete(empty_program)
+    result<boolean> _dh = FileSystem.delete(hello_program)
+    result<boolean> _da = FileSystem.delete(arith_program)
+    result<boolean> _dih = FileSystem.delete(include_helper)
+    result<boolean> _dim = FileSystem.delete(include_program)
+
+    return st
+}

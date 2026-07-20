@@ -1,0 +1,491 @@
+// Standard library tests: Xml.
+
+#include "common/resource_limits.hpp"
+#include "stdlib_test_helpers.hpp"
+
+static void test_xml_add_child() {
+    const auto v = eval("Xml.child_count(Xml.add_child("
+                        "Result.unwrap(Xml.deserialize(\"<root/>\")), "
+                        "Xml.element(\"child\")))");
+
+    ASSERT_EQ(v.as_integer(), 1);
+}
+
+static void test_xml_attribute() {
+    ASSERT_EVAL_STR("Xml.attribute(Result.unwrap(Xml.deserialize("
+                    "\"<root id=\\\"42\\\"/>\")), \"id\")",
+                    "42");
+}
+
+static void test_xml_child_count() {
+    const auto v =
+        eval("Xml.child_count(Result.unwrap(Xml.deserialize(\"<root><a/><b/></root>\")))");
+
+    ASSERT_EQ(v.as_integer(), 2);
+}
+
+static void test_xml_children() {
+    const auto v = eval("Xml.children(Result.unwrap(Xml.deserialize(\"<root><a/><b/></root>\")))");
+
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), 2U);
+}
+
+static void test_xml_element() {
+    const auto result = eval("Xml.element(\"test\") |> Xml.tag()");
+
+    ASSERT_EQ(result.as_string(), "test");
+}
+
+static void test_xml_has_attribute() {
+    const auto t = eval("Xml.has_attribute(Result.unwrap(Xml.deserialize("
+                        "\"<root id=\\\"42\\\"/>\")), \"id\")");
+
+    ASSERT_TRUE(t.is_bool() && t.as_bool());
+}
+
+static void test_xml_is_leaf() {
+    const auto t = eval("Xml.is_leaf(Result.unwrap(Xml.deserialize(\"<leaf/>\")))");
+
+    ASSERT_TRUE(t.is_bool() && t.as_bool());
+
+    const auto f = eval("Xml.is_leaf(Result.unwrap(Xml.deserialize(\"<root><a/></root>\")))");
+
+    ASSERT_TRUE(f.is_bool() && !f.as_bool());
+}
+
+static void test_xml_is_valid() {
+    const auto result = eval(R"(
+        Xml.is_valid("<root/>")
+    )");
+
+    ASSERT_TRUE(result.is_truthy());
+}
+
+static void test_xml_is_valid_false() {
+    const auto result = eval(R"(
+        Xml.is_valid("<root>")
+    )");
+
+    ASSERT_FALSE(result.is_truthy());
+}
+
+static void test_xml_module() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Xml.deserialize"));
+    ASSERT_TRUE(env->has("Xml.element"));
+    ASSERT_TRUE(env->has("Xml.serialize"));
+    ASSERT_TRUE(env->has("Xml.tag"));
+    ASSERT_TRUE(env->has("Xml.text"));
+    ASSERT_TRUE(env->has("Xml.find"));
+    ASSERT_TRUE(env->has("Xml.children"));
+}
+
+static void test_xml_parse_serialize() {
+    auto result = eval(
+        "Xml.deserialize(\"<root><item>hello</item></root>\") |> Result.unwrap() |> Xml.tag()");
+
+    ASSERT_EQ(result.as_string(), "root");
+}
+
+static void test_xml_serialize_pretty() {
+    const auto v =
+        eval("Xml.serialize_pretty(Result.unwrap(Xml.deserialize(\"<root><a/></root>\")))");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_TRUE(v.as_string().find('\n') != std::string::npos);
+}
+
+static void test_xml_set_attribute() {
+    const auto result = eval("Xml.element(\"div\") |> Xml.set_attribute(\"class\", \"main\") |> "
+                             "Xml.attribute(\"class\") |> Result.unwrap()");
+
+    ASSERT_EQ(result.as_string(), "main");
+}
+
+static void test_xml_set_tag() {
+    const auto v = eval("Xml.tag(Xml.set_tag(Xml.element(\"old\"), \"new\"))");
+
+    ASSERT_EQ(v.as_string(), "new");
+}
+
+static void test_xml_set_text() {
+    ASSERT_EVAL_STR("Xml.text(Xml.set_text(Xml.element(\"msg\"), \"hello\"))", "hello");
+}
+
+static void test_xml_tag() {
+    const auto v = eval("Xml.tag(Result.unwrap(Xml.deserialize(\"<root/>\")))");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "root");
+}
+
+static void test_xml_text() {
+    ASSERT_EVAL_STR("Xml.text(Result.unwrap(Xml.deserialize(\"<root>hello</root>\")))", "hello");
+}
+
+// ─── Additional positive coverage ────────────────────────────────────────
+
+static void test_xml_remove_attribute() {
+    const auto v = eval("Xml.has_attribute(Xml.remove_attribute(Xml.set_attribute("
+                        "Xml.element(\"div\"), \"id\", \"x\"), \"id\"), \"id\")");
+
+    ASSERT_TRUE(v.is_bool() && !v.as_bool());
+}
+
+static void test_xml_attributes_dict() {
+    const auto v = eval("Xml.attributes(Result.unwrap(Xml.deserialize("
+                        "\"<a x=\\\"1\\\" y=\\\"2\\\"/>\")))");
+
+    ASSERT_TRUE(v.is_dictionary());
+    ASSERT_EQ(v.as_dictionary()->entries.size(), 2U);
+
+    const auto* x = v.as_dictionary()->find("x");
+
+    ASSERT_TRUE(x != nullptr);
+    ASSERT_EQ(x->as_string(), "1");
+}
+
+static void test_xml_set_cdata_serialize() {
+    const auto v = eval("Xml.serialize(Xml.set_cdata(Xml.element(\"s\"), \"a<b\"))");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_TRUE(v.as_string().find("<![CDATA[a<b]]>") != std::string::npos);
+}
+
+static void test_xml_add_comment_serialize() {
+    const auto v = eval("Xml.serialize(Xml.add_comment(Xml.element(\"d\"), \"hi\"))");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_TRUE(v.as_string().find("<!--hi-->") != std::string::npos);
+}
+
+static void test_xml_to_dictionary() {
+    const auto v = eval("Xml.to_dictionary(Result.unwrap(Xml.deserialize("
+                        "\"<r><a>1</a><b>2</b></r>\")))");
+
+    ASSERT_TRUE(v.is_dictionary());
+    ASSERT_EQ(v.as_dictionary()->entries.size(), 2U);
+
+    const auto* a = v.as_dictionary()->find("a");
+
+    ASSERT_TRUE(a != nullptr);
+    ASSERT_EQ(a->as_string(), "1");
+}
+
+static void test_xml_from_dictionary() {
+    const auto v = eval("Xml.tag(Xml.from_dictionary(\"item\", {\"k\": \"v\"}))");
+
+    ASSERT_EQ(v.as_string(), "item");
+
+    const auto count = eval("Xml.child_count(Xml.from_dictionary(\"item\", {\"k\": \"v\"}))");
+
+    ASSERT_EQ(count.as_integer(), 1);
+}
+
+static void test_xml_children_by_tag() {
+    const auto v = eval("Xml.children_by_tag(Result.unwrap(Xml.deserialize("
+                        "\"<r><a/><b/><a/></r>\")), \"a\")");
+
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), 2U);
+}
+
+static void test_xml_has_child() {
+    const auto t =
+        eval("Xml.has_child(Result.unwrap(Xml.deserialize(\"<r><item/></r>\")), \"item\")");
+
+    ASSERT_TRUE(t.is_bool() && t.as_bool());
+
+    const auto f = eval("Xml.has_child(Result.unwrap(Xml.deserialize(\"<r><item/></r>\")), \"x\")");
+
+    ASSERT_TRUE(f.is_bool() && !f.as_bool());
+}
+
+static void test_xml_find() {
+    const auto v = eval("Xml.tag(Result.unwrap(Xml.find(Result.unwrap(Xml.deserialize("
+                        "\"<r><item id=\\\"1\\\"/></r>\")), \"item\")))");
+
+    ASSERT_EQ(v.as_string(), "item");
+}
+
+static void test_xml_find_all() {
+    const auto v = eval("Xml.find_all(Result.unwrap(Xml.deserialize("
+                        "\"<r><item/><item/><other/></r>\")), \"item\")");
+
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), 2U);
+}
+
+static void test_xml_find_by_attribute() {
+    ASSERT_EVAL_STR("Xml.attribute(Result.unwrap(Xml.find_by_attribute(Result.unwrap("
+                    "Xml.deserialize(\"<r><item id=\\\"42\\\"/><item id=\\\"99\\\"/></r>\")), "
+                    "\"id\", \"42\")), \"id\")",
+                    "42");
+}
+
+static void test_xml_at() {
+    const auto v = eval("Xml.tag(Result.unwrap(Xml.at(Result.unwrap(Xml.deserialize("
+                        "\"<root><child><leaf/></child></root>\")), \"root/child/leaf\")))");
+
+    ASSERT_EQ(v.as_string(), "leaf");
+}
+
+static void test_xml_text_at() {
+    ASSERT_EVAL_STR("Xml.text_at(Result.unwrap(Xml.deserialize("
+                    "\"<root><greeting>Hello</greeting></root>\")), \"root/greeting\")",
+                    "Hello");
+}
+
+static void test_xml_serialize_compact() {
+    const auto v = eval("Xml.serialize(Result.unwrap(Xml.deserialize(\"<r><a>x</a></r>\")))");
+
+    ASSERT_EQ(v.as_string(), "<r><a>x</a></r>");
+}
+
+static void test_xml_entity_decode() {
+    ASSERT_EVAL_STR("Xml.text(Result.unwrap(Xml.deserialize("
+                    "\"<r>a&lt;b&amp;c&gt;d</r>\")))",
+                    "a<b&c>d");
+}
+
+static void test_xml_serialize_escapes_text() {
+    const auto v = eval("Xml.serialize(Xml.set_text(Xml.element(\"r\"), \"a<b&c\"))");
+
+    ASSERT_EQ(v.as_string(), "<r>a&lt;b&amp;c</r>");
+}
+
+static void test_xml_cdata_roundtrip() {
+    // Parser-produced CDATA never contains "]]>", so serialize re-wraps it cleanly.
+    const auto v =
+        eval("Xml.serialize(Result.unwrap(Xml.deserialize(\"<s><![CDATA[x<y&z]]></s>\")))");
+
+    ASSERT_TRUE(v.as_string().find("<![CDATA[x<y&z]]>") != std::string::npos);
+}
+
+static void test_xml_comment_roundtrip() {
+    const auto v = eval("Xml.serialize(Result.unwrap(Xml.deserialize(\"<d><!--note--></d>\")))");
+
+    ASSERT_TRUE(v.as_string().find("<!--note-->") != std::string::npos);
+}
+
+static void test_xml_self_closing() {
+    const auto leaf = eval("Xml.is_leaf(Result.unwrap(Xml.deserialize(\"<a/>\")))");
+
+    ASSERT_TRUE(leaf.is_bool() && leaf.as_bool());
+
+    const auto s = eval("Xml.serialize(Result.unwrap(Xml.deserialize(\"<a/>\")))");
+
+    ASSERT_EQ(s.as_string(), "<a/>");
+}
+
+static void test_xml_declaration_skipped() {
+    const auto v = eval("Xml.tag(Result.unwrap(Xml.deserialize("
+                        "\"<?xml version=\\\"1.0\\\" encoding=\\\"UTF-8\\\"?><r/>\")))");
+
+    ASSERT_EQ(v.as_string(), "r");
+}
+
+static void test_xml_attribute_entity_roundtrip() {
+    // Attribute value with all five escapables survives serialize → parse.
+    ASSERT_EVAL_STR("Xml.attribute(Result.unwrap(Xml.deserialize(Xml.serialize("
+                    "Xml.set_attribute(Xml.element(\"n\"), \"k\", \"a<b>&\\\"'\")))), \"k\")",
+                    "a<b>&\"'");
+}
+
+// ─── Negative and security coverage ──────────────────────────────────────
+
+static void test_xml_attribute_not_found() {
+    ASSERT_EVAL_FAILURE("Xml.attribute(Result.unwrap(Xml.deserialize(\"<r/>\")), \"missing\")");
+}
+
+static void test_xml_text_no_content() {
+    ASSERT_EVAL_FAILURE("Xml.text(Xml.element(\"empty\"))");
+}
+
+static void test_xml_find_not_found() {
+    ASSERT_EVAL_FAILURE("Xml.find(Result.unwrap(Xml.deserialize(\"<r/>\")), \"nope\")");
+}
+
+static void test_xml_find_by_attribute_not_found() {
+    ASSERT_EVAL_FAILURE("Xml.find_by_attribute(Result.unwrap(Xml.deserialize("
+                        "\"<r><item class=\\\"a\\\"/></r>\")), \"id\", \"99\")");
+}
+
+static void test_xml_at_missing_path() {
+    ASSERT_EVAL_FAILURE("Xml.at(Result.unwrap(Xml.deserialize(\"<r/>\")), \"r/missing\")");
+}
+
+static void test_xml_text_at_missing_path() {
+    ASSERT_EVAL_FAILURE("Xml.text_at(Result.unwrap(Xml.deserialize(\"<r/>\")), \"r/missing\")");
+}
+
+static void test_xml_deserialize_unclosed() {
+    ASSERT_EVAL_FAILURE("Xml.deserialize(\"<root>\")");
+}
+
+static void test_xml_deserialize_empty() {
+    ASSERT_EVAL_FAILURE("Xml.deserialize(\"\")");
+}
+
+static void test_xml_deserialize_unterminated_attributes() {
+    // Regression: a start-tag whose attribute region ends in trailing whitespace
+    // at EOF drove the attribute scanner to read one byte past the source view
+    // (input_[pos_] with pos_ == size()).  These malformed inputs must be
+    // rejected cleanly, and is_valid must report false, without reading OOB.
+    ASSERT_EVAL_FAILURE("Xml.deserialize(\"<a \")");
+    ASSERT_EVAL_FAILURE("Xml.deserialize(\"<a x='1' \")");
+
+    const auto valid = eval("Xml.is_valid(\"<a \")");
+
+    ASSERT_FALSE(valid.is_truthy());
+}
+
+static void test_xml_deserialize_mismatched_tag() {
+    ASSERT_EVAL_FAILURE("Xml.deserialize(\"<a></b>\")");
+}
+
+static void test_xml_deserialize_trailing_content() {
+    ASSERT_EVAL_FAILURE("Xml.deserialize(\"<a/>junk\")");
+}
+
+static void test_xml_deserialize_doctype_rejected() {
+    // Security: DOCTYPE declarations are rejected (external-entity injection risk).
+    ASSERT_EVAL_FAILURE("Xml.deserialize(\"<!DOCTYPE html><r/>\")");
+}
+
+static void test_xml_is_valid_doctype() {
+    const auto v = eval("Xml.is_valid(\"<!DOCTYPE html><r/>\")");
+
+    ASSERT_FALSE(v.is_truthy());
+}
+
+static void test_xml_deserialize_too_deep() {
+    std::string deep;
+
+    for (int i{0}; i < 200; ++i) {
+        deep += "<a>";
+    }
+
+    for (int i{0}; i < 200; ++i) {
+        deep += "</a>";
+    }
+
+    const auto valid = eval("Xml.is_valid(\"" + deep + "\")");
+
+    ASSERT_FALSE(valid.is_truthy());
+
+    ASSERT_EVAL_FAILURE("Xml.deserialize(\"" + deep + "\")");
+}
+
+static void test_xml_wrong_type_throws() {
+    ASSERT_THROWS(eval("Xml.tag(42)"));
+    ASSERT_THROWS(eval("Xml.serialize(\"not xml\")"));
+}
+
+static void test_xml_deserialize_file_missing() {
+    ASSERT_EVAL_FAILURE("Xml.deserialize_file(\"nonexistent_luma_xml_xyz.xml\")");
+}
+
+static void test_xml_deserialize_file_rejects_oversized_file() {
+    // deserialize_file slurps the whole file into memory before parsing.  A
+    // file larger than the maximum string size must be rejected up front,
+    // yielding a failure result rather than an unbounded allocation.  The
+    // payload is *valid* XML larger than the lowered cap, so the size guard is
+    // the only thing that can make deserialize_file fail here; a malformed
+    // payload would let the test pass even with the guard removed, masking a
+    // regression.  The file is created under the default cap, then the cap is
+    // lowered so the test need not materialise a 256 MB file.
+    const LumaTempFile file{"_test_xml_oversize.xml", "<root>hello world</root>"};
+    const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(16)};
+
+    ASSERT_EVAL_FAILURE("Xml.deserialize_file(\"_test_xml_oversize.xml\")");
+}
+
+static void test_xml_invalid_names_rejected() {
+    // Regression: element/attribute/tag names were emitted raw, so a name that
+    // is not a valid XML name (a space, '<', empty, …) serialised to malformed,
+    // unparseable markup and could inject structure.  Construction now rejects
+    // any name outside the grammar the parser accepts, at every name-setting
+    // entry point (element, set_tag, set_attribute, from_dictionary).
+    ASSERT_THROWS(eval("Xml.element(\"bad tag\")"));
+    ASSERT_THROWS(eval("Xml.element(\"a<b\")"));
+    ASSERT_THROWS(eval("Xml.element(\"\")"));
+    ASSERT_THROWS(eval("Xml.set_tag(Xml.element(\"ok\"), \"bad tag\")"));
+    ASSERT_THROWS(eval("Xml.set_attribute(Xml.element(\"ok\"), \"bad name\", \"v\")"));
+    ASSERT_THROWS(eval("Xml.from_dictionary(\"bad root\", {\"k\": \"v\"})"));
+    ASSERT_THROWS(eval("Xml.from_dictionary(\"root\", {\"bad key\": \"v\"})"));
+}
+
+static void test_xml_valid_punctuation_names_round_trip() {
+    // Names using the allowed XML name punctuation (':', '-', '.', '_') are
+    // accepted and survive a serialize/parse round-trip unchanged — proving the
+    // validator does not over-reject legitimate names.
+    const auto v =
+        eval("Xml.tag(Result.unwrap(Xml.deserialize(Xml.serialize("
+             "Xml.set_attribute(Xml.element(\"ns:item-1.0_x\"), \"data-id\", \"7\")))))");
+
+    ASSERT_EQ(v.as_string(), "ns:item-1.0_x");
+}
+
+int main() {
+    RUN(test_xml_add_child);
+    RUN(test_xml_attribute);
+    RUN(test_xml_child_count);
+    RUN(test_xml_children);
+    RUN(test_xml_element);
+    RUN(test_xml_has_attribute);
+    RUN(test_xml_is_leaf);
+    RUN(test_xml_is_valid);
+    RUN(test_xml_is_valid_false);
+    RUN(test_xml_module);
+    RUN(test_xml_parse_serialize);
+    RUN(test_xml_serialize_pretty);
+    RUN(test_xml_set_attribute);
+    RUN(test_xml_set_tag);
+    RUN(test_xml_set_text);
+    RUN(test_xml_tag);
+    RUN(test_xml_text);
+    RUN(test_xml_remove_attribute);
+    RUN(test_xml_attributes_dict);
+    RUN(test_xml_set_cdata_serialize);
+    RUN(test_xml_add_comment_serialize);
+    RUN(test_xml_to_dictionary);
+    RUN(test_xml_from_dictionary);
+    RUN(test_xml_children_by_tag);
+    RUN(test_xml_has_child);
+    RUN(test_xml_find);
+    RUN(test_xml_find_all);
+    RUN(test_xml_find_by_attribute);
+    RUN(test_xml_at);
+    RUN(test_xml_text_at);
+    RUN(test_xml_serialize_compact);
+    RUN(test_xml_entity_decode);
+    RUN(test_xml_serialize_escapes_text);
+    RUN(test_xml_cdata_roundtrip);
+    RUN(test_xml_comment_roundtrip);
+    RUN(test_xml_self_closing);
+    RUN(test_xml_declaration_skipped);
+    RUN(test_xml_attribute_entity_roundtrip);
+    RUN(test_xml_attribute_not_found);
+    RUN(test_xml_text_no_content);
+    RUN(test_xml_find_not_found);
+    RUN(test_xml_find_by_attribute_not_found);
+    RUN(test_xml_at_missing_path);
+    RUN(test_xml_text_at_missing_path);
+    RUN(test_xml_deserialize_unclosed);
+    RUN(test_xml_deserialize_empty);
+    RUN(test_xml_deserialize_unterminated_attributes);
+    RUN(test_xml_deserialize_mismatched_tag);
+    RUN(test_xml_deserialize_trailing_content);
+    RUN(test_xml_deserialize_doctype_rejected);
+    RUN(test_xml_is_valid_doctype);
+    RUN(test_xml_deserialize_too_deep);
+    RUN(test_xml_wrong_type_throws);
+    RUN(test_xml_deserialize_file_missing);
+    RUN(test_xml_deserialize_file_rejects_oversized_file);
+    RUN(test_xml_invalid_names_rejected);
+    RUN(test_xml_valid_punctuation_names_round_trip);
+    return SUMMARY();
+}

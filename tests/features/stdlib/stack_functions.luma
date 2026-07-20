@@ -1,0 +1,232 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Stack Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_stack_new_is_empty() {
+    assert(Stack.new() |> Stack.is_empty())
+    assert((Stack.new() |> Stack.length()) == 0)
+}
+
+@test
+function void test_stack_push_and_length() {
+    integer len = Stack.new()
+    |> Stack.push(1)
+    |> Stack.push(2)
+    |> Stack.push(3)
+    |> Stack.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_stack_pop_lifo() {
+    # Pop returns a result containing (value, remaining_stack); LIFO yields the top.
+    (integer top, stack remaining) = Stack.from_array([10, 20, 30])
+    |> Stack.pop()
+    |> Result.unwrap()
+
+    assert(top == 30)
+    assert(Stack.length(remaining) == 2)
+}
+
+@test
+function void test_stack_peek() {
+    integer top = Stack.from_array([42, 99])
+    |> Stack.peek()
+    |> Result.unwrap()
+
+    assert(top == 99)
+}
+
+@test
+function void test_stack_to_array() {
+    array<integer> arr = Stack.from_array([1, 2, 3]) |> Stack.to_array()
+
+    assert(Array.length(arr) == 3)
+    assert(arr[0] == 1)
+    assert(arr[2] == 3)
+}
+
+@test
+function void test_stack_from_array_length() {
+    integer len = Stack.from_array([10, 20, 30]) |> Stack.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_stack_pop_empty_fails() {
+    assert(Stack.new() |> Stack.pop() |> Result.is_failure())
+}
+
+@test
+function void test_stack_peek_empty_fails() {
+    assert(Stack.new() |> Stack.peek() |> Result.is_failure())
+}
+
+@test
+function void test_stack_pop_until_empty_then_fails() {
+    # Popping the final element succeeds; popping the now-empty stack fails.
+    (integer only, stack emptied) = Stack.from_array([42])
+    |> Stack.pop()
+    |> Result.unwrap()
+
+    assert(only == 42)
+    assert(Stack.is_empty(emptied))
+    assert(emptied |> Stack.pop() |> Result.is_failure())
+}
+
+@test
+function void test_stack_push_multiple_peek() {
+    string top = Stack.new()
+    |> Stack.push("a")
+    |> Stack.push("b")
+    |> Stack.push("c")
+    |> Stack.peek()
+    |> Result.unwrap()
+
+    assert(top == "c")
+}
+
+@test
+function void test_stack_push_is_immutable() {
+    # Push is persistent: it returns a new stack and leaves the source intact.
+    stack original = Stack.from_array([1, 2])
+    stack extended = Stack.push(original, 3)
+
+    assert(Stack.length(original) == 2)
+    assert(Stack.length(extended) == 3)
+}
+
+@test
+function void test_stack_peek_does_not_remove() {
+    # Peek inspects the top element without consuming it.
+    stack s = Stack.from_array([10, 20])
+    integer top = Stack.peek(s) |> Result.unwrap()
+
+    assert(top == 20)
+    assert(Stack.length(s) == 2)
+}
+
+@test
+function void test_stack_pop_preserves_lifo_order() {
+    # Two consecutive pops must return elements in last-in-first-out order.
+    (integer first, stack after_first) = Stack.from_array([10, 20, 30])
+    |> Stack.pop()
+    |> Result.unwrap()
+
+    (integer second, stack after_second) = after_first
+    |> Stack.pop()
+    |> Result.unwrap()
+
+    assert(first == 30)
+    assert(second == 20)
+    assert(Stack.length(after_second) == 1)
+}
+
+# ─── Higher-order Stack operations ───────────────────────
+
+@test
+function void test_stack_map() {
+    array<integer> arr = Stack.from_array([1, 2, 3])
+    |> Stack.map((integer i) -> i * 10)
+    |> Result.unwrap()
+    |> Stack.to_array()
+
+    assert(arr[0] == 10)
+    assert(arr[1] == 20)
+    assert(arr[2] == 30)
+}
+
+@test
+function void test_stack_filter() {
+    array<integer> arr = Stack.from_array([1, 2, 3, 4])
+    |> Stack.filter((integer i) -> i > 2)
+    |> Result.unwrap()
+    |> Stack.to_array()
+
+    assert(Array.length(arr) == 2)
+    assert(arr[0] == 3)
+    assert(arr[1] == 4)
+}
+
+@test
+function void test_stack_reduce() {
+    integer total = Stack.from_array([1, 2, 3])
+    |> Stack.reduce(0, (integer acc, integer i) -> acc + i)
+    |> Result.unwrap()
+
+    assert(total == 6)
+}
+
+@test
+function void test_stack_each_success() {
+    result<none> r = Stack.from_array([1, 2, 3])
+    |> Stack.each((integer i) -> { assert(i > 0) })
+
+    assert(Result.is_success(r))
+}
+
+# ─── Stack.concat ─────────────────────────────────────────
+
+@test
+function void test_stack_concat_basic() {
+    stack s = Stack.concat(
+        Stack.from_array([1, 2]),
+        Stack.from_array([3, 4]))
+
+    assert(Stack.length(s) == 4)
+}
+
+@test
+function void test_stack_concat_empty_left() {
+    stack s = Stack.concat(Stack.new(), Stack.from_array([1, 2]))
+
+    assert(Stack.length(s) == 2)
+}
+
+@test
+function void test_stack_concat_both_empty() {
+    stack s = Stack.concat(Stack.new(), Stack.new())
+
+    assert(Stack.is_empty(s))
+}
+
+# ─── Stack.partition ──────────────────────────────────────
+
+@test
+function void test_stack_partition_basic() {
+    result<(stack, stack)> r = Stack.from_array([1, 2, 3, 4, 5])
+    |> Stack.partition((integer x) -> x > 3)
+
+    assert(Result.is_success(r))
+
+    (stack matches, stack rest) = Result.unwrap(r)
+
+    assert(Stack.length(matches) == 2)
+    assert(Stack.length(rest) == 3)
+}
+
+@test
+function void test_stack_partition_none_match() {
+    (stack matches, stack rest) = Stack.from_array([1, 2, 3])
+    |> Stack.partition((integer x) -> x > 10)
+    |> Result.unwrap()
+
+    assert(Stack.is_empty(matches))
+    assert(Stack.length(rest) == 3)
+}
+
+@test
+function void test_stack_partition_all_match() {
+    (stack matches, stack rest) = Stack.from_array([1, 2, 3])
+    |> Stack.partition((integer x) -> x > 0)
+    |> Result.unwrap()
+
+    assert(Stack.length(matches) == 3)
+    assert(Stack.is_empty(rest))
+}

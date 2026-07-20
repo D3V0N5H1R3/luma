@@ -1,0 +1,89 @@
+[
+    {
+        "label": "CMake: Configure",
+        "command": "cmake",
+        "args": ["--preset", "default"]
+    },
+    {
+        "label": "CMake: Build",
+        "command": "cmake",
+        "args": ["--build", "--preset", "default"]
+    },
+    {
+        "label": "CMake: Configure (Debug)",
+        "command": "cmake",
+        "args": ["--preset", "debug"]
+    },
+    {
+        "label": "CMake: Build (Debug)",
+        "command": "cmake",
+        "args": ["--build", "--preset", "debug"]
+    },
+    {
+        "label": "CMake: Configure (RelWithDebInfo)",
+        "command": "cmake",
+        "args": ["--preset", "relwithdebinfo"]
+    },
+    {
+        "label": "CMake: Build (RelWithDebInfo)",
+        "command": "cmake",
+        "args": ["--build", "--preset", "relwithdebinfo"]
+    },
+    {
+        "label": "CMake: Configure (Sanitizers)",
+        "command": "cmake",
+        "args": ["--preset", "sanitize"]
+    },
+    {
+        "label": "CMake: Build (Sanitizers)",
+        "command": "cmake",
+        "args": ["--build", "--preset", "sanitize"]
+    },
+    {
+        "label": "CMake: Configure (Coverage)",
+        "command": "cmake",
+        "args": ["--preset", "coverage"]
+    },
+    {
+        "label": "CMake: Build (Coverage)",
+        "command": "cmake",
+        "args": ["--build", "--preset", "coverage"]
+    },
+    {
+        "label": "CTest: Run All Tests",
+        "command": "ctest",
+        "args": ["--preset", "default"]
+    },
+    {
+        "label": "CTest: Run All Tests (Debug)",
+        "command": "ctest",
+        "args": ["--preset", "debug"]
+    },
+    {
+        "label": "Luma: Run All Test Suites",
+        "command": "python",
+        "args": [
+            "$ZED_WORKTREE_ROOT/scripts/run_luma_tests.py"
+        ]
+    },
+    {
+        "label": "Luma: Run Current File (Windows)",
+        "command": "$ZED_WORKTREE_ROOT/build/Release/luma.exe",
+        "args": ["$ZED_FILE"]
+    },
+    {
+        "label": "Luma: Run Current File (Unix)",
+        "command": "$ZED_WORKTREE_ROOT/build/luma",
+        "args": ["$ZED_FILE"]
+    },
+    {
+        "label": "Luma: Test Current File (Windows)",
+        "command": "$ZED_WORKTREE_ROOT/build/Release/luma.exe",
+        "args": ["--test", "$ZED_FILE"]
+    },
+    {
+        "label": "Luma: Test Current File (Unix)",
+        "command": "$ZED_WORKTREE_ROOT/build/luma",
+        "args": ["--test", "$ZED_FILE"]
+    }
+]

@@ -1,0 +1,31 @@
+id = "luma"
+name = "Luma"
+description = "Syntax highlighting, language configuration, snippets, and language server integration for the Luma programming language."
+version = "0.5.0"
+schema_version = 1
+authors = ["Luma Contributors"]
+repository = "https://github.com/d3v0n5h1r3/luma"
+
+snippets = ["../shared/snippets/luma.json"]
+
+[grammars.luma]
+repository = "file://./grammars/tree-sitter-luma"
+rev = "main"
+
+[language_servers.luma-lsp]
+name = "Luma Language Server"
+languages = ["Luma"]
+language_ids = { Luma = "luma" }
+
+[language_servers.luma-lsp.binary]
+path = "bin/luma_lsp"
+fetch_script = "scripts/download_binaries.sh"
+
+[debuggers.luma-dap]
+name = "Luma Debug"
+languages = ["Luma"]
+transport = "stdio"
+command = "luma_dap"
+templates = [
+  { label = "Debug Current File", body = { program = "{file}" } },
+]

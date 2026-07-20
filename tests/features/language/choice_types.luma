@@ -1,0 +1,339 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Choice Types (ADTs)
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+choice Color { Red Green Blue }
+
+choice Shape {
+    Circle(number radius)
+    Rectangle(number width, number height)
+    Point
+}
+
+@test
+function void test_choice_unit_variant() {
+    Color c = Color.Red
+
+    assert(c == Color.Red)
+    assert(c != Color.Green)
+}
+
+@test
+function void test_choice_data_variant() {
+    Shape s = Shape.Circle(5.0)
+
+    assert(s != Shape.Point)
+}
+
+@test
+function void test_choice_match_unit_variants() {
+    Color c = Color.Blue
+
+    string label = match c {
+    case Color.Red   { "red" }
+    case Color.Green { "green" }
+    case Color.Blue  { "blue" }
+    }
+
+    assert(label == "blue")
+}
+
+@test
+function void test_choice_match_data_variants() {
+    Shape s = Shape.Rectangle(3.0, 4.0)
+
+    number area = match s {
+    case Shape.Circle(r)       { 3.14159 * r * r }
+    case Shape.Rectangle(w, h) { w * h }
+    case Shape.Point           { 0.0 }
+    }
+
+    assert(Math.approximately_equal(area, 12.0))
+}
+
+function string describe_shape(Shape s) {
+    return match s {
+    case Shape.Circle(r)       { "circle with radius ${r}" }
+    case Shape.Rectangle(w, h) { "${w}x${h} rectangle" }
+    case Shape.Point           { "point" }
+    }
+}
+
+@test
+function void test_choice_in_function() {
+    Shape circle = Shape.Circle(2.5)
+
+    string desc = describe_shape(circle)
+
+    assert(desc == "circle with radius 2.5")
+}
+
+@test
+function void test_choice_point_variant() {
+    Shape p = Shape.Point
+
+    string desc = describe_shape(p)
+
+    assert(desc == "point")
+}
+
+# ─── Recursive ADTs (non-generic) ─────────────────────────
+
+choice Expr {
+    Num(integer value)
+    Add(Expr left, Expr right)
+    Mul(Expr left, Expr right)
+}
+
+function integer eval_expr(Expr e) {
+    return match e {
+    case Expr.Num(v) { v }
+    case Expr.Add(l, r) { eval_expr(l) + eval_expr(r) }
+    case Expr.Mul(l, r) { eval_expr(l) * eval_expr(r) }
+    }
+}
+
+@test
+function void test_recursive_choice_expression_tree() {
+    # (3 + 4) * 5 = 35
+    Expr e = Expr.Mul(
+        Expr.Add(Expr.Num(3), Expr.Num(4)),
+        Expr.Num(5)
+    )
+
+    assert(eval_expr(e) == 35)
+}
+
+@test
+function void test_recursive_choice_deeply_nested() {
+    # 1 + (2 + (3 + 4)) = 10
+    Expr e = Expr.Add(
+        Expr.Num(1),
+        Expr.Add(
+            Expr.Num(2),
+            Expr.Add(Expr.Num(3), Expr.Num(4))
+        )
+    )
+
+    assert(eval_expr(e) == 10)
+}
+
+@test
+function void test_recursive_choice_equality() {
+    Expr a = Expr.Add(Expr.Num(1), Expr.Num(2))
+    Expr b = Expr.Add(Expr.Num(1), Expr.Num(2))
+    Expr c = Expr.Add(Expr.Num(1), Expr.Num(3))
+
+    assert(a == b)
+    assert(a != c)
+}
+
+@test
+function void test_recursive_choice_to_string() {
+    Expr e = Expr.Add(Expr.Num(1), Expr.Num(2))
+
+    string s = "${e}"
+
+    assert(s == "Expr.Add(Expr.Num(1), Expr.Num(2))")
+}
+
+# ─── Recursive ADTs (generic) ─────────────────────────────
+
+choice List<T> {
+    Nil
+    Cons(T head, List<T> tail)
+}
+
+function integer list_length(List<integer> xs) {
+    return match xs {
+    case List.Nil { 0 }
+    case List.Cons(_h, t) { 1 + list_length(t) }
+    }
+}
+
+function integer list_sum(List<integer> xs) {
+    return match xs {
+    case List.Nil { 0 }
+    case List.Cons(h, t) { h + list_sum(t) }
+    }
+}
+
+@test
+function void test_generic_recursive_list_construction() {
+    List<integer> xs = List.Cons(10, List.Cons(20, List.Cons(30, List.Nil)))
+
+    assert(list_length(xs) == 3)
+}
+
+@test
+function void test_generic_recursive_list_sum() {
+    List<integer> xs = List.Cons(1, List.Cons(2, List.Cons(3, List.Nil)))
+
+    assert(list_sum(xs) == 6)
+}
+
+@test
+function void test_generic_recursive_list_equality() {
+    List<integer> a = List.Cons(1, List.Cons(2, List.Nil))
+    List<integer> b = List.Cons(1, List.Cons(2, List.Nil))
+    List<integer> c = List.Cons(1, List.Cons(9, List.Nil))
+
+    assert(a == b)
+    assert(a != c)
+}
+
+@test
+function void test_generic_recursive_list_empty() {
+    List<string> empty = List.Nil
+
+    string label = match empty {
+    case List.Nil { "empty" }
+    case List.Cons(_h, _t) { "non-empty" }
+    }
+
+    assert(label == "empty")
+}
+
+# ─── Generic recursive binary tree ────────────────────────
+
+choice Tree<T> {
+    Leaf(T value)
+    Branch(Tree<T> left, Tree<T> right)
+}
+
+function integer tree_sum(Tree<integer> t) {
+    return match t {
+    case Tree.Leaf(v) { v }
+    case Tree.Branch(l, r) { tree_sum(l) + tree_sum(r) }
+    }
+}
+
+function integer tree_depth(Tree<integer> t) {
+    return match t {
+    case Tree.Leaf(_v) { 1 }
+    case Tree.Branch(l, r) {
+        integer dl = tree_depth(l)
+        integer dr = tree_depth(r)
+
+        1 + if dl > dr { dl } else { dr }
+    }
+}
+}
+
+@test
+function void test_generic_recursive_tree_sum() {
+    Tree<integer> t = Tree.Branch(
+        Tree.Branch(Tree.Leaf(1), Tree.Leaf(2)),
+        Tree.Leaf(3)
+    )
+
+    assert(tree_sum(t) == 6)
+}
+
+@test
+function void test_generic_recursive_tree_depth() {
+    Tree<integer> t = Tree.Branch(
+        Tree.Branch(Tree.Leaf(1), Tree.Leaf(2)),
+        Tree.Leaf(3)
+    )
+
+    assert(tree_depth(t) == 3)
+}
+
+@test
+function void test_generic_recursive_tree_string_values() {
+    Tree<string> t = Tree.Branch(
+        Tree.Leaf("hello"),
+        Tree.Leaf("world")
+    )
+
+    string text = match t {
+    case Tree.Leaf(v) { v }
+    case Tree.Branch(l, r) {
+        string lv = match l {
+        case Tree.Leaf(v) { v }
+        else { "" }
+        }
+
+        string rv = match r {
+        case Tree.Leaf(v) { v }
+        else { "" }
+        }
+
+        "${lv} ${rv}"
+    }
+}
+
+assert(text == "hello world")
+}
+
+function<T> T first(List<T> lst) {
+    return match lst {
+    case List.Cons(h, _) { h }
+    else { 0 }
+    }
+}
+
+@test
+function void test_generic_function_match_preserves_type_params() {
+    # Matching a generic choice inside a generic function must not
+    # corrupt the function's own type parameter bindings.
+    integer x = first(List.Cons(42, List.Nil))
+
+    assert(x == 42)
+}
+
+@test
+function void test_match_expression_binding_count_correct() {
+    # Verify correct number of bindings works for match destructuring.
+    Expr e = Expr.Add(Expr.Num(3), Expr.Num(4))
+
+    integer answer = match e {
+    case Expr.Num(n) { n }
+    case Expr.Add(_l, _r) { 7 }
+    else { 0 }
+    }
+
+    assert(answer == 7)
+}
+
+# ─── Choice values inside collections ─────────────────────
+
+@test
+function void test_choice_in_array_matched() {
+    # Choice values can be stored in an array and matched while iterating.
+    array<Shape> shapes = [
+        Shape.Circle(1.0),
+        Shape.Rectangle(2.0, 3.0),
+        Shape.Point,
+        Shape.Circle(4.0)
+    ]
+
+    mutable string labels = ""
+
+    for s in shapes {
+        string label = match s {
+        case Shape.Circle(_r)        { "C" }
+        case Shape.Rectangle(_w, _h) { "R" }
+        case Shape.Point             { "P" }
+        }
+
+        labels = labels + label
+    }
+
+    assert(labels == "CRPC")
+}
+
+@test
+function void test_choice_as_dictionary_value() {
+    # Choice values can be stored as dictionary values and compared on lookup.
+    dictionary<Color> palette = { "warm": Color.Red, "cool": Color.Blue }
+
+    assert(palette["warm"] == Color.Red)
+    assert(palette["cool"] == Color.Blue)
+    assert(palette["warm"] != palette["cool"])
+}
+

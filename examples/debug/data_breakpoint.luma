@@ -1,0 +1,10 @@
+# Data breakpoint test — mutable variable that changes value in a loop.
+
+@main
+function void main() {
+    mutable integer counter = 0
+    counter = 1
+    counter = 2
+    counter = 3
+    print("Final: ${counter}")
+}

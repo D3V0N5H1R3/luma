@@ -1,0 +1,12 @@
+# Build output
+out/
+*.vsix
+
+# Dependencies
+node_modules/
+
+# Generated sources (owned by the extensions/shared generators)
+src/generated/
+
+# Type declarations
+**/*.d.ts

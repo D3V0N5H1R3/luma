@@ -1,0 +1,256 @@
+# Error handling benchmarks: Result chaining, try/catch, error propagation.
+
+record BenchOptBox {
+    integer value
+}
+
+# Uses the '?' optional-propagation operator across two optional-returning steps.
+function optional<integer> bench_opt_propagate(optional<integer> a, optional<integer> b) {
+    integer va = a?
+    integer vb = b?
+
+    return some(va + vb)
+}
+
+function result<integer> bench_fallible_divide(integer a, integer b) {
+    if b == 0 {
+        return failure("division by zero")
+    }
+    return success(a / b)
+}
+
+function result<integer> bench_chain_three() {
+    return bench_fallible_divide(100, 5)
+    |> Result.map((integer x) -> x + 10)
+    |> Result.map((integer x) -> x * 2)
+}
+
+function result<integer> bench_deep_chain() {
+    return success(1)
+    |> Result.map((integer x) -> x + 1)
+    |> Result.map((integer x) -> x + 1)
+    |> Result.map((integer x) -> x + 1)
+    |> Result.map((integer x) -> x + 1)
+    |> Result.map((integer x) -> x + 1)
+}
+
+function integer bench_increment(integer n) {
+    return n + 1
+}
+
+# Uses the '?' propagation operator across two fallible calls.
+function result<integer> bench_propagate() {
+    integer first = bench_fallible_divide(100, 5)?
+    integer second = bench_fallible_divide(first, 2)?
+
+    return success(first + second)
+}
+
+function BenchResult run_error_handling_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # --- Result creation ---
+
+    st = time_it(st, "success() construction", 50000, () -> {
+        result<integer> _r = success(42)
+    })
+
+    st = time_it(st, "failure() construction", 50000, () -> {
+        result<integer> _r = failure("error")
+    })
+
+    # --- Result chaining ---
+
+    st = time_it(st, "Result.map chain (3 stages)", 10000, () -> {
+        result<integer> _r = bench_chain_three()
+    })
+
+    st = time_it(st, "Result.map chain (5 stages)", 5000, () -> {
+        result<integer> _r = bench_deep_chain()
+    })
+
+    # --- Result inspection ---
+
+    st = time_it(st, "Result.is_success + unwrap", 10000, () -> {
+        result<integer> r = success(42)
+        boolean _ok = Result.is_success(r)
+        integer _val = Result.unwrap(r)
+    })
+
+    st = time_it(st, "Result.unwrap_or (success)", 10000, () -> {
+        result<integer> r = success(42)
+        integer _val = Result.unwrap_or(r, 0)
+    })
+
+    st = time_it(st, "Result.unwrap_or (failure)", 10000, () -> {
+        result<integer> r = failure("oops")
+        integer _val = Result.unwrap_or(r, 0)
+    })
+
+    # --- Fallible function calls ---
+
+    st = time_it(st, "fallible fn (success path)", 10000, () -> {
+        result<integer> _r = bench_fallible_divide(100, 5)
+    })
+
+    st = time_it(st, "fallible fn (failure path)", 10000, () -> {
+        result<integer> _r = bench_fallible_divide(100, 0)
+    })
+
+    # --- Result.or ---
+
+    st = time_it(st, "Result.or fallback", 10000, () -> {
+        result<integer> primary = failure("down")
+        result<integer> fallback = success(99)
+        result<integer> _r = Result.or(primary, fallback)
+    })
+
+    # --- Error propagation and chaining operators ---
+
+    st = time_it(st, "? propagation (success path)", 10000, () -> {
+        result<integer> _r = bench_propagate()
+    })
+
+    st = time_it(st, "!> error-pipe chain (2 stages)", 10000, () -> {
+        result<integer> _r = 10 !> bench_increment() !> bench_increment()
+    })
+
+    st = time_it(st, "!> error-pipe short-circuit (failure path)", 10000, () -> {
+        result<integer> _r = failure("stop") !> bench_increment() !> bench_increment()
+    })
+
+    st = time_it(st, "Result.flat_map chain", 10000, () -> {
+        result<integer> _r = Result.flat_map(success(1), (integer x) -> success(x + 1))
+    })
+
+    # --- Result destructuring and folding ---
+
+    st = time_it(st, "match on result (success)", 10000, () -> {
+        result<integer> r = success(42)
+        integer _v = match r {
+            success(v) { v }
+            failure(_e) { 0 }
+        }
+    })
+
+    st = time_it(st, "Result.fold (failure)", 10000, () -> {
+        result<integer> r = failure("oops")
+        string _s = Result.fold(r, (integer _v) -> "ok", (string _e) -> "err")
+    })
+
+    # Operand hoisted so this measures Result.collect, not array construction.
+    array<result<integer>> collect_items = [success(1), success(2), success(3), success(4), success(5)]
+    st = time_it(st, "Result.collect (5 items)", 5000, () -> {
+        result<array<integer>> _r = Result.collect(collect_items)
+    })
+
+    # --- Result combinators ---
+
+    st = time_it(st, "Result.recover (failure)", 10000, () -> {
+        result<integer> _r = Result.recover(failure("oops"), (string _e) -> 0)
+    })
+
+    st = time_it(st, "Result.or_else rescue (failure)", 10000, () -> {
+        result<integer> _r = Result.or_else(failure("oops"), (string _e) -> success(0))
+    })
+
+    st = time_it(st, "Result.filter (pass)", 10000, () -> {
+        result<integer> _r = Result.filter(success(42), (integer x) -> x > 10, "too small")
+    })
+
+    st = time_it(st, "Result.zip (both success)", 10000, () -> {
+        result<(integer, integer)> _r = Result.zip(success(1), success(2))
+    })
+
+    st = time_it(st, "Result.bimap (success)", 10000, () -> {
+        result<integer> _r = Result.bimap(success(5), (integer v) -> v * 2, (string _e) -> 0)
+    })
+
+    st = time_it(st, "Result.map_number (typed)", 10000, () -> {
+        result<number> _r = Result.map_number(success(21), (number x) -> x * 2.0)
+    })
+
+    st = time_it(st, "Result.map_failure (failure)", 10000, () -> {
+        result<integer> _r = Result.map_failure(failure("oops"), (string e) -> "wrapped: " + e)
+    })
+
+    st = time_it(st, "Result.to_optional (success)", 10000, () -> {
+        optional<integer> _r = Result.to_optional(success(42))
+    })
+
+    # --- Optional ---
+
+    st = time_it(st, "optional wrap/unwrap", 10000, () -> {
+        optional<integer> opt = some(42)
+        boolean _has = Optional.is_some(opt)
+        integer _val = Optional.unwrap(opt)
+    })
+
+    st = time_it(st, "optional none path", 10000, () -> {
+        optional<integer> opt = none
+        boolean _has = Optional.is_none(opt)
+        integer _val = Optional.unwrap_or(opt, 0)
+    })
+
+    # --- Optional combinators ---
+
+    st = time_it(st, "Optional.map (some)", 10000, () -> {
+        optional<integer> _r = Optional.map(some(21), (integer x) -> x * 2)
+    })
+
+    st = time_it(st, "Optional.filter (some)", 10000, () -> {
+        optional<integer> _r = Optional.filter(some(42), (integer x) -> x > 10)
+    })
+
+    st = time_it(st, "Optional.and_then chain", 10000, () -> {
+        integer _r = Optional.unwrap_or(Optional.and_then(some(5), (integer x) -> some(x + 1)), 0)
+    })
+
+    st = time_it(st, "Optional.zip (both some)", 10000, () -> {
+        (integer _a, integer _b) = Optional.zip(some(1), some(2))
+    })
+
+    st = time_it(st, "Optional.contains (some)", 10000, () -> {
+        boolean _has = Optional.contains(some(42), 42)
+    })
+
+    st = time_it(st, "Optional.flat_map (some)", 10000, () -> {
+        optional<integer> _r = Optional.flat_map(some(21), (integer x) -> some(x * 2))
+    })
+
+    st = time_it(st, "Optional.flatten (some(some))", 10000, () -> {
+        optional<integer> _r = Optional.flatten(some(some(42)))
+    })
+
+    st = time_it(st, "Optional.or fallback (none)", 10000, () -> {
+        optional<integer> primary = none
+        optional<integer> _r = Optional.or(primary, some(99))
+    })
+
+    st = time_it(st, "Optional.tap (some)", 10000, () -> {
+        optional<integer> _r = Optional.tap(some(42), (integer x) -> { integer _ = x })
+    })
+
+    st = time_it(st, "Optional.to_result (none)", 10000, () -> {
+        optional<integer> opt = none
+        result<integer> _r = Optional.to_result(opt, "missing")
+    })
+
+    # --- Optional operators ---
+
+    st = time_it(st, "?? null-coalescing (none)", 10000, () -> {
+        optional<integer> opt = none
+        integer _v = opt ?? 0
+    })
+
+    st = time_it(st, "?. optional chaining", 10000, () -> {
+        optional<BenchOptBox> b = some(BenchOptBox { value = 7 })
+        integer _v = b?.value ?? 0
+    })
+
+    st = time_it(st, "? optional propagation", 10000, () -> {
+        optional<integer> _r = bench_opt_propagate(some(10), some(20))
+    })
+
+    return st
+}

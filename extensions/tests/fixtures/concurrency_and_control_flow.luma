@@ -1,0 +1,76 @@
+# ═══════════════════════════════════════════════════════════════════
+# Luma Highlight Test — Concurrency and Advanced Control Flow
+# ═══════════════════════════════════════════════════════════════════
+
+function integer compute(integer n) {
+    return n * n
+}
+
+@main
+function void main() {
+    # Task scope and structured concurrency.
+    task_scope {
+        task<integer> t1 = spawn compute(10)
+        task<integer> t2 = spawn compute(20)
+
+        integer r1 = await t1
+        integer r2 = await t2
+
+        print("Results: ${Converter.to_string(r1)}, ${Converter.to_string(r2)}")
+    }
+
+    # Try/catch/finally.
+    try {
+        integer result = 10 / 0
+    } catch(error) {
+        print("Caught: ${error}")
+    } finally {
+        print("Done")
+    }
+
+    # Nested control flow.
+    for i in 1 .. 10 {
+        if i % 2 == 0 {
+            continue
+        }
+        if i > 7 {
+            break
+        }
+        print(Converter.to_string(i))
+    }
+
+    # While with mutable state.
+    mutable integer count = 0
+    while count < 5 {
+        count++
+    }
+
+    # Pipe chains.
+    string result = "hello world"
+    |> String.uppercase()
+    |> String.split(" ")
+    |> Array.join("-")
+
+    # Null coalescing chain.
+    optional<string> a = none
+    optional<string> b = none
+    string value = a ?? b ?? "default"
+
+    # Include and use (commented out to avoid file dependency).
+    # include "other_module.luma"
+    # use Math
+}
+
+# Test annotations.
+@test
+function void test_compute() {
+    assert(compute(5) == 25)
+    assert(compute(0) == 0)
+    assert(compute(-3) == 9)
+}
+
+@test
+function void test_string_operations() {
+    string upper = String.uppercase("hello")
+    assert(upper == "HELLO")
+}

@@ -1,0 +1,319 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Mutability
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────────
+# Immutable variables
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_immutable_variable() {
+    integer count = 10
+    string label = "fixed"
+
+    assert(count == 10)
+    assert(label == "fixed")
+}
+
+@test
+function void test_immutable_boolean() {
+    boolean flag = true
+
+    assert(flag)
+}
+
+@test
+function void test_immutable_number() {
+    number pi = 3.14159
+
+    assert(pi > 3.14)
+    assert(pi < 3.15)
+}
+
+# ───────────────────────────────────────────────────────────
+# Mutable variables and assignment operators
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_mutable_variable() {
+    mutable integer total = 0
+    total += 3
+
+    assert(total == 3)
+
+    total += 1
+
+    assert(total == 4)
+
+    total -= 2
+
+    assert(total == 2)
+
+    total *= 5
+
+    assert(total == 10)
+
+    total /= 2
+
+    assert(total == 5)
+}
+
+@test
+function void test_modulo_assignment() {
+    mutable integer value = 10
+    value %= 3
+
+    assert(value == 1)
+}
+
+@test
+function void test_mutable_string() {
+    mutable string greeting = "hello"
+    greeting = "world"
+
+    assert(greeting == "world")
+}
+
+@test
+function void test_mutable_boolean() {
+    mutable boolean is_active = false
+    is_active = true
+
+    assert(is_active)
+}
+
+@test
+function void test_mutable_number() {
+    mutable number amount = 1.5
+    amount += 0.5
+
+    assert(Math.approximately_equal(amount, 2.0))
+
+    amount *= 3.0
+
+    assert(Math.approximately_equal(amount, 6.0))
+}
+
+# ───────────────────────────────────────────────────────────
+# Increment / decrement
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_integer_increment_decrement() {
+    mutable integer counter = 0
+    counter++
+
+    assert(counter == 1)
+
+    counter--
+
+    assert(counter == 0)
+}
+
+@test
+function void test_number_increment_decrement() {
+    mutable number decimal_value = 0.5
+    decimal_value++
+
+    assert(Math.approximately_equal(decimal_value, 1.5))
+
+    decimal_value--
+
+    assert(Math.approximately_equal(decimal_value, 0.5))
+}
+
+@test
+function void test_multiple_increments() {
+    mutable integer n = 0
+    n++
+    n++
+    n++
+
+    assert(n == 3)
+
+    n--
+
+    assert(n == 2)
+}
+
+# ───────────────────────────────────────────────────────────
+# Mutable collections
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_mutable_array() {
+    mutable array<integer> items = [1, 2, 3]
+    items = Array.push(items, 4)
+
+    assert(Array.length(items) == 4)
+    assert(items[3] == 4)
+}
+
+@test
+function void test_mutable_dictionary() {
+    mutable dictionary<integer> scores = {"alice": 10}
+    scores = Dictionary.set(scores, "bob", 20)
+
+    assert(Dictionary.length(scores) == 2)
+    assert(scores["bob"] == 20)
+}
+
+# ───────────────────────────────────────────────────────────
+# Mutable parameters
+# ───────────────────────────────────────────────────────────
+
+function integer countdown(mutable integer n) {
+    mutable integer steps = 0
+
+    while n > 0 {
+        n--
+        steps++
+    }
+
+    return steps
+}
+
+@test
+function void test_mutable_parameter() {
+    assert(countdown(5) == 5)
+}
+
+@test
+function void test_mutable_loop_variable() {
+    mutable integer sum = 0
+
+    for i in 1 .. 5 {
+        sum += i
+    }
+
+    assert(sum == 10)
+}
+
+# ─── Negative tests: immutable record field / array / dictionary ──────
+# Note: Assigning to fields/elements of immutable variables is a static
+# type error, so it cannot be tested via try/catch at runtime. The
+# rejection is verified by C++ type checker tests instead
+# (immutable_record_field_assignment_error, immutable_array_index_assignment_error,
+# immutable_dictionary_assignment_error). Below we verify that mutable
+# variables do allow field/element assignment.
+
+record ImmPoint { integer x, integer y }
+
+@test
+function void test_mutable_record_field_assignment_allowed() {
+    mutable ImmPoint p = ImmPoint { x = 1, y = 2 }
+    p.x = 5
+
+    assert(p.x == 5, "mutable record field assignment should succeed")
+}
+
+@test
+function void test_mutable_array_index_assignment_allowed() {
+    mutable array<integer> items = [1, 2, 3]
+    items[0] = 10
+
+    assert(items[0] == 10, "mutable array element assignment should succeed")
+}
+
+@test
+function void test_mutable_dictionary_assignment_allowed() {
+    mutable dictionary<integer> d = { "a": 1 }
+    d["a"] = 10
+
+    assert(d["a"] == 10, "mutable dictionary entry assignment should succeed")
+}
+# ═══════════════════════════════════════════════════════════
+# Additional mutability tests
+# ═══════════════════════════════════════════════════════════
+
+# Note: Immutable variable reassignment is a compile-time error tested
+# in type_checker_test.cpp. Below we verify additional mutable patterns.
+
+@test
+function void test_mutable_compound_assignment() {
+    mutable integer x = 10
+    x += 5
+    assert(x == 15)
+
+    x -= 3
+    assert(x == 12)
+
+    x *= 2
+    assert(x == 24)
+}
+
+@test
+function void test_mutable_increment_decrement() {
+    mutable integer x = 0
+    x++
+    x++
+    x++
+
+    assert(x == 3)
+
+    x--
+
+    assert(x == 2)
+}
+
+@test
+function void test_mutable_string_concatenation() {
+    mutable string s = "hello"
+    s += " world"
+
+    assert(s == "hello world")
+}
+
+@test
+function void test_immutable_value_semantics() {
+    integer a = 42
+    integer b = a
+
+    # a and b are independent copies.
+    assert(a == 42)
+    assert(b == 42)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Compound assignment to mutable fields, elements, and entries
+# ═══════════════════════════════════════════════════════════
+
+# Note: Compound assignment ('+=', '-=', '*=', ...) mutates the root variable
+# through a field, array element, or dictionary entry. These require the root
+# variable to be 'mutable'; the immutable rejections are static type errors
+# verified by the C++ type checker tests (immutable_compound_assign_field_error,
+# immutable_compound_assign_element_error, immutable_compound_assign_dictionary_error).
+
+@test
+function void test_mutable_record_field_compound_assignment() {
+    mutable ImmPoint p = ImmPoint { x = 10, y = 2 }
+    p.x += 5
+
+    assert(p.x == 15, "compound assignment to a mutable record field should succeed")
+
+    p.x -= 3
+    p.x *= 2
+
+    assert(p.x == 24)
+}
+
+@test
+function void test_mutable_array_element_compound_assignment() {
+    mutable array<integer> items = [1, 2, 3]
+    items[0] += 10
+    items[2] *= 5
+
+    assert(items[0] == 11)
+    assert(items[2] == 15)
+}
+
+@test
+function void test_mutable_dictionary_value_compound_assignment() {
+    mutable dictionary<integer> scores = { "alice": 10 }
+    scores["alice"] += 5
+
+    assert(scores["alice"] == 15, "compound assignment to a mutable dictionary entry should succeed")
+}

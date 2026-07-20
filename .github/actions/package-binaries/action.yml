@@ -1,0 +1,51 @@
+# ─────────────────────────────────────────────────────────────
+# Composite action: package-binaries
+#
+# Archives the three Luma binaries (luma, luma_lsp, luma_dap) into
+# a full distribution bundle plus one archive per binary, so each
+# editor extension downloads only what it needs. Branches on the
+# runner OS (tar.gz on Unix, zip on Windows) just as cmake-build
+# hides the configure differences.
+#
+# Archive names follow extensions/BINARY_ASSETS.md:
+#   luma-{suffix}, luma_lsp-{suffix}, luma_dap-{suffix}
+# where {suffix} is "{os}-{arch}" (e.g. linux-x86_64, macos-aarch64).
+# ─────────────────────────────────────────────────────────────
+
+name: Package Binaries
+description: Archive the Luma binaries into a full bundle plus one archive per binary.
+
+inputs:
+  suffix:
+    description: The "{os}-{arch}" suffix for archive names (e.g. linux-x86_64).
+    required: true
+  build-dir:
+    description: Build directory containing the binaries (Release/ subdir on Windows).
+    required: false
+    default: build
+
+runs:
+  using: composite
+  steps:
+    - name: Package binaries (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        SUFFIX: ${{ inputs.suffix }}
+        BUILD_DIR: ${{ inputs.build-dir }}
+      run: |
+        tar -czf "luma-${SUFFIX}.tar.gz" -C "${BUILD_DIR}" luma luma_lsp luma_dap
+        tar -czf "luma_lsp-${SUFFIX}.tar.gz" -C "${BUILD_DIR}" luma_lsp
+        tar -czf "luma_dap-${SUFFIX}.tar.gz" -C "${BUILD_DIR}" luma_dap
+
+    - name: Package binaries (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        SUFFIX: ${{ inputs.suffix }}
+        BUILD_DIR: ${{ inputs.build-dir }}
+      run: |
+        $bin = "$env:BUILD_DIR/Release"
+        Compress-Archive -Path "$bin/luma.exe", "$bin/luma_lsp.exe", "$bin/luma_dap.exe" -DestinationPath "luma-$env:SUFFIX.zip"
+        Compress-Archive -Path "$bin/luma_lsp.exe" -DestinationPath "luma_lsp-$env:SUFFIX.zip"
+        Compress-Archive -Path "$bin/luma_dap.exe" -DestinationPath "luma_dap-$env:SUFFIX.zip"

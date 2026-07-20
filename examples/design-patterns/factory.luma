@@ -1,0 +1,106 @@
+# ═══════════════════════════════════════════════════════════
+# Factory Pattern
+#
+# Encapsulates object creation behind factory functions.
+# Callers specify what they need via a choice type, and the
+# factory returns the appropriate record — hiding the
+# construction details.
+#
+# Usage: luma examples/design-patterns/factory.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Product types ────────────────────────────────────────
+
+record Notification {
+    string transport,
+    string sender,
+    function(string, string) -> void send
+}
+
+# ─── Factory selector ────────────────────────────────────
+
+choice NotificationChannel {
+    Email(string address)
+    Sms(string phone)
+    Slack(string webhook)
+}
+
+# ─── Factory function ─────────────────────────────────────
+
+function Notification create_notification(NotificationChannel kind) {
+    return match kind {
+    case NotificationChannel.Email(addr) {
+        Notification {
+            transport = "email",
+            sender = addr,
+            send = (string to, string body) -> {
+                print("  Email from ${addr} to ${to}: ${body}")
+            }
+        }
+    }
+    case NotificationChannel.Sms(phone) {
+        Notification {
+            transport = "sms",
+            sender = phone,
+            send = (string to, string body) -> {
+                print("  SMS from ${phone} to ${to}: ${body}")
+            }
+        }
+    }
+    case NotificationChannel.Slack(hook) {
+        Notification {
+            transport = "slack",
+            sender = hook,
+            send = (string to, string body) -> {
+                print("  Slack [${hook}] #${to}: ${body}")
+            }
+        }
+    }
+    }
+}
+
+# ─── Convenience factories ────────────────────────────────
+
+function Notification email(string address) {
+    return create_notification(NotificationChannel.Email(address))
+}
+
+function Notification sms(string phone) {
+    return create_notification(NotificationChannel.Sms(phone))
+}
+
+function Notification slack(string webhook) {
+    return create_notification(NotificationChannel.Slack(webhook))
+}
+
+# ─── Consumer (doesn't know how notifications are built) ──
+
+function void broadcast(array<Notification> notifiers, string message) {
+    for notifier in notifiers {
+        notifier.send("all", message)
+    }
+}
+
+# ─── Main ─────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("=== Factory Pattern ===")
+    print("")
+
+    # Create different notification types via factory
+    Notification mail = email("alerts@example.com")
+    Notification text = sms("+1-555-0123")
+    Notification chat = slack("eng-alerts")
+
+    print("Single notifications:")
+
+    mail.send("bob@example.com", "Your order shipped")
+    text.send("+1-555-9999", "Verification code: 1234")
+    chat.send("deployments", "v2.1.0 released")
+
+    print("")
+    print("Broadcast:")
+
+    broadcast([mail, text, chat], "System maintenance at 02:00 UTC")
+}

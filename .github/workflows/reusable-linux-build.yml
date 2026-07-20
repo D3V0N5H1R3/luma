@@ -1,0 +1,117 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — Reusable Linux Container Build
+#
+# Builds and tests Luma inside a Linux container for a given
+# distribution image and compiler pair. Optionally emulates a
+# non-native architecture via QEMU and uploads the resulting
+# binaries (packaged as a tarball so the executable bit and
+# symlinks survive the artifact round-trip).
+#
+# Consumed by ci.yml (distro + Raspberry Pi coverage) and
+# release.yml (Raspberry Pi release binary + distro validation).
+# ─────────────────────────────────────────────────────────────
+
+name: Reusable — Linux Container Build
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Docker image to build inside.
+        required: true
+        type: string
+      cc:
+        description: C compiler to use.
+        required: true
+        type: string
+      cxx:
+        description: C++ compiler to use.
+        required: true
+        type: string
+      install-cmd:
+        description: Shell command that installs the build toolchain in the container.
+        required: true
+        type: string
+      platform:
+        description: Docker platform (e.g. linux/arm64). Empty for the native platform.
+        required: false
+        type: string
+        default: ""
+      upload-artifact:
+        description: Whether to package and upload the built binaries.
+        required: false
+        type: boolean
+        default: false
+      artifact-name:
+        description: Name of the uploaded artifact (and tarball stem).
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # A single upper bound covers both fast native distro builds and the
+    # slower QEMU-emulated ARM64 build.
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # Only needed when the requested platform differs from the runner's.
+      - name: Set up QEMU for emulation
+        if: inputs.platform != ''
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+
+      - name: Build and test
+        env:
+          IMAGE: ${{ inputs.image }}
+          CC: ${{ inputs.cc }}
+          CXX: ${{ inputs.cxx }}
+          INSTALL_CMD: ${{ inputs.install-cmd }}
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          platform_args=()
+          if [ -n "$PLATFORM" ]; then
+            platform_args=(--platform "$PLATFORM")
+          fi
+          docker run --rm "${platform_args[@]}" \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e CC -e CXX \
+            "$IMAGE" \
+            sh -c "$INSTALL_CMD && sh scripts/container-build.sh"
+
+      # The artifact name is "luma-{os}-{arch}"; stripping the "luma-" prefix
+      # gives the "{os}-{arch}" suffix the package-binaries action expects. The
+      # tarballs it produces preserve the executable bit that upload-artifact
+      # would otherwise drop. See extensions/BINARY_ASSETS.md.
+      - name: Resolve archive suffix
+        if: inputs.upload-artifact
+        id: suffix
+        env:
+          ARTIFACT: ${{ inputs.artifact-name }}
+        run: echo "value=${ARTIFACT#luma-}" >> "$GITHUB_OUTPUT"
+
+      - name: Package binaries
+        if: inputs.upload-artifact
+        uses: ./.github/actions/package-binaries
+        with:
+          suffix: ${{ steps.suffix.outputs.value }}
+
+      - name: Upload build artifact
+        if: inputs.upload-artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: |
+            luma-*.tar.gz
+            luma_lsp-*.tar.gz
+            luma_dap-*.tar.gz
+          retention-days: 30

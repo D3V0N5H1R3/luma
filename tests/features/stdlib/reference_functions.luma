@@ -1,0 +1,132 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Reference Module Functions
+#
+# Covers the Reference stdlib module (new / get / set / update /
+# swap / inspect) and the shared-identity semantics of reference
+# cells from user code. Language-level reference behaviour is
+# covered by language/reference.luma.
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+# ─── new / get ───────────────────────────────────────────
+
+@test
+function void test_reference_new_and_get() {
+    reference<integer> r = Reference.new(42)
+
+    assert(Reference.get(r) == 42)
+}
+
+@test
+function void test_reference_get_via_pipe() {
+    assert((Reference.new(7) |> Reference.get()) == 7)
+}
+
+# ─── set ─────────────────────────────────────────────────
+
+@test
+function void test_reference_set_updates_value() {
+    reference<integer> r = Reference.new(1)
+
+    Reference.set(r, 99)
+
+    assert(Reference.get(r) == 99)
+}
+
+@test
+function void test_reference_holds_array() {
+    reference<array<integer>> r = Reference.new([1, 2, 3])
+
+    Reference.set(r, [1, 2, 3, 4, 5])
+
+    assert(Array.length(Reference.get(r)) == 5)
+}
+
+# ─── update ──────────────────────────────────────────────
+
+@test
+function void test_reference_update_applies_function() {
+    reference<integer> r = Reference.new(10)
+
+    Reference.update(r, (integer x) -> x + 5)
+
+    assert(Reference.get(r) == 15)
+}
+
+@test
+function void test_reference_update_error_preserves_value() {
+    # A throwing update callback must leave the stored value untouched.
+    reference<integer> r = Reference.new(7)
+    mutable boolean threw = false
+
+    try {
+        Reference.update(r, (integer x) -> {
+            assert(false, "boom")
+            return x
+        })
+    } catch(_e) {
+        threw = true
+    }
+
+    assert(threw)
+    assert(Reference.get(r) == 7)
+}
+
+# ─── swap ────────────────────────────────────────────────
+
+@test
+function void test_reference_swap_exchanges_values() {
+    reference<integer> a = Reference.new(1)
+    reference<integer> b = Reference.new(2)
+
+    Reference.swap(a, b)
+
+    assert(Reference.get(a) == 2)
+    assert(Reference.get(b) == 1)
+}
+
+# ─── inspect ─────────────────────────────────────────────
+
+@test
+function void test_reference_inspect_renders_value() {
+    assert(Reference.inspect(Reference.new(42)) == "ref(42)")
+    assert(Reference.inspect(Reference.new(true)) == "ref(true)")
+    assert(Reference.inspect(Reference.new([1, 2, 3])) == "ref([1, 2, 3])")
+}
+
+# ─── shared identity ─────────────────────────────────────
+
+@test
+function void test_reference_shared_across_closures() {
+    # Core feature: reference cells share identity when captured.
+    reference<integer> counter = Reference.new(0)
+
+    function() -> none increment = () -> {
+        Reference.set(counter, Reference.get(counter) + 1)
+    }
+
+    increment()
+    increment()
+    increment()
+
+    assert(Reference.get(counter) == 3)
+}
+
+@test
+function void test_reference_nested_cell_shares_identity() {
+    reference<integer> inner = Reference.new(1)
+    reference<reference<integer>> outer = Reference.new(inner)
+
+    Reference.set(Reference.get(outer), 42)
+
+    assert(Reference.get(inner) == 42)
+}
+
+# ─── type ────────────────────────────────────────────────
+
+@test
+function void test_reference_type_name() {
+    assert(type_of(Reference.new(42)) == "reference")
+}

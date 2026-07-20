@@ -1,0 +1,11 @@
+# VM: basic arithmetic and control flow
+@main
+function void main() {
+    mutable integer sum = 0
+    for i in 0 .. 100 {
+        if i % 2 == 0 {
+            sum += i
+        }
+    }
+    print("Sum of evens: ${sum}")
+}

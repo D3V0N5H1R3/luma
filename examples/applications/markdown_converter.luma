@@ -1,0 +1,526 @@
+# ═══════════════════════════════════════════════════════════
+# Markdown-to-HTML Converter
+#
+# Demonstrates choice types for AST modelling, pattern
+# matching, pipes, string processing, result types,
+# and @test annotations for verifying transformations.
+#
+# Usage: luma examples/applications/markdown_converter.luma
+# Tests: luma --test examples/applications/markdown_converter.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── AST ──────────────────────────────────────────────────
+
+choice Block {
+    Heading(number level, string text)
+    Paragraph(string text)
+    CodeBlock(string language, string code)
+    UnorderedList(array<string> items)
+    OrderedList(array<string> items)
+    HorizontalRule
+    Blockquote(string text)
+}
+
+# ─── HTML Escaping ────────────────────────────────────────
+
+function string escape_html(string text) {
+    return text
+    |> String.replace_all("&", "&amp;")
+    |> String.replace_all("<", "&lt;")
+    |> String.replace_all(">", "&gt;")
+    |> String.replace_all("\"", "&quot;")
+}
+
+# ─── Inline Rendering (regex-replace based) ──────────────
+#
+# Instead of parsing inlines into an AST, we convert inline
+# markdown directly to HTML using regex replacements with
+# backreferences. Order matters: bold before italic since
+# bold uses ** which contains *.
+
+function string render_inlines(string text) {
+    string escaped = escape_html(text)
+
+    # Bold: **text** → <strong>text</strong>
+    string with_bold = RegularExpression.replace_all(
+        escaped, "\\*\\*([^*]+)\\*\\*", "<strong>\$1</strong>")
+        |> Result.unwrap_or(escaped)
+
+    # Italic: *text* → <em>text</em>
+    string with_italic = RegularExpression.replace_all(
+        with_bold, "\\*([^*]+)\\*", "<em>\$1</em>")
+        |> Result.unwrap_or(with_bold)
+
+    # Inline code: `text` → <code>text</code>
+    string with_code = RegularExpression.replace_all(
+        with_italic, "`([^`]+)`", "<code>\$1</code>")
+        |> Result.unwrap_or(with_italic)
+
+    # Links: [text](url) → <a href="url">text</a>
+    string with_links = RegularExpression.replace_all(
+        with_code, "\\[([^\\]]+)\\]\\(([^)]+)\\)", "<a href=\"\$2\">\$1</a>")
+        |> Result.unwrap_or(with_code)
+
+    return with_links
+}
+
+# ─── Heading Detection ───────────────────────────────────
+
+# Counts the leading characters of `line` for which `predicate` holds — the
+# length of the run of matching characters at the start. Shared by the heading
+# and ordered-list detectors, which differ only in the predicate they pass.
+function integer count_leading(string line, function(string) -> boolean predicate) {
+    mutable integer count = 0
+    integer len = String.length(line)
+
+    while count < len {
+        if predicate(line[count]) {
+            count += 1
+        } else {
+            break
+        }
+    }
+
+    return count
+}
+
+function integer count_leading_hashes(string line) {
+    integer len = String.length(line)
+    integer count = count_leading(line, (string character) -> character == "#")
+
+    # A heading is 1–6 leading '#' characters followed by a space.
+    if count > 0 && count <= 6 && count < len && line[count] == " " {
+        return count
+    }
+
+    return 0
+}
+
+# ─── Ordered List Detection ──────────────────────────────
+
+# Returns the number of leading ASCII digit characters in the line.
+function integer count_leading_digits(string line) {
+    return count_leading(line, (string character) -> character >= "0" && character <= "9")
+}
+
+function boolean is_ordered_list_item(string line) {
+    integer idx = count_leading_digits(line)
+    integer len = String.length(line)
+
+    return idx > 0 && idx + 1 < len && line[idx] == "." && line[idx + 1] == " "
+}
+
+function string strip_ol_prefix(string line) {
+    integer idx = count_leading_digits(line)
+    integer len = String.length(line)
+
+    # Skip ". "
+    return String.substring(line, idx + 2, len)
+}
+
+# Collects consecutive list items starting at `start`, using `is_item` to test
+# each trimmed line and `extract` to pull its text. Returns the items plus the
+# index of the first non-item line. Shared by the unordered and ordered lists.
+function (array<string>, integer) collect_list_items(array<string> lines, integer start,
+        function(string) -> boolean is_item, function(string) -> string extract) {
+    mutable array<string> items = []
+    mutable integer i = start
+
+    while i < Array.length(lines) {
+        string item_line = String.trim(lines[i])
+
+        if is_item(item_line) {
+            items = Array.push(items, extract(item_line))
+            i += 1
+        } else {
+            break
+        }
+    }
+
+    return (items, i)
+}
+
+# Classifies a trimmed line into a block kind. The order mirrors the original
+# precedence: fences and rules win over quotes and lists, and headings win
+# over ordered-list items, with paragraphs as the fallback.
+choice BlockKind {
+    Empty
+    CodeFence
+    Rule
+    Quote
+    BulletList
+    Heading
+    NumberList
+    Paragraph
+}
+
+function BlockKind detect_block_type(string trimmed) {
+    if String.is_empty(trimmed) {
+        return BlockKind.Empty
+    }
+    if String.starts_with(trimmed, "```") {
+        return BlockKind.CodeFence
+    }
+    if String.starts_with(trimmed, "---") || String.starts_with(trimmed, "***") {
+        return BlockKind.Rule
+    }
+    if String.starts_with(trimmed, "> ") {
+        return BlockKind.Quote
+    }
+    if String.starts_with(trimmed, "- ") || String.starts_with(trimmed, "* ") {
+        return BlockKind.BulletList
+    }
+    if count_leading_hashes(trimmed) > 0 {
+        return BlockKind.Heading
+    }
+    if is_ordered_list_item(trimmed) {
+        return BlockKind.NumberList
+    }
+    return BlockKind.Paragraph
+}
+
+# ─── Per-block-type parsers ──────────────────────────────
+
+function (Block, integer) parse_code_block(array<string> lines, integer start) {
+    string trimmed = String.trim(lines[start])
+    string language = String.trim(
+        String.substring(trimmed, 3, String.length(trimmed))
+    )
+    mutable array<string> code_lines = []
+    mutable integer i = start + 1
+
+    mutable boolean is_in_block = true
+
+    while i < Array.length(lines) && is_in_block {
+        if String.starts_with(String.trim(lines[i]), "```") {
+            is_in_block = false
+        } else {
+            code_lines = Array.push(code_lines, lines[i])
+        }
+
+        i += 1
+    }
+
+    string code = String.join(code_lines, "\n")
+
+    return (Block.CodeBlock(language, code), i)
+}
+
+function Block parse_heading(string trimmed) {
+    integer level = count_leading_hashes(trimmed)
+    string heading_text = String.substring(
+        trimmed, level + 1, String.length(trimmed))
+
+    return Block.Heading(level, heading_text)
+}
+
+function Block parse_blockquote(string trimmed) {
+    string quote_text = String.substring(trimmed, 2, String.length(trimmed))
+
+    return Block.Blockquote(quote_text)
+}
+
+function (Block, integer) parse_unordered_list(array<string> lines, integer start) {
+    (array<string> items, integer next) = collect_list_items(lines, start,
+        (string item) -> String.starts_with(item, "- ") || String.starts_with(item, "* "),
+        (string item) -> String.substring(item, 2, String.length(item)))
+
+    return (Block.UnorderedList(items), next)
+}
+
+function (Block, integer) parse_ordered_list(array<string> lines, integer start) {
+    (array<string> items, integer next) = collect_list_items(lines, start,
+        (string item) -> is_ordered_list_item(item),
+        (string item) -> strip_ol_prefix(item))
+
+    return (Block.OrderedList(items), next)
+}
+
+# ─── Block Parsing ───────────────────────────────────────
+#
+# The loop reads one block per iteration: detect_block_type classifies the
+# current line, then a focused parser produces the block and reports the next
+# line index (single-line blocks simply advance by one).
+
+function array<Block> parse_blocks(string markdown) {
+    array<string> lines = String.split(markdown, "\n")
+    mutable array<Block> blocks = []
+    mutable integer i = 0
+
+    while i < Array.length(lines) {
+        string trimmed = String.trim(lines[i])
+
+        match detect_block_type(trimmed) {
+            case BlockKind.Empty {
+                i += 1
+            }
+            case BlockKind.CodeFence {
+                (Block block, integer next) = parse_code_block(lines, i)
+                blocks = Array.push(blocks, block)
+                i = next
+            }
+            case BlockKind.Rule {
+                blocks = Array.push(blocks, Block.HorizontalRule)
+                i += 1
+            }
+            case BlockKind.Quote {
+                blocks = Array.push(blocks, parse_blockquote(trimmed))
+                i += 1
+            }
+            case BlockKind.BulletList {
+                (Block block, integer next) = parse_unordered_list(lines, i)
+                blocks = Array.push(blocks, block)
+                i = next
+            }
+            case BlockKind.Heading {
+                blocks = Array.push(blocks, parse_heading(trimmed))
+                i += 1
+            }
+            case BlockKind.NumberList {
+                (Block block, integer next) = parse_ordered_list(lines, i)
+                blocks = Array.push(blocks, block)
+                i = next
+            }
+            case BlockKind.Paragraph {
+                blocks = Array.push(blocks, Block.Paragraph(trimmed))
+                i += 1
+            }
+        }
+    }
+
+    return blocks
+}
+
+# ─── Block Rendering ─────────────────────────────────────
+
+function string render_li(string item) {
+    return "  <li>${render_inlines(item)}</li>"
+}
+
+function string render_list(array<string> items, string tag) {
+    string li_items = items
+    |> Array.map(render_li)
+    |> Result.unwrap_or([])
+    |> Array.join("\n")
+
+    return "<${tag}>\n${li_items}\n</${tag}>"
+}
+
+function string render_block(Block block) {
+    return match block {
+    case Block.Heading(level, text) {
+        string content = render_inlines(text)
+
+        "<h${level}>${content}</h${level}>"
+    }
+    case Block.Paragraph(text) {
+        "<p>${render_inlines(text)}</p>"
+    }
+    case Block.CodeBlock(language, code) {
+        string lang_attr = if String.is_empty(language) {
+            ""
+        } else {
+            " class=\"language-${escape_html(language)}\""
+        }
+
+        "<pre><code${lang_attr}>${escape_html(code)}</code></pre>"
+    }
+    case Block.UnorderedList(items) {
+        render_list(items, "ul")
+    }
+    case Block.OrderedList(items) {
+        render_list(items, "ol")
+    }
+    case Block.HorizontalRule {
+        "<hr>"
+    }
+    case Block.Blockquote(text) {
+        "<blockquote><p>${render_inlines(text)}</p></blockquote>"
+    }
+    }
+}
+
+function string render_document(array<Block> blocks) {
+    return blocks
+    |> Array.map(render_block)
+    |> Result.unwrap_or([])
+    |> Array.join("\n")
+}
+
+# ─── Full pipeline: markdown string → HTML string ────────
+
+function string markdown_to_html(string markdown) {
+    return markdown
+    |> parse_blocks()
+    |> render_document()
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+@test
+function void test_heading_parsing() {
+    array<Block> blocks = parse_blocks("# Hello World")
+
+    assert(Array.length(blocks) == 1, "expected 1 block")
+
+    match blocks[0] {
+    case Block.Heading(level, text) {
+        assert(level == 1, "expected level 1")
+        assert(text == "Hello World", "expected 'Hello World'")
+    }
+    else { assert(false, "expected Heading block") }
+    }
+}
+
+@test
+function void test_heading_levels() {
+    array<Block> blocks = parse_blocks("### Subheading")
+
+    match blocks[0] {
+    case Block.Heading(level, _text) {
+        assert(level == 3, "expected level 3 heading")
+    }
+    else { assert(false, "expected Heading") }
+    }
+}
+
+@test
+function void test_bold_rendering() {
+    string html = markdown_to_html("**bold text**")
+
+    assert(html == "<p><strong>bold text</strong></p>", "bold rendering failed: ${html}")
+}
+
+@test
+function void test_italic_rendering() {
+    string html = markdown_to_html("*italic*")
+
+    assert(html == "<p><em>italic</em></p>", "italic rendering failed: ${html}")
+}
+
+@test
+function void test_inline_code_rendering() {
+    string html = markdown_to_html("`code`")
+
+    assert(html == "<p><code>code</code></p>", "code rendering failed: ${html}")
+}
+
+@test
+function void test_link_rendering() {
+    string html = markdown_to_html("[Luma](https://luma.dev)")
+
+    assert(html == "<p><a href=\"https://luma.dev\">Luma</a></p>", "link rendering: ${html}")
+}
+
+@test
+function void test_html_escaping() {
+    string escaped = escape_html("<script>alert('xss')</script>")
+
+    assert(escaped == "&lt;script&gt;alert('xss')&lt;/script&gt;", "escaping failed: ${escaped}")
+}
+
+@test
+function void test_horizontal_rule() {
+    string html = markdown_to_html("---")
+
+    assert(html == "<hr>", "hr rendering failed: ${html}")
+}
+
+@test
+function void test_unordered_list() {
+    string md = String.join(["- Alpha", "- Beta", "- Gamma"], "\n")
+    string html = markdown_to_html(md)
+
+    assert("Alpha" in html, "expected Alpha in list")
+    assert("<ul>" in html, "expected <ul> tag")
+    assert("<li>" in html, "expected <li> tags")
+}
+
+@test
+function void test_code_block() {
+    string md = String.join(["```luma", "print(42)", "```"], "\n")
+    string html = markdown_to_html(md)
+
+    assert("language-luma" in html, "expected language class")
+    assert("print(42)" in html, "expected code content")
+}
+
+@test
+function void test_full_document() {
+    string md = String.join([
+        "# Title",
+        "",
+        "A paragraph with **bold** and *italic* text.",
+        "",
+        "---",
+        "",
+        "- Item one",
+        "- Item two"
+    ], "\n")
+
+    string html = markdown_to_html(md)
+
+    assert("<h1>" in html, "expected h1")
+    assert("<strong>bold</strong>" in html, "expected bold")
+    assert("<em>italic</em>" in html, "expected italic")
+    assert("<hr>" in html, "expected hr")
+    assert("<ul>" in html, "expected ul")
+}
+
+# ─── Entry Point ─────────────────────────────────────────
+
+function integer line_count(string text) {
+    return Array.length(String.split(text, "\n"))
+}
+
+function integer block_count(string markdown) {
+    return Array.length(parse_blocks(markdown))
+}
+
+@main
+function void main() {
+    string markdown = String.join([
+        "# Luma Language",
+        "",
+        "Luma is a **statically typed**, *expression-oriented* language.",
+        "",
+        "## Features",
+        "",
+        "- Pattern matching with `choice` types",
+        "- Pipe operator for **data flow**",
+        "- Built-in [testing](https://luma.dev/docs/testing)",
+        "",
+        "> Designed for beginners who want safety without complexity.",
+        "",
+        "### Example",
+        "",
+        "```luma",
+        "function integer add(integer a, integer b) {",
+        "    return a + b",
+        "}",
+        "```",
+        "",
+        "---",
+        "",
+        "1. Write code",
+        "2. Run tests",
+        "3. Ship it"
+    ], "\n")
+
+    string html = markdown_to_html(markdown)
+    integer blocks = block_count(markdown)
+
+    print("Markdown-to-HTML converter demo — converts a built-in sample (not file input).")
+    print("")
+    print("=== Markdown Input (${line_count(markdown)} lines, ${blocks} blocks) ===")
+    print("----------------------------------------")
+    print(markdown)
+    print("----------------------------------------")
+    print("")
+    print("=== HTML Output (${line_count(html)} lines, ${blocks} source blocks) ===")
+    print("----------------------------------------")
+    print(html)
+    print("----------------------------------------")
+    print("")
+    print("Converted markdown to HTML successfully.")
+}

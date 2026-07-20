@@ -1,0 +1,303 @@
+# GraphicalUi Tic-Tac-Toe — a two-player game on a 3×3 board. Demonstrates a
+# grid of clickable cells addressed by a stable style id, per-cell callbacks
+# whose index is captured through a helper function (correct closure capture),
+# win/draw detection over a pure board array, and immutable model updates.
+#
+# The board is an array<string> of nine cells (""/"X"/"O"); every interaction
+# returns the next model directly, so the @test blocks can replay real clicks.
+
+# ─── Game logic (pure, fully testable) ─────────────────────
+
+function dictionary ttt_initial() {
+    mutable dictionary model = {"turn": "X"}
+    model["board"] = ["", "", "", "", "", "", "", "", ""]
+    model["winner"] = ""
+    return model
+}
+
+# Return "X" or "O" for a completed line, "Draw" for a full board, else "".
+function string compute_winner(array<string> board) {
+    array<array<integer>> lines = [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8],
+        [0, 3, 6], [1, 4, 7], [2, 5, 8],
+        [0, 4, 8], [2, 4, 6]
+    ]
+    for line in lines {
+        string a = board[line[0]]
+        string b = board[line[1]]
+        string c = board[line[2]]
+        if a != "" && a == b && b == c {
+            return a
+        }
+    }
+    if !Array.contains(board, "") {
+        return "Draw"
+    }
+    return ""
+}
+
+function dictionary play_cell(dictionary model, integer index) {
+    # Ignore clicks once the game is decided or the cell is taken.
+    if Dictionary.get_or(model, "winner", "") != "" {
+        return model
+    }
+    array<string> board = model["board"]
+    if board[index] != "" {
+        return model
+    }
+
+    string turn = model["turn"]
+    array<string> next_board = Result.unwrap(Array.set(board, index, turn))
+    string winner = compute_winner(next_board)
+
+    mutable dictionary updated = model
+    updated["board"] = next_board
+    updated["winner"] = winner
+    updated["turn"] = if winner == "" {
+        if turn == "X" { "O" } else { "X" }
+    } else {
+        turn
+    }
+    return updated
+}
+
+function string status_text(dictionary model) {
+    string winner = model["winner"]
+    if winner == "Draw" {
+        return "It's a draw!"
+    }
+    if winner != "" {
+        return "${winner} wins!"
+    }
+    return "Turn: ${model["turn"]}"
+}
+
+# ─── View ──────────────────────────────────────────────────
+
+# Spoken description of a cell for screen-reader users: its position, its current
+# mark, and — while the game is live and the cell is free — whose turn it is.
+function string cell_label(dictionary model, integer index, string mark) {
+    integer row = index / 3 + 1
+    integer col = index % 3 + 1
+    if mark != "" {
+        return "Row ${row}, column ${col}, ${mark}"
+    }
+    if Dictionary.get_or(model, "winner", "") != "" {
+        return "Row ${row}, column ${col}, empty"
+    }
+    return "Row ${row}, column ${col}, empty, ${model["turn"]} to play"
+}
+
+function dictionary<string> cell_style(integer index, string mark, boolean locked) {
+    string color = if mark == "X" {
+        GraphicalUi.VAR_PRIMARY
+    } else if mark == "O" {
+        GraphicalUi.VAR_ERROR
+    } else {
+        GraphicalUi.VAR_FG
+    }
+    string background = if locked {
+        GraphicalUi.VAR_BG
+    } else {
+        "var(--gui-input-bg)"
+    }
+    string hover = if locked {
+        background
+    } else {
+        "var(--gui-primary-subtle-bg)"
+    }
+    return {
+        "id": "cell-${index}",
+        "width": "92px",
+        "height": "92px",
+        "font_size": "44px",
+        "font_weight": "700",
+        "color": color,
+        "background_color": background,
+        "border": "1px solid ${GraphicalUi.VAR_BORDER}",
+        "border_radius": GraphicalUi.VAR_RADIUS,
+        "hover_background_color": hover
+    }
+}
+
+# Each cell is built in its own function call, so `index` is a fresh parameter the
+# button callback captures correctly — the safe pattern for grids of widgets.
+function widget view_cell(dictionary model, integer index) {
+    array<string> board = model["board"]
+    string mark = board[index]
+    boolean locked = mark != "" || Dictionary.get_or(model, "winner", "") != ""
+    mutable dictionary<string> style = cell_style(index, mark, locked)
+    style["role"] = "gridcell"
+    style["aria_label"] = cell_label(model, index, mark)
+    if locked {
+        # Occupied / finished cells are inert: mark them disabled for assistive
+        # tech rather than exposing a nameless button wired to a no-op.
+        style["aria_disabled"] = "true"
+        return GraphicalUi.button(mark, () -> model, style)
+    }
+    return GraphicalUi.button(mark, () -> play_cell(model, index), style)
+}
+
+function widget view_board(dictionary model) {
+    array<widget> cells = Array.range(0, 9)
+        |> Result.unwrap()
+        |> Array.map((integer index) -> view_cell(model, index))
+        |> Result.unwrap()
+    # Pin three fixed columns so the board keeps its 3×3 shape: without an explicit
+    # grid_template_columns the grid auto-reflows to a single column below the
+    # 640 px phone breakpoint (this window is 360 px), collapsing rows/diagonals.
+    return GraphicalUi.grid(3, cells, GraphicalUi.merge_styles(GraphicalUi.spacing(8), {
+        "grid_template_columns": "repeat(3, minmax(64px, 92px))",
+        "justify_content": "center",
+        "role": "grid",
+        "aria_label": "Tic-tac-toe board"
+    }))
+}
+
+function dictionary<string> reset_style() {
+    return {
+        "id": "btn-reset",
+        "variant": GraphicalUi.SECONDARY
+    }
+}
+
+function widget view_tic_tac_toe(dictionary model) {
+    string winner = model["winner"]
+    string banner_color = if winner != "" && winner != "Draw" {
+        GraphicalUi.VAR_SUCCESS
+    } else {
+        GraphicalUi.VAR_FG
+    }
+    return GraphicalUi.column([
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("square", 20),
+            GraphicalUi.heading("Tic-Tac-Toe", 1)
+        ]),
+        GraphicalUi.aria_live("polite", GraphicalUi.label(status_text(model), {
+            "id": "status",
+            "font_size": "18px",
+            "font_weight": "600",
+            "text_align": "center",
+            "color": banner_color
+        })),
+        view_board(model),
+        GraphicalUi.row([
+            GraphicalUi.button("New Game", () -> ttt_initial(), reset_style())
+        ], GraphicalUi.center_x())
+    ], GraphicalUi.merge_styles(GraphicalUi.spacing(12), GraphicalUi.padding(12)))
+}
+
+@main
+function void main() {
+    GraphicalUi.app(tic_tac_toe_config())
+}
+
+# Exposed as a named function (rather than inlined in main) so the example's
+# behaviour can be driven and verified by the @test blocks without a window.
+function dictionary tic_tac_toe_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Luma Tic-Tac-Toe"
+    config["width"] = 360
+    config["height"] = 480
+    config["model"] = ttt_initial()
+    config["view"] = view_tic_tac_toe
+    config["update"] = (dictionary model, string _msg) -> model
+    return config
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+# These drive the real application headlessly: GraphicalUi.test_* renders the
+# view (registering the cell callbacks), simulates each click, and returns the
+# resulting model — so the game can be played and asserted without a window.
+
+function dictionary click_cells(dictionary config, dictionary start, array<string> ids) {
+    mutable dictionary model = start
+    for id in ids {
+        model = GraphicalUi.test_click(config, model, id)
+    }
+    return model
+}
+
+function string mark_at(dictionary model, integer index) {
+    array<string> board = Dictionary.get_or(model, "board", [])
+    return board[index]
+}
+
+@test
+function void test_first_move_places_x() {
+    dictionary config = tic_tac_toe_config()
+    dictionary model = GraphicalUi.test_click(config, ttt_initial(), "cell-0")
+    assert(mark_at(model, 0) == "X")
+    assert(Dictionary.get_or(model, "turn", "") == "O")
+}
+
+@test
+function void test_turns_alternate() {
+    dictionary config = tic_tac_toe_config()
+    dictionary model = click_cells(config, ttt_initial(), ["cell-0", "cell-1"])
+    assert(mark_at(model, 0) == "X")
+    assert(mark_at(model, 1) == "O")
+    assert(Dictionary.get_or(model, "turn", "") == "X")
+}
+
+@test
+function void test_cannot_overwrite_a_taken_cell() {
+    dictionary config = tic_tac_toe_config()
+    # X takes cell 0; clicking it again (now O's turn) must be a no-op.
+    dictionary model = click_cells(config, ttt_initial(), ["cell-0", "cell-0"])
+    assert(mark_at(model, 0) == "X")
+    assert(Dictionary.get_or(model, "turn", "") == "O")
+}
+
+@test
+function void test_top_row_win_is_detected() {
+    dictionary config = tic_tac_toe_config()
+    # X: 0,1,2  O: 3,4 → X completes the top row.
+    dictionary model = click_cells(config, ttt_initial(),
+        ["cell-0", "cell-3", "cell-1", "cell-4", "cell-2"])
+    assert(Dictionary.get_or(model, "winner", "") == "X")
+}
+
+@test
+function void test_no_moves_accepted_after_a_win() {
+    dictionary config = tic_tac_toe_config()
+    dictionary won = click_cells(config, ttt_initial(),
+        ["cell-0", "cell-3", "cell-1", "cell-4", "cell-2"])
+    dictionary after = GraphicalUi.test_click(config, won, "cell-5")
+    assert(mark_at(after, 5) == "")
+    assert(Dictionary.get_or(after, "winner", "") == "X")
+}
+
+@test
+function void test_compute_winner_finds_a_column() {
+    assert(compute_winner(["X", "O", "", "X", "O", "", "X", "", ""]) == "X")
+}
+
+@test
+function void test_compute_winner_finds_a_diagonal() {
+    assert(compute_winner(["O", "X", "", "X", "O", "", "", "", "O"]) == "O")
+}
+
+@test
+function void test_compute_winner_reports_a_draw() {
+    # X O X / X O O / O X X — a full board with no line.
+    assert(compute_winner(["X", "O", "X", "X", "O", "O", "O", "X", "X"]) == "Draw")
+}
+
+@test
+function void test_new_game_clears_the_board() {
+    dictionary config = tic_tac_toe_config()
+    dictionary played = click_cells(config, ttt_initial(), ["cell-0", "cell-4"])
+    dictionary fresh = GraphicalUi.test_click(config, played, "btn-reset")
+    assert(mark_at(fresh, 0) == "")
+    assert(mark_at(fresh, 4) == "")
+    assert(Dictionary.get_or(fresh, "turn", "") == "X")
+    assert(Dictionary.get_or(fresh, "winner", "") == "")
+}
+
+@test
+function void test_status_label_renders_the_turn() {
+    dictionary config = tic_tac_toe_config()
+    dictionary label = GraphicalUi.test_find(config, ttt_initial(), "Turn: X")
+    assert(Dictionary.get_or(label, "text", "") == "Turn: X")
+}

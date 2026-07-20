@@ -1,0 +1,133 @@
+# ═══════════════════════════════════════════════════════════
+# Decorator Pattern
+#
+# Adds behaviour to functions by wrapping them in other
+# functions. Each decorator returns a new function with
+# the same signature, enabling composable layering.
+#
+# Usage: luma examples/design-patterns/decorator.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Handler type ─────────────────────────────────────────
+
+type Handler = function(string) -> string
+
+# ─── Base service ─────────────────────────────────────────
+
+function string handle_request(string path) {
+    return "200 OK: ${path}"
+}
+
+# ─── Decorator: logging ──────────────────────────────────
+
+function Handler with_logging(Handler handler) {
+    return (string path) -> {
+        print("  [log] -> ${path}")
+
+        string response = handler(path)
+
+        print("  [log] <- ${response}")
+
+        return response
+    }
+}
+
+# ─── Decorator: authentication ────────────────────────────
+
+function Handler with_auth(Handler handler, string token) {
+    return (string path) -> {
+        if token == "" {
+            return "401 Unauthorized"
+        }
+
+        return handler(path)
+    }
+}
+
+# ─── Decorator: caching ──────────────────────────────────
+
+function Handler with_cache(Handler handler) {
+    reference<dictionary<string>> cache = Reference.new({})
+
+    return (string path) -> {
+        dictionary<string> entries = Reference.get(cache)
+        result<string> cached = Dictionary.get(entries, path)
+
+        match cached {
+            success(hit) {
+                print("  [cache] hit: ${path}")
+
+                return hit
+            }
+            failure(_msg) {}
+        }
+
+        string response = handler(path)
+
+        Reference.update(cache, (dictionary<string> c) -> {
+            return Dictionary.set(c, path, response)
+        })
+
+        return response
+    }
+}
+
+# ─── Decorator: rate limiting ─────────────────────────────
+
+function Handler with_rate_limit(Handler handler, number max_calls) {
+    reference<number> call_count = Reference.new(0)
+
+    return (string path) -> {
+        number current = Reference.get(call_count)
+
+        if current >= max_calls {
+            return "429 Too Many Requests"
+        }
+
+        Reference.set(call_count, current + 1)
+
+        return handler(path)
+    }
+}
+
+# ─── Main ─────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("=== Decorator Pattern ===")
+    print("")
+
+    # Stack decorators: cache → logging → auth → handler
+    Handler authed = with_auth(handle_request, "secret-token")
+    Handler logged = with_logging(authed)
+    Handler service = with_cache(logged)
+
+    print("--- first request ---")
+    string first_response = service("/users")
+    print("  Result: ${first_response}")
+
+    print("")
+    print("--- same path (cached) ---")
+    string cached_response = service("/users")
+    print("  Result: ${cached_response}")
+
+    print("")
+    print("--- different path ---")
+    string orders_response = service("/orders")
+    print("  Result: ${orders_response}")
+
+    print("")
+    print("--- without auth ---")
+    Handler no_auth = with_logging(with_auth(handle_request, ""))
+
+    string unauth_response = no_auth("/secret")
+    print("  Result: ${unauth_response}")
+
+    print("")
+    print("--- rate limiting ---")
+    Handler limited = with_rate_limit(handle_request, 2)
+
+    print("  Call 1: ${limited("/a")}")
+    print("  Call 2: ${limited("/b")}")
+    print("  Call 3: ${limited("/c")}")
+}

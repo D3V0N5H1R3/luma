@@ -1,0 +1,222 @@
+# ═══════════════════════════════════════════════════════════
+# Word Counter
+#
+# Analyses a text file and reports word frequency, line
+# count, and other statistics. Demonstrates file I/O,
+# dictionaries, string processing, pipes, and sorting.
+#
+# Usage: luma examples/applications/word_counter.luma <file>
+#        luma examples/applications/word_counter.luma examples/applications/word_counter.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Text Analysis ───
+
+# Removes surrounding whitespace and common punctuation from a single word.
+# A single regex character-class pass strips every mark in one scan, rather
+# than one full-string String.replace_all pass per punctuation character.
+function string clean_word(string word) {
+    string trimmed = String.trim(word)
+
+    return trimmed
+    |> RegularExpression.replace_all("[.,!?:;()\"]", "")
+    |> Result.unwrap_or(trimmed)
+}
+
+function array<string> tokenize(string text) {
+    return text
+    |> String.lowercase()
+    |> String.split(" ")
+    |> Array.flat_map((string word_token) -> String.split(word_token, "\n"))
+    |> Result.unwrap_or([])
+    |> Array.map(String.trim)
+    |> Result.unwrap_or([])
+    |> Array.filter((string word_token) -> String.length(word_token) > 0)
+    |> Result.unwrap_or([])
+}
+
+function dictionary<integer> count_words(string text) {
+    array<string> words = tokenize(text)
+    |> Array.map(clean_word)
+    |> Result.unwrap_or([])
+    |> Array.filter((string word) -> String.length(word) > 0)
+    |> Result.unwrap_or([])
+
+    # group_by makes one native pass to bucket identical words; mapping each
+    # bucket to its length yields the frequency. Accumulating with
+    # Dictionary.set per word would copy the whole dictionary every time —
+    # O(words × unique) overall.
+    return words
+    |> Array.group_by((string word) -> word)
+    |> Result.unwrap_or({})
+    |> Dictionary.map_values((array<string> group) -> Array.length(group))
+    |> Result.unwrap_or({})
+}
+
+record WordCount {
+    string word,
+    integer count
+}
+
+function array<WordCount> find_top_words(dictionary<integer> counts, integer top_n) {
+    array<WordCount> pairs = Dictionary.keys(counts)
+    |> Array.map((string word) -> WordCount { word = word, count = Dictionary.get_or(counts, word, 0) })
+    |> Result.unwrap_or([])
+
+    array<WordCount> sorted = Result.unwrap_or(Array.sort(pairs,
+    (WordCount left_entry, WordCount right_entry) ->
+    right_entry.count - left_entry.count), [])
+
+    integer limit = if top_n < Array.length(sorted) { top_n } else { Array.length(sorted) }
+
+    return Result.unwrap_or(Array.slice(sorted, 0, limit), [])
+}
+
+function integer count_lines(string text) {
+    return Array.length(String.split(text, "\n"))
+}
+
+function integer count_characters(string text) {
+    return String.length(text)
+}
+
+# ─── Display ───
+
+function void print_bar(string word, integer count, integer max_count) {
+    integer bar_width = 30
+    integer filled = if max_count > 0 {
+        count * bar_width / max_count
+    } else {
+        0
+    }
+
+    string filled_bar = Result.unwrap_or(String.repeat("█", filled), "")
+    string empty_bar = Result.unwrap_or(String.repeat("░", bar_width - filled), "")
+    string bar = "${filled_bar}${empty_bar}"
+    string padded_word = Result.unwrap_or(String.pad_right(word, 15, " "), word)
+    string padded_count = Result.unwrap_or(String.pad_left("${count}", 4, " "), "${count}")
+
+    print("  ${padded_word} ${bar} ${padded_count}")
+}
+
+function void print_report(string filename, string text) {
+    dictionary<integer> counts = count_words(text)
+    integer total_words = Dictionary.values(counts) |> Array.sum() |> Result.unwrap_or(0)
+    integer unique_words = Array.length(Dictionary.keys(counts))
+    integer lines = count_lines(text)
+    integer character_count = count_characters(text)
+
+    print("\n  File: ${filename}")
+    print("  ---------------------------------------------------------")
+    print("  Lines:        ${lines}")
+    print("  Characters:   ${character_count}")
+    print("  Total words:  ${total_words}")
+    print("  Unique words: ${unique_words}")
+
+    integer top_count = 15
+    array<WordCount> top = find_top_words(counts, top_count)
+
+    if !Array.is_empty(top) {
+        integer max_count = top[0].count
+
+        print("\n  Top ${Array.length(top)} words:")
+        print("  Word            Frequency                      Count")
+        print("  ---------------------------------------------------------")
+
+        for entry in top {
+            print_bar(entry.word, entry.count, max_count)
+        }
+    }
+
+    print("")
+}
+
+# ─── Tests ───
+
+@test
+function void test_count_words_counts_repeats() {
+    dictionary<integer> counts = count_words("Hello hello world")
+
+    assert(Dictionary.get_or(counts, "hello", 0) == 2, "hello should be counted twice (case-insensitive)")
+    assert(Dictionary.get_or(counts, "world", 0) == 1, "world should be counted once")
+}
+
+@test
+function void test_count_words_strips_punctuation() {
+    dictionary<integer> counts = count_words("Hello, hello! (world)")
+
+    assert(Dictionary.get_or(counts, "hello", 0) == 2, "punctuation should not split hello")
+    assert(Dictionary.get_or(counts, "world", 0) == 1, "surrounding parentheses should be stripped")
+}
+
+@test
+function void test_count_words_splits_on_newlines() {
+    dictionary<integer> counts = count_words("one two\nthree")
+
+    assert(Dictionary.get_or(counts, "one", 0) == 1, "one appears once")
+    assert(Dictionary.get_or(counts, "two", 0) == 1, "two appears once")
+    assert(Dictionary.get_or(counts, "three", 0) == 1, "three appears once")
+}
+
+@test
+function void test_count_words_ignores_empty_text() {
+    dictionary<integer> counts = count_words("")
+
+    assert(Array.length(Dictionary.keys(counts)) == 0, "empty text has no words")
+}
+
+@test
+function void test_find_top_words_orders_by_frequency() {
+    dictionary<integer> counts = count_words("alpha alpha alpha beta beta gamma")
+    array<WordCount> top = find_top_words(counts, 2)
+
+    assert(Array.length(top) == 2, "should return exactly two entries")
+    assert(top[0].word == "alpha", "most frequent word is alpha")
+    assert(top[0].count == 3, "alpha occurs three times")
+    assert(top[1].word == "beta", "second most frequent word is beta")
+    assert(top[1].count == 2, "beta occurs twice")
+}
+
+@test
+function void test_find_top_words_limits_to_available() {
+    dictionary<integer> counts = count_words("alpha alpha beta")
+    array<WordCount> top = find_top_words(counts, 10)
+
+    assert(Array.length(top) == 2, "only two distinct words are available")
+}
+
+# ─── Entry Point ───
+
+@main
+function void main() {
+    array<string> args = Process.get_arguments()
+
+    if Array.is_empty(args) {
+        print("Usage: luma word_counter.luma <file>")
+        print("\nNo file specified. Analysing a sample text:\n")
+
+        string sample = """
+        To be or not to be that is the question
+        Whether tis nobler in the mind to suffer
+        The slings and arrows of outrageous fortune
+        Or to take arms against a sea of troubles
+        And by opposing end them To die to sleep
+        No more and by a sleep to say we end
+        The heartache and the thousand natural shocks
+        That flesh is heir to Tis a consummation
+        """
+
+        print_report("(sample text)", sample)
+    } else {
+        string filename = args[0]
+
+        match FileSystem.read_file(filename) {
+            success(text) {
+                print_report(filename, text)
+            }
+            failure(_error_message) {
+                print("Could not read '${filename}'.")
+                print("Check that the path exists and try again.")
+            }
+        }
+    }
+}

@@ -1,0 +1,9 @@
+function integer add(integer a, integer b) {
+    return a + b
+}
+
+@main
+function void main() {
+    integer result = add(1, 2)
+    print(result)
+}

@@ -1,0 +1,13 @@
+#ifndef LUMA_COMMON_VERSION_HPP
+#define LUMA_COMMON_VERSION_HPP
+
+#include <string_view>
+
+namespace luma {
+
+// Generated from the top-level VERSION file by CMake — do not edit.
+inline constexpr std::string_view luma_version{"@LUMA_VERSION@"};
+
+} // namespace luma
+
+#endif // LUMA_COMMON_VERSION_HPP

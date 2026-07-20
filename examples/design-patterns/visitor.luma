@@ -1,0 +1,121 @@
+# ═══════════════════════════════════════════════════════════
+# Visitor Pattern
+#
+# Separates algorithms from the data structures they
+# operate on. In Luma, choice types with exhaustive match
+# provide a natural and type-safe visitor — each match arm
+# is a "visit" method, and new operations can be added as
+# new functions without modifying the data types.
+#
+# Usage: luma examples/design-patterns/visitor.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── AST for a small expression language ──────────────────
+
+choice Expr {
+    Literal(number value)
+    Add(Expr left, Expr right)
+    Mul(Expr left, Expr right)
+    Negate(Expr operand)
+}
+
+# ─── Visitor 1: evaluate ──────────────────────────────────
+
+function number evaluate(Expr expr) {
+    return match expr {
+    case Expr.Literal(value) { value }
+    case Expr.Add(left, right) { evaluate(left) + evaluate(right) }
+    case Expr.Mul(left, right) { evaluate(left) * evaluate(right) }
+    case Expr.Negate(operand) { -evaluate(operand) }
+    }
+}
+
+# ─── Visitor 2: pretty-print ─────────────────────────────
+
+function string pretty_print(Expr expr) {
+    return match expr {
+    case Expr.Literal(value) { "${value}" }
+    case Expr.Add(left, right) { "(${pretty_print(left)} + ${pretty_print(right)})" }
+    case Expr.Mul(left, right) { "(${pretty_print(left)} * ${pretty_print(right)})" }
+    case Expr.Negate(operand) { "(-${pretty_print(operand)})" }
+    }
+}
+
+# ─── Visitor 3: count operations ─────────────────────────
+
+function number count_ops(Expr expr) {
+    return match expr {
+    case Expr.Literal(_value) { 0 }
+    case Expr.Add(left, right) { 1 + count_ops(left) + count_ops(right) }
+    case Expr.Mul(left, right) { 1 + count_ops(left) + count_ops(right) }
+    case Expr.Negate(operand) { 1 + count_ops(operand) }
+    }
+}
+
+# ─── Visitor 4: depth ────────────────────────────────────
+
+function number depth(Expr expr) {
+    return match expr {
+    case Expr.Literal(_value) { 0 }
+    case Expr.Add(left, right) { 1 + Math.max(depth(left), depth(right)) }
+    case Expr.Mul(left, right) { 1 + Math.max(depth(left), depth(right)) }
+    case Expr.Negate(operand) { 1 + depth(operand) }
+    }
+}
+
+# ─── Visitor 5: collect all literals ─────────────────────
+
+function array<number> literals(Expr expr) {
+    return match expr {
+    case Expr.Literal(value) { [value] }
+    case Expr.Add(left, right) { Array.concat(literals(left), literals(right)) }
+    case Expr.Mul(left, right) { Array.concat(literals(left), literals(right)) }
+    case Expr.Negate(operand) { literals(operand) }
+    }
+}
+
+# ─── Helper ───────────────────────────────────────────────
+
+function void analyse(string label, Expr expr) {
+    print("${label}")
+    print("  Expression: ${pretty_print(expr)}")
+    print("  Value:      ${evaluate(expr)}")
+    print("  Operations: ${count_ops(expr)}")
+    print("  Depth:      ${depth(expr)}")
+
+    array<number> lits = literals(expr)
+    array<string> lit_texts = lits
+        |> Array.map((number value) -> "${value}")
+        |> Result.unwrap_or([])
+
+    print("  Literals:   [${Array.join(lit_texts, ", ")}]")
+    print("")
+}
+
+# ─── Main ─────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("=== Visitor Pattern ===")
+    print("")
+
+    # (3 + 4) * 2
+    Expr e1 = Expr.Mul(
+        Expr.Add(Expr.Literal(3), Expr.Literal(4)),
+        Expr.Literal(2)
+    )
+    analyse("Example 1:", e1)
+
+    # -(5 + -(3))
+    Expr e2 = Expr.Negate(
+        Expr.Add(Expr.Literal(5), Expr.Negate(Expr.Literal(3)))
+    )
+    analyse("Example 2:", e2)
+
+    # (1 + 2) + (3 + 4)
+    Expr e3 = Expr.Add(
+        Expr.Add(Expr.Literal(1), Expr.Literal(2)),
+        Expr.Add(Expr.Literal(3), Expr.Literal(4))
+    )
+    analyse("Example 3:", e3)
+}

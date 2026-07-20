@@ -1,0 +1,425 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Generics
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+# ─── Generic Functions ────────────────────────────────────
+
+function<T> T identity(T value) {
+    return value
+}
+
+function<T, U> (U, T) swap(T first, U second) {
+    return (second, first)
+}
+
+function<T> array<T> wrap_in_array(T value) {
+    return [value]
+}
+
+@test
+function void test_generic_function_integer() {
+    integer n = identity(42)
+
+    assert(n == 42)
+}
+
+@test
+function void test_generic_function_string() {
+    string s = identity("hello")
+
+    assert(s == "hello")
+}
+
+@test
+function void test_generic_function_boolean() {
+    boolean b = identity(true)
+
+    assert(b)
+}
+
+@test
+function void test_generic_function_two_type_params() {
+    (string, integer) swapped = swap(1, "hello")
+
+    assert(swapped.0 == "hello")
+    assert(swapped.1 == 1)
+}
+
+@test
+function void test_generic_function_returns_generic_array() {
+    array<integer> arr = wrap_in_array(42)
+
+    assert(Array.length(arr) == 1)
+    assert(arr[0] == 42)
+}
+
+@test
+function void test_generic_function_with_array_arg() {
+    array<string> original = ["a", "b", "c"]
+    array<string> same = identity(original)
+
+    assert(Array.length(same) == 3)
+    assert(same[0] == "a")
+}
+
+# ─── Generic Records ─────────────────────────────────────
+
+record Box<T> {
+    T value
+}
+
+record Pair<T, U> {
+    T first,
+    U second
+}
+
+@test
+function void test_generic_record_integer() {
+    Box<integer> int_box = Box<integer> { value = 42 }
+
+    assert(int_box.value == 42)
+}
+
+@test
+function void test_generic_record_string() {
+    Box<string> str_box = Box<string> { value = "hello" }
+
+    assert(str_box.value == "hello")
+}
+
+@test
+function void test_generic_record_nested() {
+    Box<Box<integer>> nested = Box<Box<integer>> { value = Box<integer> { value = 99 } }
+
+    assert(nested.value.value == 99)
+}
+
+@test
+function void test_generic_record_two_type_params() {
+    Pair<string, integer> entry = Pair<string, integer> { first = "age", second = 30 }
+
+    assert(entry.first == "age")
+    assert(entry.second == 30)
+}
+
+@test
+function void test_generic_record_with_array_type_param() {
+    Box<array<integer>> box = Box<array<integer>> { value = [1, 2, 3] }
+
+    assert(Array.length(box.value) == 3)
+    assert(box.value[0] == 1)
+}
+
+# ─── Generic Type Aliases ────────────────────────────────
+
+type HomoPair<T> = (T, T)
+
+@test
+function void test_generic_type_alias() {
+    HomoPair<integer> coords = (10, 20)
+
+    assert(coords.0 == 10)
+    assert(coords.1 == 20)
+}
+
+@test
+function void test_generic_type_alias_string() {
+    HomoPair<string> names = ("Alice", "Bob")
+
+    assert(names.0 == "Alice")
+    assert(names.1 == "Bob")
+}
+
+# ─── Generic Interfaces ──────────────────────────────────
+
+interface Container<T> {
+    T value
+}
+
+record IntContainer {
+    integer value
+}
+
+record StringContainer {
+    string value
+}
+
+function<T> T extract(Container<T> container) {
+    return container.value
+}
+
+@test
+function void test_generic_interface_integer() {
+    IntContainer box = IntContainer { value = 7 }
+
+    integer val = extract(box)
+
+    assert(val == 7)
+}
+
+@test
+function void test_generic_interface_string() {
+    StringContainer box = StringContainer { value = "hi" }
+
+    string val = extract(box)
+
+    assert(val == "hi")
+}
+
+# ─── Turbofish — Explicit Type Arguments ─────────────────
+
+@test
+function void test_turbofish_identity_integer() {
+    integer n = identity::<integer>(42)
+
+    assert(n == 42)
+}
+
+@test
+function void test_turbofish_identity_string() {
+    string s = identity::<string>("hello")
+
+    assert(s == "hello")
+}
+
+@test
+function void test_turbofish_swap() {
+    (string, integer) pair = swap::<integer, string>(1, "hello")
+
+    assert(pair.0 == "hello")
+    assert(pair.1 == 1)
+}
+
+@test
+function void test_turbofish_wrap_in_array() {
+    array<integer> arr = wrap_in_array::<integer>(99)
+
+    assert(Array.length(arr) == 1)
+    assert(arr[0] == 99)
+}
+
+# ─── Bounded Generic Parameters ──────────────────────────
+
+interface HasValue {
+    integer value
+}
+
+record NumberBox {
+    integer value
+}
+
+function<T: HasValue> integer extract_value(T item) {
+    return item.value
+}
+
+@test
+function void test_bounded_generic_call() {
+    NumberBox box = NumberBox { value = 7 }
+
+    integer val = extract_value(box)
+
+    assert(val == 7)
+}
+
+interface HasName {
+    string name
+}
+
+record NamedBox {
+    string name,
+    integer value
+}
+
+function<T: HasValue + HasName> string describe(T item) {
+    return "${item.name}: ${item.value}"
+}
+
+@test
+function void test_bounded_generic_multi_bound() {
+    NamedBox box = NamedBox { name = "count", value = 42 }
+
+    string desc = describe(box)
+
+    assert(desc == "count: 42")
+}
+
+# ─── Generic type alias ──────────────────────────
+
+type HomoPair<T> = (T, T)
+type Wrapper<T> = array<T>
+
+@test
+function void test_generic_type_alias_integer_pair() {
+    HomoPair<integer> p = (10, 20)
+
+    assert(p.0 == 10)
+    assert(p.1 == 20)
+}
+
+@test
+function void test_generic_type_alias_string_pair() {
+    HomoPair<string> p = ("hello", "world")
+
+    assert(p.0 == "hello")
+    assert(p.1 == "world")
+}
+
+@test
+function void test_generic_type_alias_array_wrapper() {
+    Wrapper<integer> w = [1, 2, 3]
+
+    assert(Array.length(w) == 3)
+    assert(w[0] == 1)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Edge-case tests — generics
+# ═══════════════════════════════════════════════════════════
+
+# Note: Type bound violations and type parameter mismatches are caught
+# at compile time by the type checker (tested in type_checker_test.cpp).
+# Below we test runtime generic behavior edge cases.
+
+function<T> array<T> make_singleton(T value) {
+    return [value]
+}
+
+@test
+function void test_generic_function_with_different_types() {
+    array<integer> ints = make_singleton(42)
+    array<string> strs = make_singleton("hello")
+    array<boolean> bools = make_singleton(true)
+
+    assert(ints[0] == 42)
+    assert(strs[0] == "hello")
+    assert(bools[0])
+}
+
+function<T> T first_or_default(array<T> arr, T default_value) {
+    if Array.length(arr) == 0 {
+        return default_value
+    }
+
+    return arr[0]
+}
+
+@test
+function void test_generic_function_empty_array_default() {
+    array<integer> empty = []
+    integer val = first_or_default(empty, -1)
+
+    assert(val == -1, "should return default for empty array")
+}
+
+@test
+function void test_generic_function_non_empty_array() {
+    array<string> words = ["hello"]
+    string val = first_or_default(words, "default")
+
+    assert(val == "hello")
+}
+
+@test
+function void test_generic_record_inferred_nested() {
+    Box<Box<integer>> nested = Box { value = Box { value = 42 } }
+
+    assert(nested.value.value == 42, "nested generic record with inferred type args")
+}
+
+@test
+function void test_generic_record_with_override() {
+    Box<string> b1 = Box { value = "hello" }
+    Box<string> b2 = b1 with { value = "world" }
+
+    assert(b1.value == "hello")
+    assert(b2.value == "world")
+}
+
+# ─── Generic functions producing / consuming generic types ───
+
+function<T> Box<T> wrap_in_box(T value) {
+    return Box<T> { value = value }
+}
+
+function<T> T unwrap_box(Box<T> b) {
+    return b.value
+}
+
+function<T, U> Pair<T, U> build_pair(T a, U b) {
+    return Pair<T, U> { first = a, second = b }
+}
+
+function<T> T or_default(optional<T> o, T fallback) {
+    return Optional.unwrap_or(o, fallback)
+}
+
+@test
+function void test_generic_constructor_function() {
+    Box<integer> b = wrap_in_box(42)
+
+    assert(b.value == 42)
+}
+
+@test
+function void test_generic_function_takes_generic_record() {
+    integer v = unwrap_box(wrap_in_box(7))
+
+    assert(v == 7)
+}
+
+@test
+function void test_generic_composition() {
+    # A generic call feeding another generic call: identity inside wrap_in_array.
+    array<integer> arr = wrap_in_array(identity(99))
+
+    assert(Array.length(arr) == 1)
+    assert(arr[0] == 99)
+}
+
+@test
+function void test_generic_returns_generic_record_two_params() {
+    Pair<string, integer> p = build_pair("age", 30)
+
+    assert(p.first == "age")
+    assert(p.second == 30)
+}
+
+@test
+function void test_generic_with_optional_some() {
+    integer v = or_default(some(5), 0)
+
+    assert(v == 5)
+}
+
+@test
+function void test_generic_with_optional_none() {
+    integer v = or_default(none, -1)
+
+    assert(v == -1)
+}
+
+@test
+function void test_generic_record_in_array() {
+    array<Box<integer>> boxes = [wrap_in_box(1), wrap_in_box(2), wrap_in_box(3)]
+
+    assert(Array.length(boxes) == 3)
+    assert(boxes[0].value == 1)
+    assert(boxes[2].value == 3)
+}
+
+@test
+function void test_turbofish_on_constructor_function() {
+    Box<string> b = wrap_in_box::<string>("hi")
+
+    assert(b.value == "hi")
+}
+
+@test
+function void test_generic_constructor_then_unwrap_string() {
+    string s = unwrap_box(wrap_in_box("hello"))
+
+    assert(s == "hello")
+}

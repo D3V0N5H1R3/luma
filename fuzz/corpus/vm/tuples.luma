@@ -1,0 +1,29 @@
+# VM: tuples — construction, field/index access, destructuring, equality, nesting
+function (integer, integer) min_max(array<integer> xs) {
+    return (Result.unwrap(Array.min(xs)), Result.unwrap(Array.max(xs)))
+}
+
+@main
+function void main() {
+    (integer, string, number) triple = (1, "two", 3.0)
+    print(triple.0)
+    print(triple[1])
+
+    (integer first, integer second) = (10, 20)
+    mutable (integer a, integer b) = (1, 2)
+    a = a + first
+    b = b + second
+    print(a + b)
+
+    ((integer, integer), string) nested = ((4, 5), "pair")
+    print(nested[0][1])
+
+    boolean eq = (1, 2, 3) == (1, 2, 3)
+    print(eq)
+
+    array<(integer, string)> pairs = [(1, "one"), (2, "two")]
+    print(pairs[1].1)
+
+    (integer lo, integer hi) = min_max([3, 1, 4, 1, 5, 9])
+    print("${lo}..${hi}")
+}

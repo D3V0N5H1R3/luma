@@ -1,0 +1,72 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Console Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_console_write_to_stdout_succeeds() {
+    # write_to_stdout returns result<boolean>; a string argument always succeeds.
+    result<boolean> write_result = Console.write_to_stdout("feature test stdout")
+
+    assert(Result.is_success(write_result), "write_to_stdout should succeed for a string")
+}
+
+@test
+function void test_console_write_to_stdout_returns_true() {
+    boolean wrote = Result.unwrap(Console.write_to_stdout(" "))
+
+    assert(wrote, "write_to_stdout should unwrap to true on success")
+}
+
+@test
+function void test_console_write_to_stdout_empty_string() {
+    # Writing an empty string is a no-op write that still succeeds.
+    boolean ok = Console.write_to_stdout("") |> Result.is_success()
+
+    assert(ok, "writing an empty string should succeed")
+}
+
+@test
+function void test_console_write_to_stdout_unicode_and_interpolation() {
+    integer count = 3
+    string message = "unicode ✓ café — ${count} items"
+
+    boolean ok = Console.write_to_stdout(message) |> Result.is_success()
+
+    assert(ok, "writing interpolated unicode text should succeed")
+}
+
+@test
+function void test_console_write_to_stderr_succeeds() {
+    result<boolean> write_result = Console.write_to_stderr("feature test stderr")
+
+    assert(Result.is_success(write_result), "write_to_stderr should succeed for a string")
+}
+
+@test
+function void test_console_write_to_stderr_returns_true() {
+    boolean wrote = Result.unwrap(Console.write_to_stderr("x"))
+
+    assert(wrote, "write_to_stderr should unwrap to true on success")
+}
+
+@test
+function void test_console_write_to_stderr_multiline() {
+    boolean ok = Console.write_to_stderr("line one\nline two\n") |> Result.is_success()
+
+    assert(ok, "writing a multi-line string should succeed")
+}
+
+# ───────────────────────────────────────────────────────────
+# Scope note
+#
+# Console.prompt and Console.read_from_stdin block on stdin, so they are not
+# exercised here: a feature suite must run non-interactively, and these
+# functions are covered by C++ tests that redirect std::cin. There are also no
+# negative feature tests for Console: write_to_stdout / write_to_stderr only
+# fail on an underlying stream error (not reachable from Luma), and passing a
+# non-string argument is a compile-time type error under --strict rather than a
+# runtime failure result.
+# ───────────────────────────────────────────────────────────

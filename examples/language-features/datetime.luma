@@ -1,0 +1,129 @@
+# ═══════════════════════════════════════════════════════════
+# Date and Time
+#
+# Demonstrates the DateTime module — current time, date
+# construction, decomposition, arithmetic, and formatting.
+# ═══════════════════════════════════════════════════════════
+
+# DateTime.day_of_week returns 1 (Monday) through 7 (Sunday); index from 0.
+function string day_name(integer weekday) {
+    array<string> names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    return Array.get(names, weekday - 1) |> Result.unwrap_or("Unknown")
+}
+
+# DateTime.month returns 1 (January) through 12 (December); index from 0.
+function string month_name(integer month) {
+    array<string> names = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ]
+    return Array.get(names, month - 1) |> Result.unwrap_or("Unknown")
+}
+
+@main
+function void main() {
+    # ── Current time ──
+    print("=== Current Time ===")
+
+    string now_iso = DateTime.now_iso_string() |> Result.unwrap()
+
+    print("Now (ISO 8601):  ${now_iso}")
+
+    number now = DateTime.now_unix()
+    integer current_year  = DateTime.year(now) |> Result.unwrap()
+    integer current_month = DateTime.month(now) |> Result.unwrap()
+    integer current_day   = DateTime.day_of_month(now) |> Result.unwrap()
+    integer current_hour  = DateTime.hour(now) |> Result.unwrap()
+    integer current_min   = DateTime.minute(now) |> Result.unwrap()
+    integer current_sec   = DateTime.second(now) |> Result.unwrap()
+    integer weekday       = DateTime.day_of_week(now) |> Result.unwrap()
+
+    print("Year:   ${current_year}")
+    print("Month:  ${month_name(current_month)} (${current_month})")
+    print("Day:    ${current_day} — ${day_name(weekday)}")
+    print("Time:   ${current_hour}:${current_min}:${current_sec}")
+
+    # ── Construct a specific date ──
+    print("\n=== Date Construction ===")
+
+    number y2k = DateTime.from_parts(2000, 1, 1, 0, 0, 0) |> Result.unwrap()
+    string y2k_iso = DateTime.to_iso_string(y2k) |> Result.unwrap()
+    integer y2k_dow = DateTime.day_of_week(y2k) |> Result.unwrap()
+
+    print("Y2K: ${y2k_iso}")
+    print("Day of week: ${day_name(y2k_dow)}")
+
+    # ── to_parts record ──
+    print("\n=== Date Parts Record ===")
+
+    number sample = DateTime.from_parts(2026, 4, 27, 9, 0, 0) |> Result.unwrap()
+    DateTime.TimeParts parts = DateTime.to_parts(sample) |> Result.unwrap()
+
+    print("Date: ${parts.year}-${parts.month}-${parts.day}")
+    print("Time: ${parts.hour}:${parts.minute}:${parts.second}")
+
+    # ── Parse from ISO string ──
+    print("\n=== ISO Parsing ===")
+
+    number parsed = DateTime.from_iso_string("2025-12-25") |> Result.unwrap()
+    integer parsed_year  = DateTime.year(parsed) |> Result.unwrap()
+    integer parsed_month = DateTime.month(parsed) |> Result.unwrap()
+    integer parsed_day   = DateTime.day_of_month(parsed) |> Result.unwrap()
+
+    print("Christmas 2025: ${parsed_year}-${parsed_month}-${parsed_day}")
+
+    # ── Date arithmetic ──
+    print("\n=== Date Arithmetic ===")
+
+    number project_start = DateTime.from_parts(2026, 1, 1, 0, 0, 0) |> Result.unwrap()
+
+    number after_30_days  = DateTime.add_days(project_start, 30.0)
+    number after_3_months = DateTime.add_months(project_start, 3) |> Result.unwrap()
+    number after_1_year   = DateTime.add_years(project_start, 1) |> Result.unwrap()
+
+    string iso_30d  = DateTime.to_iso_string(after_30_days) |> Result.unwrap()
+    string iso_3m   = DateTime.to_iso_string(after_3_months) |> Result.unwrap()
+    string iso_1y   = DateTime.to_iso_string(after_1_year) |> Result.unwrap()
+
+    print("Start:          2026-01-01")
+    print("+ 30 days:      ${iso_30d}")
+    print("+ 3 months:     ${iso_3m}")
+    print("+ 1 year:       ${iso_1y}")
+
+    # ── Differences ──
+    print("\n=== Differences ===")
+
+    number epoch_2026 = DateTime.from_parts(2026, 1, 1, 0, 0, 0) |> Result.unwrap()
+
+    number days_diff  = DateTime.difference_days(y2k, epoch_2026)
+    integer years_diff = DateTime.difference_years(y2k, epoch_2026) |> Result.unwrap()
+    integer months_diff = DateTime.difference_months(y2k, epoch_2026) |> Result.unwrap()
+
+    string days_str = String.format_number(days_diff, 0)
+
+    print("2000 → 2026: ${years_diff} years, ${months_diff} months, ${days_str} days")
+
+    # ── Time arithmetic ──
+    number meeting_start = DateTime.from_parts(2026, 6, 15, 14, 0, 0) |> Result.unwrap()
+    number meeting_end   = DateTime.add_hours(meeting_start, 1.5)
+    number break_end     = DateTime.add_seconds(meeting_end, 900.0)  # 15 minutes
+
+    string iso_start = DateTime.to_iso_string(meeting_start) |> Result.unwrap()
+    string iso_end   = DateTime.to_iso_string(meeting_end) |> Result.unwrap()
+    string iso_break = DateTime.to_iso_string(break_end) |> Result.unwrap()
+
+    print("\nMeeting: ${iso_start}")
+    print("End:     ${iso_end}")
+    print("Break:   ${iso_break}")
+
+    # ── Calendar helpers ──
+    print("\n=== Calendar Helpers ===")
+
+    for year in [2023, 2024, 2025, 2026, 2100] {
+        boolean is_leap = DateTime.is_leap_year(year)
+        integer feb_days = DateTime.days_in_month(year, 2) |> Result.unwrap()
+        string leap_label = if is_leap { "leap" } else { "non-leap" }
+
+        print("${year}: ${leap_label}, Feb has ${feb_days} days")
+    }
+}

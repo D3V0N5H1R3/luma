@@ -1,0 +1,129 @@
+# ═══════════════════════════════════════════════════════════
+# Advanced Types
+#
+# Demonstrates the with expression for immutable record
+# updates, default field values, structural interfaces,
+# generic records, and tuple destructuring.
+# ═══════════════════════════════════════════════════════════
+
+# ── With expression ──
+
+record Point { number x, number y }
+
+function Point translate(Point p, number dx, number dy) {
+    return p with { x = p.x + dx, y = p.y + dy }
+}
+
+function Point scale(Point p, number factor) {
+    return p with { x = p.x * factor, y = p.y * factor }
+}
+
+# ── Record default field values ──
+
+record Config {
+    string host = "localhost",
+    integer port = 8080,
+    boolean verbose = false
+}
+
+# ── Structural interface ──
+
+interface Describable {
+    string description
+}
+
+record Circle {
+    number radius,
+    string description
+}
+
+record Rectangle {
+    number width,
+    number height,
+    string description
+}
+
+function Circle make_circle(number r) {
+    return Circle { radius = r, description = "Circle(r=${r})" }
+}
+
+function Rectangle make_rectangle(number w, number h) {
+    return Rectangle { width = w, height = h, description = "Rect(${w}x${h})" }
+}
+
+function string render(Describable shape) {
+    return "Shape: ${shape.description}"
+}
+
+# ── Generic record ──
+
+record Pair<T> {
+    T first,
+    T second
+}
+
+function<T> string show_pair(Pair<T> p) {
+    return "(${p.first}, ${p.second})"
+}
+
+@main
+function void main() {
+    # ── With expression ──
+    print("=== With expression ===")
+
+    Point origin = Point { x = 0, y = 0 }
+    Point moved = translate(origin, 3, 4)
+    Point scaled = scale(moved, 2)
+
+    print("origin:  (${origin.x}, ${origin.y})")
+    print("moved:   (${moved.x}, ${moved.y})")
+    print("scaled:  (${scaled.x}, ${scaled.y})")
+
+    # Chain with expressions.
+    Point p = origin with { x = 10 }
+    Point q = p with { y = 20 }
+    print("chained: (${q.x}, ${q.y})")
+
+    # ── Default field values ──
+    print("")
+    print("=== Default field values ===")
+
+    Config defaults = Config {}
+    print("defaults: ${defaults.host}:${defaults.port} verbose=${defaults.verbose}")
+
+    Config custom = Config { port = 3000, verbose = true }
+    print("custom:   ${custom.host}:${custom.port} verbose=${custom.verbose}")
+
+    # ── Structural interface ──
+    print("")
+    print("=== Structural interface ===")
+
+    Circle c = make_circle(5)
+    Rectangle r = make_rectangle(10, 3)
+
+    # Both Circle and Rectangle satisfy Describable (they have a description field).
+    print(render(c))
+    print(render(r))
+
+    # ── Generic record ──
+    print("")
+    print("=== Generic record ===")
+
+    Pair<integer> int_pair = Pair<integer> { first = 1, second = 2 }
+    Pair<string> str_pair = Pair<string> { first = "hello", second = "world" }
+
+    print("int pair: ${show_pair(int_pair)}")
+    print("str pair: ${show_pair(str_pair)}")
+
+    # ── Tuple destructuring ──
+    print("")
+    print("=== Tuple destructuring ===")
+
+    (integer, string) pair = (42, "answer")
+    (integer num, string text) = pair
+    print("num = ${num}, text = ${text}")
+
+    (number, number, number) rgb = (0.2, 0.5, 0.8)
+    (number red, number green, number blue) = rgb
+    print("r=${red}, g=${green}, b=${blue}")
+}

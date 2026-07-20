@@ -1,0 +1,365 @@
+# ═══════════════════════════════════════════════════════════
+# Banking System
+#
+# A small in-memory bank that models accounts and a transaction
+# ledger. Demonstrates domain modelling with records and choice
+# types, result<T> as the primary error-handling mechanism
+# (insufficient funds, unknown account, non-positive amounts),
+# immutable state threaded through pure operations, dictionaries
+# keyed by account id, and @test annotations.
+#
+# Usage: luma examples/applications/bank_accounts.luma
+# Tests: luma --test examples/applications/bank_accounts.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Domain Types ────────────────────────────────────────
+
+choice TransactionKind {
+    Deposit
+    Withdraw
+    TransferIn(string counterparty)
+    TransferOut(string counterparty)
+}
+
+record Account {
+    string id,
+    string owner,
+    number balance
+}
+
+record Transaction {
+    string account_id,
+    TransactionKind kind,
+    number amount,
+    number balance_after
+}
+
+record Bank {
+    dictionary<Account> accounts,
+    array<Transaction> ledger
+}
+
+# ─── Formatting ──────────────────────────────────────────
+
+function string format_money(number amount) {
+    return "$${String.format_number(amount, 2)}"
+}
+
+function string describe_kind(TransactionKind kind) {
+    return match kind {
+    case TransactionKind.Deposit              { "deposit" }
+    case TransactionKind.Withdraw             { "withdrawal" }
+    case TransactionKind.TransferIn(from_id)  { "transfer from ${from_id}" }
+    case TransactionKind.TransferOut(to_id)   { "transfer to ${to_id}" }
+    }
+}
+
+function string format_transaction(Transaction entry) {
+    string account = Result.unwrap_or(String.pad_right(entry.account_id, 10, " "), entry.account_id)
+    string action = describe_kind(entry.kind) |> String.pad_right(22, " ") |> Result.unwrap_or("?")
+    string amount = format_money(entry.amount) |> String.pad_left(10, " ") |> Result.unwrap_or("?")
+    string balance = format_money(entry.balance_after) |> String.pad_left(10, " ") |> Result.unwrap_or("?")
+
+    return "  ${account} ${action} ${amount} ${balance}"
+}
+
+# ─── Construction ────────────────────────────────────────
+
+function Bank empty_bank() {
+    return Bank { accounts = {}, ledger = [] }
+}
+
+function result<Bank> open_account(Bank bank, string account_id, string owner, number opening) {
+    if Dictionary.has(bank.accounts, account_id) {
+        return failure("account ${account_id} already exists")
+    }
+
+    if opening < 0.0 {
+        return failure("opening balance cannot be negative")
+    }
+
+    Account account = Account { id = account_id, owner = owner, balance = opening }
+
+    return success(bank with {
+        accounts = Dictionary.set(bank.accounts, account_id, account)
+    })
+}
+
+# ─── Ledger Helper ───────────────────────────────────────
+
+function Bank record_entry(Bank bank, Account account, TransactionKind kind, number amount) {
+    Transaction entry = Transaction {
+        account_id = account.id,
+        kind = kind,
+        amount = amount,
+        balance_after = account.balance
+    }
+
+    return bank with {
+        accounts = Dictionary.set(bank.accounts, account.id, account),
+        ledger = Array.push(bank.ledger, entry)
+    }
+}
+
+# ─── Core Operations ─────────────────────────────────────
+
+function result<Bank> deposit(Bank bank, string account_id, number amount) {
+    if amount <= 0.0 {
+        return failure("deposit amount must be positive")
+    }
+
+    if !Dictionary.has(bank.accounts, account_id) {
+        return failure("No account found with id ${account_id}.")
+    }
+
+    Account account = Dictionary.get(bank.accounts, account_id)?
+    Account updated = account with { balance = account.balance + amount }
+
+    return success(record_entry(bank, updated, TransactionKind.Deposit, amount))
+}
+
+function result<Bank> withdraw(Bank bank, string account_id, number amount) {
+    if amount <= 0.0 {
+        return failure("withdrawal amount must be positive")
+    }
+
+    if !Dictionary.has(bank.accounts, account_id) {
+        return failure("No account found with id ${account_id}.")
+    }
+
+    Account account = Dictionary.get(bank.accounts, account_id)?
+
+    if amount > account.balance {
+        return failure("insufficient funds in ${account_id}: balance is ${format_money(account.balance)}")
+    }
+
+    Account updated = account with { balance = account.balance - amount }
+
+    return success(record_entry(bank, updated, TransactionKind.Withdraw, amount))
+}
+
+function result<Bank> transfer(Bank bank, string from_id, string to_id, number amount) {
+    if from_id == to_id {
+        return failure("cannot transfer to the same account")
+    }
+
+    if !Dictionary.has(bank.accounts, to_id) {
+        return failure("account ${to_id} not found")
+    }
+
+    Bank debited = withdraw(bank, from_id, amount)?
+    Account target = Dictionary.get(debited.accounts, to_id)?
+    Account credited = target with { balance = target.balance + amount }
+
+    Bank with_credit = record_entry(
+        debited, credited, TransactionKind.TransferIn(from_id), amount
+    )
+
+    # Re-tag the preceding debit entry so the ledger reads as a transfer pair.
+    array<Transaction> ledger = with_credit.ledger
+    integer debit_index = Array.length(ledger) - 2
+    Transaction debit_entry = Array.get(ledger, debit_index)?
+    Transaction retagged = debit_entry with { kind = TransactionKind.TransferOut(to_id) }
+
+    return success(with_credit with {
+        ledger = Array.set(ledger, debit_index, retagged)?
+    })
+}
+
+# ─── Queries ─────────────────────────────────────────────
+
+function result<number> balance_of(Bank bank, string account_id) {
+    Account account = Dictionary.get(bank.accounts, account_id)?
+
+    return success(account.balance)
+}
+
+function number total_assets(Bank bank) {
+    return Dictionary.values(bank.accounts)
+    |> Array.map((Account a) -> a.balance)
+    |> Result.unwrap_or([])
+    |> Array.sum()
+    |> Result.unwrap_or(0.0)
+}
+
+# ─── Reporting ───────────────────────────────────────────
+
+function void print_statement(Bank bank) {
+    print("\n─── Ledger ───")
+    print("  Account    Action                     Amount    Balance")
+    print("  -------------------------------------------------------")
+
+    for entry in bank.ledger {
+        print(format_transaction(entry))
+    }
+
+    print("\n─── Balances ───")
+
+    for account in Dictionary.values(bank.accounts) {
+        print("  ${account.id}  ${account.owner}: ${format_money(account.balance)}")
+    }
+
+    print("\n  Total assets: ${format_money(total_assets(bank))}")
+}
+
+# ─── Demo ────────────────────────────────────────────────
+
+function result<Bank> build_demo_bank() {
+    mutable Bank bank = empty_bank()
+
+    bank = open_account(bank, "AC-1001", "Alice", 500.0)?
+    bank = open_account(bank, "AC-1002", "Bob", 150.0)?
+    bank = open_account(bank, "AC-1003", "Carol", 0.0)?
+
+    bank = deposit(bank, "AC-1001", 250.0)?
+    bank = withdraw(bank, "AC-1002", 40.0)?
+    bank = transfer(bank, "AC-1001", "AC-1003", 300.0)?
+    bank = deposit(bank, "AC-1003", 75.5)?
+
+    return success(bank)
+}
+
+@main
+function void main() {
+    print("═══════════════════════════════════════")
+    print("   Luma Bank")
+    print("═══════════════════════════════════════")
+
+    match build_demo_bank() {
+        success(bank) {
+            print_statement(bank)
+
+            print("\n─── Rejected operations ───")
+
+            match withdraw(bank, "AC-1002", 10000.0) {
+                success(_) { print("  (unexpected success)") }
+                failure(message) { print("  ✗ ${message}") }
+            }
+
+            match deposit(bank, "AC-9999", 10.0) {
+                success(_) { print("  (unexpected success)") }
+                failure(message) { print("  ✗ ${message}") }
+            }
+
+            match deposit(bank, "AC-1001", -5.0) {
+                success(_) { print("  (unexpected success)") }
+                failure(message) { print("  ✗ ${message}") }
+            }
+        }
+        failure(message) {
+            print("  failed to build bank: ${message}")
+        }
+    }
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+function boolean approx(number a, number b) {
+    return Result.unwrap_or(Math.absolute(a - b), 1.0) < 0.005
+}
+
+@test
+function void test_open_account_sets_balance() {
+    Bank bank = open_account(empty_bank(), "A", "Ann", 100.0) |> Result.unwrap()
+
+    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 100.0), "opening balance should be 100")
+}
+
+@test
+function void test_duplicate_account_fails() {
+    Bank bank = open_account(empty_bank(), "A", "Ann", 100.0) |> Result.unwrap()
+    result<Bank> again = open_account(bank, "A", "Other", 0.0)
+
+    assert(!Result.is_success(again), "duplicate account id should fail")
+}
+
+@test
+function void test_deposit_increases_balance() {
+    mutable Bank bank = open_account(empty_bank(), "A", "Ann", 100.0) |> Result.unwrap()
+    bank = deposit(bank, "A", 50.0) |> Result.unwrap()
+
+    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 150.0), "balance should be 150")
+}
+
+@test
+function void test_withdraw_decreases_balance() {
+    mutable Bank bank = open_account(empty_bank(), "A", "Ann", 100.0) |> Result.unwrap()
+    bank = withdraw(bank, "A", 30.0) |> Result.unwrap()
+
+    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 70.0), "balance should be 70")
+}
+
+@test
+function void test_overdraft_is_rejected() {
+    Bank bank = open_account(empty_bank(), "A", "Ann", 100.0) |> Result.unwrap()
+    result<Bank> outcome = withdraw(bank, "A", 100.01)
+
+    assert(!Result.is_success(outcome), "overdraft should be rejected")
+}
+
+@test
+function void test_non_positive_amounts_are_rejected() {
+    Bank bank = open_account(empty_bank(), "A", "Ann", 100.0) |> Result.unwrap()
+
+    assert(!Result.is_success(deposit(bank, "A", 0.0)), "zero deposit should fail")
+    assert(!Result.is_success(withdraw(bank, "A", -1.0)), "negative withdrawal should fail")
+}
+
+@test
+function void test_transfer_moves_funds() {
+    mutable Bank bank = empty_bank()
+    bank = open_account(bank, "A", "Ann", 100.0) |> Result.unwrap()
+    bank = open_account(bank, "B", "Ben", 0.0) |> Result.unwrap()
+    bank = transfer(bank, "A", "B", 40.0) |> Result.unwrap()
+
+    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 60.0), "A should have 60")
+    assert(approx(Result.unwrap_or(balance_of(bank, "B"), -1.0), 40.0), "B should have 40")
+}
+
+@test
+function void test_transfer_conserves_total() {
+    mutable Bank bank = empty_bank()
+    bank = open_account(bank, "A", "Ann", 100.0) |> Result.unwrap()
+    bank = open_account(bank, "B", "Ben", 25.0) |> Result.unwrap()
+    bank = transfer(bank, "A", "B", 40.0) |> Result.unwrap()
+
+    assert(approx(total_assets(bank), 125.0), "total assets should be conserved at 125")
+}
+
+@test
+function void test_failed_transfer_leaves_balances_untouched() {
+    mutable Bank bank = empty_bank()
+    bank = open_account(bank, "A", "Ann", 30.0) |> Result.unwrap()
+    bank = open_account(bank, "B", "Ben", 0.0) |> Result.unwrap()
+
+    result<Bank> outcome = transfer(bank, "A", "B", 1000.0)
+
+    assert(!Result.is_success(outcome), "over-limit transfer should fail")
+    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 30.0), "A unchanged after failed transfer")
+}
+
+@test
+function void test_transfer_to_unknown_account_fails() {
+    Bank bank = open_account(empty_bank(), "A", "Ann", 30.0) |> Result.unwrap()
+
+    assert(!Result.is_success(transfer(bank, "A", "ghost", 5.0)), "transfer to unknown should fail")
+}
+
+@test
+function void test_unknown_account_lookup_fails() {
+    assert(!Result.is_success(balance_of(empty_bank(), "missing")), "unknown account should fail")
+}
+
+@test
+function void test_unknown_account_deposit_has_plain_message() {
+    result<Bank> outcome = deposit(empty_bank(), "missing", 5.0)
+
+    match outcome {
+    success(_) {
+        assert(false, "deposit to an unknown account should fail")
+    }
+    failure(message) {
+        assert(message == "No account found with id missing.", "unknown account message should be plain")
+    }
+    }
+}

@@ -1,0 +1,104 @@
+# Luma Benchmark Suite
+#
+# Run with: luma benchmarks/suite.luma
+#
+# Individual bench_*.luma files are library modules included
+# by this suite — they cannot be run standalone.
+#
+# NOTE: Luma cannot glob includes, so the `include` list below and the
+# `run_*_benchmarks` call list in run_benchmarks() are maintained by hand.
+# Keep both lists in the same order and add/remove entries in both places
+# whenever a benchmark module is added or removed.
+
+include "benchmark_harness.luma"
+include "bench_arithmetic.luma"
+include "bench_strings.luma"
+include "bench_collections.luma"
+include "bench_control_flow.luma"
+include "bench_functions.luma"
+include "bench_concurrency.luma"
+include "bench_partitioning.luma"
+include "bench_memory.luma"
+include "bench_types.luma"
+include "bench_generics.luma"
+include "bench_stdlib.luma"
+include "bench_converter.luma"
+include "bench_startup.luma"
+include "bench_graphicalui.luma"
+include "bench_data_formats.luma"
+include "bench_filesystem.luma"
+include "bench_process.luma"
+include "bench_terminal.luma"
+include "bench_error_handling.luma"
+include "bench_hash_encoder.luma"
+include "bench_compression.luma"
+include "bench_datetime.luma"
+include "bench_tuples_interfaces.luma"
+include "bench_graph.luma"
+include "bench_linearalgebra.luma"
+include "bench_calculus.luma"
+include "bench_random.luma"
+include "bench_linkedlist.luma"
+include "bench_binarytree.luma"
+include "bench_reference.luma"
+include "bench_resource.luma"
+include "bench_keyvaluestore.luma"
+include "bench_log.luma"
+include "bench_http.luma"
+
+@main
+function void run_benchmarks() {
+    print("---- Luma Benchmark Suite ----\n")
+
+    mutable BenchResult st = BenchResult { lines = [], total_time = 0.0 }
+
+    # Keep this call order in sync with the include list at the top of the file.
+    st = run_arithmetic_benchmarks(st)
+    st = run_string_benchmarks(st)
+    st = run_collection_benchmarks(st)
+    st = run_control_flow_benchmarks(st)
+    st = run_function_benchmarks(st)
+    st = run_concurrency_benchmarks(st)
+    st = run_partitioning_benchmarks(st)
+    st = run_memory_benchmarks(st)
+    st = run_type_benchmarks(st)
+    st = run_generics_benchmarks(st)
+    st = run_stdlib_benchmarks(st)
+    st = run_converter_benchmarks(st)
+    st = run_startup_benchmarks(st)
+    st = run_graphicalui_benchmarks(st)
+    st = run_data_format_benchmarks(st)
+    st = run_filesystem_benchmarks(st)
+    st = run_process_benchmarks(st)
+    st = run_terminal_benchmarks(st)
+    st = run_error_handling_benchmarks(st)
+    st = run_hash_encoder_benchmarks(st)
+    st = run_compression_benchmarks(st)
+    st = run_datetime_benchmarks(st)
+    st = run_tuple_interface_benchmarks(st)
+    st = run_graph_benchmarks(st)
+    st = run_linearalgebra_benchmarks(st)
+    st = run_calculus_benchmarks(st)
+    st = run_random_benchmarks(st)
+    st = run_linkedlist_benchmarks(st)
+    st = run_binarytree_benchmarks(st)
+    st = run_reference_benchmarks(st)
+    st = run_resource_benchmarks(st)
+    st = run_keyvaluestore_benchmarks(st)
+    st = run_log_benchmarks(st)
+    st = run_http_benchmarks(st)
+
+    # --- Print results ---
+
+    print("\nBenchmark Results:")
+    string separator = Result.unwrap_or(String.repeat("=", 80), "")
+    print(separator)
+
+    for line in st.lines {
+        print(line)
+    }
+
+    print(separator)
+    integer total_ms = Result.unwrap_or(Math.round(st.total_time), 0)
+    print("Total: ${total_ms} ms\n")
+}

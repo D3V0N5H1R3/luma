@@ -1,0 +1,5 @@
+name = "Luma"
+grammar = "luma"
+path_suffixes = ["luma"]
+line_comments = ["# "]
+tab_size = 4

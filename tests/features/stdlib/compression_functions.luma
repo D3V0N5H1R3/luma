@@ -1,0 +1,259 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Compression Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_compression_rle_encode() {
+    assert(Compression.encode_rle("aaabbbcc") == "3a3b2c")
+    assert(Compression.encode_rle("abc") == "1a1b1c")
+    assert(Compression.encode_rle("") == "")
+}
+
+@test
+function void test_compression_rle_decode() {
+    result<string> r = Compression.decode_rle("3a3b2c")
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == "aaabbbcc")
+}
+
+@test
+function void test_compression_rle_roundtrip() {
+    string original = "aabbccddee"
+    string encoded = Compression.encode_rle(original)
+    string decoded = encoded
+    |> Compression.decode_rle()
+    |> Result.unwrap()
+
+    assert(decoded == original)
+}
+
+@test
+function void test_compression_deflate_inflate() {
+    string original = "hello world"
+    string roundtripped = original
+    |> Compression.deflate()
+    |> Compression.inflate()
+    |> Result.unwrap()
+
+    assert(roundtripped == original)
+}
+
+@test
+function void test_compression_gzip_gunzip() {
+    string original = "test data 12345"
+    string roundtripped = original
+    |> Compression.gzip()
+    |> Compression.gunzip()
+    |> Result.unwrap()
+
+    assert(roundtripped == original)
+}
+
+@test
+function void test_compression_compressed_size() {
+    integer size = Compression.compressed_size("hello world")
+
+    assert(size > 0)
+}
+
+@test
+function void test_compression_inflate_malformed() {
+    result<string> r = Compression.inflate("not valid deflate")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_compression_gzip_file() {
+    result<string> r = Compression.gzip_file("nonexistent_file.txt", "out.gz")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_compression_gunzip_file() {
+    result<string> r = Compression.gunzip_file("nonexistent_file.gz")
+
+    assert(!Result.is_success(r))
+}
+
+# ───────────────────────────────────────────────────────────
+# deflate_with, gzip_with (level-controlled variants)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_compression_deflate_with_round_trip() {
+    string original = "hello world hello world hello world"
+    string deflated = Result.unwrap(Compression.deflate_with(original, 9))
+
+    assert(String.length(deflated) > 0)
+    assert(Result.unwrap(Compression.inflate(deflated)) == original)
+}
+
+@test
+function void test_compression_gzip_with_round_trip() {
+    string original = "hello world hello world hello world"
+    string gzipped = Result.unwrap(Compression.gzip_with(original, 6))
+
+    assert(String.length(gzipped) > 0)
+    assert(Result.unwrap(Compression.gunzip(gzipped)) == original)
+}
+
+
+@test
+function void test_compression_gzip_file_with() {
+    assert(Result.is_success(FileSystem.write_file("_test_gzip_src.txt", "hello hello hello hello")))
+
+    assert(Result.is_success(Compression.gzip_file_with("_test_gzip_src.txt", "_test_gzip_out.gz", 6)))
+    assert(Result.unwrap(FileSystem.exists("_test_gzip_out.gz")))
+
+    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_gzip_src.txt"), false)
+
+    _ = Result.unwrap_or(FileSystem.delete("_test_gzip_out.gz"), false)
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional positive coverage: empty, varied bytes, large
+# (multi-chunk) payloads, long RLE runs, real file round-trips.
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_compression_deflate_inflate_empty() {
+    string roundtripped = ""
+    |> Compression.deflate()
+    |> Compression.inflate()
+    |> Result.unwrap()
+
+    assert(roundtripped == "")
+}
+
+@test
+function void test_compression_gzip_gunzip_empty() {
+    string roundtripped = ""
+    |> Compression.gzip()
+    |> Compression.gunzip()
+    |> Result.unwrap()
+
+    assert(roundtripped == "")
+}
+
+@test
+function void test_compression_deflate_varied_content() {
+    string original = "Tab\tNewline\nUnicode: café ☕ 日本語 — end."
+    string roundtripped = original
+    |> Compression.deflate()
+    |> Compression.inflate()
+    |> Result.unwrap()
+
+    assert(roundtripped == original)
+}
+
+@test
+function void test_compression_large_deflate_roundtrip() {
+    # Regression: data decompressing to many times its compressed size used to
+    # fail because inflate assumed the whole output fit in a single buffer.
+    string original = Result.unwrap_or(String.repeat("The quick brown fox. ", 5000), "")
+    assert(String.length(original) > 64000)
+
+    string roundtripped = original
+    |> Compression.deflate()
+    |> Compression.inflate()
+    |> Result.unwrap()
+
+    assert(roundtripped == original)
+}
+
+@test
+function void test_compression_large_gzip_roundtrip() {
+    string original = Result.unwrap_or(String.repeat("abcdefghij", 12000), "")
+    assert(String.length(original) > 64000)
+
+    string roundtripped = original
+    |> Compression.gzip()
+    |> Compression.gunzip()
+    |> Result.unwrap()
+
+    assert(roundtripped == original)
+}
+
+@test
+function void test_compression_rle_long_run() {
+    # Runs longer than 9 are split into single-digit chunks.
+    string encoded = Compression.encode_rle("aaaaaaaaaaaa") # 12 x 'a'
+    assert(encoded == "9a3a")
+
+    string decoded = encoded
+    |> Compression.decode_rle()
+    |> Result.unwrap()
+
+    assert(decoded == "aaaaaaaaaaaa")
+}
+
+@test
+function void test_compression_compressed_size_smaller() {
+    string repetitive = Result.unwrap_or(String.repeat("A", 1000), "")
+    integer size = Compression.compressed_size(repetitive)
+
+    assert(size > 0)
+    assert(size < String.length(repetitive))
+}
+
+@test
+function void test_compression_gzip_file_gunzip_file_roundtrip() {
+    string original = "round trip through the file system"
+    assert(Result.is_success(FileSystem.write_file("_test_rt_src.txt", original)))
+
+    assert(Result.is_success(Compression.gzip_file("_test_rt_src.txt", "_test_rt_out.gz")))
+
+    string restored = Result.unwrap(Compression.gunzip_file("_test_rt_out.gz"))
+    assert(restored == original)
+
+    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_rt_src.txt"), false)
+
+    _ = Result.unwrap_or(FileSystem.delete("_test_rt_out.gz"), false)
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional negative coverage: malformed RLE / gzip input and
+# out-of-range compression levels.
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_compression_decode_rle_zero_count() {
+    assert(!Result.is_success(Compression.decode_rle("0a")))
+}
+
+@test
+function void test_compression_decode_rle_missing_char() {
+    assert(!Result.is_success(Compression.decode_rle("3")))
+}
+
+@test
+function void test_compression_decode_rle_no_digit() {
+    assert(!Result.is_success(Compression.decode_rle("aaa")))
+}
+
+@test
+function void test_compression_gunzip_bad_magic() {
+    assert(!Result.is_success(Compression.gunzip("this is definitely not gzip data!!")))
+}
+
+@test
+function void test_compression_gunzip_too_short() {
+    assert(!Result.is_success(Compression.gunzip("short")))
+}
+
+@test
+function void test_compression_deflate_with_invalid_level() {
+    assert(!Result.is_success(Compression.deflate_with("data", 0)))
+    assert(!Result.is_success(Compression.deflate_with("data", 10)))
+}
+
+@test
+function void test_compression_gzip_with_invalid_level() {
+    assert(!Result.is_success(Compression.gzip_with("data", 0)))
+    assert(!Result.is_success(Compression.gzip_with("data", 99)))
+}

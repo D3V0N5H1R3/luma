@@ -1,0 +1,6 @@
+@main
+function void main() {
+    integer x = 42
+    integer y = 10
+    print(x)
+}

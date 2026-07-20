@@ -1,0 +1,16 @@
+# Pipe operators and functional chains
+array<integer> numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+result<integer> evens = numbers
+|> Array.filter((integer x) -> x % 2 == 0)
+!> Array.map((integer x) -> x * x)
+!> Array.reduce(0, (integer acc, integer x) -> acc + x)
+
+array<integer> lengths = "hello world"
+|> String.uppercase()
+|> String.split(" ")
+|> Array.map((string w) -> String.length(w))
+|> Result.unwrap_or([])
+
+result<integer> chained = success(42)
+|> Result.map_integer((integer x) -> x * 2)

@@ -1,0 +1,11 @@
+# Concurrency constructs
+array<integer> results = task_scope {
+    spawn compute(1)
+    spawn compute(2)
+    spawn compute(3)
+}
+
+channel<integer> ch = Channel.new_buffered(10)
+boolean _ = Channel.send(ch, 42)
+result<integer> received = Channel.receive(ch)
+Channel.close(ch)

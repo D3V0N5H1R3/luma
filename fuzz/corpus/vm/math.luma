@@ -1,0 +1,106 @@
+# VM: Math module — constants, scalar functions, rounding, integer number
+# theory, trigonometry, transcendental and statistical operations.
+# Seeds the VM fuzzer with the domain guards (square_root / log / arc_sine),
+# the overflow checks (factorial / absolute / least_common_multiple) and the
+# result, array and boolean code paths exercised through the full pipeline.
+@main
+function void main() {
+    # Constants.
+    number pi = Math.pi
+    number e = Math.e
+    number tau = Math.tau
+    number inf = Math.infinity
+
+    # Rounding family (result<integer>).
+    integer fl = Math.floor(3.7) |> Result.unwrap_or(0)
+    integer ce = Math.ceil(3.2) |> Result.unwrap_or(0)
+    integer ro = Math.round(3.5) |> Result.unwrap_or(0)
+    integer tc = Math.truncate(-3.7) |> Result.unwrap_or(0)
+
+    # Core scalar operations.
+    number ab = Math.absolute(-5.0) |> Result.unwrap_or(0.0)
+    number pw = Math.power(2.0, 10.0) |> Result.unwrap_or(0.0)
+    number sq = Math.square_root(144.0) |> Result.unwrap_or(0.0)
+    integer sg = Math.sign(-42)
+    number mx = Math.max(3.0, 7.0)
+    number mn = Math.min(3.0, 7.0)
+
+    # Logarithms (result<number>).
+    number le = Math.log_e(e) |> Result.unwrap_or(0.0)
+    number l2 = Math.log_2(8.0) |> Result.unwrap_or(0.0)
+    number l10 = Math.log_10(100.0) |> Result.unwrap_or(0.0)
+    number lb = Math.log(2.0, 8.0) |> Result.unwrap_or(0.0)
+
+    # Integer number theory.
+    integer fac = Math.factorial(10) |> Result.unwrap_or(0)
+    integer gcd = Math.greatest_common_divisor(48, 36) |> Result.unwrap_or(0)
+    integer lcm = Math.least_common_multiple(12, 18) |> Result.unwrap_or(0)
+    boolean prime = Math.is_prime(97)
+
+    # Trigonometry and inverse trigonometry (result<number>).
+    number si = Math.sine(pi / 2.0) |> Result.unwrap_or(0.0)
+    number co = Math.cosine(0.0) |> Result.unwrap_or(0.0)
+    number ta = Math.tangent(0.0) |> Result.unwrap_or(0.0)
+    number asn = Math.arc_sine(1.0) |> Result.unwrap_or(0.0)
+    number acs = Math.arc_cosine(0.0) |> Result.unwrap_or(0.0)
+    number atn = Math.arc_tangent(1.0) |> Result.unwrap_or(0.0)
+    number a2 = Math.atan2(1.0, 1.0) |> Result.unwrap_or(0.0)
+    number deg = Math.degrees(pi)
+    number rad = Math.radians(180.0)
+
+    # Transcendental and hyperbolic.
+    number ex = Math.exponential(1.0) |> Result.unwrap_or(0.0)
+    number hy = Math.hypot(3.0, 4.0)
+    number cr = Math.cube_root(27.0)
+    number hs = Math.hyperbolic_sine(0.0) |> Result.unwrap_or(0.0)
+    number hc = Math.hyperbolic_cosine(0.0) |> Result.unwrap_or(0.0)
+    number ht = Math.hyperbolic_tangent(0.5)
+
+    # Interpolation and ranges.
+    number cl = Math.clamp(15.0, 0.0, 10.0) |> Result.unwrap_or(0.0)
+    number lp = Math.lerp(0.0, 100.0, 0.42) |> Result.unwrap_or(0.0)
+    number rm = Math.remap(5.0, 0.0, 10.0, 0.0, 100.0) |> Result.unwrap_or(0.0)
+    number ssp = Math.smooth_step(0.0, 1.0, 0.5) |> Result.unwrap_or(0.0)
+    number rem = Math.remainder(7.0, 3.0) |> Result.unwrap_or(0.0)
+
+    # Statistics over a numeric array.
+    array<number> data = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
+    number mean = Math.mean(data) |> Result.unwrap_or(0.0)
+    number med = Math.median(data) |> Result.unwrap_or(0.0)
+    number mode = Math.mode(data) |> Result.unwrap_or(0.0)
+    number vr = Math.variance(data) |> Result.unwrap_or(0.0)
+    number sd = Math.standard_deviation(data) |> Result.unwrap_or(0.0)
+    number pct = Math.percentile(data, 50.0) |> Result.unwrap_or(0.0)
+    number sm = Math.sum(data) |> Result.unwrap_or(0.0)
+    number corr = Math.correlation([1.0, 2.0, 3.0], [2.0, 4.0, 6.0]) |> Result.unwrap_or(0.0)
+
+    # Classification helpers.
+    boolean isinf = Math.is_infinite(inf)
+    boolean isnan = Math.is_not_a_number(inf - inf)
+    boolean approx = Math.approximately_equal(0.1 + 0.2, 0.3)
+
+    # Error path: square root of a negative is a handled failure result.
+    boolean neg_root = Math.square_root(-1.0) |> Result.is_failure()
+
+    # Error path: a factorial above 20 overflows int64 (a handled failure).
+    boolean fac_overflow = Math.factorial(21) |> Result.is_failure()
+
+    # Error path: a negative epsilon raises a catchable runtime error.
+    mutable boolean caught = false
+    try {
+        boolean _bad = Math.approximately_equal(1.0, 1.0, -0.5)
+    } catch(_err) {
+        caught = true
+    }
+
+    print("const: ${pi} ${e} ${tau} ${inf}")
+    print("round: ${fl} ${ce} ${ro} ${tc}")
+    print("core: ${ab} ${pw} ${sq} ${sg} ${mx} ${mn}")
+    print("log: ${le} ${l2} ${l10} ${lb}")
+    print("intmath: ${fac} ${gcd} ${lcm} ${prime}")
+    print("trig: ${si} ${co} ${ta} ${asn} ${acs} ${atn} ${a2} ${deg} ${rad}")
+    print("transc: ${ex} ${hy} ${cr} ${hs} ${hc} ${ht}")
+    print("interp: ${cl} ${lp} ${rm} ${ssp} ${rem}")
+    print("stats: ${mean} ${med} ${mode} ${vr} ${sd} ${pct} ${sm} ${corr}")
+    print("classify: ${isinf} ${isnan} ${approx} ${neg_root} ${fac_overflow} ${caught}")
+}

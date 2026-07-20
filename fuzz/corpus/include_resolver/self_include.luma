@@ -1,0 +1,6 @@
+# Include resolver: a file that includes itself by name (cycle/dedup path)
+include "self_include.luma"
+
+function integer recur_marker() {
+    return 42
+}

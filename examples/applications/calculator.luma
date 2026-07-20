@@ -1,0 +1,427 @@
+# ═══════════════════════════════════════════════════════════
+# Calculator
+#
+# A command-line calculator demonstrating string parsing,
+# choice types (ADTs), match expressions, result<T> error
+# handling, and expression evaluation with operator precedence.
+#
+# Usage: luma examples/applications/calculator.luma
+#
+# Expressions: 2 + 3, 10 / 3, sqrt 144, pi * 2
+# ═══════════════════════════════════════════════════════════
+
+# ─── Tokenising ───
+
+choice Token {
+    Number(string value)
+    Plus
+    Minus
+    Star
+    Slash
+    Percent
+    Name(string value)
+}
+
+record ParsedOperand {
+    number value,
+    integer next_index
+}
+
+function boolean is_digit(string character) {
+    return String.is_digit(character)
+}
+
+function boolean is_letter(string character) {
+    return String.is_alpha(character)
+}
+
+function boolean is_number_char(string character) {
+    return is_digit(character) || character == "."
+}
+
+# Consume the longest run of characters from `start` for which `predicate`
+# holds, returning the consumed text and the index just past it. The number
+# and identifier scans in tokenize() differ only in the predicate they pass.
+function (string, integer) take_while(string input, integer start, function(string) -> boolean predicate) {
+    mutable string consumed = ""
+    mutable integer position = start
+    integer input_length = String.length(input)
+
+    while position < input_length {
+        string current_char = Result.unwrap(String.character_at(input, position))
+
+        if predicate(current_char) {
+            consumed = "${consumed}${current_char}"
+            position++
+        } else {
+            break
+        }
+    }
+
+    return (consumed, position)
+}
+
+function result<array<Token>> tokenize(string input) {
+    mutable array<Token> tokens = []
+    mutable integer current_position = 0
+
+    integer input_length = String.length(input)
+
+    while current_position < input_length {
+        string current_character = Result.unwrap(String.character_at(input, current_position))
+
+        match current_character {
+        case " " {
+            current_position++
+        }
+        case "+" {
+            tokens = Array.push(tokens, Token.Plus)
+            current_position++
+        }
+        case "-" {
+            tokens = Array.push(tokens, Token.Minus)
+            current_position++
+        }
+        case "*" {
+            tokens = Array.push(tokens, Token.Star)
+            current_position++
+        }
+        case "/" {
+            tokens = Array.push(tokens, Token.Slash)
+            current_position++
+        }
+        case "%" {
+            tokens = Array.push(tokens, Token.Percent)
+            current_position++
+        }
+        else {
+            if is_number_char(current_character) {
+                (string number_text, integer after_number) = take_while(input, current_position, is_number_char)
+
+                current_position = after_number
+                tokens = Array.push(tokens, Token.Number(number_text))
+            } else if is_letter(current_character) {
+                (string name, integer after_name) = take_while(input, current_position, is_letter)
+
+                current_position = after_name
+                tokens = Array.push(tokens, Token.Name(String.lowercase(name)))
+            } else {
+                return failure("unexpected character: '${current_character}'")
+            }
+        }
+        }
+    }
+
+    return success(tokens)
+}
+
+# ─── Evaluation ───
+
+function result<number> resolve_name(string name) {
+    return match name {
+    case == "pi"  { success(Math.pi) }
+    case == "e"   { success(Math.e) }
+    case == "tau" { success(Math.tau) }
+    else           { failure("unknown name: '${name}'") }
+    }
+}
+
+function result<number> apply_unary(string name, number operand) {
+    return match name {
+    case == "sqrt"  { Math.square_root(operand) }
+    case == "abs"   { Math.absolute(operand) }
+    case == "sin"   { Math.sine(operand) }
+    case == "cos"   { Math.cosine(operand) }
+    case == "tan"   { Math.tangent(operand) }
+    case == "log"   { Math.log_e(operand) }
+    case == "ceil"  { Math.ceil(operand) }
+    case == "floor" { Math.floor(operand) }
+    else             { failure("unknown function: '${name}'") }
+    }
+}
+
+function boolean is_operator(Token token) {
+    return token == Token.Plus || token == Token.Minus || token == Token.Star ||
+        token == Token.Slash || token == Token.Percent
+}
+
+function boolean is_multiplicative(Token token) {
+    return token == Token.Star || token == Token.Slash || token == Token.Percent
+}
+
+function result<number> apply_binary(number left, Token operator_token, number right) {
+    if operator_token == Token.Slash && right == 0 {
+        return failure("division by zero")
+    }
+
+    if operator_token == Token.Percent && right == 0 {
+        return failure("division by zero")
+    }
+
+    return match operator_token {
+    case Token.Plus    { success(left + right) }
+    case Token.Minus   { success(left - right) }
+    case Token.Star    { success(left * right) }
+    case Token.Slash   { success(left / right) }
+    case Token.Percent { success(left % right) }
+    else               { failure("unknown operator") }
+    }
+}
+
+function result<ParsedOperand> parse_function_call(string name, array<Token> tokens, integer argument_index) {
+    if argument_index >= Array.length(tokens) {
+        return failure("function '${name}' needs an argument")
+    }
+
+    ParsedOperand argument = parse_operand(tokens, argument_index)?
+    number applied = apply_unary(name, argument.value)?
+
+    return success(ParsedOperand { value = applied, next_index = argument.next_index })
+}
+
+function result<ParsedOperand> parse_operand(array<Token> tokens, integer start_index) {
+    integer token_count = Array.length(tokens)
+
+    if start_index >= token_count {
+        return failure("expected a number or name")
+    }
+
+    mutable boolean is_negated = false
+    mutable integer current_index = start_index
+
+    if (tokens[current_index] == Token.Minus) {
+        is_negated = true
+        current_index++
+
+        if current_index >= token_count {
+            return failure("expected a number after '-'")
+        }
+    }
+
+    Token token = tokens[current_index]
+    mutable number parsed_value = 0.0
+    mutable integer next_index = current_index + 1
+
+    match token {
+    case Token.Number(number_text) {
+        match String.parse_number(number_text) {
+        success(value) { parsed_value = value }
+        failure(_) { return failure("invalid number: '${number_text}'") }
+        }
+    }
+    case Token.Name(name_value) {
+        match resolve_name(name_value) {
+        success(constant_value) {
+            parsed_value = constant_value
+        }
+        failure(_) {
+            match parse_function_call(name_value, tokens, current_index + 1) {
+            success(call_result) {
+                parsed_value = call_result.value
+                next_index = call_result.next_index
+            }
+            failure(error_message) { return failure(error_message) }
+            }
+        }
+        }
+    }
+    else {
+        return failure("expected a number or name")
+    }
+    }
+
+    if is_negated {
+        parsed_value = -parsed_value
+    }
+
+    return success(ParsedOperand { value = parsed_value, next_index = next_index })
+}
+
+function result<number> reduce_additive(array<number> terms, array<Token> operators) {
+    mutable number result_value = terms[0]
+    mutable integer operator_index = 0
+
+    while operator_index < Array.length(operators) {
+        Token operator_token = operators[operator_index]
+        number right = terms[operator_index + 1]
+
+        match apply_binary(result_value, operator_token, right) {
+        success(value) { result_value = value }
+        failure(error_message) { return failure(error_message) }
+        }
+
+        operator_index++
+    }
+
+    return success(result_value)
+}
+
+function result<number> evaluate(array<Token> tokens) {
+    if Array.is_empty(tokens) {
+        return failure("empty expression")
+    }
+
+    ParsedOperand first_parsed = parse_operand(tokens, 0)?
+    mutable number current_term = first_parsed.value
+    mutable integer index = first_parsed.next_index
+    mutable array<number> additive_terms = []
+    mutable array<Token> additive_operators = []
+
+    while index < Array.length(tokens) {
+        Token operator_token = tokens[index]
+
+        if !is_operator(operator_token) {
+            return failure("expected operator")
+        }
+
+        ParsedOperand next_parsed = parse_operand(tokens, index + 1)?
+        number right = next_parsed.value
+        index = next_parsed.next_index
+
+        if is_multiplicative(operator_token) {
+            match apply_binary(current_term, operator_token, right) {
+            success(value) { current_term = value }
+            failure(error_message) { return failure(error_message) }
+            }
+        } else {
+            additive_terms = Array.push(additive_terms, current_term)
+            additive_operators = Array.push(additive_operators, operator_token)
+            current_term = right
+        }
+    }
+
+    additive_terms = Array.push(additive_terms, current_term)
+
+    return reduce_additive(additive_terms, additive_operators)
+}
+
+# ─── REPL ───
+
+function string format_result(number value) {
+    # Display whole numbers without decimals (e.g. "4" instead of "4.000000").
+    # Truncation only fails for non-finite values, which fall through to format_number.
+    match Math.truncate(value) {
+    success(truncated) {
+        if value == truncated {
+            return "${truncated}"
+        }
+    }
+    failure(_) {}
+    }
+
+    return String.format_number(value, 6)
+}
+
+@main
+function void main() {
+    print("===============================")
+    print("     Luma Calculator")
+    print("===============================")
+    print("Enter expressions (e.g. 2 + 3, sqrt 144, pi * 2)")
+    print("Type 'quit' to exit.\n")
+
+    mutable boolean is_running = true
+
+    while is_running {
+        match Console.prompt("calc> ") {
+        success(raw_input) {
+            string line = String.trim(raw_input)
+            string command = String.lowercase(line)
+
+            if command == "quit" || command == "q" {
+                is_running = false
+            } else if String.length(line) > 0 {
+                match tokenize(line) {
+                success(tokens) {
+                    match evaluate(tokens) {
+                    success(value) {
+                        print("  = ${format_result(value)}")
+                    }
+                    failure(error_message) {
+                        print("  Error: ${error_message}")
+                        print("  Try: 2 + 3, sqrt 144, or type 'quit'.")
+                    }
+                    }
+                }
+                failure(error_message) {
+                    print("  Error: ${error_message}")
+                    print("  Try: 2 + 3, sqrt 144, or type 'quit'.")
+                }
+                }
+            }
+        }
+        failure(_) {
+            is_running = false
+        }
+        }
+    }
+
+    print("Goodbye!")
+}
+
+# ─── Tests ───
+
+# Renders a token list to a compact canonical string so the tokenizer's output
+# can be pinned with one equality assertion per case.
+function string describe_tokens(array<Token> tokens) {
+    mutable array<string> parts = []
+
+    for token in tokens {
+        match token {
+        case Token.Number(value) { parts = Array.push(parts, "num(${value})") }
+        case Token.Name(value)   { parts = Array.push(parts, "name(${value})") }
+        case Token.Plus          { parts = Array.push(parts, "+") }
+        case Token.Minus         { parts = Array.push(parts, "-") }
+        case Token.Star          { parts = Array.push(parts, "*") }
+        case Token.Slash         { parts = Array.push(parts, "/") }
+        case Token.Percent       { parts = Array.push(parts, "%") }
+        }
+    }
+
+    return String.join(parts, " ")
+}
+
+@test
+function void test_tokenize_arithmetic() {
+    array<Token> tokens = Result.unwrap(tokenize("2 + 3"))
+    assert(describe_tokens(tokens) == "num(2) + num(3)", describe_tokens(tokens))
+}
+
+@test
+function void test_tokenize_all_operators() {
+    array<Token> tokens = Result.unwrap(tokenize("1 + 2 - 3 * 4 / 5 % 6"))
+    assert(describe_tokens(tokens) == "num(1) + num(2) - num(3) * num(4) / num(5) % num(6)",
+        describe_tokens(tokens))
+}
+
+@test
+function void test_tokenize_decimal_number() {
+    array<Token> tokens = Result.unwrap(tokenize("3.14"))
+    assert(describe_tokens(tokens) == "num(3.14)", describe_tokens(tokens))
+}
+
+@test
+function void test_tokenize_names_are_lowercased() {
+    array<Token> tokens = Result.unwrap(tokenize("PI * Sqrt"))
+    assert(describe_tokens(tokens) == "name(pi) * name(sqrt)", describe_tokens(tokens))
+}
+
+@test
+function void test_tokenize_unary_function_call() {
+    array<Token> tokens = Result.unwrap(tokenize("sqrt 144"))
+    assert(describe_tokens(tokens) == "name(sqrt) num(144)", describe_tokens(tokens))
+}
+
+@test
+function void test_tokenize_without_spaces() {
+    array<Token> tokens = Result.unwrap(tokenize("2+3*4"))
+    assert(describe_tokens(tokens) == "num(2) + num(3) * num(4)", describe_tokens(tokens))
+}
+
+@test
+function void test_tokenize_rejects_unexpected_character() {
+    match tokenize("2 @ 3") {
+    success(_) { assert(false, "expected tokenize to fail on '@'") }
+    failure(message) { assert(String.contains(message, "unexpected character"), message) }
+    }
+}

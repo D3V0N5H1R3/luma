@@ -1,0 +1,133 @@
+# Calculus benchmarks: differentiation, integration, root finding, series.
+
+function number bench_square(number x) {
+    return x * x
+}
+
+function number bench_cubic(number x) {
+    return x * x * x - 2.0 * x + 1.0
+}
+
+# --- Helpers for multivariate and limit benchmarks ---
+
+function number bench_sphere2(array<number> v) {
+    return v[0] * v[0] + v[1] * v[1]
+}
+
+function number bench_field_x2(array<number> v) {
+    return v[0] * v[0]
+}
+
+function number bench_field_y2(array<number> v) {
+    return v[1] * v[1]
+}
+
+function number bench_curl_fx(array<number> v) {
+    return v[1]
+}
+
+function number bench_curl_fy(array<number> v) {
+    return 0.0 - v[0]
+}
+
+function number bench_curl_fz(array<number> _v) {
+    return 0.0
+}
+
+function number bench_removable_singularity(number x) {
+    return (x * x - 1.0) / (x - 1.0)
+}
+
+function BenchResult run_calculus_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # --- Differentiation ---
+
+    st = time_it(st, "Calculus.derivative (x^2)", 5000, () -> {
+        number _d = Calculus.derivative(3.0, bench_square)
+    })
+
+    st = time_it(st, "Calculus.second_derivative (x^2)", 2000, () -> {
+        number _d2 = Calculus.second_derivative(3.0, bench_square)
+    })
+
+    st = time_it(st, "Calculus.derivative_with (x^2)", 5000, () -> {
+        number _d = Calculus.derivative_with(3.0, 0.0001, bench_square)
+    })
+
+    # --- Integration ---
+
+    st = time_it(st, "Calculus.integrate (x^2, 0..10)", 1000, () -> {
+        number _area = Calculus.integrate(0.0, 10.0, bench_square)
+    })
+
+    st = time_it(st, "Calculus.integrate_with (steps=200)", 500, () -> {
+        number _area = Calculus.integrate_with(0.0, 10.0, 200, bench_square)
+    })
+
+    # --- Root finding ---
+
+    st = time_it(st, "Calculus.root bisection (x^3-2x+1)", 2000, () -> {
+        result<number> _r = Calculus.root(-2.0, 0.0, bench_cubic)
+    })
+
+    st = time_it(st, "Calculus.newton (x^3-2x+1)", 2000, () -> {
+        result<number> _r = Calculus.newton(-2.0, bench_cubic)
+    })
+
+    # --- Optimization ---
+
+    st = time_it(st, "Calculus.minimize (x^2)", 1000, () -> {
+        (number _x, number _fx) = Calculus.minimize(-10.0, 10.0, bench_square)
+    })
+
+    st = time_it(st, "Calculus.maximize (-x^2)", 1000, () -> {
+        (number _x, number _fx) = Calculus.maximize(-10.0, 10.0, (number x) -> 0.0 - x * x)
+    })
+
+    # --- Series and limits ---
+
+    st = time_it(st, "Calculus.sum_series (1..100)", 2000, () -> {
+        number _s = Calculus.sum_series(1, 100, (integer x) -> 1.0 / (Result.unwrap(Converter.to_number(x)) * Result.unwrap(Converter.to_number(x))))
+    })
+
+    st = time_it(st, "Calculus.taylor (x^2, 5 terms)", 1000, () -> {
+        array<number> _coeffs = Calculus.taylor(0.0, 5, bench_square)
+    })
+
+    st = time_it(st, "Calculus.limit ((x^2-1)/(x-1))", 2000, () -> {
+        result<number> _lim = Calculus.limit(1.0, bench_removable_singularity)
+    })
+
+    # --- Multivariate differentiation ---
+
+    st = time_it(st, "Calculus.gradient (x^2+y^2)", 2000, () -> {
+        array<number> _g = Calculus.gradient([3.0, 4.0], bench_sphere2)
+    })
+
+    st = time_it(st, "Calculus.partial_derivative (x^2+y^2)", 3000, () -> {
+        number _p = Calculus.partial_derivative([3.0, 4.0], 0, bench_sphere2)
+    })
+
+    st = time_it(st, "Calculus.hessian (x^2+y^2)", 1000, () -> {
+        array<array<number>> _h = Calculus.hessian([1.0, 1.0], bench_sphere2)
+    })
+
+    # --- Vector calculus ---
+
+    st = time_it(st, "Calculus.divergence (2D)", 2000, () -> {
+        number _d = Calculus.divergence([1.0, 1.0], [bench_field_x2, bench_field_y2])
+    })
+
+    st = time_it(st, "Calculus.curl (3D)", 1000, () -> {
+        result<array<number>> _c = Calculus.curl([1.0, 1.0, 1.0], [bench_curl_fx, bench_curl_fy, bench_curl_fz])
+    })
+
+    # --- Integral transforms ---
+
+    st = time_it(st, "Calculus.convolution (0..1)", 500, () -> {
+        number _area = Calculus.convolution(bench_square, bench_square, 1.0, 0.0, 1.0)
+    })
+
+    return st
+}

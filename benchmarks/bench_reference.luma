@@ -1,0 +1,42 @@
+# Reference benchmarks: mutable reference cells, get, set, update, swap.
+
+function BenchResult run_reference_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    st = time_it(st, "Reference new/get/set", 10000, () -> {
+        reference<integer> r = Reference.new(0)
+        integer _v = Reference.get(r)
+        Reference.set(r, 42)
+        integer _v2 = Reference.get(r)
+    })
+
+    st = time_it(st, "Reference.update (10 times)", 5000, () -> {
+        reference<integer> r = Reference.new(0)
+        for _ in 0 .. 10 {
+            Reference.update(r, (integer x) -> x + 1)
+        }
+    })
+
+    st = time_it(st, "Reference.swap", 10000, () -> {
+        reference<integer> a = Reference.new(1)
+        reference<integer> b = Reference.new(2)
+        Reference.swap(a, b)
+    })
+
+    st = time_it(st, "Reference.inspect", 10000, () -> {
+        reference<integer> r = Reference.new(42)
+        string _s = Reference.inspect(r)
+    })
+
+    st = time_it(st, "Reference shared-closure update (10x)", 5000, () -> {
+        reference<integer> counter = Reference.new(0)
+        function() -> none tick = () -> {
+            Reference.update(counter, (integer n) -> n + 1)
+        }
+        for _ in 0 .. 10 {
+            tick()
+        }
+    })
+
+    return st
+}

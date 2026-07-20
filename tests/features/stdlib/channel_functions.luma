@@ -1,0 +1,464 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Channels
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+function void run_producer(channel<integer> producer_output) {
+    boolean _s = Channel.send(producer_output, 10)
+    boolean _s2 = Channel.send(producer_output, 20)
+    boolean _s3 = Channel.send(producer_output, 30)
+
+    Channel.close(producer_output)
+}
+
+@test
+function void test_channel_make_and_send_receive() {
+    channel<integer> integer_channel = Channel.new()
+
+    boolean _s = Channel.send(integer_channel, 42)
+
+    result<integer> received = Channel.receive(integer_channel)
+
+    assert(Result.is_success(received), "receive should return ok")
+    assert(Result.unwrap(received) == 42, "receive should return sent value")
+}
+
+@test
+function void test_channel_fifo_order() {
+    channel<integer> integer_channel = Channel.new()
+
+    boolean _s = Channel.send(integer_channel, 1)
+    boolean _s2 = Channel.send(integer_channel, 2)
+    boolean _s3 = Channel.send(integer_channel, 3)
+
+    assert(Result.unwrap(Channel.receive(integer_channel)) == 1, "first value")
+    assert(Result.unwrap(Channel.receive(integer_channel)) == 2, "second value")
+    assert(Result.unwrap(Channel.receive(integer_channel)) == 3, "third value")
+}
+
+@test
+function void test_channel_length() {
+    channel<integer> integer_channel = Channel.new()
+
+    assert(Channel.length(integer_channel) == 0, "empty channel has length 0")
+
+    boolean _s = Channel.send(integer_channel, 1)
+    boolean _s2 = Channel.send(integer_channel, 2)
+
+    assert(Channel.length(integer_channel) == 2, "two items in channel")
+
+    integer _v = Result.unwrap(Channel.receive(integer_channel))
+
+    assert(Channel.length(integer_channel) == 1, "one item after receive")
+}
+
+@test
+function void test_channel_close_and_is_closed() {
+    channel<integer> integer_channel = Channel.new()
+
+    assert(!Channel.is_closed(integer_channel), "new channel is open")
+
+    Channel.close(integer_channel)
+
+    assert(Channel.is_closed(integer_channel), "closed channel is closed")
+}
+
+@test
+function void test_channel_try_receive_empty() {
+    channel<integer> integer_channel = Channel.new()
+
+    result<integer> receive_result = Channel.try_receive(integer_channel)
+
+    assert(Result.is_failure(receive_result), "try_receive on empty returns fail")
+}
+
+@test
+function void test_channel_try_receive_with_value() {
+    channel<integer> integer_channel = Channel.new()
+
+    boolean _s = Channel.send(integer_channel, 99)
+
+    result<integer> receive_result = Channel.try_receive(integer_channel)
+
+    assert(Result.is_success(receive_result), "try_receive with value returns ok")
+    assert(Result.unwrap(receive_result) == 99, "try_receive returns correct value")
+}
+
+@test
+function void test_channel_make_buffered() {
+    channel<string> string_channel = Channel.new_buffered(3)
+
+    boolean _s = Channel.send(string_channel, "a")
+    boolean _s2 = Channel.send(string_channel, "b")
+    boolean _s3 = Channel.send(string_channel, "c")
+
+    assert(Channel.length(string_channel) == 3, "buffered channel holds 3 items")
+    assert(Result.unwrap(Channel.receive(string_channel)) == "a", "first buffered value")
+}
+
+@test
+function void test_channel_receive_all() {
+    channel<integer> integer_channel = Channel.new()
+
+    boolean _s = Channel.send(integer_channel, 10)
+    boolean _s2 = Channel.send(integer_channel, 20)
+    boolean _s3 = Channel.send(integer_channel, 30)
+
+    array<integer> items = Channel.receive_all(integer_channel)
+
+    assert(Array.length(items) == 3, "receive_all gets all items")
+    assert(items[0] == 10, "first item")
+    assert(items[1] == 20, "second item")
+    assert(items[2] == 30, "third item")
+}
+
+@test
+function void test_channel_with_spawn() {
+    channel<integer> integer_channel = Channel.new()
+
+    task_scope {
+        task<void> producer_task = spawn run_producer(integer_channel)
+
+        integer first_value = Result.unwrap(Channel.receive(integer_channel))
+        integer second_value = Result.unwrap(Channel.receive(integer_channel))
+        integer third_value = Result.unwrap(Channel.receive(integer_channel))
+
+        await producer_task
+
+        assert(first_value == 10, "received from spawned producer 1")
+        assert(second_value == 20, "received from spawned producer 2")
+        assert(third_value == 30, "received from spawned producer 3")
+        assert(Channel.is_closed(integer_channel), "producer closed the channel")
+    }
+}
+
+@test
+function void test_channel_try_send() {
+    channel<integer> integer_channel = Channel.new()
+
+    boolean is_sent = Channel.try_send(integer_channel, 5)
+
+    assert(is_sent, "try_send on open channel succeeds")
+
+    Channel.close(integer_channel)
+
+    boolean is_sent_after_close = Channel.try_send(integer_channel, 6)
+
+    assert(!is_sent_after_close, "try_send on closed channel fails")
+}
+
+@test
+function void test_channel_receive_timeout_returns_value() {
+    channel<integer> integer_channel = Channel.new()
+
+    boolean _s = Channel.send(integer_channel, 77)
+
+    result<integer> received = Channel.receive_timeout(integer_channel, 1000)
+
+    assert(Result.is_success(received), "receive_timeout returns ok when value available")
+    assert(Result.unwrap(received) == 77, "receive_timeout returns correct value")
+}
+
+@test
+function void test_channel_receive_timeout_times_out() {
+    channel<integer> integer_channel = Channel.new()
+
+    result<integer> received = Channel.receive_timeout(integer_channel, 1)
+
+    assert(Result.is_failure(received), "receive_timeout returns fail on timeout")
+}
+
+@test
+function void test_channel_send_timeout_succeeds() {
+    channel<integer> ch = Channel.new_buffered(2)
+
+    result<boolean> sent = Channel.send_timeout(ch, 42, 1000)
+
+    assert(Result.is_success(sent), "send_timeout succeeds when buffer has room")
+    assert(Result.unwrap(sent), "send_timeout returns true on success")
+}
+
+@test
+function void test_channel_send_timeout_times_out() {
+    channel<integer> ch = Channel.new_buffered(1)
+
+    boolean _s = Channel.send(ch, 1)
+
+    result<boolean> sent = Channel.send_timeout(ch, 2, 1)
+
+    assert(Result.is_failure(sent), "send_timeout returns fail when buffer is full")
+}
+
+@test
+function void test_channel_send_timeout_on_closed() {
+    channel<integer> ch = Channel.new_buffered(2)
+
+    Channel.close(ch)
+
+    result<boolean> sent = Channel.send_timeout(ch, 42, 100)
+
+    assert(Result.is_failure(sent), "send_timeout returns fail on closed channel")
+}
+
+# ─── Channel.is_empty ──────────────────────────────────────
+
+@test
+function void test_channel_is_empty_new() {
+    channel<integer> ch = Channel.new()
+
+    assert(Channel.is_empty(ch), "new channel is empty")
+}
+
+@test
+function void test_channel_is_empty_after_send() {
+    channel<integer> ch = Channel.new()
+
+    boolean _s = Channel.send(ch, 1)
+
+    assert(!Channel.is_empty(ch), "channel with item is not empty")
+}
+
+# ─── Channel exception type tests ──────────────────────────
+
+@test
+function void test_channel_closed_error_on_send() {
+    channel<integer> ch = Channel.new()
+
+    Channel.close(ch)
+
+    boolean sent = Channel.send(ch, 42)
+
+    assert(!sent, "send on closed channel returns false (ChannelClosedError)")
+}
+
+@test
+function void test_channel_closed_error_on_receive() {
+    channel<integer> ch = Channel.new()
+
+    Channel.close(ch)
+
+    result<integer> r = Channel.receive(ch)
+
+    assert(Result.is_failure(r), "receive on closed channel returns failure (ChannelClosedError)")
+
+    mutable string error_msg = ""
+
+    try {
+        integer _v = Result.unwrap(r)
+    } catch(err) {
+        error_msg = err
+    }
+
+    assert(String.contains(error_msg, "channel closed"), "error message mentions channel closed")
+}
+
+@test
+function void test_channel_empty_error_on_try_receive() {
+    channel<integer> ch = Channel.new()
+
+    result<integer> r = Channel.try_receive(ch)
+
+    assert(Result.is_failure(r), "try_receive on empty channel returns failure (ChannelEmptyError)")
+
+    mutable string error_msg = ""
+
+    try {
+        integer _v = Result.unwrap(r)
+    } catch(err) {
+        error_msg = err
+    }
+
+    assert(String.contains(error_msg, "no value available"), "error message mentions no value available")
+}
+
+@test
+function void test_channel_full_error_on_try_send() {
+    channel<integer> ch = Channel.new_buffered(1)
+
+    boolean first_sent = Channel.send(ch, 1)
+
+    assert(first_sent, "first send succeeds on buffered channel")
+
+    boolean second_sent = Channel.try_send(ch, 2)
+
+    assert(!second_sent, "try_send on full buffered channel returns false (ChannelFullError)")
+}
+
+@test
+function void test_channel_closed_error_on_try_receive() {
+    channel<integer> ch = Channel.new()
+
+    Channel.close(ch)
+
+    result<integer> r = Channel.try_receive(ch)
+
+    assert(Result.is_failure(r), "try_receive on closed channel returns failure (ChannelClosedError)")
+
+    mutable string error_msg = ""
+
+    try {
+        integer _v = Result.unwrap(r)
+    } catch(err) {
+        error_msg = err
+    }
+
+    assert(String.contains(error_msg, "channel closed"), "try_receive closed error message mentions channel closed")
+}
+
+@test
+function void test_channel_closed_error_on_try_send() {
+    channel<integer> ch = Channel.new()
+
+    Channel.close(ch)
+
+    boolean sent = Channel.try_send(ch, 42)
+
+    assert(!sent, "try_send on closed channel returns false (ChannelClosedError)")
+}
+
+# ───────────────────────────────────────────────────────────
+# select
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_channel_select_returns_ready_value() {
+    channel<integer> only = Channel.new()
+
+    boolean _s = Channel.send(only, 77)
+
+    # select returns a (channel_index, value) tuple for the ready channel.
+    assert(Converter.to_string(Result.unwrap(Channel.select([only]))) == "(0, 77)")
+}
+
+@test
+function void test_channel_select_empty_array_fails() {
+    array<channel<integer>> no_channels = []
+
+    assert(Result.is_failure(Channel.select(no_channels)), "select on empty array returns failure")
+}
+
+@test
+function void test_channel_select_all_closed_fails() {
+    channel<integer> ch = Channel.new()
+
+    Channel.close(ch)
+
+    assert(Result.is_failure(Channel.select([ch])),
+        "select on all-closed channels returns failure")
+}
+
+# ───────────────────────────────────────────────────────────
+# Argument validation (negative paths)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_channel_new_buffered_rejects_zero_capacity() {
+    mutable string error_msg = ""
+
+    try {
+        channel<integer> _ch = Channel.new_buffered(0)
+    } catch(err) {
+        error_msg = err
+    }
+
+    assert(String.contains(error_msg, "must be positive"),
+        "new_buffered(0) rejects non-positive capacity")
+}
+
+@test
+function void test_channel_new_buffered_rejects_negative_capacity() {
+    mutable string error_msg = ""
+
+    try {
+        channel<integer> _ch = Channel.new_buffered(-3)
+    } catch(err) {
+        error_msg = err
+    }
+
+    assert(String.contains(error_msg, "must be positive"),
+        "new_buffered(-3) rejects negative capacity")
+}
+
+@test
+function void test_channel_send_timeout_rejects_negative_ms() {
+    channel<integer> ch = Channel.new_buffered(2)
+
+    mutable string error_msg = ""
+
+    try {
+        result<boolean> _r = Channel.send_timeout(ch, 1, -1)
+    } catch(err) {
+        error_msg = err
+    }
+
+    assert(String.contains(error_msg, "non-negative"),
+        "send_timeout rejects a negative timeout")
+}
+
+@test
+function void test_channel_receive_timeout_rejects_negative_ms() {
+    channel<integer> ch = Channel.new()
+
+    mutable string error_msg = ""
+
+    try {
+        result<integer> _r = Channel.receive_timeout(ch, -5)
+    } catch(err) {
+        error_msg = err
+    }
+
+    assert(String.contains(error_msg, "non-negative"),
+        "receive_timeout rejects a negative timeout")
+}
+
+# ───────────────────────────────────────────────────────────
+# Buffered ring-buffer and drain behaviour (positive paths)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_channel_receive_all_empty() {
+    channel<integer> ch = Channel.new()
+
+    array<integer> items = Channel.receive_all(ch)
+
+    assert(Array.length(items) == 0, "receive_all on empty channel returns empty array")
+}
+
+@test
+function void test_channel_buffered_wraparound_fifo() {
+    # Fill a capacity-3 buffer, drain two, refill so the write index wraps the
+    # ring, then confirm strict FIFO order across the wrap boundary.
+    channel<integer> ch = Channel.new_buffered(3)
+
+    boolean _s1 = Channel.send(ch, 1)
+    boolean _s2 = Channel.send(ch, 2)
+    boolean _s3 = Channel.send(ch, 3)
+
+    assert(Result.unwrap(Channel.receive(ch)) == 1, "wrap fifo first value")
+    assert(Result.unwrap(Channel.receive(ch)) == 2, "wrap fifo second value")
+
+    boolean _s4 = Channel.send(ch, 4)
+    boolean _s5 = Channel.send(ch, 5)
+
+    assert(Result.unwrap(Channel.receive(ch)) == 3, "wrap fifo third value")
+    assert(Result.unwrap(Channel.receive(ch)) == 4, "wrap fifo fourth value")
+    assert(Result.unwrap(Channel.receive(ch)) == 5, "wrap fifo fifth value")
+}
+
+@test
+function void test_channel_receive_all_drains_after_close() {
+    channel<integer> ch = Channel.new_buffered(4)
+
+    boolean _s1 = Channel.send(ch, 7)
+    boolean _s2 = Channel.send(ch, 8)
+
+    Channel.close(ch)
+
+    array<integer> items = Channel.receive_all(ch)
+
+    assert(Array.length(items) == 2, "receive_all drains buffered values after close")
+    assert(items[0] == 7, "first drained value")
+    assert(items[1] == 8, "second drained value")
+}

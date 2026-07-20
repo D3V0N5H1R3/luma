@@ -1,0 +1,13 @@
+function integer fib(integer n) {
+    if n <= 1 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+record Point { number x, number y }
+
+choice Shape {
+    Circle(number radius)
+    Rectangle(number width, number height)
+}

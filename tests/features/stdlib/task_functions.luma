@@ -1,0 +1,284 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Task Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+function integer compute_square(integer value) {
+    return value * value
+}
+
+function integer pass_through(integer input) {
+    return input
+}
+
+function integer slow_identity(integer value) {
+    Task.delay(150)
+    return value
+}
+
+@test
+function void test_task_is_done() {
+    task_scope {
+        task<integer> square_task = spawn compute_square(2)
+        integer _square_result = await square_task
+
+        assert(Result.unwrap(Task.is_done(square_task)), "completed task should be done")
+    }
+}
+
+@test
+function void test_task_all() {
+    task_scope {
+        task<integer> square_task_a = spawn compute_square(2)
+        task<integer> square_task_b = spawn compute_square(3)
+        task<integer> square_task_c = spawn compute_square(4)
+        array<integer> all_results = Result.unwrap(
+            Task.all([square_task_a, square_task_b, square_task_c])
+        )
+
+        assert(all_results[0] == 4, "Task.all first result")
+        assert(all_results[1] == 9, "Task.all second result")
+        assert(all_results[2] == 16, "Task.all third result")
+    }
+}
+
+@test
+function void test_task_race() {
+    task_scope {
+        task<integer> first_task = spawn pass_through(42)
+        task<integer> second_task = spawn pass_through(99)
+        integer race_winner = Result.unwrap(Task.race([first_task, second_task]))
+
+        # One of the two must win.
+        assert(race_winner == 42 || race_winner == 99, "Task.race returns a result")
+    }
+}
+
+@test
+function void test_task_timeout_success() {
+    task_scope {
+        task<integer> square_task = spawn compute_square(5)
+        result<integer> timeout_result = Task.timeout(square_task, 5000)
+
+        assert(Result.is_success(timeout_result), "Task.timeout should succeed")
+        assert(Result.unwrap(timeout_result) == 25, "Task.timeout value")
+    }
+}
+
+@test
+function void test_task_map() {
+    task_scope {
+        task<integer> square_task = spawn compute_square(3)
+        integer mapped_value = Result.unwrap(
+            Task.map(square_task, (integer task_value) -> task_value + 1)
+        )
+
+        assert(mapped_value == 10, "Task.map applies function to result")
+    }
+}
+
+@test
+function void test_task_flat_map() {
+    task_scope {
+        task<integer> square_task = spawn compute_square(2)
+        integer chained_result = Result.unwrap(
+            Task.flat_map(square_task, (integer task_value) -> spawn pass_through(task_value + 100))
+        )
+
+        assert(chained_result == 104, "Task.flat_map chains tasks")
+    }
+}
+
+@test
+function void test_task_map_n() {
+    task_scope {
+        task<integer> square_task_a = spawn compute_square(2)
+        task<integer> square_task_b = spawn compute_square(3)
+        array<integer> mapped_results = Result.unwrap(
+            Task.map_n([square_task_a, square_task_b], (integer task_value) -> task_value + 1)
+        )
+
+        assert(mapped_results[0] == 5, "Task.map_n first")
+        assert(mapped_results[1] == 10, "Task.map_n second")
+    }
+}
+
+@test
+function void test_task_retry_success() {
+    result<integer> retry_result = Task.retry(3, () -> success(42))
+
+    assert(Result.is_success(retry_result), "Task.retry returns ok result")
+    assert(Result.unwrap(retry_result) == 42, "Task.retry unwrapped value is correct")
+}
+
+@test
+function void test_task_retry_all_fail() {
+    result<integer> retry_result = Task.retry(3, () -> failure("oops"))
+
+    assert(Result.is_failure(retry_result), "Task.retry returns fail when all attempts fail")
+}
+
+@test
+function void test_task_retry_invalid_max_attempts() {
+    mutable boolean has_thrown = false
+
+    try {
+        result<integer> _ = Task.retry(0, () -> success(1))
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown, "Task.retry throws when max_attempts <= 0")
+}
+
+# ─── Task.delay ───────────────────────────────────────────
+
+@test
+function void test_task_delay_completes() {
+    number before = DateTime.milliseconds_since_start()
+    Task.delay(50)
+    number after = DateTime.milliseconds_since_start()
+
+    assert(after >= before, "Task.delay should advance time")
+}
+
+# ─── Task.cancel ──────────────────────────────────────────
+
+@test
+function void test_task_cancel_completed_task() {
+    mutable boolean is_cancelled = false
+
+    task_scope {
+        task<integer> t = spawn compute_square(5)
+        integer _r = await t
+        is_cancelled = Task.cancel(t)
+    }
+
+    assert(is_cancelled, "Task.cancel on scoped task returns true")
+}
+
+@test
+function void test_task_cancel_sets_flag() {
+    mutable boolean is_cancelled = false
+
+    task_scope {
+        task<integer> t = spawn compute_square(5)
+        integer _r = await t
+        boolean _c = Task.cancel(t)
+        is_cancelled = Task.is_cancelled(t)
+    }
+
+    assert(is_cancelled, "Task.is_cancelled returns true after Task.cancel")
+}
+
+# ─── Task.is_cancelled ───────────────────────────────────
+
+@test
+function void test_task_is_cancelled_initially_false() {
+    task_scope {
+        task<integer> t = spawn compute_square(5)
+        integer _r = await t
+
+        boolean is_cancelled = Task.is_cancelled(t)
+
+        assert(!is_cancelled, "Task.is_cancelled returns false when not cancelled")
+    }
+}
+
+# ───────────────────────────────────────────────────────────
+# any, sequence
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_task_any() {
+    task_scope {
+        task<integer> first_task = spawn pass_through(11)
+        task<integer> second_task = spawn pass_through(22)
+        integer winner = Result.unwrap(Task.any([first_task, second_task]))
+
+        assert(winner == 11 || winner == 22)
+    }
+}
+
+@test
+function void test_task_sequence() {
+    task_scope {
+        task<integer> first_task = spawn compute_square(2)
+        task<integer> second_task = spawn compute_square(3)
+        array<integer> results = Result.unwrap(Task.sequence([first_task, second_task]))
+
+        assert(results[0] == 4)
+        assert(results[1] == 9)
+    }
+}
+
+# ───────────────────────────────────────────────────────────
+# Edge cases and negative paths
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_task_all_empty_returns_empty() {
+    result<array<integer>> all_result = Task.all([])
+
+    assert(Result.is_success(all_result), "Task.all([]) should succeed")
+    assert(Array.length(Result.unwrap(all_result)) == 0, "Task.all([]) yields an empty array")
+}
+
+@test
+function void test_task_sequence_empty_returns_empty() {
+    result<array<integer>> sequence_result = Task.sequence([])
+
+    assert(Result.is_success(sequence_result), "Task.sequence([]) should succeed")
+    assert(Array.length(Result.unwrap(sequence_result)) == 0, "Task.sequence([]) yields an empty array")
+}
+
+@test
+function void test_task_race_empty_fails() {
+    result<integer> race_result = Task.race([])
+
+    assert(Result.is_failure(race_result), "Task.race([]) should fail")
+}
+
+@test
+function void test_task_any_empty_fails() {
+    result<integer> any_result = Task.any([])
+
+    assert(Result.is_failure(any_result), "Task.any([]) should fail")
+}
+
+@test
+function void test_task_delay_negative_throws() {
+    mutable boolean has_thrown = false
+
+    try {
+        Task.delay(-1)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown, "Task.delay throws on negative milliseconds")
+}
+
+@test
+function void test_task_timeout_expires() {
+    task_scope {
+        task<integer> slow_task = spawn slow_identity(7)
+        result<integer> timeout_result = Task.timeout(slow_task, 5)
+
+        assert(Result.is_failure(timeout_result), "Task.timeout fails when the task is too slow")
+    }
+}
+
+@test
+function void test_task_flat_map_requires_task() {
+    task_scope {
+        task<integer> base_task = spawn compute_square(3)
+        result<integer> flat_result = Task.flat_map(
+            base_task, (integer task_value) -> task_value + 1
+        )
+
+        assert(Result.is_failure(flat_result), "Task.flat_map fails when the function returns a non-task")
+    }
+}

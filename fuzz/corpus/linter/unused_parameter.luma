@@ -1,0 +1,8 @@
+@main
+function void main() {
+    print(add(1, 2))
+}
+
+function integer add(integer a, integer b) {
+    return a
+}

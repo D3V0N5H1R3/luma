@@ -1,0 +1,223 @@
+# ═══════════════════════════════════════════════════════════
+# Error Handling
+#
+# Demonstrates result<T>, typed error values with result<T,E>,
+# the error-pipe operator (!>), the ? propagation operator
+# (for both result<T> and optional<T>), try/catch/finally,
+# and idiomatic error handling patterns in Luma.
+# ═══════════════════════════════════════════════════════════
+
+function result<number> parse_number(string input) {
+    return String.parse_number(input)
+}
+
+function result<number> validate_positive(number value) {
+    if value <= 0 {
+        return failure("value must be positive, got ${value}")
+    }
+
+    return success(value)
+}
+
+function number double_it(number n) {
+    return n * 2
+}
+
+# Error propagation with the ? operator on result<T>
+function result<number> parse_and_validate(string input) {
+    number n = String.parse_number(input)?
+    number validated = validate_positive(n)?
+
+    return success(validated)
+}
+
+# Optional propagation with the ? operator on optional<T>
+record Profile { string name, optional<string> email }
+
+function optional<string> get_email_domain(optional<Profile> profile) {
+    Profile p = profile?
+    string email = p.email?
+    array<string> parts = String.split(email, "@")
+    return Array.last(parts) ?? ""
+}
+
+# ── Typed error values ──
+
+choice ValidationError { EmptyInput InvalidFormat NegativeValue TooLarge }
+
+function result<number, ValidationError> validate_score(string input) {
+    if String.is_empty(String.trim(input)) {
+        return failure(ValidationError.EmptyInput)
+    }
+
+    match String.parse_number(input) {
+        success(n) {
+            if n < 0 {
+                return failure(ValidationError.NegativeValue)
+            }
+            if n > 100 {
+                return failure(ValidationError.TooLarge)
+            }
+
+            return success(n)
+        }
+        failure(_) {
+            return failure(ValidationError.InvalidFormat)
+        }
+    }
+}
+
+# ── Result basics ──
+
+function void demo_result_basics() {
+    print("=== Result basics ===")
+
+    result<number> good = success(42.0)
+    result<number> bad = failure("something went wrong")
+
+    match good {
+        success(v) { print("Good: ${v}") }
+        failure(m) { print("Error: ${m}") }
+    }
+
+    match bad {
+        success(v) { print("Good: ${v}") }
+        failure(m) { print("Error: ${m}") }
+    }
+}
+
+# ── Error-pipe operator !> ──
+
+# Shared three-stage validation pipeline: parse the raw text into a number,
+# require it to be positive, then double it. demo_error_pipe runs it for each
+# input so the !> chain is written once.
+function result<number> run_validation_pipeline(string raw) {
+    result<number> validated = success(raw)
+    !> parse_number()
+    !> validate_positive()
+    !> double_it()
+
+    return validated
+}
+
+function void demo_error_pipe() {
+    print("")
+    print("=== Error-pipe !> ===")
+
+    result<number> pipeline_ok = run_validation_pipeline("3.14")
+    print("Pipeline ok: ${pipeline_ok}")
+
+    result<number> pipeline_bad = run_validation_pipeline("-5")
+    print("Pipeline bad: ${pipeline_bad}")
+
+    result<number> pipeline_parse_fail = run_validation_pipeline("not_a_number")
+    print("Pipeline parse fail: ${pipeline_parse_fail}")
+}
+
+# ── Error propagation with ? ──
+
+function void demo_error_propagation() {
+    print("")
+    print("=== Error propagation ? ===")
+
+    array<string> inputs = ["42", "-3", "abc", "7.5"]
+
+    for input in inputs {
+        match parse_and_validate(input) {
+            success(v) { print("  '${input}' -> ${v}") }
+            failure(m) { print("  '${input}' -> error: ${m}") }
+        }
+    }
+}
+
+# ── Optional propagation with ? ──
+
+function void demo_optional_propagation() {
+    print("")
+    print("=== Optional propagation ? ===")
+
+    optional<Profile> alice = some(Profile { name = "Alice", email = some("alice@example.com") })
+    optional<Profile> bob = some(Profile { name = "Bob", email = none })
+    optional<Profile> nobody = none
+
+    print("  Alice domain: ${get_email_domain(alice)}")
+    print("  Bob domain: ${get_email_domain(bob)}")
+    print("  Nobody domain: ${get_email_domain(nobody)}")
+}
+
+# ── Typed error values with result<T, E> ──
+
+function void demo_typed_errors() {
+    print("")
+    print("=== Typed error values ===")
+
+    array<string> scores = ["85", "-3", "200", ""]
+
+    for score in scores {
+        match validate_score(score) {
+            success(v) {
+                print("  '${score}' -> valid: ${v}")
+            }
+            failure(err) {
+                string reason = match err {
+                case ValidationError.EmptyInput    { "empty input" }
+                case ValidationError.InvalidFormat { "invalid number" }
+                case ValidationError.NegativeValue { "negative" }
+                case ValidationError.TooLarge      { "too large" }
+                }
+
+                print("  '${score}' -> rejected: ${reason}")
+            }
+        }
+    }
+}
+
+# ── try/catch/finally ──
+
+function void demo_try_catch_finally() {
+    print("")
+    print("=== try/catch/finally ===")
+
+    mutable string log = ""
+
+    try {
+        log += "opening resource"
+
+        integer zero = 0
+        integer _ = 10 / zero
+
+        log += " (unreachable)"
+    } catch(err) {
+        log += " -> caught: ${err}"
+    } finally {
+        log += " -> cleanup done"
+    }
+
+    print(log)
+
+    # try/finally without catch — cleanup always runs
+    mutable boolean has_cleanup_run = false
+
+    try {
+        try {
+            array<integer> arr = [1, 2, 3]
+            integer _ = arr[99]
+        } finally {
+            has_cleanup_run = true
+        }
+    } catch(err) {
+        print("Outer catch after finally: ${err}")
+    }
+
+    print("Cleanup ran: ${has_cleanup_run}")
+}
+
+@main
+function void main() {
+    demo_result_basics()
+    demo_error_pipe()
+    demo_error_propagation()
+    demo_optional_propagation()
+    demo_typed_errors()
+    demo_try_catch_finally()
+}

@@ -1,0 +1,637 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Optional<T>
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+# ─── Basic optional values ───────────────────────────────
+
+@test
+function void test_none_literal() {
+    optional<integer> x = none
+
+    assert(x == none)
+    assert(type_of(x) == "none")
+}
+
+@test
+function void test_some_expression() {
+    optional<integer> x = some(42)
+
+    assert(x != none)
+    assert(x == some(42))
+}
+
+@test
+function void test_value_assigned_to_optional() {
+    optional<string> s = "hello"
+
+    assert(s == some("hello"))
+}
+
+# ─── Match on optional ───────────────────────────────────
+
+@test
+function void test_match_optional_none() {
+    optional<integer> x = none
+
+    string output = match x {
+    case some(v) { "got ${v}" }
+    case none    { "nothing" }
+    }
+
+    assert(output == "nothing")
+}
+
+@test
+function void test_match_optional_some() {
+    optional<integer> x = some(99)
+
+    string output = match x {
+    case some(v) { "got ${v}" }
+    case none    { "nothing" }
+    }
+
+    assert(output == "got 99")
+}
+
+@test
+function void test_match_optional_some_binding() {
+    optional<string> name = some("Alice")
+
+    string greeting = match name {
+    case some(n) { "Hello, ${n}!" }
+    case none    { "Hello, stranger!" }
+    }
+
+    assert(greeting == "Hello, Alice!")
+}
+
+# ─── Null-coalescing ?? with optional ────────────────────
+
+@test
+function void test_coalesce_none_returns_default() {
+    optional<integer> x = none
+    integer val = x ?? 0
+
+    assert(val == 0)
+}
+
+@test
+function void test_coalesce_some_returns_value() {
+    optional<integer> x = some(7)
+    integer val = x ?? 0
+
+    assert(val == 7)
+}
+
+@test
+function void test_coalesce_chained() {
+    optional<string> a = none
+    optional<string> b = none
+    string c = "fallback"
+    string val = a ?? b ?? c
+
+    assert(val == "fallback")
+}
+
+# ─── Optional stdlib module ──────────────────────────────
+
+@test
+function void test_optional_is_some_true() {
+    optional<integer> x = some(1)
+
+    assert(Optional.is_some(x))
+}
+
+@test
+function void test_optional_is_some_false() {
+    optional<integer> x = none
+
+    assert(!Optional.is_some(x))
+}
+
+@test
+function void test_optional_is_none_true() {
+    optional<string> x = none
+
+    assert(Optional.is_none(x))
+}
+
+@test
+function void test_optional_is_none_false() {
+    optional<string> x = some("hi")
+
+    assert(!Optional.is_none(x))
+}
+
+@test
+function void test_optional_unwrap_some() {
+    optional<integer> x = some(42)
+    integer val = Optional.unwrap(x)
+
+    assert(val == 42)
+}
+
+@test
+function void test_optional_unwrap_or_some() {
+    optional<integer> x = some(10)
+    integer val = Optional.unwrap_or(x, 99)
+
+    assert(val == 10)
+}
+
+@test
+function void test_optional_unwrap_or_none() {
+    optional<integer> x = none
+    integer val = Optional.unwrap_or(x, 99)
+
+    assert(val == 99)
+}
+
+@test
+function void test_optional_or_some() {
+    optional<integer> x = some(5)
+
+    assert(Optional.or(x, some(10)) == some(5))
+}
+
+@test
+function void test_optional_or_none() {
+    optional<integer> x = none
+
+    assert(Optional.or(x, some(10)) == some(10))
+}
+
+@test
+function void test_optional_to_result_some() {
+    optional<integer> x = some(42)
+    result<integer> r = Optional.to_result(x, "missing")
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == 42)
+}
+
+@test
+function void test_optional_to_result_none() {
+    optional<integer> x = none
+    result<integer> r = Optional.to_result(x, "missing")
+
+    assert(!Result.is_success(r))
+}
+
+# ─── Optional chaining ?. ────────────────────────────────
+
+record OptBox { integer value }
+
+record OptPoint { integer x, integer y }
+
+@test
+function void test_optional_chain_on_none() {
+    optional<OptBox> b = none
+    optional<integer> v = b?.value
+
+    assert(v == none)
+}
+
+@test
+function void test_optional_chain_with_coalesce() {
+    OptBox b = OptBox { value = 7 }
+    integer v = b?.value ?? 0
+
+    assert(v == 7)
+}
+
+@test
+function void test_optional_chain_non_null_accesses_field() {
+    # x?.field returns the field value when x is not none
+    OptPoint p = OptPoint { x = 10, y = 20 }
+
+    integer chain_val = p?.x ?? 0
+
+    assert(chain_val == 10)
+}
+
+@test
+function void test_optional_chain_chained_null() {
+    # Chaining: if intermediate is none the whole chain is none
+    optional<OptPoint> first = none
+
+    optional<integer> chain_val = first?.x
+
+    assert(chain_val == none)
+}
+
+# ─── Optional in function return types ───────────────────
+
+function optional<integer> find_in_array(array<integer> arr, integer target) {
+    for i in 0 .. Array.length(arr) {
+        if arr[i] == target {
+            return some(i)
+        }
+    }
+
+    return none
+}
+
+@test
+function void test_function_returns_optional() {
+    optional<integer> found = find_in_array([10, 20, 30], 20)
+    optional<integer> missing = find_in_array([10, 20, 30], 99)
+
+    assert(found == some(1))
+    assert(missing == none)
+}
+
+# ─── Optional index access ?[ ─────────────────────────────
+
+@test
+function void test_optional_index_access_on_none() {
+    optional<array<integer>> maybe_arr = none
+    integer val = maybe_arr?[0] ?? 0
+
+    assert(val == 0)
+}
+
+@test
+function void test_optional_index_access_on_some() {
+    optional<array<integer>> arr = some([10, 20, 30])
+    integer val = arr?[1] ?? 0
+
+    assert(val == 20)
+}
+
+# ─── Optional combinators ─────────────────────────────────
+
+@test
+function void test_optional_map_some() {
+    optional<integer> x = some(5)
+
+    assert(Optional.map(x, (integer i) -> i * 2) == some(10))
+}
+
+@test
+function void test_optional_map_none() {
+    optional<integer> x = none
+
+    assert(Optional.map(x, (integer i) -> i * 2) == none)
+}
+
+@test
+function void test_optional_flat_map_some() {
+    optional<integer> x = some(5)
+
+    assert(Optional.flat_map(x, (integer i) -> some(i * 2)) == some(10))
+}
+
+@test
+function void test_optional_flat_map_none() {
+    optional<integer> x = none
+
+    assert(Optional.flat_map(x, (integer i) -> some(i * 2)) == none)
+}
+
+@test
+function void test_optional_filter_passes() {
+    optional<integer> x = some(42)
+
+    assert(Optional.filter(x, (integer i) -> i > 10) == some(42))
+}
+
+@test
+function void test_optional_filter_rejects() {
+    optional<integer> x = some(3)
+
+    assert(Optional.filter(x, (integer i) -> i > 10) == none)
+}
+
+@test
+function void test_optional_tap_returns_original() {
+    optional<integer> x = some(42)
+
+    assert(Optional.tap(x, (integer i) -> { print(i) }) == some(42))
+}
+
+@test
+function void test_optional_tap_none_skips() {
+    optional<integer> x = none
+
+    assert(Optional.tap(x, (integer i) -> { print(i) }) == none)
+}
+
+# ─── Optional.flatten ────────────────────────────────────
+
+@test
+function void test_optional_flatten_some_some() {
+    optional<optional<integer>> nested = some(some(42))
+    optional<integer> flat = Optional.flatten(nested)
+
+    assert(Optional.is_some(flat))
+    assert(Optional.unwrap(flat) == 42)
+}
+
+@test
+function void test_optional_flatten_some_none() {
+    # Optional.flat_map allows the callback to return none (optional<T>).
+    optional<integer> x = some(0)
+    optional<optional<integer>> nested = Optional.flat_map(x, (integer _i) -> {
+        optional<integer> r = none
+
+        return r
+    })
+    optional<integer> flat = Optional.flatten(nested)
+
+    assert(Optional.is_none(flat))
+}
+
+@test
+function void test_optional_flatten_none() {
+    optional<optional<integer>> nested = none
+    optional<integer> flat = Optional.flatten(nested)
+
+    assert(Optional.is_none(flat))
+}
+
+# ─── Optional chaining auto-flatten ──────────────────────
+
+record ChainInner { string value }
+
+record ChainOuter { optional<ChainInner> child }
+
+@test
+function void test_optional_chain_auto_flatten_field() {
+    optional<ChainOuter> o = some(ChainOuter { child = some(ChainInner { value = "hi" }) })
+
+    # o?.child should be optional<ChainInner>, not optional<optional<ChainInner>>
+    optional<ChainInner> c = o?.child
+
+    assert(Optional.is_some(c))
+    assert(Optional.unwrap(c).value == "hi")
+}
+
+@test
+function void test_optional_chain_auto_flatten_none_outer() {
+    optional<ChainOuter> o = none
+    optional<ChainInner> c = o?.child
+
+    assert(Optional.is_none(c))
+}
+
+@test
+function void test_optional_chain_auto_flatten_none_inner() {
+    optional<ChainOuter> o = some(ChainOuter { child = none })
+    optional<ChainInner> c = o?.child
+
+    assert(Optional.is_none(c))
+}
+
+# ─── Optional.zip ──────────────────────────────────────────
+
+@test
+function void test_optional_zip_both_some() {
+    (integer a, integer b) = Optional.zip(some(1), some(2))
+
+    assert(a == 1)
+    assert(b == 2)
+}
+
+@test
+function void test_optional_zip_left_none() {
+    assert(Optional.zip(none, some(2)) == none)
+}
+
+@test
+function void test_optional_zip_right_none() {
+    assert(Optional.zip(some(1), none) == none)
+}
+
+# ─── Negative tests ──────────────────────────────────────
+
+@test
+function void test_optional_unwrap_none_throws() {
+    mutable string caught = ""
+
+    try {
+        integer _ = Optional.unwrap(none)
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "none"), "unwrap on none should throw")
+}
+
+@test
+function void test_optional_map_returning_none_throws() {
+    # Optional.map callback must not return none.
+    optional<integer> x = some(42)
+    mutable string caught = ""
+
+    try {
+        optional<integer> _r = Optional.map(x, (integer _i) -> none)
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "none"), "map returning none should throw")
+}
+# ─── Optional Propagation ? ──────────────────────────────
+
+function optional<integer> add_one_opt(optional<integer> x) {
+    integer v = x?
+    return some(v + 1)
+}
+
+@test
+function void test_optional_propagation_some() {
+    optional<integer> r = add_one_opt(some(5))
+
+    assert(r == some(6))
+}
+
+@test
+function void test_optional_propagation_none() {
+    optional<integer> r = add_one_opt(none)
+
+    assert(r == none)
+}
+
+function optional<string> combine_opt(optional<integer> a, optional<integer> b) {
+    integer va = a?
+    integer vb = b?
+    return some("${va},${vb}")
+}
+
+@test
+function void test_optional_propagation_chained() {
+    assert(combine_opt(some(1), some(2)) == some("1,2"))
+    assert(combine_opt(some(1), none) == none)
+    assert(combine_opt(none, some(2)) == none)
+}
+
+# ─── Optional.contains ───────────────────────────────────
+
+@test
+function void test_optional_contains_some_match() {
+    optional<integer> o = some(42)
+
+    assert(Optional.contains(o, 42))
+}
+
+@test
+function void test_optional_contains_some_no_match() {
+    optional<integer> o = some(42)
+
+    assert(!Optional.contains(o, 99))
+}
+
+@test
+function void test_optional_contains_none() {
+    optional<integer> o = none
+
+    assert(!Optional.contains(o, 42))
+}
+
+# ───────────────────────────────────────────────────────────
+# Optional.and_then chaining
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_optional_and_then() {
+    assert(Optional.unwrap_or(Optional.and_then(some(5), (integer x) -> some(x * 2)), -1) == 10)
+
+    optional<integer> empty = none
+
+    assert(Optional.unwrap_or(Optional.and_then(empty, (integer x) -> some(x * 2)), -1) == -1)
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional edge cases
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_optional_or_both_none() {
+    optional<integer> a = none
+    optional<integer> b = none
+
+    assert(Optional.or(a, b) == none)
+}
+
+@test
+function void test_optional_contains_string_match() {
+    optional<string> o = some("luma")
+
+    assert(Optional.contains(o, "luma"))
+    assert(!Optional.contains(o, "other"))
+}
+
+@test
+function void test_optional_and_then_callback_none() {
+    optional<integer> x = some(5)
+
+    assert(Optional.is_none(Optional.and_then(x, (integer _i) -> none)))
+}
+
+@test
+function void test_optional_combinator_chain_passes() {
+    integer outcome = some(8)
+    |> Optional.filter((integer i) -> i > 0)
+    |> Optional.map((integer i) -> i * 2)
+    |> Optional.unwrap_or(0)
+
+    assert(outcome == 16)
+}
+
+@test
+function void test_optional_combinator_chain_rejected() {
+    integer outcome = some(3)
+    |> Optional.filter((integer i) -> i > 100)
+    |> Optional.map((integer i) -> i * 2)
+    |> Optional.unwrap_or(-1)
+
+    assert(outcome == -1)
+}
+
+@test
+function void test_optional_unwrap_computed_none_throws() {
+    mutable string caught = ""
+
+    try {
+        # filter rejects 3 (not > 10), producing none; unwrap then throws.
+        integer _ = Optional.unwrap(Optional.filter(some(3), (integer i) -> i > 10))
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "none"), "unwrap on a computed none should throw")
+}
+
+# ───────────────────────────────────────────────────────────
+# Type-changing combinators and payload-preserving conversions
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_optional_map_type_change() {
+    # map may change the inner type: optional<integer> -> optional<string>.
+    optional<string> m = Optional.map(some(5), (integer i) -> "v${i}")
+
+    assert(m == some("v5"))
+}
+
+@test
+function void test_optional_zip_heterogeneous() {
+    # zip pairs values of different types into a tuple.
+    (integer a, string b) = Optional.zip(some(1), some("x"))
+
+    assert(a == 1)
+    assert(b == "x")
+}
+
+@test
+function void test_optional_to_result_none_carries_error() {
+    optional<integer> x = none
+    result<integer> r = Optional.to_result(x, "missing")
+
+    assert(!Result.is_success(r))
+    assert(Result.error(r) == "missing")
+}
+
+@test
+function void test_optional_tap_runs_side_effect_on_some() {
+    reference<integer> seen = Reference.new(0)
+    optional<integer> r = Optional.tap(some(42), (integer v) -> Reference.set(seen, v))
+
+    assert(r == some(42))
+    assert(Reference.get(seen) == 42, "tap must run the callback for some")
+}
+
+@test
+function void test_optional_tap_skips_side_effect_on_none() {
+    reference<integer> seen = Reference.new(-1)
+    optional<integer> x = none
+    optional<integer> n = Optional.tap(x, (integer v) -> Reference.set(seen, v))
+
+    assert(n == none)
+    assert(Reference.get(seen) == -1, "tap must not run the callback for none")
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional negative tests — runtime errors that still type-check
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_optional_filter_non_boolean_throws() {
+    # The filter predicate must return boolean. A non-boolean return type-checks
+    # (the callback's return type is unconstrained statically) but throws at
+    # runtime.
+    mutable string caught = ""
+
+    try {
+        optional<integer> _r = Optional.filter(some(5), (integer i) -> i)
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "boolean"), "non-boolean filter predicate should throw")
+}
+

@@ -1,0 +1,45 @@
+# Terminal benchmarks: text styling, colour formatting, hyperlinks, and the
+# terminal-size query.
+#
+# Terminal-control functions (clear_screen, move_to, write, …) emit ANSI escape
+# sequences to stdout, which would corrupt the benchmark output that
+# scripts/parse_benchmark_results.py reads. These cases therefore exercise only
+# the side-effect-free paths: the styling/colour helpers build strings in memory
+# without writing anything, and the size queries issue a single cheap syscall.
+# These are the Terminal hot paths in TUI rendering loops, so regressions in the
+# string-building and lookup work surface here without any I/O noise.
+
+function BenchResult run_terminal_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    st = time_it(st, "Terminal.bold", 10000, () -> {
+        string _styled = Terminal.bold("status")
+    })
+
+    st = time_it(st, "Terminal.color (named lookup)", 10000, () -> {
+        result<string> _styled = Terminal.color("green", "ok")
+    })
+
+    st = time_it(st, "Terminal.rgb_color", 10000, () -> {
+        result<string> _styled = Terminal.rgb_color(255, 128, 0, "warn")
+    })
+
+    st = time_it(st, "Terminal.link (OSC 8)", 10000, () -> {
+        string _hyperlink = Terminal.link("https://example.com", "Example")
+    })
+
+    st = time_it(st, "Terminal.supports_color", 5000, () -> {
+        boolean _supported = Terminal.supports_color()
+    })
+
+    # size/columns issue a terminal-dimension syscall, so they run at a lower count.
+    st = time_it(st, "Terminal.size", 2000, () -> {
+        Terminal.Size _dims = Terminal.size()
+    })
+
+    st = time_it(st, "Terminal.columns", 2000, () -> {
+        integer _cols = Terminal.columns()
+    })
+
+    return st
+}

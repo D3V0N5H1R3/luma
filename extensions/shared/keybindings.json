@@ -1,0 +1,121 @@
+{
+    "$comment": "Canonical keybinding definitions for Luma editor extensions. Each extension maps these to its native keybinding system. See also: vscode/package.json (keybindings), zed/KEYBINDINGS.md.",
+    "keybindings": {
+        "lsp": [
+            {
+                "action": "goToDefinition",
+                "description": "Go to definition",
+                "vscode": { "key": null, "when": "resourceLangId == luma" }
+            },
+            {
+                "action": "findReferences",
+                "description": "Find references",
+                "vscode": { "key": null, "when": "resourceLangId == luma" }
+            },
+            {
+                "action": "hover",
+                "description": "Hover info",
+                "vscode": { "key": null, "when": "resourceLangId == luma" }
+            },
+            {
+                "action": "rename",
+                "description": "Rename symbol",
+                "vscode": { "key": null, "when": "resourceLangId == luma" }
+            },
+            {
+                "action": "codeAction",
+                "description": "Code action",
+                "vscode": { "key": null, "when": "resourceLangId == luma" }
+            },
+            {
+                "action": "format",
+                "description": "Format buffer",
+                "vscode": { "key": null, "when": "resourceLangId == luma" }
+            },
+            {
+                "action": "signatureHelp",
+                "description": "Signature help",
+                "vscode": { "key": null, "when": "resourceLangId == luma" }
+            },
+            {
+                "action": "typeDefinition",
+                "description": "Type definition",
+                "vscode": { "key": null, "when": "resourceLangId == luma" }
+            },
+            {
+                "action": "toggleInlayHints",
+                "description": "Toggle inlay hints",
+                "vscode": { "key": null, "when": "resourceLangId == luma" }
+            }
+        ],
+        "diagnostics": [
+            {
+                "action": "showDiagnostic",
+                "description": "Show diagnostic at cursor",
+                "vscode": { "key": null }
+            },
+            {
+                "action": "previousDiagnostic",
+                "description": "Previous diagnostic"
+            },
+            {
+                "action": "nextDiagnostic",
+                "description": "Next diagnostic"
+            },
+            {
+                "action": "diagnosticsToLoclist",
+                "description": "Send diagnostics to location list"
+            }
+        ],
+        "runner": [
+            {
+                "action": "runFile",
+                "description": "Run current Luma file",
+                "vscode": { "command": "luma.runFile", "key": "ctrl+alt+r", "mac": "cmd+alt+r", "when": "resourceLangId == luma" }
+            },
+            {
+                "action": "runTests",
+                "description": "Run tests in current file",
+                "vscode": { "command": "luma.runTests", "key": "ctrl+alt+t", "mac": "cmd+alt+t", "when": "resourceLangId == luma" }
+            },
+            {
+                "action": "runNearestTest",
+                "description": "Run nearest test"
+            }
+        ],
+        "debug": [
+            {
+                "action": "toggleBreakpoint",
+                "description": "Toggle breakpoint"
+            },
+            {
+                "action": "conditionalBreakpoint",
+                "description": "Set conditional breakpoint"
+            },
+            {
+                "action": "debugContinue",
+                "description": "Debug: continue"
+            },
+            {
+                "action": "debugStepOver",
+                "description": "Debug: step over"
+            },
+            {
+                "action": "debugStepInto",
+                "description": "Debug: step into"
+            },
+            {
+                "action": "debugTerminate",
+                "description": "Debug: terminate"
+            }
+        ]
+    },
+    "defaults": {
+        "vscode": {
+            "$comment": "VS Code keybindings use 'when' clauses to scope to Luma files."
+        },
+        "zed": {
+            "$comment": "Zed uses keymap.json for user-defined keybindings; no extension-defined defaults yet."
+        }
+    }
+}

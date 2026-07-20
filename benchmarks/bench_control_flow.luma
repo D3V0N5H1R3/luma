@@ -1,0 +1,116 @@
+# Control flow benchmarks: if/else, match, for loop, pipe chains.
+
+function BenchResult run_control_flow_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    st = time_it(st, "if/else branching", 50000, () -> {
+        integer x = 42
+        string _result = if x > 20 { "big" } else { "small" }
+    })
+
+    st = time_it(st, "match expression (4 arms)", 10000, () -> {
+        integer x = 3
+        string _result = match x {
+        case == 1 { "one" }
+        case == 2 { "two" }
+        case == 3 { "three" }
+        else { "other" }
+        }
+    })
+
+    st = time_it(st, "match with guards (when, fall-through)", 10000, () -> {
+        integer x = 7
+        string _result = match x {
+        case >= 0 when x == 0 { "zero" }
+        case >= 0 when x % 2 == 0 { "even" }
+        case >= 0 { "odd" }
+        else { "negative" }
+        }
+    })
+
+    st = time_it(st, "for loop (100 iterations)", 1000, () -> {
+        mutable integer sum = 0
+        for i in 0 .. 100 {
+            sum += i
+        }
+    })
+
+    st = time_it(st, "pipe chain (3 stages)", 5000, () -> {
+        integer _result = [1, 2, 3, 4, 5]
+        |> Array.map((integer x) -> x * 2)
+        |> Result.unwrap_or([])
+        |> Array.filter((integer x) -> x > 4)
+        |> Result.unwrap_or([])
+        |> Array.reduce(0, (integer a, integer b) -> a + b)
+        |> Result.unwrap_or(0)
+    })
+
+    st = time_it(st, "while loop (50 iterations)", 5000, () -> {
+        mutable integer n = 0
+        while n < 50 {
+            n += 1
+        }
+    })
+
+    st = time_it(st, "for-in array (10 elements)", 5000, () -> {
+        array<integer> data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        mutable integer sum = 0
+        for value in data {
+            sum += value
+        }
+    })
+
+    st = time_it(st, "nested loop with break/continue", 1000, () -> {
+        mutable integer acc = 0
+        for i in 0 .. 20 {
+            for j in 0 .. 20 {
+                if j == 10 { break }
+                if j % 2 == 0 { continue }
+                acc += i + j
+            }
+        }
+    })
+
+    st = time_it(st, "try/catch/finally (caught error)", 5000, () -> {
+        integer zero = 0
+        mutable integer handled = 0
+        try {
+            integer _quotient = 1 / zero
+        } catch(_err) {
+            handled = 1
+        } finally {
+            handled = handled + 1
+        }
+    })
+
+    st = time_it(st, "try/catch (no error)", 50000, () -> {
+        mutable integer value = 0
+        try {
+            value = 42
+        } catch(_err) {
+            value = -1
+        }
+    })
+
+    st = time_it(st, "try/finally (no error)", 50000, () -> {
+        mutable integer value = 0
+        try {
+            value = 42
+        } finally {
+            value = value + 1
+        }
+    })
+
+    st = time_it(st, "try/catch/finally (no error)", 50000, () -> {
+        mutable integer value = 0
+        try {
+            value = 42
+        } catch(_err) {
+            value = -1
+        } finally {
+            value = value + 1
+        }
+    })
+
+    return st
+}

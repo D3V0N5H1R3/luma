@@ -1,0 +1,125 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — Fuzz Workflow
+#
+# Builds the libFuzzer targets once, then fuzzes each target in
+# parallel. The fuzz binaries link the AddressSanitizer runtime
+# statically, so the fan-out jobs only need to download and run
+# them — no toolchain reinstall required.
+# ─────────────────────────────────────────────────────────────
+
+name: "Fuzz"
+
+on:
+  schedule:
+    - cron: "0 3 * * 6" # Weekly Saturday 03:00 UTC.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build fuzzers
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install Clang
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang
+
+      - name: Configure
+        run: |
+          cmake -B build-fuzz -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address" \
+            -DLUMA_BUILD_FUZZ=ON
+
+      - name: Build
+        run: cmake --build build-fuzz --parallel
+
+      # Package just the fuzz executables; tar preserves the executable bit
+      # that upload-artifact would otherwise drop. A file list (-T) avoids
+      # word-splitting the find output.
+      - name: Package fuzzers
+        working-directory: build-fuzz/fuzz
+        run: |
+          find . -maxdepth 1 -type f -executable -name 'fuzz_*' -printf '%P\n' > fuzzer-list.txt
+          tar -czf "$GITHUB_WORKSPACE/fuzzers.tar.gz" -T fuzzer-list.txt
+
+      - name: Upload fuzzers
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzzers
+          path: fuzzers.tar.gz
+          retention-days: 1
+
+  fuzz:
+    name: Fuzz — ${{ matrix.target }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: fuzz_lexer
+            time: 120
+          - target: fuzz_parser
+            time: 120
+          - target: fuzz_type_checker
+            time: 120
+          - target: fuzz_compiler
+            time: 120
+          - target: fuzz_resolver
+            time: 120
+          - target: fuzz_vm
+            time: 120
+          - target: fuzz_include_resolver
+            time: 120
+          - target: fuzz_linter
+            time: 120
+          - target: fuzz_optimizer
+            time: 120
+          - target: fuzz_structured
+            time: 300
+
+    steps:
+      - name: Download fuzzers
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: fuzzers
+
+      - name: Extract fuzzers
+        run: |
+          mkdir -p fuzzers
+          tar -xzf fuzzers.tar.gz -C fuzzers
+          chmod +x fuzzers/*
+
+      - name: Fuzz ${{ matrix.target }}
+        env:
+          TARGET: ${{ matrix.target }}
+          MAX_TIME: ${{ matrix.time }}
+        run: ./fuzzers/"$TARGET" -max_total_time="$MAX_TIME"
+
+      - name: Upload crash artefacts
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-crashes-${{ matrix.target }}
+          path: |
+            crash-*
+            oom-*
+            timeout-*
+          if-no-files-found: ignore

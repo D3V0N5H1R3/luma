@@ -1,0 +1,192 @@
+# ═══════════════════════════════════════════════════════════
+# Task Cancellation — Cooperative Cancellation Patterns
+#
+# Demonstrates Task.cancel(), Task.is_cancelled(), and
+# cooperative cancellation within task_scope blocks.
+#
+# Usage: luma examples/language-features/task_cancellation.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Helpers ───
+
+function integer slow_computation(integer iterations) {
+    mutable integer total = 0
+    for i in 0 .. iterations {
+        total += i
+    }
+    return total
+}
+
+function integer cancellable_search(integer limit) {
+    # Tasks check cancellation automatically at function calls,
+    # loop iterations, and await points. When a task is cancelled,
+    # it throws a cancellation error that propagates up.
+    mutable integer found = 0
+    for candidate in 2 .. limit {
+        if Math.is_prime(candidate) {
+            found += 1
+        }
+    }
+    return found
+}
+
+function string fetch_simulated(string name, integer delay_iterations) {
+    mutable integer _work = 0
+    for _ in 0 .. delay_iterations {
+        _work += 1
+    }
+    return "result from ${name}"
+}
+
+# ─── Cancel-on-first-failure ───
+#
+# When any child task in a task_scope throws an error,
+# all remaining sibling tasks are automatically cancelled.
+
+function integer fail_immediately() {
+    assert(false, "simulated failure")
+    return 0
+}
+
+function void demonstrate_cancel_on_failure() {
+    print("--- Cancel-on-first-failure ---")
+
+    mutable result<array<integer>> outcome = success([])
+
+    try {
+        array<integer> results = task_scope {
+            spawn slow_computation(1000)
+            spawn fail_immediately()
+            spawn slow_computation(2000)
+        }
+        outcome = success(results)
+    } catch (err) {
+        outcome = failure(err)
+    }
+
+    match outcome {
+        success(values) {
+            print("  Unexpected success: ${values}")
+        }
+        failure(msg) {
+            print("  Caught expected failure: ${msg}")
+            print("  Sibling tasks were cancelled automatically.")
+        }
+    }
+}
+
+# ─── Explicit cancellation with Task.cancel ───
+#
+# Use Task.cancel(t) to request cancellation of a specific
+# task. The task cooperatively checks for cancellation at
+# loop iterations and function calls.
+
+function void demonstrate_explicit_cancel() {
+    print("\n--- Explicit cancellation ---")
+
+    task_scope {
+        task<integer> long_task = spawn cancellable_search(100000)
+
+        # Cancel the task before it finishes
+        boolean _cancelled = Task.cancel(long_task)
+
+        boolean is_cancelled = Task.is_cancelled(long_task)
+        print("  Task cancelled: ${is_cancelled}")
+    }
+
+    print("  Scope exited cleanly after cancellation.")
+}
+
+# ─── Task.race with loser cancellation ───
+#
+# Task.race returns the result of the first task to complete.
+# All other tasks are automatically cancelled.
+
+function void demonstrate_race_cancellation() {
+    print("\n--- Race with loser cancellation ---")
+
+    task_scope {
+        task<string> fast = spawn fetch_simulated("fast-service", 100)
+        task<string> slow = spawn fetch_simulated("slow-service", 10000)
+
+        result<string> winner = Task.race([fast, slow])
+
+        match winner {
+            success(value) {
+                print("  Winner: ${value}")
+                print("  Losing task was cancelled automatically.")
+            }
+            failure(msg) {
+                print("  Race failed: ${msg}")
+            }
+        }
+    }
+}
+
+# ─── Task.all with first-failure cancellation ───
+#
+# Task.all waits for all tasks. If one fails, the rest
+# are cancelled and the error propagates.
+
+function void demonstrate_all_cancellation() {
+    print("\n--- Task.all with first-failure cancellation ---")
+
+    task_scope {
+        task<integer> t1 = spawn slow_computation(500)
+        task<integer> t2 = spawn slow_computation(1000)
+        task<integer> t3 = spawn slow_computation(1500)
+
+        result<array<integer>> outcome = Task.all([t1, t2, t3])
+
+        match outcome {
+            success(values) {
+                print("  All completed: ${Array.length(values)} results")
+            }
+            failure(msg) {
+                print("  Cancelled on failure: ${msg}")
+            }
+        }
+    }
+}
+
+# ─── Nested task_scope cancellation ───
+#
+# Inner and outer scopes have independent cancellation tokens.
+# Cancelling an inner scope does not affect the outer scope.
+
+function integer run_inner_scope() {
+    array<integer> inner = task_scope {
+        spawn slow_computation(100)
+        spawn slow_computation(200)
+    }
+    return Array.length(inner)
+}
+
+function void demonstrate_nested_cancellation() {
+    print("\n--- Nested scope cancellation ---")
+
+    array<integer> outer_results = task_scope {
+        spawn run_inner_scope()
+        spawn slow_computation(300)
+    }
+
+    print("  Outer results: ${outer_results}")
+    print("  Inner scope completed independently.")
+}
+
+# ─── Entry Point ───
+
+@main
+function void main() {
+    print("═══════════════════════════════════")
+    print("   Task Cancellation Patterns")
+    print("═══════════════════════════════════\n")
+
+    demonstrate_cancel_on_failure()
+    demonstrate_explicit_cancel()
+    demonstrate_race_cancellation()
+    demonstrate_all_cancellation()
+    demonstrate_nested_cancellation()
+
+    print("\nDone.")
+}

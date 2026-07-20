@@ -1,0 +1,18 @@
+# Closure scope test — the inner lambda captures 'base' from the
+# enclosing function. While paused inside the lambda, the debugger
+# shows 'base' in a dedicated Closure scope alongside the locals.
+
+function integer add_with_base(integer base) {
+    function(integer) -> integer add = (integer n) -> {
+        integer total = base + n
+        return total
+    }
+
+    return add(5) + add(7)
+}
+
+@main
+function void main() {
+    integer combined = add_with_base(10)
+    print("combined: ${combined}")
+}

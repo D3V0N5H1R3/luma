@@ -1,0 +1,341 @@
+# ═══════════════════════════════════════════════════════════
+# Tic-Tac-Toe with a Perfect AI
+#
+# An unbeatable tic-tac-toe opponent built on the minimax
+# algorithm with alpha-beta pruning. Demonstrates choice types
+# (Player), exhaustive pattern matching, recursion over an
+# immutable game state, optional<T> for "is there a winner",
+# result<T> for illegal moves, and @test annotations.
+#
+# The board is a flat array of 9 cells holding "X", "O" or "-".
+#
+# Usage: luma examples/applications/tic_tac_toe.luma
+# Tests: luma --test examples/applications/tic_tac_toe.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Types ───────────────────────────────────────────────
+
+choice Player {
+    X
+    O
+}
+
+# ─── Player Helpers ──────────────────────────────────────
+
+function string mark(Player player) {
+    return match player {
+    case Player.X { "X" }
+    case Player.O { "O" }
+    }
+}
+
+function Player opponent(Player player) {
+    return match player {
+    case Player.X { Player.O }
+    case Player.O { Player.X }
+    }
+}
+
+function boolean players_equal(Player left, Player right) {
+    return mark(left) == mark(right)
+}
+
+# ─── Board ───────────────────────────────────────────────
+
+function array<string> empty_board() {
+    return Array.repeat("-", 9) |> Result.unwrap_or([])
+}
+
+function array<array<integer>> winning_lines() {
+    return [
+        [0, 1, 2], [3, 4, 5], [6, 7, 8],
+        [0, 3, 6], [1, 4, 7], [2, 5, 8],
+        [0, 4, 8], [2, 4, 6]
+    ]
+}
+
+function optional<Player> winner(array<string> board) {
+    for line in winning_lines() {
+        string a = board[line[0]]
+        string b = board[line[1]]
+        string c = board[line[2]]
+
+        if a != "-" && a == b && b == c {
+            return if a == "X" { some(Player.X) } else { some(Player.O) }
+        }
+    }
+
+    return none
+}
+
+function boolean is_full(array<string> board) {
+    return !Array.contains(board, "-")
+}
+
+function array<integer> available_moves(array<string> board) {
+    return Array.range(0, 9)
+    |> Result.unwrap_or([])
+    |> Array.filter((integer i) -> board[i] == "-")
+    |> Result.unwrap_or([])
+}
+
+function result<array<string>> apply_move(array<string> board, integer index, Player player) {
+    if index < 0 || index >= Array.length(board) {
+        return failure("move ${index} is out of range")
+    }
+
+    if board[index] != "-" {
+        return failure("cell ${index} is already taken")
+    }
+
+    return Array.set(board, index, mark(player))
+}
+
+# ─── Minimax with Alpha-Beta Pruning ─────────────────────
+
+# Score is from the AI's perspective: positive favours the AI,
+# and the depth term makes the AI prefer faster wins / slower
+# losses. The alpha-beta window prunes branches that cannot
+# affect the result.
+function integer minimax(
+    array<string> board, Player to_move, Player ai, integer depth, integer alpha, integer beta
+) {
+    match winner(board) {
+    case some(champion) {
+        return if players_equal(champion, ai) { 10 - depth } else { depth - 10 }
+    }
+    case none { }
+    }
+
+    if is_full(board) {
+        return 0
+    }
+
+    boolean is_maximizing = players_equal(to_move, ai)
+
+    mutable integer best = if is_maximizing { -1000 } else { 1000 }
+    mutable integer current_alpha = alpha
+    mutable integer current_beta = beta
+
+    for move in available_moves(board) {
+        array<string> next = Result.unwrap_or(apply_move(board, move, to_move), board)
+        integer value = minimax(next, opponent(to_move), ai, depth + 1, current_alpha, current_beta)
+
+        if is_maximizing {
+            if value > best { best = value }
+            if best > current_alpha { current_alpha = best }
+        } else {
+            if value < best { best = value }
+            if best < current_beta { current_beta = best }
+        }
+
+        if current_beta <= current_alpha {
+            break
+        }
+    }
+
+    return best
+}
+
+function result<integer> best_move(array<string> board, Player to_move) {
+    array<integer> moves = available_moves(board)
+
+    if Array.is_empty(moves) {
+        return failure("no moves available")
+    }
+
+    mutable integer chosen = Result.unwrap_or(Array.first(moves), 0)
+    mutable integer best = -1000
+
+    for move in moves {
+        array<string> next = apply_move(board, move, to_move)?
+        integer value = minimax(next, opponent(to_move), to_move, 1, -1000, 1000)
+
+        if value > best {
+            best = value
+            chosen = move
+        }
+    }
+
+    return success(chosen)
+}
+
+# ─── Self-Play ───────────────────────────────────────────
+
+# Play a game to completion with both sides using the perfect
+# AI, starting from `start` with `first` to move.
+function (array<string>, optional<Player>) play_out(array<string> start, Player first) {
+    mutable array<string> board = start
+    mutable Player to_move = first
+    mutable boolean is_over = false
+
+    for _ in 0..9 {
+        if !is_over {
+            match winner(board) {
+            case some(_champion) { is_over = true }
+            case none {
+                if is_full(board) {
+                    is_over = true
+                } else {
+                    integer move = Result.unwrap_or(best_move(board, to_move), -1)
+
+                    if move >= 0 {
+                        board = Result.unwrap_or(apply_move(board, move, to_move), board)
+                        to_move = opponent(to_move)
+                    }
+                }
+            }
+            }
+        }
+    }
+
+    return (board, winner(board))
+}
+
+# ─── Rendering ───────────────────────────────────────────
+
+function string cell_label(array<string> board, integer index) {
+    string value = board[index]
+
+    return if value == "-" { Converter.to_string(index) } else { value }
+}
+
+function void print_board(array<string> board) {
+    for row in 0..3 {
+        integer base = row * 3
+
+        print("   ${cell_label(board, base)} | ${cell_label(board, base + 1)} | ${cell_label(board, base + 2)}")
+
+        if row < 2 {
+            print("  ---+---+---")
+        }
+    }
+}
+
+function string outcome_text(optional<Player> result_winner) {
+    return match result_winner {
+    case some(champion) { "${mark(champion)} wins" }
+    case none           { "draw" }
+    }
+}
+
+# ─── Demo ────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("═══════════════════════════════════════")
+    print("   Tic-Tac-Toe — Perfect AI")
+    print("═══════════════════════════════════════")
+    print("Demo mode: the AI plays both sides perfectly (not interactive).")
+
+    print("\n─── AI vs AI (both play perfectly) ───")
+
+    (array<string> final_board, optional<Player> game_winner) = play_out(empty_board(), Player.X)
+
+    print_board(final_board)
+    print("\n  Result: ${outcome_text(game_winner)}  (perfect play always draws)")
+
+    # The AI must take an immediate winning move.
+    print("\n─── AI takes the winning move ───")
+
+    array<string> can_win = ["X", "X", "-", "O", "O", "-", "-", "-", "-"]
+
+    print_board(can_win)
+
+    integer winning = Result.unwrap_or(best_move(can_win, Player.X), -1)
+
+    print("\n  X to move chooses cell ${winning} (completes the top row)")
+
+    # The AI must block the opponent's immediate threat.
+    print("\n─── AI blocks the opponent ───")
+
+    array<string> must_block = ["O", "O", "-", "X", "-", "-", "-", "-", "-"]
+
+    print_board(must_block)
+
+    integer block = Result.unwrap_or(best_move(must_block, Player.X), -1)
+
+    print("\n  X to move chooses cell ${block} (blocks O's top row)")
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+@test
+function void test_empty_board_has_no_winner() {
+    assert(Optional.is_none(winner(empty_board())), "empty board has no winner")
+    assert(Array.length(available_moves(empty_board())) == 9, "nine moves available")
+}
+
+@test
+function void test_detects_row_winner() {
+    array<string> board = ["X", "X", "X", "-", "O", "-", "O", "-", "-"]
+
+    assert(Optional.is_some(winner(board)), "top row should win")
+    assert(mark(Optional.unwrap(winner(board))) == "X", "X should be the winner")
+}
+
+@test
+function void test_detects_column_winner() {
+    array<string> board = ["O", "X", "-", "O", "X", "-", "O", "-", "-"]
+
+    assert(mark(Optional.unwrap(winner(board))) == "O", "left column should win for O")
+}
+
+@test
+function void test_detects_diagonal_winner() {
+    array<string> board = ["X", "O", "-", "O", "X", "-", "-", "-", "X"]
+
+    assert(mark(Optional.unwrap(winner(board))) == "X", "main diagonal should win for X")
+}
+
+@test
+function void test_is_full() {
+    array<string> board = ["X", "O", "X", "X", "O", "O", "O", "X", "X"]
+
+    assert(is_full(board), "completely filled board is full")
+    assert(!is_full(empty_board()), "empty board is not full")
+}
+
+@test
+function void test_apply_move_rejects_taken_cell() {
+    array<string> board = empty_board()
+    array<string> after = apply_move(board, 4, Player.X) |> Result.unwrap()
+
+    assert(after[4] == "X", "cell 4 should hold X")
+    assert(!Result.is_success(apply_move(after, 4, Player.O)), "taken cell should be rejected")
+}
+
+@test
+function void test_apply_move_rejects_out_of_range() {
+    assert(!Result.is_success(apply_move(empty_board(), 9, Player.X)), "index 9 is out of range")
+}
+
+@test
+function void test_ai_takes_immediate_win() {
+    # X has two in the top row; the winning move is cell 2.
+    array<string> board = ["X", "X", "-", "O", "O", "-", "-", "-", "-"]
+
+    assert(Result.unwrap_or(best_move(board, Player.X), -1) == 2, "X should complete the row at cell 2")
+}
+
+@test
+function void test_ai_blocks_immediate_loss() {
+    # O threatens the top row; X must block at cell 2.
+    array<string> board = ["O", "O", "-", "X", "-", "-", "-", "-", "-"]
+
+    assert(Result.unwrap_or(best_move(board, Player.X), -1) == 2, "X should block at cell 2")
+}
+
+@test
+function void test_perfect_play_is_a_draw() {
+    (array<string> board, optional<Player> game_winner) = play_out(empty_board(), Player.X)
+
+    assert(Optional.is_none(game_winner), "two perfect players always draw")
+    assert(is_full(board), "a drawn game fills the board")
+}
+
+@test
+function void test_opponent_alternates() {
+    assert(mark(opponent(Player.X)) == "O", "opponent of X is O")
+    assert(mark(opponent(Player.O)) == "X", "opponent of O is X")
+}

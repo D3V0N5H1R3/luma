@@ -1,0 +1,18 @@
+# Global-scope evaluation test — compound watch/evaluate expressions in a
+# nested frame must resolve the program's own top-level functions through the
+# scratch evaluation environment.  The integration test breaks on line 11
+# (inside inner) and evaluates a compound call to the top-level `triple`.
+
+function integer triple(integer n) {
+    return n * 3
+}
+
+function void inner(integer amount) {
+    integer total = triple(amount)
+    print("total: ${total}")
+}
+
+@main
+function void main() {
+    inner(5)
+}

@@ -1,0 +1,125 @@
+# ═══════════════════════════════════════════════════════════
+# Type System
+#
+# Demonstrates generics, downcast<T>, is<T>, type aliases,
+# interfaces, and the Luma type system in action.
+# ═══════════════════════════════════════════════════════════
+
+# ─── Generic function ─────────────────────────────────────
+
+function<T> T identity(T value) {
+    return value
+}
+
+function<T, U> (U, T) swap(T first, U second) {
+    return (second, first)
+}
+
+# ─── Generic record ───────────────────────────────────────
+
+record Box<T> {
+    T value,
+    string label
+}
+
+# ─── Generic type alias ──────────────────────────────────
+
+type Pair<T> = (T, T)
+
+# ─── Simple type aliases ─────────────────────────────────
+
+type Score = number
+type Name = string
+
+# ─── Interface ────────────────────────────────────────────
+
+interface Named {
+    string name
+}
+
+record Person {
+    string name,
+    number age
+}
+
+record Pet {
+    string name,
+    string species
+}
+
+function string greet(Named entity) {
+    return "Hello, ${entity.name}!"
+}
+
+@main
+function void main() {
+    # ── Generics ──
+    print("=== Generics ===")
+
+    integer n = identity(42)
+    string s = identity("hello")
+
+    print("identity(42) = ${n}")
+    print("identity(\"hello\") = ${s}")
+
+    (string, integer) swapped = swap(1, "world")
+
+    print("swap(1, \"world\") = (${swapped.0}, ${swapped.1})")
+
+    Box<integer> int_box = Box<integer> { value = 42, label = "answer" }
+    Box<string> str_box = Box<string> { value = "hi", label = "greeting" }
+
+    print("int_box: ${int_box.label} = ${int_box.value}")
+    print("str_box: ${str_box.label} = ${str_box.value}")
+
+    Pair<number> coords = (3.14, 2.72)
+
+    print("coords: (${coords.0}, ${coords.1})")
+
+    # ── Interfaces (structural typing) ──
+    print("")
+    print("=== Interfaces ===")
+
+    Person alice = Person { name = "Alice", age = 30 }
+    Pet buddy = Pet { name = "Buddy", species = "Dog" }
+
+    print(greet(alice))
+    print(greet(buddy))
+
+    # ── downcast and is ──
+    print("")
+    print("=== Type narrowing ===")
+
+    # Use an interface-typed variable to demonstrate downcast.
+    Named named = alice
+
+    print("is<Person>(named) = ${is<Person>(named)}")
+    print("is<Pet>(named) = ${is<Pet>(named)}")
+
+    result<Person> cast_ok = downcast<Person>(named)
+    result<Pet> cast_fail = downcast<Pet>(named)
+
+    match cast_ok {
+        success(v) { print("downcast<Person>(named) = success(${v.name}, age ${v.age})") }
+        failure(_msg) { print("downcast<Person>(named) = failure") }
+    }
+
+    match cast_fail {
+        success(v) { print("downcast<Pet>(named) = success(${v.name})") }
+        failure(_msg) { print("downcast<Pet>(named) = fail") }
+    }
+
+    # trusted_downcast — for when you're certain of the type
+    Person person = trusted_downcast<Person>(named)
+
+    print("trusted_downcast<Person>(named) = ${person.name}")
+
+    # ── Type aliases ──
+    print("")
+    print("=== Type aliases ===")
+
+    Score points = 99.5
+    Name player = "Alice"
+
+    print("${player}: ${points} points")
+}

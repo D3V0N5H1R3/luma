@@ -1,0 +1,27 @@
+# ─────────────────────────────────────────────────────────────
+# Composite action: apt-install
+#
+# Updates the APT package index once and installs the requested
+# packages. Centralises the "apt-get update && apt-get install"
+# pattern repeated across the Linux CI jobs.
+# ─────────────────────────────────────────────────────────────
+
+name: APT Install
+description: Update the APT index and install the requested packages.
+
+inputs:
+  packages:
+    description: Space-separated list of packages to install.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install APT packages
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+      run: |
+        sudo apt-get update -q
+        # shellcheck disable=SC2086 # PACKAGES is an intentional space-separated list.
+        sudo apt-get install -y $PACKAGES

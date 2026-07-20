@@ -1,0 +1,68 @@
+# VM: try/catch/finally — finally runs on every exit from the catch body.
+function string catch_then_return(reference<string> log) {
+    integer zero = 0
+
+    try {
+        integer _ = 1 / zero
+    } catch(_err) {
+        Reference.set(log, Reference.get(log) + "C")
+
+        return "ret"
+    } finally {
+        Reference.set(log, Reference.get(log) + "F")
+    }
+
+    return "end"
+}
+
+@main
+function void main() {
+    mutable string log = ""
+
+    integer zero = 0
+
+    # finally runs even when the catch body raises a new error; the new error
+    # propagates to the outer handler only after finally has run.
+    try {
+        try {
+            integer _ = 1 / zero
+        } catch(_e) {
+            log += "C"
+
+            integer _again = 1 / zero
+        } finally {
+            log += "F"
+        }
+    } catch(_outer) {
+        log += "O"
+    }
+
+    # finally runs when control leaves the catch body via break.
+    for _i in 0 .. 3 {
+        try {
+            integer _ = 1 / zero
+        } catch(_e) {
+            break
+        } finally {
+            log += "B"
+        }
+    }
+
+    # finally runs when the catch body returns from the function.
+    reference<string> returned_log = Reference.new("")
+    string _r = catch_then_return(returned_log)
+    log += Reference.get(returned_log)
+
+    # nested try/finally with no catch re-raises after its finally runs.
+    try {
+        try {
+            integer _ = 1 / zero
+        } finally {
+            log += "N"
+        }
+    } catch(_e) {
+        log += "P"
+    }
+
+    print(log)
+}

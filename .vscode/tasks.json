@@ -1,0 +1,163 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "CMake: Configure",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--preset", "default"],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "CMake: Build",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--build", "--preset", "default"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc", "$msCompile"],
+            "dependsOn": "CMake: Configure"
+        },
+        {
+            "label": "CMake: Configure (Debug)",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--preset", "debug"],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "CMake: Build (Debug)",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--build", "--preset", "debug"],
+            "group": "build",
+            "problemMatcher": ["$gcc", "$msCompile"],
+            "dependsOn": "CMake: Configure (Debug)"
+        },
+        {
+            "label": "CMake: Configure (RelWithDebInfo)",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--preset", "relwithdebinfo"],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "CMake: Build (RelWithDebInfo)",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--build", "--preset", "relwithdebinfo"],
+            "group": "build",
+            "problemMatcher": ["$gcc", "$msCompile"],
+            "dependsOn": "CMake: Configure (RelWithDebInfo)"
+        },
+        {
+            "label": "CMake: Configure (Sanitizers)",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--preset", "sanitize"],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "CMake: Build (Sanitizers)",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--build", "--preset", "sanitize"],
+            "group": "build",
+            "problemMatcher": ["$gcc", "$msCompile"],
+            "dependsOn": "CMake: Configure (Sanitizers)"
+        },
+        {
+            "label": "CMake: Configure (Coverage)",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--preset", "coverage"],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "CMake: Build (Coverage)",
+            "type": "shell",
+            "command": "cmake",
+            "args": ["--build", "--preset", "coverage"],
+            "group": "build",
+            "problemMatcher": ["$gcc", "$msCompile"],
+            "dependsOn": "CMake: Configure (Coverage)"
+        },
+        {
+            "label": "CTest: Run All Tests",
+            "type": "shell",
+            "command": "ctest",
+            "args": ["--preset", "default"],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "dependsOn": "CMake: Build",
+            "problemMatcher": []
+        },
+        {
+            "label": "CTest: Run All Tests (Debug)",
+            "type": "shell",
+            "command": "ctest",
+            "args": ["--preset", "debug"],
+            "group": "test",
+            "dependsOn": "CMake: Build (Debug)",
+            "problemMatcher": []
+        },
+        {
+            "label": "Luma: Run All Test Suites",
+            "type": "shell",
+            "command": "python",
+            "args": ["${workspaceFolder}/scripts/run_luma_tests.py"],
+            "group": "test",
+            "dependsOn": "CMake: Build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Luma: Run Current File",
+            "type": "shell",
+            "command": "${workspaceFolder}/build/luma",
+            "args": ["${file}"],
+            "windows": {
+                "command": "${workspaceFolder}/build/Release/luma.exe"
+            },
+            "group": "none",
+            "dependsOn": "CMake: Build",
+            "problemMatcher": ["$luma"]
+        },
+        {
+            "label": "Luma: Test Current File",
+            "type": "shell",
+            "command": "${workspaceFolder}/build/luma",
+            "args": ["--test", "${file}"],
+            "windows": {
+                "command": "${workspaceFolder}/build/Release/luma.exe"
+            },
+            "group": "test",
+            "dependsOn": "CMake: Build",
+            "problemMatcher": ["$luma-test"]
+        },
+        {
+            "label": "Lint: All",
+            "type": "shell",
+            "command": "python",
+            "args": ["${workspaceFolder}/scripts/lint.py"],
+            "group": "none",
+            "problemMatcher": []
+        },
+        {
+            "label": "Format: All",
+            "type": "shell",
+            "command": "python",
+            "args": ["${workspaceFolder}/scripts/format.py"],
+            "group": "none",
+            "problemMatcher": []
+        }
+    ]
+}

@@ -1,0 +1,294 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Http Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+#
+# NOTE: These tests only cover URL utility functions.
+# Actual HTTP requests are not tested to avoid network
+# dependencies.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_http_parse_url() {
+    Http.UrlParts parts = Http.parse_url("http://example.com:8080/path?q=1")
+
+    assert(parts.scheme == "http")
+    assert(parts.host == "example.com")
+    assert(parts.port == "8080")
+    assert(parts.path == "/path")
+    assert(parts.query == "q=1")
+}
+
+@test
+function void test_http_parse_url_default_port() {
+    Http.UrlParts parts = Http.parse_url("http://example.com/page")
+
+    assert(parts.host == "example.com")
+    assert(parts.port == "80")
+    assert(parts.path == "/page")
+}
+
+@test
+function void test_http_build_query() {
+    string query = Http.build_query({"key": "val"})
+
+    assert(query == "key=val")
+}
+
+@test
+function void test_http_parse_query() {
+    dictionary<string> params = Http.parse_query("a=1&b=2")
+
+    assert(params["a"] == "1")
+    assert(params["b"] == "2")
+}
+
+@test
+function void test_http_build_parse_roundtrip() {
+    dictionary<string> original = {"name": "alice", "age": "30"}
+    dictionary<string> roundtripped = original
+    |> Http.build_query()
+    |> Http.parse_query()
+
+    assert(roundtripped["name"] == "alice")
+    assert(roundtripped["age"] == "30")
+}
+
+# ─── HTTPS request handling (deterministic, no network) ──────────────────────
+# These exercise the https scheme through the same validation + SSRF pipeline as
+# http. With TLS enabled (the default) the request reaches the host/CRLF/SSRF
+# guards; with TLS disabled it is rejected up-front. Either way the result is a
+# deterministic failure, so the tests are valid in both build configurations and
+# never touch the network.
+
+@test
+function void test_http_https_loopback_blocked() {
+    result<Http.Response> r = Http.get("https://127.0.0.1/admin")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_https_empty_host_fails() {
+    result<Http.Response> r = Http.get("https://")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_https_crlf_injection_fails() {
+    result<Http.Response> r = Http.get("https://example.com/a\r\nX-Injected: 1")
+
+    assert(!Result.is_success(r))
+}
+
+# ─── HTTP request methods (error cases only) ─────────────────────────────────
+# NOTE: No live network calls — all tests use unreachable/invalid URLs.
+
+@test
+function void test_http_post_fails() {
+    result<Http.Response> r = Http.post("http://localhost:1", "body")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_put_fails() {
+    result<Http.Response> r = Http.put("http://localhost:1", "body")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_delete_fails() {
+    result<Http.Response> r = Http.delete("http://localhost:1")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_patch_fails() {
+    result<Http.Response> r = Http.patch("http://localhost:1", "body")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_head_fails() {
+    result<Http.Response> r = Http.head("http://localhost:1")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_get_with_fails() {
+    dictionary<string> headers = {"Accept": "application/json"}
+
+    result<Http.Response> r = Http.get_with("http://localhost:1", headers)
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_post_with_fails() {
+    dictionary<string> headers = {"Content-Type": "text/plain"}
+
+    result<Http.Response> r = Http.post_with("http://localhost:1", "body", headers)
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_request_fails() {
+    dictionary<string> headers = {}
+
+    result<Http.Response> r = Http.request({"method": "GET", "url": "http://localhost:1", "body": ""}, headers)
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_download_fails() {
+    result<string> r = Http.download("http://localhost:1", "test_download.bin")
+
+    assert(!Result.is_success(r))
+}
+
+# ───────────────────────────────────────────────────────────
+# basic_auth, bearer_auth (pure header builders)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_http_basic_auth() {
+    assert(Http.basic_auth("user", "pass") == "Basic dXNlcjpwYXNz")
+}
+
+@test
+function void test_http_bearer_auth() {
+    assert(Http.bearer_auth("tok") == "Bearer tok")
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional URL parsing (positive)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_http_parse_url_https_default_port() {
+    Http.UrlParts parts = Http.parse_url("https://example.com/page")
+
+    assert(parts.scheme == "https")
+    assert(parts.host == "example.com")
+    assert(parts.port == "443")
+}
+
+@test
+function void test_http_parse_url_ipv6() {
+    Http.UrlParts parts = Http.parse_url("http://[2001:db8::1]:8080/p?q=1")
+
+    assert(parts.host == "[2001:db8::1]")
+    assert(parts.port == "8080")
+    assert(parts.path == "/p")
+    assert(parts.query == "q=1")
+}
+
+@test
+function void test_http_parse_url_scheme_lowercased() {
+    Http.UrlParts parts = Http.parse_url("HTTP://Example.COM/Path")
+
+    assert(parts.scheme == "http")
+    assert(parts.host == "Example.COM")
+    assert(parts.path == "/Path")
+}
+
+@test
+function void test_http_parse_url_no_path() {
+    Http.UrlParts parts = Http.parse_url("http://example.com")
+
+    assert(parts.path == "/")
+    assert(parts.host == "example.com")
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional query string (positive)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_http_build_query_encodes_reserved() {
+    string query = Http.build_query({"q": "a b&c"})
+
+    assert(query == "q=a%20b%26c")
+}
+
+@test
+function void test_http_build_query_empty() {
+    assert(Http.build_query({}) == "")
+}
+
+@test
+function void test_http_parse_query_decodes_and_empty_value() {
+    dictionary<string> params = Http.parse_query("name=a%20b&flag&x=1")
+
+    assert(params["name"] == "a b")
+    assert(params["flag"] == "")
+    assert(params["x"] == "1")
+}
+
+# ───────────────────────────────────────────────────────────
+# Request validation (negative) — deterministic, no network.
+# These fail during validation/address resolution before any
+# connection is attempted, so they do not depend on network access.
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_http_unsupported_scheme_fails() {
+    result<Http.Response> r = Http.get("ftp://example.com/file")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_empty_host_fails() {
+    result<Http.Response> r = Http.get("http://")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_crlf_path_injection_fails() {
+    result<Http.Response> r = Http.get("http://example.com/a\r\nX-Injected: 1")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_crlf_header_injection_fails() {
+    dictionary<string> headers = {"X-Test": "v\r\nInjected: 1"}
+
+    result<Http.Response> r = Http.get_with("http://example.com", headers)
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_ssrf_loopback_fails() {
+    result<Http.Response> r = Http.get("http://127.0.0.1/admin")
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_ssrf_private_range_fails() {
+    result<Http.Response> r1 = Http.get("http://10.0.0.1/")
+    result<Http.Response> r2 = Http.get("http://192.168.1.1/")
+
+    assert(!Result.is_success(r1))
+    assert(!Result.is_success(r2))
+}
+
+@test
+function void test_http_request_missing_url_fails() {
+    result<Http.Response> r = Http.request({"method": "GET"}, {})
+
+    assert(!Result.is_success(r))
+}

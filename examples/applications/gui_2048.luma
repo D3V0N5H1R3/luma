@@ -1,0 +1,498 @@
+# GraphicalUi 2048 — the classic sliding-tile puzzle, driven entirely by the
+# keyboard. Demonstrates an on_key subscription whose messages are routed through
+# update(), a non-trivial slide-and-merge algorithm over a flat array<integer>
+# board, and win / game-over detection.
+#
+# To keep the @test blocks deterministic the spawn rule is fixed (a new 2 always
+# appears in the first empty cell) rather than random, so a sequence of moves
+# always produces the same board.
+
+# ─── Board model ───────────────────────────────────────────
+
+# Two adjacent 2s so the very first horizontal move already merges.
+function array<integer> seed_board() {
+    return [2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+}
+
+function dictionary new_2048() {
+    mutable dictionary model = {"score": 0}
+    model["board"] = seed_board()
+    model["won"] = false
+    model["over"] = false
+    return model
+}
+
+# The four cell indices traversed for each move, ordered so that sliding always
+# compresses toward the first index — i.e. a plain "slide left" per line.
+function array<array<integer>> index_groups(string direction) {
+    if direction == "right" {
+        return [[3, 2, 1, 0], [7, 6, 5, 4], [11, 10, 9, 8], [15, 14, 13, 12]]
+    }
+    if direction == "up" {
+        return [[0, 4, 8, 12], [1, 5, 9, 13], [2, 6, 10, 14], [3, 7, 11, 15]]
+    }
+    if direction == "down" {
+        return [[12, 8, 4, 0], [13, 9, 5, 1], [14, 10, 6, 2], [15, 11, 7, 3]]
+    }
+    return [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]]
+}
+
+# Drop the zeros, packing the non-empty tiles toward the front of the line.
+function array<integer> compress(array<integer> line) {
+    return Result.unwrap(Array.filter(line, (integer v) -> v != 0))
+}
+
+# Merge equal neighbours once, left to right. Returns the merged tiles (not yet
+# padded to four cells) together with the score gained from the merges.
+function (array<integer>, integer) merge_pairs(array<integer> compressed) {
+    mutable array<integer> merged = []
+    mutable integer gained = 0
+    mutable integer i = 0
+    integer n = Array.length(compressed)
+    while i < n {
+        integer current = compressed[i]
+        if i + 1 < n && compressed[i + 1] == current {
+            integer combined = current * 2
+            merged = Array.push(merged, combined)
+            gained = gained + combined
+            i = i + 2
+        } else {
+            merged = Array.push(merged, current)
+            i = i + 1
+        }
+    }
+    return (merged, gained)
+}
+
+# Pad a line with trailing zeros up to the four-cell width.
+function array<integer> pad_to_four(array<integer> line) {
+    mutable array<integer> padded = line
+    while Array.length(padded) < 4 {
+        padded = Array.push(padded, 0)
+    }
+    return padded
+}
+
+# Compress one four-cell line toward the front and merge equal neighbours once.
+# Returns the new line plus the score gained from any merges.
+function dictionary slide_line(array<integer> line) {
+    (array<integer> merged, integer gained) = merge_pairs(compress(line))
+    mutable dictionary out = {"gained": gained}
+    out["line"] = pad_to_four(merged)
+    return out
+}
+
+function boolean boards_equal(array<integer> a, array<integer> b) {
+    mutable integer i = 0
+    while i < Array.length(a) {
+        if a[i] != b[i] {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+function integer first_empty(array<integer> board) {
+    return Array.find_index(board, (integer v) -> v == 0) |> Result.unwrap_or(-1)
+}
+
+function boolean has_empty_cell(array<integer> board) {
+    return Array.contains(board, 0)
+}
+
+# True when some cell equals its right-hand neighbour (a horizontal move merges).
+function boolean has_horizontal_merge(array<integer> board) {
+    mutable integer r = 0
+    while r < 4 {
+        mutable integer c = 0
+        while c < 3 {
+            if board[r * 4 + c] == board[r * 4 + c + 1] {
+                return true
+            }
+            c = c + 1
+        }
+        r = r + 1
+    }
+    return false
+}
+
+# True when some cell equals the neighbour below it (a vertical move merges).
+function boolean has_vertical_merge(array<integer> board) {
+    mutable integer col = 0
+    while col < 4 {
+        mutable integer row = 0
+        while row < 3 {
+            if board[row * 4 + col] == board[(row + 1) * 4 + col] {
+                return true
+            }
+            row = row + 1
+        }
+        col = col + 1
+    }
+    return false
+}
+
+# No empty cells and no equal orthogonal neighbours means no move is possible.
+function boolean is_over(array<integer> board) {
+    if has_empty_cell(board) {
+        return false
+    }
+    if has_horizontal_merge(board) {
+        return false
+    }
+    if has_vertical_merge(board) {
+        return false
+    }
+    return true
+}
+
+function dictionary move(dictionary model, string direction) {
+    array<integer> board = model["board"]
+    array<array<integer>> groups = index_groups(direction)
+    mutable array<integer> next = board
+    mutable integer gained = 0
+
+    for group in groups {
+        array<integer> values = [board[group[0]], board[group[1]], board[group[2]], board[group[3]]]
+        dictionary slid = slide_line(values)
+        array<integer> line = slid["line"]
+        gained = gained + Dictionary.get_or(slid, "gained", 0)
+        mutable integer k = 0
+        for idx in group {
+            next = Result.unwrap(Array.set(next, idx, line[k]))
+            k = k + 1
+        }
+    }
+
+    # A move that changes nothing must not spawn a tile or alter the score.
+    if boards_equal(next, board) {
+        return model
+    }
+
+    integer slot = first_empty(next)
+    if slot >= 0 {
+        next = Result.unwrap(Array.set(next, slot, 2))
+    }
+
+    mutable dictionary updated = model
+    updated["board"] = next
+    updated["score"] = Dictionary.get_or(model, "score", 0) + gained
+    updated["won"] = Dictionary.get_or(model, "won", false) || Array.contains(next, 2048)
+    updated["over"] = is_over(next)
+    return updated
+}
+
+function string status_text(dictionary model) {
+    boolean won = Dictionary.get_or(model, "won", false)
+    boolean over = Dictionary.get_or(model, "over", false)
+    if won && over {
+        return "You reached 2048! No moves left."
+    }
+    if won {
+        return "You reached 2048! Keep going."
+    }
+    if over {
+        return "Game over — no moves left."
+    }
+    return "Use the arrow keys or the on-screen arrows to combine tiles."
+}
+
+# ─── View ──────────────────────────────────────────────────
+
+# The bespoke tile palette keyed by face value; values at or beyond 2048 all use
+# the brightest colour, which is also the lookup default. This is the iconic 2048
+# colour scheme and is intentionally fixed rather than theme-driven, so the board
+# reads the same in light and dark mode; per-tile contrast is handled by the
+# single dark ink chosen in tile_style().
+function string tile_background(integer value) {
+    dictionary<string> palette = {
+        "0": "var(--gui-input-bg)",
+        "2": "#eee4da",
+        "4": "#ede0c8",
+        "8": "#f2b179",
+        "16": "#f59563",
+        "32": "#f67c5f",
+        "64": "#f65e3b",
+        "128": "#edcf72",
+        "256": "#edcc61",
+        "512": "#edc850",
+        "1024": "#edc53f"
+    }
+    return Dictionary.get_or(palette, "${value}", "#edc22e")
+}
+
+function dictionary<string> tile_style(integer value) {
+    # Tile digits are essential information. A single dark ink clears WCAG AA
+    # large-text contrast (>= 3:1) against every colour in the bespoke palette
+    # — from 3.8:1 on the darkest tile to 9.6:1 on the lightest. White text was
+    # the original bug: it sinks to ~1.85:1 on #f2b179 and 2.6:1 on #f67c5f.
+    return {
+        "width": "78px",
+        "height": "78px",
+        "font_size": "30px",
+        "font_weight": "700",
+        "text_align": "center",
+        "line_height": "78px",
+        "color": "#3f342b",
+        "background_color": tile_background(value),
+        "border_radius": GraphicalUi.VAR_RADIUS
+    }
+}
+
+function widget view_tile(integer value) {
+    string text = if value == 0 { "" } else { "${value}" }
+    return GraphicalUi.label(text, tile_style(value))
+}
+
+function widget view_board(dictionary model) {
+    array<integer> board = model["board"]
+    array<widget> tiles = Array.map(board, (integer value) -> view_tile(value))
+        |> Result.unwrap()
+    return GraphicalUi.grid(4, tiles, GraphicalUi.spacing(8))
+}
+
+# ─── New Game (guarded) ────────────────────────────────────
+
+# Starting over mid-game throws away the board and score, so ask first when a
+# game is actually in progress; a fresh or finished board resets immediately.
+function dictionary request_new_game(dictionary model) {
+    boolean in_progress = (Dictionary.get_or(model, "score", 0) > 0
+        && !Dictionary.get_or(model, "over", false))
+    if in_progress {
+        return Dictionary.set(model, "show_new_game_confirm", true)
+    }
+    return new_2048()
+}
+
+function dictionary cancel_new_game(dictionary model) {
+    return Dictionary.set(model, "show_new_game_confirm", false)
+}
+
+function widget view_new_game_confirm(dictionary model) {
+    mutable dictionary opts = {}
+    opts["confirm_label"] = "Start new game"
+    opts["cancel_label"] = "Keep playing"
+    return GraphicalUi.when(Dictionary.get_or(model, "show_new_game_confirm", false),
+        GraphicalUi.confirm(
+            "Start a new game?",
+            "This clears the current board and score.",
+            () -> new_2048(),
+            () -> cancel_new_game(model),
+            opts
+        )
+    )
+}
+
+# ─── On-screen controls ────────────────────────────────────
+
+# A pointer/touch d-pad so the board is playable without a physical keyboard.
+# Each button routes through the same move() the arrow-key subscription uses;
+# the glyph is the visible label and aria_label spells the direction for readers.
+function widget dpad_button(dictionary model, string direction, string glyph, string label) {
+    return GraphicalUi.button(glyph, () -> move(model, direction), {
+        "variant": GraphicalUi.SECONDARY,
+        "aria_label": label,
+        "min_width": "52px"
+    })
+}
+
+function widget view_dpad(dictionary model) {
+    return GraphicalUi.accessible(GraphicalUi.column([
+        GraphicalUi.row([
+            dpad_button(model, "up", "▲", "Move up")
+        ], GraphicalUi.center_x()),
+        GraphicalUi.row([
+            dpad_button(model, "left", "◀", "Move left"),
+            dpad_button(model, "down", "▼", "Move down"),
+            dpad_button(model, "right", "▶", "Move right")
+        ], GraphicalUi.merge_styles(GraphicalUi.center_x(), GraphicalUi.spacing(8)))
+    ], GraphicalUi.merge_styles(GraphicalUi.spacing(8), {"align_items": "center"})),
+        {"role": "group", "aria_label": "Board controls"})
+}
+
+function widget view_2048(dictionary model) {
+    return GraphicalUi.column([
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("hash", 20),
+            GraphicalUi.heading("2048", 1)
+        ]),
+        GraphicalUi.label("Score: ${Dictionary.get_or(model, "score", 0)}", {
+            "font_size": GraphicalUi.VAR_TEXT_LG,
+            "font_weight": "700",
+            "color": GraphicalUi.VAR_PRIMARY
+        }),
+        GraphicalUi.aria_live("polite",
+            GraphicalUi.label(status_text(model), {
+                "font_size": GraphicalUi.VAR_TEXT_SM,
+                "color": GraphicalUi.VAR_DISABLED_FG
+            })
+        ),
+        view_board(model),
+        view_dpad(model),
+        GraphicalUi.row([
+            GraphicalUi.button("New Game", () -> request_new_game(model),
+                {"variant": GraphicalUi.SECONDARY})
+        ], GraphicalUi.center_x()),
+        view_new_game_confirm(model)
+    ], GraphicalUi.merge_styles(GraphicalUi.spacing(16), GraphicalUi.padding(16)))
+}
+
+function array<dictionary<string>> g2048_subscriptions(dictionary _model) {
+    return [
+        GraphicalUi.on_key("arrows", "*", (string key) -> match key {
+            case == "ArrowLeft" { "left" }
+            case == "ArrowRight" { "right" }
+            case == "ArrowUp" { "up" }
+            case == "ArrowDown" { "down" }
+            else { "" }
+        })
+    ]
+}
+
+@main
+function void main() {
+    GraphicalUi.app(g2048_config())
+}
+
+# Exposed as a named function (rather than inlined in main) so the example's
+# behaviour can be driven and verified by the @test blocks without a window.
+function dictionary g2048_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Luma 2048"
+    config["width"] = 380
+    config["height"] = 520
+    config["model"] = new_2048()
+    config["view"] = view_2048
+    config["update"] = (dictionary model, string msg) -> match msg {
+        case == "left" { move(model, "left") }
+        case == "right" { move(model, "right") }
+        case == "up" { move(model, "up") }
+        case == "down" { move(model, "down") }
+        else { model }
+    }
+    config["subscribe"] = g2048_subscriptions
+    return config
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+# Moves are sent as messages (the same strings the arrow-key subscription emits),
+# so these exercise the exact code path a key press would take — deterministically.
+
+function integer cell(dictionary model, integer index) {
+    array<integer> board = Dictionary.get_or(model, "board", [])
+    return board[index]
+}
+
+@test
+function void test_slide_merges_adjacent_pair() {
+    dictionary slid = slide_line([2, 2, 0, 0])
+    assert(boards_equal(slid["line"], [4, 0, 0, 0]))
+    assert(Dictionary.get_or(slid, "gained", -1) == 4)
+}
+
+@test
+function void test_slide_only_merges_once() {
+    # 2 2 2 2 collapses to two 4s, not a single 8.
+    dictionary slid = slide_line([2, 2, 2, 2])
+    assert(boards_equal(slid["line"], [4, 4, 0, 0]))
+    assert(Dictionary.get_or(slid, "gained", -1) == 8)
+}
+
+@test
+function void test_move_left_merges_and_scores() {
+    dictionary config = g2048_config()
+    dictionary model = GraphicalUi.test_message(config, new_2048(), "left")
+    assert(cell(model, 0) == 4)
+    assert(cell(model, 1) == 2)
+    assert(Dictionary.get_or(model, "score", -1) == 4)
+}
+
+@test
+function void test_move_right_packs_to_the_end() {
+    dictionary config = g2048_config()
+    dictionary model = GraphicalUi.test_message(config, new_2048(), "right")
+    assert(cell(model, 3) == 4)
+    assert(cell(model, 0) == 2)
+    assert(Dictionary.get_or(model, "score", -1) == 4)
+}
+
+@test
+function void test_move_that_changes_nothing_is_ignored() {
+    dictionary config = g2048_config()
+    # Two side-by-side 2s cannot move upward, so the board and score stay put.
+    dictionary model = GraphicalUi.test_message(config, new_2048(), "up")
+    assert(cell(model, 0) == 2)
+    assert(cell(model, 1) == 2)
+    assert(Dictionary.get_or(model, "score", -1) == 0)
+    # A no-op move must not spawn a new tile anywhere on the board.
+    assert(boards_equal(Dictionary.get_or(model, "board", []), seed_board()))
+}
+
+@test
+function void test_reaching_2048_sets_the_won_flag() {
+    dictionary config = g2048_config()
+    mutable dictionary primed = new_2048()
+    primed["board"] = [1024, 1024, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    dictionary model = GraphicalUi.test_message(config, primed, "left")
+    assert(cell(model, 0) == 2048)
+    assert(Dictionary.get_or(model, "won", false))
+}
+
+@test
+function void test_status_text_prioritises_terminal_states() {
+    mutable dictionary model = new_2048()
+    model["won"] = true
+    assert(status_text(model) == "You reached 2048! Keep going.")
+    model["over"] = true
+    assert(status_text(model) == "You reached 2048! No moves left.")
+    model["won"] = false
+    assert(status_text(model) == "Game over — no moves left.")
+}
+
+@test
+function void test_is_over_detects_a_locked_board() {
+    array<integer> locked = [2, 4, 2, 4, 4, 2, 4, 2, 2, 4, 2, 4, 4, 2, 4, 2]
+    assert(is_over(locked))
+    # A board with an empty cell, or with a possible merge, is not over.
+    assert(!is_over([2, 4, 2, 4, 4, 2, 4, 2, 2, 4, 2, 4, 4, 2, 4, 0]))
+    assert(!is_over([2, 2, 2, 4, 4, 2, 4, 2, 2, 4, 2, 4, 4, 2, 4, 2]))
+}
+
+@test
+function void test_arrow_key_subscription_drives_a_move() {
+    dictionary config = g2048_config()
+    dictionary model = GraphicalUi.test_key(config, new_2048(), "ArrowLeft")
+    assert(cell(model, 0) == 4)
+    # A key the subscription ignores leaves the board untouched.
+    dictionary same = GraphicalUi.test_key(config, new_2048(), "Enter")
+    assert(cell(same, 0) == 2)
+    assert(cell(same, 1) == 2)
+}
+
+@test
+function void test_new_game_resets_immediately_when_not_in_progress() {
+    dictionary config = g2048_config()
+    # A fresh board has score 0, so New Game resets without a confirm prompt.
+    dictionary fresh = GraphicalUi.test_click(config, new_2048(), "New Game")
+    assert(boards_equal(Dictionary.get_or(fresh, "board", []), seed_board()))
+    assert(Dictionary.get_or(fresh, "score", -1) == 0)
+    assert(!Dictionary.get_or(fresh, "show_new_game_confirm", false))
+}
+
+@test
+function void test_new_game_confirms_when_a_game_is_in_progress() {
+    dictionary config = g2048_config()
+    dictionary played = GraphicalUi.test_message(config, new_2048(), "left")
+    # Clicking New Game mid-game asks first: the board is untouched and a
+    # confirm dialog is requested rather than the game silently resetting.
+    dictionary requested = GraphicalUi.test_click(config, played, "New Game")
+    assert(cell(requested, 0) == 4)
+    assert(Dictionary.get_or(requested, "score", -1) == 4)
+    assert(Dictionary.get_or(requested, "show_new_game_confirm", false))
+
+    # Confirming (clicking the dialog title) starts a fresh game.
+    dictionary fresh = GraphicalUi.test_click(config, requested, "Start a new game?")
+    assert(boards_equal(Dictionary.get_or(fresh, "board", []), seed_board()))
+    assert(Dictionary.get_or(fresh, "score", -1) == 0)
+}

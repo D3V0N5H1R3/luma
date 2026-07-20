@@ -1,0 +1,85 @@
+# ═══════════════════════════════════════════════════════════
+# Fibonacci Sequence
+#
+# Demonstrates recursion, iteration with mutable variables,
+# match expressions, functional pipelines, and @test.
+# ═══════════════════════════════════════════════════════════
+
+# ─── Recursive Approach ───
+
+function integer compute_fibonacci_recursive(integer term_number) {
+    return match term_number {
+    case <= 1 { term_number }
+    else {
+        compute_fibonacci_recursive(term_number - 1)
+        + compute_fibonacci_recursive(term_number - 2)
+    }
+}
+}
+
+# ─── Iterative Approach ───
+
+function integer compute_fibonacci_iterative(integer term_number) {
+    if term_number <= 1 {
+        return term_number
+    }
+
+    mutable integer previous = 0
+    mutable integer current = 1
+
+    for _ in 2 .. term_number + 1 {
+        integer next = previous + current
+
+        previous = current
+        current = next
+    }
+
+    return current
+}
+
+# ─── Generate a Sequence ───
+
+function array<integer> generate_fibonacci_sequence(integer count) {
+    array<integer> indices = Array.range(0, count) |> Result.unwrap()
+
+    return Array.map(indices, (integer term_number) -> compute_fibonacci_iterative(term_number)) ?? []
+}
+
+@main
+function void main() {
+    integer count = 15
+
+    print("Fibonacci sequence (first ${count} numbers):")
+
+    array<integer> sequence = generate_fibonacci_sequence(count)
+
+    for term_index, value in sequence {
+        print("  F(${term_index}) = ${value}")
+    }
+
+    integer total = Array.sum(sequence) ?? 0
+
+    print("\nSum: ${total}")
+}
+
+# ─── Tests ───
+
+@test
+function void test_recursive_matches_iterative() {
+    # Both implementations must agree across a range of known terms.
+    for term_number in 0 .. 20 {
+        assert(
+            compute_fibonacci_recursive(term_number) == compute_fibonacci_iterative(term_number),
+            "recursive and iterative Fibonacci must agree at term ${term_number}"
+        )
+    }
+}
+
+@test
+function void test_known_fibonacci_terms() {
+    assert(compute_fibonacci_iterative(0) == 0, "F(0) = 0")
+    assert(compute_fibonacci_iterative(1) == 1, "F(1) = 1")
+    assert(compute_fibonacci_iterative(10) == 55, "F(10) = 55")
+    assert(compute_fibonacci_recursive(10) == 55, "F(10) = 55 (recursive)")
+    assert(compute_fibonacci_iterative(15) == 610, "F(15) = 610")
+}

@@ -1,0 +1,58 @@
+# Type checker: variables and mutability — assignment, compound assignment,
+# increment/decrement, and mutation through fields, elements, and entries.
+record Point { integer x, integer y }
+
+function integer mutate_locals() {
+    integer immutable_count = 10
+    mutable integer total = 0
+
+    total = immutable_count
+    total += 5
+    total -= 2
+    total *= 3
+    total /= 2
+    total %= 4
+    total++
+    total--
+
+    return total
+}
+
+function void mutate_through_targets() {
+    mutable Point p = Point { x = 1, y = 2 }
+    p.x = 5
+    p.y += 3
+
+    mutable array<integer> items = [1, 2, 3]
+    items[0] = 10
+    items[1] += 4
+
+    mutable dictionary<integer> scores = { "a": 1 }
+    scores["a"] = 9
+    scores["a"] *= 2
+}
+
+function integer mutate_parameter(mutable integer n) {
+    mutable integer steps = 0
+
+    while n > 0 {
+        n--
+        steps++
+    }
+
+    return steps
+}
+
+function void destructuring() {
+    (integer first, integer second) = (1, 2)
+    mutable (integer a, integer b) = (3, 4)
+
+    a = first
+    b += second
+}
+
+function string concatenate() {
+    mutable string greeting = "hello"
+    greeting += " world"
+    return greeting
+}

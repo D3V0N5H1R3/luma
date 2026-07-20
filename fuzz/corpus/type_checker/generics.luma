@@ -1,0 +1,51 @@
+# Type checker: well-typed function with generics
+function<T> T identity(T x) { return x }
+
+function<A, B, C> function(A) -> C compose(function(B) -> C f, function(A) -> B g) {
+    return (A a) -> f(g(a))
+}
+
+integer n = identity(42)
+string s = identity("hello")
+
+# Turbofish — explicit type arguments
+integer ti = identity::<integer>(7)
+string ts = identity::<string>("x")
+
+# Generic records, interfaces, and type aliases
+record Box<T> { T value }
+
+record Pair<T, U> { T first, U second }
+
+interface Container<T> { T value }
+
+type Twin<T> = (T, T)
+
+Box<integer> bx = Box<integer> { value = 1 }
+Pair<string, integer> pr = Pair<string, integer> { first = "a", second = 2 }
+Twin<integer> tw = (10, 20)
+
+# Bounded generic parameters (single and multiple bounds)
+interface HasName { string name }
+
+interface HasValue { integer value }
+
+function<T: HasName> string name_of(T item) { return item.name }
+
+function<T: HasName + HasValue> string describe(T item) {
+    return "${item.name}: ${item.value}"
+}
+
+# Narrowing operators routed through a generic parameter (non-redundant)
+function<T> result<Box<integer>> as_box(T value) {
+    return downcast<Box<integer>>(value)
+}
+
+function<T> boolean value_is_box(T value) {
+    return is<Box<integer>>(value)
+}
+
+function<T> integer force_integer(T value) {
+    return trusted_downcast<integer>(value)
+}
+

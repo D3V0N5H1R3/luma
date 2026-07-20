@@ -1,0 +1,34 @@
+# LumaConfig.cmake.in — CMake package configuration template for Luma
+#
+# Provides the following imported targets when found via find_package(Luma):
+#   Luma::luma     — the Luma interpreter executable
+#   Luma::luma_lsp — the Luma language server (if installed)
+#   Luma::luma_dap — the Luma debugger adapter (if installed)
+#
+# Usage:
+#   find_package(Luma REQUIRED)
+#   message(STATUS "Luma interpreter: $<TARGET_FILE:Luma::luma>")
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+include("${CMAKE_CURRENT_LIST_DIR}/LumaTargets.cmake" OPTIONAL RESULT_VARIABLE _luma_targets_file)
+
+if(NOT _luma_targets_file)
+    set(${CMAKE_FIND_PACKAGE_NAME}_FOUND FALSE)
+    set(${CMAKE_FIND_PACKAGE_NAME}_NOT_FOUND_MESSAGE
+        "LumaTargets.cmake not found in ${CMAKE_CURRENT_LIST_DIR}")
+    return()
+endif()
+
+# Convenience variables.
+if(TARGET Luma::luma)
+    get_target_property(LUMA_EXECUTABLE Luma::luma IMPORTED_LOCATION)
+endif()
+
+set(LUMA_EXAMPLES_DIR "${PACKAGE_PREFIX_DIR}/share/luma/examples")
+
+check_required_components(Luma)
+
+unset(_luma_targets_file)

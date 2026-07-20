@@ -1,0 +1,632 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Operators
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+function integer double_value(integer value) {
+    return value * 2
+}
+
+@test
+function void test_arithmetic_operators() {
+    assert(2 + 3 == 5)
+    assert(10 - 3 == 7)
+    assert(4 * 5 == 20)
+    assert(15 / 4 == 3)
+    assert(17 % 5 == 2)
+}
+
+@test
+function void test_string_concatenation() {
+    string greeting = "Hello"
+    string suffix = ", World!"
+    string combined = greeting + suffix
+
+    assert(combined == "Hello, World!")
+}
+
+@test
+function void test_string_containment_operator() {
+    # in operator for string containment
+    assert("world" in "hello world")
+    assert("hello" in "hello world")
+    assert(!("xyz" in "hello world"))
+}
+
+@test
+function void test_comparison_operators() {
+    assert(1 == 1)
+    assert(1 != 2)
+    assert(1 < 2)
+    assert(3 > 2)
+    assert(5 >= 5)
+    assert(5 >= 4)
+    assert(5 <= 5)
+    assert(4 <= 5)
+}
+
+@test
+function void test_logical_operators() {
+    assert(true && true)
+    assert(!(true && false))
+    assert(!(false && true))
+    assert(!(false && false))
+    assert(true || false)
+    assert(false || true)
+    assert(!(false || false))
+    assert(!false)
+    assert(true)
+}
+
+@test
+function void test_range_operator() {
+    mutable integer sum = 0
+
+    for counter in 0 .. 5 {
+        sum += counter
+    }
+
+    assert(sum == 10)
+}
+
+@test
+function void test_inclusive_range_operator() {
+    mutable integer sum = 0
+
+    for counter in 0 ..= 5 {
+        sum += counter
+    }
+
+    assert(sum == 15)
+}
+
+@test
+function void test_pipe_basic() {
+    integer doubled_value = 5 |> double_value()
+
+    assert(doubled_value == 10)
+}
+
+@test
+function void test_pipe_chain() {
+    array<integer> numbers = [1, 2, 3, 4, 5]
+    number total = Result.unwrap(numbers |> Array.sum())
+
+    assert(total == 15)
+}
+
+@test
+function void test_pipe_with_extra_args() {
+    array<integer> numbers = [1, 2, 3, 4, 5, 6]
+    array<integer> even_numbers = numbers
+    |> Array.filter((integer x) -> x % 2 == 0)
+    |> Result.unwrap_or([])
+
+    assert(Array.length(even_numbers) == 3)
+    assert(Result.unwrap(Array.sum(even_numbers)) == 12)
+}
+
+@test
+function void test_pipe_multi_step() {
+    array<integer> numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    array<integer> squares = numbers
+    |> Array.filter((integer x) -> x % 2 == 0)
+    |> Result.unwrap_or([])
+    |> Array.map((integer x) -> x * x) # 4, 16, 36, 64, 100
+    |> Result.unwrap_or([])
+
+    assert(Result.unwrap(Array.sum(squares)) == 220)
+}
+
+@test
+function void test_negative_integer_operations() {
+    assert(-5 + 3 == -2)
+    assert(-5 * -3 == 15)
+    assert(-10 / 3 == -3)
+    assert(-10 % 3 == -1)
+}
+
+@test
+function void test_mixed_integer_number_arithmetic() {
+    number integer_plus_number = 5 + 3.0
+
+    integer int_sum = Result.unwrap(Converter.to_integer(integer_plus_number))
+    assert(int_sum == 8)
+
+    number integer_times_number = 10 * 2.5
+
+    integer int_product = Result.unwrap(Converter.to_integer(integer_times_number))
+    assert(int_product == 25)
+}
+
+@test
+function void test_pipe_multiline() {
+    string processed_string = "  hello world  "
+    |> String.trim()
+    |> String.uppercase()
+    |> String.replace("WORLD", "LUMA")
+
+    assert(processed_string == "HELLO LUMA")
+}
+
+@test
+function void test_pipe_with_named_args() {
+    string padded = Result.unwrap("42" |> String.pad_left(width: 6, fill: "0"))
+
+    assert(padded == "000042")
+}
+
+# ─── String Repeat Operator ───
+
+@test
+function void test_string_repeat_operator() {
+    string repeated = "ha" * 3
+
+    assert(repeated == "hahaha")
+}
+
+@test
+function void test_string_repeat_operator_zero() {
+    string repeated = "hello" * 0
+
+    assert(repeated == "")
+}
+
+@test
+function void test_string_repeat_operator_one() {
+    string repeated = "abc" * 1
+
+    assert(repeated == "abc")
+}
+
+@test
+function void test_string_repeat_operator_empty() {
+    string repeated = "" * 5
+
+    assert(repeated == "")
+}
+
+# ─── In Operator ───
+
+@test
+function void test_in_array() {
+    array<integer> numbers = [1, 2, 3, 4, 5]
+
+    assert(3 in numbers)
+    assert(!(6 in numbers))
+}
+
+@test
+function void test_in_string() {
+    string text = "hello world"
+
+    assert("world" in text)
+    assert(!("xyz" in text))
+}
+
+@test
+function void test_in_dictionary() {
+    dictionary<integer> ages = {"alice": 30, "bob": 25}
+
+    assert("alice" in ages)
+    assert(!("charlie" in ages))
+}
+
+@test
+function void test_in_empty_array() {
+    array<integer> empty = []
+
+    assert(!(1 in empty))
+}
+
+# ─── Hex and binary integer literals ─────────────────────
+
+@test
+function void test_hex_literals() {
+    integer a = 0xff
+    integer b = 0xFF
+    integer c = 0x10
+
+    assert(a == 255)
+    assert(b == 255)
+    assert(c == 16)
+}
+
+@test
+function void test_binary_literals() {
+    integer a = 0b1010
+    integer b = 0b11111111
+    integer c = 0b0
+
+    assert(a == 10)
+    assert(b == 255)
+    assert(c == 0)
+}
+
+@test
+function void test_hex_binary_arithmetic() {
+    integer mask = 0xFF
+    integer value = 0b10110011
+
+    assert(value & mask == value)
+    assert(0x0F | 0xF0 == 0xFF)
+    assert(0b0101 ^ 0b0011 == 0b0110)
+}
+
+# ─── Combined Operator Tests ───
+
+@test
+function void test_while_with_in() {
+    array<string> words = ["hello", "world", "foo"]
+
+    mutable integer count = 0
+    mutable integer word_index = 0
+
+    while word_index < Array.length(words) {
+        if "o" in words[word_index] {
+            count++
+        }
+
+        word_index++
+    }
+
+    # "hello" has o, "world" has o, "foo" has o
+    assert(count == 3)
+}
+
+@test
+function void test_slice_with_repeat() {
+    string text = "abc" * 3
+    # text == "abcabcabc"
+    string sliced = text[3 .. 6]
+
+    assert(sliced == "abc")
+}
+
+# ─── Null-Coalescing Operator ?? ───
+
+@test
+function void test_null_coalescing_null_left() {
+    optional<string> maybe = none
+    string val = maybe ?? "default"
+
+    assert(val == "default")
+}
+
+@test
+function void test_null_coalescing_non_null_left() {
+    integer maybe = 42
+    integer val = maybe ?? 0
+
+    assert(val == 42)
+}
+
+@test
+function void test_null_coalescing_chained() {
+    optional<string> a = none
+    optional<string> b = none
+    string c = "found"
+    string val = a ?? b ?? c
+
+    assert(val == "found")
+}
+
+@test
+function void test_null_coalescing_right_not_evaluated_when_left_non_null() {
+    # When left is non-none the right side is not evaluated.
+    integer x = 1
+    integer val = x ?? 999
+
+    assert(val == 1)
+}
+
+@test
+function void test_null_coalescing_result_failure() {
+    result<string> r = failure("oops")
+    string val = r ?? "fallback"
+
+    assert(val == "fallback")
+}
+
+@test
+function void test_null_coalescing_result_success() {
+    result<integer> r = success(42)
+    integer val = r ?? 0
+
+    assert(val == 42)
+}
+
+@test
+function void test_null_coalescing_result_chained() {
+    result<string> a = failure("err1")
+    result<string> b = failure("err2")
+    string val = a ?? b ?? "default"
+
+    assert(val == "default")
+}
+
+@test
+function void test_null_coalescing_result_with_pipe() {
+    # ?? on a result produced by a pipe chain
+    integer val = String.parse_integer("abc") ?? -1
+
+    assert(val == -1)
+
+    integer val2 = String.parse_integer("99") ?? -1
+
+    assert(val2 == 99)
+}
+
+@test
+function void test_null_coalescing_result_from_array_function() {
+    # Array.first returns result<T> — ?? provides fallback
+    array<integer> empty = []
+    integer first = Array.first(empty) ?? 0
+
+    assert(first == 0)
+
+    array<integer> nums = [10, 20, 30]
+    integer head = Array.first(nums) ?? 0
+
+    assert(head == 10)
+}
+
+# ─── Integer Division Operator // ───
+
+@test
+function void test_integer_division_basic() {
+    assert(10 // 3 == 3)
+    assert(7 // 2 == 3)
+    assert(0 // 5 == 0)
+    assert(6 // 3 == 2)
+}
+
+@test
+function void test_integer_division_negative() {
+    assert(-7 // 2 == -3)
+    assert(7 // -2 == -3)
+    assert(-7 // -2 == 3)
+}
+
+@test
+function void test_integer_division_compound_assignment() {
+    mutable integer x = 17
+
+    x //= 5
+
+    assert(x == 3)
+}
+
+# ─── Bitwise Operators ───
+
+@test
+function void test_bitwise_and_operator() {
+    assert(12 & 10 == 8) # 1100 & 1010 = 1000
+    assert(255 & 15 == 15)
+    assert(7 & 0 == 0)
+}
+
+@test
+function void test_bitwise_or_operator() {
+    assert(10 | 5 == 15) # 1010 | 0101 = 1111
+    assert(8 | 4 == 12)
+    assert(0 | 7 == 7)
+}
+
+@test
+function void test_bitwise_xor_operator() {
+    assert(12 ^ 10 == 6) # 1100 ^ 1010 = 0110
+    assert(15 ^ 9 == 6)
+    assert(5 ^ 5 == 0)
+}
+
+@test
+function void test_bitwise_not_operator() {
+    assert(~0 == -1)
+    assert(~(-1) == 0)
+    assert(~1 == -2)
+}
+
+@test
+function void test_shift_operators() {
+    assert(1 << 3 == 8)
+    assert(3 << 4 == 48)
+    assert(16 >> 2 == 4)
+    assert(32 >> 1 == 16)
+}
+
+@test
+function void test_bitwise_compound_assignments() {
+    mutable integer a = 255
+
+    a &= 15
+
+    assert(a == 15)
+
+    mutable integer b = 8
+
+    b |= 4
+
+    assert(b == 12)
+
+    mutable integer c = 15
+
+    c ^= 9
+
+    assert(c == 6)
+
+    mutable integer d = 1
+
+    d <<= 4
+
+    assert(d == 16)
+
+    mutable integer e = 32
+
+    e >>= 2
+
+    assert(e == 8)
+}
+
+@test
+function void test_bitwise_precedence() {
+    # & binds tighter than ^, which binds tighter than |
+    # Shift binds tighter than bitwise OR/XOR/AND
+    assert(4 | 2 & 3 == 6)    # 4 | (2 & 3) = 4 | 2 = 6
+    assert(1 << 2 | 1 == 5)   # (1 << 2) | 1 = 4 | 1 = 5
+    assert((6 ^ (3 & 5)) == 7) # 3 & 5 = 1, 6 ^ 1 = 7
+}
+
+@test
+function void test_bitwise_with_logical() {
+    # Bitwise ops bind tighter than logical && and ||
+    integer flags = 5  # 101
+
+    assert((flags & 1) == 1)
+    assert((flags & 4) == 4)
+    assert((flags & 2) == 0)
+}
+
+# ─── Cross-Category Precedence ───
+
+@test
+function void test_precedence_arithmetic_before_comparison() {
+    # Multiplicative binds tighter than additive, both before comparison.
+    assert(2 + 3 * 4 == 14)
+    assert(10 - 2 * 3 == 4)
+    assert(20 / 4 + 1 == 6)
+}
+
+@test
+function void test_precedence_comparison_before_logical() {
+    # Comparisons evaluate before && and ||.
+    assert(1 < 2 && 3 < 4)
+    assert(1 < 2 || 5 < 3)
+    assert(!(1 > 2 && 3 < 4))
+}
+
+@test
+function void test_precedence_shift_before_comparison() {
+    # Shifts bind tighter than comparison and equality.
+    assert(1 << 3 == 8)
+    assert(16 >> 2 < 5)
+}
+
+@test
+function void test_precedence_bitwise_before_equality() {
+    # Bitwise operators bind tighter than == (Python-style precedence).
+    assert(4 | 1 == 5)   # (4 | 1) == 5
+    assert(6 & 3 == 2)   # (6 & 3) == 2
+    assert(5 ^ 1 == 4)   # (5 ^ 1) == 4
+}
+
+@test
+function void test_precedence_null_coalescing_lowest() {
+    # ?? has lower precedence than arithmetic, so the sum is computed first.
+    integer x = 2 + 3 ?? 0
+
+    assert(x == 5)
+}
+
+# ─── Unary Operator Combinations ───
+
+@test
+function void test_unary_minus_with_arithmetic() {
+    assert(-3 + 5 == 2)
+    assert(-(3 + 5) == -8)
+    assert(-2 * -3 == 6)
+}
+
+@test
+function void test_unary_logical_not_precedence() {
+    # ! applied to a parenthesised comparison.
+    assert(!(1 == 2))
+    assert(!(5 < 3))
+    # ! binds tighter than &&: parses as (!(2 > 9)) && (3 < 4).
+    assert(!(2 > 9) && 3 < 4)
+    # ! over a short-circuiting && / || (regression: the negation used to be
+    # dropped on the short-circuit path when the operands were comparisons).
+    assert(!(1 > 2 && 3 < 4))
+    assert(!(5 < 1 || 6 < 2))
+}
+
+@test
+function void test_unary_bitwise_not_with_and() {
+    # ~ binds tighter than &.
+    assert((~0 & 15) == 15)
+    assert((~5 & 255) == 250)
+}
+
+@test
+function void test_unary_double_negation() {
+    integer x = 7
+
+    assert(-(-x) == 7)
+}
+
+@test
+function void test_number_overflow_add() {
+    # Adding two large finite numbers that produce infinity must throw.
+    mutable boolean is_caught = false
+
+    try {
+        number _ = 1e308 + 1e308
+    } catch(err) {
+        is_caught = String.contains(err, "number overflow")
+    }
+
+    assert(is_caught)
+}
+
+@test
+function void test_number_overflow_multiply() {
+    # Multiplying two large finite numbers that produce infinity must throw.
+    mutable boolean is_caught = false
+
+    try {
+        number _ = 1e308 * 2.0
+    } catch(err) {
+        is_caught = String.contains(err, "number overflow")
+    }
+
+    assert(is_caught)
+}
+
+@test
+function void test_number_infinity_is_not_overflow() {
+    # Arithmetic involving Math.infinity itself is not treated as overflow.
+    number r = 1.0 / Math.infinity
+
+    assert(r < 0.0001)
+    assert(r > -0.0001)
+}
+
+# ─── Bitwise Operators (basic) ───
+
+@test
+function void test_bitwise_operators() {
+    assert((12 & 10) == 8)
+    assert((8 | 4) == 12)
+    assert((15 ^ 9) == 6)
+    assert(~0 == -1)
+    assert((1 << 3) == 8)
+    assert((16 >> 2) == 4)
+}
+
+# ─── Shift Out-of-Range ───
+
+@test
+function void test_shift_out_of_range() {
+    mutable boolean is_caught = false
+
+    try {
+        integer bits = 64
+        integer _ = 1 << bits
+    } catch(_err) {
+        is_caught = true
+    }
+
+    assert(is_caught)
+}

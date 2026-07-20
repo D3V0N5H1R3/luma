@@ -1,0 +1,13 @@
+# Set variable test — mutable variables that can be modified by the debugger.
+# The debugger's setVariable command changes count and label at runtime.
+
+@main
+function void main() {
+    mutable integer count = 10
+    mutable string label = "original"
+    count += 1
+    count -= 1
+    label = "still_${label}"
+    integer output = count * 2
+    print("Set-variable result: ${label}: ${output}")
+}

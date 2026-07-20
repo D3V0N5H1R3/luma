@@ -1,0 +1,330 @@
+# ═══════════════════════════════════════════════════════════
+# Text Adventure — A Choice-Type State Machine
+#
+# A tiny explorable dungeon driven by a scripted sequence of
+# commands. Demonstrates choice types for directions and player
+# commands, exhaustive pattern matching, records with optional
+# fields, a dictionary<Room> world map, immutable player state
+# updated with `record with { ... }`, and @test annotations that
+# verify movement, item collection and the winning walkthrough.
+#
+# The world is a dictionary keyed by room id. Each room lists its
+# exits (direction → room id) and an optional item to collect.
+#
+# Usage: luma examples/applications/text_adventure.luma
+# Tests: luma --test examples/applications/text_adventure.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Types ───────────────────────────────────────────────
+
+choice Direction {
+    North
+    South
+    East
+    West
+}
+
+choice Command {
+    Go(Direction direction)
+    Take
+    Look
+}
+
+record Room {
+    string name,
+    string description,
+    dictionary<string> exits,
+    optional<string> item
+}
+
+record Player {
+    string location,
+    array<string> inventory
+}
+
+# ─── World ───────────────────────────────────────────────
+
+function dictionary<Room> build_world() {
+    return {
+        "gate": Room {
+            name = "Castle Gate",
+            description = "A rusted portcullis groans in the wind.",
+            exits = {"north": "hall"},
+            item = none
+        },
+        "hall": Room {
+            name = "Great Hall",
+            description = "Tattered banners hang above cold flagstones.",
+            exits = {"south": "gate", "east": "library", "north": "vault"},
+            item = none
+        },
+        "library": Room {
+            name = "Dusty Library",
+            description = "Sagging shelves brim with forgotten tomes.",
+            exits = {"west": "hall"},
+            item = some("brass key")
+        },
+        "vault": Room {
+            name = "Treasure Vault",
+            description = "An iron chest glints beneath a shaft of light.",
+            exits = {"south": "hall"},
+            item = some("golden crown")
+        }
+    }
+}
+
+# ─── Direction Helpers ───────────────────────────────────
+
+function string direction_key(Direction direction) {
+    return match direction {
+    case Direction.North { "north" }
+    case Direction.South { "south" }
+    case Direction.East { "east" }
+    case Direction.West { "west" }
+    }
+}
+
+function string direction_name(Direction direction) {
+    return direction_key(direction)
+}
+
+# ─── Game Logic ──────────────────────────────────────────
+
+function Room current_room(dictionary<Room> world, Player player) {
+    return Result.unwrap(Dictionary.get(world, player.location))
+}
+
+function Player go(dictionary<Room> world, Player player, Direction direction) {
+    Room here = current_room(world, player)
+    string key = direction_key(direction)
+    if Dictionary.has(here.exits, key) {
+        string destination = Result.unwrap(Dictionary.get(here.exits, key))
+        return player with { location = destination }
+    }
+    return player
+}
+
+function Player take_item(dictionary<Room> world, Player player) {
+    Room here = current_room(world, player)
+    return match here.item {
+    case some(thing) {
+        if Array.contains(player.inventory, thing) {
+            player
+        } else {
+            player with { inventory = Array.push(player.inventory, thing) }
+        }
+    }
+    case none {
+        player
+    }
+    }
+}
+
+function Player apply_command(dictionary<Room> world, Player player, Command command) {
+    return match command {
+    case Command.Go(direction) {
+        go(world, player, direction)
+    }
+    case Command.Take {
+        take_item(world, player)
+    }
+    case Command.Look {
+        player
+    }
+    }
+}
+
+function boolean has_won(Player player) {
+    return Array.contains(player.inventory, "brass key") &&
+           Array.contains(player.inventory, "golden crown")
+}
+
+function Player run_script(dictionary<Room> world, Player start, array<Command> script) {
+    mutable Player player = start
+    for command in script {
+        player = apply_command(world, player, command)
+    }
+    return player
+}
+
+# ─── Narration ───────────────────────────────────────────
+
+function string inventory_text(Player player) {
+    if Array.length(player.inventory) == 0 {
+        return "(empty)"
+    }
+    return String.join(player.inventory, ", ")
+}
+
+function void describe(dictionary<Room> world, Player player) {
+    Room here = current_room(world, player)
+    print("  [${here.name}] ${here.description}")
+    print("  Exits: ${String.join(Dictionary.keys(here.exits), ", ")}")
+    match here.item {
+    case some(thing) {
+        if !Array.contains(player.inventory, thing) {
+            print("  A ${thing} lies within reach.")
+        }
+    }
+    case none {
+    }
+    }
+}
+
+function Player narrate(dictionary<Room> world, Player player, Command command) {
+    Player next = apply_command(world, player, command)
+    match command {
+    case Command.Go(direction) {
+        if next.location == player.location {
+            Room here = current_room(world, player)
+            string valid = String.join(Dictionary.keys(here.exits), ", ")
+            print("> go ${direction_name(direction)} — the way is blocked. Try: ${valid}.")
+        } else {
+            print("> go ${direction_name(direction)}")
+            describe(world, next)
+        }
+    }
+    case Command.Take {
+        Room here = current_room(world, player)
+        match here.item {
+        case some(thing) {
+            if Array.contains(player.inventory, thing) {
+                print("> take — you already have the ${thing}.")
+            } else {
+                print("> take — you collect the ${thing}.")
+            }
+        }
+        case none {
+            print("> take — there is nothing to collect.")
+        }
+        }
+    }
+    case Command.Look {
+        print("> look")
+        describe(world, player)
+    }
+    }
+    return next
+}
+
+# ─── Demo ────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("═══════════════════════════════════════════════════")
+    print("   Text Adventure — The Sealed Vault")
+    print("═══════════════════════════════════════════════════")
+    print("Guided demo — follows a scripted playthrough (not interactive).")
+
+    dictionary<Room> world = build_world()
+    mutable Player player = Player { location = "gate", inventory = [] }
+
+    print("")
+    describe(world, player)
+
+    array<Command> script = [
+        Command.Go(Direction.North),
+        Command.Go(Direction.East),
+        Command.Take,
+        Command.Go(Direction.West),
+        Command.Go(Direction.North),
+        Command.Take,
+    ]
+
+    for command in script {
+        player = narrate(world, player, command)
+    }
+
+    print("")
+    if has_won(player) {
+        print("With key and crown in hand, you escape a legend. You win!")
+    } else {
+        print("The vault keeps its secrets for another day.")
+    }
+    print("Final inventory: ${inventory_text(player)}")
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+function Player fresh_player() {
+    return Player { location = "gate", inventory = [] }
+}
+
+@test
+function void test_world_is_fully_connected() {
+    dictionary<Room> world = build_world()
+    assert(Dictionary.length(world) == 4, "the world has four rooms")
+    assert(Dictionary.has(world, "vault"), "the vault exists")
+}
+
+@test
+function void test_direction_keys() {
+    assert(direction_key(Direction.North) == "north", "north maps to its key")
+    assert(direction_key(Direction.West) == "west", "west maps to its key")
+}
+
+@test
+function void test_movement_follows_exits() {
+    dictionary<Room> world = build_world()
+    Player moved = go(world, fresh_player(), Direction.North)
+    assert(moved.location == "hall", "north from the gate reaches the hall")
+}
+
+@test
+function void test_blocked_movement_keeps_location() {
+    dictionary<Room> world = build_world()
+    Player blocked = go(world, fresh_player(), Direction.South)
+    assert(blocked.location == "gate", "there is no exit south of the gate")
+}
+
+@test
+function void test_take_collects_room_item() {
+    dictionary<Room> world = build_world()
+    Player in_library = fresh_player() with { location = "library" }
+    Player carrying = take_item(world, in_library)
+    assert(Array.contains(carrying.inventory, "brass key"), "the key is collected")
+}
+
+@test
+function void test_take_is_idempotent() {
+    dictionary<Room> world = build_world()
+    Player in_library = fresh_player() with { location = "library" }
+    Player once = take_item(world, in_library)
+    Player twice = take_item(world, once)
+    assert(Array.length(twice.inventory) == 1, "collecting twice keeps one copy")
+}
+
+@test
+function void test_take_in_empty_room_does_nothing() {
+    dictionary<Room> world = build_world()
+    Player carrying = take_item(world, fresh_player())
+    assert(Array.length(carrying.inventory) == 0, "the gate holds no item")
+}
+
+@test
+function void test_winning_walkthrough() {
+    dictionary<Room> world = build_world()
+    array<Command> script = [
+        Command.Go(Direction.North),
+        Command.Go(Direction.East),
+        Command.Take,
+        Command.Go(Direction.West),
+        Command.Go(Direction.North),
+        Command.Take,
+    ]
+    Player ending = run_script(world, fresh_player(), script)
+    assert(ending.location == "vault", "the journey ends in the vault")
+    assert(has_won(ending), "carrying both treasures wins the game")
+}
+
+@test
+function void test_cannot_win_without_the_key() {
+    dictionary<Room> world = build_world()
+    array<Command> script = [
+        Command.Go(Direction.North),
+        Command.Go(Direction.North),
+        Command.Take,
+    ]
+    Player ending = run_script(world, fresh_player(), script)
+    assert(!has_won(ending), "the crown alone is not enough to win")
+}

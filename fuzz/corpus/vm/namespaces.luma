@@ -1,0 +1,65 @@
+# VM corpus seed: namespaces executed end-to-end.
+# Namespace members compile to qualified globals; `use` emits bare aliases.
+# Reaches qualified and use-imported calls, recursion through a qualified
+# self-call, namespace record construction and field access, namespace choice
+# construction and match dispatch, and an internal helper reached only from
+# within its declaring namespace.
+
+namespace MathUtil {
+    function integer add(integer a, integer b) {
+        return a + b
+    }
+
+    function integer factorial(integer n) {
+        if n <= 1 {
+            return 1
+        }
+        return n * MathUtil.factorial(n - 1)
+    }
+
+    function integer doubled(integer n) {
+        return MathUtil.scale(n, 2)
+    }
+
+    internal function integer scale(integer value, integer by) {
+        return value * by
+    }
+
+    record Counter {
+        integer count
+    }
+
+    choice Step {
+        Up(integer amount)
+        Down(integer amount)
+        Reset
+    }
+}
+
+use MathUtil
+
+function integer apply_step(Step s, integer current) {
+    return match s {
+    case Step.Up(a) { current + a }
+    case Step.Down(a) { current - a }
+    case Step.Reset { 0 }
+    }
+}
+
+@main
+function void main() {
+    print(MathUtil.add(2, 3))
+    print(add(10, 20))
+    print(MathUtil.factorial(5))
+    print(MathUtil.doubled(21))
+
+    MathUtil.Counter c = MathUtil.Counter { count = 7 }
+    print(c.count)
+    Counter c2 = Counter { count = 9 }
+    print(c2.count)
+
+    Step up = Step.Up(5)
+    print(apply_step(up, 10))
+    MathUtil.Step reset = MathUtil.Step.Reset
+    print(apply_step(reset, 100))
+}

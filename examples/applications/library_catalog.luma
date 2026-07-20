@@ -1,0 +1,429 @@
+# ═══════════════════════════════════════════════════════════
+# Library Catalog
+#
+# A lending library that tracks books, members, and loans.
+# Demonstrates a choice-type state machine for loan status
+# (Available vs Borrowed), dictionary-backed CRUD keyed by id,
+# result<T> error handling, structural interfaces shared across
+# media types, immutable state, and @test annotations.
+#
+# Usage: luma examples/applications/library_catalog.luma
+# Tests: luma --test examples/applications/library_catalog.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Domain Types ────────────────────────────────────────
+
+# Any catalogued item exposes an id and a title. Both Book and
+# Movie satisfy this structural interface without inheritance.
+interface Catalogued {
+    string id,
+    string title
+}
+
+choice LoanState {
+    Available
+    Borrowed(string member_id, integer due_day)
+}
+
+record Book {
+    string id,
+    string title,
+    string author,
+    integer year,
+    LoanState state
+}
+
+record Movie {
+    string id,
+    string title,
+    integer minutes
+}
+
+record Member {
+    string id,
+    string name
+}
+
+record Library {
+    dictionary<Book> books,
+    dictionary<Member> members
+}
+
+# ─── Construction ────────────────────────────────────────
+
+function Library empty_library() {
+    return Library { books = {}, members = {} }
+}
+
+function Book new_book(string id, string title, string author, integer year) {
+    return Book { id = id, title = title, author = author, year = year, state = LoanState.Available }
+}
+
+function result<Library> add_book(Library lib, Book book) {
+    if Dictionary.has(lib.books, book.id) {
+        return failure("book ${book.id} already catalogued")
+    }
+
+    return success(lib with { books = Dictionary.set(lib.books, book.id, book) })
+}
+
+function result<Library> register_member(Library lib, Member member) {
+    if Dictionary.has(lib.members, member.id) {
+        return failure("member ${member.id} already registered")
+    }
+
+    return success(lib with { members = Dictionary.set(lib.members, member.id, member) })
+}
+
+# ─── Loan Operations ─────────────────────────────────────
+
+function boolean is_available(Book book) {
+    return match book.state {
+    case LoanState.Available       { true }
+    case LoanState.Borrowed(_m, _d) { false }
+    }
+}
+
+function result<Library> check_out(Library lib, string book_id, string member_id, integer today, integer loan_days) {
+    if !Dictionary.has(lib.books, book_id) {
+        return failure("No book found with id ${book_id}. Check the catalog and try again.")
+    }
+
+    Book book = Dictionary.get(lib.books, book_id)?
+
+    if !Dictionary.has(lib.members, member_id) {
+        return failure("unknown member ${member_id}")
+    }
+
+    match book.state {
+    case LoanState.Borrowed(holder, _due) {
+        return failure("'${book.title}' is already on loan to ${holder}")
+    }
+    case LoanState.Available { }
+    }
+
+    Book updated = book with { state = LoanState.Borrowed(member_id, today + loan_days) }
+
+    return success(lib with { books = Dictionary.set(lib.books, book_id, updated) })
+}
+
+function result<Library> return_book(Library lib, string book_id) {
+    if !Dictionary.has(lib.books, book_id) {
+        return failure("No book found with id ${book_id}. Check the catalog and try again.")
+    }
+
+    Book book = Dictionary.get(lib.books, book_id)?
+
+    if is_available(book) {
+        return failure("'${book.title}' was not on loan")
+    }
+
+    Book updated = book with { state = LoanState.Available }
+
+    return success(lib with { books = Dictionary.set(lib.books, book_id, updated) })
+}
+
+function result<Library> renew(Library lib, string book_id, integer extra_days) {
+    if !Dictionary.has(lib.books, book_id) {
+        return failure("No book found with id ${book_id}. Check the catalog and try again.")
+    }
+
+    Book book = Dictionary.get(lib.books, book_id)?
+
+    match book.state {
+    case LoanState.Borrowed(holder, due_day) {
+        Book updated = book with { state = LoanState.Borrowed(holder, due_day + extra_days) }
+
+        return success(lib with { books = Dictionary.set(lib.books, book_id, updated) })
+    }
+    case LoanState.Available {
+        return failure("'${book.title}' is not on loan and cannot be renewed")
+    }
+    }
+}
+
+# ─── Queries ─────────────────────────────────────────────
+
+function array<Book> all_books(Library lib) {
+    return Dictionary.values(lib.books)
+}
+
+function array<Book> available_books(Library lib) {
+    return all_books(lib)
+    |> Array.filter((Book b) -> is_available(b))
+    |> Result.unwrap_or([])
+}
+
+function array<Book> books_by_author(Library lib, string author) {
+    return all_books(lib)
+    |> Array.filter((Book b) -> b.author == author)
+    |> Result.unwrap_or([])
+}
+
+# True when a book is on loan and its (holder, due_day) satisfies the predicate.
+function boolean is_borrowed_matching(
+    Book book,
+    function(string, integer) -> boolean predicate
+) {
+    match book.state {
+    case LoanState.Borrowed(holder, due_day) { return predicate(holder, due_day) }
+    case LoanState.Available { return false }
+    }
+}
+
+# Collect every borrowed book whose (holder, due_day) satisfies the predicate.
+# overdue_books and loans_for_member differ only in that predicate.
+function array<Book> borrowed_books_where(
+    Library lib,
+    function(string, integer) -> boolean predicate
+) {
+    return all_books(lib)
+    |> Array.filter((Book book) -> is_borrowed_matching(book, predicate))
+    |> Result.unwrap_or([])
+}
+
+function array<Book> overdue_books(Library lib, integer today) {
+    return borrowed_books_where(lib, (string _holder, integer due_day) -> due_day < today)
+}
+
+function array<Book> loans_for_member(Library lib, string member_id) {
+    return borrowed_books_where(lib, (string holder, integer _due) -> holder == member_id)
+}
+
+# ─── Formatting (uses the structural interface) ──────────
+
+function string shelf_label(Catalogued item) {
+    return "[${item.id}] ${item.title}"
+}
+
+function string describe_book(Book book) {
+    string status = match book.state {
+    case LoanState.Available                  { "available" }
+    case LoanState.Borrowed(holder, due_day)  { "on loan to ${holder}, due day ${due_day}" }
+    }
+    string id = Result.unwrap_or(String.pad_right(book.id, 5, " "), book.id)
+    string title = Result.unwrap_or(String.pad_right(book.title, 29, " "), book.title)
+    string author = Result.unwrap_or(String.pad_right(book.author, 17, " "), book.author)
+    string year = Result.unwrap_or(String.pad_left("${book.year}", 4, " "), "${book.year}")
+    string status_cell = Result.unwrap_or(String.pad_right(status, 24, " "), status)
+
+    return "  ${id} ${title} ${author} ${year}  ${status_cell}"
+}
+
+function void print_book_table(array<Book> books, string empty_message) {
+    if Array.is_empty(books) {
+        print("  ${empty_message}")
+        return
+    }
+
+    print("  ID    Title                         Author            Year  Status")
+    print("  -----------------------------------------------------------------------------")
+
+    for book in books {
+        print(describe_book(book))
+    }
+}
+
+# ─── Demo ────────────────────────────────────────────────
+
+function result<Library> build_demo_library() {
+    mutable Library lib = empty_library()
+
+    lib = add_book(lib, new_book("B1", "The Pragmatic Programmer", "Hunt & Thomas", 1999))?
+    lib = add_book(lib, new_book("B2", "Structure and Interpretation", "Abelson & Sussman", 1985))?
+    lib = add_book(lib, new_book("B3", "The Mythical Man-Month", "Brooks", 1975))?
+    lib = add_book(lib, new_book("B4", "Refactoring", "Fowler", 1999))?
+
+    lib = register_member(lib, Member { id = "M1", name = "Alice" })?
+    lib = register_member(lib, Member { id = "M2", name = "Bob" })?
+
+    # Day 10: Alice borrows two books for 14 days; Bob borrows one for 7.
+    lib = check_out(lib, "B1", "M1", 10, 14)?
+    lib = check_out(lib, "B2", "M1", 10, 14)?
+    lib = check_out(lib, "B3", "M2", 10, 7)?
+
+    return success(lib)
+}
+
+@main
+function void main() {
+    print("═══════════════════════════════════════")
+    print("   Luma Library Catalog")
+    print("═══════════════════════════════════════")
+
+    match build_demo_library() {
+        success(lib) {
+            print("\n─── Catalog ───")
+            print_book_table(all_books(lib), "No books in the catalog.")
+
+            print("\n─── Available now ───")
+            print_book_table(available_books(lib), "No books are available right now.")
+
+            # Day 20: anything due before day 20 is overdue (Bob's 7-day loan).
+            print("\n─── Overdue on day 20 ───")
+            print_book_table(overdue_books(lib, 20), "No overdue books.")
+
+            print("\n─── Alice's loans ───")
+            print_book_table(loans_for_member(lib, "M1"), "Alice has no books on loan.")
+
+            # A Movie also satisfies the Catalogued interface.
+            Movie film = Movie { id = "F1", title = "Hackers", minutes = 105 }
+
+            print("\n─── Mixed media via interface ───")
+            print("  ${shelf_label(film)} (${film.minutes} min)")
+
+            print("\n─── Rejected operations ───")
+
+            match check_out(lib, "B1", "M2", 21, 14) {
+                success(_) { print("  (unexpected success)") }
+                failure(message) { print("  ✗ ${message}") }
+            }
+
+            match return_book(lib, "B4") {
+                success(_) { print("  (unexpected success)") }
+                failure(message) { print("  ✗ ${message}") }
+            }
+        }
+        failure(message) {
+            print("  failed to build library: ${message}")
+        }
+    }
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+@test
+function void test_add_book_then_available() {
+    Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+
+    assert(Array.length(available_books(lib)) == 1, "one available book expected")
+}
+
+@test
+function void test_duplicate_book_rejected() {
+    Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+    result<Library> again = add_book(lib, new_book("B1", "Other", "Z", 2001))
+
+    assert(!Result.is_success(again), "duplicate book id should fail")
+}
+
+@test
+function void test_borrow_marks_unavailable() {
+    mutable Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+    lib = register_member(lib, Member { id = "M1", name = "Ann" }) |> Result.unwrap()
+    lib = check_out(lib, "B1", "M1", 0, 14) |> Result.unwrap()
+
+    assert(Array.length(available_books(lib)) == 0, "book should be on loan")
+    assert(Array.length(loans_for_member(lib, "M1")) == 1, "member should have one loan")
+}
+
+@test
+function void test_double_borrow_rejected() {
+    mutable Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+    lib = register_member(lib, Member { id = "M1", name = "Ann" }) |> Result.unwrap()
+    lib = register_member(lib, Member { id = "M2", name = "Ben" }) |> Result.unwrap()
+    lib = check_out(lib, "B1", "M1", 0, 14) |> Result.unwrap()
+
+    assert(!Result.is_success(check_out(lib, "B1", "M2", 0, 14)), "already-borrowed book should fail")
+}
+
+@test
+function void test_borrow_unknown_member_rejected() {
+    Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+
+    assert(!Result.is_success(check_out(lib, "B1", "ghost", 0, 14)), "unknown member should fail")
+}
+
+@test
+function void test_borrow_unknown_book_has_plain_message() {
+    mutable Library lib = empty_library()
+    lib = register_member(lib, Member { id = "M1", name = "Ann" }) |> Result.unwrap()
+    result<Library> outcome = check_out(lib, "missing", "M1", 0, 14)
+
+    match outcome {
+    success(_) {
+        assert(false, "borrowing an unknown book should fail")
+    }
+    failure(message) {
+        assert(message == "No book found with id missing. Check the catalog and try again.",
+               "unknown book message should be plain")
+    }
+    }
+}
+
+@test
+function void test_return_makes_available_again() {
+    mutable Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+    lib = register_member(lib, Member { id = "M1", name = "Ann" }) |> Result.unwrap()
+    lib = check_out(lib, "B1", "M1", 0, 14) |> Result.unwrap()
+    lib = return_book(lib, "B1") |> Result.unwrap()
+
+    assert(Array.length(available_books(lib)) == 1, "returned book should be available")
+}
+
+@test
+function void test_return_not_on_loan_rejected() {
+    Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+
+    assert(!Result.is_success(return_book(lib, "B1")), "returning a free book should fail")
+}
+
+@test
+function void test_return_unknown_book_has_plain_message() {
+    result<Library> outcome = return_book(empty_library(), "missing")
+
+    match outcome {
+    success(_) {
+        assert(false, "returning an unknown book should fail")
+    }
+    failure(message) {
+        assert(message == "No book found with id missing. Check the catalog and try again.",
+               "unknown return message should be plain")
+    }
+    }
+}
+
+@test
+function void test_renew_extends_due_day() {
+    mutable Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+    lib = register_member(lib, Member { id = "M1", name = "Ann" }) |> Result.unwrap()
+    lib = check_out(lib, "B1", "M1", 0, 7) |> Result.unwrap()
+
+    assert(Array.length(overdue_books(lib, 10)) == 1, "loan is overdue on day 10")
+
+    lib = renew(lib, "B1", 14) |> Result.unwrap()
+
+    assert(Array.length(overdue_books(lib, 10)) == 0, "renewed loan is no longer overdue on day 10")
+}
+
+@test
+function void test_renew_unknown_book_has_plain_message() {
+    result<Library> outcome = renew(empty_library(), "missing", 7)
+
+    match outcome {
+    success(_) {
+        assert(false, "renewing an unknown book should fail")
+    }
+    failure(message) {
+        assert(message == "No book found with id missing. Check the catalog and try again.",
+               "unknown renewal message should be plain")
+    }
+    }
+}
+
+@test
+function void test_books_by_author() {
+    mutable Library lib = empty_library()
+    lib = add_book(lib, new_book("B1", "A1", "Fowler", 1999)) |> Result.unwrap()
+    lib = add_book(lib, new_book("B2", "A2", "Fowler", 2018)) |> Result.unwrap()
+    lib = add_book(lib, new_book("B3", "A3", "Brooks", 1975)) |> Result.unwrap()
+
+    assert(Array.length(books_by_author(lib, "Fowler")) == 2, "two Fowler books expected")
+}
+
+@test
+function void test_shelf_label_works_for_movie() {
+    Movie film = Movie { id = "F1", title = "Hackers", minutes = 105 }
+
+    assert(shelf_label(film) == "[F1] Hackers", "interface label should work for movies")
+}

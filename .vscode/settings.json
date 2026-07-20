@@ -1,0 +1,89 @@
+{
+    "cmake.sourceDirectory": "${workspaceFolder}",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.configureOnOpen": true,
+    "cmake.configureSettings": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+    },
+
+    "C_Cpp.default.cppStandard": "c++20",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+
+    "files.associations": {
+        "*.luma": "luma"
+    },
+
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+
+    "editor.formatOnSave": false,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.rulers": [100],
+
+    "[cpp]": {
+        "editor.defaultFormatter": "ms-vscode.cpptools",
+        "editor.formatOnSave": true
+    },
+
+    "[cmake]": {
+        "editor.tabSize": 4
+    },
+
+    "[markdown]": {
+        "files.trimTrailingWhitespace": false
+    },
+
+    "[yaml]": {
+        "editor.tabSize": 2
+    },
+
+    // luma.lsp.path / luma.path / luma.dap.path are intentionally unset so the
+    // extension resolves these binaries (bundled download or PATH). This keeps
+    // the workspace portable across multi-config Windows (build/Release/luma*.exe)
+    // and single-config Unix (build/luma*) layouts. To use a local build, set the
+    // matching path in your user settings to the binary for your platform.
+
+    "chat.instructionsFilesLocations": {
+        "instructions": true
+    },
+
+    "github.copilot.chat.commitMessageGeneration.instructions": [
+        {
+            "text": "Follow Conventional Commits: begin the subject with one of these type prefixes followed by a colon and a space — chore:, docs:, feat:, fix:, refactor:, test:."
+        },
+        {
+            "text": "Use the imperative mood after the prefix (e.g. 'feat: add match expression', not 'feat: added match expression'). Keep the first line under 72 characters with no trailing period."
+        },
+        {
+            "text": "Limit each commit to one logical change. Add a body explaining the why when the change is non-trivial."
+        },
+        {
+            "file": "instructions/git.instructions.md"
+        }
+    ],
+
+    "github.copilot.chat.reviewSelection.instructions": [
+        {
+            "text": "Prioritise findings: correctness and security bugs first, then performance, then style. Surface logic errors, unhandled edge cases, resource leaks (missing RAII), and concurrency hazards before stylistic nits."
+        },
+        {
+            "text": "Check the selection against the matching guide in the instructions/ folder (for example cpp.instructions.md for C++) and flag deviations from its naming, const-correctness, error-handling, and formatting rules."
+        },
+        {
+            "text": "For each finding give the file and line, a severity (Bug, Security, Performance, or Style), why it matters, and a concrete fix."
+        }
+    ],
+
+    "github.copilot.chat.pullRequestDescriptionGeneration.instructions": [
+        {
+            "text": "Start the PR title with a Conventional Commit prefix (chore:, docs:, feat:, fix:, refactor:, test:) matching the dominant change."
+        },
+        {
+            "text": "Structure the body with a short Summary (what changed and why), a bulleted list of notable changes, and a Testing section noting how it was validated (cmake build, ctest, and the Luma feature suites via scripts/run_luma_tests.py)."
+        },
+        {
+            "text": "Note any cross-platform impact (Linux, macOS, Windows) and link related issues. Keep it factual and concise; omit sections that do not apply."
+        }
+    ]
+}

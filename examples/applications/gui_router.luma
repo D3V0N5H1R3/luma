@@ -1,0 +1,291 @@
+# GraphicalUi Routing Example
+#
+# Demonstrates client-side routing with GraphicalUi.router,
+# GraphicalUi.navigate, and GraphicalUi.navigate_back.
+
+function dictionary<string> button_variant(string variant) {
+    return {"variant": variant}
+}
+
+# Human-readable page name for screen-reader announcements on navigation.
+function string route_name(string route) {
+    if route == "/" {
+        return "Home"
+    }
+    if route == "/about" {
+        return "About"
+    }
+    if route == "/settings" {
+        return "Settings"
+    }
+    if String.starts_with(route, "/users") {
+        return "User Profile"
+    }
+    return "Not Found"
+}
+
+function widget back_controls(dictionary<string> model) {
+    return GraphicalUi.row([
+        GraphicalUi.button("Back", () -> {
+            return GraphicalUi.with_command(model, GraphicalUi.navigate_back())
+        }, button_variant(GraphicalUi.SECONDARY)),
+        GraphicalUi.button("Home", () -> {
+            return GraphicalUi.with_command(model, GraphicalUi.navigate("/"))
+        }, button_variant(GraphicalUi.GHOST))
+    ], GraphicalUi.spacing(8))
+}
+
+function widget home_page(dictionary<string> _model) {
+    return GraphicalUi.column([
+        GraphicalUi.heading("Home", 1, {"id": "page-heading"}),
+        GraphicalUi.label("Welcome to the routing demo. Use the navigation bar above to move between pages."),
+        GraphicalUi.label("The active page is highlighted in the navigation bar.")
+    ], GraphicalUi.spacing(12))
+}
+
+function widget about_page(dictionary<string> model) {
+    return GraphicalUi.column([
+        GraphicalUi.heading("About", 1, {"id": "page-heading"}),
+        GraphicalUi.label("This app demonstrates the GraphicalUi routing system."),
+        back_controls(model)
+    ], GraphicalUi.spacing(12))
+}
+
+function widget settings_page(dictionary<string> model) {
+    return GraphicalUi.column([
+        GraphicalUi.heading("Settings", 1, {"id": "page-heading"}),
+        GraphicalUi.label("Application settings would go here."),
+        back_controls(model)
+    ], GraphicalUi.spacing(12))
+}
+
+function widget user_page(dictionary<string> model) {
+    string route = model["route"]
+    return GraphicalUi.column([
+        GraphicalUi.heading("User Profile", 1, {"id": "page-heading"}),
+        GraphicalUi.label("Viewing route: ${route}"),
+        back_controls(model)
+    ], GraphicalUi.spacing(12))
+}
+
+function widget not_found_page(dictionary<string> model) {
+    return GraphicalUi.column([
+        GraphicalUi.heading("404 — Not Found", 1, {"id": "page-heading"}),
+        GraphicalUi.alert("The requested page was not found.", GraphicalUi.WARNING),
+        back_controls(model)
+    ], GraphicalUi.spacing(12))
+}
+
+function dictionary<string> nav_link_style(boolean active) {
+    if active {
+        return {
+            "padding": "var(--gui-space-xs) var(--gui-space-md)",
+            "border_radius": GraphicalUi.VAR_RADIUS,
+            "background_color": GraphicalUi.VAR_BG,
+            "color": GraphicalUi.VAR_PRIMARY,
+            "font_weight": "600",
+            "text_decoration": "none",
+            "box_shadow": GraphicalUi.VAR_SHADOW,
+            "aria_current": "page"
+        }
+    }
+    return {
+        "padding": "var(--gui-space-xs) var(--gui-space-md)",
+        "border_radius": GraphicalUi.VAR_RADIUS,
+        "background_color": "transparent",
+        "color": GraphicalUi.VAR_FG,
+        "text_decoration": "none",
+        "hover_background_color": "var(--gui-primary-subtle-bg)"
+    }
+}
+
+function widget nav_bar(string route) {
+    boolean users_active = String.starts_with(route, "/users")
+    return GraphicalUi.wrapped_row([
+        GraphicalUi.navigation_link("Home", "navigate:/", nav_link_style(route == "/")),
+        GraphicalUi.navigation_link("About", "navigate:/about", nav_link_style(route == "/about")),
+        GraphicalUi.navigation_link("Settings", "navigate:/settings", nav_link_style(route == "/settings")),
+        GraphicalUi.navigation_link("User 42", "navigate:/users/42", nav_link_style(users_active))
+    ], GraphicalUi.merge_styles(
+        GraphicalUi.spacing(4),
+        {
+            "align_items": "center",
+            "padding": "4px",
+            "background_color": "var(--gui-primary-subtle-bg)",
+            "border_radius": GraphicalUi.VAR_RADIUS
+        }
+    ))
+}
+
+function widget view_router(dictionary<string> model) {
+    string route = model["route"]
+
+    return GraphicalUi.column([
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("compass", 20),
+            GraphicalUi.heading("Router Demo", 2),
+            GraphicalUi.flexible_space(),
+            GraphicalUi.badge("Route: ${route}")
+        ]),
+        nav_bar(route),
+        GraphicalUi.separator(),
+        GraphicalUi.column([
+            GraphicalUi.router(route, {
+                "/": home_page(model),
+                "/about": about_page(model),
+                "/settings": settings_page(model),
+                "/users/:id": user_page(model),
+                "_": not_found_page(model)
+            })
+        ], GraphicalUi.merge_styles(GraphicalUi.padding_xy(4, 8), GraphicalUi.spacing(12)))
+    ], GraphicalUi.spacing(8))
+}
+
+@main
+function void main() {
+    GraphicalUi.app(router_config())
+}
+
+function dictionary<string> router_model() {
+    return {
+        "route": "/"
+    }
+}
+
+# Build a navigation message of the shape the framework delivers to update().
+function dictionary<string> navigate_message(string route) {
+    mutable dictionary<string> msg = {"_gui_nav": "navigate"}
+    msg["route"] = route
+    return msg
+}
+
+# Exposed as a named function (rather than inlined in main) so the example's
+# routing logic can be driven and verified by the @test blocks below.
+function dictionary router_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Router Demo"
+    config["width"] = 600
+    config["height"] = 400
+    config["model"] = router_model()
+    config["view"] = view_router
+    config["update"] = (dictionary<string> model, dictionary<string> msg) -> {
+        if msg["_gui_nav"] == "navigate" {
+            string next = msg["route"]
+            dictionary<string> updated = Dictionary.set(model, "route", next)
+
+            # Tell screen-reader users the page changed and move keyboard focus
+            # to the new page heading so they are not stranded in the navbar.
+            return GraphicalUi.with_command(updated, GraphicalUi.batch([
+                GraphicalUi.focus("page-heading"),
+                GraphicalUi.announce("Navigated to ${route_name(next)}")
+            ]))
+        }
+        return model
+    }
+
+    return config
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+# Navigation is delivered to update() as a message; these drive that path
+# headlessly and assert the active route changes as expected.
+
+@test
+function void test_navigate_message_updates_route() {
+    dictionary<string> to_about =
+        GraphicalUi.test_message(router_config(), router_model(), navigate_message("/about"))
+    assert(to_about["route"] == "/about")
+
+    dictionary<string> to_settings =
+        GraphicalUi.test_message(router_config(), router_model(), navigate_message("/settings"))
+    assert(to_settings["route"] == "/settings")
+}
+
+@test
+function void test_non_navigation_message_keeps_route() {
+    dictionary<string> other = {"_gui_nav": "noop"}
+    dictionary<string> unchanged = GraphicalUi.test_message(router_config(), router_model(), other)
+    assert(unchanged["route"] == "/")
+}
+
+@test
+function void test_active_page_is_rendered_for_route() {
+    dictionary<string> about_model = {"route": "/about"}
+    dictionary page_label = GraphicalUi.test_find(router_config(), about_model,
+        "This app demonstrates the GraphicalUi routing system.")
+    assert(Dictionary.get_or(page_label, "type", "") == "label")
+}
+
+# ─── Navigation-link click tests ───────────────────────────
+# Clicking a navigation_link delivers its "navigate:<route>" message through the
+# real callback path. These drive that path end-to-end (the flow a user triggers
+# by selecting a tab) and assert the route updates — guarding against the
+# regression where the raw message reached update() unparsed.
+
+@test
+function void test_clicking_nav_link_changes_route() {
+    dictionary<string> to_about =
+        GraphicalUi.test_click(router_config(), router_model(), "About")
+    assert(to_about["route"] == "/about")
+
+    dictionary<string> to_settings =
+        GraphicalUi.test_click(router_config(), router_model(), "Settings")
+    assert(to_settings["route"] == "/settings")
+}
+
+@test
+function void test_clicking_parameterised_nav_link() {
+    dictionary<string> to_user =
+        GraphicalUi.test_click(router_config(), router_model(), "User 42")
+    assert(to_user["route"] == "/users/42")
+}
+
+# Guards the parameterised-route fix: the ":id" segment must match a concrete
+# path so /users/42 resolves to the user page (not the not-found page).
+@test
+function void test_parameterised_route_resolves_to_user_page() {
+    dictionary<string> user_model = {"route": "/users/42"}
+    dictionary page_label = GraphicalUi.test_find(router_config(), user_model,
+        "Viewing route: /users/42")
+    assert(Dictionary.get_or(page_label, "type", "") == "label")
+}
+
+@test
+function void test_clicking_home_resets_route() {
+    dictionary<string> home =
+        GraphicalUi.test_click(router_config(), {"route": "/about"}, "Home")
+    assert(home["route"] == "/")
+}
+
+# Guards the route-history fix: push_route_history must record the *current*
+# route, not an empty string.  (The previous code read through a dictionary
+# pointer that a subsequent insert had invalidated, recording "" and breaking
+# Go Back.)  This drives the framework's "navigate:<route>" / "navigate_back"
+# string convention — which shares push_route_history / pop_route_history with
+# the Go Back command — so the forward-then-back round trip is verified without a
+# window.  (The Settings page's Go Back button uses GraphicalUi.navigate_back()
+# via with_command; its command queue is a deliberate no-op in the headless
+# harness, so the same history logic is exercised here through the string path.)
+@test
+function void test_navigate_back_restores_previous_route() {
+    mutable dictionary cfg = {"_": "gui_config"}
+    cfg["model"] = {"route": "/"}
+    cfg["view"] = (dictionary<string> _m) -> GraphicalUi.column([
+        GraphicalUi.navigation_link("Go About", "navigate:/about"),
+        GraphicalUi.navigation_link("Back", "navigate_back")
+    ], GraphicalUi.spacing(8))
+    cfg["update"] = (dictionary<string> model, dictionary<string> msg) -> {
+        if msg["_gui_nav"] == "navigate" {
+            return Dictionary.set(model, "route", msg["route"])
+        }
+        return model
+    }
+
+    dictionary<string> at_about =
+        GraphicalUi.test_click(cfg, {"route": "/"}, "Go About")
+    assert(at_about["route"] == "/about")
+
+    dictionary<string> back =
+        GraphicalUi.test_click(cfg, at_about, "Back")
+    assert(back["route"] == "/")
+}

@@ -1,0 +1,12 @@
+# Conditional breakpoint test — loop with a variable to test conditions.
+
+@main
+function void main() {
+    mutable integer total = 0
+
+    for i in 1 .. 11 {
+        total += i
+    }
+
+    print("Total: ${total}")
+}

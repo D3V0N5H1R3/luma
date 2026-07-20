@@ -1,0 +1,24 @@
+# Resolver: mutable variables and loop bindings
+function void mutability() {
+    mutable integer x = 0
+    x += 1
+
+    for i in 0 .. 10 {
+        mutable integer acc = 0
+        acc += i
+    }
+
+    mutable array<integer> arr = []
+    for j in 0 .. 5 {
+        arr = Array.push(arr, j)
+    }
+}
+
+function void multiple_bindings() {
+    integer a = 1
+    integer b = 2
+    integer c = a + b
+    integer d = c * 2
+    string e = if d > 5 { "big" } else { "small" }
+    print(e)
+}

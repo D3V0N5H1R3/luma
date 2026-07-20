@@ -1,0 +1,192 @@
+# Solaris showcase — a broader tour of the framework than the counter.
+#
+# Usage: luma examples/applications/solaris_showcase.luma
+# Tests: luma --test examples/applications/solaris_showcase.luma
+#
+# Demonstrates the full beginner-facing surface of Solaris (Luma's GUI
+# framework):
+#
+#   * a typed `record` Model with several fields,
+#   * a `choice` Message whose data-carrying variants feed text input and a
+#     checkbox back into `update` (exhaustively matched — no `else`),
+#   * every common component: heading, text, button, text_field, checkbox,
+#     card, list, row, column,
+#   * fluent `|>` modifiers and semantic design tokens (TextScale, Spacing,
+#     Emphasis via primary/secondary/danger/muted, Length).
+#
+# The framework is built in — no `include` is required; this file only
+# describes the app.
+
+# ─── Message: every way the app's state can change ───
+
+choice Msg {
+    Increment,
+    Decrement,
+    Reset,
+    SetName(string value),
+    ToggleDone(boolean value)
+}
+
+# ─── Model: the app's state ───
+
+record ShowcaseModel {
+    integer count = 0,
+    string name = "",
+    boolean done = false
+}
+
+# ─── Update: a pure Model, Msg -> Model transition ───
+
+function ShowcaseModel showcase_update(ShowcaseModel model, Msg msg) {
+    return match msg {
+        case Msg.Increment         { model with { count = model.count + 1 } }
+        case Msg.Decrement         { model with { count = model.count - 1 } }
+        case Msg.Reset             { model with { count = 0 } }
+        case Msg.SetName(value)    { model with { name = value } }
+        case Msg.ToggleDone(value) { model with { done = value } }
+    }
+}
+
+# ─── View: a pure Model -> View function ───
+
+function View showcase_view(ShowcaseModel model) {
+    return Solaris.column([
+        Solaris.heading("Solaris showcase"),
+        Solaris.text("A tour of Solaris's components and design tokens.")
+            |> Solaris.size(TextScale.Caption) |> Solaris.muted(),
+
+        # A big, centred readout driven by the counter.
+        Solaris.text("count = ${model.count}")
+            |> Solaris.size(TextScale.Title) |> Solaris.center(),
+
+        # A row of buttons showing the semantic emphasis tokens.
+        Solaris.row([
+            Solaris.button("- Decrement") |> Solaris.on_click(Msg.Decrement) |> Solaris.muted(),
+            Solaris.button("+ Increment")
+                |> Solaris.on_click(Msg.Increment)
+                |> Solaris.primary()
+                |> Solaris.width(Length.Fixed(160))
+        ]) |> Solaris.gap(Spacing.M),
+
+        # A card grouping the data-carrying inputs.
+        Solaris.card([
+            Solaris.text("Profile") |> Solaris.size(TextScale.Heading),
+            Solaris.text_field(model.name)
+                |> Solaris.placeholder("Your name")
+                |> Solaris.on_change((string v) -> Msg.SetName(v)),
+            Solaris.checkbox("Subscribed")
+                |> Solaris.checked(model.done)
+                |> Solaris.on_toggle((boolean b) -> Msg.ToggleDone(b))
+        ]) |> Solaris.padding(Spacing.L),
+
+        # A read-only list summarising the current state.
+        Solaris.list([
+            Solaris.text("Name: ${model.name}"),
+            Solaris.text("Subscribed: ${model.done}"),
+            Solaris.text("Count: ${model.count}")
+        ]),
+
+        # A few of Solaris's newer components, all read-only and driven by
+        # the model: a divider, status badges, a progress bar, and a
+        # two-column grid.
+        Solaris.divider(),
+        Solaris.row([
+            Solaris.badge("count ${model.count}") |> Solaris.emphasis(Emphasis.Primary),
+            Solaris.badge("done ${model.done}") |> Solaris.emphasis(Emphasis.Secondary)
+        ]) |> Solaris.gap(Spacing.S),
+        Solaris.progress(model.count, 10.0) |> Solaris.rounded(Radius.Full),
+        Solaris.grid(2, [
+            Solaris.card([
+                Solaris.text("Name") |> Solaris.muted(),
+                Solaris.text(model.name)
+            ]),
+            Solaris.card([
+                Solaris.text("Count") |> Solaris.muted(),
+                Solaris.text("${model.count}")
+            ])
+        ]) |> Solaris.gap(Spacing.M),
+
+        Solaris.button("Reset") |> Solaris.on_click(Msg.Reset) |> Solaris.danger()
+    ]) |> Solaris.padding(Spacing.L) |> Solaris.gap(Spacing.M)
+}
+
+# Exposed as a named function so the @test blocks can drive the same app.
+function dictionary showcase_app() {
+    return Solaris.app("Solaris Showcase", ShowcaseModel { count = 0 }, showcase_update, showcase_view)
+}
+
+@main
+function void main() {
+    Solaris.run(showcase_app())
+}
+
+# ══════════════════════════════════════════════════════════════════════
+# TESTS
+# ══════════════════════════════════════════════════════════════════════
+
+# Button clicks routed through the reconciler + dispatch (integration). The
+# low-level GraphicalUi.test_click helper renders and clicks without a window.
+
+@test
+function void test_increment_button() {
+    ShowcaseModel next = GraphicalUi.test_click(showcase_app(), ShowcaseModel { count = 0 }, "+ Increment")
+    assert(next.count == 1)
+}
+
+@test
+function void test_decrement_button() {
+    ShowcaseModel next = GraphicalUi.test_click(showcase_app(), ShowcaseModel { count = 5 }, "- Decrement")
+    assert(next.count == 4)
+}
+
+@test
+function void test_reset_button() {
+    ShowcaseModel next = GraphicalUi.test_click(showcase_app(), ShowcaseModel { count = 9 }, "Reset")
+    assert(next.count == 0)
+}
+
+# Data-carrying messages drive update directly (pure MVU transition).
+
+@test
+function void test_set_name_message() {
+    ShowcaseModel next = showcase_update(ShowcaseModel { name = "" }, Msg.SetName("Ada"))
+    assert(next.name == "Ada")
+}
+
+@test
+function void test_toggle_done_message() {
+    ShowcaseModel next = showcase_update(ShowcaseModel { done = false }, Msg.ToggleDone(true))
+    assert(next.done)
+}
+
+@test
+function void test_update_is_exhaustive() {
+    # Drive every variant to confirm the whole choice type is handled.
+    assert(showcase_update(ShowcaseModel { count = 3 }, Msg.Increment).count == 4)
+    assert(showcase_update(ShowcaseModel { count = 3 }, Msg.Decrement).count == 2)
+    assert(showcase_update(ShowcaseModel { count = 3 }, Msg.Reset).count == 0)
+    assert(showcase_update(ShowcaseModel { name = "x" }, Msg.SetName("y")).name == "y")
+    assert(showcase_update(ShowcaseModel { done = false }, Msg.ToggleDone(true)).done)
+}
+
+# Fail-safe by construction: a control left without its handler must be inert.
+
+# A view with an intentionally unwired button — used only by the guarantee below.
+function View inert_view(ShowcaseModel model) {
+    return Solaris.column([
+        Solaris.text("${model.count}"),
+        Solaris.button("No handler")
+    ])
+}
+
+function dictionary inert_app() {
+    return Solaris.app("Inert", ShowcaseModel { count = 0 }, showcase_update, inert_view)
+}
+
+@test
+function void test_unwired_button_is_inert() {
+    # Clicking a button that has no |> Solaris.on_click must be a no-op: the
+    # model is returned unchanged, never replaced by the control's unset default.
+    ShowcaseModel next = GraphicalUi.test_click(inert_app(), ShowcaseModel { count = 7 }, "No handler")
+    assert(next.count == 7)
+}

@@ -1,0 +1,97 @@
+# ═══════════════════════════════════════════════════════════
+# Builder Pattern
+#
+# Constructs complex objects step by step using immutable
+# record updates (with-expressions). Each builder function
+# returns a new configuration, enabling a readable chain.
+#
+# Usage: luma examples/design-patterns/builder.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Domain types ─────────────────────────────────────────
+
+choice Protocol { Http  Https }
+
+record ServerConfig {
+    string host = "localhost",
+    number port = 8080,
+    Protocol protocol = Protocol.Http,
+    number max_connections = 100,
+    boolean is_verbose = false,
+    string log_path = "server.log"
+}
+
+# ─── Builder functions ────────────────────────────────────
+
+function ServerConfig with_host(ServerConfig cfg, string host) {
+    return cfg with { host = host }
+}
+
+function ServerConfig with_port(ServerConfig cfg, number port) {
+    return cfg with { port = port }
+}
+
+function ServerConfig with_protocol(ServerConfig cfg, Protocol protocol) {
+    return cfg with { protocol = protocol }
+}
+
+function ServerConfig with_max_connections(ServerConfig cfg, number max_connections) {
+    return cfg with { max_connections = max_connections }
+}
+
+function ServerConfig with_verbose(ServerConfig cfg, boolean is_verbose) {
+    return cfg with { is_verbose = is_verbose }
+}
+
+function ServerConfig with_log_path(ServerConfig cfg, string path) {
+    return cfg with { log_path = path }
+}
+
+# ─── Display ──────────────────────────────────────────────
+
+function string protocol_name(Protocol p) {
+    return match p {
+    case Protocol.Http { "http" }
+    case Protocol.Https { "https" }
+    }
+}
+
+function string describe(ServerConfig cfg) {
+    string proto = protocol_name(cfg.protocol)
+    string opts = "max=${cfg.max_connections}, verbose=${cfg.is_verbose}, log=${cfg.log_path}"
+
+    return "${proto}://${cfg.host}:${cfg.port} (${opts})"
+}
+
+# ─── Main ─────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("=== Builder Pattern ===")
+    print("")
+
+    # Build a production server config step by step — each call returns a
+    # new config, so the pipe chain reads top-to-bottom.
+    ServerConfig production = ServerConfig {}
+        |> with_host(host: "api.example.com")
+        |> with_port(port: 443)
+        |> with_protocol(protocol: Protocol.Https)
+        |> with_max_connections(max_connections: 500)
+        |> with_log_path(path: "/var/log/api.log")
+
+    print("Production: ${describe(production)}")
+
+    # Build a development config — start from defaults, tweak a few
+    ServerConfig development = ServerConfig {}
+        |> with_verbose(is_verbose: true)
+
+    print("Development: ${describe(development)}")
+
+    # Derive a staging config from production
+    ServerConfig staging = production
+        |> with_host(host: "staging.example.com")
+        |> with_max_connections(max_connections: 50)
+        |> with_verbose(is_verbose: true)
+
+    print("Staging: ${describe(staging)}")
+}

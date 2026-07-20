@@ -1,0 +1,28 @@
+# ─────────────────────────────────────────────
+# Luma — cmakelint Configuration
+#
+# Static-analysis settings for CMake files. Applied by the CMake CI gate
+# (.github/workflows/ci-cmake.yml) and any local
+# `cmakelint --config=.cmakelintrc` run.
+#
+# Two built-in checks are disabled because they conflict with the project's
+# documented CMake conventions (instructions/cmake.instructions.md), not
+# because the files violate good style:
+#
+#   linelength        cmakelint measures width in UTF-8 bytes, so the
+#                     box-drawing character (U+2500 '─') used throughout the
+#                     project's comment-header separators counts as three units
+#                     each and trips the limit on lines that are well under 100
+#                     visible columns. Column width is already declared per file
+#                     by .editorconfig (max_line_length = 100).
+#
+#   whitespace/indent cmakelint assumes 2-space indentation; the project uses
+#                     4 spaces (enforced by .editorconfig), which the check
+#                     reports as "weird indentation".
+#
+# Every other built-in check still runs: command casing
+# (readability/mixedcase), tabs, trailing whitespace, parenthesis spacing, and
+# syntax.
+# ─────────────────────────────────────────────
+
+filter=-linelength,-whitespace/indent

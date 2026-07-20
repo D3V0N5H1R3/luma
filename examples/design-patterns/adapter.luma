@@ -1,0 +1,120 @@
+# ═══════════════════════════════════════════════════════════
+# Adapter Pattern
+#
+# Converts one interface into another so that incompatible
+# components can work together. Each adapter is a simple
+# function that wraps one record to satisfy a different
+# interface contract.
+#
+# Usage: luma examples/design-patterns/adapter.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Render function type ────────────────────────────────
+
+type RenderFn = function(string) -> void
+
+# ─── Target interface (what the system expects) ───────────
+
+interface Renderer {
+    RenderFn render
+}
+
+# ─── Existing (incompatible) components ──────────────────
+
+record HtmlWriter {
+    function(string, string) -> void write_element
+}
+
+function HtmlWriter make_html_writer() {
+    return HtmlWriter {
+        write_element = (string tag, string content) -> {
+            print("  <${tag}>${content}</${tag}>")
+        }
+    }
+}
+
+record MarkdownWriter {
+    string prefix
+}
+
+function void write_markdown(MarkdownWriter writer, string text) {
+    print("  ${writer.prefix} ${text}")
+}
+
+record JsonWriter {
+    string key
+}
+
+function void write_json(JsonWriter writer, string value) {
+    print("  { \"${writer.key}\": \"${value}\" }")
+}
+
+# ─── Adapters ─────────────────────────────────────────────
+
+record RendererAdapter {
+    RenderFn render
+}
+
+function RendererAdapter adapt_html(HtmlWriter writer, string tag) {
+    return RendererAdapter {
+        render = (string text) -> writer.write_element(tag, text)
+    }
+}
+
+function RendererAdapter adapt_markdown(MarkdownWriter writer) {
+    return RendererAdapter {
+        render = (string text) -> write_markdown(writer, text)
+    }
+}
+
+function RendererAdapter adapt_json(JsonWriter writer) {
+    return RendererAdapter {
+        render = (string text) -> write_json(writer, text)
+    }
+}
+
+# ─── Consumer (works with any Renderer) ──────────────────
+
+function void render_report(Renderer renderer, array<string> lines) {
+    for line in lines {
+        renderer.render(line)
+    }
+}
+
+# ─── Main ─────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("=== Adapter Pattern ===")
+    print("")
+
+    array<string> data = ["Alice: 95", "Bob: 87", "Charlie: 92"]
+
+    # HTML adapter
+    print("--- HTML output ---")
+
+    HtmlWriter html = make_html_writer()
+    RendererAdapter html_adapter = adapt_html(html, "p")
+
+    render_report(html_adapter, data)
+
+    print("")
+
+    # Markdown adapter
+    print("--- Markdown output ---")
+
+    MarkdownWriter md = MarkdownWriter { prefix = "-" }
+    RendererAdapter md_adapter = adapt_markdown(md)
+
+    render_report(md_adapter, data)
+
+    print("")
+
+    # JSON adapter
+    print("--- JSON output ---")
+
+    JsonWriter json = JsonWriter { key = "score" }
+    RendererAdapter json_adapter = adapt_json(json)
+
+    render_report(json_adapter, data)
+}

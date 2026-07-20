@@ -1,0 +1,61 @@
+# Structured corpus seed: namespaces.
+# Exercises qualified member access, wildcard `use`, selective `use`,
+# namespace records and choices, namespace-qualified match arms, and an
+# internal helper reached only from within its own namespace.
+
+namespace Geometry {
+    record Point {
+        number x,
+        number y
+    }
+
+    choice Shape {
+        Circle(number radius)
+        Rectangle(number width, number height)
+    }
+
+    function number distance(Point a, Point b) {
+        number dx = Geometry.delta(a.x, b.x)
+        number dy = Geometry.delta(a.y, b.y)
+        return Math.square_root(dx * dx + dy * dy) |> Result.unwrap_or(0.0)
+    }
+
+    internal function number delta(number p, number q) {
+        return p - q
+    }
+
+    function number area(Shape s) {
+        return match s {
+        case Geometry.Shape.Circle(r) { Math.pi * r * r }
+        case Geometry.Shape.Rectangle(w, h) { w * h }
+        }
+    }
+}
+
+namespace Text {
+    function string shout(string s) {
+        return String.uppercase(s)
+    }
+
+    function string whisper(string s) {
+        return String.lowercase(s)
+    }
+}
+
+use Geometry
+use Text.shout
+
+@main
+function void main() {
+    Point origin = Point { x = 0.0, y = 0.0 }
+    Geometry.Point far = Geometry.Point { x = 3.0, y = 4.0 }
+    print(Geometry.distance(origin, far))
+
+    Shape circle = Shape.Circle(2.0)
+    Geometry.Shape rect = Geometry.Shape.Rectangle(3.0, 4.0)
+    print(Geometry.area(circle))
+    print(Geometry.area(rect))
+
+    print(shout("hello"))
+    print(Text.whisper("WORLD"))
+}

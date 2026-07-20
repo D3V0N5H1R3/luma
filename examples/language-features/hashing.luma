@@ -1,0 +1,50 @@
+# ═══════════════════════════════════════════════════════════
+# Hashing
+#
+# Demonstrates the Hash module — MD5, SHA-256, SHA-512,
+# CRC32, HMAC, and digest verification.
+# ═══════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # ── Basic digests ──
+    print("=== Hash Digests ===")
+
+    string message = "Hello, Luma!"
+
+    print("MD5    : ${Hash.md5(message)}")
+    print("SHA-1  : ${Hash.sha1(message)}")
+    print("SHA-256: ${Hash.sha256(message)}")
+    print("CRC32  : ${Hash.crc32(message)}")
+
+    # ── HMAC ──
+    print("\n=== HMAC ===")
+
+    string secret = "my-secret-key"
+    string hmac = Hash.hmac_sha256(secret, message)
+
+    print("HMAC-SHA256: ${hmac}")
+
+    string hmac512 = Hash.hmac_sha512(secret, message)
+
+    print("HMAC-SHA512: ${hmac512}")
+
+    # ── Verify a digest ──
+    print("\n=== Verification ===")
+
+    string digest = Hash.sha256(message)
+    boolean is_valid = Hash.verify("sha256", message, digest)
+
+    print("SHA-256 verify (correct): ${is_valid}")
+
+    boolean tampered_is_valid = Hash.verify("sha256", "tampered", digest)
+
+    print("SHA-256 verify (wrong):   ${tampered_is_valid}")
+
+    # ── Available algorithms ──
+    print("\n=== Algorithms ===")
+
+    array<string> algos = Hash.algorithms()
+
+    print("Supported: ${algos}")
+}

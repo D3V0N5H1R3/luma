@@ -1,0 +1,6 @@
+@main
+function void main() {
+    array<integer> numbers = [1, 2, 3, 4, 5]
+    array<integer> doubled = numbers |> Array.map((integer x) -> { return x * 2 })
+    print(doubled)
+}

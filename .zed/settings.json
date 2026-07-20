@@ -1,0 +1,42 @@
+{
+    "lsp": {
+        "clangd": {
+            "binary": {
+                "arguments": ["--compile-commands-dir=build"]
+            }
+        }
+        // luma_lsp has no binary.path override here: the Zed extension resolves
+        // it (PATH or auto-download), keeping it portable across build layouts.
+    },
+
+    "agent": {
+        "commit_message_instructions": "Follow Conventional Commits: begin the subject with one of these type prefixes followed by a colon and a space — chore:, docs:, feat:, fix:, refactor:, test:. Use the imperative mood after the prefix (e.g. 'feat: add match expression', not 'feat: added match expression'). Keep the first line under 72 characters with no trailing period. Limit each commit to one logical change. Add a body explaining the why when the change is non-trivial."
+    },
+
+    "file_types": {
+        "Luma": ["luma"]
+    },
+
+    "remove_trailing_whitespace_on_save": true,
+    "ensure_final_newline_on_save": true,
+    "format_on_save": "off",
+    "tab_size": 4,
+    "hard_tabs": false,
+    "wrap_guides": [100],
+
+    "languages": {
+        "C++": {
+            "tab_size": 4,
+            "format_on_save": "on"
+        },
+        "CMake": {
+            "tab_size": 4
+        },
+        "Markdown": {
+            "remove_trailing_whitespace_on_save": false
+        },
+        "YAML": {
+            "tab_size": 2
+        }
+    }
+}

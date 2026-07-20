@@ -1,0 +1,6 @@
+@main
+function void main() {
+    number x = 3.14
+    boolean y = x == 3.14
+    print(y)
+}

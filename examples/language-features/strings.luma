@@ -1,0 +1,53 @@
+# ═══════════════════════════════════════════════════════════
+# Strings: Interpolation and Multi-Line
+#
+# Demonstrates string literal syntax: ${...} interpolation,
+# escape sequences, and triple-quoted multi-line strings.
+# For String module functions (trim, split, replace, ...),
+# see string_functions.
+# ═══════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # ── Interpolation ──
+    print("=== Interpolation ===")
+
+    string name = "Luma"
+    integer version = 1
+    print("Welcome to ${name} ${version}.0!")
+
+    # Any expression works inside ${...}
+    array<integer> prices = [3, 5, 2]
+    print("Total: ${Result.unwrap(Array.sum(prices))}")
+    print("Doubled: ${version * 2}")
+    print("Status: ${if version >= 1 { "stable" } else { "preview" }}")
+
+    # ── Escape sequences ──
+    print("")
+    print("=== Escape sequences ===")
+
+    print("Tab:\tafter tab")
+    print("Newline:\nsecond line")
+    print("Quote: \"quoted\"")
+    print("Backslash: C:\\path\\to\\file")
+    print("Literal dollar: \${not interpolated}")
+
+    # ── Multi-line strings ──
+    print("")
+    print("=== Multi-line strings ===")
+
+    # Common leading indentation is stripped automatically.
+    string message = """
+        Hello, World!
+        This is a multi-line string.
+        Indentation is removed automatically.
+        """
+    print(message)
+
+    # Interpolation works in triple-quoted strings too.
+    string who = "Alice"
+    string letter = """
+        Dear ${who}, thank you for trying Luma.
+        """
+    print(letter)
+}

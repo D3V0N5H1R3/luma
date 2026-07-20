@@ -1,0 +1,40 @@
+# ─────────────────────────────────────────────
+# Luma — EditorConfig
+#
+# Cross-editor formatting defaults. Supported by
+# VS Code, Visual Studio, Xcode (via plugin), Zed,
+# and most other editors.
+# ─────────────────────────────────────────────
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# ── Two-space indent ──
+[*.{yml,yaml}]
+indent_size = 2
+
+[*.toml]
+indent_size = 2
+
+# Tree-sitter query files use 2-space indentation by convention.
+[*.scm]
+indent_size = 2
+
+# ── Markdown: trailing whitespace is significant (hard line breaks); do not wrap ──
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# ── Compiled Luma bytecode is binary — never reformat or re-encode ──
+[*.lumc]
+charset = unset
+trim_trailing_whitespace = false
+insert_final_newline = false

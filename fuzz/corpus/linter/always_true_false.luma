@@ -1,0 +1,8 @@
+@main
+function void main() {
+    if true {
+        print("always")
+    } else {
+        print("never")
+    }
+}

@@ -1,0 +1,25 @@
+{
+    "$comment": "Canonical binary resolution order for all Luma editor extensions. Each extension should attempt these sources in order, falling through on failure.",
+    "resolution_order": [
+        {
+            "source": "user_config",
+            "description": "User-configured binary path (e.g. luma.lsp.path setting)",
+            "check": "File exists at the configured path"
+        },
+        {
+            "source": "bundled",
+            "description": "Extension-bundled binary in extension storage",
+            "check": "File exists in extension's managed binary directory"
+        },
+        {
+            "source": "auto_download",
+            "description": "Auto-downloaded binary via shared download script",
+            "check": "Invoke shared/binary-download/download.py or extension-native download"
+        },
+        {
+            "source": "system_path",
+            "description": "Binary found on system PATH",
+            "check": "which/where lookup succeeds"
+        }
+    ]
+}

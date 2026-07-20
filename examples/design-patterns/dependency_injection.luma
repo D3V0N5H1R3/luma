@@ -1,0 +1,98 @@
+# ═══════════════════════════════════════════════════════════
+# Dependency Injection Pattern
+#
+# Decouples components by injecting behaviour through
+# function parameters and interfaces. The caller decides
+# which concrete implementation to use, making the code
+# easy to test and reconfigure.
+#
+# Usage: luma examples/design-patterns/dependency_injection.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Function types ──────────────────────────────────────
+
+type LogFn = function(string) -> void
+type FindUserFn = function(string) -> result<string>
+
+# ─── Logger interface ─────────────────────────────────────
+
+# Any record with a `log` function field satisfies this.
+interface Logger {
+    LogFn log
+}
+
+# ─── Concrete loggers ────────────────────────────────────
+
+record ConsoleLogger {
+    LogFn log
+}
+
+function ConsoleLogger make_console_logger() {
+    return ConsoleLogger {
+        log = (string msg) -> print("[console] ${msg}")
+    }
+}
+
+record PrefixLogger {
+    LogFn log
+}
+
+function PrefixLogger make_prefix_logger(string prefix) {
+    return PrefixLogger {
+        log = (string msg) -> print("[${prefix}] ${msg}")
+    }
+}
+
+# ─── Repository interface ────────────────────────────────
+
+interface UserRepository {
+    FindUserFn find_user
+}
+
+record InMemoryUserRepository {
+    FindUserFn find_user
+}
+
+function InMemoryUserRepository make_in_memory_repo() {
+    dictionary<string> users = {
+        "1": "Alice",
+        "2": "Bob",
+        "3": "Charlie"
+    }
+
+    return InMemoryUserRepository {
+        find_user = (string id) -> Dictionary.get(users, id)
+    }
+}
+
+# ─── Service that depends on abstractions ─────────────────
+
+function void greet_user(UserRepository repo, Logger logger, string id) {
+    match repo.find_user(id) {
+        success(name) { logger.log("Hello, ${name}!") }
+        failure(_) { logger.log("Unknown user: ${id}") }
+    }
+}
+
+# ─── Main ─────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("=== Dependency Injection Pattern ===")
+    print("")
+
+    # Wire up with a console logger
+    ConsoleLogger console = make_console_logger()
+    InMemoryUserRepository repo = make_in_memory_repo()
+
+    greet_user(repo, console, "1")
+    greet_user(repo, console, "2")
+
+    print("")
+
+    # Swap in a different logger — no service code changes
+    PrefixLogger debug_logger = make_prefix_logger("DEBUG")
+
+    greet_user(repo, debug_logger, "3")
+    greet_user(repo, debug_logger, "99")
+}

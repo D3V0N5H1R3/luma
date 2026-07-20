@@ -1,0 +1,45 @@
+# VM: dictionary construction and functional operations
+@main
+function void main() {
+    dictionary<integer> scores = {"alice": 95, "bob": 87, "carol": 72}
+
+    result<integer> _got = Dictionary.get(scores, "alice")
+    integer _or = Dictionary.get_or(scores, "missing", 0)
+    boolean _has = Dictionary.has(scores, "bob")
+    boolean _empty = Dictionary.is_empty(scores)
+    integer _len = Dictionary.length(scores)
+
+    dictionary<integer> _with = Dictionary.set(scores, "dave", 60)
+    dictionary<integer> _without = Dictionary.remove(scores, "carol")
+    dictionary<integer> _merged = Dictionary.merge(scores, {"erin": 100})
+
+    array<string> _keys = Dictionary.keys(scores)
+    array<integer> _values = Dictionary.values(scores)
+    boolean _hasval = Dictionary.has_value(scores, 95)
+
+    dictionary<integer> _doubled = scores
+    |> Dictionary.map((string _k, integer v) -> v * 2)
+    |> Result.unwrap_or({})
+
+    dictionary<integer> _passing = scores
+    |> Dictionary.filter((string _k, integer v) -> v >= 80)
+    |> Result.unwrap_or({})
+
+    integer _total = scores
+    |> Dictionary.reduce(0, (integer acc, string _k, integer v) -> acc + v)
+    |> Result.unwrap_or(0)
+
+    result<integer> _count = Dictionary.count(scores, (string _k, integer v) -> v > 70)
+    result<(string, integer)> _found = Dictionary.find(scores, (string _k, integer v) -> v == 87)
+
+    dictionary<integer> _picked = Dictionary.pick(scores, ["alice", "bob"])
+    dictionary<integer> _omitted = Dictionary.omit(scores, ["carol"])
+
+    array<(string, integer)> _entries = Dictionary.to_entries(scores)
+    dictionary<integer> _rebuilt = Dictionary.from_entries(_entries)
+    dictionary<integer> _seeded = Dictionary.from_keys(["x", "y", "z"], 0)
+
+    for key, value in scores {
+        print("${key}=${value}")
+    }
+}

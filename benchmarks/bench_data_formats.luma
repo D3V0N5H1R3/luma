@@ -1,0 +1,143 @@
+# Data format benchmarks: JSON, CSV, XML serialization and deserialization.
+
+function BenchResult run_data_format_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # --- JSON ---
+
+    # Operand hoisted so this measures serialization, not dict construction.
+    dictionary<string> json_obj = {"name": "Alice", "city": "Berlin", "role": "engineer"}
+    st = time_it(st, "Json.serialize", 5000, () -> {
+        string _json = Json.serialize(json_obj)
+    })
+
+    st = time_it(st, "Json.deserialize", 5000, () -> {
+        result<dictionary<string>> _val = Json.deserialize("{\"name\":\"Alice\",\"age\":\"30\",\"active\":\"true\"}")
+    })
+
+    # Operand hoisted so this measures pretty-printing, not dict construction.
+    dictionary<string> json_pretty_obj = {"a": "1", "b": "2", "c": "3", "d": "4", "e": "5"}
+    st = time_it(st, "Json.serialize_pretty", 2000, () -> {
+        string _json = Json.serialize_pretty(json_pretty_obj)
+    })
+
+    st = time_it(st, "Json.get nested", 5000, () -> {
+        string json = "{\"user\":{\"name\":\"Bob\",\"score\":42}}"
+        result<string> _name = Json.get(json, "user.name")
+    })
+
+    st = time_it(st, "Json.is_valid", 10000, () -> {
+        boolean _v1 = Json.is_valid("{\"key\":\"value\"}")
+        boolean _v2 = Json.is_valid("not json")
+    })
+
+    st = time_it(st, "Json.set", 5000, () -> {
+        result<string> _updated = Json.set("{\"name\":\"Alice\",\"age\":30}", "age", 31)
+    })
+
+    st = time_it(st, "Json.merge", 5000, () -> {
+        result<string> _merged = Json.merge("{\"a\":1,\"b\":2}", "{\"b\":3,\"c\":4}")
+    })
+
+    st = time_it(st, "Json.get_path indexed", 5000, () -> {
+        string json = "{\"users\":[{\"name\":\"Bob\"},{\"name\":\"Eve\"}]}"
+        result<string> _name = Json.get_path(json, "users[1].name")
+    })
+
+    st = time_it(st, "Json.set_path", 5000, () -> {
+        result<string> _updated = Json.set_path("{\"a\":{\"b\":{\"c\":1}}}", "a.b.c", 42)
+    })
+
+    # --- CSV ---
+
+    string csv_data = "name,age,city\nAlice,30,Berlin\nBob,25,Paris\nCharlie,35,London"
+
+    st = time_it(st, "Csv.deserialize", 2000, () -> {
+        result<array<array<string>>> _rows = Csv.deserialize(csv_data)
+    })
+
+    # Operand hoisted so this measures serialization, not row construction.
+    array<array<string>> csv_rows = [
+        ["name", "age", "city"],
+        ["Alice", "30", "Berlin"],
+        ["Bob", "25", "Paris"]
+    ]
+    st = time_it(st, "Csv.serialize", 2000, () -> {
+        string _csv = Csv.serialize(csv_rows) |> Result.unwrap()
+    })
+
+    st = time_it(st, "Csv.deserialize_records", 1000, () -> {
+        result<array<dictionary<string>>> _recs = Csv.deserialize_records(csv_data)
+    })
+
+    # Quoted input exercises the RFC 4180 quote state machine (embedded
+    # delimiters, escaped quotes) that the plain csv_data above never reaches.
+    string csv_quoted = "name,note\n\"Smith, John\",\"said \"\"hi\"\"\"\n\"Doe, Jane\",\"plain\""
+
+    st = time_it(st, "Csv.deserialize quoted", 2000, () -> {
+        result<array<array<string>>> _rows = Csv.deserialize(csv_quoted)
+    })
+
+    st = time_it(st, "Csv.deserialize_with", 2000, () -> {
+        result<array<array<string>>> _rows = Csv.deserialize_with("a;b;c\n1;2;3\n4;5;6", {"delimiter": ";"})
+    })
+
+    # Operand hoisted so this measures serialization, not record construction.
+    array<dictionary<string>> csv_records = [
+        {"name": "Alice", "city": "Berlin"},
+        {"name": "Bob", "city": "Paris"}
+    ]
+    st = time_it(st, "Csv.serialize_records", 1000, () -> {
+        string _csv = Csv.serialize_records(csv_records)
+    })
+
+    # --- XML ---
+
+    # Hoisted out of the timed bodies below: "Xml.serialize" should measure
+    # serialization only (construction is covered by "Xml.element construction"),
+    # and "Xml.find_all" should measure the search, not the deserialize parse.
+    xml serialize_node = Xml.element("div")
+    |> Xml.set_attribute("class", "main")
+    |> Xml.add_child(Xml.element("span") |> Xml.set_text("hello"))
+    xml find_doc = Result.unwrap(Xml.deserialize("<r><item/><item/><other/><item/></r>"))
+    xml nav_doc = Result.unwrap(Xml.deserialize("<root><child><leaf id=\"x\">v</leaf></child></root>"))
+    xml attr_doc = Result.unwrap(Xml.deserialize("<r><item id=\"1\"/><item id=\"2\"/><item id=\"3\"/></r>"))
+
+    st = time_it(st, "Xml.deserialize", 2000, () -> {
+        result<xml> _doc = Xml.deserialize("<root><item id=\"1\">hello</item><item id=\"2\">world</item></root>")
+    })
+
+    st = time_it(st, "Xml.is_valid", 5000, () -> {
+        boolean _v1 = Xml.is_valid("<root><item id=\"1\">hello</item></root>")
+        boolean _v2 = Xml.is_valid("<root><unterminated>")
+    })
+
+    st = time_it(st, "Xml.serialize", 5000, () -> {
+        string _s = Xml.serialize(serialize_node)
+    })
+
+    st = time_it(st, "Xml.serialize_pretty", 2000, () -> {
+        string _s = Xml.serialize_pretty(find_doc)
+    })
+
+    st = time_it(st, "Xml.element construction", 5000, () -> {
+        xml _node = Xml.element("root")
+        |> Xml.add_child(Xml.element("a") |> Xml.set_text("1"))
+        |> Xml.add_child(Xml.element("b") |> Xml.set_text("2"))
+        |> Xml.add_child(Xml.element("c") |> Xml.set_text("3"))
+    })
+
+    st = time_it(st, "Xml.find_all", 2000, () -> {
+        array<xml> _items = Xml.find_all(find_doc, "item")
+    })
+
+    st = time_it(st, "Xml.find_by_attribute", 2000, () -> {
+        result<xml> _item = Xml.find_by_attribute(attr_doc, "id", "3")
+    })
+
+    st = time_it(st, "Xml.at", 5000, () -> {
+        result<xml> _leaf = Xml.at(nav_doc, "root/child/leaf")
+    })
+
+    return st
+}

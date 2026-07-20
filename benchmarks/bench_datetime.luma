@@ -1,0 +1,98 @@
+# DateTime benchmarks: parsing, formatting, arithmetic.
+
+function BenchResult run_datetime_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # --- Construction ---
+
+    st = time_it(st, "DateTime.from_parts", 5000, () -> {
+        result<number> _dt = DateTime.from_parts(2026, 5, 15, 10, 30, 0)
+    })
+
+    st = time_it(st, "DateTime.from_iso_string", 2000, () -> {
+        result<number> _dt = DateTime.from_iso_string("2026-05-15T10:30:00Z")
+    })
+
+    # --- Formatting ---
+
+    number dt = Result.unwrap(DateTime.from_parts(2026, 5, 15, 14, 30, 45))
+
+    st = time_it(st, "DateTime.to_iso_string", 5000, () -> {
+        result<string> _s = DateTime.to_iso_string(dt)
+    })
+
+    st = time_it(st, "DateTime.format", 2000, () -> {
+        result<string> _s = DateTime.format(dt, "YYYY-MM-DD hh:mm:ss")
+    })
+
+    # --- Decomposition ---
+
+    st = time_it(st, "DateTime.to_parts", 5000, () -> {
+        result<DateTime.TimeParts> _p = DateTime.to_parts(dt)
+    })
+
+    # --- Field extraction ---
+
+    st = time_it(st, "DateTime field extraction", 10000, () -> {
+        result<integer> _y = DateTime.year(dt)
+        result<integer> _m = DateTime.month(dt)
+        result<integer> _d = DateTime.day_of_month(dt)
+        result<integer> _h = DateTime.hour(dt)
+        result<integer> _min = DateTime.minute(dt)
+        result<integer> _s = DateTime.second(dt)
+    })
+
+    # --- Arithmetic ---
+
+    st = time_it(st, "DateTime.add_days", 5000, () -> {
+        number _future = DateTime.add_days(dt, 30)
+    })
+
+    st = time_it(st, "DateTime.add_hours", 5000, () -> {
+        number _future = DateTime.add_hours(dt, 48)
+    })
+
+    st = time_it(st, "DateTime.add_months", 5000, () -> {
+        result<number> _future = DateTime.add_months(dt, 6)
+    })
+
+    # --- Comparison ---
+
+    number dt2 = Result.unwrap(DateTime.from_parts(2026, 12, 25, 0, 0, 0))
+
+    st = time_it(st, "DateTime.is_before/after", 10000, () -> {
+        boolean _before = DateTime.is_before(dt, dt2)
+        boolean _after = DateTime.is_after(dt2, dt)
+    })
+
+    # --- Difference ---
+
+    st = time_it(st, "DateTime.difference_days", 5000, () -> {
+        number _days = DateTime.difference_days(dt, dt2)
+    })
+
+    # --- Timezone offsets ---
+
+    st = time_it(st, "DateTime.to_iso_string_offset", 2000, () -> {
+        result<string> _s = DateTime.to_iso_string_offset(dt, 330.0)
+    })
+
+    st = time_it(st, "DateTime to/from_offset round-trip", 5000, () -> {
+        number _local = Result.unwrap(DateTime.to_offset(dt, 120.0))
+        number _utc = Result.unwrap(DateTime.from_offset(_local, 120.0))
+    })
+
+    # --- Utilities ---
+
+    st = time_it(st, "DateTime.is_leap_year", 10000, () -> {
+        boolean _yes = DateTime.is_leap_year(2024)
+        boolean _no = DateTime.is_leap_year(2025)
+    })
+
+    st = time_it(st, "DateTime.days_in_month", 10000, () -> {
+        result<integer> _jan = DateTime.days_in_month(2026, 1)
+        result<integer> _feb = DateTime.days_in_month(2026, 2)
+    })
+
+    return st
+}

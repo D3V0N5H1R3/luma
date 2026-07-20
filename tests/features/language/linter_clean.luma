@@ -1,0 +1,183 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Linter Precision (no false positives)
+#
+# Every Luma feature test is executed with `--strict --test`, so warnings
+# are fatal here. This file therefore doubles as an executable assertion
+# that the linter does NOT warn on correct code: it concentrates the idioms
+# that are the common false-positive risks for each lint rule (W0001–W0016).
+# If the linter regresses and starts flagging valid code, this test fails
+# under --strict before a single assertion runs.
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+# ─── W0003: underscore-prefixed parameters are intentionally unused ───
+
+function integer _first_of_two(integer a, integer _b) {
+    return a
+}
+
+@test
+function void test_unused_parameter_underscore_is_clean() {
+    assert(_first_of_two(7, 9) == 7)
+}
+
+# ─── W0001: underscore-prefixed locals are intentionally unused ───
+
+@test
+function void test_unused_local_underscore_is_clean() {
+    integer _ignored = 99
+    integer used = 1
+
+    assert(used == 1)
+}
+
+# ─── W0004: a mutable mutated through every form is not "never mutated" ───
+
+@test
+function void test_mutable_reassigned_is_clean() {
+    mutable integer x = 0
+
+    x = 5
+
+    assert(x == 5)
+}
+
+@test
+function void test_mutable_compound_and_step_is_clean() {
+    mutable integer x = 0
+
+    x += 2
+    x++
+    x--
+
+    assert(x == 2)
+}
+
+@test
+function void test_mutable_element_mutation_is_clean() {
+    mutable array<integer> a = [1, 2, 3]
+
+    a[0] = 10
+
+    assert(a[0] == 10)
+}
+
+# ─── W0008: variable-driven conditions are not constant ───
+
+@test
+function void test_non_constant_condition_is_clean() {
+    integer n = 3
+    mutable string label = ""
+
+    if n > 0 {
+        label = "positive"
+    } else {
+        label = "non-positive"
+    }
+
+    assert(label == "positive")
+}
+
+# ─── W0009: integer equality is not floating-point equality ───
+
+@test
+function void test_integer_equality_is_clean() {
+    integer a = 2
+    integer b = 2
+
+    assert(a == b)
+}
+
+# ─── W0010: a consumed result is not a discarded result ───
+
+@test
+function void test_consumed_result_is_clean() {
+    array<integer> values = [10, 20, 30]
+
+    result<integer> r = Array.get(values, 1)
+
+    assert(Result.unwrap(r) == 20)
+}
+
+# ─── W0011: an if that returns needs no else (no redundant else) ───
+
+function integer _absolute(integer x) {
+    if x < 0 {
+        return -x
+    }
+
+    return x
+}
+
+@test
+function void test_no_redundant_else_is_clean() {
+    assert(_absolute(-4) == 4)
+    assert(_absolute(4) == 4)
+}
+
+# ─── W0012: distinct names across nested scopes do not shadow ───
+
+@test
+function void test_no_shadowing_is_clean() {
+    integer outer = 1
+
+    if outer == 1 {
+        integer inner = 2
+
+        assert(inner == 2)
+    }
+
+    assert(outer == 1)
+}
+
+# ─── W0013: a catch block that handles the error is not empty ───
+
+@test
+function void test_non_empty_catch_is_clean() {
+    mutable string caught = ""
+
+    try {
+        result<integer> r = failure("boom")
+
+        integer _ = Result.unwrap(r)
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "boom"))
+}
+
+# ─── W0014: division by a non-zero literal or a variable is safe ───
+
+@test
+function void test_safe_division_is_clean() {
+    integer a = 20
+    integer d = 4
+
+    assert(a / d == 5)
+    assert(a / 2 == 10)
+}
+
+# ─── W0015: a single negation is not a double negation ───
+
+@test
+function void test_single_negation_is_clean() {
+    boolean flag = false
+
+    assert(!flag)
+}
+
+# ─── W0006 / W0007: loop bodies are non-empty with no unreachable tail ───
+
+@test
+function void test_clean_loop_is_clean() {
+    mutable integer sum = 0
+
+    for i in 1 .. 4 {
+        sum += i
+    }
+
+    assert(sum == 6)
+}

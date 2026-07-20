@@ -1,0 +1,106 @@
+# ═══════════════════════════════════════════════════════════
+# Process and Terminal Typed Models
+#
+# Demonstrates the Process.ProcessResult,
+# Terminal.CursorPosition, and Terminal.InputEvent
+# record types.
+# ═══════════════════════════════════════════════════════════
+
+# ─── Process.run returns a ProcessResult record ──────────
+
+function void show_process_result() {
+    result<Process.ProcessResult> r = Process.run("cmd /c echo Hello from Luma")
+
+    match r {
+        success(pr) {
+            print("Exit code: ${pr.exit_code}")
+            print("Output: ${String.trim(pr.output)}")
+        }
+        failure(msg) {
+            print("Command failed: ${msg}")
+        }
+    }
+}
+
+# ─── Terminal.get_cursor_position returns CursorPosition ─
+
+function void show_cursor_position() {
+    result<void> _ = Terminal.enable_raw_mode()
+
+    result<Terminal.CursorPosition> r = Terminal.get_cursor_position()
+
+    match r {
+        success(pos) {
+            Terminal.write("Cursor at row ${pos.row}, column ${pos.column}\r\n")
+        }
+        failure(_) {}
+    }
+
+    Terminal.disable_raw_mode()
+}
+
+# ─── Terminal.get_input returns an InputEvent record ─────
+
+function void show_input_events() {
+    result<void> _ = Terminal.enable_raw_mode()
+    Terminal.write("Press keys (q, Escape, or Ctrl+C to exit):\r\n")
+
+    while true {
+        result<Terminal.InputEvent> r = Terminal.get_input()
+
+        match r {
+            success(event) {
+                mutable string modifiers = ""
+
+                if event.ctrl {
+                    modifiers = "${modifiers}Ctrl+"
+                }
+
+                if event.alt {
+                    modifiers = "${modifiers}Alt+"
+                }
+
+                if event.shift {
+                    modifiers = "${modifiers}Shift+"
+                }
+
+                Terminal.write("Key: ${modifiers}${event.key}\r\n")
+
+                if (event.ctrl && event.key == "c") || event.key == "q"
+                        || event.key == "escape" {
+                    break
+                }
+            }
+            failure(message) {
+                Terminal.write("Could not read terminal input: ${message}\r\n")
+                break
+            }
+        }
+    }
+
+    Terminal.disable_raw_mode()
+}
+
+@main
+function void main() {
+    show_process_result()
+    print("")
+    show_cursor_position()
+    print("")
+    show_input_events()
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+# Drive the input-event loop through the headless Terminal harness: scripted
+# keys are consumed by get_input(), and the formatted output is asserted. The
+# loop breaks on Ctrl+C, exactly as in interactive use.
+
+@test
+function void test_show_input_events_formats_modifiers() {
+    Terminal.test_start(["a", "shift+b", "ctrl+c"])
+    show_input_events()
+    string out = Terminal.test_stop()
+    assert(String.contains(out, "Key: a"))
+    assert(String.contains(out, "Key: Shift+b"))
+    assert(String.contains(out, "Key: Ctrl+c"))
+}

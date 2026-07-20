@@ -1,0 +1,6 @@
+.button {
+    color: var(--fg);
+    padding: calc(8px + 1rem);
+    background: linear-gradient(to right, #fff, #000);
+    width: clamp(100px, 50%, 400px);
+}

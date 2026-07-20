@@ -1,0 +1,9 @@
+# Unhandled exception test — triggers a division by zero.
+
+@main
+function void main() {
+    number x = 10
+    number y = 0
+    number answer = x / y
+    print("Should not reach here: ${answer}")
+}

@@ -1,0 +1,442 @@
+# GraphicalUi Pixel Paint — a small drawing canvas. Demonstrates a 2D grid of
+# clickable cells addressed by stable ids, a colour palette with an active
+# selection, an eraser tool, and a clear action. The canvas is a flat
+# array<string> of colour values ("" = blank), so every brush stroke is a pure,
+# verifiable model transformation.
+
+# ─── Canvas configuration ──────────────────────────────────
+
+function integer grid_columns() {
+    return 8
+}
+
+function integer grid_rows() {
+    return 8
+}
+
+# The canvas is grid_columns × grid_rows cells; every size derives from these.
+function integer grid_size() {
+    return grid_columns() * grid_rows()
+}
+
+function array<string> palette() {
+    return [
+        "#ef4444", "#f97316", "#eab308", "#22c55e",
+        "#3b82f6", "#a855f7", "#111827"
+    ]
+}
+
+function string color_name(string color) {
+    dictionary<string> names = {
+        "#ef4444": "red",
+        "#f97316": "orange",
+        "#eab308": "yellow",
+        "#22c55e": "green",
+        "#3b82f6": "blue",
+        "#a855f7": "purple",
+        "#111827": "black"
+    }
+    return Dictionary.get_or(names, color, color)
+}
+
+function array<string> empty_pixels() {
+    mutable array<string> pixels = []
+    mutable integer i = 0
+    while i < grid_size() {
+        pixels = Array.push(pixels, "")
+        i = i + 1
+    }
+    return pixels
+}
+
+# ─── Model + transitions (pure, fully testable) ────────────
+
+function dictionary paint_initial() {
+    array<string> colors = palette()
+    mutable dictionary model = {"color": colors[0]}
+    model["pixels"] = empty_pixels()
+    model["erase"] = false
+    model["confirm_clear"] = false
+    model["cursor"] = 0
+    return model
+}
+
+function string pixel_at(dictionary model, integer index) {
+    array<string> pixels = Dictionary.get_or(model, "pixels", [])
+    return pixels[index]
+}
+
+function integer count_painted(array<string> pixels) {
+    mutable integer painted = 0
+    for value in pixels {
+        if value != "" {
+            painted = painted + 1
+        }
+    }
+    return painted
+}
+
+function dictionary paint_cell(dictionary model, integer index) {
+    array<string> pixels = Dictionary.get_or(model, "pixels", [])
+    string value = if Dictionary.get_or(model, "erase", false) {
+        ""
+    } else {
+        Dictionary.get_or(model, "color", "#111827")
+    }
+    mutable dictionary updated = model
+    updated["pixels"] = Result.unwrap(Array.set(pixels, index, value))
+    updated["confirm_clear"] = false
+    return updated
+}
+
+function dictionary select_color(dictionary model, integer index) {
+    array<string> colors = palette()
+    mutable dictionary updated = model
+    updated["color"] = colors[index]
+    updated["erase"] = false
+    updated["confirm_clear"] = false
+    return updated
+}
+
+function dictionary set_erase(dictionary model) {
+    mutable dictionary updated = model
+    updated["erase"] = true
+    updated["confirm_clear"] = false
+    return updated
+}
+
+function dictionary clear_canvas(dictionary model) {
+    array<string> pixels = Dictionary.get_or(model, "pixels", [])
+    if count_painted(pixels) == 0 {
+        return Dictionary.set(model, "confirm_clear", false)
+    }
+    if !Dictionary.get_or(model, "confirm_clear", false) {
+        return Dictionary.set(model, "confirm_clear", true)
+    }
+    mutable dictionary updated = model
+    updated["pixels"] = empty_pixels()
+    updated["confirm_clear"] = false
+    return updated
+}
+
+# ─── Keyboard navigation ───────────────────────────────────
+# A 64-cell grid is reachable by Tab, but stepping through every cell is tedious.
+# The arrow keys move a logical cursor and shift focus to that cell, so keyboard
+# users glide across the canvas; Enter/Space then paint via the cell's own button.
+
+function integer clamp_index(integer value, integer low, integer high) {
+    if value < low {
+        return low
+    }
+    if value > high {
+        return high
+    }
+    return value
+}
+
+function dictionary move_cursor(dictionary model, integer row_delta, integer col_delta) {
+    integer cols = grid_columns()
+    integer rows = grid_size() / cols
+    integer cursor = Dictionary.get_or(model, "cursor", 0)
+    integer row = clamp_index(cursor / cols + row_delta, 0, rows - 1)
+    integer column = clamp_index(cursor % cols + col_delta, 0, cols - 1)
+    return Dictionary.set(model, "cursor", row * cols + column)
+}
+
+# Move keyboard focus to the cursor cell so its native focus ring is the single,
+# visible indicator of position.
+function any focus_cursor(dictionary model) {
+    integer cursor = Dictionary.get_or(model, "cursor", 0)
+    return GraphicalUi.with_command(model, GraphicalUi.focus("px-${cursor}"))
+}
+
+function any paint_update(dictionary model, string msg) {
+    if msg == "cursor:up" {
+        return focus_cursor(move_cursor(model, -1, 0))
+    }
+    if msg == "cursor:down" {
+        return focus_cursor(move_cursor(model, 1, 0))
+    }
+    if msg == "cursor:left" {
+        return focus_cursor(move_cursor(model, 0, -1))
+    }
+    if msg == "cursor:right" {
+        return focus_cursor(move_cursor(model, 0, 1))
+    }
+    return model
+}
+
+function string map_paint_key(string key) {
+    if key == "ArrowUp" {
+        return "cursor:up"
+    }
+    if key == "ArrowDown" {
+        return "cursor:down"
+    }
+    if key == "ArrowLeft" {
+        return "cursor:left"
+    }
+    if key == "ArrowRight" {
+        return "cursor:right"
+    }
+    return ""
+}
+
+function array<dictionary<string>> paint_subscriptions(dictionary _model) {
+    return [
+        GraphicalUi.on_key("paint_keys", "*", (string key) -> map_paint_key(key))
+    ]
+}
+
+# ─── View ──────────────────────────────────────────────────
+
+# True when this swatch's colour is the active brush (and the eraser is off).
+function boolean swatch_is_active(dictionary model, string color) {
+    return !Dictionary.get_or(model, "erase", false)
+        && Dictionary.get_or(model, "color", "") == color
+}
+
+# One consistent "selected tool" ring, shared by every swatch and the eraser so
+# the whole tool group reads as a single selection treatment (same colour and
+# offset) rather than each control inventing its own highlight.
+function string selected_ring(boolean active) {
+    return if active { "0 0 0 3px ${GraphicalUi.VAR_FG}" } else { "none" }
+}
+
+function dictionary<string> swatch_style(string color, integer index, boolean active) {
+    return {
+        "id": "swatch-${index}",
+        "width": "30px",
+        "height": "30px",
+        "background_color": color,
+        "border": "1px solid ${GraphicalUi.VAR_BORDER}",
+        "border_radius": GraphicalUi.VAR_RADIUS,
+        "box_shadow": selected_ring(active)
+    }
+}
+
+function widget view_swatch(dictionary model, integer index) {
+    string color = palette()[index]
+    boolean active = swatch_is_active(model, color)
+    mutable dictionary attrs = {}
+    attrs["aria_label"] = "Select ${color_name(color)} brush"
+    return GraphicalUi.accessible(
+        GraphicalUi.button("", () -> select_color(model, index), swatch_style(color, index, active)),
+        attrs
+    )
+}
+
+function widget view_eraser(dictionary model) {
+    boolean active = Dictionary.get_or(model, "erase", false)
+    mutable dictionary attrs = {}
+    attrs["aria_label"] = "Select eraser"
+    return GraphicalUi.accessible(GraphicalUi.button("Erase", () -> set_erase(model), {
+        "id": "btn-erase",
+        "background_color": "transparent",
+        "color": GraphicalUi.VAR_FG,
+        "border": "1px solid ${GraphicalUi.VAR_BORDER}",
+        "box_shadow": selected_ring(active)
+    }), attrs)
+}
+
+function widget view_palette(dictionary model) {
+    array<widget> swatches = Array.range(0, Array.length(palette()))
+        |> Result.unwrap()
+        |> Array.map((integer index) -> view_swatch(model, index))
+        |> Result.unwrap()
+    array<widget> tools = Array.push(swatches, view_eraser(model))
+    return GraphicalUi.row(tools, GraphicalUi.merge_styles(
+        GraphicalUi.center_x(), GraphicalUi.spacing(8)))
+}
+
+# Each cell is a single click-to-paint button. Painting is deliberately one
+# click per cell (rather than pointer drag) so every stroke is a discrete,
+# replayable message the @test blocks can drive; the arrow-key + Enter/Space
+# path gives the same reach from the keyboard.
+function widget view_pixel(dictionary model, integer index) {
+    string color = pixel_at(model, index)
+    string background = if color == "" { "var(--gui-input-bg)" } else { color }
+    integer row = index / grid_columns() + 1
+    integer column = index % grid_columns() + 1
+    string state = if color == "" { "empty" } else { "painted ${color_name(color)}" }
+    mutable dictionary attrs = {}
+    attrs["aria_label"] = "Row ${row} column ${column}, ${state}"
+    return GraphicalUi.accessible(GraphicalUi.button("", () -> paint_cell(model, index), {
+        "id": "px-${index}",
+        "width": "30px",
+        "height": "30px",
+        "background_color": background,
+        "border": "1px solid ${GraphicalUi.VAR_BORDER}"
+    }), attrs)
+}
+
+function widget view_canvas(dictionary model) {
+    array<widget> cells = Array.range(0, grid_size())
+        |> Result.unwrap()
+        |> Array.map((integer index) -> view_pixel(model, index))
+        |> Result.unwrap()
+    return GraphicalUi.grid(grid_columns(), cells, GraphicalUi.spacing(2))
+}
+
+function widget view_paint(dictionary model) {
+    integer painted = count_painted(Dictionary.get_or(model, "pixels", []))
+    boolean confirming = Dictionary.get_or(model, "confirm_clear", false)
+    string clear_label = if confirming { "Confirm Clear" } else { "Clear" }
+    return GraphicalUi.column([
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("edit", 20),
+            GraphicalUi.heading("Pixel Paint", 1)
+        ]),
+        view_palette(model),
+        view_canvas(model),
+        GraphicalUi.label("Tip: use the arrow keys to move across the canvas, then Enter or Space to paint.",
+            {
+                "font_size": GraphicalUi.VAR_TEXT_SM,
+                "text_align": "center",
+                "color": GraphicalUi.VAR_DISABLED_FG
+            }),
+        GraphicalUi.row([
+            GraphicalUi.label("Painted: ${painted} / ${grid_size()}", {
+                "id": "status",
+                "font_size": GraphicalUi.VAR_TEXT_SM,
+                "color": GraphicalUi.VAR_DISABLED_FG
+            }),
+            GraphicalUi.button(clear_label, () -> clear_canvas(model), {
+                "id": "btn-clear",
+                "background_color": "transparent",
+                "color": GraphicalUi.VAR_ERROR,
+                "border": "1px solid ${GraphicalUi.VAR_BORDER}"
+            })
+        ], GraphicalUi.merge_styles(GraphicalUi.center_x(), GraphicalUi.spacing(16))),
+        if confirming {
+            GraphicalUi.aria_live("polite",
+                GraphicalUi.label("Press Clear again to confirm.", {
+                    "font_size": GraphicalUi.VAR_TEXT_SM,
+                    "text_align": "center",
+                    "color": GraphicalUi.VAR_WARNING
+                }))
+        } else {
+            GraphicalUi.label("", {"font_size": GraphicalUi.VAR_TEXT_SM})
+        }
+    ], GraphicalUi.merge_styles(GraphicalUi.spacing(12), GraphicalUi.padding(12)))
+}
+
+@main
+function void main() {
+    GraphicalUi.app(paint_config())
+}
+
+# Exposed as a named function (rather than inlined in main) so the example's
+# behaviour can be driven and verified by the @test blocks without a window.
+function dictionary paint_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Luma Pixel Paint"
+    config["width"] = 360
+    config["height"] = 520
+    config["model"] = paint_initial()
+    config["view"] = view_paint
+    config["update"] = (dictionary model, string msg) -> paint_update(model, msg)
+    config["subscribe"] = paint_subscriptions
+    return config
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+# Every brush stroke is a click on a real grid cell or palette swatch, so these
+# exercise the canvas through the same callbacks the UI wires up.
+
+@test
+function void test_default_colour_is_the_first_swatch() {
+    assert(Dictionary.get_or(paint_initial(), "color", "") == "#ef4444")
+}
+
+@test
+function void test_painting_fills_a_cell() {
+    dictionary config = paint_config()
+    dictionary model = GraphicalUi.test_click(config, paint_initial(), "px-0")
+    assert(pixel_at(model, 0) == "#ef4444")
+}
+
+@test
+function void test_selecting_a_swatch_changes_the_active_colour() {
+    dictionary config = paint_config()
+    dictionary model = GraphicalUi.test_click(config, paint_initial(), "swatch-4")
+    assert(Dictionary.get_or(model, "color", "") == "#3b82f6")
+    assert(!Dictionary.get_or(model, "erase", true))
+}
+
+@test
+function void test_painting_uses_the_selected_colour() {
+    dictionary config = paint_config()
+    dictionary chosen = GraphicalUi.test_click(config, paint_initial(), "swatch-4")
+    dictionary model = GraphicalUi.test_click(config, chosen, "px-3")
+    assert(pixel_at(model, 3) == "#3b82f6")
+}
+
+@test
+function void test_eraser_clears_a_painted_cell() {
+    dictionary config = paint_config()
+    dictionary painted = GraphicalUi.test_click(config, paint_initial(), "px-2")
+    dictionary erasing = GraphicalUi.test_click(config, painted, "btn-erase")
+    dictionary model = GraphicalUi.test_click(config, erasing, "px-2")
+    assert(pixel_at(model, 2) == "")
+}
+
+@test
+function void test_eraser_button_sets_the_flag() {
+    dictionary config = paint_config()
+    dictionary model = GraphicalUi.test_click(config, paint_initial(), "btn-erase")
+    assert(Dictionary.get_or(model, "erase", false))
+}
+
+@test
+function void test_arrow_keys_move_the_cursor() {
+    dictionary config = paint_config()
+    dictionary right = GraphicalUi.test_message(config, paint_initial(), "cursor:right")
+    assert(Dictionary.get_or(right, "cursor", -1) == 1)
+    dictionary down = GraphicalUi.test_message(config, right, "cursor:down")
+    assert(Dictionary.get_or(down, "cursor", -1) == grid_columns() + 1)
+}
+
+@test
+function void test_cursor_is_clamped_at_the_edges() {
+    dictionary config = paint_config()
+    dictionary at_top_left = GraphicalUi.test_message(config, paint_initial(), "cursor:up")
+    assert(Dictionary.get_or(at_top_left, "cursor", -1) == 0)
+    dictionary still_top_left = GraphicalUi.test_message(config, at_top_left, "cursor:left")
+    assert(Dictionary.get_or(still_top_left, "cursor", -1) == 0)
+}
+
+@test
+function void test_clear_empties_the_whole_canvas() {
+    dictionary config = paint_config()
+    dictionary first = GraphicalUi.test_click(config, paint_initial(), "px-0")
+    dictionary second = GraphicalUi.test_click(config, first, "px-7")
+    dictionary confirming = GraphicalUi.test_click(config, second, "btn-clear")
+    dictionary cleared = GraphicalUi.test_click(config, confirming, "btn-clear")
+    assert(count_painted(Dictionary.get_or(cleared, "pixels", [])) == 0)
+}
+
+@test
+function void test_count_painted_tracks_strokes() {
+    dictionary config = paint_config()
+    mutable dictionary model = paint_initial()
+    for id in ["px-0", "px-1", "px-2"] {
+        model = GraphicalUi.test_click(config, model, id)
+    }
+    assert(count_painted(Dictionary.get_or(model, "pixels", [])) == 3)
+}
+
+@test
+function void test_status_label_counts_painted_cells() {
+    dictionary config = paint_config()
+    dictionary model = GraphicalUi.test_click(config, paint_initial(), "px-0")
+    dictionary status = GraphicalUi.test_find(config, model, "status")
+    assert(Dictionary.get_or(status, "text", "") == "Painted: 1 / 64")
+}
+
+@test
+function void test_canvas_cells_are_addressable() {
+    dictionary config = paint_config()
+    dictionary cell = GraphicalUi.test_find(config, paint_initial(), "px-10")
+    assert(String.length(Dictionary.get_or(cell, "type", "")) > 0)
+}

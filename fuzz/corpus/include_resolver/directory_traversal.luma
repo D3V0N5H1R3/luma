@@ -1,0 +1,9 @@
+# Include resolver: directory-traversal paths (must be rejected pre-resolution)
+include "../secret.luma"
+include "../../etc/passwd"
+include "a/../../b.luma"
+include "sub/../../../escape.luma"
+
+function integer f() {
+    return 1
+}

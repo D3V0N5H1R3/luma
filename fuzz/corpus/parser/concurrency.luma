@@ -1,0 +1,50 @@
+# Parser/VM: concurrency grammar — nested task_scope, spawn with args, await,
+# channels, timeouts, and select.  Self-contained and deadlock-free (every
+# channel receive/select is preceded by a matching send).
+function integer work(integer n) {
+    return n + 1
+}
+
+function integer produce(channel<integer> out, integer count) {
+    for i in 0 .. count {
+        boolean _ = Channel.send(out, i)
+    }
+    Channel.close(out)
+    return count
+}
+
+@main
+function void main() {
+    array<integer> outer = task_scope {
+        spawn work(1)
+        spawn work(2)
+
+        array<integer> inner = task_scope {
+            spawn work(3)
+            spawn work(4)
+        }
+        print(Array.length(inner))
+
+        spawn work(4)
+    }
+    print(Array.length(outer))
+
+    # Channel with a spawned producer, then drain.
+    channel<integer> ch = Channel.new_buffered(8)
+    task_scope {
+        task<integer> producer = spawn produce(ch, 3)
+        array<integer> items = Channel.receive_all(ch)
+        integer made = await producer
+        print(Array.length(items) + made)
+    }
+
+    # Timeouts and select on a ready channel.
+    channel<string> sch = Channel.new_buffered(2)
+    boolean _s = Channel.send(sch, "x")
+    result<string> rt = Channel.receive_timeout(sch, 100)
+    print(Result.unwrap_or(rt, "none"))
+
+    boolean _s2 = Channel.send(sch, "y")
+    result<(integer, string)> chosen = Channel.select([sch])
+    print(Result.is_success(chosen))
+}

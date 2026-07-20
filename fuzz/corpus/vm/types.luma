@@ -1,0 +1,25 @@
+# VM: records and choice types at runtime
+record Point { number x, number y }
+
+choice Shape {
+    Circle(number radius)
+    Rectangle(number width, number height)
+}
+
+function number area(Shape s) {
+    return match s {
+    case Shape.Circle(r) { 3.14159 * r * r }
+    case Shape.Rectangle(w, h) { w * h }
+    }
+}
+
+@main
+function void main() {
+    Point p = Point { x = 3.0, y = 4.0 }
+    Point _p2 = p with { x = 10.0 }
+
+    Shape c = Shape.Circle(5.0)
+    Shape r = Shape.Rectangle(3.0, 4.0)
+    print("Circle area: ${area(c)}")
+    print("Rect area: ${area(r)}")
+}

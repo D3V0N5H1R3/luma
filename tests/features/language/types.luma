@@ -1,0 +1,569 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Types
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+# Helper types used by the type_of tests below.
+
+record TypePoint {
+    number x,
+    number y
+}
+
+choice TypeShape {
+    Circle(number radius)
+    Dot
+}
+
+@test
+function void test_boolean_type() {
+    boolean is_enabled = true
+    boolean is_disabled = false
+
+    assert(is_enabled)
+    assert(!is_disabled)
+    assert(is_enabled != is_disabled)
+}
+
+@test
+function void test_integer_type() {
+    integer zero = 0
+    integer positive_integer = 42
+    integer negative_integer = -100
+    integer large_integer = 9007199254740992
+
+    assert(zero == 0)
+    assert(positive_integer == 42)
+    assert(negative_integer == -100)
+    assert(large_integer == 9007199254740992)
+}
+
+@test
+function void test_number_type() {
+    number approx_pi = 3.14
+    number negative_number = -7.0
+    number scientific_number = 1e6
+
+    assert(Math.approximately_equal(approx_pi, 3.14))
+    assert(Math.approximately_equal(negative_number, -7.0))
+    assert(Math.approximately_equal(scientific_number, 1000000.0))
+}
+
+@test
+function void test_string_type() {
+    string empty = ""
+    string hello = "hello"
+
+    assert(empty == "")
+    assert(hello == "hello")
+}
+
+@test
+function void test_none_value() {
+    optional<integer> none_value = none
+
+    assert(none_value == none)
+    assert(type_of(none_value) == "none")
+}
+
+@test
+function void test_type_of() {
+    assert(type_of(42) == "integer")
+    assert(type_of(3.14) == "number")
+    assert(type_of(true) == "boolean")
+    assert(type_of("hi") == "string")
+    assert(type_of(none) == "none")
+}
+
+@test
+function void test_integer_division_truncates() {
+    assert(7 / 2 == 3)
+    assert(-7 / 2 == -3)
+    assert(10 / 5 == 2)
+}
+
+@test
+function void test_string_interpolation_basic() {
+    string name = "Luma"
+    integer version_number = 1
+
+    assert("Hello, ${name}!" == "Hello, Luma!")
+    assert("v${version_number}" == "v1")
+}
+
+@test
+function void test_string_interpolation_expression() {
+    assert("${1 + 2}" == "3")
+    assert("${10 * 5}" == "50")
+}
+
+@test
+function void test_multiline_string() {
+    string text_block = """
+    Hello
+    World
+    """
+
+    assert("Hello" in text_block)
+    assert("World" in text_block)
+}
+
+# ─── String Slice Syntax ───
+
+@test
+function void test_string_slice() {
+    string text = "hello world"
+    string sliced = text[0 .. 5]
+
+    assert(sliced == "hello")
+}
+
+@test
+function void test_string_slice_middle() {
+    string text = "abcdef"
+    string sliced = text[2 .. 4]
+
+    assert(sliced == "cd")
+}
+
+# ─── String Index / Inclusive Slice ───
+
+@test
+function void test_string_index() {
+    string text = "hello"
+    string first_char = text[0]
+
+    assert(first_char == "h")
+}
+
+@test
+function void test_string_slice_inclusive() {
+    string text = "hello"
+    string sliced = text[1 ..= 3]
+
+    assert(sliced == "ell")
+}
+
+@test
+function void test_string_slice_inclusive_negative_end() {
+    string text = "hello"
+
+    # `..= -1` must include through the final character, not yield "".
+    assert(text[1 ..= -1] == "ello")
+    assert(text[0 ..= -1] == "hello")
+    assert(text[1 ..= -2] == "ell")
+}
+
+# ─── String Escapes ───
+
+@test
+function void test_string_escape_null() {
+    string null_byte_string = "a\0b"
+
+    assert(String.length(null_byte_string) == 3)
+}
+
+@test
+function void test_string_escape_tab() {
+    string tab_string = "a\tb"
+
+    assert("\t" in tab_string)
+}
+
+# ─── Integer Limits ───
+
+@test
+function void test_integer_max_value() {
+    integer maximum_integer = 9223372036854775807
+
+    assert(maximum_integer == 9223372036854775807)
+}
+
+@test
+function void test_integer_min_value() {
+    integer minimum_integer = -9223372036854775807
+
+    assert(minimum_integer == -9223372036854775807)
+}
+
+@test
+function void test_integer_safe_arithmetic() {
+    integer first_operand = 1000000000
+    integer second_operand = 2000000000
+    integer sum_result = first_operand + second_operand
+
+    assert(sum_result == 3000000000)
+}
+
+@test
+function void test_number_division_normal() {
+    number quotient = 10.0 / 3.0
+
+    assert(quotient > 3.3 && quotient < 3.4)
+}
+
+# ─── type_of Collections ───
+
+@test
+function void test_type_of_collections() {
+    assert(type_of([1, 2, 3]) == "array")
+    assert(type_of({"a": 1}) == "dictionary")
+    assert(type_of(none) == "none")
+}
+
+@test
+function void test_type_of_result() {
+    assert(type_of(success(1)) == "result")
+    assert(type_of(failure("error message")) == "result")
+}
+
+@test
+function void test_print_returns_none() {
+    assert(print("test output") == none)
+}
+
+@test
+function void test_print_multiple_arguments_returns_none() {
+    # print accepts a variadic argument list and always returns none.
+    assert(print(1, "two", true, 4.5) == none)
+}
+
+# ─── assert failure semantics ────────────────────────────
+
+@test
+function void test_assert_passes_on_truthy() {
+    mutable boolean reached_after_assert = false
+
+    assert(true)
+    assert(1 == 1, "one equals one")
+    reached_after_assert = true
+
+    assert(reached_after_assert)
+}
+
+@test
+function void test_assert_failure_uses_default_message() {
+    mutable string caught_message = ""
+
+    try {
+        assert(false)
+    } catch(err) {
+        caught_message = err
+    }
+
+    assert(caught_message == "assertion failed")
+}
+
+@test
+function void test_assert_failure_uses_custom_message() {
+    mutable string caught_message = ""
+
+    try {
+        assert(false, "values must match")
+    } catch(err) {
+        caught_message = err
+    }
+
+    assert(caught_message == "values must match")
+}
+
+@test
+function void test_assert_failure_on_falsy_value() {
+    # A falsy non-boolean argument (empty string) fails the assertion.
+    mutable boolean caught = false
+
+    try {
+        assert("")
+    } catch(_err) {
+        caught = true
+    }
+
+    assert(caught)
+}
+
+# ─── Integer → number implicit widening ──────────────────
+
+@test
+function void test_integer_assigned_to_number_variable() {
+    number x = 5
+
+    assert(Math.approximately_equal(x, 5.0))
+    assert(type_of(x) == "number")
+}
+
+@test
+function void test_integer_value_reassigned_to_number_variable() {
+    mutable number total = 0
+    total = 3
+    total += 1
+
+    assert(Math.approximately_equal(total, 4.0))
+    assert(type_of(total) == "number")
+}
+
+@test
+function void test_mixed_integer_number_arithmetic() {
+    integer count = 3
+    number factor = 2.5
+    number product = count * factor
+
+    assert(Math.approximately_equal(product, 7.5))
+}
+
+# ─── Complex String Interpolation ────────────────────────
+
+@test
+function void test_string_interpolation_with_computed_value() {
+    string word = "hello"
+    integer word_length = String.length(word)
+    string output = "len=${word_length}"
+
+    assert(output == "len=5")
+}
+
+@test
+function void test_string_interpolation_with_arithmetic() {
+    integer a = 3
+    integer b = 4
+    string output = "sum=${a + b}, product=${a * b}"
+
+    assert(output == "sum=7, product=12")
+}
+
+@test
+function void test_string_interpolation_many_parts() {
+    integer n = 1
+    string s = "x"
+    # More than the inline buffer capacity (8 parts) forces the heap-fallback
+    # path and interleaves string and non-string operands with literal chunks.
+    string output = "a${n}b${s}c${n}d${s}e${n}f${s}g${n}h${s}i"
+
+    assert(output == "a1bxc1dxe1fxg1hxi")
+}
+
+# ─── Triple-Quoted String with Interpolation ─────────────
+
+@test
+function void test_multiline_string_with_interpolation() {
+    string name = "Alice"
+    string letter = """
+    Dear ${name},
+    Welcome!
+    """
+
+    assert(String.contains(letter, "Dear Alice,"))
+    assert(String.contains(letter, "Welcome!"))
+}
+
+@test
+function void test_multiline_string_preserves_lines() {
+    string block = """
+    Line1
+    Line2
+    Line3
+    """
+    array<string> lines = String.split(String.trim(block), "\n")
+
+    assert(Array.length(lines) == 3)
+}
+
+# ─── Collection Type Keywords ────────────────────────────
+
+@test
+function void test_binary_tree_type_keyword() {
+    binary_tree t = BinaryTree.from_array([3, 1, 2])
+
+    assert(BinaryTree.length(t) == 3)
+    assert(type_of(t) == "binary_tree")
+}
+
+function integer tree_size(binary_tree tree) {
+    return BinaryTree.length(tree)
+}
+
+@test
+function void test_binary_tree_type_in_function_signature() {
+    binary_tree t = BinaryTree.from_array([10, 20, 30])
+
+    assert(tree_size(t) == 3)
+}
+
+@test
+function void test_queue_type_keyword() {
+    queue<integer> q = Queue.new()
+    queue<integer> q2 = Queue.enqueue(q, 42)
+
+    assert(Queue.length(q2) == 1)
+    assert(type_of(q2) == "queue")
+}
+
+function integer queue_size(queue<integer> q) {
+    return Queue.length(q)
+}
+
+@test
+function void test_queue_type_in_function_signature() {
+    queue<integer> q = Queue.new()
+    |> Queue.enqueue(1)
+    |> Queue.enqueue(2)
+
+    assert(queue_size(q) == 2)
+}
+
+@test
+function void test_stack_type_keyword() {
+    stack<integer> s = Stack.new()
+    stack<integer> s2 = Stack.push(s, 99)
+
+    assert(Stack.length(s2) == 1)
+    assert(type_of(s2) == "stack")
+}
+
+function integer stack_size(stack<integer> s) {
+    return Stack.length(s)
+}
+
+@test
+function void test_stack_type_in_function_signature() {
+    stack<integer> s = Stack.new()
+    |> Stack.push(10)
+    |> Stack.push(20)
+    |> Stack.push(30)
+
+    assert(stack_size(s) == 3)
+}
+
+@test
+function void test_collection_type_keywords_in_tuple() {
+    binary_tree t = BinaryTree.from_array([1, 2])
+    queue<integer> q = Queue.new() |> Queue.enqueue(3)
+    stack<integer> s = Stack.new() |> Stack.push(4)
+
+    (binary_tree tree_val, queue<integer> queue_val, stack<integer> stack_val) = (t, q, s)
+
+    assert(BinaryTree.length(tree_val) == 2)
+    assert(Queue.length(queue_val) == 1)
+    assert(Stack.length(stack_val) == 1)
+}
+
+# ─── Numeric Literal Bases ───────────────────────────────
+
+@test
+function void test_hex_integer_literal() {
+    integer all_ones = 0xFF
+    integer zero = 0x0
+
+    assert(all_ones == 255)
+    assert(zero == 0)
+    assert(0x10 + 1 == 17)
+}
+
+@test
+function void test_binary_integer_literal() {
+    integer ten = 0b1010
+
+    assert(ten == 10)
+    assert(0b1 + 0b10 == 3)
+}
+
+@test
+function void test_scientific_notation_negative_exponent() {
+    number small = 2.5e-2
+
+    assert(Math.approximately_equal(small, 0.025))
+}
+
+# ─── type_of on Composite and Wrapped Values ─────────────
+
+@test
+function void test_type_of_tuple() {
+    assert(type_of((1, "a")) == "tuple")
+}
+
+@test
+function void test_type_of_function() {
+    assert(type_of(() -> 1) == "function")
+}
+
+@test
+function void test_type_of_optional_some_reports_inner() {
+    # An optional holding a value reports the inner runtime type.
+    assert(type_of(some(42)) == "integer")
+}
+
+@test
+function void test_type_of_record_reports_name() {
+    TypePoint p = TypePoint { x = 1.0, y = 2.0 }
+
+    assert(type_of(p) == "TypePoint")
+}
+
+@test
+function void test_type_of_choice_reports_name() {
+    TypeShape s = TypeShape.Circle(3.0)
+
+    assert(type_of(s) == "TypeShape")
+}
+
+# ─── Integer Overflow Promotes to number ─────────────────
+
+@test
+function void test_integer_overflow_promotes_to_number() {
+    integer maximum_integer = 9223372036854775807
+
+    # Overflowing integer arithmetic widens the result to number rather
+    # than wrapping around.
+    assert(type_of(maximum_integer + 1) == "number")
+
+    number promoted = maximum_integer + 1
+
+    assert(promoted > 9000000000000000000.0)
+}
+
+# ─── Integer Division / Modulo Sign ──────────────────────
+
+@test
+function void test_modulo_sign_follows_dividend() {
+    assert(-7 % 2 == -1)
+    assert(7 % -2 == 1)
+    assert(-7 / 2 == -3)
+}
+
+# ─── Floating-point Modulo ───────────────────────────────
+# `%` on `number` operands computes the floating-point remainder (fmod),
+# matching the type checker and the language reference (which document
+# `number % number`). Integer `%` stays integer modulo.
+@test
+function void test_modulo_floating_point() {
+    assert(Math.approximately_equal(5.5 % 2.0, 1.5))
+    assert(Math.approximately_equal(-5.5 % 2.0, -1.5))
+
+    # Mixed integer/number operands promote to number, taking the fmod path.
+    assert(Math.approximately_equal(5 % 2.0, 1.0))
+
+    # Compound `%=` on a `number` accumulator (see the User Manual example).
+    mutable number total = 10.0
+    total %= 3.0
+    assert(Math.approximately_equal(total, 1.0))
+}
+
+# ─── Additional String Escapes ───────────────────────────
+
+@test
+function void test_string_escape_carriage_return_and_backslash() {
+    string text = "a\r\nb\\c\"d"
+
+    assert("\r" in text)
+    assert("\\" in text)
+    assert("\"" in text)
+}
+
+@test
+function void test_string_escape_dollar() {
+    string text = "price \$5"
+
+    assert(text == "price $5")
+    assert(String.length(text) == 8)
+}

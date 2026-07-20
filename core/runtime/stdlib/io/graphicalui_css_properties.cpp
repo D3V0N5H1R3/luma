@@ -1,0 +1,450 @@
+#include <iterator>
+#include <string>
+#include <string_view>
+#include <unordered_set>
+
+#include "runtime/stdlib/io/graphicalui_css.hpp"
+
+// ═══════════════════════════════════════════════════════════
+// CSS property database — shared by webview and stub builds
+// for type-safe CSS validation (§7).
+// ═══════════════════════════════════════════════════════════
+
+namespace luma::gui_detail {
+
+// Single authoritative list of all known CSS property names (underscore form).
+// Used by both is_known_css_property() (via a hash set built on first call)
+// and suggest_css_property() (via linear scan for Levenshtein matching).
+// The dual access pattern exists because the hash set provides O(1) validation
+// while the linear scan is needed for fuzzy matching across all candidates.
+static constexpr std::string_view all_css_properties[] = {
+    "accent_color",
+    "align_content",
+    "align_items",
+    "align_self",
+    "all",
+    "animation",
+    "animation_delay",
+    "animation_direction",
+    "animation_duration",
+    "animation_fill_mode",
+    "animation_iteration_count",
+    "animation_name",
+    "animation_play_state",
+    "animation_timing_function",
+    "appearance",
+    "aspect_ratio",
+    "backdrop_filter",
+    "backface_visibility",
+    "background",
+    "background_attachment",
+    "background_blend_mode",
+    "background_clip",
+    "background_color",
+    "background_image",
+    "background_origin",
+    "background_position",
+    "background_repeat",
+    "background_size",
+    "block_size",
+    "border",
+    "border_block",
+    "border_block_color",
+    "border_block_end",
+    "border_block_end_color",
+    "border_block_end_style",
+    "border_block_end_width",
+    "border_block_start",
+    "border_block_start_color",
+    "border_block_start_style",
+    "border_block_start_width",
+    "border_block_style",
+    "border_block_width",
+    "border_bottom",
+    "border_bottom_color",
+    "border_bottom_left_radius",
+    "border_bottom_right_radius",
+    "border_bottom_style",
+    "border_bottom_width",
+    "border_collapse",
+    "border_color",
+    "border_image",
+    "border_image_outset",
+    "border_image_repeat",
+    "border_image_slice",
+    "border_image_source",
+    "border_image_width",
+    "border_inline",
+    "border_inline_color",
+    "border_inline_end",
+    "border_inline_end_color",
+    "border_inline_end_style",
+    "border_inline_end_width",
+    "border_inline_start",
+    "border_inline_start_color",
+    "border_inline_start_style",
+    "border_inline_start_width",
+    "border_inline_style",
+    "border_inline_width",
+    "border_left",
+    "border_left_color",
+    "border_left_style",
+    "border_left_width",
+    "border_radius",
+    "border_right",
+    "border_right_color",
+    "border_right_style",
+    "border_right_width",
+    "border_spacing",
+    "border_style",
+    "border_top",
+    "border_top_color",
+    "border_top_left_radius",
+    "border_top_right_radius",
+    "border_top_style",
+    "border_top_width",
+    "border_width",
+    "bottom",
+    "box_decoration_break",
+    "box_shadow",
+    "box_sizing",
+    "break_after",
+    "break_before",
+    "break_inside",
+    "caption_side",
+    "caret_color",
+    "clear",
+    "clip",
+    "clip_path",
+    "clip_rule",
+    "color",
+    "color_scheme",
+    "column_count",
+    "column_fill",
+    "column_gap",
+    "column_rule",
+    "column_rule_color",
+    "column_rule_style",
+    "column_rule_width",
+    "column_span",
+    "column_width",
+    "columns",
+    "contain",
+    "container",
+    "container_name",
+    "container_type",
+    "content",
+    "counter_increment",
+    "counter_reset",
+    "counter_set",
+    "cursor",
+    "direction",
+    "display",
+    "empty_cells",
+    "fill",
+    "filter",
+    "flex",
+    "flex_basis",
+    "flex_direction",
+    "flex_flow",
+    "flex_grow",
+    "flex_shrink",
+    "flex_wrap",
+    "float",
+    "font",
+    "font_family",
+    "font_feature_settings",
+    "font_kerning",
+    "font_optical_sizing",
+    "font_size",
+    "font_size_adjust",
+    "font_stretch",
+    "font_style",
+    "font_synthesis",
+    "font_variant",
+    "font_variant_caps",
+    "font_variant_east_asian",
+    "font_variant_ligatures",
+    "font_variant_numeric",
+    "font_variation_settings",
+    "font_weight",
+    "forced_color_adjust",
+    "gap",
+    "grid",
+    "grid_area",
+    "grid_auto_columns",
+    "grid_auto_flow",
+    "grid_auto_rows",
+    "grid_column",
+    "grid_column_end",
+    "grid_column_gap",
+    "grid_column_start",
+    "grid_gap",
+    "grid_row",
+    "grid_row_end",
+    "grid_row_gap",
+    "grid_row_start",
+    "grid_template",
+    "grid_template_areas",
+    "grid_template_columns",
+    "grid_template_rows",
+    "height",
+    "hyphens",
+    "image_rendering",
+    "inline_size",
+    "inset",
+    "inset_block",
+    "inset_block_end",
+    "inset_block_start",
+    "inset_inline",
+    "inset_inline_end",
+    "inset_inline_start",
+    "isolation",
+    "justify_content",
+    "justify_items",
+    "justify_self",
+    "left",
+    "letter_spacing",
+    "line_break",
+    "line_height",
+    "list_style",
+    "list_style_image",
+    "list_style_position",
+    "list_style_type",
+    "margin",
+    "margin_block",
+    "margin_block_end",
+    "margin_block_start",
+    "margin_bottom",
+    "margin_inline",
+    "margin_inline_end",
+    "margin_inline_start",
+    "margin_left",
+    "margin_right",
+    "margin_top",
+    "mask",
+    "mask_image",
+    "max_block_size",
+    "max_height",
+    "max_inline_size",
+    "max_width",
+    "min_block_size",
+    "min_height",
+    "min_inline_size",
+    "min_width",
+    "mix_blend_mode",
+    "object_fit",
+    "object_position",
+    "offset",
+    "offset_anchor",
+    "offset_distance",
+    "offset_path",
+    "offset_rotate",
+    "opacity",
+    "order",
+    "orphans",
+    "outline",
+    "outline_color",
+    "outline_offset",
+    "outline_style",
+    "outline_width",
+    "overflow",
+    "overflow_anchor",
+    "overflow_block",
+    "overflow_inline",
+    "overflow_wrap",
+    "overflow_x",
+    "overflow_y",
+    "overscroll_behavior",
+    "overscroll_behavior_block",
+    "overscroll_behavior_inline",
+    "overscroll_behavior_x",
+    "overscroll_behavior_y",
+    "padding",
+    "padding_block",
+    "padding_block_end",
+    "padding_block_start",
+    "padding_bottom",
+    "padding_inline",
+    "padding_inline_end",
+    "padding_inline_start",
+    "padding_left",
+    "padding_right",
+    "padding_top",
+    "page_break_after",
+    "page_break_before",
+    "page_break_inside",
+    "paint_order",
+    "perspective",
+    "perspective_origin",
+    "place_content",
+    "place_items",
+    "place_self",
+    "pointer_events",
+    "position",
+    "print_color_adjust",
+    "quotes",
+    "resize",
+    "right",
+    "rotate",
+    "row_gap",
+    "ruby_position",
+    "scale",
+    "scroll_behavior",
+    "scroll_margin",
+    "scroll_margin_block",
+    "scroll_margin_block_end",
+    "scroll_margin_block_start",
+    "scroll_margin_bottom",
+    "scroll_margin_inline",
+    "scroll_margin_inline_end",
+    "scroll_margin_inline_start",
+    "scroll_margin_left",
+    "scroll_margin_right",
+    "scroll_margin_top",
+    "scroll_padding",
+    "scroll_padding_block",
+    "scroll_padding_block_end",
+    "scroll_padding_block_start",
+    "scroll_padding_bottom",
+    "scroll_padding_inline",
+    "scroll_padding_inline_end",
+    "scroll_padding_inline_start",
+    "scroll_padding_left",
+    "scroll_padding_right",
+    "scroll_padding_top",
+    "scroll_snap_align",
+    "scroll_snap_stop",
+    "scroll_snap_type",
+    "shape_image_threshold",
+    "shape_margin",
+    "shape_outside",
+    "stroke",
+    "stroke_dasharray",
+    "stroke_dashoffset",
+    "stroke_linecap",
+    "stroke_linejoin",
+    "stroke_miterlimit",
+    "stroke_opacity",
+    "stroke_width",
+    "tab_size",
+    "table_layout",
+    "text_align",
+    "text_align_last",
+    "text_combine_upright",
+    "text_decoration",
+    "text_decoration_color",
+    "text_decoration_line",
+    "text_decoration_skip_ink",
+    "text_decoration_style",
+    "text_decoration_thickness",
+    "text_emphasis",
+    "text_emphasis_color",
+    "text_emphasis_position",
+    "text_emphasis_style",
+    "text_indent",
+    "text_justify",
+    "text_orientation",
+    "text_overflow",
+    "text_rendering",
+    "text_shadow",
+    "text_transform",
+    "text_underline_offset",
+    "text_underline_position",
+    "text_wrap",
+    "top",
+    "touch_action",
+    "transform",
+    "transform_box",
+    "transform_origin",
+    "transform_style",
+    "transition",
+    "transition_delay",
+    "transition_duration",
+    "transition_property",
+    "transition_timing_function",
+    "translate",
+    "unicode_bidi",
+    "user_select",
+    "vertical_align",
+    "visibility",
+    "white_space",
+    "widows",
+    "width",
+    "will_change",
+    "word_break",
+    "word_spacing",
+    "word_wrap",
+    "writing_mode",
+    "z_index",
+};
+
+// Common CSS property names (underscore form, matching Luma style dict keys).
+// This is a compile-time lookup set used by validate_style / Level 1 validation.
+[[nodiscard]] bool is_known_css_property(const std::string& key) {
+    // Reserved style-dict keys that are not CSS properties.
+    if (key == "class" || key == "id" || key == "role") {
+        return true;
+    }
+
+    if (key.starts_with("aria_")) {
+        return true;
+    }
+
+    if (key.starts_with("on_")) {
+        return true;
+    }
+
+    // Pseudo-class prefixes (§4) — strip and re-validate the remainder.
+    static constexpr const char* pseudo_prefixes[] = {"hover_", "focus_", "active_", "disabled_",
+                                                      "focus_within_"};
+
+    for (const auto* prefix : pseudo_prefixes) {
+        const std::string_view pv{prefix};
+
+        if (key.starts_with(pv)) {
+            return is_known_css_property(key.substr(pv.size()));
+        }
+    }
+
+    // Custom CSS properties (--*).
+    if (key.size() > 2 && key[0] == '-' && key[1] == '-') {
+        return true;
+    }
+
+    // Build a hash set from the authoritative array on first call.
+    static const std::unordered_set<std::string_view> known_set{std::begin(all_css_properties),
+                                                                std::end(all_css_properties)};
+
+    return known_set.contains(key);
+}
+
+// Find the closest matching CSS property for typo suggestions.
+[[nodiscard]] std::string suggest_css_property(const std::string& key) {
+    // Search the single authoritative all_css_properties array for the closest
+    // match using Levenshtein distance.
+    std::string best;
+    std::size_t best_dist = 4; // Max distance threshold.
+
+    for (const auto prop : all_css_properties) {
+        if (prop == key) {
+            continue;
+        }
+
+        // Skip properties with very different lengths.
+        if (prop.size() > key.size() + 3 || key.size() > prop.size() + 3) {
+            continue;
+        }
+
+        auto dist = luma::levenshtein_distance(key, prop);
+
+        if (dist < best_dist) {
+            best_dist = dist;
+            best = prop;
+        }
+    }
+
+    return best;
+}
+
+} // namespace luma::gui_detail

@@ -1,0 +1,53 @@
+# Arithmetic benchmarks: integer and floating-point operations.
+
+function BenchResult run_arithmetic_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    st = time_it(st, "integer arithmetic", 50000, () -> {
+        mutable integer x = 0
+        x += 1
+        x *= 2
+        x -= 1
+    })
+
+    st = time_it(st, "floating-point arithmetic", 50000, () -> {
+        mutable number x = 0.0
+        x += 1.5
+        x *= 2.0
+        x /= 3.0
+    })
+
+    st = time_it(st, "integer division and modulo", 50000, () -> {
+        mutable integer x = 100
+        x //= 3
+        x %= 7
+        x = 97 // 4
+    })
+
+    st = time_it(st, "bitwise and shift", 50000, () -> {
+        mutable integer x = 0xFF
+        x &= 0x0F
+        x |= 0x30
+        x ^= 0x05
+        x <<= 2
+        x >>= 1
+        x = ~x
+    })
+
+    st = time_it(st, "comparison operators", 50000, () -> {
+        mutable boolean b = false
+        b = 5 < 10
+        b = 10 >= 10
+        b = 7 == 7
+        b = 3 != 4
+    })
+
+    st = time_it(st, "logical short-circuit", 50000, () -> {
+        mutable boolean b = true
+        b = b && false
+        b = b || true
+        b = !b
+    })
+
+    return st
+}

@@ -1,0 +1,69 @@
+# VM: LinearAlgebra module — vector and matrix construction, arithmetic,
+# products, norms, determinants, inverses and linear-system solving.
+# Seeds the VM fuzzer with the numeric converters (to_vec / to_mat), the LU
+# decomposition behind determinant / inverse / solve, and the result, tuple
+# and nested-array code paths exercised through the full pipeline.
+@main
+function void main() {
+    # Vector construction and arithmetic.
+    array<number> z = LinearAlgebra.zero_vector(3)
+    array<number> e1 = LinearAlgebra.unit_vector(3, 1)
+    array<number> a = [1.0, 2.0, 3.0]
+    array<number> b = [4.0, 5.0, 6.0]
+    array<number> sum = LinearAlgebra.add(a, b) |> Result.unwrap_or([0.0])
+    array<number> diff = LinearAlgebra.subtract(a, b) |> Result.unwrap_or([0.0])
+    array<number> scaled = LinearAlgebra.scale(a, 2.0)
+    array<number> neg = LinearAlgebra.negate(a)
+
+    # Products, norms and metrics.
+    number dp = LinearAlgebra.dot(a, b) |> Result.unwrap_or(0.0)
+    array<number> cp = LinearAlgebra.cross(a, b) |> Result.unwrap_or([0.0, 0.0, 0.0])
+    number nrm = LinearAlgebra.norm(a)
+    array<number> unit = LinearAlgebra.normalize(a) |> Result.unwrap_or([0.0])
+    number dist = LinearAlgebra.distance(a, b) |> Result.unwrap_or(0.0)
+    integer dim = LinearAlgebra.dimension(a)
+    number ang = LinearAlgebra.angle([1.0, 0.0], [0.0, 1.0]) |> Result.unwrap_or(0.0)
+    boolean orth = LinearAlgebra.is_orthogonal([1.0, 0.0], [0.0, 1.0])
+
+    # Matrix construction and queries.
+    array<array<number>> id2 = LinearAlgebra.identity(2)
+    array<array<number>> zm = LinearAlgebra.zero_matrix(2, 3)
+    array<array<number>> dg = LinearAlgebra.diagonal([1.0, 2.0, 3.0])
+    array<array<number>> m = [[1.0, 2.0], [3.0, 4.0]]
+    array<array<number>> mt = LinearAlgebra.transpose(m)
+    integer rows = LinearAlgebra.rows(m)
+    integer cols = LinearAlgebra.columns(m)
+    (integer, integer) shp = LinearAlgebra.shape(m)
+    boolean sq = LinearAlgebra.is_square(m)
+    boolean sym = LinearAlgebra.is_symmetric([[1.0, 2.0], [2.0, 1.0]])
+
+    # Matrix arithmetic.
+    array<array<number>> prod = LinearAlgebra.multiply(m, id2) |> Result.unwrap_or([[0.0]])
+    array<number> mv = LinearAlgebra.multiply_vector(m, [1.0, 2.0]) |> Result.unwrap_or([0.0])
+    array<array<number>> sm = LinearAlgebra.scale_matrix(m, 2.0)
+    array<array<number>> am = LinearAlgebra.add_matrix(m, m) |> Result.unwrap_or([[0.0]])
+
+    # Determinant, trace, inverse and linear-system solving.
+    number det = LinearAlgebra.determinant(m) |> Result.unwrap_or(0.0)
+    number tr = LinearAlgebra.trace(m) |> Result.unwrap_or(0.0)
+    array<array<number>> inv = LinearAlgebra.inverse(m) |> Result.unwrap_or([[0.0]])
+    array<number> x = LinearAlgebra.solve([[2.0, 1.0], [1.0, 3.0]], [5.0, 10.0])
+        |> Result.unwrap_or([0.0])
+
+    # Error path: a singular matrix has no inverse (a handled failure result).
+    boolean singular = LinearAlgebra.inverse([[1.0, 2.0], [2.0, 4.0]]) |> Result.is_failure()
+
+    # Error path: an invalid dimension raises a catchable runtime error.
+    mutable boolean caught = false
+    try {
+        array<number> _bad = LinearAlgebra.zero_vector(0)
+    } catch(_err) {
+        caught = true
+    }
+
+    print("vec: ${z[0]} ${e1[1]} ${sum[0]} ${diff[0]} ${scaled[0]} ${neg[0]}")
+    print("metrics: ${dp} ${cp[2]} ${nrm} ${unit[0]} ${dist} ${dim} ${ang} ${orth}")
+    print("mat: ${id2[0][0]} ${zm[0][0]} ${dg[1][1]} ${mt[0][1]} ${rows} ${cols} ${shp.0} ${sq} ${sym}")
+    print("arith: ${prod[0][0]} ${mv[1]} ${sm[1][1]} ${am[0][0]}")
+    print("solve: ${det} ${tr} ${inv[0][0]} ${x[0]} ${x[1]} ${singular} ${caught}")
+}

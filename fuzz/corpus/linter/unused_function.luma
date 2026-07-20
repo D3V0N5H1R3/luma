@@ -1,0 +1,8 @@
+@main
+function void main() {
+    print("hi")
+}
+
+function integer helper() {
+    return 42
+}

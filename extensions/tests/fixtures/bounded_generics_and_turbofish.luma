@@ -1,0 +1,41 @@
+# ═══════════════════════════════════════════════════════════════════
+# Luma Highlight Test — Bounded Generics and Turbofish
+#
+# Regression coverage for the tree-sitter grammar:
+#   • bounded generic parameters   <T: I>  and  <T: I + J>
+#   • turbofish explicit arguments callee::<T, …>(args)
+# Both are documented in the User Manual and must parse without ERROR.
+# ═══════════════════════════════════════════════════════════════════
+
+# Interfaces used as generic bounds.
+interface Printable {
+    string label
+}
+
+interface Comparable {
+    integer rank
+}
+
+# Single interface bound on a type parameter.
+function<T: Printable> string render(T item) {
+    return "rendered"
+}
+
+# Multiple interface bounds separated with '+'.
+function<T: Printable + Comparable> string render_sorted(array<T> items) {
+    return "sorted"
+}
+
+# Generic function invoked with explicit type arguments below.
+function<T> T default_value() {
+    return none
+}
+
+@main
+function void main() {
+    # Turbofish with a single explicit type argument.
+    integer n = default_value::<integer>()
+
+    # Turbofish with multiple explicit type arguments.
+    (string, integer) pair = swap::<integer, string>(1, "hello")
+}

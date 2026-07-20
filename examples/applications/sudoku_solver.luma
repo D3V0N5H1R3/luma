@@ -1,0 +1,308 @@
+# ═══════════════════════════════════════════════════════════
+# Sudoku Solver — Recursive Backtracking
+#
+# Solves any 9×9 Sudoku puzzle with classic backtracking
+# recursion over an immutable board. Demonstrates flat-array
+# grids with row/column/box index arithmetic, constraint
+# checking, optional<T> for "did we find a solution", and
+# @test annotations covering the constraint engine end to end.
+#
+# The board is a flat array of 81 integers, row-major, where 0
+# marks a blank cell and 1–9 are filled digits.
+#
+# Usage: luma examples/applications/sudoku_solver.luma
+# Tests: luma --test examples/applications/sudoku_solver.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Parsing & Rendering ─────────────────────────────────
+
+function array<integer> parse_grid(string text) {
+    mutable array<integer> board = []
+    for ch in String.characters(text) {
+        integer digit = Result.unwrap_or(Converter.to_integer(ch), 0)
+        board = Array.push(board, digit)
+    }
+    return board
+}
+
+function string three(array<integer> board, integer row, integer start) {
+    mutable array<string> parts = []
+    for col in start..start + 3 {
+        integer value = board[row * 9 + col]
+        string shown = if value == 0 { "." } else { Converter.to_string(value) }
+        parts = Array.push(parts, shown)
+    }
+    return String.join(parts, " ")
+}
+
+function void print_grid(array<integer> board) {
+    for row in 0..9 {
+        string left = three(board, row, 0)
+        string middle = three(board, row, 3)
+        string right = three(board, row, 6)
+        print("   ${left} | ${middle} | ${right}")
+        if row == 2 || row == 5 {
+            print("  -------+-------+-------")
+        }
+    }
+}
+
+# ─── Constraint Checking ─────────────────────────────────
+
+function array<integer> row_values(array<integer> board, integer row) {
+    return Array.range(0, 9)
+    |> Result.unwrap_or([])
+    |> Array.map((integer col) -> board[row * 9 + col])
+    |> Result.unwrap_or([])
+}
+
+function array<integer> column_values(array<integer> board, integer col) {
+    return Array.range(0, 9)
+    |> Result.unwrap_or([])
+    |> Array.map((integer row) -> board[row * 9 + col])
+    |> Result.unwrap_or([])
+}
+
+function array<integer> box_values(array<integer> board, integer box) {
+    integer box_row = (box / 3) * 3
+    integer box_col = (box % 3) * 3
+
+    # The nine cells of a box map to indices 0..8; cell / 3 and cell % 3 give
+    # the local row and column. One native map replaces a nested push loop.
+    return Array.range(0, 9)
+    |> Result.unwrap_or([])
+    |> Array.map((integer cell) -> board[(box_row + cell / 3) * 9 + box_col + cell % 3])
+    |> Result.unwrap_or([])
+}
+
+function boolean is_safe(array<integer> board, integer row, integer col, integer value) {
+    for c in 0..9 {
+        if board[row * 9 + c] == value {
+            return false
+        }
+    }
+    for r in 0..9 {
+        if board[r * 9 + col] == value {
+            return false
+        }
+    }
+    integer box_row = (row / 3) * 3
+    integer box_col = (col / 3) * 3
+    for r in box_row..box_row + 3 {
+        for c in box_col..box_col + 3 {
+            if board[r * 9 + c] == value {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+function boolean unit_is_complete(array<integer> values) {
+    if Array.contains(values, 0) {
+        return false
+    }
+    set seen = Set.from_array(values)
+    return Set.length(seen) == 9
+}
+
+function boolean is_solved(array<integer> board) {
+    for index in 0..9 {
+        if !unit_is_complete(row_values(board, index)) {
+            return false
+        }
+        if !unit_is_complete(column_values(board, index)) {
+            return false
+        }
+        if !unit_is_complete(box_values(board, index)) {
+            return false
+        }
+    }
+    return true
+}
+
+# ─── Solver ──────────────────────────────────────────────
+
+function optional<integer> first_empty(array<integer> board) {
+    for index in 0..81 {
+        if board[index] == 0 {
+            return some(index)
+        }
+    }
+    return none
+}
+
+function optional<array<integer>> solve(array<integer> board) {
+    match first_empty(board) {
+    case none {
+        return some(board)
+    }
+    case some(index) {
+        integer row = index / 9
+        integer col = index % 9
+        for value in 1..10 {
+            if is_safe(board, row, col, value) {
+                array<integer> next = Result.unwrap_or(Array.set(board, index, value), board)
+                match solve(next) {
+                case some(solution) {
+                    return some(solution)
+                }
+                case none {
+                }
+                }
+            }
+        }
+        return none
+    }
+    }
+}
+
+function integer count_clues(array<integer> board) {
+    mutable integer clues = 0
+    for index in 0..81 {
+        if board[index] != 0 {
+            clues = clues + 1
+        }
+    }
+    return clues
+}
+
+# ─── Demo ────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("═══════════════════════════════════════════════════")
+    print("   Sudoku Solver — Recursive Backtracking")
+    print("═══════════════════════════════════════════════════")
+
+    string puzzle = "53__7____" +
+                    "6__195___" +
+                    "_98____6_" +
+                    "8___6___3" +
+                    "4__8_3__1" +
+                    "7___2___6" +
+                    "_6____28_" +
+                    "___419__5" +
+                    "____8__79"
+    string normalised = String.replace(puzzle, "_", "0")
+    array<integer> board = parse_grid(normalised)
+
+    print("")
+    print("Puzzle (${count_clues(board)} clues):")
+    print("Legend: . means an empty cell")
+    print_grid(board)
+
+    print("")
+    print("Solving with recursive backtracking...")
+
+    match solve(board) {
+    case some(solution) {
+        print("")
+        print("Solved:")
+        print_grid(solution)
+        print("")
+        string ok = if is_solved(solution) { "yes" } else { "no" }
+        print("Every row, column and box valid: ${ok}")
+    }
+    case none {
+        print("")
+        print("This puzzle has no solution.")
+    }
+    }
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+function array<integer> sample_board() {
+    string puzzle = "53__7____" +
+                    "6__195___" +
+                    "_98____6_" +
+                    "8___6___3" +
+                    "4__8_3__1" +
+                    "7___2___6" +
+                    "_6____28_" +
+                    "___419__5" +
+                    "____8__79"
+    return parse_grid(String.replace(puzzle, "_", "0"))
+}
+
+@test
+function void test_parse_grid_has_81_cells() {
+    assert(Array.length(sample_board()) == 81, "grid should hold 81 cells")
+}
+
+@test
+function void test_count_clues() {
+    assert(count_clues(sample_board()) == 30, "sample puzzle has 30 clues")
+}
+
+@test
+function void test_is_safe_rejects_row_conflict() {
+    array<integer> board = sample_board()
+    assert(!is_safe(board, 0, 2, 5), "5 already sits in row 0")
+}
+
+@test
+function void test_is_safe_rejects_column_conflict() {
+    array<integer> board = sample_board()
+    assert(!is_safe(board, 2, 0, 8), "8 already sits in column 0")
+}
+
+@test
+function void test_is_safe_rejects_box_conflict() {
+    array<integer> board = sample_board()
+    assert(!is_safe(board, 1, 1, 3), "3 already sits in the top-left box")
+}
+
+@test
+function void test_is_safe_accepts_valid_value() {
+    array<integer> board = sample_board()
+    assert(is_safe(board, 0, 2, 4), "4 is legal at row 0 column 2")
+}
+
+@test
+function void test_solver_finds_solution() {
+    match solve(sample_board()) {
+    case some(solution) {
+        assert(is_solved(solution), "returned board must satisfy every constraint")
+    }
+    case none {
+        assert(false, "sample puzzle is solvable")
+    }
+    }
+}
+
+@test
+function void test_solution_preserves_clues() {
+    array<integer> board = sample_board()
+    match solve(board) {
+    case some(solution) {
+        mutable boolean preserved = true
+        for index in 0..81 {
+            if board[index] != 0 && solution[index] != board[index] {
+                preserved = false
+            }
+        }
+        assert(preserved, "original clues must remain unchanged")
+    }
+    case none {
+        assert(false, "sample puzzle is solvable")
+    }
+    }
+}
+
+@test
+function void test_unsolvable_board_returns_none() {
+    mutable array<integer> board = Result.unwrap_or(Array.repeat(0, 81), [])
+    for value in 1..9 {
+        board = Result.unwrap_or(Array.set(board, value - 1, value), board)
+    }
+    board = Result.unwrap_or(Array.set(board, 17, 9), board)
+    assert(Optional.is_none(solve(board)), "cell (0,8) can hold no digit")
+}
+
+@test
+function void test_empty_board_is_not_solved() {
+    array<integer> board = Result.unwrap_or(Array.repeat(0, 81), [])
+    assert(!is_solved(board), "an empty grid is not a finished puzzle")
+}

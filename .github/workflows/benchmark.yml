@@ -1,0 +1,126 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — Benchmark Workflow
+#
+# Runs the benchmark suite on pushes to main to track
+# performance trends and detect regressions.
+#
+# Baseline management:
+#   - Results from each main-branch run are cached as the
+#     baseline for the next run.
+#   - On the first run (no cached baseline), comparison is
+#     skipped and the results become the initial baseline.
+#   - Use workflow_dispatch with update_baseline=true to
+#     force a baseline refresh without comparison.
+# ─────────────────────────────────────────────────────────────
+
+name: Benchmark
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/**"
+      - "shared/**"
+      - "benchmarks/**"
+      - "scripts/check_benchmark_suite.py"
+      - "scripts/compare_benchmarks.py"
+      - "scripts/parse_benchmark_results.py"
+      - "CMakeLists.txt"
+  workflow_dispatch:
+    inputs:
+      update_baseline:
+        description: "Update baseline without comparison (skip regression check)"
+        required: false
+        default: "false"
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Run benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Verify benchmark suite is wired up
+        run: python3 scripts/check_benchmark_suite.py
+
+      - name: Configure and build
+        uses: ./.github/actions/cmake-build
+
+      - name: Run benchmark suite
+        run: |
+          ./build/luma benchmarks/suite.luma 2>&1 | tee benchmark-results.txt
+
+      - name: Parse results to JSON
+        run: |
+          python3 scripts/parse_benchmark_results.py \
+            benchmark-results.txt \
+            -o benchmark-results.json
+
+      - name: Restore baseline from cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: benchmarks/baseline.json
+          key: benchmark-baseline-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            benchmark-baseline-${{ runner.os }}-
+
+      - name: Check for baseline
+        id: baseline
+        run: |
+          if [ -f benchmarks/baseline.json ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compare with baseline
+        if: steps.baseline.outputs.exists == 'true' && inputs.update_baseline != 'true'
+        run: |
+          echo "Comparing against cached baseline..."
+          python3 scripts/compare_benchmarks.py \
+            benchmarks/baseline.json \
+            benchmark-results.json \
+            --threshold 10 \
+            --io-threshold 50
+
+      - name: Skip comparison (no baseline)
+        if: steps.baseline.outputs.exists != 'true'
+        run: |
+          echo "No baseline found — skipping regression comparison."
+          echo "Current results will be saved as the initial baseline."
+
+      - name: Skip comparison (baseline refresh)
+        if: steps.baseline.outputs.exists == 'true' && inputs.update_baseline == 'true'
+        run: |
+          echo "Baseline refresh requested — skipping regression comparison."
+
+      - name: Save results as new baseline
+        run: cp benchmark-results.json benchmarks/baseline.json
+
+      - name: Update baseline cache
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: benchmarks/baseline.json
+          key: benchmark-baseline-${{ runner.os }}-${{ github.sha }}
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: |
+            benchmark-results.txt
+            benchmark-results.json
+          retention-days: 90

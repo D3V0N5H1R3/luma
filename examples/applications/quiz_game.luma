@@ -1,0 +1,524 @@
+# ═══════════════════════════════════════════════════════════
+# Interactive Quiz Game
+#
+# Demonstrates choice types for question modelling, pattern
+# matching, records with immutable updates, Random module,
+# pipes, optional chaining, Terminal module for colours, and
+# @test annotations for scoring logic.
+#
+# Usage: luma examples/applications/quiz_game.luma
+# Tests: luma --test examples/applications/quiz_game.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Question Types ──────────────────────────────────────
+
+choice Question {
+    MultipleChoice(string prompt, array<string> options, integer correct_index)
+    TrueFalse(string prompt, boolean correct_answer)
+    FillInBlank(string prompt, array<string> accepted_answers)
+}
+
+record QuizState {
+    number current,
+    number score,
+    number total,
+    array<boolean> results
+}
+
+choice Difficulty { Easy Medium Hard }
+
+# ─── Question Bank ───────────────────────────────────────
+
+function array<Question> get_questions(Difficulty difficulty) {
+    return match difficulty {
+    case Difficulty.Easy {
+        [
+            Question.TrueFalse("Luma is a statically typed language.", true),
+            Question.MultipleChoice(
+                "What operator does Luma use for pipes?",
+                ["|>", ">>", "->", "=>"],
+                0
+            ),
+            Question.FillInBlank(
+                "Variables in Luma are _______ by default.",
+                ["immutable"]
+            ),
+            Question.TrueFalse("Luma requires semicolons.", false),
+            Question.MultipleChoice(
+                "Which keyword marks the entry point?",
+                ["@start", "@main", "@entry", "@run"],
+                1
+            )
+        ]
+    }
+    case Difficulty.Medium {
+        [
+            Question.MultipleChoice(
+                "What does the ? operator do in Luma?",
+                ["Null check", "Error propagation", "Optional creation", "Type assertion"],
+                1
+            ),
+            Question.FillInBlank(
+                "Luma's algebraic data types are called _______ types.",
+                ["choice"]
+            ),
+            Question.TrueFalse(
+                "Pattern matching in Luma must be exhaustive.",
+                true
+            ),
+            Question.MultipleChoice(
+                "Which module provides channels for concurrency?",
+                ["Task", "Channel", "Thread", "Async"],
+                1
+            ),
+            Question.FillInBlank(
+                "The error-pipe operator in Luma is written as _______.",
+                ["!>"]
+            ),
+            Question.TrueFalse(
+                "Luma uses structural typing for interfaces.",
+                true
+            )
+        ]
+    }
+    case Difficulty.Hard {
+        [
+            Question.MultipleChoice(
+                "What does task_scope guarantee?",
+                [
+                    "Sequential execution",
+                    "All spawned tasks complete before the scope exits",
+                    "Thread safety via locks",
+                    "Automatic retry on failure"
+                ],
+                1
+            ),
+            Question.FillInBlank(
+                "To run untrusted code safely, Luma provides the _______ flag.",
+                ["--box", "box"]
+            ),
+            Question.TrueFalse(
+                "Luma records use reference semantics.",
+                false
+            ),
+            Question.MultipleChoice(
+                "What does result<T, E> represent?",
+                [
+                    "A nullable value",
+                    "A success value of type T or a typed error of type E",
+                    "An optional with a default",
+                    "A tuple of T and E"
+                ],
+                1
+            ),
+            Question.FillInBlank(
+                "The optional chaining operator in Luma is _______.",
+                ["?.", "?."]
+            ),
+            Question.MultipleChoice(
+                "How does Luma handle cooperative cancellation?",
+                [
+                    "Thread.interrupt()",
+                    "Task.cancel() and Task.is_cancelled()",
+                    "Exception-based abort",
+                    "Signal handlers"
+                ],
+                1
+            ),
+            Question.TrueFalse(
+                "Luma's @test functions can take parameters.",
+                false
+            )
+        ]
+    }
+    }
+}
+
+# ─── Scoring ─────────────────────────────────────────────
+
+function QuizState new_quiz(number total) {
+    return QuizState {
+        current = 0,
+        score = 0,
+        total = total,
+        results = []
+    }
+}
+
+function QuizState record_answer(QuizState state, boolean correct) {
+    return state with {
+        current = state.current + 1,
+        score = if correct { state.score + 1 } else { state.score },
+        results = Array.push(state.results, correct)
+    }
+}
+
+function number score_percentage(QuizState state) {
+    if state.total == 0 {
+        return 0.0
+    }
+
+    return (state.score * 100.0) / state.total
+}
+
+function string grade(QuizState state) {
+    number pct = score_percentage(state)
+
+    return match pct {
+    case >= 90.0 { "A — Excellent!" }
+    case >= 80.0 { "B — Great job!" }
+    case >= 70.0 { "C — Good effort!" }
+    case >= 60.0 { "D — Keep practicing!" }
+    else         { "F — Study more and try again!" }
+    }
+}
+
+# ─── Question Presentation ───────────────────────────────
+
+function string question_type_label(Question q) {
+    return match q {
+    case Question.MultipleChoice(_a, _b, _c) { "Multiple Choice" }
+    case Question.TrueFalse(_a, _b)           { "True/False" }
+    case Question.FillInBlank(_a, _b)         { "Fill in the Blank" }
+    }
+}
+
+function string letter_for_index(integer index) {
+    return match index {
+    case 0 { "A" }
+    case 1 { "B" }
+    case 2 { "C" }
+    else   { "D" }
+    }
+}
+
+function string format_question(Question q, number num) {
+    string type_label = question_type_label(q)
+    mutable string output = "\nQuestion ${num} (${type_label}):\n"
+
+    match q {
+    case Question.MultipleChoice(prompt, options, _) {
+        output += "  ${prompt}\n"
+
+        for i, option in options {
+            string letter = letter_for_index(i)
+
+            output += "    ${letter}) ${option}\n"
+        }
+    }
+    case Question.TrueFalse(prompt, _) {
+        output += "  ${prompt}\n"
+        output += "    A) True\n"
+        output += "    B) False\n"
+    }
+    case Question.FillInBlank(prompt, _) {
+        output += "  ${prompt}\n"
+    }
+    }
+
+    return output
+}
+
+function string normalize_answer(string answer) {
+    return String.trim(String.lowercase(answer))
+}
+
+# Accepts a letter (a/b/c/d) or a raw index (0/1/2/3); returns -1 for anything
+# that does not name a valid option.
+function integer parse_multiple_choice(string normalized) {
+    return match normalized {
+    case "a" { 0 }
+    case "b" { 1 }
+    case "c" { 2 }
+    case "d" { 3 }
+    else {
+        match String.parse_integer(normalized) {
+            success(n) { n }
+            failure(_) { -1 }
+        }
+    }
+    }
+}
+
+# Maps the accepted true/false synonyms to a boolean, or none if unrecognized.
+function optional<boolean> parse_true_false(string normalized) {
+    return match normalized {
+    case "true"  { some(true) }
+    case "t"     { some(true) }
+    case "a"     { some(true) }
+    case "yes"   { some(true) }
+    case "false" { some(false) }
+    case "f"     { some(false) }
+    case "b"     { some(false) }
+    case "no"    { some(false) }
+    else         { none }
+    }
+}
+
+# True when the normalized answer matches one of the accepted fill-in answers,
+# compared case-insensitively.
+function boolean accepts_fill(array<string> accepted, string normalized) {
+    array<string> lowercased = Array.map(accepted, (string a) -> String.lowercase(a)) ?? []
+
+    return Array.contains(lowercased, normalized)
+}
+
+function boolean check_answer(Question q, string answer) {
+    string normalized = normalize_answer(answer)
+
+    return match q {
+    case Question.MultipleChoice(_p, _o, correct_index) {
+        parse_multiple_choice(normalized) == correct_index
+    }
+    case Question.TrueFalse(_p, correct_answer) {
+        match parse_true_false(normalized) {
+            case some(user_answer) { user_answer == correct_answer }
+            case none { false }
+        }
+    }
+    case Question.FillInBlank(_, accepted) {
+        accepts_fill(accepted, normalized)
+    }
+    }
+}
+
+function string correct_answer_text(Question q) {
+    return match q {
+    case Question.MultipleChoice(_p, options, idx) {
+        string letter = letter_for_index(idx)
+
+        "${letter}) ${options[idx]}"
+    }
+    case Question.TrueFalse(_, answer) {
+        if answer { "True" } else { "False" }
+    }
+    case Question.FillInBlank(_, accepted) {
+        accepted[0]
+    }
+    }
+}
+
+# ─── Quiz Shuffling ─────────────────────────────────────
+
+function array<Question> shuffle_questions(array<Question> questions) {
+    return Random.shuffle(questions)
+}
+
+# ─── Results Display ────────────────────────────────────
+
+function string format_results(QuizState state) {
+    mutable string output = "\n═══════════════════════════════════\n"
+    output += "         QUIZ RESULTS\n"
+    output += "═══════════════════════════════════\n\n"
+
+    # Per-question results
+    for i, correct in state.results {
+        string mark = if correct { "✓" } else { "✗" }
+
+        output += "  Q${i + 1}: ${mark}\n"
+    }
+
+    number pct = score_percentage(state)
+
+    output += "\n  Score: ${state.score} / ${state.total}"
+    output += " (${String.format_number(pct, 1)}%)\n"
+    output += "  Grade: ${grade(state)}\n"
+
+    return output
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+@test
+function void test_new_quiz() {
+    QuizState state = new_quiz(5)
+
+    assert(state.current == 0, "current should be 0")
+    assert(state.score == 0, "score should be 0")
+    assert(state.total == 5, "total should be 5")
+}
+
+@test
+function void test_record_correct_answer() {
+    QuizState state = new_quiz(3)
+    QuizState updated = record_answer(state, true)
+
+    assert(updated.current == 1, "current should be 1")
+    assert(updated.score == 1, "score should be 1")
+    assert(Array.length(updated.results) == 1, "should have 1 result")
+}
+
+@test
+function void test_record_wrong_answer() {
+    QuizState state = new_quiz(3)
+    QuizState updated = record_answer(state, false)
+
+    assert(updated.current == 1, "current should be 1")
+    assert(updated.score == 0, "score should still be 0")
+}
+
+@test
+function void test_score_percentage() {
+    QuizState state = QuizState {
+        current = 4,
+        score = 3,
+        total = 4,
+        results = [true, true, true, false]
+    }
+    number pct = score_percentage(state)
+
+    number diff = Result.unwrap_or(Math.absolute(pct - 75.0), 0.0)
+    assert(diff < 0.01, "expected 75%, got ${pct}")
+}
+
+@test
+function void test_grade_excellent() {
+    QuizState state = QuizState {
+        current = 10, score = 10, total = 10,
+        results = [true, true, true, true, true, true, true, true, true, true]
+    }
+
+    assert("A" in grade(state), "perfect score should get A")
+}
+
+@test
+function void test_grade_failing() {
+    QuizState state = QuizState {
+        current = 10, score = 2, total = 10,
+        results = [true, true, false, false, false, false, false, false, false, false]
+    }
+
+    assert("F" in grade(state), "low score should get F")
+}
+
+@test
+function void test_check_multiple_choice() {
+    Question q = Question.MultipleChoice("Test?", ["A", "B", "C", "D"], 2)
+
+    assert(check_answer(q, "c"), "c should be correct")
+    assert(check_answer(q, "C"), "C should be correct")
+    assert(!check_answer(q, "a"), "a should be wrong")
+}
+
+@test
+function void test_check_true_false() {
+    Question q = Question.TrueFalse("Is Luma typed?", true)
+
+    assert(check_answer(q, "true"), "true should be correct")
+    assert(check_answer(q, "t"), "t should be correct")
+    assert(check_answer(q, "a"), "a should be correct")
+    assert(!check_answer(q, "false"), "false should be wrong")
+}
+
+@test
+function void test_check_fill_in_blank() {
+    Question q = Question.FillInBlank("Answer?", ["immutable", "const"])
+
+    assert(check_answer(q, "immutable"), "immutable is correct")
+    assert(check_answer(q, "IMMUTABLE"), "case insensitive")
+    assert(!check_answer(q, "mutable"), "mutable is wrong")
+}
+
+@test
+function void test_question_type_labels() {
+    assert(question_type_label(Question.MultipleChoice("?", [], 0)) == "Multiple Choice")
+    assert(question_type_label(Question.TrueFalse("?", true)) == "True/False")
+    assert(question_type_label(Question.FillInBlank("?", [])) == "Fill in the Blank")
+}
+
+@test
+function void test_full_quiz_flow() {
+    array<Question> questions = [
+        Question.TrueFalse("2+2=4?", true),
+        Question.MultipleChoice("Pick B", ["A", "B"], 1),
+        Question.FillInBlank("Say hello", ["hello"])
+    ]
+
+    mutable QuizState state = new_quiz(3)
+
+    state = record_answer(state, check_answer(questions[0], "true"))
+    state = record_answer(state, check_answer(questions[1], "b"))
+    state = record_answer(state, check_answer(questions[2], "hello"))
+
+    assert(state.score == 3, "expected perfect score")
+    number pct_diff = Result.unwrap_or(Math.absolute(score_percentage(state) - 100.0), 0.0)
+    assert(pct_diff < 0.01, "expected 100%")
+}
+
+# ─── Simulated Game (non-interactive) ───────────────────
+
+function QuizState simulate_quiz(
+    array<Question> questions,
+    array<string> answers
+) {
+    mutable QuizState state = new_quiz(Array.length(questions))
+
+    for i, q in questions {
+        string answer = if i < Array.length(answers) {
+            answers[i]
+        } else {
+            ""
+        }
+
+        boolean is_correct = check_answer(q, answer)
+
+        print(format_question(q, i + 1))
+        print("  Real play would accept A-D, true/false, text answers, or 'quit'.")
+        print("  Your answer: ${answer}")
+
+        if is_correct {
+            print("  ✓ Correct!")
+        } else {
+            print("  ✗ Wrong — correct answer: ${correct_answer_text(q)}")
+        }
+
+        state = record_answer(state, is_correct)
+    }
+
+    return state
+}
+
+# ─── Entry Point ─────────────────────────────────────────
+
+@main
+function void main() {
+    run_demo_round()
+
+    run_hard_preview()
+}
+
+function void run_demo_round() {
+    print("═══════════════════════════════════════")
+    print("      Luma Quiz Game — Demo Mode")
+    print("═══════════════════════════════════════")
+    print("Guided demo — plays a scripted set of answers (not interactive).")
+    print("Invalid or out-of-range demo answers are scored as wrong.")
+
+    # Demonstrate with medium difficulty
+    array<Question> questions = get_questions(Difficulty.Medium)
+    |> shuffle_questions()
+
+    # Simulated answers (some right, some wrong)
+    array<string> demo_answers = ["b", "choice", "true", "b", "!>", "true"]
+
+    QuizState final_state = simulate_quiz(questions, demo_answers)
+
+    print(format_results(final_state))
+}
+
+function void run_hard_preview() {
+    # Show a harder round
+    print("═══════════════════════════════════════")
+    print("        Hard Round Preview")
+    print("═══════════════════════════════════════")
+
+    array<Question> hard_questions = get_questions(Difficulty.Hard)
+
+    mutable number q_num = 1
+
+    for q in hard_questions {
+        print(format_question(q, q_num))
+
+        q_num += 1
+    }
+}

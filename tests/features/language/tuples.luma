@@ -1,0 +1,207 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Tuples
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_tuple_creation_and_access() {
+    (integer, string) pair = (42, "hello")
+
+    assert(pair.0 == 42)
+    assert(pair.1 == "hello")
+}
+
+@test
+function void test_tuple_three_elements() {
+    (integer, string, number) triple = (1, "two", 3.0)
+
+    assert(triple.0 == 1)
+    assert(triple.1 == "two")
+    assert(Math.approximately_equal(triple.2, 3.0))
+}
+
+@test
+function void test_tuple_destructuring() {
+    (integer, integer) pair = (10, 20)
+    (integer first_value, integer second_value) = pair
+
+    assert(first_value == 10)
+    assert(second_value == 20)
+}
+
+@test
+function void test_tuple_four_elements() {
+    (integer, string, number, boolean) quad = (1, "two", 3.0, true)
+
+    assert(quad.0 == 1)
+    assert(quad.1 == "two")
+    assert(Math.approximately_equal(quad.2, 3.0))
+    assert(quad.3)
+}
+
+@test
+function void test_tuple_mutable_destructuring() {
+    (integer, integer) pair = (10, 20)
+
+    mutable (integer first_value, integer second_value) = pair
+
+    first_value = 99
+    second_value = 100
+
+    assert(first_value == 99)
+    assert(second_value == 100)
+}
+
+function (integer, integer) find_min_max(array<integer> numbers) {
+    return (Result.unwrap(Array.min(numbers)), Result.unwrap(Array.max(numbers)))
+}
+
+@test
+function void test_tuple_as_return_type() {
+    (integer minimum, integer maximum) = find_min_max([3, 1, 4, 1, 5])
+
+    assert(minimum == 1)
+    assert(maximum == 5)
+}
+
+@test
+function void test_tuple_structural_equality() {
+    (integer, string) a = (1, "hi")
+    (integer, string) b = (1, "hi")
+    (integer, string) c = (2, "hi")
+
+    assert(a == b)
+    assert(a != c)
+    assert(b != c)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Negative / edge-case tests — tuples
+# ═══════════════════════════════════════════════════════════
+
+# Note: Wrong tuple size and type mismatches are caught at compile time.
+# Below we test runtime edge cases.
+
+@test
+function void test_tuple_inequality_both_elements_differ() {
+    (integer, integer) a = (1, 2)
+    (integer, integer) b = (3, 4)
+
+    assert(a != b, "tuples with all different elements should be unequal")
+}
+
+@test
+function void test_tuple_nested_equality() {
+    ((integer, integer), string) a = ((1, 2), "hello")
+    ((integer, integer), string) b = ((1, 2), "hello")
+    ((integer, integer), string) c = ((1, 3), "hello")
+
+    assert(a == b, "nested tuples with same values should be equal")
+    assert(a != c, "nested tuples with different inner values should differ")
+}
+
+@test
+function void test_tuple_destructuring_preserves_values() {
+    (string, integer, boolean) data = ("test", 42, true)
+    (string name, integer count, boolean flag) = data
+
+    assert(name == "test")
+    assert(count == 42)
+    assert(flag)
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional tuple tests
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_tuple_in_array() {
+    array<(integer, string)> pairs = [(1, "one"), (2, "two"), (3, "three")]
+
+    assert(Array.length(pairs) == 3)
+    assert(pairs[0].0 == 1)
+    assert(pairs[2].1 == "three")
+}
+
+@test
+function void test_tuple_inequality_second_element() {
+    (integer, string) a = (1, "hello")
+    (integer, string) b = (1, "world")
+
+    assert(a != b, "tuples differing in second element should be unequal")
+}
+
+@test
+function void test_tuple_destructuring_in_function() {
+    (integer, integer) result_pair = find_min_max([7, 2, 9, 1, 5])
+    (integer min_val, integer max_val) = result_pair
+
+    assert(min_val == 1)
+    assert(max_val == 9)
+}
+
+function (string, string) split_full_name(string full) {
+    integer space_index = Result.unwrap(String.index_of(full, " "))
+    string first = String.substring(full, 0, space_index)
+    string last = String.substring(full, space_index + 1, String.length(full))
+    return (first, last)
+}
+
+@test
+function void test_tuple_from_string_split() {
+    (string first, string last) = split_full_name("Alice Smith")
+
+    assert(first == "Alice")
+    assert(last == "Smith")
+}
+
+@test
+function void test_tuple_equality_four_elements() {
+    (integer, integer, integer, integer) a = (1, 2, 3, 4)
+    (integer, integer, integer, integer) b = (1, 2, 3, 4)
+    (integer, integer, integer, integer) c = (1, 2, 3, 5)
+
+    assert(a == b)
+    assert(a != c)
+}
+
+# ───────────────────────────────────────────────────────────
+# Tuples as parameters and tuples containing collections
+# ───────────────────────────────────────────────────────────
+
+function integer sum_pair((integer, integer) p) {
+    return p.0 + p.1
+}
+
+@test
+function void test_tuple_as_function_parameter() {
+    integer total = sum_pair((15, 27))
+
+    assert(total == 42)
+}
+
+@test
+function void test_tuple_containing_array() {
+    (array<integer>, string) data = ([10, 20, 30], "nums")
+
+    assert(data.0[1] == 20)
+    assert(data.1 == "nums")
+}
+
+@test
+function void test_tuple_containing_dictionary() {
+    (dictionary<integer>, integer) data = ({"a": 1, "b": 2}, 99)
+
+    assert(Result.unwrap(Dictionary.get(data.0, "b")) == 2)
+    assert(data.1 == 99)
+}
+
+@test
+function void test_nested_tuple_index_access() {
+    ((integer, integer), (string, string)) nested = ((1, 2), ("x", "y"))
+
+    assert(nested[0][1] == 2)
+    assert(nested[1][0] == "x")
+}

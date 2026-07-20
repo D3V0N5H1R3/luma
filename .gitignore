@@ -1,69 +1,207 @@
-# Prerequisites
-*.d
+# ─────────────────────────────────────────────
+# Luma — .gitignore
+# ─────────────────────────────────────────────
 
-# Compiled Object files
-*.slo
-*.lo
+# ── Build output ──
+build/
+build-*/
+cmake-build-*/
+out/
+install/
+
+# Rust build output (Zed extension, tree-sitter grammar).
+target/
+
+# Re-include composite actions whose names start with `build-`; these are
+# source files, not build output (the build-*/ rule above would match them).
+!.github/actions/build-*/
+
+# ── CMake generated files ──
+cmake_install.cmake
+CMakeCache.txt
+CMakeUserPresets.json
+compile_commands.json
+CTestTestfile.cmake
+/Makefile
+_deps/
+CMakeFiles/
+/Testing/
+
+# Doxyfile is generated from the tracked Doxyfile.in template by CMake.
+/Doxyfile
+
+# ── Ninja build files ──
+*.ninja
+.ninja_deps
+.ninja_log
+rules.ninja
+
+# ── Compiled binaries ──
+*.a
+*.app
+*.d
+*.dll
+*.dylib
+*.exe
+*.exp
+*.ilk
+*.lib
+*.lumc
 *.o
 *.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-*.so.*
-
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
 *.out
-*.app
+*.pdb
+*.so
 
-# Build directories
-build/
-Build/
-build-*/
+# Keep intentional .lumc fuzz corpus seeds; the bytecode deserializer fuzz
+# target needs committed binary input (build-artifact .lumc stay ignored above).
+!fuzz/corpus/**/*.lumc
 
-# CMake generated files
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-install_manifest.txt
-compile_commands.json
+# ── IDE and editor files ──
 
-# Temporary files
-*.tmp
-*.log
-*.bak
-*.swp
+# Visual Studio
+.vs/
+*.opendb
+*.opensdf
+*.sdf
+*.sln
+*.slnx
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+/Debug/
+ipch/
+/MinSizeRel/
+/Release/
+/RelWithDebInfo/
+x64/
+x86/
 
-# vcpkg
+# Visual Studio Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
+
+# CLion / JetBrains
+.idea/
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+xcuserdata/
+
+# Zed
+.zed/*
+!.zed/debug.json
+!.zed/settings.json
+!.zed/tasks.json
+
+# Claude Code (keep the shared .claude/ layer tracked; ignore personal overrides)
+.claude/settings.local.json
+
+# Language server caches
+.cache/
+.clangd/
+
+# ── Environment and secrets ──
+.env
+.env.*
+.env.local
+
+# ── OS-specific files ──
+
+# Windows
+$RECYCLE.BIN/
+Desktop.ini
+ehthumbs.db
+Thumbs.db
+
+# macOS
+._*
+.AppleDouble
+.DS_Store
+.LSOverride
+*.dSYM/
+
+# Linux
+.directory
+*~
+
+# ── Package and dependency caches ──
+.ccache/
+conan/
+node_modules/
 vcpkg_installed/
 
-# debug information files
-*.dwo
+# Root-level Node artifacts from the CSS/Markdown lint flow. The ci-css.yml
+# workflow writes a throwaway package.json (and npm a lockfile) at the repo
+# root; the real extension manifests under extensions/ are tracked and, being
+# unanchored above, are unaffected by these root-anchored rules.
+/package.json
+/package-lock.json
+.stylelintcache
 
-# test output & cache
-Testing/
-.cache/
+# ── Python artifacts ──
+__pycache__/
+*.pyc
+
+# ── Extension build artifacts ──
+*.tgz
+*.vsix
+
+# ── Code coverage artifacts ──
+*.gcda
+*.gcno
+*.gcov
+*.profdata
+*.profraw
+coverage/
+lcov.info
+
+# ── Fuzzing artifacts ──
+crash-*
+leak-*
+oom-*
+slow-unit-*
+timeout-*
+
+# ── Profiling and sanitiser output ──
+gmon.out
+perf.data
+perf.data.old
+sanitizer.log.*
+
+# ── Miscellaneous ──
+*.bak
+*.log
+*.swo
+*.swp
+
+# ── Temporary output files ──
+*_out.txt
+*_out2.txt
+*_out3.txt
+ct_*.txt
+const_warnings.txt
+temp_*
+*.tmp
+# Benchmark scratch files (normally cleaned up; ignored in case of a crash).
+__bench_*
+luma_bench_tmp*/
+# Unix core dumps. The trailing-slash negation keeps the tracked `core/`
+# source directory while still ignoring `core` and `core.<pid>` dump files.
+core
+!core/
+core.*
+
+# ── Prompt-pipeline artifacts ──
+# Reports, logs, and transcripts produced by scripts/pipeline/*.ps1. These are
+# generated audit/fix run outputs, never source.
+pipeline-artifacts/

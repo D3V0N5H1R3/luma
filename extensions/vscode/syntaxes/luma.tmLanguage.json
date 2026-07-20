@@ -1,0 +1,357 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Luma",
+    "fileTypes": [
+        "luma"
+    ],
+    "scopeName": "source.luma",
+    "patterns": [
+        { "include": "#string_triple" },
+        { "include": "#comment" },
+        { "include": "#annotation" },
+        { "include": "#number" },
+        { "include": "#constant" },
+        { "include": "#for_variable" },
+        { "include": "#typed_binding" },
+        { "include": "#user_typed_binding" },
+        { "include": "#type" },
+        { "include": "#catch_variable" },
+        { "include": "#record_declaration_body" },
+        { "include": "#keyword_control" },
+        { "include": "#function_declaration" },
+        { "include": "#type_declaration" },
+        { "include": "#keyword_declaration" },
+        { "include": "#storage_modifier" },
+        { "include": "#with_field" },
+        { "include": "#record_literal_field" },
+        { "include": "#keyword_other" },
+        { "include": "#lambda" },
+        { "include": "#named_argument" },
+        { "include": "#function_call" },
+        { "include": "#constructor_call" },
+        { "include": "#operator" },
+        { "include": "#module_access" },
+        { "include": "#string" }
+    ],
+    "repository": {
+        "comment": {
+            "name": "comment.line.number-sign.luma",
+            "match": "#.*$"
+        },
+        "annotation": {
+            "name": "entity.name.tag.annotation.luma",
+            "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+        },
+        "string_triple": {
+            "name": "string.quoted.triple.luma",
+            "begin": "\"\"\"",
+            "beginCaptures": {
+                "0": { "name": "punctuation.definition.string.begin.luma" }
+            },
+            "end": "\"\"\"",
+            "endCaptures": {
+                "0": { "name": "punctuation.definition.string.end.luma" }
+            },
+            "patterns": [
+                { "include": "#interpolation" },
+                { "include": "#string_escape" }
+            ]
+        },
+        "string": {
+            "name": "string.quoted.double.luma",
+            "begin": "\"",
+            "beginCaptures": {
+                "0": { "name": "punctuation.definition.string.begin.luma" }
+            },
+            "end": "\"",
+            "endCaptures": {
+                "0": { "name": "punctuation.definition.string.end.luma" }
+            },
+            "patterns": [
+                { "include": "#interpolation" },
+                { "include": "#string_escape" }
+            ]
+        },
+        "string_escape": {
+            "name": "constant.character.escape.luma",
+            "match": "\\\\[ntr0\\\\\"$]"
+        },
+        "interpolation": {
+            "name": "meta.interpolation.luma",
+            "begin": "\\$\\{",
+            "beginCaptures": {
+                "0": { "name": "punctuation.section.interpolation.begin.luma" }
+            },
+            "end": "\\}",
+            "endCaptures": {
+                "0": { "name": "punctuation.section.interpolation.end.luma" }
+            },
+            "patterns": [
+                { "include": "$self" }
+            ]
+        },
+        "number": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.hex.luma",
+                    "match": "\\b0[xX][0-9a-fA-F]+"
+                },
+                {
+                    "name": "constant.numeric.binary.luma",
+                    "match": "\\b0[bB][01]+"
+                },
+                {
+                    "name": "constant.numeric.float.luma",
+                    "match": "\\b[0-9]+\\.[0-9]+(?:[eE][+\\-]?[0-9]+)?\\b|\\b[0-9]+[eE][+\\-]?[0-9]+\\b"
+                },
+                {
+                    "name": "constant.numeric.integer.luma",
+                    "match": "\\b[0-9]+\\b"
+                }
+            ]
+        },
+        "constant": {
+            "patterns": [
+                {
+                    "name": "constant.language.boolean.luma",
+                    "match": "\\b(true|false)\\b"
+                },
+                {
+                    "name": "constant.language.null.luma",
+                    "match": "\\bnone\\b"
+                },
+                {
+                    "name": "support.function.builtin.luma",
+                    "match": "\\b(success|failure|some|print|assert|type_of)\\b(?=\\s*[\\(])"
+                }
+            ]
+        },
+        "for_variable": {
+            "comment": "Loop variable names: for x in … / for k, v in …",
+            "match": "(\\bfor)\\s+([a-z_][a-zA-Z0-9_]*)(?:\\s*,\\s*([a-z_][a-zA-Z0-9_]*))?\\s+(in)\\b",
+            "captures": {
+                "1": { "name": "keyword.control.luma" },
+                "2": { "name": "variable.other.luma" },
+                "3": { "name": "variable.other.luma" },
+                "4": { "name": "keyword.control.luma" }
+            }
+        },
+        "typed_binding": {
+            "comment": "Typed variable or parameter: builtin_type[<T>] name",
+            "match": "\\b(binary_tree|graph|boolean|integer|number|string|void|array|dictionary|optional|reference|result|task|channel|socket|queue|stack|widget|xml|linked_list|hash_set|key_value_store|set)(?:<[^>]*>)?\\s+([a-z_][a-zA-Z0-9_]*)",
+            "captures": {
+                "1": { "name": "storage.type.luma" },
+                "2": { "name": "variable.other.luma" }
+            }
+        },
+        "user_typed_binding": {
+            "comment": "User-defined type binding: PascalCase name",
+            "match": "(?<=^|\\s)([A-Z][a-zA-Z0-9_]*)(?:<[^>]*>)?\\s+([a-z_][a-zA-Z0-9_]*)\\s*(?==)",
+            "captures": {
+                "1": { "name": "entity.name.type.luma" },
+                "2": { "name": "variable.other.luma" }
+            }
+        },
+        "type": {
+            "name": "storage.type.luma",
+            "match": "\\b(binary_tree|graph|boolean|integer|number|string|void|array|dictionary|optional|reference|result|task|channel|socket|queue|stack|widget|xml|linked_list|hash_set|key_value_store|set)\\b"
+        },
+        "keyword_control": {
+            "name": "keyword.control.luma",
+            "match": "\\b(if|else|for|while|in|break|continue|return|match|case|try|catch|finally)\\b"
+        },
+        "keyword_declaration": {
+            "name": "keyword.declaration.luma",
+            "match": "\\b(function|record|choice|interface|namespace|type|include|use|spawn|await|task_scope)\\b"
+        },
+        "storage_modifier": {
+            "name": "storage.modifier.luma",
+            "match": "\\b(mutable|unique|borrow|internal)\\b"
+        },
+        "keyword_other": {
+            "name": "keyword.other.luma",
+            "match": "\\b(with|trusted_downcast|downcast|is)\\b"
+        },
+        "with_field": {
+            "comment": "Record-update expression: expr with { field = … }",
+            "begin": "(\\bwith)\\s*\\{",
+            "beginCaptures": {
+                "1": { "name": "keyword.other.luma" }
+            },
+            "end": "\\}",
+            "patterns": [
+                {
+                    "comment": "Field name before assignment",
+                    "match": "\\b([a-z_][a-zA-Z0-9_]*)(?=\\s*=(?!=))",
+                    "captures": {
+                        "1": { "name": "variable.other.property.luma" }
+                    }
+                },
+                { "include": "$self" }
+            ]
+        },
+        "record_literal_field": {
+            "comment": "Record literal: TypeName[<T>] { field = … }",
+            "begin": "\\b([A-Z][a-zA-Z0-9_]*)(?:<[^>]*>)?\\s*\\{",
+            "beginCaptures": {
+                "1": { "name": "entity.name.type.luma" }
+            },
+            "end": "\\}",
+            "patterns": [
+                {
+                    "comment": "Field name before assignment",
+                    "match": "\\b([a-z_][a-zA-Z0-9_]*)(?=\\s*=(?!=))",
+                    "captures": {
+                        "1": { "name": "variable.other.property.luma" }
+                    }
+                },
+                { "include": "$self" }
+            ]
+        },
+        "named_argument": {
+            "comment": "Named call-argument label: identifier:",
+            "match": "\\b([a-z_][a-zA-Z0-9_]*)(?=\\s*:(?!:))",
+            "captures": {
+                "1": { "name": "variable.parameter.luma" }
+            }
+        },
+        "function_declaration": {
+            "patterns": [
+                {
+                    "comment": "function with or without generics: function[<T>] ReturnType name(",
+                    "match": "(\\bfunction\\b)(?:\\s*<[^>]*>)?\\s+[a-zA-Z0-9_<>(), \\t-]+?\\s+([a-z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+                    "captures": {
+                        "1": { "name": "keyword.declaration.luma" },
+                        "2": { "name": "entity.name.function.luma" }
+                    }
+                }
+            ]
+        },
+        "function_call": {
+            "comment": "Highlight call sites: identifier( and turbofish identifier::<",
+            "match": "\\b([a-z_][a-zA-Z0-9_]*)\\s*(?=\\(|::<)",
+            "captures": {
+                "1": { "name": "variable.function.luma" }
+            }
+        },
+        "constructor_call": {
+            "comment": "Choice variant constructors and declarations: PascalCase(",
+            "match": "\\b([A-Z][a-zA-Z0-9_]*)\\s*(?=\\()",
+            "captures": {
+                "1": { "name": "entity.name.type.luma" }
+            }
+        },
+        "type_declaration": {
+            "match": "\\b(record|choice|interface|namespace|type)\\s+([A-Z][a-zA-Z0-9_]*(?:<[^>]*>)?)",
+            "captures": {
+                "1": { "name": "keyword.declaration.luma" },
+                "2": { "name": "entity.name.type.luma" }
+            }
+        },
+        "operator": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.pipe.luma",
+                    "match": "\\|>|!>"
+                },
+                {
+                    "name": "keyword.operator.range.luma",
+                    "match": "\\.\\.=|\\.\\.(?!=)"
+                },
+                {
+                    "name": "keyword.operator.luma",
+                    "match": "::"
+                },
+                {
+                    "name": "keyword.operator.arrow.luma",
+                    "match": "->"
+                },
+                {
+                    "name": "keyword.operator.coalescing.luma",
+                    "match": "\\?\\?"
+                },
+                {
+                    "name": "keyword.operator.optional-chain.luma",
+                    "match": "\\?\\.(?!\\.)|\\?\\["
+                },
+                {
+                    "name": "keyword.operator.logical.luma",
+                    "match": "&&|\\|\\||(?<![a-zA-Z0-9_])!(?!=)"
+                },
+                {
+                    "name": "keyword.operator.comparison.luma",
+                    "match": "==|!=|<=|>=|<(?!<)|>(?!>)"
+                },
+                {
+                    "name": "keyword.operator.assignment.luma",
+                    "match": "//=|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=|(?<![=!<>])=(?!=)"
+                },
+                {
+                    "name": "keyword.operator.assignment.luma",
+                    "match": "\\+\\+|--"
+                },
+                {
+                    "name": "keyword.operator.arithmetic.luma",
+                    "match": "//|\\+|-(?!>)|\\*|/(?!/)|%"
+                },
+                {
+                    "name": "keyword.operator.bitwise.luma",
+                    "match": "&(?!&)|\\|(?!\\|)|\\^|~|<<|>>"
+                }
+            ]
+        },
+        "module_access": {
+            "match": "\\b([A-Z][a-zA-Z0-9_]*)\\.([a-zA-Z_][a-zA-Z0-9_]*)",
+            "captures": {
+                "1": { "name": "support.class.luma" },
+                "2": { "name": "support.function.luma" }
+            }
+        },
+        "lambda": {
+            "comment": "Lambda parameters: (x, y) -> body",
+            "match": "\\(([a-z_][a-zA-Z0-9_]*(?:\\s*,\\s*[a-z_][a-zA-Z0-9_]*)*)\\)\\s*(?=->)",
+            "captures": {
+                "1": { "name": "variable.parameter.luma" }
+            }
+        },
+        "catch_variable": {
+            "comment": "Catch clause variable: catch(error)",
+            "match": "(\\bcatch)\\s*\\(\\s*([a-z_][a-zA-Z0-9_]*)\\s*\\)",
+            "captures": {
+                "1": { "name": "keyword.control.luma" },
+                "2": { "name": "variable.other.luma" }
+            }
+        },
+        "record_declaration_body": {
+            "comment": "Record declaration body: field names inside record { }",
+            "begin": "\\b(record)\\s+([A-Z][a-zA-Z0-9_]*)(?:<[^>]*>)?\\s*\\{",
+            "beginCaptures": {
+                "1": { "name": "keyword.declaration.luma" },
+                "2": { "name": "entity.name.type.luma" }
+            },
+            "end": "\\}",
+            "patterns": [
+                {
+                    "comment": "Field declaration: lowercase type name",
+                    "match": "\\b([a-z_][a-zA-Z0-9_]*)(?:<[^>]*>)?\\s+([a-z_][a-zA-Z0-9_]*)",
+                    "captures": {
+                        "1": { "name": "storage.type.luma" },
+                        "2": { "name": "variable.other.property.luma" }
+                    }
+                },
+                {
+                    "comment": "Field declaration: PascalCase type name",
+                    "match": "\\b([A-Z][a-zA-Z0-9_]*)(?:<[^>]*>)?\\s+([a-z_][a-zA-Z0-9_]*)",
+                    "captures": {
+                        "1": { "name": "entity.name.type.luma" },
+                        "2": { "name": "variable.other.property.luma" }
+                    }
+                },
+                { "include": "#comment" },
+                { "include": "#type" },
+                { "include": "#module_access" },
+                { "include": "$self" }
+            ]
+        }
+    }
+}

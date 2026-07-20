@@ -1,0 +1,41 @@
+# VM: closures, arrays, and functional operations
+@main
+function void main() {
+    array<integer> numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    array<integer> _doubled = numbers |> Array.map((integer x) -> x * 2) |> Result.unwrap_or([])
+    array<integer> _evens = numbers |> Array.filter((integer x) -> x % 2 == 0) |> Result.unwrap_or([])
+    integer _total = numbers |> Array.reduce(0, (integer acc, integer x) -> acc + x) |> Result.unwrap_or(0)
+
+    dictionary<string> d = {"name": "Alice", "city": "Paris"}
+    result<string> _name = Dictionary.get(d, "name")
+
+    array<integer> _distinct = Set.from_array([1, 2, 3, 2, 1]) |> Set.to_array()
+    boolean _contains = Set.contains(Set.from_array([1, 2, 3, 2, 1]), 2)
+
+    hash_set hs = HashSet.from_array([1, 2, 3, 2, 1])
+    boolean _hs_contains = HashSet.contains(hs, 2)
+    integer _hs_union = HashSet.union(hs, HashSet.from_array([3, 4, 5])) |> HashSet.length()
+    integer _hs_inter = HashSet.intersection(hs, HashSet.from_array([2, 3])) |> HashSet.length()
+    hash_set _hs_mapped = HashSet.map(hs, (integer x) -> x + 1) |> Result.unwrap_or(HashSet.new())
+
+    stack<integer> st = Stack.from_array([1, 2, 3, 4, 5])
+    stack<integer> _st_pushed = Stack.push(st, 6)
+    boolean _st_can_pop = Stack.pop(st) |> Result.is_success()
+    integer _st_peek = Stack.peek(st) |> Result.unwrap_or(0)
+    array<integer> _st_arr = Stack.to_array(st)
+    boolean _st_empty = Stack.is_empty(st)
+    stack<integer> _st_mapped = Stack.map(st, (integer x) -> x * 2) |> Result.unwrap_or(Stack.new())
+    stack<integer> _st_filtered = Stack.filter(st, (integer x) -> x > 2) |> Result.unwrap_or(Stack.new())
+    integer _st_sum = Stack.reduce(st, 0, (integer acc, integer x) -> acc + x) |> Result.unwrap_or(0)
+    stack<integer> _st_cat = Stack.concat(st, Stack.from_array([7, 8]))
+
+    queue<integer> q = Queue.from_array([1, 2, 3, 4, 5])
+    queue<integer> _q_enq = Queue.enqueue(q, 6)
+    boolean _q_can_deq = Queue.dequeue(q) |> Result.is_success()
+    integer _q_peek = Queue.peek(q) |> Result.unwrap_or(0)
+    array<integer> _q_arr = Queue.to_array(q)
+    queue<integer> _q_mapped = Queue.map(q, (integer x) -> x * 2) |> Result.unwrap_or(Queue.new())
+    integer _q_sum = Queue.reduce(q, 0, (integer acc, integer x) -> acc + x) |> Result.unwrap_or(0)
+    queue<integer> _q_cat = Queue.concat(q, Queue.from_array([7, 8]))
+}

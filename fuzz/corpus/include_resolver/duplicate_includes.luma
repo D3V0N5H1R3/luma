@@ -1,0 +1,10 @@
+# Include resolver: the same file included repeatedly (deduplication path)
+include "shared.luma"
+include "shared.luma"
+include "shared.luma"
+include "shared.luma"
+
+@main
+function void main() {
+    print("dedup")
+}

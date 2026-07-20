@@ -1,0 +1,45 @@
+# Compiler: every try/catch/finally shape exercises a distinct lowering path.
+function integer divide(integer a, integer b) {
+    return a / b
+}
+
+@main
+function void main() {
+    integer zero = 0
+
+    # catch only
+    try {
+        integer _ = divide(1, zero)
+    } catch(err) {
+        print(err)
+    }
+
+    # finally only
+    try {
+        print("body")
+    } finally {
+        print("cleanup")
+    }
+
+    # catch and finally combined (lowered as nested layers)
+    try {
+        integer _ = divide(1, zero)
+    } catch(err) {
+        print(err)
+    } finally {
+        print("done")
+    }
+
+    # non-local exits from inside protected blocks
+    for i in 0 .. 3 {
+        try {
+            if i == 1 {
+                break
+            }
+        } catch(_e) {
+            continue
+        } finally {
+            print("iter")
+        }
+    }
+}

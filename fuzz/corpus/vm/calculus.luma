@@ -1,0 +1,55 @@
+# VM: Calculus module — derivatives, integrals, roots, optimisation,
+# series, multivariate and vector calculus, plus an error path.
+# Seeds the VM fuzzer with native callback, result, tuple and nested-array
+# code paths exercised through the full pipeline.
+@main
+function void main() {
+    # Single-variable callbacks.
+    number d = Calculus.derivative(3.0, (number x) -> x * x)
+    number d2 = Calculus.second_derivative(2.0, (number x) -> x * x * x)
+    number dh = Calculus.derivative_with(1.0, 0.001, (number x) -> x * x)
+
+    # Numerical integration.
+    number area = Calculus.integrate(0.0, 2.0, (number x) -> x)
+    number area_n = Calculus.integrate_with(0.0, 1.0, 50, (number x) -> x * x)
+
+    # Root finding returns result<number>.
+    number r = Calculus.root(1.0, 3.0, (number x) -> x * x - 4.0) |> Result.unwrap_or(0.0)
+    number rn = Calculus.newton(2.0, (number x) -> x * x - 2.0) |> Result.unwrap_or(0.0)
+
+    # Optimisation returns a (number, number) tuple.
+    (number, number) lo = Calculus.minimize(-2.0, 2.0, (number x) -> (x - 1.0) * (x - 1.0))
+    (number, number) hi = Calculus.maximize(-2.0, 2.0, (number x) -> 0.0 - x * x)
+
+    # Series, limits and Taylor coefficients.
+    number s = Calculus.sum_series(0, 20, (integer _n) -> 1.0)
+    number lim = Calculus.limit(1.0, (number x) -> (x * x - 1.0) / (x - 1.0)) |> Result.unwrap_or(0.0)
+    array<number> coeffs = Calculus.taylor(0.0, 4, (number x) -> x * x)
+
+    # Multivariate callbacks: gradient, partial derivative, Hessian.
+    array<number> g = Calculus.gradient([3.0, 4.0], (array<number> v) -> v[0] * v[0] + v[1] * v[1])
+    number p = Calculus.partial_derivative([3.0, 4.0], 1, (array<number> v) -> v[0] * v[1])
+    array<array<number>> h = Calculus.hessian([1.0, 1.0], (array<number> v) -> v[0] * v[1])
+
+    # Vector calculus: divergence and curl take arrays of field functions.
+    number div = Calculus.divergence([1.0, 1.0], [(array<number> v) -> v[0], (array<number> v) -> v[1]])
+    array<number> c = Calculus.curl([1.0, 1.0, 1.0],
+        [(array<number> v) -> v[1], (array<number> v) -> v[0], (array<number> _v) -> 0.0])
+        |> Result.unwrap_or([0.0, 0.0, 0.0])
+
+    # Integral transform.
+    number conv = Calculus.convolution((number x) -> x, (number x) -> x, 1.0, 0.0, 1.0)
+
+    # Error path: invalid Taylor term count raises a catchable runtime error.
+    mutable boolean caught = false
+    try {
+        array<number> _bad = Calculus.taylor(0.0, 99, (number x) -> x)
+    } catch(_err) {
+        caught = true
+    }
+
+    print("calculus: ${d} ${d2} ${dh} ${area} ${area_n} ${r} ${rn}")
+    print("opt: ${lo.0} ${lo.1} ${hi.0} ${hi.1}")
+    print("series: ${s} ${lim} ${coeffs[2]}")
+    print("multi: ${g[0]} ${p} ${h[0][1]} ${div} ${c[2]} ${conv} ${caught}")
+}

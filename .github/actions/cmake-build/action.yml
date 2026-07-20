@@ -1,0 +1,84 @@
+# ─────────────────────────────────────────────────────────────
+# Composite action: cmake-build
+#
+# Configures and builds the Luma project with CMake. Hides the
+# Unix/Windows configure differences behind a single step so the
+# calling workflows do not each duplicate them.
+#
+# On Unix the compilers can be selected via the `cc`/`cxx`
+# inputs. On Windows the default MSVC toolchain is used (the
+# Visual Studio generator ignores CMAKE_*_COMPILER overrides).
+# ─────────────────────────────────────────────────────────────
+
+name: CMake Build
+description: Configure and build the Luma project with CMake (cross-platform).
+
+inputs:
+  build-type:
+    description: CMake build type (Debug, Release, ...).
+    required: false
+    default: Release
+  build-dir:
+    description: Build directory to configure into.
+    required: false
+    default: build
+  cc:
+    description: C compiler to use (Unix only; optional).
+    required: false
+    default: ""
+  cxx:
+    description: C++ compiler to use (Unix only; optional).
+    required: false
+    default: ""
+  extra-args:
+    description: Extra arguments appended to the CMake configure command.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Configure (Unix)
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        BUILD_TYPE: ${{ inputs.build-type }}
+        BUILD_DIR: ${{ inputs.build-dir }}
+        CC_INPUT: ${{ inputs.cc }}
+        CXX_INPUT: ${{ inputs.cxx }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
+      run: |
+        args="-DCMAKE_BUILD_TYPE=${BUILD_TYPE}"
+        if [ -n "${CC_INPUT}" ]; then
+          args="${args} -DCMAKE_C_COMPILER=${CC_INPUT}"
+        fi
+        if [ -n "${CXX_INPUT}" ]; then
+          args="${args} -DCMAKE_CXX_COMPILER=${CXX_INPUT}"
+        fi
+        # shellcheck disable=SC2086 # EXTRA_ARGS is an intentional argument list.
+        cmake -B "${BUILD_DIR}" ${args} ${EXTRA_ARGS}
+
+    - name: Configure (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        BUILD_DIR: ${{ inputs.build-dir }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
+      # Split EXTRA_ARGS on whitespace and splat so each token is a separate
+      # argument (mirrors the Unix branch's word-splitting); a bare
+      # "$env:EXTRA_ARGS" would pass all tokens to cmake as one argument.
+      # The separators MUST be cast to [char[]]: a bare @(" ", "`t") is an
+      # object[], which binds String.Split(String, StringSplitOptions) and
+      # coerces the array to a single 2-char separator string that never
+      # matches — so nothing splits. [char[]] binds the char[] overload.
+      run: |
+        $extra = "$env:EXTRA_ARGS".Split(
+          [char[]]@(" ", "`t"), [System.StringSplitOptions]::RemoveEmptyEntries)
+        cmake -B "$env:BUILD_DIR" @extra
+
+    - name: Build
+      shell: bash
+      env:
+        BUILD_TYPE: ${{ inputs.build-type }}
+        BUILD_DIR: ${{ inputs.build-dir }}
+      run: cmake --build "${BUILD_DIR}" --config "${BUILD_TYPE}" --parallel

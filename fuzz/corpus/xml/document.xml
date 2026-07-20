@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+    <!-- a comment with -- dashes -->
+    <enabled value="true"/>
+    <empty/>
+    <nested><deep><leaf/></deep></nested>
+</config>

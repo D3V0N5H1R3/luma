@@ -1,0 +1,458 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — LinearAlgebra Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_linearalgebra_add() {
+    array<number> v = LinearAlgebra.add([1.0, 2.0], [3.0, 4.0])
+    |> Result.unwrap()
+
+    assert(Math.approximately_equal(v[0], 4.0, 0.0001))
+    assert(Math.approximately_equal(v[1], 6.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_subtract() {
+    array<number> v = LinearAlgebra.subtract([5.0, 3.0], [1.0, 1.0])
+    |> Result.unwrap()
+
+    assert(Math.approximately_equal(v[0], 4.0, 0.0001))
+    assert(Math.approximately_equal(v[1], 2.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_scale() {
+    array<number> v = LinearAlgebra.scale([1.0, 2.0, 3.0], 2.0)
+
+    assert(Math.approximately_equal(v[0], 2.0, 0.0001))
+    assert(Math.approximately_equal(v[2], 6.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_dot() {
+    number d = LinearAlgebra.dot([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])
+    |> Result.unwrap()
+
+    assert(Math.approximately_equal(d, 32.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_cross() {
+    array<number> c = LinearAlgebra.cross([1.0, 0.0, 0.0], [0.0, 1.0, 0.0])
+    |> Result.unwrap()
+
+    assert(Math.approximately_equal(c[0], 0.0, 0.0001))
+    assert(Math.approximately_equal(c[1], 0.0, 0.0001))
+    assert(Math.approximately_equal(c[2], 1.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_norm() {
+    number n = LinearAlgebra.norm([3.0, 4.0])
+
+    assert(Math.approximately_equal(n, 5.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_normalize() {
+    array<number> v = LinearAlgebra.normalize([3.0, 4.0]) |> Result.unwrap()
+
+    number n = LinearAlgebra.norm(v)
+
+    assert(Math.approximately_equal(n, 1.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_identity() {
+    array<array<number>> m = LinearAlgebra.identity(3)
+
+    assert(Math.approximately_equal(m[0][0], 1.0, 0.0001))
+    assert(Math.approximately_equal(m[0][1], 0.0, 0.0001))
+    assert(Math.approximately_equal(m[1][1], 1.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_determinant() {
+    number d = LinearAlgebra.determinant([[1.0, 2.0], [3.0, 4.0]])
+    |> Result.unwrap()
+
+    assert(Math.approximately_equal(d, -2.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_transpose() {
+    array<array<number>> t = LinearAlgebra.transpose([[1.0, 2.0], [3.0, 4.0]])
+
+    assert(Math.approximately_equal(t[0][0], 1.0, 0.0001))
+    assert(Math.approximately_equal(t[0][1], 3.0, 0.0001))
+    assert(Math.approximately_equal(t[1][0], 2.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_solve() {
+    array<number> x = LinearAlgebra.solve(
+        [[2.0, 1.0], [1.0, 3.0]],
+        [5.0, 10.0]
+    ) |> Result.unwrap()
+
+    assert(Math.approximately_equal(x[0], 1.0, 0.0001))
+    assert(Math.approximately_equal(x[1], 3.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_dimension_mismatch() {
+    assert(
+        LinearAlgebra.add([1.0, 2.0], [1.0, 2.0, 3.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_is_square() {
+    assert(LinearAlgebra.is_square([[1.0, 2.0], [3.0, 4.0]]))
+    assert(!LinearAlgebra.is_square([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]))
+}
+
+@test
+function void test_linearalgebra_is_symmetric() {
+    assert(LinearAlgebra.is_symmetric([[1.0, 2.0], [2.0, 1.0]]))
+    assert(!LinearAlgebra.is_symmetric([[1.0, 2.0], [3.0, 1.0]]))
+}
+
+# ─── Vector construction ─────────────────────────────────
+
+@test
+function void test_linearalgebra_zero_vector() {
+    array<number> z = LinearAlgebra.zero_vector(3)
+
+    assert(Array.length(z) == 3)
+
+    assert(Math.approximately_equal(z[0], 0.0, 0.0001))
+    assert(Math.approximately_equal(z[1], 0.0, 0.0001))
+    assert(Math.approximately_equal(z[2], 0.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_unit_vector() {
+    # unit_vector(n, i): n-dimensional vector with 1.0 at index i
+    array<number> e1 = LinearAlgebra.unit_vector(3, 1)
+
+    assert(Array.length(e1) == 3)
+
+    assert(Math.approximately_equal(e1[0], 0.0, 0.0001))
+    assert(Math.approximately_equal(e1[1], 1.0, 0.0001))
+    assert(Math.approximately_equal(e1[2], 0.0, 0.0001))
+}
+
+# ─── Vector arithmetic ────────────────────────────────────
+
+@test
+function void test_linearalgebra_negate() {
+    array<number> v = LinearAlgebra.negate([1.0, -2.0, 3.0])
+
+    assert(Math.approximately_equal(v[0], -1.0, 0.0001))
+    assert(Math.approximately_equal(v[1], 2.0, 0.0001))
+    assert(Math.approximately_equal(v[2], -3.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_distance() {
+    number d = LinearAlgebra.distance([0.0, 0.0], [3.0, 4.0]) |> Result.unwrap()
+
+    assert(Math.approximately_equal(d, 5.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_dimension() {
+    integer n = LinearAlgebra.dimension([1.0, 2.0, 3.0, 4.0])
+
+    assert(n == 4)
+}
+
+@test
+function void test_linearalgebra_angle() {
+    # Angle between [1,0] and [0,1] should be pi/2.
+    number a = LinearAlgebra.angle([1.0, 0.0], [0.0, 1.0])
+    |> Result.unwrap()
+
+    assert(Math.approximately_equal(a, Math.pi / 2.0, 0.001))
+}
+
+# ─── Matrix construction ──────────────────────────────────
+
+@test
+function void test_linearalgebra_zero_matrix() {
+    array<array<number>> m = LinearAlgebra.zero_matrix(2, 3)
+
+    assert(Array.length(m) == 2)
+    assert(Array.length(m[0]) == 3)
+
+    assert(Math.approximately_equal(m[0][0], 0.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_diagonal() {
+    array<array<number>> m = LinearAlgebra.diagonal([1.0, 2.0, 3.0])
+
+    assert(Array.length(m) == 3)
+
+    assert(Math.approximately_equal(m[0][0], 1.0, 0.0001))
+    assert(Math.approximately_equal(m[1][1], 2.0, 0.0001))
+    assert(Math.approximately_equal(m[2][2], 3.0, 0.0001))
+    assert(Math.approximately_equal(m[0][1], 0.0, 0.0001))
+}
+
+# ─── Matrix queries ───────────────────────────────────────
+
+@test
+function void test_linearalgebra_rows() {
+    integer r = LinearAlgebra.rows([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+
+    assert(r == 3)
+}
+
+@test
+function void test_linearalgebra_columns() {
+    integer c = LinearAlgebra.columns([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+
+    assert(c == 3)
+}
+
+@test
+function void test_linearalgebra_shape() {
+    (integer rows, integer cols) = LinearAlgebra.shape(
+        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    )
+
+    assert(rows == 2)
+    assert(cols == 3)
+}
+
+# ─── Matrix arithmetic ────────────────────────────────────
+
+@test
+function void test_linearalgebra_multiply() {
+    array<array<number>> a = [[1.0, 2.0], [3.0, 4.0]]
+    array<array<number>> b = [[1.0, 0.0], [0.0, 1.0]]
+
+    array<array<number>> c = LinearAlgebra.multiply(a, b) |> Result.unwrap()
+
+    assert(Math.approximately_equal(c[0][0], 1.0, 0.0001))
+    assert(Math.approximately_equal(c[1][1], 4.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_multiply_vector() {
+    array<array<number>> m = [[1.0, 0.0], [0.0, 2.0]]
+    array<number> v = [3.0, 4.0]
+
+    array<number> prod = LinearAlgebra.multiply_vector(m, v) |> Result.unwrap()
+
+    assert(Math.approximately_equal(prod[0], 3.0, 0.0001))
+    assert(Math.approximately_equal(prod[1], 8.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_scale_matrix() {
+    array<array<number>> m = LinearAlgebra.scale_matrix(
+        [[1.0, 2.0], [3.0, 4.0]], 2.0
+    )
+
+    assert(Math.approximately_equal(m[0][0], 2.0, 0.0001))
+    assert(Math.approximately_equal(m[1][1], 8.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_add_matrix() {
+    array<array<number>> m = LinearAlgebra.add_matrix(
+        [[1.0, 2.0], [3.0, 4.0]],
+        [[10.0, 20.0], [30.0, 40.0]]
+    ) |> Result.unwrap()
+
+    assert(Math.approximately_equal(m[0][0], 11.0, 0.0001))
+    assert(Math.approximately_equal(m[1][1], 44.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_trace() {
+    number t = LinearAlgebra.trace([[1.0, 2.0], [3.0, 4.0]])
+    |> Result.unwrap()
+
+    assert(Math.approximately_equal(t, 5.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_inverse() {
+    array<array<number>> inv = LinearAlgebra.inverse(
+        [[1.0, 2.0], [3.0, 4.0]]
+    ) |> Result.unwrap()
+
+    # Verify A * A^{-1} ≈ I
+    array<array<number>> product = LinearAlgebra.multiply(
+        [[1.0, 2.0], [3.0, 4.0]], inv
+    ) |> Result.unwrap()
+
+    assert(Math.approximately_equal(product[0][0], 1.0, 0.0001))
+    assert(Math.approximately_equal(product[1][1], 1.0, 0.0001))
+    assert(Math.approximately_equal(product[0][1], 0.0, 0.0001))
+}
+
+@test
+function void test_linearalgebra_is_orthogonal() {
+    # Orthogonal vectors: [1,0] and [0,1]
+    assert(LinearAlgebra.is_orthogonal([1.0, 0.0], [0.0, 1.0]))
+
+    # Non-orthogonal vectors
+    assert(!LinearAlgebra.is_orthogonal([1.0, 0.0], [1.0, 1.0]))
+}
+
+# ─── Negative tests: dimension and singularity failures ──
+
+@test
+function void test_linearalgebra_multiply_dimension_mismatch_fails() {
+    # Inner dimensions must agree: (1x2) * (1x2) is invalid.
+    assert(
+        LinearAlgebra.multiply([[1.0, 2.0]], [[1.0, 2.0]])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_inverse_singular_fails() {
+    # A singular matrix (second row is a multiple of the first)
+    # has no inverse.
+    assert(
+        LinearAlgebra.inverse([[1.0, 2.0], [2.0, 4.0]])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_dot_length_mismatch_fails() {
+    assert(
+        LinearAlgebra.dot([1.0, 2.0], [1.0, 2.0, 3.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_cross_requires_three_dimensions_fails() {
+    # The cross product is only defined for 3D vectors.
+    assert(
+        LinearAlgebra.cross([1.0, 2.0], [3.0, 4.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_solve_singular_system_fails() {
+    # A singular coefficient matrix has no unique solution.
+    assert(
+        LinearAlgebra.solve([[1.0, 1.0], [1.0, 1.0]], [1.0, 2.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_subtract_dimension_mismatch_fails() {
+    assert(
+        LinearAlgebra.subtract([1.0, 2.0], [1.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_distance_dimension_mismatch_fails() {
+    assert(
+        LinearAlgebra.distance([1.0, 2.0], [1.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_angle_dimension_mismatch_fails() {
+    assert(
+        LinearAlgebra.angle([1.0, 2.0], [1.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_angle_zero_vector_fails() {
+    # The angle is undefined when either vector has zero length.
+    assert(
+        LinearAlgebra.angle([0.0, 0.0], [1.0, 1.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_normalize_zero_vector_fails() {
+    # A zero vector cannot be normalised to unit length.
+    assert(
+        LinearAlgebra.normalize([0.0, 0.0, 0.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_multiply_vector_dimension_mismatch_fails() {
+    # The matrix column count must match the vector length.
+    assert(
+        LinearAlgebra.multiply_vector([[1.0, 2.0], [3.0, 4.0]], [1.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_add_matrix_dimension_mismatch_fails() {
+    assert(
+        LinearAlgebra.add_matrix([[1.0, 2.0]], [[1.0, 2.0], [3.0, 4.0]])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_determinant_non_square_fails() {
+    # The determinant is only defined for square matrices.
+    assert(
+        LinearAlgebra.determinant([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_trace_non_square_fails() {
+    assert(
+        LinearAlgebra.trace([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_inverse_non_square_fails() {
+    assert(
+        LinearAlgebra.inverse([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_solve_dimension_mismatch_fails() {
+    # The right-hand side length must match the matrix order.
+    assert(
+        LinearAlgebra.solve([[2.0, 1.0], [1.0, 3.0]], [5.0])
+        |> Result.is_failure()
+    )
+}
+
+@test
+function void test_linearalgebra_solve_non_square_fails() {
+    assert(
+        LinearAlgebra.solve([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], [1.0, 2.0])
+        |> Result.is_failure()
+    )
+}

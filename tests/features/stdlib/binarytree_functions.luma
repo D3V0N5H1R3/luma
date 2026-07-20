@@ -1,0 +1,484 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — BinaryTree Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_binarytree_new_is_empty() {
+    assert(BinaryTree.new() |> BinaryTree.is_empty())
+    assert((BinaryTree.new() |> BinaryTree.length()) == 0)
+}
+
+@test
+function void test_binarytree_from_array() {
+    integer len = BinaryTree.from_array([5, 3, 7, 1, 9]) |> BinaryTree.length()
+
+    assert(len == 5)
+}
+
+@test
+function void test_binarytree_from_array_deduplicates() {
+    integer len = BinaryTree.from_array([5, 3, 5, 3, 7]) |> BinaryTree.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_binarytree_insert() {
+    integer len = BinaryTree.new()
+    |> BinaryTree.insert(5)
+    |> BinaryTree.insert(3)
+    |> BinaryTree.insert(7)
+    |> BinaryTree.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_binarytree_contains() {
+    assert(BinaryTree.from_array([5, 3, 7]) |> BinaryTree.contains(5))
+    assert(BinaryTree.from_array([5, 3, 7]) |> BinaryTree.contains(3))
+    assert(!(BinaryTree.from_array([5, 3, 7]) |> BinaryTree.contains(99)))
+}
+
+@test
+function void test_binarytree_remove() {
+    integer len = BinaryTree.from_array([5, 3, 7])
+    |> BinaryTree.remove(3)
+    |> BinaryTree.length()
+
+    assert(len == 2)
+    assert(!(BinaryTree.from_array([5, 3, 7]) |> BinaryTree.remove(3) |> BinaryTree.contains(3)))
+}
+
+@test
+function void test_binarytree_height() {
+    integer h = BinaryTree.from_array([5, 3, 7, 1, 9]) |> BinaryTree.height()
+
+    assert(h >= 2)
+    assert(h <= 5)
+}
+
+@test
+function void test_binarytree_min() {
+    integer m = BinaryTree.from_array([5, 3, 7, 1, 9])
+    |> BinaryTree.min()
+    |> Result.unwrap()
+
+    assert(m == 1)
+}
+
+@test
+function void test_binarytree_max() {
+    integer m = BinaryTree.from_array([5, 3, 7, 1, 9])
+    |> BinaryTree.max()
+    |> Result.unwrap()
+
+    assert(m == 9)
+}
+
+@test
+function void test_binarytree_min_empty_fails() {
+    assert(BinaryTree.new() |> BinaryTree.min() |> Result.is_failure())
+}
+
+@test
+function void test_binarytree_max_empty_fails() {
+    assert(BinaryTree.new() |> BinaryTree.max() |> Result.is_failure())
+}
+
+@test
+function void test_binarytree_inorder() {
+    array<integer> arr = BinaryTree.from_array([5, 3, 7, 1, 9])
+    |> BinaryTree.inorder()
+
+    assert(Array.length(arr) == 5)
+    assert(arr[0] == 1)
+    assert(arr[1] == 3)
+    assert(arr[2] == 5)
+    assert(arr[3] == 7)
+    assert(arr[4] == 9)
+}
+
+@test
+function void test_binarytree_preorder() {
+    array<integer> arr = BinaryTree.from_array([5, 3, 7])
+    |> BinaryTree.preorder()
+
+    assert(Array.length(arr) == 3)
+    assert(arr[0] == 5)
+}
+
+@test
+function void test_binarytree_postorder() {
+    array<integer> arr = BinaryTree.from_array([5, 3, 7])
+    |> BinaryTree.postorder()
+
+    assert(Array.length(arr) == 3)
+    assert(arr[2] == 5)
+}
+
+@test
+function void test_binarytree_level_order() {
+    array<integer> arr = BinaryTree.from_array([5, 3, 7])
+    |> BinaryTree.level_order()
+
+    assert(Array.length(arr) == 3)
+    assert(arr[0] == 5)
+}
+
+@test
+function void test_binarytree_to_array() {
+    array<integer> arr = BinaryTree.from_array([3, 1, 2])
+    |> BinaryTree.to_array()
+
+    assert(arr[0] == 1)
+    assert(arr[1] == 2)
+    assert(arr[2] == 3)
+}
+
+# ─── BinaryTree.floor_value / ceiling_value ───────────────────
+
+@test
+function void test_binarytree_floor_value() {
+    result<integer> r = BinaryTree.from_array([1, 3, 5, 7])
+    |> BinaryTree.floor_value(4)
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == 3)
+}
+
+@test
+function void test_binarytree_floor_value_exact() {
+    result<integer> r = BinaryTree.from_array([1, 3, 5])
+    |> BinaryTree.floor_value(3)
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == 3)
+}
+
+@test
+function void test_binarytree_floor_value_none() {
+    # Key smaller than every element — no floor exists
+    result<integer> r = BinaryTree.from_array([5, 7])
+    |> BinaryTree.floor_value(2)
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_binarytree_ceiling_value() {
+    result<integer> r = BinaryTree.from_array([1, 3, 5, 7])
+    |> BinaryTree.ceiling_value(4)
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == 5)
+}
+
+@test
+function void test_binarytree_ceiling_value_none() {
+    # Key larger than every element — no ceiling exists
+    result<integer> r = BinaryTree.from_array([1, 3])
+    |> BinaryTree.ceiling_value(10)
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_binarytree_strings() {
+    assert((BinaryTree.from_array(["banana", "apple", "cherry"])
+    |> BinaryTree.min()
+    |> Result.unwrap()) == "apple")
+    assert((BinaryTree.from_array(["banana", "apple", "cherry"])
+    |> BinaryTree.max()
+    |> Result.unwrap()) == "cherry")
+}
+
+# ─── BinaryTree.union ─────────────────────────────────────
+
+@test
+function void test_binarytree_union_basic() {
+    binary_tree a = BinaryTree.from_array([1, 3, 5])
+    binary_tree b = BinaryTree.from_array([2, 4, 6])
+    binary_tree merged = BinaryTree.union(a, b)
+
+    assert(BinaryTree.length(merged) == 6)
+    assert(BinaryTree.contains(merged, 1))
+    assert(BinaryTree.contains(merged, 6))
+}
+
+@test
+function void test_binarytree_union_overlapping() {
+    binary_tree merged = BinaryTree.union(
+        BinaryTree.from_array([1, 2, 3]),
+        BinaryTree.from_array([2, 3, 4]))
+
+        assert(BinaryTree.length(merged) == 4)
+    }
+
+    @test
+    function void test_binarytree_union_empty_right() {
+        binary_tree merged = BinaryTree.union(
+            BinaryTree.from_array([1, 2, 3]),
+            BinaryTree.new())
+
+            assert(BinaryTree.length(merged) == 3)
+        }
+
+        # ─── BinaryTree.partition ─────────────────────────────────
+
+        @test
+        function void test_binarytree_partition_basic() {
+            result<(binary_tree, binary_tree)> r = BinaryTree.from_array([1, 2, 3, 4, 5])
+            |> BinaryTree.partition((integer x) -> x > 3)
+
+            assert(Result.is_success(r))
+
+            (binary_tree matches, binary_tree rest) = Result.unwrap(r)
+
+            assert(BinaryTree.length(matches) == 2)
+            assert(BinaryTree.length(rest) == 3)
+            assert(BinaryTree.contains(matches, 4))
+            assert(BinaryTree.contains(matches, 5))
+        }
+
+        @test
+        function void test_binarytree_partition_none_match() {
+            (binary_tree matches, binary_tree rest) = BinaryTree.from_array([1, 2, 3])
+            |> BinaryTree.partition((integer x) -> x > 10)
+            |> Result.unwrap()
+
+            assert(BinaryTree.length(matches) == 0)
+            assert(BinaryTree.length(rest) == 3)
+        }
+
+        @test
+        function void test_binarytree_partition_all_match() {
+            (binary_tree matches, binary_tree rest) = BinaryTree.from_array([1, 2, 3])
+            |> BinaryTree.partition((integer x) -> x > 0)
+            |> Result.unwrap()
+
+            assert(BinaryTree.length(matches) == 3)
+            assert(BinaryTree.length(rest) == 0)
+        }
+
+        # ── BinaryTree.filter ──
+
+        @test
+        function void test_binarytree_filter_basic() {
+            result<binary_tree> r = BinaryTree.from_array([1, 2, 3, 4, 5])
+            |> BinaryTree.filter((integer x) -> x > 2)
+
+            assert(Result.is_success(r))
+
+            binary_tree filtered = Result.unwrap(r)
+
+            assert(BinaryTree.length(filtered) == 3)
+            assert(BinaryTree.contains(filtered, 3))
+            assert(BinaryTree.contains(filtered, 4))
+            assert(BinaryTree.contains(filtered, 5))
+        }
+
+        @test
+        function void test_binarytree_filter_none_match() {
+            result<binary_tree> r = BinaryTree.from_array([1, 2, 3])
+            |> BinaryTree.filter((integer x) -> x > 10)
+
+            binary_tree filtered = Result.unwrap(r)
+
+            assert(BinaryTree.length(filtered) == 0)
+        }
+
+        @test
+        function void test_binarytree_filter_all_match() {
+            result<binary_tree> r = BinaryTree.from_array([1, 2, 3])
+            |> BinaryTree.filter((integer x) -> x > 0)
+
+            binary_tree filtered = Result.unwrap(r)
+
+            assert(BinaryTree.length(filtered) == 3)
+        }
+
+        # ── BinaryTree.reduce ──
+
+        @test
+        function void test_binarytree_reduce_sum() {
+            result<integer> r = BinaryTree.from_array([1, 2, 3, 4, 5])
+            |> BinaryTree.reduce(0, (integer acc, integer x) -> acc + x)
+
+            assert(Result.is_success(r))
+            assert(Result.unwrap(r) == 15)
+        }
+
+        @test
+        function void test_binarytree_reduce_empty() {
+            result<integer> r = BinaryTree.new()
+            |> BinaryTree.reduce(42, (integer acc, integer x) -> acc + x)
+
+            assert(Result.unwrap(r) == 42)
+        }
+
+        @test
+        function void test_binarytree_reduce_string_concat() {
+            # Elements are traversed in sorted order (inorder)
+            result<string> r = BinaryTree.from_array([3, 1, 2])
+            |> BinaryTree.reduce("", (string acc, integer x) -> acc + Converter.to_string(x))
+
+            assert(Result.unwrap(r) == "123")
+        }
+
+# ───────────────────────────────────────────────────────────
+# predecessor, successor, balance
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_binarytree_predecessor() {
+    binary_tree tree = BinaryTree.from_array([5, 3, 7, 1, 9])
+
+    assert(Result.unwrap(BinaryTree.predecessor(tree, 7)) == 5)
+}
+
+@test
+function void test_binarytree_successor() {
+    binary_tree tree = BinaryTree.from_array([5, 3, 7, 1, 9])
+
+    assert(Result.unwrap(BinaryTree.successor(tree, 3)) == 5)
+}
+
+@test
+function void test_binarytree_balance() {
+    integer len = BinaryTree.balance(BinaryTree.from_array([1, 2, 3, 4, 5]))
+    |> BinaryTree.length()
+
+    assert(len == 5)
+}
+
+# ───────────────────────────────────────────────────────────
+# length, duplicate / absent no-ops, balance invariants
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_binarytree_length() {
+    integer len = BinaryTree.new()
+    |> BinaryTree.insert(10)
+    |> BinaryTree.insert(20)
+    |> BinaryTree.insert(30)
+    |> BinaryTree.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_binarytree_insert_duplicate_noop() {
+    # Re-inserting an existing value leaves the size unchanged.
+    integer len = BinaryTree.from_array([5, 3, 7])
+    |> BinaryTree.insert(5)
+    |> BinaryTree.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_binarytree_remove_absent_noop() {
+    # Removing a value that is not present leaves the size unchanged.
+    integer len = BinaryTree.from_array([5, 3, 7])
+    |> BinaryTree.remove(99)
+    |> BinaryTree.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_binarytree_balance_sorted() {
+    # A degenerate insertion order still yields a sorted in-order traversal.
+    array<integer> arr = BinaryTree.new()
+    |> BinaryTree.insert(1)
+    |> BinaryTree.insert(2)
+    |> BinaryTree.insert(3)
+    |> BinaryTree.insert(4)
+    |> BinaryTree.insert(5)
+    |> BinaryTree.balance()
+    |> BinaryTree.inorder()
+
+    assert(Array.length(arr) == 5)
+    assert(arr[0] == 1)
+    assert(arr[1] == 2)
+    assert(arr[2] == 3)
+    assert(arr[3] == 4)
+    assert(arr[4] == 5)
+}
+
+@test
+function void test_binarytree_balance_reduces_height() {
+    # Inserting 1..5 in ascending order builds a right-leaning chain of height 5.
+    binary_tree degenerate = BinaryTree.new()
+    |> BinaryTree.insert(1)
+    |> BinaryTree.insert(2)
+    |> BinaryTree.insert(3)
+    |> BinaryTree.insert(4)
+    |> BinaryTree.insert(5)
+
+    assert(BinaryTree.height(degenerate) == 5)
+    assert(BinaryTree.height(BinaryTree.balance(degenerate)) < 5)
+}
+
+# ───────────────────────────────────────────────────────────
+# Negative: successor / predecessor boundaries
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_binarytree_successor_of_max_fails() {
+    binary_tree tree = BinaryTree.from_array([1, 3, 5])
+
+    assert(BinaryTree.successor(tree, 5) |> Result.is_failure())
+}
+
+@test
+function void test_binarytree_predecessor_of_min_fails() {
+    binary_tree tree = BinaryTree.from_array([1, 3, 5])
+
+    assert(BinaryTree.predecessor(tree, 1) |> Result.is_failure())
+}
+
+@test
+function void test_binarytree_successor_empty_fails() {
+    assert(BinaryTree.new() |> BinaryTree.successor(5) |> Result.is_failure())
+}
+
+@test
+function void test_binarytree_predecessor_empty_fails() {
+    assert(BinaryTree.new() |> BinaryTree.predecessor(5) |> Result.is_failure())
+}
+
+# ───────────────────────────────────────────────────────────
+# Negative: incomparable values raise a catchable runtime error
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_binarytree_contains_incomparable_throws() {
+    mutable boolean caught = false
+    binary_tree tree = BinaryTree.from_array([1, 2, 3])
+
+    try {
+        boolean _found = BinaryTree.contains(tree, [5])
+    } catch(_err) {
+        caught = true
+    }
+
+    assert(caught, "comparing an array against integer nodes should fail")
+}
+
+@test
+function void test_binarytree_from_array_incomparable_throws() {
+    mutable boolean caught = false
+
+    try {
+        binary_tree _t = BinaryTree.from_array([[1], [2]])
+    } catch(_err) {
+        caught = true
+    }
+
+    assert(caught, "building a tree of incomparable arrays should fail")
+}

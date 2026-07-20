@@ -1,0 +1,126 @@
+# ═══════════════════════════════════════════════════════════
+# Composite Pattern
+#
+# Treats individual objects and compositions uniformly.
+# A recursive choice type naturally models the tree, and
+# recursive functions process it without special cases at
+# the call site.
+#
+# Usage: luma examples/design-patterns/composite.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── File-system tree ────────────────────────────────────
+
+choice FileNode {
+    File(string name, number size)
+    Directory(string name, array<FileNode> children)
+}
+
+# ─── Operations on the tree ──────────────────────────────
+
+function number total_size(FileNode node) {
+    return match node {
+    case FileNode.File(_name, size) { size }
+    case FileNode.Directory(_name, children) {
+        mutable number sum = 0
+
+        for child in children {
+            sum += total_size(child)
+        }
+
+        sum
+    }
+    }
+}
+
+function number count_files(FileNode node) {
+    return match node {
+    case FileNode.File(_name, _size) { 1 }
+    case FileNode.Directory(_name, children) {
+        mutable number count = 0
+
+        for child in children {
+            count += count_files(child)
+        }
+
+        count
+    }
+    }
+}
+
+function void print_tree(FileNode node, string indent) {
+    match node {
+    case FileNode.File(name, size) {
+        print("${indent}📄 ${name} (${size} bytes)")
+    }
+    case FileNode.Directory(name, children) {
+        print("${indent}📁 ${name}/")
+
+        for child in children {
+            print_tree(child, "${indent}  ")
+        }
+    }
+    }
+}
+
+function array<string> find_large_files(FileNode node, number threshold) {
+    match node {
+    case FileNode.File(name, size) {
+        if size >= threshold {
+            return [name]
+        }
+
+        return []
+    }
+    case FileNode.Directory(_name, children) {
+        mutable array<string> found = []
+
+        for child in children {
+            found = Array.concat(found, find_large_files(child, threshold))
+        }
+
+        return found
+    }
+    }
+}
+
+# ─── Main ─────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("=== Composite Pattern ===")
+    print("")
+
+    # Build a file tree
+    FileNode tree = FileNode.Directory("project", [
+        FileNode.File("README.md", 1200),
+        FileNode.Directory("src", [
+            FileNode.File("main.luma", 3400),
+            FileNode.File("utils.luma", 800),
+            FileNode.Directory("tests", [
+                FileNode.File("test_main.luma", 2100),
+                FileNode.File("test_utils.luma", 950)
+            ])
+        ]),
+        FileNode.Directory("docs", [
+            FileNode.File("guide.md", 5600),
+            FileNode.File("api.md", 4200)
+        ])
+    ])
+
+    # Uniform operations on the whole tree
+    print_tree(tree, "")
+    print("")
+
+    print("Total size: ${total_size(tree)} bytes")
+    print("File count: ${count_files(tree)}")
+
+    print("")
+    print("Files >= 3000 bytes:")
+
+    array<string> large = find_large_files(tree, 3000)
+
+    for name in large {
+        print("  - ${name}")
+    }
+}

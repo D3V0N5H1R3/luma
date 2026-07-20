@@ -1,0 +1,34 @@
+{
+    "description": "Canonical list of Luma built-in type keywords for the editor extensions. The order mirrors the tree-sitter grammar's `builtin_type` rule (extensions/zed/grammars/tree-sitter-luma/grammar.js). The VS Code extension is generated from this file into extensions/vscode/src/generated/builtin-types.ts (exported as LUMA_BUILTIN_TYPE_SET and consumed by the make-mutable quick fix in src/lsp/code-actions.ts). The same list is spelled out by hand in the TextMate grammar's `type` and `typed_binding` patterns (extensions/vscode/syntaxes/luma.tmLanguage.json); a VS Code unit test (src/test/suite/builtin-types.test.ts) asserts that grammar stays in sync with this file. The interpreter's source of truth is the KeywordKind::BuiltinType entries of k_keywords in core/analysis/lexer/token_type.hpp (note: `void` is an editor-surface type not present in that keyword table). Update every implementation in tandem when a built-in type is added or removed.",
+    "types": [
+        "boolean",
+        "integer",
+        "number",
+        "string",
+        "void",
+        "array",
+        "dictionary",
+        "optional",
+        "reference",
+        "result",
+        "task",
+        "channel",
+        "socket",
+        "queue",
+        "stack",
+        "binary_tree",
+        "graph",
+        "linked_list",
+        "hash_set",
+        "key_value_store",
+        "set",
+        "widget",
+        "xml"
+    ],
+    "implementations": [
+        "extensions/vscode/src/generated/builtin-types.ts (generated — LUMA_BUILTIN_TYPE_SET)",
+        "extensions/vscode/syntaxes/luma.tmLanguage.json (hand-maintained — `type`/`typed_binding` patterns)",
+        "extensions/zed/grammars/tree-sitter-luma/grammar.js (tree-sitter `builtin_type` rule)",
+        "core/analysis/lexer/token_type.hpp (interpreter — k_keywords BuiltinType entries)"
+    ]
+}

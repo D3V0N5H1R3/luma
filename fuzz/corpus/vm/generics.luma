@@ -1,0 +1,54 @@
+# VM: generics executed end-to-end — generic functions, generic records,
+# turbofish, bounded parameters, and runtime narrowing (downcast / is /
+# trusted_downcast). Reaches generic instantiation, MakeRecord, Downcast,
+# IsType and TrustedDowncast through the VM.
+
+interface HasId { integer id }
+
+interface HasValue { integer value }
+
+record Box<T> { T value }
+
+record User { integer id, string name }
+
+record Valued { integer value }
+
+function<T> T identity(T value) {
+    return value
+}
+
+function<T> Box<T> wrap(T value) {
+    return Box<T> { value = value }
+}
+
+function<T> T unwrap(Box<T> b) {
+    return b.value
+}
+
+function<T: HasValue> integer extract(T item) {
+    return item.value
+}
+
+@main
+function void main() {
+    integer a = identity(42)
+    integer b = identity::<integer>(7)
+    print(a + b)
+
+    Box<integer> bx = wrap(99)
+    print(unwrap(bx))
+
+    Box<Box<string>> nested = Box<Box<string>> { value = Box<string> { value = "hi" } }
+    print(nested.value.value)
+
+    integer v = extract(Valued { value = 5 })
+    print(v)
+
+    HasId thing = User { id = 1, name = "Ada" }
+    result<User> r = downcast<User>(thing)
+    print(Result.is_success(r))
+    print(is<User>(thing))
+
+    User u = trusted_downcast<User>(thing)
+    print(u.name)
+}

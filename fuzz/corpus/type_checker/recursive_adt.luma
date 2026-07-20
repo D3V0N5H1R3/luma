@@ -1,0 +1,48 @@
+# Type checker: generic and recursive choice types (ADTs).
+# Exercises generic constructor inference and match-binding inference,
+# the most involved choice-type paths in the type checker.
+
+choice Expr {
+    Num(integer value)
+    Add(Expr left, Expr right)
+    Mul(Expr left, Expr right)
+}
+
+function integer eval_expr(Expr e) {
+    return match e {
+    case Expr.Num(v) { v }
+    case Expr.Add(l, r) { eval_expr(l) + eval_expr(r) }
+    case Expr.Mul(l, r) { eval_expr(l) * eval_expr(r) }
+    }
+}
+
+choice List<T> {
+    Nil
+    Cons(T head, List<T> tail)
+}
+
+function integer list_length(List<integer> xs) {
+    return match xs {
+    case List.Nil { 0 }
+    case List.Cons(_h, t) { 1 + list_length(t) }
+    }
+}
+
+choice Tree<T> {
+    Leaf(T value)
+    Branch(Tree<T> left, Tree<T> right)
+}
+
+function integer tree_sum(Tree<integer> t) {
+    return match t {
+    case Tree.Leaf(v) { v }
+    case Tree.Branch(l, r) { tree_sum(l) + tree_sum(r) }
+    }
+}
+
+function<T> T first_or(List<T> xs, T fallback) {
+    return match xs {
+    case List.Cons(h, _t) { h }
+    else { fallback }
+    }
+}

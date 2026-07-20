@@ -1,0 +1,145 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Include
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+include "include_helper.luma"
+
+@test
+function void test_included_function() {
+    integer sum = add(3, 4)
+
+    assert(sum == 7, "included function should work")
+}
+
+@test
+function void test_included_record() {
+    Color color = Color { red = 255, green = 128, blue = 0 }
+
+    assert(color.red == 255, "included record field red")
+    assert(color.green == 128, "included record field green")
+    assert(color.blue == 0, "included record field blue")
+}
+
+@test
+function void test_included_enum() {
+    Direction direction = Direction.North
+
+    assert(direction == Direction.North, "included enum value")
+}
+
+# ═══════════════════════════════════════════════════════════
+# Edge-case tests — include deduplication
+# ═══════════════════════════════════════════════════════════
+
+# Including the same file twice should not cause duplicate definition errors.
+include "include_helper.luma"
+
+@test
+function void test_include_deduplication() {
+    # After including the same file twice, the function should still work.
+    integer result_value = add(10, 20)
+
+    assert(result_value == 30, "function from deduplicated include should work")
+}
+
+@test
+function void test_included_record_still_works_after_dedup() {
+    Color c = Color { red = 100, green = 200, blue = 50 }
+
+    assert(c.red == 100)
+    assert(c.green == 200)
+    assert(c.blue == 50)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Additional include tests
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_included_function_in_expression() {
+    integer result_value = add(add(1, 2), add(3, 4))
+
+    assert(result_value == 10)
+}
+
+@test
+function void test_included_enum_match() {
+    Direction d = Direction.East
+
+    string label = match d {
+    case Direction.North { "N" }
+    case Direction.South { "S" }
+    case Direction.East  { "E" }
+    case Direction.West  { "W" }
+    }
+
+    assert(label == "E")
+}
+
+@test
+function void test_included_enum_all_variants() {
+    assert(Direction.North != Direction.South)
+    assert(Direction.East != Direction.West)
+    assert(Direction.North != Direction.East)
+}
+
+@test
+function void test_included_record_equality() {
+    Color a = Color { red = 10, green = 20, blue = 30 }
+    Color b = Color { red = 10, green = 20, blue = 30 }
+    Color c = Color { red = 0, green = 0, blue = 0 }
+
+    assert(a == b)
+    assert(a != c)
+}
+
+@test
+function void test_included_function_with_zero() {
+    assert(add(0, 0) == 0)
+    assert(add(-5, 5) == 0)
+    assert(add(100, -100) == 0)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Broader declaration kinds — generics, choice payloads, interfaces
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_included_generic_function() {
+    integer n = pick(99)
+    string s = pick("luma")
+
+    assert(n == 99, "included generic function with integer")
+    assert(s == "luma", "included generic function with string")
+}
+
+@test
+function void test_included_choice_with_payload() {
+    Shape circle = Shape.Circle(2.0)
+    Shape square = Shape.Square(3.0)
+
+    number circle_area = match circle {
+    case Shape.Circle(r) { 3.14159 * r * r }
+    case Shape.Square(s) { s * s }
+    }
+
+    number square_area = match square {
+    case Shape.Circle(r) { 3.14159 * r * r }
+    case Shape.Square(s) { s * s }
+    }
+
+    assert(Math.approximately_equal(circle_area, 12.56636), "circle area from included choice")
+    assert(Math.approximately_equal(square_area, 9.0), "square area from included choice")
+}
+
+@test
+function void test_included_interface_structural() {
+    Animal dog = Animal { name = "Rex", legs = 4 }
+
+    string n = name_of(dog)
+
+    assert(n == "Rex", "included interface used structurally with included record")
+}

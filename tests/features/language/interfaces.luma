@@ -1,0 +1,343 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Interfaces
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+interface Named {
+    string name
+}
+
+record Player {
+    string name,
+    integer level
+}
+
+function string greet_named(Named entity) {
+    return "Hello, ${entity.name}!"
+}
+
+@test
+function void test_interface_structural() {
+    Player player = Player { name = "Alice", level = 5 }
+
+    string greeting = greet_named(player)
+
+    assert(greeting == "Hello, Alice!")
+}
+
+interface Positioned {
+    number x,
+    number y
+}
+
+record Sprite {
+    string name,
+    number x,
+    number y
+}
+
+function string describe_named(Named entity) {
+    return entity.name
+}
+
+function number get_x(Positioned positioned) {
+    return positioned.x
+}
+
+@test
+function void test_interface_multiple_fields() {
+    Sprite sprite = Sprite { name = "hero", x = 10.0, y = 20.0 }
+
+    number position_x = get_x(sprite)
+
+    assert(Math.approximately_equal(position_x, 10.0), "interface with multiple fields")
+}
+
+@test
+function void test_interface_multiple_satisfaction() {
+    Sprite sprite = Sprite { name = "hero", x = 5.0, y = 15.0 }
+
+    # Sprite satisfies both Named and Positioned.
+    assert(describe_named(sprite) == "hero", "satisfies Named")
+    assert(Math.approximately_equal(get_x(sprite), 5.0), "satisfies Positioned")
+}
+
+@test
+function void test_interface_different_records() {
+    Player player = Player { name = "Bob", level = 10 }
+
+    Sprite sprite = Sprite { name = "Alice", x = 0.0, y = 0.0 }
+
+    # Both satisfy Named.
+    assert(describe_named(player) == "Bob")
+    assert(describe_named(sprite) == "Alice")
+}
+
+# ─── Interface-to-interface assignability ────────────────
+
+interface Labelled {
+    string name
+}
+
+interface FullyLabelled {
+    string name,
+    number x,
+    number y
+}
+
+function string show_label(Labelled lbl) {
+    return lbl.name
+}
+
+@test
+function void test_interface_to_interface_assignability() {
+    # Sprite has name, x, y — so it satisfies FullyLabelled.
+    Sprite s = Sprite { name = "ship", x = 1.0, y = 2.0 }
+
+    FullyLabelled fl = s
+
+    # FullyLabelled satisfies Labelled (has a 'name' field),
+    # so passing fl to show_label should be accepted.
+    assert(show_label(fl) == "ship")
+}
+
+@test
+function void test_interface_to_interface_subset() {
+    Sprite s = Sprite { name = "dot", x = 5.0, y = 10.0 }
+
+    FullyLabelled fl = s
+
+    # The interface value can be used via the sub-interface.
+    assert(show_label(fl) == "dot")
+}
+
+# ─── Generic interfaces ──────────────────────────
+
+interface Container<T> {
+    T value
+}
+
+record IntBox {
+    integer value
+}
+
+record StrBox {
+    string value
+}
+
+function<T> T get_value(Container<T> c) {
+    return c.value
+}
+
+@test
+function void test_generic_interface_integer() {
+    IntBox box = IntBox { value = 42 }
+
+    integer v = get_value(box)
+
+    assert(v == 42)
+}
+
+@test
+function void test_generic_interface_string() {
+    StrBox box = StrBox { value = "hello" }
+
+    string v = get_value(box)
+
+    assert(v == "hello")
+}
+
+@test
+function void test_generic_interface_different_records() {
+    IntBox ib = IntBox { value = 7 }
+    StrBox sb = StrBox { value = "world" }
+
+    integer iv = get_value(ib)
+    string sv = get_value(sb)
+
+    assert(iv == 7)
+    assert(sv == "world")
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional interface tests
+# ───────────────────────────────────────────────────────────
+
+# Record with extra fields still satisfies a smaller interface.
+
+interface HasAge {
+    integer age
+}
+
+record Person {
+    string name,
+    integer age,
+    boolean active
+}
+
+function integer get_age(HasAge entity) {
+    return entity.age
+}
+
+@test
+function void test_interface_extra_fields_ok() {
+    Person p = Person { name = "Alice", age = 30, active = true }
+
+    assert(get_age(p) == 30)
+}
+
+# Same record satisfies Named and HasAge.
+@test
+function void test_record_satisfies_two_interfaces() {
+    Person p = Person { name = "Bob", age = 25, active = false }
+
+    assert(describe_named(p) == "Bob")
+    assert(get_age(p) == 25)
+}
+
+# Interface used in loop context.
+@test
+function void test_interface_in_loop() {
+    Player p1 = Player { name = "Alice", level = 5 }
+    Player p2 = Player { name = "Bob", level = 10 }
+    array<Player> players = [p1, p2]
+
+    mutable string all_names = ""
+
+    for p in players {
+        all_names = all_names + describe_named(p) + " "
+    }
+
+    assert(String.contains(all_names, "Alice"))
+    assert(String.contains(all_names, "Bob"))
+}
+
+# Interface with number field.
+interface Weighted {
+    number weight
+}
+
+record Package {
+    string label,
+    number weight
+}
+
+function number get_weight(Weighted w) {
+    return w.weight
+}
+
+@test
+function void test_interface_number_field() {
+    Package pkg = Package { label = "box", weight = 2.5 }
+
+    assert(Math.approximately_equal(get_weight(pkg), 2.5))
+}
+
+# Interface with boolean field.
+interface Toggleable {
+    boolean enabled
+}
+
+record Feature {
+    string name,
+    boolean enabled
+}
+
+function boolean is_enabled(Toggleable t) {
+    return t.enabled
+}
+
+@test
+function void test_interface_boolean_field() {
+    Feature f = Feature { name = "dark_mode", enabled = true }
+
+    assert(is_enabled(f))
+}
+
+# ─── Empty interface ─────────────────────────────────────
+
+# An interface with no fields is satisfied by every record.
+interface Any {}
+
+record Token {
+    integer id
+}
+
+function boolean accepts_any(Any _value) {
+    return true
+}
+
+@test
+function void test_interface_empty_satisfied_by_record() {
+    Token t = Token { id = 7 }
+
+    assert(accepts_any(t), "record satisfies empty interface")
+}
+
+# ─── Integer field satisfies number interface field ──────
+
+# A record with an integer field satisfies an interface that declares the field
+# as number, because integer is assignable to number.
+interface Measurable {
+    number measure
+}
+
+record IntReading {
+    integer measure
+}
+
+function number read_measure(Measurable m) {
+    return m.measure
+}
+
+@test
+function void test_interface_integer_field_satisfies_number() {
+    IntReading r = IntReading { measure = 42 }
+
+    number v = read_measure(r)
+
+    assert(Math.approximately_equal(v, 42.0), "integer field satisfies number field")
+}
+
+# ─── Interface parameter forwarding ──────────────────────
+
+# An interface-typed value can be forwarded to another function that expects the
+# same interface.
+function string forward_name(Named n) {
+    return describe_named(n)
+}
+
+@test
+function void test_interface_param_forwarded() {
+    Player p = Player { name = "Zoe", level = 3 }
+
+    assert(forward_name(p) == "Zoe", "interface param forwarded to another interface function")
+}
+
+# ─── Nested record field via interface ───────────────────
+
+record Address {
+    string city
+}
+
+interface HasAddress {
+    Address address
+}
+
+record Company {
+    string name,
+    Address address
+}
+
+function string company_city(HasAddress h) {
+    return h.address.city
+}
+
+@test
+function void test_interface_nested_record_field() {
+    Company c = Company { name = "Acme", address = Address { city = "Springfield" } }
+
+    assert(company_city(c) == "Springfield", "nested record field accessed through interface")
+}

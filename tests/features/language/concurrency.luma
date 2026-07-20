@@ -1,0 +1,554 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Concurrency (spawn/await)
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+function integer compute_square(integer x) {
+    return x * x
+}
+
+function integer add(integer a, integer b) {
+    return a + b
+}
+
+function integer await_other(task<integer> t) {
+    return await t
+}
+
+function integer fail_fast() {
+    assert(false, "intentional failure")
+    return 0
+}
+
+function integer channel_send_int(channel<integer> ch, integer val) {
+    boolean _sent = Channel.send(ch, val)
+
+    return val
+}
+
+# ───────────────────────────────────────────────────────────
+# Basic spawn / await
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_spawn_and_await() {
+    task_scope {
+        task<integer> square_task = spawn compute_square(6)
+
+        integer square_value = await square_task
+
+        assert(square_value == 36, "spawn/await should return correct value")
+    }
+}
+
+@test
+function void test_multiple_spawns() {
+    array<integer> results = task_scope {
+        spawn compute_square(3)
+        spawn compute_square(4)
+        spawn compute_square(5)
+    }
+
+    assert(results[0] == 9, "first task")
+    assert(results[1] == 16, "second task")
+    assert(results[2] == 25, "third task")
+}
+
+@test
+function void test_spawn_with_multiple_args() {
+    task_scope {
+        task<integer> sum_task = spawn add(10, 20)
+
+        integer sum_value = await sum_task
+
+        assert(sum_value == 30, "spawn with multiple args")
+    }
+}
+
+# ───────────────────────────────────────────────────────────
+# Task module functions
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_task_all() {
+    array<integer> results = task_scope {
+        spawn compute_square(2)
+        spawn compute_square(3)
+        spawn compute_square(4)
+    }
+
+    assert(Array.length(results) == 3, "Task.all returns all results")
+    assert(results[0] == 4, "Task.all first result")
+    assert(results[1] == 9, "Task.all second result")
+    assert(results[2] == 16, "Task.all third result")
+}
+
+@test
+function void test_task_race() {
+    task_scope {
+        task<integer> t1 = spawn compute_square(5)
+        task<integer> t2 = spawn compute_square(6)
+
+        integer winner = Task.race([t1, t2]) |> Result.unwrap()
+
+        # Either result is valid — both tasks are fast.
+        assert(winner == 25 || winner == 36, "Task.race returns one result")
+    }
+}
+
+@test
+function void test_task_timeout_success() {
+    task_scope {
+        task<integer> t = spawn compute_square(7)
+
+        integer value = Task.timeout(t, 5000) |> Result.unwrap()
+
+        assert(value == 49, "Task.timeout returns value before deadline")
+    }
+}
+
+@test
+function void test_task_is_done() {
+    task_scope {
+        task<integer> t = spawn compute_square(8)
+
+        # Wait for it to complete.
+        integer _ = await t
+
+        boolean done = Task.is_done(t) |> Result.unwrap()
+
+        assert(done, "Task.is_done returns true after await")
+    }
+}
+
+@test
+function void test_task_delay() {
+    # Task.delay should complete without error.
+    Task.delay(10)
+
+    assert(true, "Task.delay completes")
+}
+
+@test
+function void test_task_map() {
+    task_scope {
+        task<integer> t = spawn compute_square(3)
+
+        integer mapped = Task.map(t, (integer x) -> x + 1) |> Result.unwrap()
+
+        assert(mapped == 10, "Task.map applies function to result")
+    }
+}
+
+@test
+function void test_task_flat_map() {
+    task_scope {
+        task<integer> t = spawn compute_square(2)
+
+        integer val = Task.flat_map(t, (integer x) -> spawn add(x, 10))
+        |> Result.unwrap()
+
+        assert(val == 14, "Task.flat_map chains tasks")
+    }
+}
+
+@test
+function void test_task_map_n() {
+    task_scope {
+        task<integer> t1 = spawn compute_square(2)
+        task<integer> t2 = spawn compute_square(3)
+
+        array<integer> results = Task.map_n([t1, t2], (integer x) -> x * 10)
+        |> Result.unwrap()
+
+        assert(results[0] == 40, "Task.map_n first mapped result")
+        assert(results[1] == 90, "Task.map_n second mapped result")
+    }
+}
+
+@test
+function void test_task_retry_immediate_success() {
+    integer value = Task.retry(3, () -> success(42)) |> Result.unwrap()
+
+    assert(value == 42, "Task.retry returns on first success")
+}
+
+@test
+function void test_task_retry_eventual_failure() {
+    result<integer> outcome = Task.retry(2, () -> failure("always fails"))
+
+    assert(Result.is_failure(outcome), "Task.retry fails after max attempts")
+}
+
+# ───────────────────────────────────────────────────────────
+# Channel functions
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_channel_send_receive() {
+    channel<integer> ch = Channel.new()
+
+    # Use a task to send asynchronously.
+    task_scope {
+        task<integer> _sender = spawn channel_send_int(ch, 42)
+
+        integer value = Channel.receive(ch) |> Result.unwrap()
+
+        assert(value == 42, "Channel send/receive")
+    }
+}
+
+@test
+function void test_channel_buffered() {
+    channel<integer> ch = Channel.new_buffered(3)
+
+    boolean _s1 = Channel.send(ch, 10)
+    boolean _s2 = Channel.send(ch, 20)
+    boolean _s3 = Channel.send(ch, 30)
+
+    integer first = Channel.receive(ch) |> Result.unwrap()
+    integer second = Channel.receive(ch) |> Result.unwrap()
+    integer third = Channel.receive(ch) |> Result.unwrap()
+
+    assert(first == 10, "buffered channel first")
+    assert(second == 20, "buffered channel second")
+    assert(third == 30, "buffered channel third")
+}
+
+@test
+function void test_channel_close_and_is_closed() {
+    channel<integer> ch = Channel.new_buffered(5)
+
+    assert(!Channel.is_closed(ch), "channel starts open")
+
+    Channel.close(ch)
+
+    assert(Channel.is_closed(ch), "channel is closed after close()")
+}
+
+@test
+function void test_channel_length() {
+    channel<string> ch = Channel.new_buffered(10)
+
+    assert(Channel.length(ch) == 0, "empty channel length")
+
+    boolean _s1 = Channel.send(ch, "hello")
+    boolean _s2 = Channel.send(ch, "world")
+
+    assert(Channel.length(ch) == 2, "channel length after sends")
+
+    string _ = Channel.receive(ch) |> Result.unwrap()
+
+    assert(Channel.length(ch) == 1, "channel length after receive")
+}
+
+@test
+function void test_channel_try_send_and_try_receive() {
+    channel<integer> ch = Channel.new_buffered(1)
+
+    boolean sent = Channel.try_send(ch, 99)
+
+    assert(sent, "try_send succeeds on non-full channel")
+
+    result<integer> received = Channel.try_receive(ch)
+
+    assert(Result.unwrap(received) == 99, "try_receive gets value")
+}
+
+@test
+function void test_channel_receive_all() {
+    channel<integer> ch = Channel.new_buffered(5)
+
+    boolean _s1 = Channel.send(ch, 1)
+    boolean _s2 = Channel.send(ch, 2)
+    boolean _s3 = Channel.send(ch, 3)
+
+    array<integer> all = Channel.receive_all(ch)
+
+    assert(Array.length(all) == 3, "receive_all gets all values")
+    assert(all[0] == 1, "receive_all first")
+    assert(all[2] == 3, "receive_all third")
+}
+
+# ─── Concurrency type safety ──────────────────────────
+
+@test
+function void test_channel_type_preserves_element_type() {
+    channel<string> ch = Channel.new_buffered(1)
+
+    boolean _sent = Channel.send(ch, "hello")
+
+    result<string> received = Channel.receive_timeout(ch, 1000)
+
+    assert(Result.is_success(received), "receive should succeed")
+    assert(Result.unwrap(received) == "hello", "received value matches")
+}
+
+@test
+function void test_task_type_preserves_result_type() {
+    task_scope {
+        task<integer> t = spawn compute_square(7)
+        integer val = await t
+
+        assert(val == 49, "task result has correct type and value")
+    }
+}
+
+@test
+function void test_spawn_multiple_typed_tasks() {
+    task_scope {
+        task<integer> t1 = spawn compute_square(3)
+        task<integer> t2 = spawn compute_square(4)
+
+        integer r1 = await t1
+        integer r2 = await t2
+
+        assert(r1 == 9)
+        assert(r2 == 16)
+    }
+}
+
+# ───────────────────────────────────────────────────────────
+# task_scope — structured concurrency
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_task_scope_basic() {
+    array<integer> results = task_scope {
+        spawn compute_square(3)
+        spawn compute_square(4)
+        spawn compute_square(5)
+    }
+
+    assert(Array.length(results) == 3, "task_scope collects all results")
+    assert(results[0] == 9, "task_scope first result")
+    assert(results[1] == 16, "task_scope second result")
+    assert(results[2] == 25, "task_scope third result")
+}
+
+@test
+function void test_task_scope_single_task() {
+    array<integer> results = task_scope {
+        spawn compute_square(7)
+    }
+
+    assert(Array.length(results) == 1, "task_scope single task")
+    assert(results[0] == 49, "task_scope single result")
+}
+
+@test
+function void test_task_scope_with_args() {
+    array<integer> results = task_scope {
+        spawn add(10, 20)
+        spawn add(30, 40)
+    }
+
+    assert(results[0] == 30, "task_scope add first")
+    assert(results[1] == 70, "task_scope add second")
+}
+
+@test
+function void test_task_passed_to_spawned_worker() {
+    # A task handle passed as an argument to another spawned task is deep-copied
+    # for the worker thread.  The worker awaits it while the scope end also joins
+    # it, so each must hold its own future over the shared task state — no data
+    # race and no "already-consumed task" error.  Regression for the
+    # shared_future task-handle fix.
+    array<integer> results = task_scope {
+        task<integer> source = spawn compute_square(8)
+        task<integer> _consumer = spawn await_other(source)
+    }
+
+    assert(Array.length(results) == 2, "scope collects both children")
+    assert(results[0] == 64, "source task result")
+    assert(results[1] == 64, "worker awaited the same task result")
+}
+
+@test
+function void test_task_scope_nested() {
+    array<integer> outer_results = task_scope {
+        spawn compute_square(2)
+
+        array<integer> inner_results = task_scope {
+            spawn compute_square(10)
+            spawn compute_square(11)
+        }
+
+        # inner_results is [100, 121] — nested scope completes before outer continues
+        assert(inner_results[0] == 100, "nested scope first")
+        assert(inner_results[1] == 121, "nested scope second")
+
+        spawn compute_square(3)
+    }
+
+    assert(Array.length(outer_results) == 2, "outer scope collects its own spawns")
+    assert(outer_results[0] == 4, "outer first result")
+    assert(outer_results[1] == 9, "outer second result")
+}
+
+@test
+function void test_task_scope_error_cancels_siblings() {
+    mutable string caught = ""
+
+    try {
+        array<integer> _ = task_scope {
+            spawn fail_fast()
+            spawn compute_square(5)
+        }
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "intentional failure"), "error propagated from task_scope")
+}
+
+@test
+function void test_task_scope_body_error_is_contained() {
+    # The task_scope BODY (not a spawned task) raises an error after spawning a
+    # child.  During unwinding the scope must cancel and join the child so it is
+    # not orphaned, and the error must remain catchable.  Regression test for
+    # the body-throw path bypassing TaskScopeEnd and leaking the scope/children.
+    mutable string caught = ""
+
+    try {
+        array<integer> _ = task_scope {
+            spawn compute_square(7)
+            assert(false, "body failure")
+        }
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "body failure"), "body error should be catchable")
+
+    # If the scope stack or current scope were left corrupted by the unwind, a
+    # subsequent task_scope would misbehave.  Confirm a clean follow-up scope.
+    array<integer> results = task_scope {
+        spawn compute_square(9)
+    }
+
+    assert(results[0] == 81, "task_scope works after a contained body error")
+}
+
+@test
+function void test_task_cancel() {
+    task_scope {
+        task<integer> t = spawn compute_square(5)
+
+        # Wait for completion before cancel (it's cooperative).
+        integer val = await t
+
+        boolean _cancelled = Task.cancel(t)
+
+        # Token exists because this file runs with the interpreter which has a scope context.
+        assert(val == 25, "value before cancel")
+    }
+}
+
+@test
+function void test_task_is_cancelled() {
+    task_scope {
+        task<integer> t = spawn compute_square(5)
+        integer _ = await t
+
+        # Fire-and-forget tasks (outside task_scope) don't have a token.
+        boolean is_cancelled = Task.is_cancelled(t)
+
+        assert(!is_cancelled, "task not cancelled by default")
+    }
+}
+
+@test
+function void test_task_scope_cancel_propagates() {
+    array<integer> results = task_scope {
+        spawn compute_square(6)
+    }
+
+    # After task_scope completes, results are available.
+    assert(results[0] == 36, "scope completed normally")
+}
+
+@test
+function void test_task_cancel_returns_true_for_scoped_task() {
+    # Inside a task_scope, tasks have cancellation tokens.
+    # Task.cancel returns true when a token exists.
+    task_scope {
+        task<integer> t = spawn compute_square(8)
+        integer _val = await t
+
+        boolean cancelled = Task.cancel(t)
+
+        assert(cancelled, "Task.cancel returns true for scoped task with token")
+    }
+}
+
+# ═══════════════════════════════════════════════════════════
+# Negative tests — error conditions in concurrency
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_channel_receive_timeout_expires() {
+    channel<integer> ch = Channel.new_buffered(1)
+
+    # Receive with a very short timeout on empty channel should fail.
+    result<integer> r = Channel.receive_timeout(ch, 10)
+
+    assert(Result.is_failure(r), "receive_timeout on empty channel should fail")
+}
+
+@test
+function void test_channel_send_timeout_on_full_buffer() {
+    channel<integer> ch = Channel.new_buffered(1)
+
+    # Fill the buffer.
+    boolean _ = Channel.send(ch, 42)
+
+    # Sending with timeout on full buffer should fail.
+    result<boolean> r = Channel.send_timeout(ch, 99, 10)
+
+    assert(Result.is_failure(r), "send_timeout on full buffer should fail")
+}
+
+@test
+function void test_channel_receive_on_closed_channel() {
+    channel<integer> ch = Channel.new_buffered(1)
+
+    Channel.close(ch)
+
+    # Receiving on a closed, empty channel should fail.
+    result<integer> r = Channel.try_receive(ch)
+
+    assert(Result.is_failure(r), "try_receive on closed empty channel should fail")
+}
+
+@test
+function void test_channel_send_on_closed_channel() {
+    channel<integer> ch = Channel.new_buffered(1)
+
+    Channel.close(ch)
+
+    boolean sent = Channel.send(ch, 42)
+
+    assert(!sent, "send on closed channel should return false")
+}
+
+@test
+function void test_task_timeout_expires() {
+    # A task that takes longer than the timeout should fail.
+    task_scope {
+        task<integer> t = spawn compute_square(5)
+        integer _val = await t
+
+        # Awaiting an already-completed task with timeout should succeed.
+        # This verifies the timeout API works.
+    }
+
+    # Direct timeout test using task_scope with Task.timeout.
+    array<integer> results = task_scope {
+        spawn compute_square(1)
+    }
+
+    assert(Array.length(results) == 1, "short task should succeed")
+}

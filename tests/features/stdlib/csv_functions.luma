@@ -1,0 +1,309 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Csv Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────────
+# Parsing (deserialize)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_csv_parse_basic() {
+    array<array<string>> rows = Csv.deserialize("a,b,c\n1,2,3\n4,5,6")
+    |> Result.unwrap()
+
+    assert(Array.length(rows) == 3)
+    assert(rows[0][0] == "a")
+    assert(rows[1][1] == "2")
+}
+
+@test
+function void test_csv_parse_quoted() {
+    array<array<string>> rows = Csv.deserialize("name,value\n\"hello, world\",42")
+    |> Result.unwrap()
+
+    assert(Array.length(rows) == 2)
+    assert(rows[1][0] == "hello, world")
+}
+
+@test
+function void test_csv_parse_single_row() {
+    array<array<string>> rows = Csv.deserialize("x,y,z")
+    |> Result.unwrap()
+
+    assert(Array.length(rows) == 1)
+    assert(rows[0][2] == "z")
+}
+
+@test
+function void test_csv_parse_empty_fields() {
+    array<array<string>> rows = Csv.deserialize("a,,c\n,b,")
+    |> Result.unwrap()
+
+    assert(rows[0][1] == "")
+    assert(rows[1][0] == "")
+    assert(rows[1][2] == "")
+}
+
+@test
+function void test_csv_parse_with_custom_delimiter() {
+    array<array<string>> rows = Csv.deserialize_with("a;b\n1;2", {"delimiter": ";"})
+    |> Result.unwrap()
+
+    assert(rows[0][0] == "a")
+    assert(rows[1][1] == "2")
+}
+
+# ───────────────────────────────────────────────────────────
+# Serialization
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_csv_serialize() {
+    string csv = Csv.serialize([["name", "age"], ["Alice", "30"]]) |> Result.unwrap()
+
+    assert(String.contains(csv, "name,age"))
+    assert(String.contains(csv, "Alice,30"))
+}
+
+@test
+function void test_csv_serialize_with_custom_delimiter() {
+    string csv = Csv.serialize_with([["a", "b"], ["1", "2"]], {"delimiter": ";"}) |> Result.unwrap()
+
+    assert(String.contains(csv, "a;b"))
+    assert(String.contains(csv, "1;2"))
+}
+
+@test
+function void test_csv_serialize_roundtrip() {
+    array<array<string>> original = [["x", "y"], ["1", "2"], ["3", "4"]]
+
+    string csv = Csv.serialize(original) |> Result.unwrap()
+
+    array<array<string>> parsed = Csv.deserialize(csv) |> Result.unwrap()
+
+    assert(Array.length(parsed) == 3)
+    assert(parsed[0][0] == "x")
+    assert(parsed[2][1] == "4")
+}
+
+# ───────────────────────────────────────────────────────────
+# Records (named columns)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_csv_deserialize_records() {
+    array<dictionary<string>> records =
+    Csv.deserialize_records("name,age\nAlice,30\nBob,25")
+    |> Result.unwrap()
+
+    assert(Array.length(records) == 2)
+    assert(records[0]["name"] == "Alice")
+    assert(records[1]["age"] == "25")
+}
+
+@test
+function void test_csv_serialize_records() {
+    array<dictionary<string>> records = [
+        {"name": "Alice", "age": "30"},
+        {"name": "Bob", "age": "25"}
+    ]
+
+    string csv = Csv.serialize_records(records)
+
+    assert(String.contains(csv, "Alice"))
+    assert(String.contains(csv, "Bob"))
+}
+
+# ───────────────────────────────────────────────────────────
+# Utility functions
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_csv_header() {
+    array<string> h = Csv.header("name,age\nAlice,30") |> Result.unwrap()
+
+    assert(Array.length(h) == 2)
+    assert(h[0] == "name")
+    assert(h[1] == "age")
+}
+
+@test
+function void test_csv_count_rows() {
+    integer n = Csv.count_rows("a,b\n1,2\n3,4") |> Result.unwrap()
+
+    assert(n == 2)
+}
+
+@test
+function void test_csv_count_rows_empty_body() {
+    integer n = Csv.count_rows("a,b") |> Result.unwrap()
+
+    assert(n == 0)
+}
+
+# ─── File I/O ─────────────────────────────────────────────
+
+@test
+function void test_csv_write_file_then_read_file() {
+    array<dictionary<string>> data = [
+        {"name": "Alice", "score": "95"},
+        {"name": "Bob", "score": "87"}
+    ]
+
+    result<boolean> _w = Csv.write_file("test_csv_luma.csv", data)
+
+    array<dictionary<string>> loaded = Csv.read_file("test_csv_luma.csv")
+    |> Result.unwrap()
+
+    assert(Array.length(loaded) == 2)
+    assert(loaded[0]["name"] == "Alice")
+    assert(loaded[0]["score"] == "95")
+    assert(loaded[1]["score"] == "87")
+
+    # Clean up
+    result<boolean> _d = FileSystem.delete("test_csv_luma.csv")
+}
+
+@test
+function void test_csv_read_file_missing() {
+    result<array<dictionary<string>>> r = Csv.read_file("nonexistent_file.csv")
+
+    assert(Result.is_failure(r))
+}
+
+# ───────────────────────────────────────────────────────────
+# RFC 4180 quoting and line endings
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_csv_parse_crlf() {
+    array<array<string>> rows = Csv.deserialize("a,b\r\n1,2\r\n3,4")
+    |> Result.unwrap()
+
+    assert(Array.length(rows) == 3)
+    assert(rows[1][0] == "1")
+    assert(rows[2][1] == "4")
+}
+
+@test
+function void test_csv_parse_escaped_quotes() {
+    array<array<string>> rows = Csv.deserialize("\"she said \"\"hi\"\"\",x")
+    |> Result.unwrap()
+
+    assert(rows[0][0] == "she said \"hi\"")
+    assert(rows[0][1] == "x")
+}
+
+@test
+function void test_csv_parse_multiline_field() {
+    # A newline inside a quoted field is data, not a row separator.
+    array<array<string>> rows = Csv.deserialize("\"line1\nline2\",b")
+    |> Result.unwrap()
+
+    assert(Array.length(rows) == 1)
+    assert(rows[0][0] == "line1\nline2")
+    assert(rows[0][1] == "b")
+}
+
+@test
+function void test_csv_serialize_quotes_special() {
+    # A field containing the delimiter must be quoted on output.
+    string csv = Csv.serialize([["a,b", "c"]]) |> Result.unwrap()
+
+    assert(String.contains(csv, "\"a,b\""))
+}
+
+@test
+function void test_csv_serialize_with_custom_quote() {
+    string csv = Csv.serialize_with([["a;b", "c"]], {"delimiter": ";", "quote": "'"})
+    |> Result.unwrap()
+
+    assert(String.contains(csv, "'a;b'"))
+}
+
+@test
+function void test_csv_roundtrip_embedded() {
+    # Embedded delimiters, quotes and newlines must survive a serialise/parse cycle.
+    array<array<string>> original = [["a\nb", "c,d"], ["e\"f", "g"]]
+
+    string csv = Csv.serialize(original) |> Result.unwrap()
+
+    array<array<string>> parsed = Csv.deserialize(csv) |> Result.unwrap()
+
+    assert(Array.length(parsed) == 2)
+    assert(parsed[0][0] == "a\nb")
+    assert(parsed[0][1] == "c,d")
+    assert(parsed[1][0] == "e\"f")
+}
+
+@test
+function void test_csv_count_rows_quoted_newline() {
+    # The newline lives inside a quoted field, so this is one data row.
+    integer n = Csv.count_rows("a,b\n\"x\ny\",2") |> Result.unwrap()
+
+    assert(n == 1)
+}
+
+@test
+function void test_csv_deserialize_records_ragged() {
+    # A data row shorter than the header is padded with empty fields.
+    array<dictionary<string>> recs = Csv.deserialize_records("a,b,c\n1,2")
+    |> Result.unwrap()
+
+    assert(Array.length(recs) == 1)
+    assert(recs[0]["a"] == "1")
+    assert(recs[0]["b"] == "2")
+    assert(recs[0]["c"] == "")
+}
+
+@test
+function void test_csv_serialize_records_roundtrip() {
+    array<dictionary<string>> records = [
+        {"name": "Alice", "city": "Berlin"},
+        {"name": "Bob", "city": "Paris"}
+    ]
+
+    string csv = Csv.serialize_records(records)
+
+    array<dictionary<string>> parsed = Csv.deserialize_records(csv)
+    |> Result.unwrap()
+
+    assert(Array.length(parsed) == 2)
+    assert(parsed[0]["name"] == "Alice")
+    assert(parsed[1]["city"] == "Paris")
+}
+
+# ───────────────────────────────────────────────────────────
+# Negative: malformed input yields a failure result
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_csv_deserialize_unterminated_fails() {
+    result<array<array<string>>> r = Csv.deserialize("\"unterminated")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_csv_deserialize_records_unterminated_fails() {
+    result<array<dictionary<string>>> r = Csv.deserialize_records("\"oops")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_csv_header_unterminated_fails() {
+    result<array<string>> r = Csv.header("\"oops")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_csv_count_rows_unterminated_fails() {
+    result<integer> r = Csv.count_rows("\"oops")
+
+    assert(Result.is_failure(r))
+}

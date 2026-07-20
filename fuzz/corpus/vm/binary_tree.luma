@@ -1,0 +1,41 @@
+# VM: BinaryTree construction, traversal, lookup, and transformations.
+@main
+function void main() {
+    binary_tree base = BinaryTree.from_array([5, 3, 7, 1, 9, 2, 8, 4, 6])
+
+    binary_tree grown = base
+    |> BinaryTree.insert(10)
+    |> BinaryTree.insert(0)
+    |> BinaryTree.remove(5)
+
+    boolean _has = BinaryTree.contains(grown, 7)
+    integer _len = BinaryTree.length(grown)
+    boolean _empty = BinaryTree.is_empty(grown)
+    integer _height = BinaryTree.height(grown)
+
+    integer _min = BinaryTree.min(grown) |> Result.unwrap_or(-1)
+    integer _max = BinaryTree.max(grown) |> Result.unwrap_or(-1)
+    integer _floor = BinaryTree.floor_value(grown, 6) |> Result.unwrap_or(-1)
+    integer _ceil = BinaryTree.ceiling_value(grown, 6) |> Result.unwrap_or(-1)
+    integer _succ = BinaryTree.successor(grown, 6) |> Result.unwrap_or(-1)
+    integer _pred = BinaryTree.predecessor(grown, 6) |> Result.unwrap_or(-1)
+
+    array<integer> _in = BinaryTree.inorder(grown)
+    array<integer> _pre = BinaryTree.preorder(grown)
+    array<integer> _post = BinaryTree.postorder(grown)
+    array<integer> _level = BinaryTree.level_order(grown)
+    array<integer> _arr = BinaryTree.to_array(grown)
+
+    binary_tree _balanced = BinaryTree.balance(grown)
+    binary_tree _merged = BinaryTree.union(base, BinaryTree.from_array([11, 12, 13]))
+
+    binary_tree _even = grown
+    |> BinaryTree.filter((integer x) -> x % 2 == 0)
+    |> Result.unwrap_or(BinaryTree.new())
+
+    integer _sum = grown
+    |> BinaryTree.reduce(0, (integer acc, integer x) -> acc + x)
+    |> Result.unwrap_or(0)
+
+    result<(binary_tree, binary_tree)> _parts = BinaryTree.partition(grown, (integer x) -> x > 5)
+}

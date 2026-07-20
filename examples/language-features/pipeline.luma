@@ -1,0 +1,55 @@
+# ═══════════════════════════════════════════════════════════
+# Data Pipeline
+#
+# Demonstrates the pipe operator, lambdas, higher-order
+# functions, and functional data transformations.
+# ═══════════════════════════════════════════════════════════
+
+record Product {
+    string name,
+    number price,
+    integer quantity
+}
+
+function string _format_product(Product product) {
+    number total = product.price * product.quantity
+
+    return "${product.name}: ${String.format_number(total, 2)}"
+}
+
+@main
+function void main() {
+    array<Product> inventory = [
+        Product { name = "Keyboard", price = 49.99, quantity = 3 },
+        Product { name = "Mouse", price = 29.99, quantity = 0 },
+        Product { name = "Monitor", price = 299.99, quantity = 1 },
+        Product { name = "Cable", price = 9.99, quantity = 12 },
+        Product { name = "Webcam", price = 79.99, quantity = 2 },
+        Product { name = "Headset", price = 59.99, quantity = 0 }
+    ]
+
+    array<string> report = inventory
+    !> Array.filter((Product product) -> product.quantity > 0)
+    !> Array.sort_by((Product product) -> -product.price)
+    !> Array.map(_format_product)
+    |> Result.unwrap_or([])
+
+    print("In-stock items (by price, descending):")
+
+    result<none> _ = report |> Array.each((string line) -> print("  ${line}"))
+
+    number total_value = inventory
+    !> Array.map((Product product) -> product.price * product.quantity)
+    !> Array.sum()
+    |> Result.unwrap_or(0.0)
+
+    print("\nTotal inventory value: ${String.format_number(total_value, 2)}")
+
+    integer in_stock = inventory
+    |> Array.count((Product product) -> product.quantity > 0)
+    |> Result.unwrap_or(0)
+
+    integer out_of_stock = Array.length(inventory) - in_stock
+
+    print("In stock: ${in_stock}, Out of stock: ${out_of_stock}")
+}

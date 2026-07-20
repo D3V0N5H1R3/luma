@@ -1,0 +1,12 @@
+# Long loop test — runs long enough for an async pause to interrupt.
+
+@main
+function void main() {
+    mutable integer sum = 0
+
+    for i in 1 .. 10001 {
+        sum += i
+    }
+
+    print("Sum: ${sum}")
+}

@@ -1,0 +1,328 @@
+# ═══════════════════════════════════════════════════════════
+# Mouse Draw — A terminal canvas with mouse support
+#
+# Demonstrates the Terminal module's mouse input capabilities:
+# raw mode, mouse tracking, cursor control, colors, and the
+# alternate screen buffer.
+#
+# Usage: luma examples/applications/mouse_draw.luma
+#
+# Controls:
+#   Left-click/drag  — draw with the current brush
+#   Right-click/drag — erase a cell
+#   Scroll wheel     — cycle brush colors (with the pointer over the canvas)
+#   1-5              — select a brush character
+#   c (twice)        — clear the canvas
+#   q / Escape       — quit
+# ═══════════════════════════════════════════════════════════
+
+# ─── Brush palette ─────────────────────────────────────────
+
+function string get_brush_char(integer index) {
+    array<string> brushes = ["█", "▓", "░", "●", "◆"]
+
+    return brushes[index]
+}
+
+function array<string> get_palette() {
+    return [
+        "red", "green", "yellow", "blue", "magenta",
+        "cyan", "white", "bright_red", "bright_green",
+        "bright_yellow", "bright_blue", "bright_magenta",
+        "bright_cyan", "bright_white"
+    ]
+}
+
+function string get_color_name(integer index) {
+    array<string> colors = get_palette()
+
+    return colors[index]
+}
+
+function integer count_colors() {
+    return Array.length(get_palette())
+}
+
+# ─── Parse mouse events ───────────────────────────────────
+#
+# Mouse events from Terminal.read_key are formatted as:
+#   "mouse:<action>:<row>:<col>"
+# where action is left_press, left_drag, left_release,
+# right_press, right_drag, right_release, wheel_up,
+# wheel_down, etc.
+
+function boolean is_mouse_event(string key) {
+    return String.starts_with(key, "mouse:")
+}
+
+function (string, integer, integer) parse_mouse_event(string key) {
+    array<string> parts = String.split(key, ":")
+
+    mutable string action = ""
+    mutable integer event_row = 0
+    mutable integer event_col = 0
+
+    if Array.length(parts) >= 2 {
+        action = parts[1]
+    }
+
+    if Array.length(parts) >= 3 {
+        event_row = match String.parse_integer(parts[2]) {
+            success(parsed_integer) { parsed_integer }
+            failure(_) { 0 }
+        }
+    }
+
+    if Array.length(parts) >= 4 {
+        event_col = match String.parse_integer(parts[3]) {
+            success(parsed_integer) { parsed_integer }
+            failure(_) { 0 }
+        }
+    }
+
+    return (action, event_row, event_col)
+}
+
+# ─── Canvas ────────────────────────────────────────────────
+#
+# The canvas is a flat array of strings (one per cell).
+# Empty cells contain a space.
+
+function array<string> make_canvas(integer width, integer height) {
+    return Array.repeat(" ", width * height) |> Result.unwrap()
+}
+
+function array<string> make_color_canvas(integer width, integer height) {
+    return Array.repeat("white", width * height) |> Result.unwrap()
+}
+
+function integer get_canvas_index(integer col, integer row, integer width) {
+    return (row - 1) * width + (col - 1)
+}
+
+function boolean is_within_canvas(integer row, integer col, integer canvas_rows, integer cols) {
+    return row >= 1 && row <= canvas_rows && col >= 1 && col <= cols
+}
+
+# ─── Rendering ─────────────────────────────────────────────
+
+function void draw_status_bar(integer cols, integer rows, string brush,
+string color_label, string status_text) {
+    Result.unwrap(Terminal.move_to(rows, 1))
+
+    string styled_brush = Result.unwrap(Terminal.color(color_label, brush))
+    string left = " Brush: ${styled_brush}  Color: ${color_label}  ${status_text}"
+    string right = "q: quit  c×2: clear  1-5: brush  scroll: color "
+    number raw_padding_width = cols - String.length(left) - String.length(right)
+    number padding_width = if raw_padding_width < 0 { 0 } else { raw_padding_width }
+    integer int_padding = Result.unwrap_or(Converter.to_integer(padding_width), 0)
+    string bar = "${left}${String.repeat(" ", int_padding)}${right}"
+
+    bar
+    |> String.pad_right(cols, " ")
+    |> Terminal.inverse()
+    |> Terminal.write()
+}
+
+function void draw_cell(integer col, integer row, string cell_character, string color_label) {
+    Result.unwrap(Terminal.move_to(row, col))
+
+    if cell_character == " " {
+        Terminal.write(" ")
+    } else {
+        Terminal.write(Result.unwrap(Terminal.color(color_label, cell_character)))
+    }
+}
+
+# ─── Main ──────────────────────────────────────────────────
+
+@main
+function void main() {
+    integer cols = Terminal.columns()
+    integer rows = Terminal.rows()
+    integer canvas_rows = rows - 1
+
+    mutable array<string> canvas = make_canvas(cols, canvas_rows)
+    # Store color per cell so erased cells don't need color info
+    mutable array<string> canvas_colors = make_color_canvas(cols, canvas_rows)
+
+    mutable integer brush_index = 0
+    mutable integer color_index = 0
+    mutable boolean is_running = true
+    mutable string last_status_text = ""
+    mutable boolean should_full_redraw = true
+    mutable boolean pending_clear = false
+
+    result<void> _ = Terminal.enable_raw_mode()
+
+    Terminal.enter_alternate_screen()
+    Terminal.hide_cursor()
+
+    result<void> _mouse = Terminal.enable_mouse()
+
+    while is_running {
+        # Full redraw when needed (start-up, clear, resize)
+        if should_full_redraw {
+            Terminal.clear_screen()
+
+            for row in 1 .. canvas_rows + 1 {
+                for col in 1 .. cols + 1 {
+                    integer cell_index = get_canvas_index(col, row, cols)
+
+                    if canvas[cell_index] != " " {
+                        draw_cell(col, row, canvas[cell_index], canvas_colors[cell_index])
+                    }
+                }
+            }
+
+            should_full_redraw = false
+        }
+
+        string current_brush = get_brush_char(brush_index)
+        string current_color = get_color_name(color_index)
+
+        draw_status_bar(cols, rows, current_brush, current_color, last_status_text)
+
+        string key = Result.unwrap_or(Terminal.read_key(), "")
+
+        if key == "" { is_running = false }
+
+        if String.length(key) > 0 {
+            # Clearing the canvas is destructive, so require a confirming second
+            # press; any other key cancels the pending clear.
+            boolean was_pending_clear = pending_clear
+            pending_clear = false
+
+            if key == "q" || key == "escape" {
+                is_running = false
+            } else if key == "c" {
+                if was_pending_clear {
+                    canvas = make_canvas(cols, canvas_rows)
+                    canvas_colors = make_color_canvas(cols, canvas_rows)
+                    last_status_text = "Canvas cleared"
+                    should_full_redraw = true
+                } else {
+                    pending_clear = true
+                    last_status_text = "Press c again to clear the canvas"
+                }
+            } else if key == "1" {
+                brush_index = 0
+            } else if key == "2" {
+                brush_index = 1
+            } else if key == "3" {
+                brush_index = 2
+            } else if key == "4" {
+                brush_index = 3
+            } else if key == "5" {
+                brush_index = 4
+            } else if is_mouse_event(key) {
+                (string action, integer event_row, integer event_col) = parse_mouse_event(key)
+
+                # Only draw within the canvas area (not on the status bar)
+                if is_within_canvas(event_row, event_col, canvas_rows, cols) {
+                    integer cell_index = get_canvas_index(event_col, event_row, cols)
+
+                    if action == "left_press" || action == "left_drag" {
+                        string brush_character = get_brush_char(brush_index)
+                        string brush_color = get_color_name(color_index)
+
+                        canvas[cell_index] = brush_character
+                        canvas_colors[cell_index] = brush_color
+
+                        draw_cell(event_col, event_row, brush_character, brush_color)
+
+                        last_status_text = "Draw (${event_row}, ${event_col})"
+                    } else if action == "right_press" || action == "right_drag" {
+                        canvas[cell_index] = " "
+
+                        draw_cell(event_col, event_row, " ", "white")
+
+                        last_status_text = "Erase (${event_row}, ${event_col})"
+                    } else if action == "wheel_up" {
+                        color_index = (color_index + 1) % count_colors()
+                        last_status_text = "Color: ${get_color_name(color_index)}"
+                    } else if action == "wheel_down" {
+                        color_index = (color_index - 1 + count_colors()) % count_colors()
+                        last_status_text = "Color: ${get_color_name(color_index)}"
+                    }
+                }
+            }
+        }
+    }
+
+    Terminal.disable_mouse()
+    Terminal.show_cursor()
+    Terminal.leave_alternate_screen()
+    Terminal.disable_raw_mode()
+
+    print("Goodbye!")
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+# The canvas, brush and mouse-parsing logic is asserted directly; the Terminal
+# rendering is driven through the headless capture buffer (Terminal.test_*), so
+# the example is verified without a real terminal.
+
+@test
+function void test_brush_palette_characters() {
+    assert(get_brush_char(0) == "█")
+    assert(get_brush_char(4) == "◆")
+}
+
+@test
+function void test_color_palette_cycles_through_fourteen() {
+    assert(count_colors() == 14)
+    assert(get_color_name(0) == "red")
+    assert(get_color_name(13) == "bright_white")
+}
+
+@test
+function void test_is_mouse_event_detects_prefix() {
+    assert(is_mouse_event("mouse:left_press:5:10"))
+    assert(!is_mouse_event("q"))
+}
+
+@test
+function void test_parse_mouse_event_extracts_action_and_position() {
+    (string action, integer event_row, integer event_col) = parse_mouse_event("mouse:left_press:5:10")
+    assert(action == "left_press")
+    assert(event_row == 5)
+    assert(event_col == 10)
+}
+
+@test
+function void test_canvas_index_is_row_major() {
+    assert(get_canvas_index(1, 1, 80) == 0)
+    assert(get_canvas_index(1, 2, 80) == 80)
+    assert(get_canvas_index(10, 1, 80) == 9)
+}
+
+@test
+function void test_is_within_canvas_bounds() {
+    assert(is_within_canvas(1, 1, 24, 80))
+    assert(is_within_canvas(24, 80, 24, 80))
+    assert(!is_within_canvas(0, 1, 24, 80))
+    assert(!is_within_canvas(25, 1, 24, 80))
+    assert(!is_within_canvas(1, 81, 24, 80))
+}
+
+@test
+function void test_status_bar_renders_through_capture() {
+    array<string> no_keys = []
+    Terminal.test_start(no_keys)
+    draw_status_bar(80, 24, "█", "red", "Draw (3, 5)")
+    string out = Terminal.test_stop()
+    assert(String.contains(out, "Brush:"))
+    assert(String.contains(out, "Color: red"))
+    assert(String.contains(out, "Draw (3, 5)"))
+    assert(String.contains(out, "q: quit"))
+}
+
+@test
+function void test_draw_cell_writes_colored_character() {
+    array<string> no_keys = []
+    Terminal.test_start(no_keys)
+    draw_cell(5, 3, "█", "red")
+    string captured = Terminal.test_stop()
+    assert(String.contains(captured, "█"))
+}

@@ -1,0 +1,49 @@
+{
+    "$comment": "Machine-readable download protocol constants shared by all Luma editor extensions. Extensions should reference these values instead of hardcoding them. See download-spec.md for the full protocol.",
+
+    "github_repo": "d3v0n5h1r3/luma",
+
+    "urls": {
+        "api_latest": "https://api.github.com/repos/d3v0n5h1r3/luma/releases/latest",
+        "api_tagged": "https://api.github.com/repos/d3v0n5h1r3/luma/releases/tags/{tag}",
+        "download_tagged": "https://github.com/d3v0n5h1r3/luma/releases/download/{tag}/{asset}",
+        "download_latest": "https://github.com/d3v0n5h1r3/luma/releases/latest/download/{asset}"
+    },
+
+    "checksums": {
+        "filename": "SHA256SUMS",
+        "algorithm": "sha256",
+        "format": "{64-char hex hash}  {filename}",
+        "separator": "  "
+    },
+
+    "asset_naming": {
+        "pattern": "{binary}-{suffix}",
+        "binaries": ["luma_lsp", "luma_dap", "luma"],
+        "binary_extension": {
+            "windows": ".exe",
+            "linux": "",
+            "macos": ""
+        }
+    },
+
+    "retry_policy": {
+        "max_retries": 3,
+        "base_delay_ms": 1000,
+        "max_delay_ms": 30000,
+        "backoff_formula": "min(base_delay_ms * 2^attempt, max_delay_ms)",
+        "$comment": "VS Code implements retry with exponential backoff. Zed uses a single attempt via the editor API."
+    },
+
+    "timeouts": {
+        "request_timeout_ms": 30000,
+        "download_timeout_ms": 120000,
+        "max_redirects": 5
+    },
+
+    "transport": {
+        "require_https": true,
+        "reject_https_to_http_redirect": true,
+        "user_agent_prefix": "luma"
+    }
+}

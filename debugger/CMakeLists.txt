@@ -1,0 +1,40 @@
+# debugger/CMakeLists.txt
+# Debug Adapter Protocol (DAP) implementation for Luma.
+
+luma_add_tool_library(dap
+    SOURCES
+        source/dap_server.cpp
+        source/dap_server_execution.cpp
+        source/dap_server_lifecycle.cpp
+        source/dap_server_breakpoints.cpp
+        source/dap_server_inspection.cpp
+        source/dap_handler_context.cpp
+        source/dap_transport.cpp
+        source/dap_tcp_transport.cpp
+        source/dap_types.cpp
+        source/debug_session.cpp
+        source/thread_state_manager.cpp
+        source/debug_execution_engine.cpp
+        source/debug_execution_lifecycle.cpp
+        source/debug_execution_control.cpp
+        source/debug_execution_hooks.cpp
+        source/vm_hook_registry.cpp
+        source/breakpoint_shared_context.cpp
+        source/breakpoint_manager.cpp
+        source/line_breakpoint_manager.cpp
+        source/function_breakpoint_manager.cpp
+        source/data_breakpoint_manager.cpp
+        source/dap_breakpoint_validator.cpp
+        source/compiled_breakpoint.cpp
+        source/expression_compiler.cpp
+        source/variable_inspector.cpp
+        source/value_expander.cpp
+        source/expression_evaluator.cpp
+        source/time_travel.cpp
+        source/custom_visualizer.cpp
+        source/hot_reloader.cpp
+        source/source_manager_locator.cpp
+        source/vm_debug_adapter.cpp
+    DEPENDS
+        luma_core
+)

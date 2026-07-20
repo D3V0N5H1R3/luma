@@ -1,0 +1,254 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Random Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_random_generate_boolean() {
+    boolean is_generated = Random.generate_boolean()
+
+    assert(is_generated || !is_generated)
+}
+
+@test
+function void test_random_integer() {
+    integer random_integer = Result.unwrap(Random.generate_integer(0, 100))
+
+    assert(random_integer >= 0 && random_integer <= 100)
+}
+
+@test
+function void test_random_integer_singleton() {
+    integer only = Result.unwrap(Random.generate_integer(7, 7))
+
+    assert(only == 7)
+}
+
+@test
+function void test_random_integer_invalid_range() {
+    result<integer> bad = Random.generate_integer(100, 0)
+
+    # lo > hi should produce a failure, not a value.
+    assert(Result.is_failure(bad))
+}
+
+@test
+function void test_random_integer_wide_range() {
+    # The full int64 span previously overflowed and divided by zero. It must now
+    # return a value inside the range. (INT64_MIN cannot be written as a literal,
+    # so build it from INT64_MIN + 1.)
+    mutable integer lo = -9223372036854775807
+    lo = lo - 1
+
+    integer v = Result.unwrap(Random.generate_integer(lo, 9223372036854775807))
+
+    assert(v >= lo && v <= 9223372036854775807)
+}
+
+@test
+function void test_random_number() {
+    number random_number = Random.generate_number()
+
+    assert(random_number >= 0.0 && random_number <= 1.0)
+}
+
+@test
+function void test_random_string() {
+    string random_string = Result.unwrap(Random.generate_string(16))
+
+    assert(String.length(random_string) == 16)
+}
+
+@test
+function void test_random_choice() {
+    array<integer> items = [10, 20, 30, 40, 50]
+    result<integer> choice_result = Random.choice(items)
+
+    assert(Result.is_success(choice_result))
+
+    integer picked = Result.unwrap(choice_result)
+
+    assert(picked in items)
+
+    result<integer> empty_result = Random.choice([])
+
+    assert(!Result.is_success(empty_result))
+}
+
+@test
+function void test_random_shuffle() {
+    array<integer> numbers = [1, 2, 3, 4, 5]
+    array<integer> shuffled = Random.shuffle(numbers)
+
+    assert(Array.length(shuffled) == 5)
+    assert(Result.unwrap(Array.sum(shuffled)) == 15)
+}
+
+@test
+function void test_random_shuffle_preserves_elements() {
+    array<integer> numbers = [1, 2, 3, 4, 5]
+    array<integer> shuffled = Random.shuffle(numbers)
+
+    # A shuffle is a permutation: every original element survives exactly once.
+    assert(Array.length(shuffled) == 5)
+    assert(1 in shuffled && 2 in shuffled && 3 in shuffled && 4 in shuffled && 5 in shuffled)
+}
+
+@test
+function void test_random_sample() {
+    array<integer> numbers = [10, 20, 30, 40, 50]
+    array<integer> sampled = Random.sample(numbers, 3) |> Result.unwrap()
+
+    assert(Array.length(sampled) == 3)
+}
+
+@test
+function void test_random_sample_too_large() {
+    array<integer> numbers = [10, 20, 30]
+
+    # A count beyond the array size fails (per the documented contract).
+    result<array<integer>> bad = Random.sample(numbers, 10)
+
+    assert(Result.is_failure(bad))
+}
+
+@test
+function void test_random_sample_zero() {
+    array<integer> numbers = [10, 20, 30]
+    array<integer> sampled = Random.sample(numbers, 0) |> Result.unwrap()
+
+    assert(Array.length(sampled) == 0)
+}
+
+@test
+function void test_random_sample_negative() {
+    result<array<integer>> bad = Random.sample([10, 20, 30], -1)
+
+    assert(Result.is_failure(bad))
+}
+
+@test
+function void test_random_generate_string_invalid() {
+    result<string> bad = Random.generate_string(-1)
+
+    assert(Result.is_failure(bad))
+}
+
+@test
+function void test_random_uuid() {
+    string id = Random.generate_uuid()
+
+    # UUID v4 format: 8-4-4-4-12 = 36 characters
+    assert(String.length(id) == 36)
+    assert(String.contains(id, "-"))
+}
+
+@test
+function void test_random_uuid_uniqueness() {
+    string id1 = Random.generate_uuid()
+    string id2 = Random.generate_uuid()
+
+    assert(id1 != id2)
+}
+
+# ─── Secure Random Functions ─────────────────────────────
+
+@test
+function void test_random_secure_boolean() {
+    result<boolean> r = Random.secure_boolean()
+
+    # May fail if TLS not available, but should not throw
+    if Result.is_success(r) {
+        boolean val = Result.unwrap(r)
+
+        assert(val || !val)
+    }
+}
+
+@test
+function void test_random_secure_integer() {
+    result<integer> r = Random.secure_integer(0, 100)
+
+    if Result.is_success(r) {
+        integer val = Result.unwrap(r)
+
+        assert(val >= 0 && val <= 100)
+    }
+}
+
+@test
+function void test_random_secure_integer_singleton() {
+    result<integer> r = Random.secure_integer(42, 42)
+
+    if Result.is_success(r) {
+        assert(Result.unwrap(r) == 42)
+    }
+}
+
+@test
+function void test_random_secure_integer_wide_range() {
+    # Regression: the full int64 span previously triggered a division-by-zero
+    # crash in the secure path. It must now return cleanly — a value when the
+    # secure backend is available, a failure when it is not — but never crash.
+    mutable integer lo = -9223372036854775807
+    lo = lo - 1
+
+    result<integer> r = Random.secure_integer(lo, 9223372036854775807)
+
+    if Result.is_success(r) {
+        integer val = Result.unwrap(r)
+
+        assert(val >= lo && val <= 9223372036854775807)
+    }
+}
+
+@test
+function void test_random_secure_integer_invalid_range() {
+    result<integer> r = Random.secure_integer(100, 0)
+
+    # lo > hi should produce a failure
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_random_secure_number() {
+    result<number> r = Random.secure_number()
+
+    if Result.is_success(r) {
+        number val = Result.unwrap(r)
+
+        assert(val >= 0.0 && val <= 1.0)
+    }
+}
+
+@test
+function void test_random_secure_string() {
+    result<string> r = Random.secure_string(16)
+
+    if Result.is_success(r) {
+        string val = Result.unwrap(r)
+
+        assert(String.length(val) == 16)
+    }
+}
+
+@test
+function void test_random_secure_string_invalid_length() {
+    result<string> r = Random.secure_string(-1)
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_random_secure_uuid() {
+    result<string> r = Random.secure_uuid()
+
+    if Result.is_success(r) {
+        string val = Result.unwrap(r)
+
+        assert(String.length(val) == 36)
+        assert(String.contains(val, "-"))
+    }
+}

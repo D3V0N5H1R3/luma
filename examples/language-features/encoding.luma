@@ -1,0 +1,46 @@
+# ═══════════════════════════════════════════════════════════
+# Encoding
+#
+# Demonstrates the Encoder standard library module:
+# Base64 encoding/decoding, URL-safe Base64, and
+# URL percent-encoding.
+# ═══════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # ── Base64 ──
+    print("=== Base64 ===")
+
+    string original = "Hello, Luma!"
+    string encoded = Result.unwrap(Encoder.encode_base64(original))
+    string decoded = Result.unwrap(Encoder.decode_base64(encoded))
+
+    print("original: ${original}")
+    print("encoded:  ${encoded}")
+    print("decoded:  ${decoded}")
+    print("roundtrip: ${original == decoded}")
+
+    # ── URL-safe Base64 ──
+    print("")
+    print("=== URL-safe Base64 ===")
+
+    string data = "subjects?foo=1&bar=2"
+    string url_encoded = Result.unwrap(Encoder.encode_base64url(data))
+    string url_decoded = Result.unwrap(Encoder.decode_base64url(url_encoded))
+
+    print("original:    ${data}")
+    print("base64url:   ${url_encoded}")
+    print("decoded:     ${url_decoded}")
+
+    # ── URL percent-encoding ──
+    print("")
+    print("=== URL encoding ===")
+
+    string query = "name=Luma Lang&version=1.0&tag=awesome!"
+    string pct_encoded = Result.unwrap(Encoder.encode_url(query))
+    string pct_decoded = Result.unwrap(Encoder.decode_url(pct_encoded))
+
+    print("original: ${query}")
+    print("encoded:  ${pct_encoded}")
+    print("decoded:  ${pct_decoded}")
+}

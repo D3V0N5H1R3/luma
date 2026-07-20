@@ -1,0 +1,49 @@
+{
+  // ─────────────────────────────────────────────────────────────
+  // Luma — markdownlint-cli2 Configuration
+  //
+  // Lints project Markdown for structural consistency. Rules are tuned to the
+  // documented house style (instructions/markdown.instructions.md) and the
+  // shared .editorconfig. The CI gate lives in .github/workflows/ci-markdown.yml.
+  // ─────────────────────────────────────────────────────────────
+  "config": {
+    "default": true,
+
+    // Prose is not hard-wrapped; line length is intentionally unbounded for
+    // Markdown (see .editorconfig: max_line_length is off for *.md).
+    "MD013": false,
+
+    // House style indents nested lists by 4 spaces, not the tool's default 2.
+    "MD007": { "indent": 4 },
+
+    // Allow repeated headings as long as they are not siblings (e.g. a
+    // recurring "Usage" subsection under different top-level sections).
+    "MD024": { "siblings_only": true },
+
+    // Inline HTML used deliberately for collapsible sections and line breaks.
+    "MD033": { "allowed_elements": ["details", "summary", "br"] },
+
+    // Table pipe-alignment (padding every cell to a uniform column width) is a
+    // human-maintained convention here; markdownlint cannot auto-fix it and the
+    // existing tables are not pixel-aligned, so this rule is left off. The
+    // padding preference is still documented in markdown.instructions.md §7.
+    "MD060": false,
+
+    // Prompt files (.github/prompts) and editor walkthrough fragments
+    // (extensions/**/walkthroughs) intentionally open with front matter or an
+    // H2 rather than a top-level heading; MD025 still guarantees a single H1.
+    "MD041": false,
+
+    // The documented admonition style (markdown.instructions.md §9) places
+    // separate "> **Note:**" / "> **Warning:**" blockquotes one blank line
+    // apart, which this rule would otherwise flag as an ambiguous quote break.
+    "MD028": false
+  },
+  "globs": ["**/*.md"],
+  "ignores": [
+    "external/**",
+    "**/node_modules/**",
+    "build/**",
+    "build-*/**"
+  ]
+}

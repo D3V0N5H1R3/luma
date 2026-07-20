@@ -1,0 +1,57 @@
+# ═══════════════════════════════════════════════════════════
+# HTTP Client
+#
+# Demonstrates the Http module — URL parsing, query string
+# helpers, and issuing a request with result<T> error handling.
+#
+# NOTE: The request targets a closed local port so the example
+# fails fast without needing a live server.
+# ═══════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # ── URL Parsing ──
+    print("=== URL Parsing ===")
+
+    string url = "http://api.example.com:8080/v1/users?page=2&limit=10"
+    Http.UrlParts parts = Http.parse_url(url)
+
+    print("URL:    ${url}")
+    print("Scheme: ${parts.scheme}")
+    print("Host:   ${parts.host}")
+    print("Port:   ${parts.port}")
+    print("Path:   ${parts.path}")
+    print("Query:  ${parts.query}")
+
+    # ── Query Strings ──
+    print("\n=== Query Strings ===")
+
+    dictionary<string> params = {
+        "search": "luma lang",
+        "page": "1",
+        "sort": "date"
+    }
+    string query = Http.build_query(params)
+
+    print("Built query: ${query}")
+
+    dictionary<string> parsed = Http.parse_query(query)
+
+    print("Parsed back: search=${parsed["search"]}, page=${parsed["page"]}")
+
+    # ── HTTPS detection ──
+    print("\n=== HTTPS Detection ===")
+
+    # Use a closed localhost port so the request fails fast instead
+    # of hanging on an unreachable external host.
+    result<Http.Response> r = Http.get("https://localhost:1")
+
+    match r {
+        success(response) {
+            print("Request unexpectedly succeeded with status ${response.status}.")
+        }
+        failure(_) {
+            print("Request failed as expected: the local HTTPS port is closed.")
+        }
+    }
+}

@@ -1,0 +1,73 @@
+# Converter benchmarks: type conversions, base conversions (binary, hex),
+# Roman numerals, number-to-words, ordinals, and character/codepoint
+# encoding and decoding.
+
+function BenchResult run_converter_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # --- Type conversions ---
+
+    st = time_it(st, "Converter.to_string", 10000, () -> {
+        string _s = Converter.to_string(123456)
+    })
+
+    st = time_it(st, "Converter.to_integer (string)", 10000, () -> {
+        result<integer> _i = Converter.to_integer("123456")
+    })
+
+    st = time_it(st, "Converter.to_number (string)", 10000, () -> {
+        result<number> _n = Converter.to_number("3.14159")
+    })
+
+    st = time_it(st, "Converter.to_boolean", 10000, () -> {
+        result<boolean> _b = Converter.to_boolean("true")
+    })
+
+    # --- Base conversions ---
+
+    st = time_it(st, "Converter.to_hexadecimal", 10000, () -> {
+        string _h = Converter.to_hexadecimal(3735928559)
+    })
+
+    st = time_it(st, "Converter.from_hexadecimal", 10000, () -> {
+        result<integer> _h = Converter.from_hexadecimal("deadbeef")
+    })
+
+    st = time_it(st, "Converter.to_binary", 10000, () -> {
+        string _b = Converter.to_binary(123456)
+    })
+
+    st = time_it(st, "Converter.from_binary", 10000, () -> {
+        result<integer> _b = Converter.from_binary("11110001001000000")
+    })
+
+    # --- Roman numerals (longest 1..3999 form stresses the encode/decode loops) ---
+
+    st = time_it(st, "Converter.to_roman", 10000, () -> {
+        result<string> _r = Converter.to_roman(3888)
+    })
+
+    st = time_it(st, "Converter.from_roman", 10000, () -> {
+        result<integer> _r = Converter.from_roman("MMMDCCCLXXXVIII")
+    })
+
+    # --- Words, ordinals, and codepoints ---
+
+    st = time_it(st, "Converter.number_to_words", 10000, () -> {
+        string _w = Converter.number_to_words(1234567)
+    })
+
+    st = time_it(st, "Converter.ordinal", 10000, () -> {
+        string _o = Converter.ordinal(112)
+    })
+
+    st = time_it(st, "Converter.character_to_codepoint", 10000, () -> {
+        result<integer> _c = Converter.character_to_codepoint("A")
+    })
+
+    st = time_it(st, "Converter.codepoint_to_character", 10000, () -> {
+        result<string> _c = Converter.codepoint_to_character(9733)
+    })
+
+    return st
+}

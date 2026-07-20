@@ -1,0 +1,448 @@
+# GraphicalUi Quiz — a multiple-choice quiz with scoring and a progress bar.
+# Demonstrates radio_group answer selection, a multi-step state machine
+# (select → submit → next → results), per-question grading, and a progress bar
+# bound to the question index.
+#
+# Selection is locked once an answer is submitted, so each question scores once;
+# the pure transition functions make the whole flow verifiable headlessly.
+
+# ─── Question bank ─────────────────────────────────────────
+
+function dictionary make_question(string prompt, array<string> options, string answer) {
+    mutable dictionary question = {"prompt": prompt}
+    question["options"] = options
+    question["answer"] = answer
+    return question
+}
+
+function array<dictionary> quiz_questions() {
+    return [
+        make_question(
+            "What is the capital of France?",
+            ["Paris", "London", "Berlin", "Madrid"],
+            "Paris"),
+        make_question(
+            "Which planet is known as the Red Planet?",
+            ["Venus", "Mars", "Jupiter", "Saturn"],
+            "Mars"),
+        make_question(
+            "What is 7 × 8?",
+            ["54", "56", "64", "58"],
+            "56"),
+        make_question(
+            "Who wrote 'Romeo and Juliet'?",
+            ["Dickens", "Austen", "Shakespeare", "Twain"],
+            "Shakespeare")
+    ]
+}
+
+function integer question_count() {
+    return Array.length(quiz_questions())
+}
+
+function dictionary current_question(dictionary model) {
+    array<dictionary> questions = quiz_questions()
+    return questions[Dictionary.get_or(model, "index", 0)]
+}
+
+# ─── Model + transitions (pure, fully testable) ────────────
+
+function dictionary quiz_initial() {
+    mutable dictionary model = {"index": 0}
+    model["selected"] = ""
+    model["score"] = 0
+    model["answered"] = false
+    model["finished"] = false
+    return model
+}
+
+# Picking an option only changes the selection before the answer is committed.
+function dictionary select_answer(dictionary model, string pick) {
+    if Dictionary.get_or(model, "answered", false) {
+        return model
+    }
+    mutable dictionary updated = model
+    updated["selected"] = pick
+    return updated
+}
+
+function dictionary do_submit(dictionary model) {
+    if Dictionary.get_or(model, "answered", false) {
+        return model
+    }
+    string selected = Dictionary.get_or(model, "selected", "")
+    if selected == "" {
+        return model
+    }
+    string answer = Dictionary.get_or(current_question(model), "answer", "")
+    mutable dictionary updated = model
+    updated["answered"] = true
+    if selected == answer {
+        updated["score"] = Dictionary.get_or(model, "score", 0) + 1
+    }
+    return updated
+}
+
+function dictionary do_next(dictionary model) {
+    integer next_index = Dictionary.get_or(model, "index", 0) + 1
+    mutable dictionary updated = model
+    if next_index >= question_count() {
+        updated["finished"] = true
+        # Moving to the results screen: announce the outcome and move focus to it.
+        return GraphicalUi.with_command(updated, GraphicalUi.batch([
+            GraphicalUi.announce("Quiz complete. You scored "
+                + "${Dictionary.get_or(updated, "score", 0)} out of ${question_count()}."),
+            GraphicalUi.focus("result")
+        ]))
+    }
+    updated["index"] = next_index
+    updated["selected"] = ""
+    updated["answered"] = false
+    # Announce the new question and move focus to the prompt so keyboard and
+    # screen-reader users are carried to the next step rather than left behind.
+    string prompt = Dictionary.get_or(current_question(updated), "prompt", "")
+    return GraphicalUi.with_command(updated, GraphicalUi.batch([
+        GraphicalUi.announce("Question ${next_index + 1} of ${question_count()}. ${prompt}"),
+        GraphicalUi.focus("prompt")
+    ]))
+}
+
+function string feedback_text(dictionary model) {
+    if !Dictionary.get_or(model, "answered", false) {
+        if Dictionary.get_or(model, "selected", "") == "" {
+            return "Select an answer to continue."
+        }
+        return "Choose an answer, then press Submit."
+    }
+    string answer = Dictionary.get_or(current_question(model), "answer", "")
+    if Dictionary.get_or(model, "selected", "") == answer {
+        return "Correct!"
+    }
+    return "Not quite — the answer is ${answer}."
+}
+
+function string grade_text(integer score, integer total) {
+    if score == total {
+        return "Perfect score!"
+    }
+    if score * 2 >= total {
+        return "Well done!"
+    }
+    return "Keep practising!"
+}
+
+# ─── View ──────────────────────────────────────────────────
+
+function dictionary<string> primary_style(string id) {
+    return {
+        "id": id,
+        "min_width": "140px",
+        "variant": GraphicalUi.PRIMARY
+    }
+}
+
+function dictionary<string> muted_submit_style() {
+    return {
+        "id": "btn-submit",
+        "min_width": "140px",
+        "variant": GraphicalUi.GHOST
+    }
+}
+
+function dictionary<string> review_option_style(string option, string selected, string answer) {
+    if option == answer {
+        return {
+            "padding": "8px 10px",
+            "border": "1px solid ${GraphicalUi.VAR_SUCCESS}",
+            "border_radius": GraphicalUi.VAR_RADIUS,
+            "background_color": "var(--gui-success-subtle-bg)",
+            "color": GraphicalUi.VAR_SUCCESS,
+            "font_weight": "600"
+        }
+    }
+    if option == selected {
+        return {
+            "padding": "8px 10px",
+            "border": "1px solid ${GraphicalUi.VAR_ERROR}",
+            "border_radius": GraphicalUi.VAR_RADIUS,
+            "background_color": "var(--gui-error-subtle-bg)",
+            "color": GraphicalUi.VAR_ERROR,
+            "font_weight": "600"
+        }
+    }
+    return {
+        "padding": "8px 10px",
+        "border": "1px solid ${GraphicalUi.VAR_BORDER}",
+        "border_radius": GraphicalUi.VAR_RADIUS,
+        "color": GraphicalUi.VAR_DISABLED_FG
+    }
+}
+
+function widget view_answer_review(array<string> options, string selected, string answer) {
+    mutable array<widget> rows = []
+    for option in options {
+        string prefix = if option == answer {
+            "✓ "
+        } else if option == selected {
+            "Your answer: "
+        } else {
+            ""
+        }
+        widget row = GraphicalUi.label("${prefix}${option}",
+            review_option_style(option, selected, answer))
+        rows = Array.push(rows, row)
+    }
+    return GraphicalUi.column(rows, GraphicalUi.spacing(6))
+}
+
+function widget action_button(dictionary model) {
+    if Dictionary.get_or(model, "answered", false) {
+        boolean last = Dictionary.get_or(model, "index", 0) == question_count() - 1
+        string label = if last { "Finish" } else { "Next" }
+        return GraphicalUi.button(label, () -> "next", primary_style("btn-next"))
+    }
+    if Dictionary.get_or(model, "selected", "") == "" {
+        # No selection yet: instead of a silent dead click, this Submit stays a
+        # real control that announces a validation hint so the press has feedback.
+        return GraphicalUi.button("Submit",
+            () -> GraphicalUi.with_command(model,
+                GraphicalUi.announce("Select an answer to continue before submitting.")),
+            muted_submit_style())
+    }
+    return GraphicalUi.button("Submit", () -> "submit", primary_style("btn-submit"))
+}
+
+# The static top of a question card: title bar, counter, progress, and prompt.
+# Returned as a widget list so view_active can splice it into the flat column.
+function array<widget> view_question_header(dictionary question, integer index) {
+    return [
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("help-circle", 20),
+            GraphicalUi.heading("Quiz", 1)
+        ]),
+        GraphicalUi.label("Question ${index + 1} of ${question_count()}", {
+            "font_size": GraphicalUi.VAR_TEXT_XS,
+            "font_weight": "600",
+            "color": GraphicalUi.VAR_DISABLED_FG
+        }),
+        GraphicalUi.progress_bar(index + 1, question_count()),
+        GraphicalUi.label(Dictionary.get_or(question, "prompt", ""), {
+            "id": "prompt",
+            "font_size": GraphicalUi.VAR_TEXT_LG,
+            "font_weight": "600"
+        })
+    ]
+}
+
+# Either the reviewed answer (once submitted) or the live radio choices.
+function widget view_answer_options(
+    dictionary model,
+    dictionary question,
+    array<string> options,
+    boolean answered
+) {
+    if answered {
+        return view_answer_review(
+            options,
+            Dictionary.get_or(model, "selected", ""),
+            Dictionary.get_or(question, "answer", ""))
+    }
+    return GraphicalUi.radio_group(
+        options,
+        Dictionary.get_or(model, "selected", ""),
+        (string pick) -> select_answer(model, pick)
+    )
+}
+
+function widget view_feedback(dictionary model, string feedback_color) {
+    return GraphicalUi.aria_live("polite", GraphicalUi.label(feedback_text(model), {
+        "id": "feedback",
+        "font_size": GraphicalUi.VAR_TEXT_SM,
+        "color": feedback_color
+    }))
+}
+
+function widget view_active(dictionary model) {
+    dictionary question = current_question(model)
+    array<string> options = Dictionary.get_or(question, "options", [])
+    integer index = Dictionary.get_or(model, "index", 0)
+    boolean answered = Dictionary.get_or(model, "answered", false)
+    boolean correct = Dictionary.get_or(model, "selected", "")
+        == Dictionary.get_or(question, "answer", "")
+    string feedback_color = if !answered {
+        GraphicalUi.VAR_DISABLED_FG
+    } else if correct {
+        GraphicalUi.VAR_SUCCESS
+    } else {
+        GraphicalUi.VAR_ERROR
+    }
+
+    return GraphicalUi.column(
+        Array.concat(
+            view_question_header(question, index),
+            [
+                view_answer_options(model, question, options, answered),
+                view_feedback(model, feedback_color),
+                action_button(model)
+            ]
+        ),
+        GraphicalUi.merge_styles(GraphicalUi.spacing(16), GraphicalUi.padding(16))
+    )
+}
+
+function widget view_result(dictionary model) {
+    integer score = Dictionary.get_or(model, "score", 0)
+    integer total = question_count()
+    return GraphicalUi.column([
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("award", 20),
+            GraphicalUi.heading("Quiz Complete", 1)
+        ]),
+        GraphicalUi.aria_live("polite", GraphicalUi.label("You scored ${score} / ${total}", {
+            "id": "result",
+            "font_size": GraphicalUi.VAR_TEXT_XL,
+            "font_weight": "700",
+            "text_align": "center",
+            "color": GraphicalUi.VAR_PRIMARY
+        })),
+        GraphicalUi.label(grade_text(score, total), {
+            "font_size": GraphicalUi.VAR_TEXT_MD,
+            "text_align": "center",
+            "color": GraphicalUi.VAR_DISABLED_FG
+        }),
+        GraphicalUi.button("Restart", () -> "restart", primary_style("btn-restart"))
+    ], GraphicalUi.merge_styles(GraphicalUi.spacing(16), GraphicalUi.padding(16)))
+}
+
+function widget view_quiz(dictionary model) {
+    if Dictionary.get_or(model, "finished", false) {
+        return view_result(model)
+    }
+    return view_active(model)
+}
+
+@main
+function void main() {
+    GraphicalUi.app(quiz_config())
+}
+
+# Exposed as a named function (rather than inlined in main) so the example's
+# behaviour can be driven and verified by the @test blocks without a window.
+function dictionary quiz_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Luma Quiz"
+    config["width"] = 440
+    config["height"] = 520
+    config["model"] = quiz_initial()
+    config["view"] = view_quiz
+    config["update"] = (dictionary model, string msg) -> match msg {
+        case == "submit" { do_submit(model) }
+        case == "next" { do_next(model) }
+        case == "restart" { quiz_initial() }
+        else { model }
+    }
+    return config
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+# Answers are chosen with select_answer (the same function the radio_group's
+# on_select calls), then committed by clicking the real Submit / Next buttons —
+# so the scoring state machine is exercised end to end without a window.
+
+function dictionary answer_and_submit(dictionary config, dictionary model, string pick) {
+    dictionary chosen = select_answer(model, pick)
+    return GraphicalUi.test_click(config, chosen, "btn-submit")
+}
+
+@test
+function void test_first_question_renders() {
+    dictionary config = quiz_config()
+    dictionary prompt = GraphicalUi.test_find(config, quiz_initial(), "prompt")
+    assert(Dictionary.get_or(prompt, "text", "") == "What is the capital of France?")
+}
+
+@test
+function void test_correct_answer_scores_a_point() {
+    dictionary config = quiz_config()
+    dictionary model = answer_and_submit(config, quiz_initial(), "Paris")
+    assert(Dictionary.get_or(model, "answered", false))
+    assert(Dictionary.get_or(model, "score", -1) == 1)
+}
+
+@test
+function void test_wrong_answer_scores_nothing() {
+    dictionary config = quiz_config()
+    dictionary model = answer_and_submit(config, quiz_initial(), "London")
+    assert(Dictionary.get_or(model, "answered", false))
+    assert(Dictionary.get_or(model, "score", -1) == 0)
+}
+
+@test
+function void test_submit_without_selection_is_ignored() {
+    dictionary config = quiz_config()
+    dictionary model = GraphicalUi.test_click(config, quiz_initial(), "btn-submit")
+    assert(!Dictionary.get_or(model, "answered", true))
+    assert(Dictionary.get_or(model, "score", -1) == 0)
+}
+
+@test
+function void test_selection_locks_after_submitting() {
+    dictionary config = quiz_config()
+    dictionary answered = answer_and_submit(config, quiz_initial(), "Paris")
+    dictionary attempted = select_answer(answered, "London")
+    assert(Dictionary.get_or(attempted, "selected", "") == "Paris")
+}
+
+@test
+function void test_radio_group_changes_selection() {
+    dictionary config = quiz_config()
+    # Start from a known selection ("Paris"), then pick another option via the radio.
+    dictionary chosen = select_answer(quiz_initial(), "Paris")
+    dictionary outcome = GraphicalUi.test_input(config, chosen, "Paris", "London")
+    assert(Dictionary.get_or(outcome, "selected", "") == "London")
+}
+
+@test
+function void test_next_advances_to_the_following_question() {
+    dictionary config = quiz_config()
+    dictionary answered = answer_and_submit(config, quiz_initial(), "Paris")
+    dictionary advanced = GraphicalUi.test_click(config, answered, "btn-next")
+    assert(Dictionary.get_or(advanced, "index", -1) == 1)
+    assert(!Dictionary.get_or(advanced, "answered", true))
+    assert(Dictionary.get_or(advanced, "selected", "x") == "")
+}
+
+@test
+function void test_playing_through_reaches_a_perfect_score() {
+    dictionary config = quiz_config()
+    mutable dictionary model = quiz_initial()
+    array<string> answers = ["Paris", "Mars", "56", "Shakespeare"]
+    for answer in answers {
+        model = answer_and_submit(config, model, answer)
+        model = GraphicalUi.test_click(config, model, "btn-next")
+    }
+    assert(Dictionary.get_or(model, "finished", false))
+    assert(Dictionary.get_or(model, "score", -1) == 4)
+}
+
+@test
+function void test_results_screen_shows_the_score() {
+    dictionary config = quiz_config()
+    mutable dictionary finished = quiz_initial()
+    finished["finished"] = true
+    finished["score"] = 3
+    dictionary found = GraphicalUi.test_find(config, finished, "result")
+    assert(Dictionary.get_or(found, "text", "") == "You scored 3 / 4")
+}
+
+@test
+function void test_restart_resets_the_quiz() {
+    dictionary config = quiz_config()
+    mutable dictionary finished = quiz_initial()
+    finished["finished"] = true
+    finished["score"] = 3
+    dictionary model = GraphicalUi.test_click(config, finished, "btn-restart")
+    assert(Dictionary.get_or(model, "index", -1) == 0)
+    assert(Dictionary.get_or(model, "score", -1) == 0)
+    assert(!Dictionary.get_or(model, "finished", true))
+}

@@ -1,0 +1,305 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Reference<T>
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+# ─── Basic operations ────────────────────────────────────
+
+@test
+function void test_reference_new_and_get() {
+    reference<integer> r = Reference.new(42)
+    integer value = Reference.get(r)
+
+    assert(value == 42)
+}
+
+@test
+function void test_reference_set() {
+    reference<string> r = Reference.new("hello")
+    Reference.set(r, "world")
+
+    assert(Reference.get(r) == "world")
+}
+
+@test
+function void test_reference_update() {
+    reference<integer> r = Reference.new(10)
+    Reference.update(r, (integer x) -> x * 2)
+
+    assert(Reference.get(r) == 20)
+}
+
+@test
+function void test_reference_swap() {
+    reference<integer> a = Reference.new(1)
+    reference<integer> b = Reference.new(2)
+    Reference.swap(a, b)
+
+    assert(Reference.get(a) == 2)
+    assert(Reference.get(b) == 1)
+}
+
+@test
+function void test_reference_inspect() {
+    reference<integer> r = Reference.new(42)
+    string s = Reference.inspect(r)
+
+    assert(s == "ref(42)")
+}
+
+# ─── Shared identity across closures ─────────────────────
+
+@test
+function void test_closure_captures_reference() {
+    reference<integer> count = Reference.new(0)
+
+    function() -> none increment = () -> {
+        Reference.set(count, Reference.get(count) + 1)
+    }
+
+    increment()
+    increment()
+    increment()
+
+    assert(Reference.get(count) == 3)
+}
+
+@test
+function void test_multiple_closures_share_reference() {
+    reference<integer> state = Reference.new(0)
+
+    function() -> none add_ten = () -> {
+        Reference.set(state, Reference.get(state) + 10)
+    }
+
+    function() -> none double_it = () -> {
+        Reference.update(state, (integer x) -> x * 2)
+    }
+
+    add_ten()
+    double_it()
+
+    assert(Reference.get(state) == 20)
+}
+
+@test
+function void test_reference_with_string_value() {
+    reference<string> label = Reference.new("initial")
+
+    function(string) -> none set_label = (string s) -> {
+        Reference.set(label, s)
+    }
+
+    set_label("updated")
+
+    assert(Reference.get(label) == "updated")
+}
+
+@test
+function void test_reference_with_boolean_value() {
+    reference<boolean> flag = Reference.new(false)
+
+    function() -> none toggle = () -> {
+        Reference.set(flag, !Reference.get(flag))
+    }
+
+    toggle()
+
+    assert(Reference.get(flag))
+
+    toggle()
+
+    assert(!Reference.get(flag))
+}
+
+@test
+function void test_reference_with_array_value() {
+    reference<array<integer>> items = Reference.new([1, 2, 3])
+    array<integer> current = Reference.get(items)
+
+    assert(Array.length(current) == 3)
+
+    Reference.set(items, [1, 2, 3, 4, 5])
+    array<integer> updated = Reference.get(items)
+
+    assert(Array.length(updated) == 5)
+}
+
+# ─── Pipe operator ───────────────────────────────────────
+
+@test
+function void test_reference_pipe_get() {
+    integer value = Reference.new(99) |> Reference.get()
+
+    assert(value == 99)
+}
+
+@test
+function void test_reference_pipe_inspect() {
+    string s = Reference.new(7) |> Reference.inspect()
+
+    assert(s == "ref(7)")
+}
+
+# ─── Callback-style pattern (TUI use case) ───────────────
+
+@test
+function void test_callback_counter_pattern() {
+    reference<integer> clicks = Reference.new(0)
+
+    function() -> none on_click = () -> {
+        Reference.update(clicks, (integer n) -> n + 1)
+    }
+
+    on_click()
+    on_click()
+    on_click()
+    on_click()
+    on_click()
+
+    assert(Reference.get(clicks) == 5)
+}
+
+@test
+function void test_callback_state_pattern() {
+    reference<string> state = Reference.new("idle")
+
+    function() -> none start_fn = () -> {
+        Reference.set(state, "running")
+    }
+
+    function() -> none stop_fn = () -> {
+        Reference.set(state, "stopped")
+    }
+
+    assert(Reference.get(state) == "idle")
+
+    start_fn()
+
+    assert(Reference.get(state) == "running")
+
+    stop_fn()
+
+    assert(Reference.get(state) == "stopped")
+}
+
+# ─── Reentrancy, nesting, and identity ───────────────────
+
+@test
+function void test_reference_update_is_reentrant() {
+    # Reference.update holds the cell's lock across the callback, so reading the
+    # same cell inside the callback only works because the lock is re-entrant.
+    reference<integer> r = Reference.new(5)
+
+    Reference.update(r, (integer current) -> Reference.get(r) + current)
+
+    assert(Reference.get(r) == 10)
+}
+
+@test
+function void test_reference_nested_cells() {
+    reference<integer> inner = Reference.new(1)
+    reference<reference<integer>> outer = Reference.new(inner)
+
+    Reference.set(Reference.get(outer), 99)
+
+    assert(Reference.get(inner) == 99)
+    assert(Reference.get(Reference.get(outer)) == 99)
+}
+
+@test
+function void test_reference_cells_are_independent() {
+    # Two cells created from the same value do not share storage.
+    reference<integer> a = Reference.new(7)
+    reference<integer> b = Reference.new(7)
+
+    Reference.set(a, 100)
+
+    assert(Reference.get(a) == 100)
+    assert(Reference.get(b) == 7)
+}
+
+@test
+function void test_reference_swap_twice_restores_values() {
+    reference<integer> a = Reference.new(1)
+    reference<integer> b = Reference.new(2)
+
+    Reference.swap(a, b)
+    Reference.swap(a, b)
+
+    assert(Reference.get(a) == 1)
+    assert(Reference.get(b) == 2)
+}
+
+@test
+function void test_reference_array_accumulator_across_closures() {
+    reference<array<integer>> acc = Reference.new([])
+
+    function(integer) -> none collect = (integer n) -> {
+        Reference.update(acc, (array<integer> xs) -> Array.push(xs, n))
+    }
+
+    collect(1)
+    collect(2)
+    collect(3)
+
+    array<integer> collected = Reference.get(acc)
+
+    assert(Array.length(collected) == 3)
+    assert(collected[0] == 1)
+    assert(collected[2] == 3)
+}
+
+# ─── Negative tests ──────────────────────────────────────
+
+@test
+function void test_reference_update_error_preserves_value() {
+    # If the update function throws, the original value must be preserved.
+    reference<integer> r = Reference.new(10)
+    mutable string caught = ""
+
+    try {
+        Reference.update(r, (integer v) -> {
+            assert(false, "force error")
+            return v
+        })
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.length(caught) > 0, "update should have thrown")
+    assert(Reference.get(r) == 10, "value should be unchanged after failed update")
+}
+
+@test
+function void test_reference_swap_same_ref() {
+    # Swapping a reference with itself should leave the value unchanged.
+    reference<integer> r = Reference.new(42)
+
+    Reference.swap(r, r)
+
+    assert(Reference.get(r) == 42)
+}
+
+@test
+function void test_reference_update_runtime_error_preserves_value() {
+    # A runtime error (not an assert) raised inside the callback must also leave
+    # the stored value untouched, because the write happens only on success.
+    reference<integer> r = Reference.new(50)
+    mutable boolean threw = false
+
+    try {
+        Reference.update(r, (integer v) -> {
+            integer zero = v - v
+            integer bad = v / zero
+            return bad
+        })
+    } catch(_err) {
+        threw = true
+    }
+
+    assert(threw, "division by zero should have thrown")
+    assert(Reference.get(r) == 50, "value preserved after runtime error in update")
+}

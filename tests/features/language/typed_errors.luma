@@ -1,0 +1,143 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Typed Error Values
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+choice MathError { DivisionByZero Overflow }
+
+function result<number, MathError> safe_divide(number a, number b) {
+    if b == 0 {
+        return failure(MathError.DivisionByZero)
+    }
+
+    return success(a / b)
+}
+
+@test
+function void test_typed_error_ok() {
+    result<number, MathError> r = safe_divide(10.0, 2.0)
+
+    number value = match r {
+        success(v) { v }
+        failure(_e) { 0.0 }
+    }
+
+    assert(Math.approximately_equal(value, 5.0))
+}
+
+@test
+function void test_typed_error_fail() {
+    result<number, MathError> r = safe_divide(10.0, 0.0)
+
+    boolean is_fail = match r {
+        success(_v) { false }
+        failure(_e) { true }
+    }
+
+    assert(is_fail)
+}
+
+@test
+function void test_result_string_error_default() {
+    result<number> r = failure("something went wrong")
+
+    string message = match r {
+        success(_v) { "ok" }
+        failure(e) { e }
+    }
+
+    assert(message == "something went wrong")
+}
+
+# ─── Error payload preservation through try/catch ────────
+
+@test
+function void test_try_catch_preserves_error() {
+    mutable string caught_message = ""
+
+    try {
+        integer _val = Result.unwrap(failure("intentional"))
+    } catch(err) {
+        caught_message = err
+    }
+
+    assert(caught_message == "intentional")
+}
+
+# ─── Match on specific error variant ───────────────────────
+
+@test
+function void test_typed_error_match_variant() {
+    result<number, MathError> r = safe_divide(10.0, 0.0)
+
+    boolean is_div_zero = match r {
+        success(_v) { false }
+        failure(_e) { true }
+    }
+
+    assert(is_div_zero)
+}
+
+# ─── Typed error with Result.is_failure / Result.is_success ─
+
+@test
+function void test_typed_error_is_success_check() {
+    result<number, MathError> ok = safe_divide(10.0, 5.0)
+    result<number, MathError> err = safe_divide(10.0, 0.0)
+
+    assert(Result.is_success(ok))
+    assert(Result.is_failure(err))
+}
+
+# ─── Multiple typed-error choice variants ───────────────────
+
+choice ValidationError { TooShort TooLong InvalidChar }
+
+function result<string, ValidationError> validate_name(string name) {
+    if String.length(name) < 2 {
+        return failure(ValidationError.TooShort)
+    }
+    if String.length(name) > 50 {
+        return failure(ValidationError.TooLong)
+    }
+    return success(name)
+}
+
+@test
+function void test_typed_error_too_short() {
+    result<string, ValidationError> r = validate_name("A")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_typed_error_valid_name() {
+    result<string, ValidationError> r = validate_name("Alice")
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == "Alice")
+}
+
+# ─── Typed error through pipe chain ────────────────────────
+
+@test
+function void test_typed_error_unwrap_success() {
+    number value = safe_divide(20.0, 4.0) |> Result.unwrap()
+
+    assert(Math.approximately_equal(value, 5.0))
+}
+
+@test
+function void test_typed_error_unwrap_failure_throws() {
+    mutable boolean caught = false
+
+    try {
+        number _v = safe_divide(1.0, 0.0) |> Result.unwrap()
+    } catch(_err) {
+        caught = true
+    }
+
+    assert(caught)
+}

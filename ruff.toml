@@ -1,0 +1,35 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — Ruff Configuration
+#
+# Ruff lints and formats the project's Python tooling (build, codegen,
+# benchmark, and maintenance scripts under scripts/ and extensions/shared/).
+# See instructions/python.instructions.md for the documented house style.
+#
+# Settings follow the repository conventions in .editorconfig (4-space
+# indentation, 100-column lines, LF endings) and target the minimum supported
+# interpreter (Python 3.10). The CI gate lives in .github/workflows/ci-python.yml.
+# ─────────────────────────────────────────────────────────────
+
+line-length = 100
+target-version = "py310"
+
+# Vendored third-party sources are not ours to lint or format.
+extend-exclude = ["external"]
+
+[lint]
+# E/W  pycodestyle errors and warnings
+# F    Pyflakes (unused imports, undefined names, …)
+# I    isort import ordering
+# UP   pyupgrade (modern syntax for the target version)
+# B    flake8-bugbear (likely bugs and footguns)
+# C4   flake8-comprehensions (clearer comprehensions)
+# SIM  flake8-simplify (simpler equivalent constructs)
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+
+[lint.per-file-ignores]
+# Intentional runtime guard: _common.py checks the interpreter version before
+# any 3.10+ syntax executes, so the "outdated version block" lint is wrong here.
+"scripts/_common.py" = ["UP036"]
+
+[format]
+quote-style = "double"

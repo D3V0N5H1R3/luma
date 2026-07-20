@@ -1,0 +1,19 @@
+# Type checker: closures with captured variables
+function function() -> integer make_counter(integer start) {
+    mutable integer count = start
+    return () -> {
+        count += 1
+        return count
+    }
+}
+
+function array<integer> apply_n(function() -> integer f, integer n) {
+    mutable array<integer> results = []
+    for _ in 0 .. n {
+        results = Array.push(results, f())
+    }
+    return results
+}
+
+function() -> integer counter = make_counter(0)
+array<integer> values = apply_n(counter, 5)

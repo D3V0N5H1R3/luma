@@ -1,0 +1,528 @@
+#include "runtime/stdlib/io/graphicalui_internal.hpp"
+
+#ifdef LUMA_HAS_WEBVIEW
+
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include "analysis/errors/error.hpp"
+#include "analysis/source/source_location.hpp"
+#include "runtime/interpreter/value.hpp"
+#include "runtime/stdlib/common/error_messages.hpp"
+#include "runtime/stdlib/common/native_function.hpp"
+
+// ═══════════════════════════════════════════════════════════
+// Headless interaction-testing API (GraphicalUi.test_*)
+// ═══════════════════════════════════════════════════════════
+//
+// These functions let Luma code drive a GraphicalUi application without
+// opening a window, so GUI examples can be tested by simulating real user
+// input and asserting on the resulting state.  Each call is stateless: it
+// builds a transient, windowless AppState from the same config dictionary that
+// GraphicalUi.app() consumes, renders the view (which registers the interactive
+// widgets' callbacks exactly as the live app does), fires the requested
+// interaction through the real callback/update cycle, and returns the new
+// model.  Because no webview exists, command-producing callbacks are safely
+// no-ops (execute_command guards on a null webview).
+
+namespace luma::gui_detail {
+
+namespace {
+
+// Widget dictionary fields that identify a widget for locating it in a rendered
+// tree.  A locator string is matched against each of these, in order.  Style
+// `id` is surfaced as `_element_id`, giving every widget a stable, unique handle
+// that disambiguates otherwise-identical labels.  `selected` is the current
+// choice of a radio_group (the equivalent of `value` for a dropdown), so a radio
+// group can be located by its current selection.
+constexpr const char* k_locator_keys[] = {
+    "label", "text", "placeholder", "value", "selected", "name", "title", "_element_id",
+};
+
+// Candidate callback-id fields per interaction.  A widget's primary action lives
+// in `_callback_id`; secondary pointer events are registered by
+// apply_widget_events as `_on_<event>_id`; the dialog dismiss and search-input
+// clear handlers are bound (by apply_widget_events) as `_close_id` / `_clear_id`.
+// Listing several candidates lets one resolver serve clicks, inputs, pointer
+// events, and the dismiss/clear handlers alike (first non-empty wins, in order).
+constexpr const char* k_click_fields[] = {"_callback_id", "_on_click_id"};
+constexpr const char* k_primary_fields[] = {"_callback_id"};
+constexpr const char* k_double_click_fields[] = {"_on_double_click_id"};
+constexpr const char* k_right_click_fields[] = {"_on_right_click_id"};
+constexpr const char* k_mouse_enter_fields[] = {"_on_mouse_enter_id"};
+constexpr const char* k_mouse_leave_fields[] = {"_on_mouse_leave_id"};
+constexpr const char* k_mouse_move_fields[] = {"_on_mouse_move_id"};
+constexpr const char* k_close_fields[] = {"_close_id"};
+constexpr const char* k_clear_fields[] = {"_clear_id"};
+constexpr const char* k_action_fields[] = {"_action_id"};
+
+// text_input / text_area commit their value (on blur or Enter) through a
+// dedicated `_commit_id`, distinct from the per-keystroke on_change
+// (`_callback_id`).  The "commit" event fires it.
+constexpr const char* k_commit_fields[] = {"_commit_id"};
+
+// The combobox binds its commit handler (on_select) as `_select_id`; the menu
+// commits through its primary `_callback_id`.  Listing both lets one "select"
+// event drive either widget (first non-empty wins, in order).
+constexpr const char* k_select_fields[] = {"_select_id", "_callback_id"};
+
+// True when `dict` is a widget node (carries a string "type").
+[[nodiscard]] bool is_widget(const DictionaryValue& dict) {
+    const auto* type = dict.find("type");
+    return type != nullptr && type->is_string();
+}
+
+// True when any locator field of `dict` equals `locator`.
+[[nodiscard]] bool identity_matches(const DictionaryValue& dict, const std::string& locator) {
+    for (const auto* match_key : k_locator_keys) {
+        const auto* field = dict.find(match_key);
+
+        if (field != nullptr && field->is_string() && field->as_string() == locator) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Depth-first (pre-order) collection of every widget node whose identity equals
+// `locator`.  Descent is structure-agnostic: it recurses through every nested
+// dictionary and array, so container key names (children / content / ...) and
+// wrappers (accessible, tooltip, ...) are handled uniformly.  The returned
+// values share the underlying widget dictionaries (cheap shared-pointer copies),
+// and document order is preserved so callers can address duplicates by index.
+void collect_matching_widgets(const Value& node, const std::string& locator,
+                              std::vector<Value>& out) {
+    if (!node.is_dictionary()) {
+        return;
+    }
+
+    const auto& dict = *node.as_dictionary();
+
+    if (is_widget(dict) && identity_matches(dict, locator)) {
+        out.push_back(node);
+    }
+
+    for (const auto& [entry_key, entry_value] : dict.entries) {
+        if (entry_value.is_dictionary()) {
+            collect_matching_widgets(entry_value, locator, out);
+        } else if (entry_value.is_array()) {
+            for (const auto& element : *entry_value.as_array()->elements) {
+                collect_matching_widgets(element, locator, out);
+            }
+        }
+    }
+}
+
+// Convenience wrapper returning the widgets matching `locator` as a vector.
+[[nodiscard]] std::vector<Value> matching_widgets(const Value& tree, const std::string& locator) {
+    std::vector<Value> out;
+    collect_matching_widgets(tree, locator, out);
+    return out;
+}
+
+// From `widgets`, collect the callback id of each widget carrying a non-empty
+// string in one of `fields` (first matching field wins).  Preserves document
+// order, so callers can address duplicates by index.
+[[nodiscard]] std::vector<std::string> callback_ids_for(const std::vector<Value>& widgets,
+                                                        std::span<const char* const> fields) {
+    std::vector<std::string> ids;
+
+    for (const auto& widget : widgets) {
+        const auto& dict = *widget.as_dictionary();
+
+        for (const auto* field : fields) {
+            auto id = dict_string(dict, field);
+
+            if (!id.empty()) {
+                ids.push_back(std::move(id));
+                break;
+            }
+        }
+    }
+
+    return ids;
+}
+
+// A transient, windowless application built from a GraphicalUi.app config dict.
+// Installs itself as the thread-local active app so interactive-widget
+// construction (which registers callbacks) succeeds during rendering.
+//
+// Member order matters: `scope` is declared after `state` so that it is
+// destroyed first, clearing the active_app pointer before `state` is torn down.
+struct HeadlessApp {
+    AppState state;
+    ActiveAppScope scope;
+
+    HeadlessApp(const DictionaryValue& config, SourceLocation loc) {
+        auto cfg = extract_app_config(config, loc);
+        init_app_state(state, cfg, nullptr, loc);
+        scope.set(&state);
+    }
+};
+
+// Render the view for `model`, returning the resulting widget tree.  Side
+// effect: registers the model's interactive-widget callbacks on `state`.
+[[nodiscard]] Value render_tree(AppState& state, const Value& model, SourceLocation loc) {
+    state.model = model;
+
+    if (state.view_fn.is_null() || !state.view_fn.is_callable()) {
+        throw RuntimeError{
+            error_msg("GraphicalUi", "test", "config has no 'view' function to render"), loc,
+            "add a \"view\" entry to the config dictionary"};
+    }
+
+    std::vector<Value> view_args{model};
+    return invoke_callable(state.view_fn, view_args, loc);
+}
+
+// Map an event name to the widget id fields it can fire.  Returns nullopt for an
+// unknown event so callers can report the supported set.
+[[nodiscard]] std::optional<std::span<const char* const>>
+event_id_fields(const std::string& event) {
+    if (event == "click") {
+        return std::span<const char* const>{k_click_fields};
+    }
+    if (event == "change" || event == "input") {
+        return std::span<const char* const>{k_primary_fields};
+    }
+    if (event == "double_click") {
+        return std::span<const char* const>{k_double_click_fields};
+    }
+    if (event == "right_click") {
+        return std::span<const char* const>{k_right_click_fields};
+    }
+    if (event == "mouse_enter") {
+        return std::span<const char* const>{k_mouse_enter_fields};
+    }
+    if (event == "mouse_leave") {
+        return std::span<const char* const>{k_mouse_leave_fields};
+    }
+    if (event == "mouse_move") {
+        return std::span<const char* const>{k_mouse_move_fields};
+    }
+    if (event == "close") {
+        return std::span<const char* const>{k_close_fields};
+    }
+    if (event == "clear") {
+        return std::span<const char* const>{k_clear_fields};
+    }
+    if (event == "select") {
+        return std::span<const char* const>{k_select_fields};
+    }
+    if (event == "action") {
+        return std::span<const char* const>{k_action_fields};
+    }
+    if (event == "commit") {
+        return std::span<const char* const>{k_commit_fields};
+    }
+
+    return std::nullopt;
+}
+
+// Render `model`, locate the `index`-th widget matching `locator` that exposes a
+// callback in one of `fields`, fire it with `call_args`, run the result through
+// the standard update cycle, and return the resulting model.
+[[nodiscard]] Value fire_event(AppState& state, const Value& model, const std::string& locator,
+                               std::span<const char* const> fields, std::vector<Value> call_args,
+                               std::size_t index, std::string_view fn_name, std::string_view what,
+                               SourceLocation loc) {
+    const auto tree = render_tree(state, model, loc);
+    const auto widgets = matching_widgets(tree, locator);
+    const auto ids = callback_ids_for(widgets, fields);
+
+    if (ids.empty()) {
+        throw RuntimeError{
+            error_msg("GraphicalUi", fn_name,
+                      "no " + std::string{what} + " widget found matching '" + locator + "'"),
+            loc, "check the locator matches the widget's label, placeholder, value, or style id"};
+    }
+
+    if (index >= ids.size()) {
+        throw RuntimeError{
+            error_msg("GraphicalUi", fn_name,
+                      "index " + std::to_string(index) + " is out of range: only " +
+                          std::to_string(ids.size()) + " " + std::string{what} +
+                          " widget(s) match '" + locator + "'"),
+            loc, "use a smaller index, or GraphicalUi.test_count() to count matches first"};
+    }
+
+    auto callback = state.find_callback(ids[index]);
+    auto result = invoke_callable(callback, call_args, loc);
+    apply_event_result(state, std::move(result));
+    return state.model;
+}
+
+// Drive the application's keyboard subscriptions for `key_name`: call subscribe
+// to obtain the current subscriptions, then fire every keyboard subscription
+// whose filter is "*" or equals `key_name`, threading the model through each.
+// Mirrors the live dispatch (handle_keyboard -> dispatch_event) without needing
+// a window.  Throws when no keyboard subscription matches.
+[[nodiscard]] Value drive_key(AppState& state, const Value& model, const std::string& key_name,
+                              SourceLocation loc) {
+    state.model = model;
+
+    if (state.subscribe_fn.is_null() || !state.subscribe_fn.is_callable()) {
+        throw RuntimeError{
+            error_msg("GraphicalUi", "test_key",
+                      "config has no 'subscribe' function to receive keyboard events"),
+            loc, "add a \"subscribe\" entry returning GraphicalUi.on_key(...)"};
+    }
+
+    std::vector<Value> sub_args{state.model};
+    const auto subs_value = invoke_callable(state.subscribe_fn, sub_args, loc);
+    const auto subscriptions = unwrap_array_arg(subs_value);
+
+    bool fired = false;
+
+    if (subscriptions.is_array()) {
+        for (const auto& sub : *subscriptions.as_array()->elements) {
+            if (!sub.is_dictionary()) {
+                continue;
+            }
+
+            const auto& sub_dict = *sub.as_dictionary();
+
+            if (dict_string(sub_dict, key::sub_type) != sub::keyboard) {
+                continue;
+            }
+
+            const auto filter = dict_string(sub_dict, "filter", "*");
+
+            if (filter != "*" && filter != key_name) {
+                continue;
+            }
+
+            const auto* callback = sub_dict.find(key::callback);
+
+            if (callback == nullptr || !callback->is_callable()) {
+                continue;
+            }
+
+            std::vector<Value> callback_args{Value{key_name}};
+            auto result = invoke_callable(*callback, callback_args, loc);
+            apply_event_result(state, std::move(result));
+            fired = true;
+        }
+    }
+
+    if (!fired) {
+        throw RuntimeError{error_msg("GraphicalUi", "test_key",
+                                     "no keyboard subscription matches key '" + key_name + "'"),
+                           loc,
+                           "ensure subscribe returns GraphicalUi.on_key with filter \"*\" or \"" +
+                               key_name + "\""};
+    }
+
+    return state.model;
+}
+
+} // namespace
+
+// Register the GraphicalUi.test_* interaction-testing functions.
+void register_graphicalui_testing(const EnvPtr& env) {
+    // GraphicalUi.test_init(config) -> any
+    // Run the application's init lifecycle (or fall back to the configured
+    // model) and return the resulting initial model.
+    define_native(env, "GraphicalUi.test_init",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.test_init", args, 1, loc);
+                      const auto& config = *expect_dict(args[0], "GraphicalUi.test_init", loc);
+                      HeadlessApp app{config, loc};
+                      return app.state.model;
+                  });
+
+    // GraphicalUi.test_render(config, model) -> dictionary
+    // Render the view for `model` and return the widget tree for assertions.
+    define_native(env, "GraphicalUi.test_render",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.test_render", args, 2, loc);
+                      const auto& config = *expect_dict(args[0], "GraphicalUi.test_render", loc);
+                      HeadlessApp app{config, loc};
+                      return render_tree(app.state, args[1], loc);
+                  });
+
+    // GraphicalUi.test_click(config, model, locator, index?) -> any
+    // Simulate a click on the widget identified by `locator` and return the new
+    // model.  When several widgets share the locator, `index` (0-based, default
+    // 0) selects which one; use GraphicalUi.test_count() to count them.
+    define_native(env, "GraphicalUi.test_click",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_min_args("GraphicalUi.test_click", args, 3, loc);
+                      const auto& config = *expect_dict(args[0], "GraphicalUi.test_click", loc);
+                      const auto& locator = expect_string(args[2], "GraphicalUi.test_click", loc);
+                      std::size_t index = 0;
+                      if (args.size() >= 4 && args[3].is_integer()) {
+                          index = static_cast<std::size_t>(args[3].as_integer());
+                      }
+                      HeadlessApp app{config, loc};
+                      return fire_event(app.state, args[1], locator,
+                                        std::span<const char* const>{k_click_fields}, {}, index,
+                                        "test_click", "clickable", loc);
+                  });
+
+    // GraphicalUi.test_input(config, model, locator, value, index?) -> any
+    // Simulate entering `value` into the widget identified by `locator`
+    // (text input change, toggle, slider, dropdown select, ...) and return the
+    // new model.  The value's type should match the widget callback's parameter
+    // (string for text/dropdown, boolean for toggle/checkbox, number for
+    // slider).  `index` (0-based, default 0) disambiguates duplicate locators.
+    define_native(env, "GraphicalUi.test_input",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_min_args("GraphicalUi.test_input", args, 4, loc);
+                      const auto& config = *expect_dict(args[0], "GraphicalUi.test_input", loc);
+                      const auto& locator = expect_string(args[2], "GraphicalUi.test_input", loc);
+                      std::size_t index = 0;
+                      if (args.size() >= 5 && args[4].is_integer()) {
+                          index = static_cast<std::size_t>(args[4].as_integer());
+                      }
+                      HeadlessApp app{config, loc};
+                      return fire_event(app.state, args[1], locator,
+                                        std::span<const char* const>{k_primary_fields}, {args[3]},
+                                        index, "test_input", "input", loc);
+                  });
+
+    // GraphicalUi.test_event(config, model, locator, event, args?, index?) -> any
+    // Fire a named widget event on the widget identified by `locator` and return
+    // the new model.  `event` is one of: click, change, double_click,
+    // right_click, mouse_enter, mouse_leave, mouse_move, close (dialog dismiss),
+    // clear (search-input clear), select (menu / combobox commit).  `args` is an
+    // optional array forwarded to the callback (length and contents are up to the
+    // handler, so arbitrary arity is supported).  `index` (0-based, default 0)
+    // disambiguates duplicate locators.
+    define_native(
+        env, "GraphicalUi.test_event",
+        [](std::span<const Value> args, SourceLocation loc) -> Value {
+            expect_min_args("GraphicalUi.test_event", args, 4, loc);
+            const auto& config = *expect_dict(args[0], "GraphicalUi.test_event", loc);
+            const auto& locator = expect_string(args[2], "GraphicalUi.test_event", loc);
+            const auto& event = expect_string(args[3], "GraphicalUi.test_event", loc);
+
+            const auto fields = event_id_fields(event);
+            if (!fields) {
+                throw RuntimeError{
+                    error_msg("GraphicalUi", "test_event", "unknown event '" + event + "'"), loc,
+                    "valid events: click, change, double_click, right_click, "
+                    "mouse_enter, mouse_leave, mouse_move, close, clear, select, action"};
+            }
+
+            std::vector<Value> call_args;
+            if (args.size() >= 5 && args[4].is_array()) {
+                const auto& elements = *args[4].as_array()->elements;
+                call_args.assign(elements.begin(), elements.end());
+            }
+
+            std::size_t index = 0;
+            if (args.size() >= 6 && args[5].is_integer()) {
+                index = static_cast<std::size_t>(args[5].as_integer());
+            }
+
+            HeadlessApp app{config, loc};
+            return fire_event(app.state, args[1], locator, *fields, std::move(call_args), index,
+                              "test_event", "matching", loc);
+        });
+
+    // GraphicalUi.test_count(config, model, locator) -> integer
+    // Count the widgets in the rendered view that match `locator` (the same
+    // matching test_find uses, so the two agree).  Useful for asserting how many
+    // duplicates exist before addressing one by `index` with test_click /
+    // test_event / test_find.  When matches mix interactive and non-interactive
+    // widgets, give the target a unique style `id` so it can be addressed by
+    // identity rather than position.
+    define_native(env, "GraphicalUi.test_count",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.test_count", args, 3, loc);
+                      const auto& config = *expect_dict(args[0], "GraphicalUi.test_count", loc);
+                      const auto& locator = expect_string(args[2], "GraphicalUi.test_count", loc);
+                      HeadlessApp app{config, loc};
+                      const auto tree = render_tree(app.state, args[1], loc);
+                      const auto widgets = matching_widgets(tree, locator);
+                      return Value{static_cast<std::int64_t>(widgets.size())};
+                  });
+
+    // GraphicalUi.test_find(config, model, locator, index?) -> dictionary
+    // Return the rendered widget dictionary identified by `locator` so tests can
+    // assert on its serialized state (value, disabled, style, children, ...)
+    // without firing an interaction.  `index` (0-based, default 0) selects among
+    // duplicate locators.
+    define_native(
+        env, "GraphicalUi.test_find", [](std::span<const Value> args, SourceLocation loc) -> Value {
+            expect_min_args("GraphicalUi.test_find", args, 3, loc);
+            const auto& config = *expect_dict(args[0], "GraphicalUi.test_find", loc);
+            const auto& locator = expect_string(args[2], "GraphicalUi.test_find", loc);
+            std::size_t index = 0;
+            if (args.size() >= 4 && args[3].is_integer()) {
+                index = static_cast<std::size_t>(args[3].as_integer());
+            }
+            HeadlessApp app{config, loc};
+            const auto tree = render_tree(app.state, args[1], loc);
+            const auto widgets = matching_widgets(tree, locator);
+
+            if (widgets.empty()) {
+                throw RuntimeError{
+                    error_msg("GraphicalUi", "test_find",
+                              "no widget found matching '" + locator + "'"),
+                    loc,
+                    "check the locator matches the widget's label, placeholder, value, "
+                    "or style id"};
+            }
+            if (index >= widgets.size()) {
+                throw RuntimeError{
+                    error_msg("GraphicalUi", "test_find",
+                              "index " + std::to_string(index) + " is out of range: only " +
+                                  std::to_string(widgets.size()) + " widget(s) match '" + locator +
+                                  "'"),
+                    loc, "use a smaller index, or GraphicalUi.test_count() to count"};
+            }
+
+            return widgets[index];
+        });
+
+    // GraphicalUi.test_key(config, model, key) -> any
+    // Deliver a keyboard event to the application's subscriptions (the path
+    // driven by GraphicalUi.on_key) and return the new model.  Every keyboard
+    // subscription whose filter is "*" or equals `key` fires, exactly as the live
+    // runtime dispatches keys.
+    define_native(env, "GraphicalUi.test_key",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.test_key", args, 3, loc);
+                      const auto& config = *expect_dict(args[0], "GraphicalUi.test_key", loc);
+                      const auto& key_name = expect_string(args[2], "GraphicalUi.test_key", loc);
+                      HeadlessApp app{config, loc};
+                      return drive_key(app.state, args[1], key_name, loc);
+                  });
+
+    // GraphicalUi.test_message(config, model, message) -> any
+    // Deliver `message` to the application's update(model, message) function
+    // (the Elm-style message path used for keyboard/navigation events) and
+    // return the new model.
+    define_native(env, "GraphicalUi.test_message",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.test_message", args, 3, loc);
+                      const auto& config = *expect_dict(args[0], "GraphicalUi.test_message", loc);
+                      HeadlessApp app{config, loc};
+                      app.state.model = args[1];
+
+                      if (app.state.update_fn.is_null() || !app.state.update_fn.is_callable()) {
+                          throw RuntimeError{
+                              error_msg("GraphicalUi", "test_message",
+                                        "config has no 'update' function to receive messages"),
+                              loc, "add an \"update\" entry to the config dictionary"};
+                      }
+
+                      std::vector<Value> update_args{args[1], args[2]};
+                      auto result = invoke_callable(app.state.update_fn, update_args, loc);
+                      process_callback_result(app.state, std::move(result));
+                      return app.state.model;
+                  });
+}
+
+} // namespace luma::gui_detail
+
+#endif // LUMA_HAS_WEBVIEW

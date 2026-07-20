@@ -1,0 +1,10 @@
+# Include resolver: include mixed with top-level statements (warning path)
+include "helper.luma"
+
+print("top-level side effect before main")
+x = 1 + 2
+
+@main
+function void main() {
+    print(x)
+}

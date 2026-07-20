@@ -1,0 +1,584 @@
+# ═══════════════════════════════════════════════════════════
+# Expression Evaluator with Type Checking
+#
+# Demonstrates recursive choice types for an AST, exhaustive
+# pattern matching, result types for error handling, optional
+# for environment lookup, pipes, and @test annotations.
+#
+# Implements a small expression language with:
+#   - Integer and boolean literals
+#   - Arithmetic (add, multiply, negate)
+#   - Comparisons (less-than, equal)
+#   - Conditionals (if-then-else)
+#   - Let bindings and variables
+#
+# Usage: luma examples/applications/expression_evaluator.luma
+# Tests: luma --test examples/applications/expression_evaluator.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Types ───────────────────────────────────────────────
+
+choice Type {
+    TInt
+    TBool
+}
+
+choice Expr {
+    Lit(number value)
+    BoolLit(boolean value)
+    Add(Expr left, Expr right)
+    Mul(Expr left, Expr right)
+    Neg(Expr operand)
+    LessThan(Expr left, Expr right)
+    Equal(Expr left, Expr right)
+    If(Expr condition, Expr then_branch, Expr else_branch)
+    Var(string name)
+    Let(string name, Expr binding, Expr body)
+}
+
+choice Value {
+    VInt(number value)
+    VBool(boolean value)
+}
+
+# ─── Pretty Printing ────────────────────────────────────
+
+function string type_to_string(Type type_value) {
+    return match type_value {
+    case Type.TInt  { "int" }
+    case Type.TBool { "bool" }
+    }
+}
+
+function string value_to_string(Value value) {
+    return match value {
+    case Value.VInt(int_value)   { "${int_value}" }
+    case Value.VBool(bool_value) { "${bool_value}" }
+    }
+}
+
+# ─── Type Helpers ────────────────────────────────────────
+
+function boolean is_int(Type type_value) {
+    return match type_value {
+    case Type.TInt  { true }
+    case Type.TBool { false }
+    }
+}
+
+function boolean is_bool(Type type_value) {
+    return match type_value {
+    case Type.TInt  { false }
+    case Type.TBool { true }
+    }
+}
+
+function boolean types_equal(Type left, Type right) {
+    if is_int(left) && is_int(right)   { return true }
+    if is_bool(left) && is_bool(right) { return true }
+
+    return false
+}
+
+# ─── Environment Helpers ────────────────────────────────
+
+record TypeBinding {
+    string name,
+    Type bound_type
+}
+
+record ValueBinding {
+    string name,
+    Value bound_value
+}
+
+function optional<Type> type_lookup(array<TypeBinding> env, string name) {
+    return match Array.find_last_index(env, (TypeBinding b) -> b.name == name) {
+        success(index) { some(env[index].bound_type) }
+        failure(_) { none }
+    }
+}
+
+function optional<Value> value_lookup(array<ValueBinding> env, string name) {
+    return match Array.find_last_index(env, (ValueBinding b) -> b.name == name) {
+        success(index) { some(env[index].bound_value) }
+        failure(_) { none }
+    }
+}
+
+# ─── Type Checker ────────────────────────────────────────
+
+function result<Type> _check_binary_int(
+    Expr left, Expr right, array<TypeBinding> env, Type result_type, string operator
+) {
+    Type left_type = type_check(left, env)?
+    Type right_type = type_check(right, env)?
+
+    if is_int(left_type) && is_int(right_type) {
+        return success(result_type)
+    }
+
+    string left_name = type_to_string(left_type)
+    string right_name = type_to_string(right_type)
+
+    return failure("${operator} expects int, got ${left_name} and ${right_name}")
+}
+
+function result<Type> _check_equal(
+    Expr left, Expr right, array<TypeBinding> env
+) {
+    Type left_type = type_check(left, env)?
+    Type right_type = type_check(right, env)?
+
+    if types_equal(left_type, right_type) {
+        return success(Type.TBool)
+    }
+
+    string left_name = type_to_string(left_type)
+    string right_name = type_to_string(right_type)
+
+    return failure("Equal expects matching types, got ${left_name} == ${right_name}")
+}
+
+function result<Type> _check_if(
+    Expr condition, Expr then_branch, Expr else_branch, array<TypeBinding> env
+) {
+    Type cond_type = type_check(condition, env)?
+
+    if !is_bool(cond_type) {
+        return failure("If condition must be bool, got ${type_to_string(cond_type)}")
+    }
+
+    Type then_type = type_check(then_branch, env)?
+    Type else_type = type_check(else_branch, env)?
+
+    if types_equal(then_type, else_type) {
+        return success(then_type)
+    }
+
+    string then_name = type_to_string(then_type)
+    string else_name = type_to_string(else_type)
+
+    return failure("If branches must match: ${then_name} vs ${else_name}")
+}
+
+function result<Type> _check_let(
+    string name, Expr binding, Expr body, array<TypeBinding> env
+) {
+    Type binding_type = type_check(binding, env)?
+
+    array<TypeBinding> new_env = Array.push(
+        env, TypeBinding { name = name, bound_type = binding_type })
+
+    return type_check(body, new_env)
+}
+
+function result<Type> type_check(Expr expr, array<TypeBinding> env) {
+    match expr {
+    case Expr.Lit(_value)     { return success(Type.TInt) }
+    case Expr.BoolLit(_value) { return success(Type.TBool) }
+    case Expr.Add(left, right) { return _check_binary_int(left, right, env, Type.TInt, "Add") }
+    case Expr.Mul(left, right) { return _check_binary_int(left, right, env, Type.TInt, "Mul") }
+    case Expr.Neg(operand) {
+        Type operand_type = type_check(operand, env)?
+
+        if is_int(operand_type) {
+            return success(Type.TInt)
+        }
+
+        return failure("Neg expects int, got ${type_to_string(operand_type)}")
+    }
+    case Expr.LessThan(left, right) {
+        return _check_binary_int(left, right, env, Type.TBool, "LessThan")
+    }
+    case Expr.Equal(left, right) { return _check_equal(left, right, env) }
+    case Expr.If(condition, then_branch, else_branch) {
+        return _check_if(condition, then_branch, else_branch, env)
+    }
+    case Expr.Var(name) {
+        optional<Type> found = type_lookup(env, name)
+
+        match found {
+        case some(bound_type) { return success(bound_type) }
+        case none { return failure("unbound variable '${name}'") }
+        }
+    }
+    case Expr.Let(name, binding, body) {
+        return _check_let(name, binding, body, env)
+    }
+    }
+}
+
+# ─── Interpreter ─────────────────────────────────────────
+
+function result<Value> _eval_binary(
+    Expr left, Expr right, array<ValueBinding> env,
+    function(number, number) -> Value combiner,
+    string operator
+) {
+    Value left_value = evaluate(left, env)?
+    Value right_value = evaluate(right, env)?
+
+    match left_value {
+    case Value.VInt(left_int) {
+        match right_value {
+        case Value.VInt(right_int) { return success(combiner(left_int, right_int)) }
+        else { return failure("${operator}: expected integers") }
+        }
+    }
+    else { return failure("${operator}: expected integers") }
+    }
+}
+
+function result<Value> _eval_equal(
+    Expr left, Expr right, array<ValueBinding> env
+) {
+    Value left_value = evaluate(left, env)?
+    Value right_value = evaluate(right, env)?
+
+    match left_value {
+    case Value.VInt(left_int) {
+        match right_value {
+        case Value.VInt(right_int) {
+            result<integer> left_number = Converter.to_integer(left_int)
+            result<integer> right_number = Converter.to_integer(right_int)
+
+            return success(Value.VBool(left_number == right_number))
+        }
+        else { return failure("Equal: type mismatch") }
+        }
+    }
+    case Value.VBool(left_bool) {
+        match right_value {
+        case Value.VBool(right_bool) {
+            string left_text = Converter.to_string(left_bool)
+            string right_text = Converter.to_string(right_bool)
+
+            return success(Value.VBool(left_text == right_text))
+        }
+        else { return failure("Equal: type mismatch") }
+        }
+    }
+    }
+
+    return failure("Equal: unsupported type")
+}
+
+function result<Value> _eval_if(
+    Expr condition, Expr then_branch, Expr else_branch, array<ValueBinding> env
+) {
+    Value cond_value = evaluate(condition, env)?
+
+    match cond_value {
+    case Value.VBool(bool_value) {
+        if bool_value {
+            return evaluate(then_branch, env)
+        }
+
+        return evaluate(else_branch, env)
+    }
+    else { return failure("If: condition must be boolean") }
+    }
+}
+
+function result<Value> _eval_let(
+    string name, Expr binding, Expr body, array<ValueBinding> env
+) {
+    Value binding_value = evaluate(binding, env)?
+
+    array<ValueBinding> new_env = Array.push(
+        env, ValueBinding { name = name, bound_value = binding_value })
+
+    return evaluate(body, new_env)
+}
+
+function result<Value> evaluate(Expr expr, array<ValueBinding> env) {
+    match expr {
+    case Expr.Lit(value)     { return success(Value.VInt(value)) }
+    case Expr.BoolLit(value) { return success(Value.VBool(value)) }
+    case Expr.Add(left, right) {
+        return _eval_binary(
+            left, right, env, (number a, number b) -> Value.VInt(a + b), "Add")
+    }
+    case Expr.Mul(left, right) {
+        return _eval_binary(
+            left, right, env, (number a, number b) -> Value.VInt(a * b), "Mul")
+    }
+    case Expr.Neg(operand) {
+        Value operand_value = evaluate(operand, env)?
+
+        match operand_value {
+        case Value.VInt(int_value) { return success(Value.VInt(-int_value)) }
+        else { return failure("Neg: expected integer") }
+        }
+    }
+    case Expr.LessThan(left, right) {
+        return _eval_binary(
+            left, right, env, (number a, number b) -> Value.VBool(a < b), "LessThan")
+    }
+    case Expr.Equal(left, right) { return _eval_equal(left, right, env) }
+    case Expr.If(condition, then_branch, else_branch) {
+        return _eval_if(condition, then_branch, else_branch, env)
+    }
+    case Expr.Var(name) {
+        optional<Value> found = value_lookup(env, name)
+
+        match found {
+        case some(value) { return success(value) }
+        case none { return failure("unbound variable '${name}'") }
+        }
+    }
+    case Expr.Let(name, binding, body) {
+        return _eval_let(name, binding, body, env)
+    }
+    }
+}
+
+# ─── Convenience: type-check then evaluate ───────────────
+
+function result<Value> run(Expr expr) {
+    array<TypeBinding> empty_type_env = []
+    array<ValueBinding> empty_val_env = []
+
+    type_check(expr, empty_type_env)?
+
+    return evaluate(expr, empty_val_env)
+}
+
+function string run_and_show(string label, Expr expr) {
+    match run(expr) {
+    success(value) { return "${label} => ${value_to_string(value)}" }
+    failure(error) { return "${label} => ERROR: ${error}" }
+    }
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+@test
+function void test_literal() {
+    Value value = run(Expr.Lit(42)) |> Result.unwrap()
+
+    match value {
+    case Value.VInt(int_value) { assert(int_value == 42, "expected 42") }
+    else { assert(false, "expected VInt") }
+    }
+}
+
+@test
+function void test_arithmetic() {
+    # (3 + 4) * 2 = 14
+    Expr expr = Expr.Mul(Expr.Add(Expr.Lit(3), Expr.Lit(4)), Expr.Lit(2))
+    Value value = run(expr) |> Result.unwrap()
+
+    match value {
+    case Value.VInt(int_value) { assert(int_value == 14, "expected 14, got ${int_value}") }
+    else { assert(false, "expected VInt") }
+    }
+}
+
+@test
+function void test_negation() {
+    Expr expr = Expr.Neg(Expr.Lit(7))
+    Value value = run(expr) |> Result.unwrap()
+
+    match value {
+    case Value.VInt(int_value) { assert(int_value == -7, "expected -7") }
+    else { assert(false, "expected VInt") }
+    }
+}
+
+@test
+function void test_comparison() {
+    Expr expr = Expr.LessThan(Expr.Lit(3), Expr.Lit(5))
+    Value value = run(expr) |> Result.unwrap()
+
+    match value {
+    case Value.VBool(bool_value) { assert(bool_value, "expected true") }
+    else { assert(false, "expected VBool") }
+    }
+}
+
+@test
+function void test_conditional() {
+    # if 1 < 10 then 42 else 0
+    Expr expr = Expr.If(
+        Expr.LessThan(Expr.Lit(1), Expr.Lit(10)),
+        Expr.Lit(42),
+        Expr.Lit(0)
+    )
+    Value value = run(expr) |> Result.unwrap()
+
+    match value {
+    case Value.VInt(int_value) { assert(int_value == 42, "expected 42") }
+    else { assert(false, "expected VInt") }
+    }
+}
+
+@test
+function void test_let_binding() {
+    # let x = 5 in x + x  =>  10
+    Expr expr = Expr.Let("x", Expr.Lit(5),
+        Expr.Add(Expr.Var("x"), Expr.Var("x"))
+    )
+    Value value = run(expr) |> Result.unwrap()
+
+    match value {
+    case Value.VInt(int_value) { assert(int_value == 10, "expected 10") }
+    else { assert(false, "expected VInt") }
+    }
+}
+
+@test
+function void test_nested_let() {
+    # let x = 3 in let y = 4 in x * y  =>  12
+    Expr expr = Expr.Let("x", Expr.Lit(3),
+        Expr.Let("y", Expr.Lit(4),
+            Expr.Mul(Expr.Var("x"), Expr.Var("y"))
+        )
+    )
+    Value value = run(expr) |> Result.unwrap()
+
+    match value {
+    case Value.VInt(int_value) { assert(int_value == 12, "expected 12") }
+    else { assert(false, "expected VInt") }
+    }
+}
+
+@test
+function void test_type_error_add_bool() {
+    Expr expr = Expr.Add(Expr.BoolLit(true), Expr.Lit(1))
+    result<Value> outcome = run(expr)
+
+    assert(!Result.is_success(outcome), "expected type error")
+}
+
+@test
+function void test_type_error_unbound_variable() {
+    Expr expr = Expr.Var("undefined_var")
+    result<Value> outcome = run(expr)
+
+    assert(!Result.is_success(outcome), "expected unbound variable error")
+}
+
+@test
+function void test_type_error_if_condition() {
+    Expr expr = Expr.If(Expr.Lit(42), Expr.Lit(1), Expr.Lit(2))
+    result<Value> outcome = run(expr)
+
+    assert(!Result.is_success(outcome), "expected type error for non-bool condition")
+}
+
+@test
+function void test_equality() {
+    Expr expr = Expr.Equal(Expr.Lit(7), Expr.Lit(7))
+    Value value = run(expr) |> Result.unwrap()
+
+    match value {
+    case Value.VBool(bool_value) { assert(bool_value, "7 == 7 should be true") }
+    else { assert(false, "expected VBool") }
+    }
+}
+
+@test
+function void test_complex_expression() {
+    # let a = 10 in let b = 3 in if a < b then 0 else a + b  =>  13
+    Expr expr = Expr.Let("a", Expr.Lit(10),
+        Expr.Let("b", Expr.Lit(3),
+            Expr.If(
+                Expr.LessThan(Expr.Var("a"), Expr.Var("b")),
+                Expr.Lit(0),
+                Expr.Add(Expr.Var("a"), Expr.Var("b"))
+            )
+        )
+    )
+    Value value = run(expr) |> Result.unwrap()
+
+    match value {
+    case Value.VInt(int_value) { assert(int_value == 13, "expected 13, got ${int_value}") }
+    else { assert(false, "expected VInt") }
+    }
+}
+
+# ─── Entry Point ─────────────────────────────────────────
+
+@main
+function void main() {
+    print("═══════════════════════════════════════")
+    print("   Expression Evaluator & Type Checker")
+    print("═══════════════════════════════════════")
+
+    # Simple arithmetic: (3 + 4) * 2
+    print("")
+    print(run_and_show("(3 + 4) * 2",
+        Expr.Mul(Expr.Add(Expr.Lit(3), Expr.Lit(4)), Expr.Lit(2))
+    ))
+
+    # Negation: -(10)
+    print(run_and_show("-(10)",
+        Expr.Neg(Expr.Lit(10))
+    ))
+
+    # Comparison: 5 < 3
+    print(run_and_show("5 < 3",
+        Expr.LessThan(Expr.Lit(5), Expr.Lit(3))
+    ))
+
+    # Equality: 42 == 42
+    print(run_and_show("42 == 42",
+        Expr.Equal(Expr.Lit(42), Expr.Lit(42))
+    ))
+
+    # Conditional: if 1 < 10 then 42 else 0
+    print(run_and_show("if 1 < 10 then 42 else 0",
+        Expr.If(
+            Expr.LessThan(Expr.Lit(1), Expr.Lit(10)),
+            Expr.Lit(42),
+            Expr.Lit(0)
+        )
+    ))
+
+    # Let binding: let x = 5 in x + x
+    print(run_and_show("let x = 5 in x + x",
+        Expr.Let("x", Expr.Lit(5),
+            Expr.Add(Expr.Var("x"), Expr.Var("x"))
+        )
+    ))
+
+    # Nested let: let x = 3 in let y = x + 1 in x * y
+    print(run_and_show("let x=3 in let y=x+1 in x*y",
+        Expr.Let("x", Expr.Lit(3),
+            Expr.Let("y", Expr.Add(Expr.Var("x"), Expr.Lit(1)),
+                Expr.Mul(Expr.Var("x"), Expr.Var("y"))
+            )
+        )
+    ))
+
+    # Complex: let a = 10 in let b = 3 in if a < b then 0 else a + b
+    print(run_and_show("let a=10, b=3 in if a<b then 0 else a+b",
+        Expr.Let("a", Expr.Lit(10),
+            Expr.Let("b", Expr.Lit(3),
+                Expr.If(
+                    Expr.LessThan(Expr.Var("a"), Expr.Var("b")),
+                    Expr.Lit(0),
+                    Expr.Add(Expr.Var("a"), Expr.Var("b"))
+                )
+            )
+        )
+    ))
+
+    # Type error demonstration
+    print("")
+    print("─── Type Errors ───")
+
+    print(run_and_show("true + 1",
+        Expr.Add(Expr.BoolLit(true), Expr.Lit(1))
+    ))
+
+    print(run_and_show("if 42 then 1 else 2",
+        Expr.If(Expr.Lit(42), Expr.Lit(1), Expr.Lit(2))
+    ))
+
+    print(run_and_show("unbound_var",
+        Expr.Var("oops")
+    ))
+}

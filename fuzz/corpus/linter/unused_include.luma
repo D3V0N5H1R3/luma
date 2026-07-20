@@ -1,0 +1,6 @@
+include "some_helper.luma"
+
+@main
+function void main() {
+    print("nothing from the include is used")
+}

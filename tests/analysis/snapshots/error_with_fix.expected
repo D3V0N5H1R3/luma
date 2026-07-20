@@ -1,0 +1,4 @@
+TypeError[E0001] in <unknown>:1:1
+unknown type 'intger'
+hint: Use Converter.to_integer() or Converter.to_string() to convert between types.
+fix: did you mean 'integer'?

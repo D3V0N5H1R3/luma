@@ -1,0 +1,25 @@
+# VM: bitwise, shift, integer-division and null-coalescing operators
+@main
+function void main() {
+    mutable integer flags = 0xFF
+    flags &= 0x0F
+    flags |= 0x30
+    flags ^= 0x05
+    flags <<= 2
+    flags >>= 1
+    flags = ~flags
+
+    integer quotient = 97 // 4
+    integer remainder = 97 % 4
+    integer shifted = 1 << 10
+
+    boolean masked = (flags & 1) == 1
+    integer fallback = String.parse_integer("nope") ?? -1
+
+    mutable integer total = 0
+    for i in 0 ..= 8 {
+        total += i & 3
+    }
+
+    print("${quotient} ${remainder} ${shifted} ${masked} ${fallback} ${total}")
+}

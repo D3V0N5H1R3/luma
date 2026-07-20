@@ -1,0 +1,112 @@
+# ═══════════════════════════════════════════════════════════
+# Publish / Subscribe Pattern
+#
+# Decouples event producers from consumers. An event bus
+# holds subscriber callbacks in a reference and dispatches
+# events to all registered listeners.
+#
+# Usage: luma examples/design-patterns/publish_subscribe.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Event types ──────────────────────────────────────────
+
+choice Event {
+    UserCreated(string name)
+    OrderPlaced(string item, number quantity)
+    ErrorOccurred(string message)
+}
+
+# ─── Event handler type ──────────────────────────────────
+
+type EventHandler = function(Event) -> void
+
+# ─── Event bus ────────────────────────────────────────────
+
+record EventBus {
+    reference<array<EventHandler>> subscribers
+}
+
+function EventBus make_bus() {
+    return EventBus {
+        subscribers = Reference.new([])
+    }
+}
+
+function void subscribe(EventBus bus, EventHandler handler) {
+    Reference.update(bus.subscribers, (array<EventHandler> subs) -> {
+        return Array.push(subs, handler)
+    })
+}
+
+function void publish(EventBus bus, Event event) {
+    array<EventHandler> subs = Reference.get(bus.subscribers)
+
+    for handler in subs {
+        handler(event)
+    }
+}
+
+# ─── Subscribers ──────────────────────────────────────────
+
+function void log_event(Event event) {
+    string msg = match event {
+    case Event.UserCreated(name) { "User created: ${name}" }
+    case Event.OrderPlaced(item, qty) { "Order: ${qty}x ${item}" }
+    case Event.ErrorOccurred(message) { "ERROR: ${message}" }
+    }
+
+    print("  [log] ${msg}")
+}
+
+function EventHandler make_counter(string label) {
+    reference<number> count = Reference.new(0)
+
+    return (Event _) -> {
+        Reference.update(count, (number n) -> n + 1)
+
+        number current = Reference.get(count)
+
+        print("  [${label}] event count: ${current}")
+    }
+}
+
+function EventHandler make_error_alerter() {
+    return (Event event) -> {
+        match event {
+        case Event.ErrorOccurred(message) {
+            print("  *** ALERT: ${message} ***")
+        }
+        else {}
+        }
+    }
+}
+
+# ─── Main ─────────────────────────────────────────────────
+
+@main
+function void main() {
+    print("=== Publish / Subscribe Pattern ===")
+    print("")
+
+    # Create bus and register subscribers
+    EventBus bus = make_bus()
+    subscribe(bus, log_event)
+    subscribe(bus, make_counter("metrics"))
+    subscribe(bus, make_error_alerter())
+
+    # Publish events — all subscribers are notified
+    print("--- UserCreated ---")
+    publish(bus, Event.UserCreated("Alice"))
+
+    print("")
+    print("--- OrderPlaced ---")
+    publish(bus, Event.OrderPlaced("Widget", 3))
+
+    print("")
+    print("--- ErrorOccurred ---")
+    publish(bus, Event.ErrorOccurred("Database timeout"))
+
+    print("")
+    print("--- Another order ---")
+    publish(bus, Event.OrderPlaced("Gadget", 1))
+}

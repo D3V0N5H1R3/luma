@@ -1,0 +1,6 @@
+@main
+function void main() {
+    integer x = 10
+    integer y = x / 0
+    print(y)
+}

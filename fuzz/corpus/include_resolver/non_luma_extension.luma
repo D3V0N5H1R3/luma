@@ -1,0 +1,6 @@
+# Include resolver: non-Luma extensions and extensionless include targets
+include "data.txt"
+include "noextension"
+include "archive.tar.gz"
+include "module.LUMA"
+include "weird.luma.bak"

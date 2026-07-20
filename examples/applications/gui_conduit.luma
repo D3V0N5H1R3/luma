@@ -1,0 +1,1720 @@
+# GraphicalUi "Conduit" — a Luma port of the RealWorld example app.
+#
+# RealWorld (https://github.com/gothinkster/realworld), and Richard Feldman's
+# Elm implementation (rtfeldman/elm-spa-example), is the canonical *advanced*
+# Elm application: a Medium-style social blogging platform exercising CRUD,
+# authentication, client-side routing, pagination, and other real-world
+# patterns. Because GraphicalUi shares Elm's Model/View/Update architecture,
+# the design transfers almost directly.
+#
+# This is a self-contained, in-memory port (no HTTP backend) covering the core
+# of the RealWorld spec:
+#   - Auth:      register, sign in, sign out, settings.
+#   - Articles:  create, read, edit, delete (CRUD).
+#   - Comments:  list, add, delete.
+#   - Social:    favorite/unfavorite articles, follow/unfollow authors.
+#   - Feeds:     global feed, "your feed" (followed authors), tag filter.
+#   - Routing:   navbar links drive a URL-style route held in the model;
+#                pages dispatch on it and parse their own :slug / :username.
+#   - Pagination on the home feed.
+#
+# Simplification vs. the full spec: "following" tracks only the current user's
+# follows (one active session at a time); article favorites are stored as the
+# set of usernames who favorited, so counts and the per-user heart are exact.
+
+# ─── Constants ─────────────────────────────────────────────
+
+function integer PAGE_SIZE() {
+    return 3
+}
+
+# ─── Styles ────────────────────────────────────────────────
+
+function dictionary<string> brand_style() {
+    return {
+        "font_size": "1.5rem",
+        "font_weight": "700",
+        "color": GraphicalUi.VAR_PRIMARY,
+        "text_decoration": "none"
+    }
+}
+
+function dictionary<string> nav_style(boolean active) {
+    if active {
+        return {
+            "padding": "6px 10px",
+            "color": GraphicalUi.VAR_PRIMARY,
+            "font_weight": "600",
+            "text_decoration": "none"
+        }
+    }
+    return {
+        "padding": "6px 10px",
+        "color": GraphicalUi.VAR_FG,
+        "text_decoration": "none"
+    }
+}
+
+function dictionary<string> card_style() {
+    return {
+        "border": "1px solid ${GraphicalUi.VAR_BORDER}",
+        "border_radius": GraphicalUi.VAR_RADIUS,
+        "padding": "16px",
+        "gap": "8px"
+    }
+}
+
+function dictionary<string> banner_style() {
+    return {
+        "background_color": GraphicalUi.VAR_PRIMARY,
+        "color": "white",
+        "padding": "24px",
+        "border_radius": GraphicalUi.VAR_RADIUS,
+        "align_items": "center",
+        "gap": "4px"
+    }
+}
+
+function dictionary<string> title_link_style() {
+    return {
+        "font_size": "1.25rem",
+        "font_weight": "700",
+        "color": GraphicalUi.VAR_FG,
+        "text_decoration": "none"
+    }
+}
+
+function dictionary<string> author_link_style() {
+    return {
+        "color": GraphicalUi.VAR_PRIMARY,
+        "text_decoration": "none",
+        "font_weight": "600"
+    }
+}
+
+function dictionary<string> muted_style() {
+    return {"color": GraphicalUi.VAR_DISABLED_FG}
+}
+
+function dictionary<string> form_style() {
+    return {"gap": "10px", "max_width": "440px", "margin": "0 auto"}
+}
+
+function dictionary<string> input_style(string id) {
+    return GraphicalUi.merge_styles({"id": id}, {"width": "100%"})
+}
+
+function dictionary<string> id_style(dictionary<string> base, string id) {
+    return GraphicalUi.merge_styles(base, {"id": id})
+}
+
+function dictionary<string> variant_button_style(string variant, string id) {
+    return {"variant": variant, "id": id}
+}
+
+function dictionary field_options(boolean required, string help, string error) {
+    mutable dictionary opts = {}
+    if required {
+        opts["required"] = true
+    }
+    if !String.is_empty(help) {
+        opts["help"] = help
+    }
+    if !String.is_empty(error) {
+        opts["error"] = error
+    }
+    return opts
+}
+
+function string required_error(string form_error, string value, string label) {
+    if !String.is_empty(form_error) && String.is_empty(String.trim(value)) {
+        return "${label} is required."
+    }
+    return ""
+}
+
+function widget text_field(dictionary model, string label, string key, string placeholder,
+    string help) {
+    string err = model["error"]
+    return GraphicalUi.field(label,
+        GraphicalUi.text_input(model[key],
+            (string v) -> Dictionary.set(model, key, v), placeholder,
+            input_style(String.replace(key, "_", "-"))),
+        field_options(true, help, required_error(err, model[key], label)))
+}
+
+function dictionary confirm_danger_options(string cancel_label) {
+    mutable dictionary opts = {}
+    opts["confirm_label"] = "Delete"
+    opts["cancel_label"] = cancel_label
+    opts["danger"] = true
+    return opts
+}
+
+function dictionary<string> fav_style(boolean active, string slug) {
+    mutable dictionary<string> s = {"id": "fav-${slug}"}
+    s["padding"] = "4px 10px"
+    s["border"] = "1px solid ${GraphicalUi.VAR_PRIMARY}"
+    s["border_radius"] = GraphicalUi.VAR_RADIUS
+    s["cursor"] = "pointer"
+    if active {
+        s["background_color"] = GraphicalUi.VAR_PRIMARY
+        s["color"] = "white"
+    } else {
+        s["background_color"] = "transparent"
+        s["color"] = GraphicalUi.VAR_PRIMARY
+    }
+    return s
+}
+
+function dictionary<string> tab_style(boolean active, string id) {
+    mutable dictionary<string> s = {"id": id}
+    s["padding"] = "6px 12px"
+    s["background_color"] = "transparent"
+    s["border"] = "none"
+    s["cursor"] = "pointer"
+    if active {
+        s["color"] = GraphicalUi.VAR_PRIMARY
+        s["font_weight"] = "600"
+        s["border_bottom"] = "2px solid ${GraphicalUi.VAR_PRIMARY}"
+    } else {
+        s["color"] = GraphicalUi.VAR_DISABLED_FG
+    }
+    return s
+}
+
+function dictionary<string> poptag_base() {
+    return {
+        "padding": "2px 12px",
+        "background_color": "var(--gui-primary-subtle-bg)",
+        "border": "none",
+        "border_radius": "12px",
+        "color": GraphicalUi.VAR_FG,
+        "cursor": "pointer"
+    }
+}
+
+# ─── Record constructors ───────────────────────────────────
+
+function dictionary make_user(string username, string email, string password, string bio) {
+    mutable dictionary u = {"username": username}
+    u["email"] = email
+    u["password"] = password
+    u["bio"] = bio
+    return u
+}
+
+function dictionary make_comment(integer id, string author, string body) {
+    mutable dictionary c = {"id": id}
+    c["author"] = author
+    c["body"] = body
+    return c
+}
+
+function dictionary make_article(string slug, string title, string description,
+        string body, array<string> tags, string author,
+        array<string> favorited_by, array<dictionary> comments) {
+    mutable dictionary a = {"slug": slug}
+    a["title"] = title
+    a["description"] = description
+    a["body"] = body
+    a["tags"] = tags
+    a["author"] = author
+    a["favorited_by"] = favorited_by
+    a["comments"] = comments
+    return a
+}
+
+# ─── Seed data & initial model ─────────────────────────────
+
+function array<dictionary> seed_users() {
+    return [
+        make_user("elm_fan", "elm@conduit.dev", "password",
+            "Functional programming enthusiast."),
+        make_user("luma_dev", "luma@conduit.dev", "password",
+            "Building delightful tools with Luma."),
+        make_user("guest_writer", "guest@conduit.dev", "password",
+            "Occasional contributor and avid reader.")
+    ]
+}
+
+function array<dictionary> seed_articles() {
+    return [
+        make_article(slugify("Why Elm Changed How I Think", 1),
+            "Why Elm Changed How I Think",
+            "A reflection on pure functional UI and the Elm Architecture.",
+            "The Elm Architecture splits every program into Model, View, and "
+                + "Update. Once state can only change in one place, whole classes "
+                + "of bugs simply disappear.",
+            ["functional", "elm"], "elm_fan",
+            ["luma_dev"],
+            [make_comment(1, "luma_dev",
+                "Great read — the Model/View/Update split finally clicked for me.")]),
+        make_article(slugify("The Elm Architecture Explained", 2),
+            "The Elm Architecture Explained",
+            "Model, View, Update — the loop that powers it all.",
+            "State lives in one immutable Model. The View renders it. Update "
+                + "returns a brand new Model in response to messages. That is the "
+                + "entire loop.",
+            ["elm", "architecture"], "elm_fan", [], []),
+        make_article(slugify("Getting Started with Luma", 3),
+            "Getting Started with Luma",
+            "Your first steps in a statically typed language built for beginners.",
+            "Luma is expression-oriented and statically typed. Start from an "
+                + "@main function, lean on the compiler, and let the types guide "
+                + "you.",
+            ["luma", "beginners"], "luma_dev",
+            ["elm_fan", "guest_writer"],
+            [make_comment(2, "elm_fan", "Very approachable introduction. Bookmarked!")]),
+        make_article(slugify("Static Types for Beginners", 4),
+            "Static Types for Beginners",
+            "Why types help you more than they slow you down.",
+            "Static types catch mistakes before your program ever runs, and they "
+                + "double as always-accurate documentation.",
+            ["types", "beginners"], "luma_dev", [], []),
+        make_article(slugify("A Tour of GraphicalUi", 5),
+            "A Tour of GraphicalUi",
+            "Build desktop UIs with the Elm Architecture in Luma.",
+            "GraphicalUi brings Model/View/Update to native windows. Describe a "
+                + "view as data and let the framework reconcile it.",
+            ["luma", "gui"], "guest_writer",
+            ["elm_fan"], [])
+    ]
+}
+
+function dictionary conduit_model() {
+    mutable dictionary model = {"articles": seed_articles()}
+    model["users"] = seed_users()
+    model["following"] = []
+    model["current_user"] = ""
+    model["route"] = "/"
+    model["feed"] = "global"
+    model["feed_tag"] = ""
+    model["page_index"] = 0
+    model["next_id"] = 100
+    model["profile_tab"] = "authored"
+    model["login_email"] = ""
+    model["login_password"] = ""
+    model["reg_username"] = ""
+    model["reg_email"] = ""
+    model["reg_password"] = ""
+    model["editor_title"] = ""
+    model["editor_desc"] = ""
+    model["editor_body"] = ""
+    model["editor_tags"] = ""
+    model["comment_body"] = ""
+    model["settings_email"] = ""
+    model["settings_bio"] = ""
+    model["pending_delete_type"] = ""
+    model["pending_delete_slug"] = ""
+    model["pending_delete_comment_id"] = -1
+    model["error"] = ""
+    return model
+}
+
+# ─── Pure helpers ──────────────────────────────────────────
+
+function string slugify(string title, integer id) {
+    array<string> parts = String.split(String.lowercase(title), " ")
+    array<string> trimmed = Array.map(parts, (string p) -> String.trim(p)) ?? []
+    array<string> words = Array.filter(trimmed, (string w) -> !String.is_empty(w)) ?? []
+    string joined = String.join(words, "-")
+    return "${joined}-${id}"
+}
+
+function array<string> parse_tags(string raw) {
+    array<string> parts = String.split(raw, " ")
+    array<string> trimmed = Array.map(parts, (string p) -> String.trim(p)) ?? []
+    array<string> present = Array.filter(trimmed, (string t) -> !String.is_empty(t)) ?? []
+    return Array.unique(present)
+}
+
+# Linear scan for the first item whose string field `key` equals `value`.
+# On a miss, returns a stub carrying an empty `key`, so callers can detect
+# "not found" by testing that field.
+function dictionary find_by_field(array<dictionary> items, string key, string value) {
+    for item in items {
+        string field = item[key]
+        if field == value {
+            return item
+        }
+    }
+    mutable dictionary missing = {}
+    missing[key] = ""
+    return missing
+}
+
+function dictionary find_article(dictionary model, string slug) {
+    return find_by_field(model["articles"], "slug", slug)
+}
+
+function dictionary find_user(dictionary model, string username) {
+    return find_by_field(model["users"], "username", username)
+}
+
+function array<dictionary> feed_articles(dictionary model) {
+    array<dictionary> arts = model["articles"]
+    string feed = model["feed"]
+    if feed == "personal" {
+        array<string> following = model["following"]
+        return Array.filter(arts, (dictionary a) -> {
+            string author = a["author"]
+            return Array.contains(following, author)
+        }) ?? []
+    }
+    if feed == "tag" {
+        string tag = model["feed_tag"]
+        return Array.filter(arts, (dictionary a) -> {
+            array<string> tags = a["tags"]
+            return Array.contains(tags, tag)
+        }) ?? []
+    }
+    return arts
+}
+
+function array<dictionary> profile_articles(dictionary model, string username, string tab) {
+    array<dictionary> arts = model["articles"]
+    if tab == "favorited" {
+        return Array.filter(arts, (dictionary a) -> {
+            array<string> fav = a["favorited_by"]
+            return Array.contains(fav, username)
+        }) ?? []
+    }
+    return Array.filter(arts, (dictionary a) -> {
+        string au = a["author"]
+        return au == username
+    }) ?? []
+}
+
+function array<string> popular_tags(dictionary model) {
+    array<dictionary> arts = model["articles"]
+    mutable array<string> tags = []
+    for a in arts {
+        array<string> t = a["tags"]
+        for tag in t {
+            if !Array.contains(tags, tag) {
+                tags = Array.push(tags, tag)
+            }
+        }
+    }
+    return tags
+}
+
+function array<dictionary> paginate(array<dictionary> arr, integer page, integer size) {
+    integer count = Array.length(arr)
+    integer start = page * size
+    if start >= count {
+        return []
+    }
+    mutable integer end_index = start + size
+    if end_index > count {
+        end_index = count
+    }
+    return Array.slice(arr, start, end_index) ?? []
+}
+
+# Clamp a (possibly stale) page index into range so a feed that shrank — e.g. after
+# deleting articles — can never strand the reader on a blank, control-less page.
+function integer clamp_page(integer total, integer requested, integer size) {
+    integer last_page = if total == 0 { 0 } else { (total - 1) / size }
+    if requested > last_page {
+        return last_page
+    }
+    return requested
+}
+
+# Split a "/a/b" route and return the segment at `index`, falling back to
+# `fallback` when that segment is absent or empty.
+function string route_segment(string route, integer index, string fallback) {
+    array<string> segs = String.split(route, "/")
+    if Array.length(segs) <= index {
+        return fallback
+    }
+    string segment = segs[index]
+    if String.is_empty(segment) {
+        return fallback
+    }
+    return segment
+}
+
+function string route_page(string route) {
+    return route_segment(route, 1, "home")
+}
+
+function string route_param(string route) {
+    return route_segment(route, 2, "")
+}
+
+# ─── State transitions (return a new model) ────────────────
+
+# Shared post-authentication reset: adopt the signed-in user and return to a
+# clean global feed. Callers clear their own form fields and attach the command.
+function dictionary enter_session(dictionary model, string username) {
+    mutable dictionary updated = model
+    updated["current_user"] = username
+    updated["route"] = "/"
+    updated["error"] = ""
+    updated["following"] = []
+    updated["feed"] = "global"
+    updated["page_index"] = 0
+    return updated
+}
+
+function dictionary login(dictionary model) {
+    string email = model["login_email"]
+    string pw = model["login_password"]
+    array<dictionary> users = model["users"]
+    mutable string found = ""
+    for u in users {
+        string ue = u["email"]
+        string up = u["password"]
+        if ue == email && up == pw {
+            found = u["username"]
+        }
+    }
+    if String.is_empty(String.trim(email)) || String.is_empty(pw) {
+        return Dictionary.set(model, "error", "Email and password are required.")
+    }
+    if String.is_empty(found) {
+        return Dictionary.set(model, "error", "Invalid email or password.")
+    }
+    mutable dictionary updated = enter_session(model, found)
+    updated["login_email"] = ""
+    updated["login_password"] = ""
+    return GraphicalUi.with_command(updated, GraphicalUi.batch([
+        GraphicalUi.announce("Signed in as ${found}."),
+        GraphicalUi.focus("feed-global")
+    ]))
+}
+
+function dictionary register(dictionary model) {
+    string username = String.trim(model["reg_username"])
+    string email = String.trim(model["reg_email"])
+    string pw = model["reg_password"]
+    if String.is_empty(username) || String.is_empty(email) || String.is_empty(pw) {
+        return Dictionary.set(model, "error", "All fields are required.")
+    }
+    array<dictionary> users = model["users"]
+    for u in users {
+        string name = u["username"]
+        if name == username {
+            return Dictionary.set(model, "error", "That username is already taken.")
+        }
+    }
+    dictionary new_user = make_user(username, email, pw, "")
+    mutable dictionary updated = enter_session(model, username)
+    updated["users"] = Array.push(users, new_user)
+    updated["reg_username"] = ""
+    updated["reg_email"] = ""
+    updated["reg_password"] = ""
+    return GraphicalUi.with_command(updated, GraphicalUi.batch([
+        GraphicalUi.announce("Account created. Signed in as ${username}."),
+        GraphicalUi.focus("feed-global")
+    ]))
+}
+
+function dictionary logout(dictionary model) {
+    mutable dictionary updated = model
+    updated["current_user"] = ""
+    updated["route"] = "/"
+    updated["feed"] = "global"
+    updated["following"] = []
+    updated["page_index"] = 0
+    return GraphicalUi.with_command(updated, GraphicalUi.announce("Signed out."))
+}
+
+function dictionary save_settings(dictionary model) {
+    string user = model["current_user"]
+    string new_email = String.trim(model["settings_email"])
+    string new_bio = model["settings_bio"]
+    if String.is_empty(new_email) {
+        return Dictionary.set(model, "error", "Email is required.")
+    }
+    array<dictionary> users = model["users"]
+    array<dictionary> updated_users = Array.map(users, (dictionary u) -> {
+        string name = u["username"]
+        if name == user {
+            mutable dictionary uu = u
+            uu["email"] = new_email
+            uu["bio"] = new_bio
+            return uu
+        }
+        return u
+    }) ?? []
+    mutable dictionary updated = model
+    updated["users"] = updated_users
+    updated["error"] = ""
+    return GraphicalUi.with_command(updated,
+        GraphicalUi.announce("Settings saved."))
+}
+
+# Mirror of require_login_view() for state transitions: with no one signed in,
+# redirect to /login and explain why. Callers guard on an empty current_user.
+function dictionary require_login(dictionary model, string message) {
+    dictionary login_model = Dictionary.set(model, "route", "/login")
+    return GraphicalUi.with_command(login_model, GraphicalUi.announce(message))
+}
+
+function dictionary toggle_favorite(dictionary model, string slug) {
+    string user = model["current_user"]
+    if String.is_empty(user) {
+        return require_login(model, "Please sign in to favorite articles.")
+    }
+    dictionary article = find_article(model, slug)
+    array<string> current_favorites = article["favorited_by"]
+    boolean active = Array.contains(current_favorites, user)
+    array<dictionary> arts = model["articles"]
+    array<dictionary> updated = Array.map(arts, (dictionary a) -> {
+        string s = a["slug"]
+        if s == slug {
+            array<string> fav = a["favorited_by"]
+            mutable dictionary u = a
+            if Array.contains(fav, user) {
+                u["favorited_by"] = Array.filter(fav, (string n) -> n != user) ?? []
+            } else {
+                u["favorited_by"] = Array.push(fav, user)
+            }
+            return u
+        }
+        return a
+    }) ?? []
+    string title = article["title"]
+    string message = if active { "Removed ${title} from favorites." } else { "Added ${title} to favorites." }
+    return GraphicalUi.with_command(Dictionary.set(model, "articles", updated),
+        GraphicalUi.announce(message))
+}
+
+function dictionary toggle_follow(dictionary model, string username) {
+    string user = model["current_user"]
+    if String.is_empty(user) {
+        return require_login(model, "Please sign in to follow authors.")
+    }
+    array<string> following = model["following"]
+    if Array.contains(following, username) {
+        dictionary updated = Dictionary.set(model, "following",
+            Array.filter(following, (string n) -> n != username) ?? [])
+        return GraphicalUi.with_command(updated,
+            GraphicalUi.announce("Unfollowed ${username}."))
+    }
+    return GraphicalUi.with_command(
+        Dictionary.set(model, "following", Array.push(following, username)),
+        GraphicalUi.announce("Following ${username}."))
+}
+
+function dictionary set_feed(dictionary model, string feed, string tag) {
+    mutable dictionary updated = model
+    updated["feed"] = feed
+    updated["feed_tag"] = tag
+    updated["page_index"] = 0
+    return updated
+}
+
+function dictionary announce_set_feed(dictionary model, string feed, string tag) {
+    dictionary updated = set_feed(model, feed, tag)
+    string label = if feed == "tag" { "#${tag}" } else { feed }
+    return GraphicalUi.with_command(updated,
+        GraphicalUi.announce("Showing ${label} feed."))
+}
+
+function dictionary new_editor(dictionary model) {
+    mutable dictionary updated = model
+    updated["editor_title"] = ""
+    updated["editor_desc"] = ""
+    updated["editor_body"] = ""
+    updated["editor_tags"] = ""
+    updated["error"] = ""
+    updated["route"] = "/editor"
+    return GraphicalUi.with_command(updated,
+        GraphicalUi.focus("editor-title"))
+}
+
+function dictionary open_settings(dictionary model) {
+    dictionary user = find_user(model, model["current_user"])
+    mutable dictionary updated = model
+    updated["settings_email"] = user["email"]
+    updated["settings_bio"] = user["bio"]
+    updated["route"] = "/settings"
+    updated["error"] = ""
+    return GraphicalUi.with_command(updated,
+        GraphicalUi.focus("settings-email"))
+}
+
+function dictionary start_edit(dictionary model, string slug) {
+    dictionary a = find_article(model, slug)
+    array<string> tags = a["tags"]
+    mutable dictionary updated = model
+    updated["editor_title"] = a["title"]
+    updated["editor_desc"] = a["description"]
+    updated["editor_body"] = a["body"]
+    updated["editor_tags"] = String.join(tags, " ")
+    updated["error"] = ""
+    updated["route"] = "/editor/${slug}"
+    return GraphicalUi.with_command(updated,
+        GraphicalUi.focus("editor-title"))
+}
+
+function dictionary create_article(dictionary model) {
+    string title = String.trim(model["editor_title"])
+    string desc = String.trim(model["editor_desc"])
+    string body = String.trim(model["editor_body"])
+    if String.is_empty(title) || String.is_empty(desc) || String.is_empty(body) {
+        return Dictionary.set(model, "error", "Title, description, and body are required.")
+    }
+    integer id = model["next_id"]
+    string slug = slugify(title, id)
+    array<string> tags = parse_tags(model["editor_tags"])
+    string author = model["current_user"]
+    dictionary article = make_article(slug, title, desc, body, tags, author, [], [])
+    array<dictionary> arts = model["articles"]
+    mutable dictionary updated = model
+    updated["articles"] = Array.push(arts, article)
+    updated["next_id"] = id + 1
+    updated["route"] = "/article/${slug}"
+    updated["error"] = ""
+    updated["editor_title"] = ""
+    updated["editor_desc"] = ""
+    updated["editor_body"] = ""
+    updated["editor_tags"] = ""
+    return GraphicalUi.with_command(updated, GraphicalUi.batch([
+        GraphicalUi.announce("Article published: ${title}."),
+        GraphicalUi.focus("fav-${slug}")
+    ]))
+}
+
+function dictionary update_article(dictionary model, string slug) {
+    string title = String.trim(model["editor_title"])
+    string desc = String.trim(model["editor_desc"])
+    string body = String.trim(model["editor_body"])
+    if String.is_empty(title) || String.is_empty(desc) || String.is_empty(body) {
+        return Dictionary.set(model, "error", "Title, description, and body are required.")
+    }
+    array<string> tags = parse_tags(model["editor_tags"])
+    array<dictionary> arts = model["articles"]
+    array<dictionary> updated_arts = Array.map(arts, (dictionary a) -> {
+        string s = a["slug"]
+        if s == slug {
+            mutable dictionary u = a
+            u["title"] = title
+            u["description"] = desc
+            u["body"] = body
+            u["tags"] = tags
+            return u
+        }
+        return a
+    }) ?? []
+    mutable dictionary updated = model
+    updated["articles"] = updated_arts
+    updated["route"] = "/article/${slug}"
+    updated["error"] = ""
+    return GraphicalUi.with_command(updated, GraphicalUi.batch([
+        GraphicalUi.announce("Article updated: ${title}."),
+        GraphicalUi.focus("fav-${slug}")
+    ]))
+}
+
+# The pending_delete_* triplet tracks a delete awaiting confirmation. Reset it
+# once the deletion resolves (confirmed or cancelled).
+function dictionary clear_pending_delete(dictionary model) {
+    mutable dictionary updated = model
+    updated["pending_delete_type"] = ""
+    updated["pending_delete_slug"] = ""
+    updated["pending_delete_comment_id"] = -1
+    return updated
+}
+
+function dictionary delete_article(dictionary model, string slug) {
+    array<dictionary> arts = model["articles"]
+    array<dictionary> remaining = Array.filter(arts, (dictionary a) -> {
+        string s = a["slug"]
+        return s != slug
+    }) ?? []
+    mutable dictionary updated = clear_pending_delete(model)
+    updated["articles"] = remaining
+    updated["route"] = "/"
+    updated["page_index"] = 0
+    return GraphicalUi.with_command(updated, GraphicalUi.batch([
+        GraphicalUi.announce("Article deleted."),
+        GraphicalUi.focus("feed-global")
+    ]))
+}
+
+function dictionary add_comment(dictionary model, string slug) {
+    string body = String.trim(model["comment_body"])
+    if String.is_empty(body) {
+        return Dictionary.set(model, "error", "Comment is required.")
+    }
+    integer id = model["next_id"]
+    string author = model["current_user"]
+    dictionary comment = make_comment(id, author, body)
+    array<dictionary> arts = model["articles"]
+    array<dictionary> updated_arts = Array.map(arts, (dictionary a) -> {
+        string s = a["slug"]
+        if s == slug {
+            array<dictionary> cmts = a["comments"]
+            mutable dictionary u = a
+            u["comments"] = Array.push(cmts, comment)
+            return u
+        }
+        return a
+    }) ?? []
+    mutable dictionary updated = model
+    updated["articles"] = updated_arts
+    updated["next_id"] = id + 1
+    updated["comment_body"] = ""
+    updated["error"] = ""
+    return GraphicalUi.with_command(updated, GraphicalUi.batch([
+        GraphicalUi.announce("Comment posted."),
+        GraphicalUi.focus("post-comment")
+    ]))
+}
+
+function dictionary delete_comment(dictionary model, string slug, integer comment_id) {
+    array<dictionary> arts = model["articles"]
+    array<dictionary> updated_arts = Array.map(arts, (dictionary a) -> {
+        string s = a["slug"]
+        if s == slug {
+            array<dictionary> cmts = a["comments"]
+            mutable dictionary u = a
+            u["comments"] = Array.filter(cmts, (dictionary c) -> {
+                integer cid = c["id"]
+                return cid != comment_id
+            }) ?? []
+            return u
+        }
+        return a
+    }) ?? []
+    mutable dictionary updated = clear_pending_delete(model)
+    updated["articles"] = updated_arts
+    return GraphicalUi.with_command(updated,
+        GraphicalUi.announce("Comment deleted."))
+}
+
+# Stage a delete for confirmation. `comment_id` is -1 for article deletions.
+function dictionary request_delete(dictionary model, string kind, string slug, integer comment_id) {
+    mutable dictionary updated = model
+    updated["pending_delete_type"] = kind
+    updated["pending_delete_slug"] = slug
+    updated["pending_delete_comment_id"] = comment_id
+    return GraphicalUi.with_command(updated,
+        GraphicalUi.announce("Confirm ${kind} deletion."))
+}
+
+function dictionary cancel_delete(dictionary model) {
+    return GraphicalUi.with_command(clear_pending_delete(model),
+        GraphicalUi.announce("Deletion cancelled."))
+}
+
+function dictionary confirm_pending_delete(dictionary model) {
+    string kind = model["pending_delete_type"]
+    string slug = model["pending_delete_slug"]
+    if kind == "article" {
+        return delete_article(model, slug)
+    }
+    if kind == "comment" {
+        integer comment_id = model["pending_delete_comment_id"]
+        return delete_comment(model, slug, comment_id)
+    }
+    return model
+}
+
+function dictionary set_profile_tab(dictionary model, string tab) {
+    return GraphicalUi.with_command(Dictionary.set(model, "profile_tab", tab),
+        GraphicalUi.announce("Showing ${tab} articles."))
+}
+
+function dictionary next_page(dictionary model) {
+    integer page = model["page_index"]
+    return GraphicalUi.with_command(Dictionary.set(model, "page_index", page + 1),
+        GraphicalUi.announce("Page ${page + 2}."))
+}
+
+function dictionary prev_page(dictionary model) {
+    integer page = model["page_index"]
+    if page <= 0 {
+        return model
+    }
+    return GraphicalUi.with_command(Dictionary.set(model, "page_index", page - 1),
+        GraphicalUi.announce("Page ${page}."))
+}
+
+# ─── View components ───────────────────────────────────────
+
+function widget view_favorite_button(dictionary model, dictionary a) {
+    string slug = a["slug"]
+    array<string> fav = a["favorited_by"]
+    integer count = Array.length(fav)
+    string user = model["current_user"]
+    boolean active = Array.contains(fav, user)
+    return GraphicalUi.button("♥ ${count}", () -> toggle_favorite(model, slug),
+        GraphicalUi.merge_styles(fav_style(active, slug), {
+            "aria_label": if active {
+                "Unfavorite article, ${count} favorites"
+            } else {
+                "Favorite article, ${count} favorites"
+            }
+        }))
+}
+
+function widget view_tag_badges(array<string> tags) {
+    return GraphicalUi.row(
+        Array.map(tags, (string t) -> GraphicalUi.badge(t)) ?? [],
+        {"gap": "4px"})
+}
+
+function widget view_preview(dictionary model, dictionary a) {
+    string slug = a["slug"]
+    string author = a["author"]
+    string title = a["title"]
+    string description = a["description"]
+    array<string> tags = a["tags"]
+    return GraphicalUi.column([
+        GraphicalUi.row([
+            GraphicalUi.navigation_link(author, "navigate:/profile/${author}",
+                author_link_style()),
+            GraphicalUi.flexible_space(),
+            view_favorite_button(model, a)
+        ], {"align_items": "center"}),
+        GraphicalUi.navigation_link(title, "navigate:/article/${slug}",
+            title_link_style()),
+        GraphicalUi.label(description, muted_style()),
+        GraphicalUi.row([
+            GraphicalUi.navigation_link("Read more...", "navigate:/article/${slug}",
+                GraphicalUi.merge_styles(muted_style(), {"aria_label": "Read more: ${title}"})),
+            GraphicalUi.flexible_space(),
+            view_tag_badges(tags)
+        ], {"align_items": "center"})
+    ], card_style())
+}
+
+function widget view_feed_list(dictionary model, array<dictionary> entries, integer total) {
+    if total == 0 {
+        mutable dictionary opts = {}
+        opts["icon"] = "file-text"
+        opts["title"] = "No articles yet"
+        if model["feed"] != "global" {
+            opts["action_label"] = "Show global feed"
+            opts["on_action"] = () -> announce_set_feed(model, "global", "")
+        }
+        return GraphicalUi.empty_state("There are no articles in this feed yet.", opts)
+    }
+    return GraphicalUi.column(
+        Array.map(entries, (dictionary a) -> view_preview(model, a)) ?? [],
+        {"gap": "12px"})
+}
+
+function widget view_feed_tabs(dictionary model) {
+    string feed = model["feed"]
+    string user = model["current_user"]
+    string tag = model["feed_tag"]
+    mutable array<widget> tabs = []
+    if !String.is_empty(user) {
+        tabs = Array.push(tabs, GraphicalUi.button("Your Feed",
+            () -> announce_set_feed(model, "personal", ""),
+            tab_style(feed == "personal", "feed-personal")))
+    }
+    tabs = Array.push(tabs, GraphicalUi.button("Global Feed",
+        () -> announce_set_feed(model, "global", ""),
+        tab_style(feed == "global", "feed-global")))
+    if feed == "tag" {
+        tabs = Array.push(tabs, GraphicalUi.button("#${tag}",
+            () -> announce_set_feed(model, "tag", tag),
+            tab_style(true, "feed-tag")))
+    }
+    return GraphicalUi.row(tabs,
+        {"gap": "4px", "border_bottom": "1px solid ${GraphicalUi.VAR_BORDER}"})
+}
+
+function widget view_pagination(dictionary model, integer page, integer total) {
+    integer size = PAGE_SIZE()
+    boolean has_next = (page + 1) * size < total
+    mutable array<widget> controls = []
+    if page > 0 {
+        controls = Array.push(controls, GraphicalUi.button("Prev",
+            () -> prev_page(model), variant_button_style(GraphicalUi.GHOST, "page-prev")))
+    }
+    controls = Array.push(controls, GraphicalUi.label("Page ${page + 1}", muted_style()))
+    if has_next {
+        controls = Array.push(controls, GraphicalUi.button("Next",
+            () -> next_page(model), variant_button_style(GraphicalUi.GHOST, "page-next")))
+    }
+    return GraphicalUi.when(total > size, GraphicalUi.row(controls,
+        {"align_items": "center", "gap": "8px", "padding": "8px 0"}))
+}
+
+function widget view_tags_sidebar(dictionary model) {
+    array<string> tags = popular_tags(model)
+    dictionary<string> sidebar_style = GraphicalUi.responsive({
+        "0": {"width": "100%"},
+        "640": {"width": "240px"}
+    })
+    return GraphicalUi.column([
+        GraphicalUi.heading("Popular Tags", 3),
+        GraphicalUi.row(
+            Array.map(tags, (string t) -> GraphicalUi.button(t,
+                () -> announce_set_feed(model, "tag", t),
+                id_style(poptag_base(), "poptag-${t}"))) ?? [],
+            {"gap": "6px", "flex_wrap": "wrap"})
+    ], GraphicalUi.merge_styles(card_style(), sidebar_style))
+}
+
+function widget navbar_right(dictionary model) {
+    string route = model["route"]
+    string user = model["current_user"]
+    if String.is_empty(user) {
+        return GraphicalUi.row([
+            GraphicalUi.navigation_link("Home", "navigate:/", nav_style(route == "/")),
+            GraphicalUi.navigation_link("Sign in", "navigate:/login",
+                nav_style(route == "/login")),
+            GraphicalUi.navigation_link("Sign up", "navigate:/register",
+                nav_style(route == "/register"))
+        ], {"align_items": "center", "gap": "2px"})
+    }
+    return GraphicalUi.row([
+        GraphicalUi.navigation_link("Home", "navigate:/", nav_style(route == "/")),
+        GraphicalUi.button("New Article", () -> new_editor(model),
+            variant_button_style(GraphicalUi.GHOST, "new-article")),
+        GraphicalUi.button("Settings", () -> open_settings(model),
+            variant_button_style(GraphicalUi.GHOST, "settings-link")),
+        GraphicalUi.navigation_link(user, "navigate:/profile/${user}",
+            nav_style(String.starts_with(route, "/profile"))),
+        GraphicalUi.button("Logout", () -> logout(model),
+            variant_button_style(GraphicalUi.GHOST, "nav-logout"))
+    ], {"align_items": "center", "gap": "2px"})
+}
+
+function widget view_navbar(dictionary model) {
+    return GraphicalUi.toolbar([
+        GraphicalUi.navigation_link("conduit", "navigate:/", brand_style()),
+        GraphicalUi.flexible_space(),
+        navbar_right(model)
+    ])
+}
+
+# ─── Pages ─────────────────────────────────────────────────
+
+function widget view_banner() {
+    return GraphicalUi.column([
+        GraphicalUi.heading("conduit", 1),
+        GraphicalUi.label("A place to share your knowledge.")
+    ], banner_style())
+}
+
+function widget view_home(dictionary model) {
+    array<dictionary> feed = feed_articles(model)
+    integer total = Array.length(feed)
+    integer page = clamp_page(total, model["page_index"], PAGE_SIZE())
+    array<dictionary> page_articles = paginate(feed, page, PAGE_SIZE())
+    dictionary<string> home_grid = GraphicalUi.responsive({
+        "0": {"flex_direction": "column", "gap": "16px", "align_items": "stretch"},
+        "640": {"flex_direction": "row", "gap": "16px", "align_items": "flex-start"}
+    })
+    return GraphicalUi.column([
+        view_banner(),
+        GraphicalUi.row([
+            GraphicalUi.column([
+                view_feed_tabs(model),
+                view_feed_list(model, page_articles, total),
+                view_pagination(model, page, total)
+            ], GraphicalUi.merge_styles({"flex": GraphicalUi.fill()}, {"gap": "12px"})),
+            view_tags_sidebar(model)
+        ], home_grid)
+    ], {"gap": "16px"})
+}
+
+# Append an error alert to a view's children only when there is an error to show.
+function array<widget> push_optional_alert(array<widget> children, string error) {
+    if String.is_empty(error) {
+        return children
+    }
+    return Array.push(children, GraphicalUi.alert(error, GraphicalUi.ERROR))
+}
+
+# Shared shell for the sign-in / sign-up forms: a heading, an alternate-action
+# link, an optional error alert, the form fields, then a submit button.
+function widget auth_form_view(dictionary model, string heading, widget alt_link,
+        array<widget> fields, widget submit) {
+    mutable array<widget> children = [GraphicalUi.heading(heading, 1), alt_link]
+    children = push_optional_alert(children, model["error"])
+    for field in fields {
+        children = Array.push(children, field)
+    }
+    children = Array.push(children, submit)
+    return GraphicalUi.column(children, form_style())
+}
+
+function widget require_login_view() {
+    return GraphicalUi.column([
+        GraphicalUi.heading("Please sign in", 1),
+        GraphicalUi.navigation_link("Go to Sign in", "navigate:/login", author_link_style())
+    ], form_style())
+}
+
+function widget view_login(dictionary model) {
+    return auth_form_view(model, "Sign in",
+        GraphicalUi.navigation_link("Need an account?", "navigate:/register",
+            author_link_style()),
+        [
+            text_field(model, "Email", "login_email", "Email",
+                "Use elm@conduit.dev for the demo account."),
+            text_field(model, "Password", "login_password", "Password",
+                "Required to sign in.")
+        ],
+        GraphicalUi.button("Sign in", () -> login(model),
+            variant_button_style(GraphicalUi.PRIMARY, "submit-login")))
+}
+
+function widget view_register(dictionary model) {
+    return auth_form_view(model, "Sign up",
+        GraphicalUi.navigation_link("Have an account?", "navigate:/login",
+            author_link_style()),
+        [
+            text_field(model, "Username", "reg_username", "Username",
+                "Choose a public author name."),
+            text_field(model, "Email", "reg_email", "Email",
+                "Used for signing in."),
+            text_field(model, "Password", "reg_password", "Password",
+                "Required to protect your account.")
+        ],
+        GraphicalUi.button("Sign up", () -> register(model),
+            variant_button_style(GraphicalUi.PRIMARY, "submit-register")))
+}
+
+function widget view_settings(dictionary model) {
+    string user = model["current_user"]
+    if String.is_empty(user) {
+        return require_login_view()
+    }
+    string err = model["error"]
+    mutable array<widget> children = [
+        GraphicalUi.heading("Your Settings", 1),
+        GraphicalUi.field("Username", GraphicalUi.label(user),
+            field_options(false, "Your public author name.", "")),
+        GraphicalUi.field("Email",
+            GraphicalUi.text_input(model["settings_email"],
+                (string v) -> Dictionary.set(model, "settings_email", v), "Email",
+                input_style("settings-email")),
+            field_options(true, "Required for account updates.",
+                required_error(err, model["settings_email"], "Email"))),
+        GraphicalUi.field("Short bio",
+            GraphicalUi.text_area(model["settings_bio"],
+                (string v) -> Dictionary.set(model, "settings_bio", v),
+                input_style("settings-bio")),
+            field_options(false, "Tell readers a little about yourself.", ""))
+    ]
+    children = push_optional_alert(children, err)
+    children = Array.push(children, GraphicalUi.row([
+        GraphicalUi.button("Update Settings", () -> save_settings(model),
+            variant_button_style(GraphicalUi.PRIMARY, "submit-settings")),
+        GraphicalUi.flexible_space(),
+        GraphicalUi.button("Logout", () -> logout(model),
+            variant_button_style(GraphicalUi.DANGER, "settings-logout"))
+    ], {"align_items": "center"}))
+    return GraphicalUi.column(children, form_style())
+}
+
+function widget view_editor(dictionary model) {
+    string user = model["current_user"]
+    if String.is_empty(user) {
+        return require_login_view()
+    }
+    string slug = route_param(model["route"])
+    boolean editing = !String.is_empty(slug)
+    string submit_label = if editing { "Update Article" } else { "Publish Article" }
+    string heading_label = if editing { "Edit Article" } else { "New Article" }
+    string err = model["error"]
+    mutable array<widget> children = [GraphicalUi.heading(heading_label, 1)]
+    children = push_optional_alert(children, err)
+    children = Array.push(children, GraphicalUi.field("Article Title",
+        GraphicalUi.text_input(model["editor_title"],
+            (string v) -> Dictionary.set(model, "editor_title", v), "Article Title",
+            input_style("editor-title")),
+        field_options(true, "A clear title helps readers decide to open it.",
+            required_error(err, model["editor_title"], "Title"))))
+    children = Array.push(children, GraphicalUi.field("Description",
+        GraphicalUi.text_input(model["editor_desc"],
+            (string v) -> Dictionary.set(model, "editor_desc", v),
+            "What's this article about?", input_style("editor-desc")),
+        field_options(true, "One sentence summary shown in the feed.",
+            required_error(err, model["editor_desc"], "Description"))))
+    children = Array.push(children, GraphicalUi.field("Body",
+        GraphicalUi.text_area(model["editor_body"],
+            (string v) -> Dictionary.set(model, "editor_body", v),
+            input_style("editor-body")),
+        field_options(true, "Write the article content.",
+            required_error(err, model["editor_body"], "Body"))))
+    children = Array.push(children, GraphicalUi.field("Tags",
+        GraphicalUi.text_input(model["editor_tags"],
+            (string v) -> Dictionary.set(model, "editor_tags", v),
+            "Tags (space separated)", input_style("editor-tags")),
+        field_options(false, "Separate tags with spaces.", "")))
+    children = Array.push(children, GraphicalUi.button(submit_label,
+        () -> submit_editor(model, slug, editing),
+        variant_button_style(GraphicalUi.PRIMARY, "submit-article")))
+    return GraphicalUi.column(children, form_style())
+}
+
+function dictionary submit_editor(dictionary model, string slug, boolean editing) {
+    if editing {
+        return update_article(model, slug)
+    }
+    return create_article(model)
+}
+
+function widget view_article_actions(dictionary model, dictionary a) {
+    string author = a["author"]
+    string slug = a["slug"]
+    string title = a["title"]
+    string user = model["current_user"]
+    mutable array<widget> actions = [view_favorite_button(model, a)]
+    if String.is_empty(user) {
+        return GraphicalUi.row(actions, {"gap": "8px", "align_items": "center"})
+    }
+    if author == user {
+        actions = Array.push(actions, GraphicalUi.button("Edit",
+            () -> start_edit(model, slug), variant_button_style(GraphicalUi.GHOST, "edit-article")))
+        actions = Array.push(actions, GraphicalUi.button("Delete",
+            () -> request_delete(model, "article", slug, -1),
+            GraphicalUi.merge_styles(variant_button_style(GraphicalUi.DANGER, "delete-article"),
+                {"aria_label": "Delete article: ${title}"})))
+        return GraphicalUi.row(actions, {"gap": "8px", "align_items": "center"})
+    }
+    array<string> following = model["following"]
+    boolean is_following = Array.contains(following, author)
+    string follow_label = if is_following { "Unfollow ${author}" } else { "Follow ${author}" }
+    actions = Array.push(actions, GraphicalUi.button(follow_label,
+        () -> toggle_follow(model, author), variant_button_style(GraphicalUi.GHOST, "follow-${author}")))
+    return GraphicalUi.row(actions, {"gap": "8px", "align_items": "center"})
+}
+
+function widget view_comment(dictionary model, string slug, dictionary c) {
+    string author = c["author"]
+    string body = c["body"]
+    integer id = c["id"]
+    string user = model["current_user"]
+    mutable array<widget> rowkids = [
+        GraphicalUi.navigation_link(author, "navigate:/profile/${author}",
+            author_link_style()),
+        GraphicalUi.flexible_space()
+    ]
+    if author == user {
+        rowkids = Array.push(rowkids, GraphicalUi.button("Delete",
+            () -> request_delete(model, "comment", slug, id),
+            GraphicalUi.merge_styles(variant_button_style(GraphicalUi.DANGER, "del-comment-${id}"),
+                {"aria_label": "Delete comment by ${author}"})))
+    }
+    return GraphicalUi.column([
+        GraphicalUi.label(body),
+        GraphicalUi.row(rowkids, {"align_items": "center"})
+    ], card_style())
+}
+
+function widget view_comment_form(dictionary model, string slug) {
+    if String.is_empty(model["current_user"]) {
+        return GraphicalUi.row([
+            GraphicalUi.navigation_link("Sign in", "navigate:/login", author_link_style()),
+            GraphicalUi.label(" to add comments.", muted_style())
+        ], {"align_items": "center"})
+    }
+    string err = model["error"]
+    return GraphicalUi.column([
+        GraphicalUi.field("Comment",
+            GraphicalUi.text_area(model["comment_body"],
+                (string v) -> Dictionary.set(model, "comment_body", v),
+                input_style("comment-body")),
+            field_options(true, "Add to the discussion.",
+                required_error(err, model["comment_body"], "Comment"))),
+        GraphicalUi.when(!String.is_empty(err), GraphicalUi.alert(err, GraphicalUi.ERROR)),
+        GraphicalUi.row([
+            GraphicalUi.flexible_space(),
+            GraphicalUi.button("Post Comment", () -> add_comment(model, slug),
+                variant_button_style(GraphicalUi.PRIMARY, "post-comment"))
+        ])
+    ], {"gap": "6px"})
+}
+
+function widget view_comment_list(dictionary model, string slug, array<dictionary> comments) {
+    if Array.length(comments) == 0 {
+        mutable dictionary opts = {}
+        opts["icon"] = "message-circle"
+        opts["title"] = "No comments yet"
+        if !String.is_empty(model["current_user"]) {
+            opts["action_label"] = "Write a comment"
+            opts["on_action"] = () -> GraphicalUi.with_command(model,
+                GraphicalUi.focus("comment-body"))
+        }
+        return GraphicalUi.empty_state("Be the first to share a response.", opts)
+    }
+    return GraphicalUi.column(
+        Array.map(comments, (dictionary c) -> view_comment(model, slug, c)) ?? [],
+        {"gap": "8px"})
+}
+
+function widget view_delete_confirm(dictionary model) {
+    string kind = model["pending_delete_type"]
+    string slug = model["pending_delete_slug"]
+    if kind == "article" {
+        dictionary article = find_article(model, slug)
+        string title = article["title"]
+        return GraphicalUi.confirm(
+            "Delete article?",
+            "Delete '${title}' permanently? This cannot be undone.",
+            () -> confirm_pending_delete(model),
+            () -> cancel_delete(model),
+            confirm_danger_options("Keep article")
+        )
+    }
+    return GraphicalUi.when(kind == "comment", GraphicalUi.confirm(
+        "Delete comment?",
+        "Delete this comment permanently? This cannot be undone.",
+        () -> confirm_pending_delete(model),
+        () -> cancel_delete(model),
+        confirm_danger_options("Keep comment")
+    ))
+}
+
+function widget view_article(dictionary model) {
+    string slug = route_param(model["route"])
+    dictionary a = find_article(model, slug)
+    string found_slug = a["slug"]
+    if String.is_empty(found_slug) {
+        return GraphicalUi.column([
+            GraphicalUi.heading("Article not found", 1),
+            GraphicalUi.navigation_link("Back to Home", "navigate:/", author_link_style())
+        ], {"gap": "12px"})
+    }
+    string author = a["author"]
+    string title = a["title"]
+    string body = a["body"]
+    array<string> tags = a["tags"]
+    array<dictionary> comments = a["comments"]
+    return GraphicalUi.column([
+        GraphicalUi.heading(title, 1),
+        GraphicalUi.row([
+            GraphicalUi.navigation_link(author, "navigate:/profile/${author}",
+                author_link_style()),
+            GraphicalUi.flexible_space(),
+            view_article_actions(model, a)
+        ], {"align_items": "center"}),
+        GraphicalUi.separator(),
+        GraphicalUi.label(body),
+        view_tag_badges(tags),
+        GraphicalUi.separator(),
+        GraphicalUi.heading("Comments", 2),
+        view_comment_form(model, slug),
+        view_comment_list(model, slug, comments)
+    ], {"gap": "12px"})
+}
+
+function widget view_profile_follow(dictionary model, string username) {
+    string current = model["current_user"]
+    boolean can_follow = !String.is_empty(current) && current != username
+    array<string> following = model["following"]
+    boolean is_following = Array.contains(following, username)
+    string follow_label = if is_following { "Unfollow" } else { "Follow" }
+    return GraphicalUi.when(can_follow, GraphicalUi.row([
+        GraphicalUi.button(follow_label, () -> toggle_follow(model, username),
+            variant_button_style(GraphicalUi.GHOST, "profile-follow"))
+    ]))
+}
+
+function widget view_profile(dictionary model) {
+    string username = route_param(model["route"])
+    dictionary u = find_user(model, username)
+    string found_name = u["username"]
+    if String.is_empty(found_name) {
+        return GraphicalUi.column([
+            GraphicalUi.heading("Profile not found", 1),
+            GraphicalUi.navigation_link("Back to Home", "navigate:/", author_link_style())
+        ], {"gap": "12px"})
+    }
+    string bio = u["bio"]
+    string bio_text = if String.is_empty(bio) { "No bio yet." } else { bio }
+    string tab = model["profile_tab"]
+    boolean favorited_tab = tab == "favorited"
+    array<dictionary> entries = profile_articles(model, username, tab)
+    return GraphicalUi.column([
+        GraphicalUi.heading(username, 1),
+        GraphicalUi.label(bio_text, muted_style()),
+        view_profile_follow(model, username),
+        GraphicalUi.row([
+            GraphicalUi.button("My Articles", () -> set_profile_tab(model, "authored"),
+                tab_style(!favorited_tab, "tab-authored")),
+            GraphicalUi.button("Favorited Articles", () -> set_profile_tab(model, "favorited"),
+                tab_style(favorited_tab, "tab-favorited"))
+        ], {"gap": "4px", "border_bottom": "1px solid ${GraphicalUi.VAR_BORDER}"}),
+        view_feed_list(model, entries, Array.length(entries))
+    ], {"gap": "12px"})
+}
+
+# ─── Root view & dispatch ──────────────────────────────────
+
+function widget view_page(dictionary model) {
+    string page = route_page(model["route"])
+    return match page {
+        case "login" { view_login(model) }
+        case "register" { view_register(model) }
+        case "settings" { view_settings(model) }
+        case "editor" { view_editor(model) }
+        case "article" { view_article(model) }
+        case "profile" { view_profile(model) }
+        else { view_home(model) }
+    }
+}
+
+function widget view_conduit(dictionary model) {
+    return GraphicalUi.column([
+        view_navbar(model),
+        GraphicalUi.separator(),
+        GraphicalUi.scroll_column([view_page(model)]),
+        view_delete_confirm(model)
+    ], {"gap": "12px", "padding": "12px"})
+}
+
+@main
+function void main() {
+    GraphicalUi.app(conduit_config())
+}
+
+# Exposed as a named function (rather than inlined in main) so every page, form,
+# and action can be driven and asserted by the @test blocks below.
+function dictionary conduit_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Conduit — Luma RealWorld"
+    config["width"] = 900
+    config["height"] = 720
+    config["model"] = conduit_model()
+    config["view"] = view_conduit
+    config["update"] = (dictionary model, dictionary msg) -> {
+        if msg["_gui_nav"] == "navigate" {
+            return Dictionary.set(model, "route", msg["route"])
+        }
+        return model
+    }
+    return config
+}
+
+# ─── Tests: pure logic ─────────────────────────────────────
+
+@test
+function void test_slugify_builds_kebab_slug() {
+    assert(slugify("Hello World Example", 7) == "hello-world-example-7")
+    assert(slugify("  Spaced   Out  ", 3) == "spaced-out-3")
+}
+
+@test
+function void test_parse_tags_trims_and_dedupes() {
+    array<string> tags = parse_tags("  elm  luma elm  gui ")
+    assert(Array.length(tags) == 3)
+    assert(Array.contains(tags, "elm"))
+    assert(Array.contains(tags, "gui"))
+}
+
+@test
+function void test_global_feed_lists_all_articles() {
+    assert(Array.length(feed_articles(conduit_model())) == 5)
+}
+
+@test
+function void test_tag_feed_filters_articles() {
+    dictionary filtered = set_feed(conduit_model(), "tag", "beginners")
+    assert(Array.length(feed_articles(filtered)) == 2)
+}
+
+@test
+function void test_personal_feed_follows_authors() {
+    mutable dictionary model = conduit_model()
+    model["current_user"] = "reader"
+    model["following"] = ["luma_dev"]
+    dictionary personal = set_feed(model, "personal", "")
+    array<dictionary> feed = feed_articles(personal)
+    assert(Array.length(feed) == 2)
+}
+
+@test
+function void test_popular_tags_are_unique() {
+    array<string> tags = popular_tags(conduit_model())
+    mutable integer beginners = 0
+    for t in tags {
+        if t == "beginners" {
+            beginners = beginners + 1
+        }
+    }
+    assert(beginners == 1)
+    assert(Array.contains(tags, "elm"))
+}
+
+@test
+function void test_pagination_splits_feed() {
+    array<dictionary> feed = feed_articles(conduit_model())
+    assert(Array.length(paginate(feed, 0, PAGE_SIZE())) == 3)
+    assert(Array.length(paginate(feed, 1, PAGE_SIZE())) == 2)
+    assert(Array.length(paginate(feed, 2, PAGE_SIZE())) == 0)
+}
+
+@test
+function void test_clamp_page_guards_a_stale_index() {
+    # A page index left over from a larger feed collapses back into range so the
+    # home view can never render a blank page with no pagination controls.
+    assert(clamp_page(3, 5, PAGE_SIZE()) == 0)
+    assert(clamp_page(0, 2, PAGE_SIZE()) == 0)
+    assert(clamp_page(25, 1, PAGE_SIZE()) == 1)
+    assert(clamp_page(5, 0, PAGE_SIZE()) == 0)
+}
+
+@test
+function void test_route_parsing() {
+    assert(route_page("/") == "home")
+    assert(route_page("/article/getting-started-3") == "article")
+    assert(route_param("/article/getting-started-3") == "getting-started-3")
+    assert(route_param("/") == "")
+}
+
+# ─── Tests: authentication ─────────────────────────────────
+
+@test
+function void test_login_with_valid_credentials() {
+    mutable dictionary model = conduit_model()
+    model["route"] = "/login"
+    model["login_email"] = "elm@conduit.dev"
+    model["login_password"] = "password"
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), model, "submit-login")
+    string cu = outcome["current_user"]
+    string route = outcome["route"]
+    assert(cu == "elm_fan")
+    assert(route == "/")
+}
+
+@test
+function void test_login_with_invalid_credentials_sets_error() {
+    mutable dictionary model = conduit_model()
+    model["route"] = "/login"
+    model["login_email"] = "elm@conduit.dev"
+    model["login_password"] = "wrong"
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), model, "submit-login")
+    string cu = outcome["current_user"]
+    string err = outcome["error"]
+    assert(String.is_empty(cu))
+    assert(!String.is_empty(err))
+}
+
+@test
+function void test_register_creates_and_logs_in_user() {
+    mutable dictionary model = conduit_model()
+    model["route"] = "/register"
+    model["reg_username"] = "newbie"
+    model["reg_email"] = "new@conduit.dev"
+    model["reg_password"] = "secret"
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), model, "submit-register")
+    string cu = outcome["current_user"]
+    array<dictionary> users = outcome["users"]
+    assert(cu == "newbie")
+    assert(Array.length(users) == 4)
+}
+
+@test
+function void test_register_rejects_duplicate_username() {
+    mutable dictionary model = conduit_model()
+    model["route"] = "/register"
+    model["reg_username"] = "elm_fan"
+    model["reg_email"] = "dup@conduit.dev"
+    model["reg_password"] = "secret"
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), model, "submit-register")
+    string cu = outcome["current_user"]
+    string err = outcome["error"]
+    assert(String.is_empty(cu))
+    assert(!String.is_empty(err))
+}
+
+@test
+function void test_logout_clears_session() {
+    mutable dictionary model = conduit_model()
+    model["current_user"] = "luma_dev"
+    model["route"] = "/"
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), model, "Logout")
+    string cu = outcome["current_user"]
+    assert(String.is_empty(cu))
+}
+
+@test
+function void test_settings_updates_bio() {
+    mutable dictionary model = conduit_model()
+    model["current_user"] = "luma_dev"
+    model["route"] = "/settings"
+    model["settings_email"] = "luma@conduit.dev"
+    model["settings_bio"] = "Updated bio text."
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), model, "submit-settings")
+    string bio = find_user(outcome, "luma_dev")["bio"]
+    assert(bio == "Updated bio text.")
+}
+
+# ─── Tests: articles, comments, social ─────────────────────
+
+@test
+function void test_favorite_toggles_membership_and_count() {
+    mutable dictionary model = conduit_model()
+    model["current_user"] = "elm_fan"
+    array<dictionary> arts = model["articles"]
+    dictionary first = arts[0]
+    string slug = first["slug"]
+
+    dictionary faved = GraphicalUi.test_click(conduit_config(), model, "fav-${slug}")
+    dictionary a1 = find_article(faved, slug)
+    array<string> fav1 = a1["favorited_by"]
+    assert(Array.contains(fav1, "elm_fan"))
+    assert(Array.length(fav1) == 2)
+
+    dictionary unfaved = GraphicalUi.test_click(conduit_config(), faved, "fav-${slug}")
+    dictionary a2 = find_article(unfaved, slug)
+    array<string> fav2 = a2["favorited_by"]
+    assert(!Array.contains(fav2, "elm_fan"))
+    assert(Array.length(fav2) == 1)
+}
+
+@test
+function void test_follow_toggles_following_list() {
+    mutable dictionary model = conduit_model()
+    model["current_user"] = "luma_dev"
+    array<dictionary> arts = model["articles"]
+    dictionary first = arts[0]
+    string slug = first["slug"]
+    model["route"] = "/article/${slug}"
+
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), model, "follow-elm_fan")
+    array<string> following = outcome["following"]
+    assert(Array.contains(following, "elm_fan"))
+}
+
+@test
+function void test_create_article_publishes_and_navigates() {
+    mutable dictionary model = conduit_model()
+    model["current_user"] = "luma_dev"
+    model["route"] = "/editor"
+    model["editor_title"] = "My Fresh Take"
+    model["editor_desc"] = "A short description."
+    model["editor_body"] = "The full body of the article."
+    model["editor_tags"] = "fresh news"
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), model, "submit-article")
+    array<dictionary> arts = outcome["articles"]
+    string route = outcome["route"]
+    assert(Array.length(arts) == 6)
+    assert(String.starts_with(route, "/article/"))
+}
+
+@test
+function void test_start_edit_prefills_editor() {
+    mutable dictionary model = conduit_model()
+    model["current_user"] = "elm_fan"
+    array<dictionary> arts = model["articles"]
+    dictionary first = arts[0]
+    string slug = first["slug"]
+    string title = first["title"]
+    model["route"] = "/article/${slug}"
+
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), model, "edit-article")
+    string editor_title = outcome["editor_title"]
+    string route = outcome["route"]
+    assert(editor_title == title)
+    assert(route == "/editor/${slug}")
+}
+
+@test
+function void test_delete_article_removes_and_navigates_home() {
+    mutable dictionary model = conduit_model()
+    model["current_user"] = "elm_fan"
+    array<dictionary> arts = model["articles"]
+    dictionary first = arts[0]
+    string slug = first["slug"]
+    model["route"] = "/article/${slug}"
+
+    dictionary pending = GraphicalUi.test_click(conduit_config(), model, "delete-article")
+    assert(pending["pending_delete_type"] == "article")
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), pending, "Delete article?")
+    array<dictionary> remaining = outcome["articles"]
+    string route = outcome["route"]
+    assert(Array.length(remaining) == 4)
+    assert(route == "/")
+    assert(String.is_empty(find_article(outcome, slug)["slug"]))
+}
+
+@test
+function void test_delete_article_resets_pagination() {
+    # Deleting while on a later page must reset to page one so the reader is never
+    # stranded past the (now shorter) feed's end.
+    mutable dictionary model = conduit_model()
+    model["current_user"] = "elm_fan"
+    model["page_index"] = 1
+    array<dictionary> arts = model["articles"]
+    dictionary first = arts[0]
+    string slug = first["slug"]
+    model["route"] = "/article/${slug}"
+    dictionary pending = GraphicalUi.test_click(conduit_config(), model, "delete-article")
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), pending, "Delete article?")
+    assert(Dictionary.get_or(outcome, "page_index", -1) == 0)
+}
+
+@test
+function void test_add_comment_appends_to_article() {
+    mutable dictionary model = conduit_model()
+    model["current_user"] = "luma_dev"
+    array<dictionary> arts = model["articles"]
+    dictionary first = arts[0]
+    string slug = first["slug"]
+    model["route"] = "/article/${slug}"
+    model["comment_body"] = "Sharp insight, thanks!"
+
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), model, "post-comment")
+    array<dictionary> comments = find_article(outcome, slug)["comments"]
+    assert(Array.length(comments) == 2)
+}
+
+@test
+function void test_delete_comment_removes_own_comment() {
+    mutable dictionary model = conduit_model()
+    model["current_user"] = "luma_dev"
+    array<dictionary> arts = model["articles"]
+    dictionary first = arts[0]
+    string slug = first["slug"]
+    model["route"] = "/article/${slug}"
+
+    dictionary pending = GraphicalUi.test_click(conduit_config(), model, "del-comment-1")
+    assert(pending["pending_delete_type"] == "comment")
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), pending, "Delete comment?")
+    array<dictionary> comments = find_article(outcome, slug)["comments"]
+    assert(Array.length(comments) == 0)
+}
+
+# ─── Tests: feed filtering, pagination, navigation ─────────
+
+@test
+function void test_popular_tag_click_filters_feed() {
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), conduit_model(),
+        "poptag-beginners")
+    string feed = outcome["feed"]
+    string tag = outcome["feed_tag"]
+    assert(feed == "tag")
+    assert(tag == "beginners")
+}
+
+@test
+function void test_pagination_next_advances_page() {
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), conduit_model(), "Next")
+    integer page = outcome["page_index"]
+    assert(page == 1)
+}
+
+@test
+function void test_navbar_signin_link_changes_route() {
+    dictionary outcome = GraphicalUi.test_click(conduit_config(), conduit_model(), "Sign in")
+    string route = outcome["route"]
+    assert(route == "/login")
+}
+
+@test
+function void test_navigate_message_updates_route() {
+    dictionary msg = {"_gui_nav": "navigate"}
+    mutable dictionary nav = msg
+    nav["route"] = "/profile/elm_fan"
+    dictionary outcome = GraphicalUi.test_message(conduit_config(), conduit_model(), nav)
+    string route = outcome["route"]
+    assert(route == "/profile/elm_fan")
+}

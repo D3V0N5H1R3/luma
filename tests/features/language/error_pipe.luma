@@ -1,0 +1,231 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Error Pipe (!>)
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+function result<integer> parse_positive(string s) {
+    result<integer> parsed = String.parse_integer(s)
+
+    match parsed {
+        failure(e) { return failure(e) }
+        success(n) {
+            if n > 0 {
+                return success(n)
+            }
+
+            return failure("not positive")
+        }
+    }
+}
+
+function integer double_it(integer n) {
+    return n * 2
+}
+
+function result<integer> halve(integer n) {
+    if n == 0 {
+        return failure("cannot halve zero")
+    }
+
+    return success(n / 2)
+}
+
+# !> propagates a successful success() value through the chain.
+@test
+function void test_error_pipe_ok_propagates() {
+    result<integer> r = success("4") !> parse_positive() !> double_it()
+
+    match r {
+        success(v) { assert(v == 8) }
+        failure(_) { assert(false) }
+    }
+}
+
+# !> short-circuits on the first fail, skipping the rest of the chain.
+@test
+function void test_error_pipe_fail_short_circuits() {
+    result<integer> r = success("-1") !> parse_positive() !> double_it()
+
+    match r {
+        failure(msg) { assert(msg == "not positive") }
+        success(_)   { assert(false) }
+    }
+}
+
+# A plain (non-result) value on the left is treated as success(value).
+@test
+function void test_error_pipe_plain_left_value() {
+    result<integer> r = 21 !> double_it()
+
+    match r {
+        success(v) { assert(v == 42) }
+        failure(_) { assert(false) }
+    }
+}
+
+# A fail returned mid-chain does not reach subsequent steps.
+@test
+function void test_error_pipe_mid_chain_fail() {
+    result<integer> r = success("4") !> parse_positive() !> halve() !> halve()
+
+    match r {
+        success(v) { assert(v == 1) }
+        failure(_) { assert(false) }
+    }
+}
+
+# Chaining two fallible steps where the second fails.
+@test
+function void test_error_pipe_second_step_fails() {
+    result<integer> r = success("0") !> parse_positive() !> halve()
+
+    match r {
+        failure(msg) { assert(msg == "not positive") }
+        success(_)   { assert(false) }
+    }
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional error pipe tests
+# ───────────────────────────────────────────────────────────
+
+# Initial failure short-circuits entire chain.
+@test
+function void test_error_pipe_initial_failure() {
+    result<integer> r = failure("bad input") !> double_it() !> double_it()
+
+    match r {
+        failure(msg) { assert(msg == "bad input") }
+        success(_)   { assert(false) }
+    }
+}
+
+# Chained fallible steps where all succeed.
+@test
+function void test_error_pipe_all_succeed() {
+    result<integer> r = success("8") !> parse_positive() !> halve() !> halve()
+
+    match r {
+        success(v) { assert(v == 2) }
+        failure(_) { assert(false) }
+    }
+}
+
+# Plain value through multiple pure functions.
+@test
+function void test_error_pipe_plain_through_pure() {
+    result<integer> r = 5 !> double_it() !> double_it()
+
+    match r {
+        success(v) { assert(v == 20) }
+        failure(_) { assert(false) }
+    }
+}
+
+# Error pipe with string functions.
+function result<string> uppercase_non_empty(string s) {
+    if String.length(s) == 0 {
+        return failure("empty string")
+    }
+    return success(String.uppercase(s))
+}
+
+@test
+function void test_error_pipe_string_chain() {
+    result<string> r = success("hello") !> uppercase_non_empty()
+
+    match r {
+        success(v) { assert(v == "HELLO") }
+        failure(_) { assert(false) }
+    }
+}
+
+@test
+function void test_error_pipe_string_empty_fails() {
+    result<string> r = success("") !> uppercase_non_empty()
+
+    match r {
+        failure(msg) { assert(msg == "empty string") }
+        success(_)   { assert(false) }
+    }
+}
+
+# Failure from a fallible function mid-chain stops further steps.
+function result<integer> must_be_even(integer n) {
+    if n % 2 != 0 {
+        return failure("not even")
+    }
+    return success(n)
+}
+
+@test
+function void test_error_pipe_mid_chain_fallible_fails() {
+    result<integer> r = 3 !> must_be_even() !> double_it()
+
+    match r {
+        failure(msg) { assert(msg == "not even") }
+        success(_)   { assert(false) }
+    }
+}
+
+@test
+function void test_error_pipe_mid_chain_fallible_succeeds() {
+    result<integer> r = 4 !> must_be_even() !> double_it()
+
+    match r {
+        success(v) { assert(v == 8) }
+        failure(_) { assert(false) }
+    }
+}
+
+# ───────────────────────────────────────────────────────────
+# Error pipe with namespaced functions and final-step failures
+# ───────────────────────────────────────────────────────────
+
+namespace ErrorPipeMath {
+    function result<integer> checked_increment(integer n) {
+        if n < 0 {
+            return failure("negative")
+        }
+        return success(n + 1)
+    }
+}
+
+# An error pipe targeting a namespaced function threads a success through.
+@test
+function void test_error_pipe_namespace_function() {
+    result<integer> r = 41 !> ErrorPipeMath.checked_increment()
+
+    match r {
+        success(v) { assert(v == 42) }
+        failure(_) { assert(false) }
+    }
+}
+
+# The final step of a chain can be the one that fails (odd value fails must_be_even).
+@test
+function void test_error_pipe_last_step_fails() {
+    result<integer> r = success("3") !> parse_positive() !> must_be_even()
+
+    match r {
+        failure(msg) { assert(msg == "not even") }
+        success(_)   { assert(false) }
+    }
+}
+
+# A success threads through every stage of a longer mixed chain.
+@test
+function void test_error_pipe_long_chain_all_succeed() {
+    result<integer> r = success("4")
+    !> parse_positive()
+    !> double_it()
+    !> halve()
+    !> double_it()
+
+    match r {
+        success(v) { assert(v == 8) }
+        failure(_) { assert(false) }
+    }
+}

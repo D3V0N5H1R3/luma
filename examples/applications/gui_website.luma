@@ -1,0 +1,790 @@
+# GraphicalUi Website Example
+#
+# Because GraphicalUi renders through an embedded HTML/CSS/JS webview (WebView2
+# on Windows, WebKit on macOS, WebKitGTK on Linux), a GraphicalUi program is in
+# effect a single-window web front-end: widgets become DOM nodes, style
+# dictionaries become CSS, and `stylesheet` injects a real <style> block. This
+# example leans into that nature to build a small but complete multi-page
+# *website* — a marketing/landing site for the Luma language — with:
+#
+#   * a persistent top navigation bar with active-link highlighting,
+#   * client-side routing (GraphicalUi.router + navigation_link) across
+#     Home, Features, Blog, an individual Post page, and Contact,
+#   * a hero section, feature cards, a stats band, and a footer,
+#   * a blog index that links to slug-based article pages (/post/<slug>),
+#   * a contact form with validation and a submitted "thank you" state,
+#   * a hand-written CSS stylesheet injected at startup.
+#
+# It is a desktop application (not a server that browsers connect to), but the
+# structure, styling, and interaction model are exactly those of a website.
+
+# ─── Brand ────────────────────────────────────────────────────────────────────
+
+function string brand_name() {
+    return "Luma"
+}
+
+# ─── Site stylesheet (raw, hand-written CSS injected at startup) ───────────────
+# This is plain CSS text — the same language you would write for any website —
+# applied verbatim to the embedded webview's document.
+
+function string site_css() {
+    return """
+        .lw-hero {
+            background: linear-gradient(
+                135deg,
+                color-mix(in srgb, var(--gui-primary) 82%, var(--gui-bg)) 0%,
+                color-mix(in srgb, var(--gui-primary) 68%, var(--gui-fg)) 100%
+            );
+        }
+        .lw-kicker { text-transform: uppercase; letter-spacing: 0.09em; }
+        .lw-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .lw-card:hover { transform: translateY(-4px); box-shadow: var(--gui-shadow); }
+        .lw-footer { opacity: 0.82; }
+        @media (prefers-reduced-motion: reduce) {
+            .lw-card { transition: none; }
+            .lw-card:hover { transform: none; }
+        }
+        """
+}
+
+# ─── Style helpers (style dictionaries become CSS at render time) ──────────────
+
+function dictionary<string> nav_link_style(boolean active) {
+    if active {
+        return {
+            "padding": "6px 12px",
+            "border_radius": "6px",
+            "background_color": GraphicalUi.VAR_PRIMARY,
+            "color": "color-mix(in srgb, var(--gui-bg) 92%, var(--gui-fg) 8%)",
+            "font_weight": "600",
+            "text_decoration": "none"
+        }
+    }
+    return {
+        "padding": "6px 12px",
+        "border_radius": "6px",
+        "color": GraphicalUi.VAR_FG,
+        "text_decoration": "none",
+        "hover_background_color": "var(--gui-primary-subtle-bg)"
+    }
+}
+
+function dictionary<string> brand_style() {
+    return {
+        "font_weight": "800",
+        "font_size": GraphicalUi.VAR_TEXT_LG,
+        "color": GraphicalUi.VAR_PRIMARY,
+        "text_decoration": "none",
+        "letter_spacing": "0.02em"
+    }
+}
+
+function dictionary<string> hero_style() {
+    # Mobile-first padding: tight on phones, roomier as width allows, so small
+    # windows are not cramped by the desktop-sized hero. responsive() re-resolves
+    # on resize, so the padding tracks the current window width.
+    return GraphicalUi.merge_styles({
+        "class": "lw-hero",
+        "background": "linear-gradient(135deg, color-mix(in srgb, var(--gui-primary) 82%, var(--gui-bg)) 0%, color-mix(in srgb, var(--gui-primary) 68%, var(--gui-fg)) 100%)",
+        "color": "color-mix(in srgb, var(--gui-bg) 92%, var(--gui-fg) 8%)",
+        "border_radius": "18px"
+    }, GraphicalUi.responsive({
+        "0": {"padding": "28px 20px"},
+        "640": {"padding": "40px 32px"},
+        "960": {"padding": "56px 48px"}
+    }))
+}
+
+function dictionary<string> hero_kicker_style() {
+    return {
+        "class": "lw-kicker",
+        "color": "color-mix(in srgb, var(--gui-bg) 84%, var(--gui-primary) 16%)",
+        "font_weight": "700",
+        "font_size": GraphicalUi.VAR_TEXT_XS
+    }
+}
+
+function dictionary<string> hero_heading_style() {
+    return {
+        "color": "color-mix(in srgb, var(--gui-bg) 92%, var(--gui-fg) 8%)",
+        "font_size": "clamp(var(--gui-font-size-xl), 6vw, 2.5rem)",
+        "line_height": "1.1"
+    }
+}
+
+function dictionary<string> hero_sub_style() {
+    return {
+        "color": "color-mix(in srgb, var(--gui-bg) 88%, var(--gui-fg) 12%)",
+        "font_size": "18px",
+        "max_width": "560px"
+    }
+}
+
+# Hero call-to-action buttons use the variant system (not hand-rolled colours) so
+# they inherit the theme-aware primary/secondary hierarchy and proper hover, focus
+# and active states. The supporting action is SECONDARY to the main PRIMARY one.
+function dictionary<string> secondary_button_style() {
+    return {
+        "variant": GraphicalUi.SECONDARY,
+        "padding": "11px 20px",
+        "font_weight": "600"
+    }
+}
+
+function dictionary<string> solid_button_style() {
+    return {
+        "variant": GraphicalUi.PRIMARY,
+        "padding": "11px 20px",
+        "font_weight": "600"
+    }
+}
+
+function dictionary<string> section_style() {
+    return {
+        "padding": "8px 4px"
+    }
+}
+
+function dictionary<string> card_style() {
+    return {
+        "class": "lw-card",
+        "padding": GraphicalUi.VAR_SPACE_LG,
+        "border": "1px solid ${GraphicalUi.VAR_BORDER}",
+        "border_radius": GraphicalUi.VAR_RADIUS,
+        "background_color": GraphicalUi.VAR_BG,
+        "flex": "1 1 15rem"
+    }
+}
+
+function dictionary<string> card_icon_style() {
+    return {
+        "color": GraphicalUi.VAR_PRIMARY
+    }
+}
+
+function dictionary<string> meta_style() {
+    return {
+        "color": GraphicalUi.VAR_DISABLED_FG,
+        "font_size": GraphicalUi.VAR_TEXT_XS
+    }
+}
+
+function dictionary<string> post_title_link_style() {
+    return {
+        "font_weight": "700",
+        "font_size": GraphicalUi.VAR_TEXT_LG,
+        "color": GraphicalUi.VAR_FG,
+        "text_decoration": "none"
+    }
+}
+
+function dictionary<string> read_link_style() {
+    return {
+        "color": GraphicalUi.VAR_PRIMARY,
+        "font_weight": "600",
+        "text_decoration": "none"
+    }
+}
+
+function dictionary<string> input_style() {
+    return {
+        "width": "100%",
+        "padding": "10px 12px",
+        "border": "1px solid ${GraphicalUi.VAR_BORDER}",
+        "border_radius": GraphicalUi.VAR_RADIUS
+    }
+}
+
+function dictionary<string> textarea_style() {
+    return {
+        "width": "100%",
+        "min_height": "120px",
+        "padding": "10px 12px",
+        "border": "1px solid ${GraphicalUi.VAR_BORDER}",
+        "border_radius": GraphicalUi.VAR_RADIUS
+    }
+}
+
+# Form-field options (required flag, help text, validation error), matching the
+# builder used in gui_conduit. Empty help/error values are omitted.
+function dictionary field_options(boolean required, string help, string error) {
+    mutable dictionary opts = {}
+    if required {
+        opts["required"] = true
+    }
+    if !String.is_empty(help) {
+        opts["help"] = help
+    }
+    if !String.is_empty(error) {
+        opts["error"] = error
+    }
+    return opts
+}
+
+function dictionary<string> stat_value_style() {
+    return {
+        "font_size": GraphicalUi.VAR_TEXT_XL,
+        "font_weight": "800",
+        "color": GraphicalUi.VAR_PRIMARY
+    }
+}
+
+function dictionary<string> footer_style() {
+    return {
+        "class": "lw-footer",
+        "color": GraphicalUi.VAR_DISABLED_FG,
+        "font_size": GraphicalUi.VAR_TEXT_XS
+    }
+}
+
+function dictionary<string> content_style() {
+    return {
+        "padding": "24px",
+        "max_width": "980px",
+        "margin": "0 auto",
+        "width": "100%"
+    }
+}
+
+# ─── Content data ──────────────────────────────────────────────────────────────
+
+function dictionary make_post(string slug, string title, string date, string excerpt, string body) {
+    return {
+        "slug": slug,
+        "title": title,
+        "date": date,
+        "excerpt": excerpt,
+        "body": body
+    }
+}
+
+function array<dictionary> seed_posts() {
+    return [
+        make_post("why-luma", "Why Luma?", "2026-01-12",
+            "What we set out to build and who it is for.",
+            "Luma blends a friendly, readable syntax with real static types, so beginners get clear errors instead of silent surprises."),
+        make_post("static-types-for-beginners", "Static Types for Beginners", "2026-02-03",
+            "Types that help you learn rather than fight the compiler.",
+            "Inference keeps the code uncluttered while the checker still catches mistakes before the program ever runs."),
+        make_post("the-elm-architecture", "The Elm Architecture in Luma", "2026-03-15",
+            "Model, View, and Update — a tidy way to build UIs.",
+            "GraphicalUi makes your interface a pure function of state, so every screen is predictable and easy to test."),
+        make_post("pipes-and-pattern-matching", "Pipes and Pattern Matching", "2026-04-09",
+            "Two features that make data flow read top to bottom.",
+            "The pipe operator threads a value through a series of steps, and pattern matching unpacks results without nested ifs.")
+    ]
+}
+
+# ─── Model ─────────────────────────────────────────────────────────────────────
+
+function dictionary site_model() {
+    mutable dictionary model = {"route": "/"}
+    model["posts"] = seed_posts()
+    model["contact_name"] = ""
+    model["contact_email"] = ""
+    model["contact_message"] = ""
+    model["contact_name_error"] = ""
+    model["contact_email_error"] = ""
+    model["contact_message_error"] = ""
+    model["submitted"] = false
+    model["error"] = ""
+    return model
+}
+
+# ─── Pure helpers ──────────────────────────────────────────────────────────────
+
+function string last_segment(string path) {
+    array<string> parts = String.split(path, "/")
+    return Array.last(parts) ?? ""
+}
+
+function boolean is_blog_route(string route) {
+    return route == "/blog" || String.starts_with(route, "/post")
+}
+
+function dictionary find_post(array<dictionary> posts, string slug) {
+    for post in posts {
+        string post_slug = post["slug"]
+        if post_slug == slug {
+            return post
+        }
+    }
+    return {}
+}
+
+# ─── State transitions (returned directly from callbacks) ──────────────────────
+
+# Human-readable page name for screen-reader announcements on navigation.
+function string route_name(string route) {
+    if route == "/" {
+        return "Home"
+    }
+    if route == "/features" {
+        return "Features"
+    }
+    if route == "/blog" {
+        return "Blog"
+    }
+    if route == "/contact" {
+        return "Contact"
+    }
+    if String.starts_with(route, "/post") {
+        return "Article"
+    }
+    return "Page"
+}
+
+function dictionary go_to(dictionary model, string route) {
+    # Navigation is a page change: tell screen-reader users where they landed and
+    # move focus to the new page heading so keyboard users are not left behind.
+    return GraphicalUi.with_command(Dictionary.set(model, "route", route),
+        GraphicalUi.batch([
+            GraphicalUi.focus("page-heading"),
+            GraphicalUi.announce("Navigated to ${route_name(route)}")
+        ]))
+}
+
+function dictionary submit_contact(dictionary model) {
+    string name = model["contact_name"]
+    string email = model["contact_email"]
+    string message = model["contact_message"]
+
+    # Diagnose each field individually and say exactly how to fix it, rather than
+    # showing one generic message that leaves the user guessing which field failed.
+    string name_error = if String.is_empty(name) { "Your name is required." } else { "" }
+    string email_error = if String.is_empty(email) {
+        "Your email is required."
+    } else if !String.contains(email, "@") {
+        "Enter a valid email address, e.g. you@example.com."
+    } else {
+        ""
+    }
+    string message_error = if String.is_empty(message) { "A message is required." } else { "" }
+
+    mutable dictionary next = Dictionary.set(model, "contact_name_error", name_error)
+    next = Dictionary.set(next, "contact_email_error", email_error)
+    next = Dictionary.set(next, "contact_message_error", message_error)
+
+    if name_error != "" || email_error != "" || message_error != "" {
+        next = Dictionary.set(next, "error", "Please correct the highlighted fields below.")
+        next = Dictionary.set(next, "submitted", false)
+        return GraphicalUi.with_command(next,
+            GraphicalUi.announce("Please correct the highlighted fields below."))
+    }
+
+    next = Dictionary.set(next, "error", "")
+    next = Dictionary.set(next, "submitted", true)
+    # Confirm success out loud and move focus to the thank-you heading.
+    return GraphicalUi.with_command(next, GraphicalUi.batch([
+        GraphicalUi.focus("page-heading"),
+        GraphicalUi.announce("Thanks for reaching out. Your message has been sent.")
+    ]))
+}
+
+function dictionary reset_contact(dictionary model) {
+    mutable dictionary next = Dictionary.set(model, "submitted", false)
+    next = Dictionary.set(next, "contact_name", "")
+    next = Dictionary.set(next, "contact_email", "")
+    next = Dictionary.set(next, "contact_message", "")
+    next = Dictionary.set(next, "contact_name_error", "")
+    next = Dictionary.set(next, "contact_email_error", "")
+    next = Dictionary.set(next, "contact_message_error", "")
+    next = Dictionary.set(next, "error", "")
+    # Returning to a blank form is a state change: announce it and refocus the top.
+    return GraphicalUi.with_command(next, GraphicalUi.batch([
+        GraphicalUi.focus("page-heading"),
+        GraphicalUi.announce("New message form ready.")
+    ]))
+}
+
+# ─── Shared chrome: navigation bar and footer ──────────────────────────────────
+
+function widget nav_bar(string route) {
+    return GraphicalUi.toolbar([
+        GraphicalUi.row([
+            GraphicalUi.icon("feather", 22),
+            GraphicalUi.navigation_link(brand_name(), "navigate:/", brand_style())
+        ], GraphicalUi.merge_styles(GraphicalUi.spacing(8), {"align_items": "center"})),
+        GraphicalUi.flexible_space(),
+        GraphicalUi.wrapped_row([
+            GraphicalUi.navigation_link("Home", "navigate:/", nav_link_style(route == "/")),
+            GraphicalUi.navigation_link("Features", "navigate:/features", nav_link_style(route == "/features")),
+            GraphicalUi.navigation_link("Blog", "navigate:/blog", nav_link_style(is_blog_route(route))),
+            GraphicalUi.navigation_link("Contact", "navigate:/contact", nav_link_style(route == "/contact"))
+        ], GraphicalUi.spacing(8))
+    ])
+}
+
+function widget site_footer() {
+    return GraphicalUi.column([
+        GraphicalUi.separator(),
+        GraphicalUi.wrapped_row([
+            GraphicalUi.label("(c) 2026 ${brand_name()} - built with GraphicalUi", footer_style()),
+            GraphicalUi.label("Docs · Privacy · Terms", footer_style())
+        ], GraphicalUi.merge_styles(GraphicalUi.spacing(16), {"align_items": "center"}))
+    ], GraphicalUi.spacing(8))
+}
+
+# ─── Reusable components ───────────────────────────────────────────────────────
+
+function widget feature_card(string icon_name, string title, string body) {
+    return GraphicalUi.column([
+        GraphicalUi.icon(icon_name, 28, card_icon_style()),
+        GraphicalUi.heading(title, 3),
+        GraphicalUi.label(body)
+    ], GraphicalUi.merge_styles(card_style(), GraphicalUi.spacing(10)))
+}
+
+function widget stat(string value, string caption) {
+    return GraphicalUi.column([
+        GraphicalUi.label(value, stat_value_style()),
+        GraphicalUi.label(caption, meta_style())
+    ], GraphicalUi.spacing(2))
+}
+
+function widget post_card(dictionary post) {
+    string slug = post["slug"]
+    string title = post["title"]
+    string date = post["date"]
+    string excerpt = post["excerpt"]
+    return GraphicalUi.column([
+        GraphicalUi.navigation_link(title, "navigate:/post/${slug}", post_title_link_style()),
+        GraphicalUi.label(date, meta_style()),
+        GraphicalUi.label(excerpt),
+        GraphicalUi.navigation_link("Read article", "navigate:/post/${slug}", read_link_style())
+    ], GraphicalUi.merge_styles(card_style(), GraphicalUi.spacing(8)))
+}
+
+# ─── Pages ─────────────────────────────────────────────────────────────────────
+
+function widget home_page(dictionary model) {
+    widget hero = GraphicalUi.column([
+        GraphicalUi.label("The friendly, typed language", hero_kicker_style()),
+        GraphicalUi.heading("Build delightful apps with Luma", 1,
+            GraphicalUi.merge_styles(hero_heading_style(), {"id": "page-heading"})),
+        GraphicalUi.label("A statically typed, expression-oriented language with a batteries-included standard library and an Elm-style GUI toolkit.", hero_sub_style()),
+        GraphicalUi.row([
+            GraphicalUi.button("Get started", () -> go_to(model, "/contact"), solid_button_style()),
+            GraphicalUi.button("Browse features", () -> go_to(model, "/features"), secondary_button_style())
+        ], GraphicalUi.spacing(12))
+    ], GraphicalUi.merge_styles(hero_style(), GraphicalUi.spacing(16)))
+
+    widget stats = GraphicalUi.wrapped_row([
+        stat("40+", "stdlib modules"),
+        stat("129", "built-in GUI icons"),
+        stat("100%", "type-checked")
+    ], GraphicalUi.merge_styles(GraphicalUi.spacing(48), {"padding": "8px 4px"}))
+
+    widget features = GraphicalUi.wrapped_row([
+        feature_card("zap", "Fast to learn", "Clean syntax and friendly errors get newcomers productive on day one."),
+        feature_card("shield", "Statically typed", "A type checker catches mistakes before your program ever runs."),
+        feature_card("feather", "Batteries included", "Strings, files, JSON, HTTP, charts, and a GUI ship in the box.")
+    ], GraphicalUi.spacing(16))
+
+    return GraphicalUi.column([
+        hero,
+        stats,
+        GraphicalUi.heading("Why teams pick Luma", 2),
+        features
+    ], GraphicalUi.merge_styles(section_style(), GraphicalUi.spacing(28)))
+}
+
+function widget features_page(dictionary _model) {
+    widget row_one = GraphicalUi.wrapped_row([
+        feature_card("zap", "Approachable", "Readable, expression-oriented syntax with no ceremony."),
+        feature_card("shield", "Type-safe", "Inference keeps code tidy while the checker guards correctness."),
+        feature_card("feather", "Complete stdlib", "Over forty modules covering everyday programming tasks.")
+    ], GraphicalUi.spacing(16))
+
+    widget row_two = GraphicalUi.wrapped_row([
+        feature_card("layers", "Elm-style GUI", "Build interfaces as a pure function of application state."),
+        feature_card("terminal", "Great tooling", "A REPL, formatter, language server, and debugger."),
+        feature_card("globe", "Cross-platform", "Run the same program on Windows, macOS, and Linux.")
+    ], GraphicalUi.spacing(16))
+
+    return GraphicalUi.column([
+        GraphicalUi.label("Features", hero_kicker_style()),
+        GraphicalUi.heading("Everything you need to ship", 1, {"id": "page-heading"}),
+        GraphicalUi.label("From first script to full application, Luma grows with you."),
+        GraphicalUi.spacer(8),
+        row_one,
+        row_two
+    ], GraphicalUi.merge_styles(section_style(), GraphicalUi.spacing(16)))
+}
+
+function widget blog_page(dictionary model) {
+    array<dictionary> posts = model["posts"]
+    mutable array<widget> cards = []
+    for post in posts {
+        cards = Array.push(cards, post_card(post))
+    }
+    return GraphicalUi.column([
+        GraphicalUi.label("Blog", hero_kicker_style()),
+        GraphicalUi.heading("News and tutorials", 1, {"id": "page-heading"}),
+        GraphicalUi.label("Notes from the team on language design and building with Luma."),
+        GraphicalUi.spacer(8),
+        GraphicalUi.column(cards ?? [], GraphicalUi.spacing(16))
+    ], GraphicalUi.merge_styles(section_style(), GraphicalUi.spacing(16)))
+}
+
+function widget post_page(dictionary model) {
+    string route = model["route"]
+    string slug = last_segment(route)
+    array<dictionary> posts = model["posts"]
+    dictionary post = find_post(posts, slug)
+    string found = Dictionary.get_or(post, "slug", "")
+
+    if found == "" {
+        return GraphicalUi.column([
+            GraphicalUi.heading("Article not found", 2, {"id": "page-heading"}),
+            GraphicalUi.label("We could not find that article."),
+            GraphicalUi.navigation_link("Back to blog", "navigate:/blog", read_link_style())
+        ], GraphicalUi.merge_styles(section_style(), GraphicalUi.spacing(12)))
+    }
+
+    string title = post["title"]
+    string date = post["date"]
+    string body = post["body"]
+    return GraphicalUi.column([
+        GraphicalUi.navigation_link("Back to blog", "navigate:/blog", read_link_style()),
+        GraphicalUi.heading(title, 1, {"id": "page-heading"}),
+        GraphicalUi.label(date, meta_style()),
+        GraphicalUi.separator(),
+        GraphicalUi.label(body),
+        GraphicalUi.spacer(8),
+        GraphicalUi.label("Enjoyed this? Share it with a friend who is learning to code.", meta_style())
+    ], GraphicalUi.merge_styles(section_style(), GraphicalUi.spacing(12)))
+}
+
+function widget contact_page(dictionary model) {
+    boolean submitted = model["submitted"]
+    if submitted {
+        return GraphicalUi.column([
+            GraphicalUi.heading("Thanks for reaching out", 2, {"id": "page-heading"}),
+            GraphicalUi.label("We received your message and will reply soon."),
+            GraphicalUi.button("Send another message", () -> reset_contact(model), solid_button_style())
+        ], GraphicalUi.merge_styles(section_style(), GraphicalUi.spacing(12)))
+    }
+
+    string name = model["contact_name"]
+    string email = model["contact_email"]
+    string message = model["contact_message"]
+    string error = model["error"]
+
+    mutable array<widget> items = []
+    items = Array.push(items, GraphicalUi.label("Contact", hero_kicker_style()))
+    items = Array.push(items, GraphicalUi.heading("Get in touch", 1, {"id": "page-heading"}))
+    items = Array.push(items, GraphicalUi.label("Questions, feedback, or just saying hello — we would love to hear from you."))
+    if error != "" {
+        items = Array.push(items, GraphicalUi.alert(error, GraphicalUi.ERROR))
+    }
+    dictionary name_options = field_options(true, "Tell us what to call you in our reply.",
+        Dictionary.get_or(model, "contact_name_error", ""))
+    dictionary email_options = field_options(true, "Use an address where we can reach you.",
+        Dictionary.get_or(model, "contact_email_error", ""))
+    dictionary message_options = field_options(true,
+        "Include enough context for a helpful response.",
+        Dictionary.get_or(model, "contact_message_error", ""))
+
+    items = Array.push(items, GraphicalUi.field(
+        "Name",
+        GraphicalUi.text_input(name,
+            (string value) -> Dictionary.set(model, "contact_name", value), "Your name", input_style()),
+        name_options
+    ))
+    items = Array.push(items, GraphicalUi.field(
+        "Email",
+        GraphicalUi.text_input(email,
+            (string value) -> Dictionary.set(model, "contact_email", value), "you@example.com", input_style()),
+        email_options
+    ))
+    items = Array.push(items, GraphicalUi.field(
+        "Message",
+        GraphicalUi.text_area(message,
+            (string value) -> Dictionary.set(model, "contact_message", value), textarea_style()),
+        message_options
+    ))
+    items = Array.push(items, GraphicalUi.button("Send message", () -> submit_contact(model), solid_button_style()))
+
+    return GraphicalUi.column(items ?? [], GraphicalUi.merge_styles(section_style(), GraphicalUi.spacing(12)))
+}
+
+# ─── Root view ─────────────────────────────────────────────────────────────────
+
+function widget view_site(dictionary model) {
+    string route = model["route"]
+    widget body = GraphicalUi.router(route, {
+        "/": home_page(model),
+        "/features": features_page(model),
+        "/blog": blog_page(model),
+        "/post/:slug": post_page(model),
+        "/contact": contact_page(model)
+    })
+    return GraphicalUi.column([
+        nav_bar(route),
+        GraphicalUi.separator(),
+        GraphicalUi.column([body], content_style()),
+        site_footer()
+    ], GraphicalUi.spacing(12))
+}
+
+# ─── Entry point and configuration ─────────────────────────────────────────────
+
+@main
+function void main() {
+    GraphicalUi.app(site_config())
+}
+
+function dictionary site_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Luma - GraphicalUi Website"
+    config["width"] = 1040
+    config["height"] = 760
+    config["model"] = site_model()
+    config["view"] = view_site
+    config["init"] = (dictionary model) -> {
+        # Inject the hand-written site stylesheet into the webview at startup.
+        return GraphicalUi.with_command(model, GraphicalUi.stylesheet(site_css()))
+    }
+    config["update"] = (dictionary model, dictionary msg) -> {
+        # navigation_link delivers {"_gui_nav": "navigate", "route": "/path"}.
+        if msg["_gui_nav"] == "navigate" {
+            string target = msg["route"]
+            mutable dictionary next = Dictionary.set(model, "route", target)
+            next = Dictionary.set(next, "submitted", false)
+            next = Dictionary.set(next, "error", "")
+            next = Dictionary.set(next, "contact_name_error", "")
+            next = Dictionary.set(next, "contact_email_error", "")
+            next = Dictionary.set(next, "contact_message_error", "")
+            # Announce the new page and move focus to its heading so screen-reader
+            # and keyboard users are carried across the route change.
+            return GraphicalUi.with_command(next, GraphicalUi.batch([
+                GraphicalUi.focus("page-heading"),
+                GraphicalUi.announce("Navigated to ${route_name(target)}")
+            ]))
+        }
+        return model
+    }
+    return config
+}
+
+# Build the navigation message in the shape the framework delivers to update().
+function dictionary navigate_message(string route) {
+    mutable dictionary msg = {"_gui_nav": "navigate"}
+    msg["route"] = route
+    return msg
+}
+
+# ─── Tests ─────────────────────────────────────────────────────────────────────
+
+@test
+function void test_home_route_shows_hero() {
+    dictionary heading = GraphicalUi.test_find(site_config(), site_model(),
+        "Build delightful apps with Luma")
+    assert(Dictionary.get_or(heading, "type", "") == "heading")
+}
+
+@test
+function void test_nav_links_change_route() {
+    dictionary to_features = GraphicalUi.test_click(site_config(), site_model(), "Features")
+    assert(to_features["route"] == "/features")
+
+    dictionary to_blog = GraphicalUi.test_click(site_config(), site_model(), "Blog")
+    assert(to_blog["route"] == "/blog")
+
+    dictionary to_contact = GraphicalUi.test_click(site_config(), site_model(), "Contact")
+    assert(to_contact["route"] == "/contact")
+}
+
+@test
+function void test_home_link_returns_to_root() {
+    dictionary at_features = Dictionary.set(site_model(), "route", "/features")
+    dictionary home = GraphicalUi.test_click(site_config(), at_features, "Home")
+    assert(home["route"] == "/")
+}
+
+@test
+function void test_hero_cta_navigates_to_contact() {
+    dictionary after = GraphicalUi.test_click(site_config(), site_model(), "Get started")
+    assert(after["route"] == "/contact")
+}
+
+@test
+function void test_hero_secondary_cta_navigates_to_features() {
+    dictionary after = GraphicalUi.test_click(site_config(), site_model(), "Browse features")
+    assert(after["route"] == "/features")
+}
+
+@test
+function void test_blog_lists_every_post() {
+    dictionary at_blog = Dictionary.set(site_model(), "route", "/blog")
+    integer count = GraphicalUi.test_count(site_config(), at_blog, "Read article")
+    assert(count == 4)
+}
+
+@test
+function void test_clicking_post_title_opens_article() {
+    dictionary at_blog = Dictionary.set(site_model(), "route", "/blog")
+    dictionary opened = GraphicalUi.test_click(site_config(), at_blog, "Why Luma?")
+    assert(opened["route"] == "/post/why-luma")
+}
+
+@test
+function void test_post_page_renders_body() {
+    dictionary at_post = Dictionary.set(site_model(), "route", "/post/the-elm-architecture")
+    dictionary body = GraphicalUi.test_find(site_config(), at_post,
+        "GraphicalUi makes your interface a pure function of state, so every screen is predictable and easy to test.")
+    assert(Dictionary.get_or(body, "type", "") == "label")
+}
+
+@test
+function void test_unknown_post_shows_not_found() {
+    dictionary at_post = Dictionary.set(site_model(), "route", "/post/does-not-exist")
+    dictionary message = GraphicalUi.test_find(site_config(), at_post,
+        "We could not find that article.")
+    assert(Dictionary.get_or(message, "type", "") == "label")
+}
+
+@test
+function void test_unknown_route_uses_router_fallback() {
+    dictionary unknown = Dictionary.set(site_model(), "route", "/nope")
+    dictionary fallback = GraphicalUi.test_find(site_config(), unknown,
+        "Route not found: /nope")
+    assert(Dictionary.get_or(fallback, "type", "") == "label")
+}
+
+@test
+function void test_contact_field_updates_model() {
+    dictionary at_contact = Dictionary.set(site_model(), "route", "/contact")
+    dictionary typed = GraphicalUi.test_input(site_config(), at_contact, "Your name", "Grace")
+    assert(typed["contact_name"] == "Grace")
+}
+
+@test
+function void test_contact_submit_requires_all_fields() {
+    dictionary at_contact = Dictionary.set(site_model(), "route", "/contact")
+    dictionary after = GraphicalUi.test_click(site_config(), at_contact, "Send message")
+    boolean submitted = after["submitted"]
+    assert(!submitted)
+    string error = after["error"]
+    assert(error != "")
+}
+
+@test
+function void test_contact_submit_succeeds_when_complete() {
+    mutable dictionary filled = Dictionary.set(site_model(), "route", "/contact")
+    filled = Dictionary.set(filled, "contact_name", "Ada Lovelace")
+    filled = Dictionary.set(filled, "contact_email", "ada@example.com")
+    filled = Dictionary.set(filled, "contact_message", "Luma looks wonderful.")
+    dictionary after = GraphicalUi.test_click(site_config(), filled, "Send message")
+    boolean submitted = after["submitted"]
+    assert(submitted)
+}
+
+@test
+function void test_navigate_message_updates_route() {
+    dictionary after = GraphicalUi.test_message(site_config(), site_model(),
+        navigate_message("/features"))
+    assert(after["route"] == "/features")
+}

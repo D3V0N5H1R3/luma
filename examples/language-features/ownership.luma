@@ -1,0 +1,58 @@
+# ═══════════════════════════════════════════════════════════
+# Ownership
+#
+# Demonstrates unique ownership, borrow references, and
+# the _ prefix convention for suppressing unused-variable
+# warnings.
+# ═══════════════════════════════════════════════════════════
+
+# A simple resource that requires explicit consumption.
+function unique string acquire_handle(string name) {
+    return "handle:${name}"
+}
+
+function void process_handle(unique string handle) {
+    print("  processing ${handle}")
+}
+
+# Borrow: read-only, cannot be moved or reassigned.
+function void inspect(borrow string value) {
+    print("  inspecting: '${value}'")
+}
+
+@main
+function void main() {
+    # ── Unique ownership ──
+    print("=== Unique ownership ===")
+
+    unique string h1 = acquire_handle("file_a")
+    process_handle(h1)
+    # h1 has been consumed — using it again would be a compile error.
+
+    unique string h2 = acquire_handle("file_b")
+    unique string h3 = acquire_handle("file_c")
+
+    # Each handle can only be consumed once.
+    process_handle(h2)
+    process_handle(h3)
+
+    # ── Borrow references ──
+    print("")
+    print("=== Borrow references ===")
+
+    string message = "Hello, Luma!"
+    borrow string view = message
+    inspect(view)
+
+    # The original is still accessible (borrow is read-only).
+    print("  original: '${message}'")
+
+    # ── Unused variable suppression with _ ──
+    print("")
+    print("=== Unused _ prefix ===")
+
+    # The _ prefix suppresses unused-variable warnings.
+    integer _unused = 42
+    unique string _discarded = acquire_handle("temp")
+    print("  no warnings for _unused or _discarded")
+}

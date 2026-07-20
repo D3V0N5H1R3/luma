@@ -1,0 +1,250 @@
+# ═══════════════════════════════════════════════════════════
+# Conway's Game of Life — Cellular Automaton
+#
+# A pure-functional implementation of Conway's Game of Life.
+# Each generation is computed from the previous one with no
+# mutation of the original grid. Demonstrates nested arrays as a
+# 2D grid, neighbour counting with bounds checking, an
+# expression-oriented update rule, and @test annotations that
+# verify the classic still-life, oscillator and glider patterns.
+#
+# The grid is an array of equal-length rows of integers, where 1
+# is a live cell and 0 is dead. Patterns are written with '#'
+# for live cells and '.' for dead ones.
+#
+# Usage: luma examples/applications/game_of_life.luma
+# Tests: luma --test examples/applications/game_of_life.luma
+# ═══════════════════════════════════════════════════════════
+
+# ─── Grid Helpers ────────────────────────────────────────
+
+function integer rows_of(array<array<integer>> grid) {
+    return Array.length(grid)
+}
+
+function integer cols_of(array<array<integer>> grid) {
+    return Array.length(grid[0])
+}
+
+function array<array<integer>> parse_pattern(array<string> lines) {
+    mutable array<array<integer>> grid = []
+    for line in lines {
+        mutable array<integer> row = []
+        for character in String.characters(line) {
+            row = Array.push(row, if character == "#" { 1 } else { 0 })
+        }
+        grid = Array.push(grid, row)
+    }
+    return grid
+}
+
+function void print_grid(array<array<integer>> grid) {
+    for row in 0..rows_of(grid) {
+        mutable array<string> cells = []
+        for col in 0..cols_of(grid) {
+            cells = Array.push(cells, if grid[row][col] == 1 { "#" } else { "." })
+        }
+        print("  ${String.join(cells, "")}")
+    }
+}
+
+function integer population(array<array<integer>> grid) {
+    mutable integer total = 0
+    for row in grid {
+        for cell in row {
+            total = total + cell
+        }
+    }
+    return total
+}
+
+function boolean grids_equal(array<array<integer>> a, array<array<integer>> b) {
+    if rows_of(a) != rows_of(b) || cols_of(a) != cols_of(b) {
+        return false
+    }
+    for row in 0..rows_of(a) {
+        for col in 0..cols_of(a) {
+            if a[row][col] != b[row][col] {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+# ─── Evolution Rules ─────────────────────────────────────
+
+function integer live_neighbours(array<array<integer>> grid, integer row, integer col) {
+    mutable integer count = 0
+    for delta_row in 0..3 {
+        for delta_col in 0..3 {
+            integer offset_row = delta_row - 1
+            integer offset_col = delta_col - 1
+            boolean is_self = offset_row == 0 && offset_col == 0
+            integer probe_row = row + offset_row
+            integer probe_col = col + offset_col
+            boolean inside = probe_row >= 0 && probe_row < rows_of(grid) &&
+                             probe_col >= 0 && probe_col < cols_of(grid)
+            if !is_self && inside {
+                count = count + grid[probe_row][probe_col]
+            }
+        }
+    }
+    return count
+}
+
+function integer next_cell(integer alive, integer neighbours) {
+    return if alive == 1 {
+        if neighbours == 2 || neighbours == 3 { 1 } else { 0 }
+    } else {
+        if neighbours == 3 { 1 } else { 0 }
+    }
+}
+
+function array<integer> step_row(array<array<integer>> grid, integer row) {
+    return Array.range(0, cols_of(grid))
+    |> Result.unwrap_or([])
+    |> Array.map((integer col) -> next_cell(grid[row][col], live_neighbours(grid, row, col)))
+    |> Result.unwrap_or([])
+}
+
+function array<array<integer>> step(array<array<integer>> grid) {
+    # Build every row with a single native map pass instead of pushing cells one
+    # at a time; per-element push would copy the growing row on each append,
+    # making a whole-grid rebuild O((rows × cols)²).
+    return Array.range(0, rows_of(grid))
+    |> Result.unwrap_or([])
+    |> Array.map((integer row) -> step_row(grid, row))
+    |> Result.unwrap_or([])
+}
+
+function array<array<integer>> advance(array<array<integer>> grid, integer generations) {
+    mutable array<array<integer>> current = grid
+    mutable integer remaining = generations
+    while remaining > 0 {
+        current = step(current)
+        remaining = remaining - 1
+    }
+    return current
+}
+
+# ─── Demo ────────────────────────────────────────────────
+
+function void show_generations(string title, array<array<integer>> start, integer generations) {
+    print("")
+    print("${title}:")
+    mutable array<array<integer>> current = start
+    mutable integer generation = 0
+    while generation <= generations {
+        print("  generation ${generation} — population ${population(current)}")
+        print_grid(current)
+        current = step(current)
+        generation = generation + 1
+    }
+}
+
+@main
+function void main() {
+    print("═══════════════════════════════════════════════════")
+    print("   Conway's Game of Life")
+    print("═══════════════════════════════════════════════════")
+
+    array<array<integer>> blinker = parse_pattern([
+        ".....",
+        "..#..",
+        "..#..",
+        "..#..",
+        ".....",
+    ])
+    show_generations("Blinker (oscillator, period 2)", blinker, 2)
+
+    array<array<integer>> glider = parse_pattern([
+        ".#......",
+        "..#.....",
+        "###.....",
+        "........",
+        "........",
+        "........",
+    ])
+    show_generations("Glider (spaceship, travels diagonally)", glider, 4)
+}
+
+# ─── Tests ───────────────────────────────────────────────
+
+@test
+function void test_parse_and_population() {
+    array<array<integer>> grid = parse_pattern([".#.", "###", ".#."])
+    assert(population(grid) == 5, "five live cells were marked")
+    assert(rows_of(grid) == 3 && cols_of(grid) == 3, "grid is three by three")
+}
+
+@test
+function void test_neighbour_count_in_centre() {
+    array<array<integer>> grid = parse_pattern(["###", "#.#", "###"])
+    assert(live_neighbours(grid, 1, 1) == 8, "the hollow centre sees all eight")
+}
+
+@test
+function void test_neighbour_count_in_corner() {
+    array<array<integer>> grid = parse_pattern(["##", "##"])
+    assert(live_neighbours(grid, 0, 0) == 3, "a corner sees three neighbours")
+}
+
+@test
+function void test_block_is_a_still_life() {
+    array<array<integer>> block = parse_pattern([
+        "....",
+        ".##.",
+        ".##.",
+        "....",
+    ])
+    assert(grids_equal(step(block), block), "a 2x2 block never changes")
+}
+
+@test
+function void test_blinker_oscillates() {
+    array<array<integer>> vertical = parse_pattern([
+        ".....",
+        "..#..",
+        "..#..",
+        "..#..",
+        ".....",
+    ])
+    array<array<integer>> horizontal = parse_pattern([
+        ".....",
+        ".....",
+        ".###.",
+        ".....",
+        ".....",
+    ])
+    assert(grids_equal(step(vertical), horizontal), "one step rotates the blinker")
+    assert(grids_equal(advance(vertical, 2), vertical), "two steps restore it")
+}
+
+@test
+function void test_lonely_cell_dies() {
+    array<array<integer>> grid = parse_pattern(["...", ".#.", "..."])
+    assert(population(step(grid)) == 0, "a single cell dies of isolation")
+}
+
+@test
+function void test_glider_translates_after_four_generations() {
+    array<array<integer>> start = parse_pattern([
+        ".#......",
+        "..#.....",
+        "###.....",
+        "........",
+        "........",
+        "........",
+    ])
+    array<array<integer>> shifted = parse_pattern([
+        "........",
+        "..#.....",
+        "...#....",
+        ".###....",
+        "........",
+        "........",
+    ])
+    assert(population(start) == 5, "a glider has five cells")
+    assert(grids_equal(advance(start, 4), shifted), "a glider moves one step diagonally")
+}

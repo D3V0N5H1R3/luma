@@ -1,0 +1,386 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Json Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_json_serialize_integer() {
+    string json = Json.serialize(42)
+
+    assert(json == "42")
+}
+
+@test
+function void test_json_serialize_string() {
+    string json = Json.serialize("hello")
+
+    assert(json == "\"hello\"")
+}
+
+@test
+function void test_json_serialize_boolean() {
+    assert(Json.serialize(true) == "true")
+    assert(Json.serialize(false) == "false")
+}
+
+@test
+function void test_json_serialize_null() {
+    assert(Json.serialize(none) == "null")
+}
+
+@test
+function void test_json_serialize_array() {
+    string json = Json.serialize([1, 2, 3])
+
+    assert(json == "[1,2,3]")
+}
+
+@test
+function void test_json_deserialize_integer() {
+    integer v = Json.deserialize("42") |> Result.unwrap()
+
+    assert(v == 42)
+}
+
+@test
+function void test_json_deserialize_string() {
+    string v = Json.deserialize("\"hello\"") |> Result.unwrap()
+
+    assert(v == "hello")
+}
+
+@test
+function void test_json_deserialize_boolean() {
+    boolean v = Json.deserialize("true") |> Result.unwrap()
+
+    assert(v)
+}
+
+@test
+function void test_json_deserialize_array() {
+    array<integer> v = Json.deserialize("[1, 2, 3]") |> Result.unwrap()
+
+    assert(Array.length(v) == 3)
+    assert(v[0] == 1)
+}
+
+@test
+function void test_json_roundtrip_array() {
+    string json = Json.serialize([1, 2, 3])
+
+    array<integer> parsed = Json.deserialize(json) |> Result.unwrap()
+
+    assert(Array.length(parsed) == 3)
+    assert(parsed[0] == 1)
+}
+
+@test
+function void test_json_is_valid() {
+    assert(Json.is_valid("{\"key\": \"value\"}"))
+    assert(Json.is_valid("[1, 2, 3]"))
+    assert(!Json.is_valid("{bad"))
+    assert(!Json.is_valid(""))
+}
+
+@test
+function void test_json_deserialize_invalid() {
+    assert(Json.deserialize("{invalid}") |> Result.is_failure())
+}
+
+@test
+function void test_json_serialize_pretty() {
+    string json = Json.serialize_pretty([1, 2])
+
+    assert(String.contains(json, "\n"))
+}
+
+# ─── Json.get ────────────────────────────────────────────
+
+@test
+function void test_json_get_top_level_key() {
+    string json = "{\"name\": \"Alice\", \"age\": 30}"
+
+    string name = Json.get(json, "name") |> Result.unwrap()
+
+    assert(name == "Alice")
+}
+
+@test
+function void test_json_get_nested_key() {
+    string json = "{\"user\": {\"id\": 42}}"
+
+    integer id = Json.get(json, "user.id") |> Result.unwrap()
+
+    assert(id == 42)
+}
+
+@test
+function void test_json_get_array_index() {
+    string json = "[10, 20, 30]"
+
+    integer val = Json.get(json, "1") |> Result.unwrap()
+
+    assert(val == 20)
+}
+
+@test
+function void test_json_get_missing_key() {
+    result<integer> r = Json.get("{\"a\": 1}", "b")
+
+    assert(Result.is_failure(r))
+}
+
+# ─── Json.set ────────────────────────────────────────────
+
+@test
+function void test_json_set_existing_key() {
+    string updated = Json.set("{\"x\": 1}", "x", 99) |> Result.unwrap()
+
+    integer v = Json.get(updated, "x") |> Result.unwrap()
+
+    assert(v == 99)
+}
+
+@test
+function void test_json_set_new_key() {
+    string updated = Json.set("{}", "greeting", "hi") |> Result.unwrap()
+
+    string v = Json.get(updated, "greeting") |> Result.unwrap()
+
+    assert(v == "hi")
+}
+
+# ─── Json.merge ──────────────────────────────────────────
+
+@test
+function void test_json_merge_two_objects() {
+    string merged = Json.merge("{\"a\": 1}", "{\"b\": 2}") |> Result.unwrap()
+
+    integer a = Json.get(merged, "a") |> Result.unwrap()
+    integer b = Json.get(merged, "b") |> Result.unwrap()
+
+    assert(a == 1)
+    assert(b == 2)
+}
+
+@test
+function void test_json_merge_right_wins_on_conflict() {
+    string merged = Json.merge("{\"x\": 1}", "{\"x\": 99}") |> Result.unwrap()
+
+    integer x = Json.get(merged, "x") |> Result.unwrap()
+
+    assert(x == 99)
+}
+
+@test
+function void test_json_merge_invalid_fails() {
+    result<string> r = Json.merge("{invalid}", "{}")
+
+    assert(Result.is_failure(r))
+}
+
+# ───────────────────────────────────────────────────────────
+# get_path, set_path
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_json_get_path() {
+    assert(Converter.to_string(Result.unwrap(Json.get_path("{\"a\":{\"b\":42}}", "a.b"))) == "42")
+}
+
+@test
+function void test_json_set_path() {
+    assert(Result.unwrap(Json.set_path("{\"a\":1}", "a", 9)) == "{\"a\":9}")
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional serialize / deserialize coverage
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_json_serialize_number() {
+    assert(Json.serialize(3.5) == "3.5")
+}
+
+@test
+function void test_json_serialize_dictionary() {
+    dictionary<integer> d = {"b": 2, "a": 1}
+
+    assert(Json.serialize(d) == "{\"b\":2,\"a\":1}")
+}
+
+@test
+function void test_json_serialize_nested() {
+    dictionary<array<integer>> d = {"items": [1, 2, 3]}
+
+    assert(Json.serialize(d) == "{\"items\":[1,2,3]}")
+}
+
+@test
+function void test_json_deserialize_number() {
+    number v = Json.deserialize("3.14") |> Result.unwrap()
+
+    assert(v > 3.13)
+    assert(v < 3.15)
+}
+
+@test
+function void test_json_deserialize_null() {
+    result<integer> r = Json.deserialize("null")
+
+    assert(Result.is_success(r))
+}
+
+@test
+function void test_json_deserialize_object() {
+    dictionary<integer> v = Json.deserialize("{\"a\": 1, \"b\": 2}") |> Result.unwrap()
+
+    integer a = Dictionary.get(v, "a") |> Result.unwrap()
+    integer b = Dictionary.get(v, "b") |> Result.unwrap()
+
+    assert(a == 1)
+    assert(b == 2)
+}
+
+@test
+function void test_json_roundtrip_dictionary() {
+    dictionary<integer> original = {"x": 1, "y": 2}
+
+    string json = Json.serialize(original)
+    dictionary<integer> parsed = Json.deserialize(json) |> Result.unwrap()
+
+    integer x = Dictionary.get(parsed, "x") |> Result.unwrap()
+
+    assert(x == 1)
+}
+
+@test
+function void test_json_serialize_pretty_roundtrips() {
+    array<integer> original = [1, 2, 3]
+
+    string pretty = Json.serialize_pretty(original)
+    array<integer> parsed = Json.deserialize(pretty) |> Result.unwrap()
+
+    assert(Array.length(parsed) == 3)
+    assert(parsed[2] == 3)
+}
+
+@test
+function void test_json_deserialize_unicode_escape() {
+    string v = Json.deserialize("\"\\u0041\"") |> Result.unwrap()
+
+    assert(v == "A")
+}
+
+# ───────────────────────────────────────────────────────────
+# Path navigation — bracket index, nested set, dot index
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_json_get_path_array_bracket() {
+    string json = "{\"items\": [{\"id\": 10}, {\"id\": 20}]}"
+
+    integer id = Json.get_path(json, "items[1].id") |> Result.unwrap()
+
+    assert(id == 20)
+}
+
+@test
+function void test_json_set_path_array_index() {
+    string updated = Json.set_path("[1, 2, 3]", "[0]", 99) |> Result.unwrap()
+
+    assert(updated == "[99,2,3]")
+}
+
+@test
+function void test_json_set_path_nested_object() {
+    string json = "{\"a\": {\"b\": {\"c\": 1}}}"
+
+    string updated = Json.set_path(json, "a.b.c", 42) |> Result.unwrap()
+    integer c = Json.get_path(updated, "a.b.c") |> Result.unwrap()
+
+    assert(c == 42)
+}
+
+@test
+function void test_json_get_dot_array_index() {
+    string json = "{\"a\": {\"b\": [7, 8, 9]}}"
+
+    integer v = Json.get(json, "a.b.2") |> Result.unwrap()
+
+    assert(v == 9)
+}
+
+@test
+function void test_json_merge_overwrites_object() {
+    string merged = Json.merge("{\"a\": 1, \"b\": 2}", "{\"b\": 99}") |> Result.unwrap()
+
+    integer a = Json.get(merged, "a") |> Result.unwrap()
+    integer b = Json.get(merged, "b") |> Result.unwrap()
+
+    assert(a == 1)
+    assert(b == 99)
+}
+
+# ───────────────────────────────────────────────────────────
+# Negative cases — malformed input and invalid operations
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_json_deserialize_trailing_fails() {
+    assert(Json.deserialize("1 2") |> Result.is_failure())
+}
+
+@test
+function void test_json_deserialize_leading_zero_fails() {
+    assert(Json.deserialize("01") |> Result.is_failure())
+}
+
+@test
+function void test_json_deserialize_unterminated_fails() {
+    assert(Json.deserialize("\"abc") |> Result.is_failure())
+}
+
+@test
+function void test_json_get_into_scalar_fails() {
+    result<integer> r = Json.get("5", "a")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_json_get_path_out_of_bounds_fails() {
+    result<integer> r = Json.get_path("[1, 2, 3]", "[9]")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_json_set_missing_parent_fails() {
+    result<string> r = Json.set("{\"a\": 1}", "x.y", 1)
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_json_set_non_object_fails() {
+    result<string> r = Json.set("[1, 2]", "a", 1)
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_json_set_path_out_of_bounds_fails() {
+    result<string> r = Json.set_path("[1, 2]", "[5]", 9)
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_json_merge_non_objects_fails() {
+    result<string> r = Json.merge("[1]", "[2]")
+
+    assert(Result.is_failure(r))
+}

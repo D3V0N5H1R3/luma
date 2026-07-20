@@ -1,0 +1,117 @@
+# ═══════════════════════════════════════════════════════════
+# Logging
+#
+# Demonstrates the Log module — log levels, structured
+# context, custom formatting, and output routing.
+#
+# Log output goes to stderr; this example focuses on the
+# Log API rather than capturing output.
+# ═══════════════════════════════════════════════════════════
+
+# Demonstrate the log levels and how the minimum level gates output.
+function void show_log_levels() {
+    print("=== Log Levels ===")
+    print("The next log lines are written to stderr.")
+
+    # Set the minimum level — messages below it are suppressed.
+    Log.set_level(Log.Level.Debug)
+
+    print("Minimum log level is Debug, so debug and higher messages appear.")
+
+    Log.debug("application starting")
+    Log.info("server listening on port 8080")
+    Log.warn("config file not found, using defaults")
+    Log.error("failed to connect to database")
+
+    # Raise the level — only warn and above get through.
+    Log.set_level(Log.Level.Warn)
+
+    print("\nLevel raised to Warn:")
+
+    Log.debug("this is suppressed")
+    Log.info("this is suppressed")
+    Log.warn("low disk space")
+    Log.error("write failed")
+
+    # Turn logging off completely.
+    Log.set_level(Log.Level.Off)
+    Log.error("this is silent")
+
+    print("Level set to Off — nothing logged above")
+
+    # Reset to Debug for the rest of the example.
+    Log.set_level(Log.Level.Debug)
+}
+
+# Attach structured fields that ride along with every log line.
+function void show_structured_context() {
+    print("\n=== Structured Context ===")
+    print("(log lines below carry module and request_id fields)")
+
+    Log.set_context("module", "auth")
+    Log.set_context("request_id", "req-4821")
+
+    Log.info("user login attempt")
+    Log.warn("invalid password, attempt 2 of 3")
+    Log.info("login successful")
+
+    Log.clear_context()
+    Log.info("context cleared — no extra fields")
+}
+
+# Route log output to a named stream, reporting any failure.
+function void show_output_routing() {
+    print("\n=== Output Routing ===")
+
+    result<void> ok = Log.set_output("stderr")
+
+    match ok {
+        success(_) { Log.info("routed to stderr") }
+        failure(e) { print("Could not set output: ${e}") }
+    }
+}
+
+# Walk through a simulated application lifecycle with contextual fields.
+function void show_application_lifecycle() {
+    print("\n=== Application Lifecycle ===")
+
+    Log.set_level(Log.Level.Info)
+    Log.set_context("app", "demo")
+
+    Log.info("initialising modules")
+    Log.info("loading configuration")
+    Log.warn("optional feature X unavailable")
+    Log.info("startup complete")
+
+    Log.set_context("user", "alice")
+    Log.info("processing request")
+    Log.info("request complete")
+    Log.clear_context()
+
+    Log.info("shutting down")
+
+    Log.set_level(Log.Level.Debug)
+}
+
+# Replace the log line template with a custom literal prefix.
+function void show_custom_line_prefix() {
+    # set_format replaces the entire log line template. Since Luma's
+    # ${...} syntax is reserved for string interpolation, pass a
+    # literal prefix string — the message text is still appended.
+    print("\n=== Custom Line Prefix ===")
+
+    Log.set_format("[MYAPP] ")
+    Log.info("this line carries the [MYAPP] prefix on stderr")
+    Log.warn("cache miss rate high")
+}
+
+@main
+function void main() {
+    show_log_levels()
+    show_structured_context()
+    show_output_routing()
+    show_application_lifecycle()
+    show_custom_line_prefix()
+
+    print("\nLogging demo complete; check stderr for the generated log lines.")
+}

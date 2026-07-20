@@ -1,0 +1,508 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Result
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+function result<number> safe_divide(number numerator, number denominator) {
+    if denominator == 0 { return failure("division by zero") }
+
+    return success(numerator / denominator)
+}
+
+@test
+function void test_result_ok_and_fail() {
+    result<integer> ok_result = success(42)
+    result<integer> fail_result = failure("value missing")
+
+    assert(Result.is_success(ok_result))
+    assert(!Result.is_success(fail_result))
+    assert(Result.unwrap(ok_result) == 42)
+    assert(Result.unwrap_or(fail_result, 0) == 0)
+}
+
+@test
+function void test_result_from_function() {
+    result<number> divide_result = safe_divide(10.0, 2.0)
+    result<number> zero_divide_result = safe_divide(10.0, 0.0)
+
+    assert(Result.is_success(divide_result))
+    assert(Math.approximately_equal(Result.unwrap(divide_result), 5.0))
+    assert(!Result.is_success(zero_divide_result))
+}
+
+@test
+function void test_result_or() {
+    result<integer> failing_result = failure("not found")
+    result<integer> fallback_result = success(42)
+    result<integer> resolved = Result.or(failing_result, fallback_result)
+
+    assert(Result.is_success(resolved))
+    assert(Result.unwrap(resolved) == 42)
+}
+
+@test
+function void test_result_flatten() {
+    result<result<integer>> nested = success(success(42))
+    result<integer> flattened_result = Result.flatten(nested)
+
+    assert(Result.is_success(flattened_result))
+    assert(Result.unwrap(flattened_result) == 42)
+}
+
+@test
+function void test_result_collect() {
+    array<result<integer>> result_array = [success(1), success(2), success(3)]
+    result<array<integer>> collected = Result.collect(result_array)
+
+    assert(Result.is_success(collected))
+
+    array<integer> integer_values = Result.unwrap(collected)
+
+    assert(Result.unwrap(Array.sum(integer_values)) == 6)
+}
+
+@test
+function void test_result_collect_with_fail() {
+    array<result<integer>> result_array = [success(1), failure("invalid value"), success(3)]
+    result<array<integer>> collected = Result.collect(result_array)
+
+    assert(!Result.is_success(collected))
+}
+
+@test
+function void test_result_collect_empty() {
+    array<result<integer>> empty_items = []
+    result<array<integer>> collected = Result.collect(empty_items)
+
+    assert(Result.is_success(collected))
+    assert(Array.length(Result.unwrap(collected)) == 0)
+}
+
+@test
+function void test_result_tap() {
+    result<integer> ok_result = success(10)
+    result<integer> tapped = Result.tap(ok_result, (integer v) -> print(v))
+
+    assert(Result.is_success(tapped))
+    assert(Result.unwrap(tapped) == 10)
+}
+
+@test
+function void test_result_filter() {
+    result<integer> ok_result = success(5)
+    result<integer> filtered = Result.filter(ok_result, (integer v) -> v > 3, "too small")
+
+    assert(Result.is_success(filtered))
+
+    result<integer> rejected_result = Result.filter(ok_result, (integer v) -> v > 10, "too small")
+
+    assert(!Result.is_success(rejected_result))
+}
+
+@test
+function void test_result_map_number_ok() {
+    result<integer> ok_result = success(10)
+    result<number> mapped = Result.map_number(ok_result, (number v) -> v * 3)
+
+    assert(Result.is_success(mapped))
+    assert(Result.unwrap(mapped) == 30)
+}
+
+@test
+function void test_result_map_number_fail() {
+    result<integer> fail_result = failure("computation error")
+    result<number> mapped = Result.map_number(fail_result, (number v) -> v * 3)
+
+    assert(!Result.is_success(mapped))
+}
+
+@test
+function void test_result_map_string() {
+    result<string> ok_result = success("hello")
+    result<string> mapped = Result.map_string(ok_result, (string s) -> String.uppercase(s))
+
+    assert(Result.is_success(mapped))
+    assert(Result.unwrap(mapped) == "HELLO")
+}
+
+@test
+function void test_result_is_fail() {
+    assert(Result.is_failure(failure("error message")))
+    assert(!Result.is_failure(success(42)))
+}
+
+@test
+function void test_result_map() {
+    result<integer> ok_result = success(10)
+    result<integer> mapped = Result.map(ok_result, (integer v) -> v)
+
+    assert(Result.is_success(mapped))
+}
+
+@test
+function void test_result_map_boolean() {
+    result<boolean> ok_result = success(true)
+    result<boolean> mapped = Result.map_boolean(ok_result, (boolean is_set) -> !is_set)
+
+    assert(Result.is_success(mapped))
+    assert(!Result.unwrap(mapped))
+}
+
+@test
+function void test_result_map_integer() {
+    result<integer> ok_result = success(5)
+    result<integer> mapped = Result.map_integer(ok_result, (integer n) -> n * 2)
+
+    assert(Result.is_success(mapped))
+    assert(Result.unwrap(mapped) == 10)
+}
+
+@test
+function void test_result_flat_map_ok() {
+    result<integer> ok_result = success(10)
+    result<integer> chained = Result.flat_map(ok_result, (integer _v) -> success(42))
+
+    assert(Result.is_success(chained))
+    assert(Result.unwrap(chained) == 42)
+}
+
+@test
+function void test_result_flat_map_fail() {
+    result<integer> fail_result = failure("computation error")
+    result<integer> chained = Result.flat_map(fail_result, (integer _v) -> success(42))
+
+    assert(Result.is_failure(chained))
+}
+
+@test
+function void test_result_recover_fail() {
+    result<integer> fail_result = failure("computation error")
+    result<integer> recovered = Result.recover(fail_result, (string _message) -> 99)
+
+    assert(Result.is_success(recovered))
+    assert(Result.unwrap(recovered) == 99)
+}
+
+@test
+function void test_result_recover_ok() {
+    result<integer> ok_result = success(10)
+    result<integer> kept = Result.recover(ok_result, (string _message) -> 99)
+
+    assert(Result.is_success(kept))
+    assert(Result.unwrap(kept) == 10)
+}
+
+# ─── Error Propagation ? ───
+
+function result<integer> safe_divide_integer(integer numerator, integer denominator) {
+    if denominator == 0 {
+        return failure("division by zero")
+    }
+
+    return success(numerator / denominator)
+}
+
+function result<integer> compute() {
+    integer first_quotient = safe_divide_integer(10, 2)?
+    integer second_quotient = safe_divide_integer(first_quotient, 1)?
+
+    return success(first_quotient + second_quotient)
+}
+
+function result<integer> compute_failing() {
+    integer quotient = safe_divide_integer(10, 0)?
+
+    # This line should not be reached.
+    return success(quotient)
+}
+
+@test
+function void test_error_propagation_ok() {
+    result<integer> compute_result = compute()
+
+    assert(Result.is_success(compute_result))
+    assert(Result.unwrap(compute_result) == 10)
+}
+
+@test
+function void test_error_propagation_fail() {
+    result<integer> compute_result = compute_failing()
+
+    assert(Result.is_failure(compute_result))
+}
+
+@test
+function void test_result_error() {
+    assert(Result.error(failure("msg")) == "msg")
+}
+
+@test
+function void test_result_error_on_ok_throws() {
+    mutable boolean has_thrown = false
+
+    try {
+        string _ = Result.error(success(42))
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+# ─── Result.to_optional ──────────────────────────────────
+
+@test
+function void test_result_to_optional_success() {
+    result<integer> r = success(42)
+    optional<integer> o = Result.to_optional(r)
+
+    assert(Optional.is_some(o))
+    assert(Optional.unwrap(o) == 42)
+}
+
+@test
+function void test_result_to_optional_failure() {
+    result<integer> r = failure("oops")
+    optional<integer> o = Result.to_optional(r)
+
+    assert(Optional.is_none(o))
+}
+
+# ─── Result.map_failure ──────────────────────────────────
+
+@test
+function void test_result_map_failure_on_failure() {
+    result<integer> r = failure("error")
+    result<integer> mapped = Result.map_failure(r, (string e) -> "wrapped: " + e)
+
+    assert(Result.is_failure(mapped))
+    assert(Result.error(mapped) == "wrapped: error")
+}
+
+@test
+function void test_result_map_failure_on_success() {
+    result<integer> r = success(42)
+    result<integer> mapped = Result.map_failure(r, (string e) -> "wrapped: " + e)
+
+    assert(Result.is_success(mapped))
+    assert(Result.unwrap(mapped) == 42)
+}
+
+# ─── Result.zip ─────────────────────────────────────────
+
+@test
+function void test_result_zip_both_success() {
+    result<(integer, integer)> r = Result.zip(success(1), success(2))
+
+    assert(Result.is_success(r))
+
+    (integer a, integer b) = Result.unwrap(r)
+
+    assert(a == 1)
+    assert(b == 2)
+}
+
+@test
+function void test_result_zip_first_failure() {
+    result<(integer, integer)> r = Result.zip(failure("err"), success(2))
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_result_zip_second_failure() {
+    result<(integer, integer)> r = Result.zip(success(1), failure("err"))
+
+    assert(Result.is_failure(r))
+}
+
+# ─── Result.bimap ─────────────────────────────────────────
+
+@test
+function void test_result_bimap_success() {
+    result<integer> r = success(5)
+    result<string> mapped = Result.bimap(r, (integer v) -> Converter.to_string(v), (string e) -> "err: ${e}")
+
+    assert(mapped == success("5"))
+}
+
+@test
+function void test_result_bimap_failure() {
+    result<integer> r = failure("bad")
+    result<string> mapped = Result.bimap(r, (integer v) -> Converter.to_string(v), (string e) -> "err: ${e}")
+
+    assert(mapped == failure("err: bad"))
+}
+
+# ─── Result.fold ──────────────────────────────────────────
+
+@test
+function void test_result_fold_success() {
+    result<integer> r = success(42)
+    string folded = Result.fold(r, (integer v) -> "ok: ${Converter.to_string(v)}", (string e) -> "err: ${e}")
+
+    assert(folded == "ok: 42")
+}
+
+@test
+function void test_result_fold_failure() {
+    result<integer> r = failure("oops")
+    string folded = Result.fold(r, (integer v) -> "ok: ${Converter.to_string(v)}", (string e) -> "err: ${e}")
+
+    assert(folded == "err: oops")
+}
+
+# ───────────────────────────────────────────────────────────
+# or_else, error_code, source_function
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_result_or_else() {
+    result<integer> rescued = Result.or_else(failure("boom"), (string _e) -> success(0))
+    result<integer> kept = Result.or_else(success(7), (string _e) -> success(0))
+
+    assert(Result.unwrap(rescued) == 0)
+    assert(Result.unwrap(kept) == 7)
+}
+
+@test
+function void test_result_error_code_and_source_function() {
+    result<integer> failed = failure("boom")
+
+    # A plain string failure carries no machine-readable code or source.
+    assert(Result.error_code(failed) == "")
+    assert(Result.source_function(failed) == "")
+}
+
+# ───────────────────────────────────────────────────────────
+# Structured error metadata from stdlib failures
+# ───────────────────────────────────────────────────────────
+
+# Stdlib functions attach a machine-readable error_code and source_function
+# to their failures so callers can match on error categories.
+@test
+function void test_result_error_code_from_stdlib() {
+    result<integer> r = Array.get([1, 2, 3], 10)
+
+    assert(Result.is_failure(r))
+    assert(Result.error_code(r) == "index_out_of_bounds")
+    assert(Result.source_function(r) == "Array.get")
+}
+
+@test
+function void test_result_error_code_empty_on_success() {
+    result<integer> r = success(42)
+
+    assert(Result.error_code(r) == "")
+    assert(Result.source_function(r) == "")
+}
+
+# ───────────────────────────────────────────────────────────
+# Negative: callbacks must return a result value
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_result_flat_map_non_result_throws() {
+    mutable boolean has_thrown = false
+
+    try {
+        result<integer> _r = Result.flat_map(success(1), (integer x) -> x + 1)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+@test
+function void test_result_or_else_non_result_throws() {
+    mutable boolean has_thrown = false
+
+    try {
+        result<integer> _r = Result.or_else(failure("boom"), (string _e) -> 7)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+@test
+function void test_result_unwrap_on_failure_throws() {
+    mutable boolean has_thrown = false
+    result<integer> failed = failure("boom")
+
+    try {
+        integer _value = Result.unwrap(failed)
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown)
+}
+
+# ───────────────────────────────────────────────────────────
+# Passthrough: combinators leave a failure (or non-matching input) untouched
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_result_map_on_failure_passthrough() {
+    result<integer> failed = failure("boom")
+    result<integer> mapped = Result.map(failed, (integer v) -> v * 10)
+
+    assert(Result.is_failure(mapped))
+    assert(Result.error(mapped) == "boom")
+}
+
+@test
+function void test_result_flatten_on_failure() {
+    result<result<integer>> nested = failure("outer")
+    result<integer> flattened = Result.flatten(nested)
+
+    assert(Result.is_failure(flattened))
+    assert(Result.error(flattened) == "outer")
+}
+
+@test
+function void test_result_filter_on_failure_passthrough() {
+    result<integer> failed = failure("boom")
+    result<integer> filtered = Result.filter(failed, (integer v) -> v > 0, "rejected")
+
+    assert(Result.is_failure(filtered))
+    assert(Result.error(filtered) == "boom")
+}
+
+# ───────────────────────────────────────────────────────────
+# Result.tap side effects and Result.recover callback argument
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_result_tap_runs_side_effect_on_success() {
+    reference<integer> seen = Reference.new(0)
+    result<integer> tapped = Result.tap(success(42), (integer v) -> Reference.set(seen, v))
+
+    assert(Result.unwrap(tapped) == 42)
+    assert(Reference.get(seen) == 42, "tap must run the callback on success")
+}
+
+@test
+function void test_result_tap_skips_side_effect_on_failure() {
+    reference<integer> seen = Reference.new(-1)
+    result<integer> failed = failure("boom")
+    result<integer> tapped = Result.tap(failed, (integer v) -> Reference.set(seen, v))
+
+    assert(Result.is_failure(tapped))
+    assert(Reference.get(seen) == -1, "tap must not run the callback on failure")
+}
+
+@test
+function void test_result_recover_receives_error_message() {
+    # The recover callback is handed the failure's error value (the message).
+    result<integer> recovered = Result.recover(failure("boom"), (string e) -> String.length(e))
+
+    assert(Result.is_success(recovered))
+    assert(Result.unwrap(recovered) == 4)
+}
+

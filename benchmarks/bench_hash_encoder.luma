@@ -1,0 +1,94 @@
+# Hash and Encoder benchmarks: hashing algorithms, base64/URL encoding.
+
+function BenchResult run_hash_encoder_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    string short_input = "hello world"
+    string medium_input = Result.unwrap_or(String.repeat("abcdefghij", 10), "")
+
+    # --- Hash ---
+
+    st = time_it(st, "Hash.sha256 (short)", 2000, () -> {
+        string _h = Hash.sha256(short_input)
+    })
+
+    st = time_it(st, "Hash.sha256 (100 chars)", 1000, () -> {
+        string _h = Hash.sha256(medium_input)
+    })
+
+    st = time_it(st, "Hash.sha512 (short)", 2000, () -> {
+        string _h = Hash.sha512(short_input)
+    })
+
+    st = time_it(st, "Hash.sha512 (100 chars)", 1000, () -> {
+        string _h = Hash.sha512(medium_input)
+    })
+
+    st = time_it(st, "Hash.sha1 (short)", 2000, () -> {
+        string _h = Hash.sha1(short_input)
+    })
+
+    st = time_it(st, "Hash.md5 (short)", 2000, () -> {
+        string _h = Hash.md5(short_input)
+    })
+
+    st = time_it(st, "Hash.crc32 (short)", 5000, () -> {
+        integer _h = Hash.crc32(short_input)
+    })
+
+    st = time_it(st, "Hash.hmac_sha256", 1000, () -> {
+        string _h = Hash.hmac_sha256("secret-key", short_input)
+    })
+
+    st = time_it(st, "Hash.hmac_sha512", 1000, () -> {
+        string _h = Hash.hmac_sha512("secret-key", short_input)
+    })
+
+    st = time_it(st, "Hash.verify (sha256)", 1000, () -> {
+        string hash = Hash.sha256(short_input)
+        boolean _ok = Hash.verify("sha256", short_input, hash)
+    })
+
+    # --- Encoder ---
+
+    string large_input = Result.unwrap_or(String.repeat("The quick brown fox. ", 200), "")
+
+    st = time_it(st, "Encoder.encode_base64", 5000, () -> {
+        result<string> _encoded = Encoder.encode_base64(short_input)
+    })
+
+    st = time_it(st, "Encoder.decode_base64", 5000, () -> {
+        result<string> _decoded = Encoder.decode_base64("aGVsbG8gd29ybGQ=")
+    })
+
+    st = time_it(st, "Encoder base64 roundtrip", 2000, () -> {
+        result<string> _encoded = Encoder.encode_base64(medium_input)
+    })
+
+    st = time_it(st, "Encoder.encode_base64 (large)", 500, () -> {
+        result<string> _encoded = Encoder.encode_base64(large_input)
+    })
+
+    st = time_it(st, "Encoder.encode_base64url", 5000, () -> {
+        result<string> _encoded = Encoder.encode_base64url(short_input)
+    })
+
+    st = time_it(st, "Encoder.decode_base64url", 5000, () -> {
+        result<string> _decoded = Encoder.decode_base64url("aGVsbG8gd29ybGQ")
+    })
+
+    st = time_it(st, "Encoder base64url roundtrip", 2000, () -> {
+        string enc = Result.unwrap_or(Encoder.encode_base64url(medium_input), "")
+        result<string> _decoded = Encoder.decode_base64url(enc)
+    })
+
+    st = time_it(st, "Encoder.encode_url", 5000, () -> {
+        result<string> _encoded = Encoder.encode_url("hello world & foo=bar")
+    })
+
+    st = time_it(st, "Encoder.decode_url", 5000, () -> {
+        result<string> _decoded = Encoder.decode_url("hello%20world%20%26%20foo%3Dbar")
+    })
+
+    return st
+}

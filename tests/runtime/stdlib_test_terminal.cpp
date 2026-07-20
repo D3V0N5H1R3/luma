@@ -1,0 +1,614 @@
+// Standard library tests: Terminal.
+
+#include <string>
+#include <utility>
+
+#include "runtime/stdlib/io/terminal_input_common.hpp"
+#include "runtime/stdlib/io/terminal_key_decoder.hpp"
+#include "stdlib_test_helpers.hpp"
+
+static void test_terminal_bold() {
+    const auto v = eval("Terminal.bold(\"hello\")");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_TRUE(v.as_string().find("hello") != std::string::npos);
+}
+
+static void test_terminal_color() {
+    const auto v = eval("Terminal.color(\"red\", \"warning\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("warning") != std::string::npos);
+}
+
+static void test_terminal_color_invalid() {
+    ASSERT_EVAL_FAILURE("Terminal.color(\"not_a_color\", \"text\")");
+}
+
+static void test_terminal_columns_rows() {
+    auto v = eval("Terminal.columns()");
+
+    ASSERT_TRUE(v.is_integer());
+    ASSERT_TRUE(v.as_integer() > 0);
+
+    v = eval("Terminal.rows()");
+
+    ASSERT_TRUE(v.is_integer());
+    ASSERT_TRUE(v.as_integer() > 0);
+}
+
+static void test_terminal_is_mouse() {
+    const auto v = eval("Terminal.is_mouse_enabled()");
+
+    ASSERT_TRUE(v.is_bool());
+    ASSERT_FALSE(v.as_bool());
+}
+
+static void test_terminal_is_raw_mode() {
+    // Raw mode should be off by default.
+    const auto v = eval("Terminal.is_in_raw_mode()");
+
+    ASSERT_TRUE(v.is_bool());
+    ASSERT_FALSE(v.as_bool());
+}
+
+static void test_terminal_is_terminal() {
+    const auto v = eval("Terminal.is_terminal()");
+
+    ASSERT_TRUE(v.is_bool());
+}
+
+static void test_terminal_link() {
+    const auto v = eval("Terminal.link(\"https://example.com\", \"click\")");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_TRUE(v.as_string().find("click") != std::string::npos);
+}
+
+static void test_terminal_module() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Terminal.is_terminal"));
+    ASSERT_TRUE(env->has("Terminal.size"));
+    ASSERT_TRUE(env->has("Terminal.columns"));
+    ASSERT_TRUE(env->has("Terminal.rows"));
+    ASSERT_TRUE(env->has("Terminal.clear_screen"));
+    ASSERT_TRUE(env->has("Terminal.clear_line"));
+    ASSERT_TRUE(env->has("Terminal.move_to"));
+    ASSERT_TRUE(env->has("Terminal.move_up"));
+    ASSERT_TRUE(env->has("Terminal.move_down"));
+    ASSERT_TRUE(env->has("Terminal.move_right"));
+    ASSERT_TRUE(env->has("Terminal.move_left"));
+    ASSERT_TRUE(env->has("Terminal.move_to_column"));
+    ASSERT_TRUE(env->has("Terminal.move_to_row"));
+    ASSERT_TRUE(env->has("Terminal.hide_cursor"));
+    ASSERT_TRUE(env->has("Terminal.show_cursor"));
+    ASSERT_TRUE(env->has("Terminal.save_cursor"));
+    ASSERT_TRUE(env->has("Terminal.restore_cursor"));
+    ASSERT_TRUE(env->has("Terminal.reset_style"));
+    ASSERT_TRUE(env->has("Terminal.bold"));
+    ASSERT_TRUE(env->has("Terminal.dim"));
+    ASSERT_TRUE(env->has("Terminal.italic"));
+    ASSERT_TRUE(env->has("Terminal.underline"));
+    ASSERT_TRUE(env->has("Terminal.strikethrough"));
+    ASSERT_TRUE(env->has("Terminal.inverse"));
+    ASSERT_TRUE(env->has("Terminal.color"));
+    ASSERT_TRUE(env->has("Terminal.background_color"));
+    ASSERT_TRUE(env->has("Terminal.rgb_color"));
+    ASSERT_TRUE(env->has("Terminal.rgb_background_color"));
+    ASSERT_TRUE(env->has("Terminal.write"));
+    ASSERT_TRUE(env->has("Terminal.overwrite_line"));
+    ASSERT_TRUE(env->has("Terminal.enter_alternate_screen"));
+    ASSERT_TRUE(env->has("Terminal.leave_alternate_screen"));
+    ASSERT_TRUE(env->has("Terminal.scroll_up"));
+    ASSERT_TRUE(env->has("Terminal.scroll_down"));
+    ASSERT_TRUE(env->has("Terminal.bell"));
+    ASSERT_TRUE(env->has("Terminal.link"));
+    ASSERT_TRUE(env->has("Terminal.enable_raw_mode"));
+    ASSERT_TRUE(env->has("Terminal.disable_raw_mode"));
+    ASSERT_TRUE(env->has("Terminal.is_in_raw_mode"));
+    ASSERT_TRUE(env->has("Terminal.read_key"));
+    ASSERT_TRUE(env->has("Terminal.read_key_timeout"));
+    ASSERT_TRUE(env->has("Terminal.get_input"));
+    ASSERT_TRUE(env->has("Terminal.get_cursor_position"));
+    ASSERT_TRUE(env->has("Terminal.set_scroll_region"));
+    ASSERT_TRUE(env->has("Terminal.reset_scroll_region"));
+    ASSERT_TRUE(env->has("Terminal.enable_mouse"));
+    ASSERT_TRUE(env->has("Terminal.disable_mouse"));
+    ASSERT_TRUE(env->has("Terminal.is_mouse_enabled"));
+    ASSERT_TRUE(env->has("Terminal.set_title"));
+    ASSERT_TRUE(env->has("Terminal.supports_color"));
+    ASSERT_TRUE(env->has("Terminal.supports_true_color"));
+    ASSERT_TRUE(env->has("Terminal.set_escape_timeout"));
+    ASSERT_TRUE(env->has("Terminal.get_escape_timeout"));
+}
+
+static void test_terminal_move_to_row() {
+    // Valid row should return result<null> success.
+    const auto v = eval("Terminal.move_to_row(5)");
+
+    ASSERT_RESULT_SUCCESS(v);
+}
+
+static void test_terminal_move_to_row_invalid() {
+    ASSERT_EVAL_FAILURE("Terminal.move_to_row(0)");
+}
+
+static void test_terminal_rgb_color() {
+    const auto v = eval("Terminal.rgb_color(255, 0, 128, \"pink\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("pink") != std::string::npos);
+}
+
+static void test_terminal_rgb_color_invalid() {
+    ASSERT_EVAL_FAILURE("Terminal.rgb_color(256, 0, 0, \"text\")");
+}
+
+static void test_terminal_scroll_region() {
+    // set_scroll_region now returns result<null>.
+    const auto v = eval("Terminal.set_scroll_region(1, 10)");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    eval("Terminal.reset_scroll_region()");
+}
+
+static void test_terminal_scroll_region_invalid() {
+    ASSERT_EVAL_FAILURE("Terminal.set_scroll_region(10, 1)");
+}
+
+static void test_terminal_text_styles() {
+    // dim / italic / underline / strikethrough / inverse each wrap the text in
+    // SGR codes: the result preserves the input and adds an escape sequence.
+    for (const char* style : {"dim", "italic", "underline", "strikethrough", "inverse"}) {
+        const auto v = eval(std::string{"Terminal."} + style + "(\"data\")");
+
+        ASSERT_TRUE(v.is_string());
+        ASSERT_TRUE(v.as_string().find("data") != std::string::npos);
+        ASSERT_TRUE(v.as_string().find("\x1b[") != std::string::npos);
+    }
+}
+
+static void test_terminal_background_color() {
+    const auto v = eval("Terminal.background_color(\"yellow\", \"warn\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("warn") != std::string::npos);
+}
+
+static void test_terminal_background_color_invalid() {
+    ASSERT_EVAL_FAILURE("Terminal.background_color(\"not_a_color\", \"text\")");
+}
+
+static void test_terminal_rgb_background_color() {
+    const auto v = eval("Terminal.rgb_background_color(0, 0, 128, \"navy\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("navy") != std::string::npos);
+}
+
+static void test_terminal_rgb_background_color_invalid() {
+    ASSERT_EVAL_FAILURE("Terminal.rgb_background_color(256, 0, 0, \"text\")");
+    ASSERT_EVAL_FAILURE("Terminal.rgb_background_color(0, -1, 0, \"text\")");
+}
+
+static void test_terminal_rgb_color_negative() {
+    ASSERT_EVAL_FAILURE("Terminal.rgb_color(-1, 0, 0, \"text\")");
+}
+
+static void test_terminal_move_to() {
+    const auto v = eval("Terminal.move_to(1, 1)");
+
+    ASSERT_RESULT_SUCCESS(v);
+}
+
+static void test_terminal_move_to_invalid() {
+    ASSERT_EVAL_FAILURE("Terminal.move_to(0, 1)");
+}
+
+static void test_terminal_move_to_column() {
+    const auto v = eval("Terminal.move_to_column(3)");
+
+    ASSERT_RESULT_SUCCESS(v);
+}
+
+static void test_terminal_move_to_column_invalid() {
+    ASSERT_EVAL_FAILURE("Terminal.move_to_column(0)");
+}
+
+static void test_terminal_escape_timeout_roundtrip() {
+    eval("Terminal.set_escape_timeout(100)");
+
+    const auto v = eval("Terminal.get_escape_timeout()");
+
+    ASSERT_TRUE(v.is_integer());
+    ASSERT_EQ(v.as_integer(), 100);
+
+    // Restore the default so later tests observing the timeout are unaffected.
+    eval("Terminal.set_escape_timeout(50)");
+}
+
+static void test_terminal_set_escape_timeout_out_of_range() {
+    // Out-of-range timeouts throw rather than returning a result.
+    ASSERT_THROWS(eval("Terminal.set_escape_timeout(0)"));
+    ASSERT_THROWS(eval("Terminal.set_escape_timeout(5001)"));
+}
+
+static void test_terminal_supports_color_returns_bool() {
+    ASSERT_TRUE(eval("Terminal.supports_color()").is_bool());
+    ASSERT_TRUE(eval("Terminal.supports_true_color()").is_bool());
+}
+
+// The input functions require raw mode; with raw mode disabled (the default in
+// the test harness) they must fail fast with a result failure rather than block
+// on stdin.
+
+static void test_terminal_read_key_requires_raw_mode() {
+    ASSERT_EVAL_FAILURE("Terminal.read_key()");
+}
+
+static void test_terminal_read_key_timeout_requires_raw_mode() {
+    ASSERT_EVAL_FAILURE("Terminal.read_key_timeout(100)");
+}
+
+static void test_terminal_get_input_requires_raw_mode() {
+    ASSERT_EVAL_FAILURE("Terminal.get_input()");
+}
+
+static void test_terminal_get_cursor_position_requires_raw_mode() {
+    ASSERT_EVAL_FAILURE("Terminal.get_cursor_position()");
+}
+
+static void test_terminal_enable_mouse_requires_raw_mode() {
+    ASSERT_EVAL_FAILURE("Terminal.enable_mouse()");
+}
+
+static void test_terminal_write_requires_argument() {
+    // write is variadic with a one-argument minimum.
+    ASSERT_THROWS(eval("Terminal.write()"));
+}
+
+static void test_terminal_mouse_button_names() {
+    ASSERT_EQ(terminal_detail::format_mouse_button(0), "left");
+    ASSERT_EQ(terminal_detail::format_mouse_button(1), "middle");
+    ASSERT_EQ(terminal_detail::format_mouse_button(2), "right");
+    ASSERT_EQ(terminal_detail::format_mouse_button(3), "unknown");
+}
+
+static void test_terminal_mouse_event_format() {
+    // Format is "mouse:<button>_<action>:<row>:<col>".
+    ASSERT_EQ(terminal_detail::format_mouse_event(0, 5, 10, false), "mouse:left_press:10:5");
+    ASSERT_EQ(terminal_detail::format_mouse_event(2, 5, 10, true), "mouse:right_release:10:5");
+    ASSERT_EQ(terminal_detail::format_mouse_event(1, 3, 4, false, true), "mouse:middle_drag:4:3");
+}
+
+static void test_terminal_mouse_wheel_format() {
+    ASSERT_EQ(terminal_detail::format_mouse_event(64, 1, 2, false), "mouse:wheel_up:2:1");
+    ASSERT_EQ(terminal_detail::format_mouse_event(65, 1, 2, false), "mouse:wheel_down:2:1");
+}
+
+// ── terminal key decoder (platform-independent escape/key parsing) ──
+
+// Build a byte_reader that yields each byte of `rest` (as an unsigned value),
+// then -1 once exhausted — mirroring read_byte_timeout() at end of input.
+static terminal_detail::byte_reader make_byte_reader(std::string rest) {
+    std::size_t idx{0};
+
+    return [rest = std::move(rest), idx]() mutable -> int {
+        if (idx >= rest.size()) {
+            return -1;
+        }
+
+        return static_cast<unsigned char>(rest[idx++]);
+    };
+}
+
+// Decode a full key press: `first` is the initial byte, `rest` the subsequent
+// bytes available before the (simulated) escape timeout.
+static std::string decode_seq(int first, const std::string& rest = "", bool mouse_mode = false) {
+    return terminal_detail::decode_key(first, make_byte_reader(rest), mouse_mode);
+}
+
+static void test_terminal_decode_basic_keys() {
+    ASSERT_EQ(decode_seq(13), "enter");
+    ASSERT_EQ(decode_seq(10), "enter");
+    ASSERT_EQ(decode_seq(9), "tab");
+    ASSERT_EQ(decode_seq(127), "backspace");
+    ASSERT_EQ(decode_seq(8), "backspace");
+    ASSERT_EQ(decode_seq(0), "ctrl+space");
+    ASSERT_EQ(decode_seq(32), "space");
+    ASSERT_EQ(decode_seq(1), "ctrl+a");
+    ASSERT_EQ(decode_seq(26), "ctrl+z");
+    // Plain printable ASCII is returned verbatim.
+    ASSERT_EQ(decode_seq('A'), "A");
+    ASSERT_EQ(decode_seq('z'), "z");
+}
+
+static void test_terminal_decode_escape_arrows() {
+    // A bare ESC with no continuation decodes as "escape".
+    ASSERT_EQ(decode_seq(27, ""), "escape");
+    // A truncated CSI introducer also yields "escape".
+    ASSERT_EQ(decode_seq(27, "["), "escape");
+    ASSERT_EQ(decode_seq(27, "[A"), "up");
+    ASSERT_EQ(decode_seq(27, "[B"), "down");
+    ASSERT_EQ(decode_seq(27, "[C"), "right");
+    ASSERT_EQ(decode_seq(27, "[D"), "left");
+    ASSERT_EQ(decode_seq(27, "[H"), "home");
+    ASSERT_EQ(decode_seq(27, "[F"), "end");
+    ASSERT_EQ(decode_seq(27, "[Z"), "shift+tab");
+    // Unknown final byte in a CSI sequence.
+    ASSERT_EQ(decode_seq(27, "[!"), "unknown");
+}
+
+static void test_terminal_decode_ss3_and_alt() {
+    // SS3 function keys (ESC O ...).
+    ASSERT_EQ(decode_seq(27, "OP"), "f1");
+    ASSERT_EQ(decode_seq(27, "OQ"), "f2");
+    ASSERT_EQ(decode_seq(27, "OR"), "f3");
+    ASSERT_EQ(decode_seq(27, "OS"), "f4");
+    ASSERT_EQ(decode_seq(27, "OH"), "home");
+    ASSERT_EQ(decode_seq(27, "OF"), "end");
+    // SS3 with an unrecognised printable falls back to Alt+char.
+    ASSERT_EQ(decode_seq(27, "OX"), "alt+X");
+    // ESC followed by a printable byte is Alt+char.
+    ASSERT_EQ(decode_seq(27, "a"), "alt+a");
+    ASSERT_EQ(decode_seq(27, "Z"), "alt+Z");
+}
+
+static void test_terminal_decode_csi_tilde() {
+    ASSERT_EQ(decode_seq(27, "[1~"), "home");
+    ASSERT_EQ(decode_seq(27, "[2~"), "insert");
+    ASSERT_EQ(decode_seq(27, "[3~"), "delete");
+    ASSERT_EQ(decode_seq(27, "[4~"), "end");
+    ASSERT_EQ(decode_seq(27, "[5~"), "page_up");
+    ASSERT_EQ(decode_seq(27, "[6~"), "page_down");
+    ASSERT_EQ(decode_seq(27, "[11~"), "f1");
+    ASSERT_EQ(decode_seq(27, "[15~"), "f5");
+    ASSERT_EQ(decode_seq(27, "[24~"), "f12");
+    // A numeric parameter that maps to no key decodes as "unknown".
+    ASSERT_EQ(decode_seq(27, "[9~"), "unknown");
+    // A numeric parameter with no terminator decodes as "unknown".
+    ASSERT_EQ(decode_seq(27, "[99"), "unknown");
+}
+
+static void test_terminal_decode_csi_modifiers() {
+    ASSERT_EQ(decode_seq(27, "[1;2A"), "shift+up");
+    ASSERT_EQ(decode_seq(27, "[1;3B"), "alt+down");
+    ASSERT_EQ(decode_seq(27, "[1;4C"), "alt+shift+right");
+    ASSERT_EQ(decode_seq(27, "[1;5D"), "ctrl+left");
+    ASSERT_EQ(decode_seq(27, "[1;6H"), "ctrl+shift+home");
+    ASSERT_EQ(decode_seq(27, "[1;7F"), "ctrl+alt+end");
+}
+
+static void test_terminal_decode_mouse() {
+    // SGR mouse: ESC [ < button ; col ; row M/m. Output is "mouse:<x>:<row>:<col>".
+    ASSERT_EQ(decode_seq(27, "[<0;5;10M", true), "mouse:left_press:10:5");
+    ASSERT_EQ(decode_seq(27, "[<0;5;10m", true), "mouse:left_release:10:5");
+    ASSERT_EQ(decode_seq(27, "[<2;3;4M", true), "mouse:right_press:4:3");
+    // Motion events set bit 5 (button += 32) and decode as a drag.
+    ASSERT_EQ(decode_seq(27, "[<32;1;1M", true), "mouse:left_drag:1:1");
+    // Wheel events use button codes 64/65.
+    ASSERT_EQ(decode_seq(27, "[<64;1;1M", true), "mouse:wheel_up:1:1");
+    ASSERT_EQ(decode_seq(27, "[<65;2;2M", true), "mouse:wheel_down:2:2");
+    // With mouse mode disabled the same sequence is not decoded as a mouse event.
+    ASSERT_EQ(decode_seq(27, "[<0;5;10M", false), "unknown");
+    // A truncated SGR sequence (no terminator) decodes gracefully.
+    ASSERT_EQ(decode_seq(27, "[<0;5;10", true), "unknown");
+}
+
+static void test_terminal_decode_utf8() {
+    // Valid 2-, 3-, and 4-byte UTF-8 code points pass through intact
+    // (U+00E9, U+20AC, U+1F600).
+    ASSERT_EQ(decode_seq(0xC3, "\xA9"), "\xC3\xA9");
+    ASSERT_EQ(decode_seq(0xE2, "\x82\xAC"), "\xE2\x82\xAC");
+    ASSERT_EQ(decode_seq(0xF0, "\x9F\x98\x80"), "\xF0\x9F\x98\x80");
+    // Invalid leading byte yields the Unicode replacement character.
+    ASSERT_EQ(decode_seq(0x80), "\xEF\xBF\xBD");
+    // Truncated multi-byte sequence yields the replacement character.
+    ASSERT_EQ(decode_seq(0xC3, ""), "\xEF\xBF\xBD");
+    // A non-continuation trailing byte yields the replacement character.
+    ASSERT_EQ(decode_seq(0xC3, "A"), "\xEF\xBF\xBD");
+}
+
+static void test_terminal_size() {
+    const auto v = eval("Terminal.size()");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, "Size");
+    ASSERT_TRUE(v.as_record()->find_field("columns") != nullptr);
+    ASSERT_TRUE(v.as_record()->find_field("rows") != nullptr);
+}
+
+// ── Terminal headless interaction-testing harness (Terminal.test_*) ──
+// Each program is self-contained: it calls test_start(...) and test_stop() so
+// the process-global harness state is reset before the next test runs.
+
+static void test_terminal_test_harness_reads_scripted_keys() {
+    const auto v = eval(R"(
+        Terminal.test_start(["a", "b", "enter"])
+        mutable string out = ""
+        mutable boolean running = true
+        while running {
+            match Terminal.read_key() {
+                success(k) { out = out + k }
+                failure(_) { running = false }
+            }
+        }
+        Terminal.test_stop()
+        out
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "abenter");
+}
+
+static void test_terminal_test_harness_drains_to_failure() {
+    // An empty scripted queue makes read_key report end-of-input immediately.
+    const auto v = eval(R"(
+        Terminal.test_start([])
+        boolean failed = match Terminal.read_key() {
+            success(_) { false }
+            failure(_) { true }
+        }
+        Terminal.test_stop()
+        failed
+    )");
+
+    ASSERT_TRUE(v.is_bool());
+    ASSERT_TRUE(v.as_bool());
+}
+
+static void test_terminal_test_harness_captures_output() {
+    // write / overwrite_line / bell are all routed into the capture buffer.
+    const auto v = eval(R"(
+        Terminal.test_start([])
+        Terminal.write("hello")
+        Terminal.bell()
+        Terminal.overwrite_line("X")
+        Terminal.test_stop()
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_TRUE(v.as_string().find("hello") != std::string::npos);
+    ASSERT_TRUE(v.as_string().find('\a') != std::string::npos);
+    ASSERT_TRUE(v.as_string().find('X') != std::string::npos);
+}
+
+static void test_terminal_test_output_reads_mid_session() {
+    const auto v = eval(R"(
+        Terminal.test_start([])
+        Terminal.write("AB")
+        string mid = Terminal.test_output()
+        Terminal.write("CD")
+        Terminal.test_stop()
+        mid
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "AB");
+}
+
+static void test_terminal_test_get_input_parses_modifiers() {
+    const auto v = eval(R"(
+        Terminal.test_start(["ctrl+c"])
+        string r = match Terminal.get_input() {
+            success(ev) { "${ev.key}:${ev.ctrl}:${ev.shift}:${ev.alt}" }
+            failure(_) { "fail" }
+        }
+        Terminal.test_stop()
+        r
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "c:true:false:false");
+}
+
+static void test_terminal_test_remaining_and_feed() {
+    // start with 2 keys, consume 1 (remaining 1), feed 1 more (remaining 2).
+    const auto v = eval(R"(
+        Terminal.test_start(["a", "b"])
+        Terminal.read_key()
+        integer after_one = Terminal.test_remaining()
+        Terminal.test_feed(["c"])
+        integer after_feed = Terminal.test_remaining()
+        Terminal.test_stop()
+        after_one * 10 + after_feed
+    )");
+
+    ASSERT_TRUE(v.is_integer());
+    ASSERT_EQ(v.as_integer(), 12);
+}
+
+static void test_terminal_test_session_reports_as_terminal() {
+    // Inside a session is_terminal() and is_in_raw_mode() both report true so the
+    // program under test runs its real loop; after test_stop() they reset.
+    const auto v = eval(R"(
+        Terminal.test_start(["x"])
+        boolean term = Terminal.is_terminal()
+        boolean raw = Terminal.is_in_raw_mode()
+        Terminal.test_stop()
+        boolean term_after = Terminal.is_in_raw_mode()
+        term && raw && (!term_after)
+    )");
+
+    ASSERT_TRUE(v.is_bool());
+    ASSERT_TRUE(v.as_bool());
+}
+
+static void test_terminal_test_read_key_timeout_drains_to_timeout() {
+    const auto v = eval(R"(
+        Terminal.test_start(["a"])
+        string first = match Terminal.read_key_timeout(50) {
+            success(k) { k }
+            failure(_) { "timeout" }
+        }
+        string second = match Terminal.read_key_timeout(50) {
+            success(k) { k }
+            failure(_) { "timeout" }
+        }
+        Terminal.test_stop()
+        first + "/" + second
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "a/timeout");
+}
+
+int main() {
+    RUN(test_terminal_bold);
+    RUN(test_terminal_color);
+    RUN(test_terminal_color_invalid);
+    RUN(test_terminal_columns_rows);
+    RUN(test_terminal_is_mouse);
+    RUN(test_terminal_is_raw_mode);
+    RUN(test_terminal_is_terminal);
+    RUN(test_terminal_link);
+    RUN(test_terminal_module);
+    RUN(test_terminal_move_to_row);
+    RUN(test_terminal_move_to_row_invalid);
+    RUN(test_terminal_rgb_color);
+    RUN(test_terminal_rgb_color_invalid);
+    RUN(test_terminal_scroll_region);
+    RUN(test_terminal_scroll_region_invalid);
+    RUN(test_terminal_text_styles);
+    RUN(test_terminal_background_color);
+    RUN(test_terminal_background_color_invalid);
+    RUN(test_terminal_rgb_background_color);
+    RUN(test_terminal_rgb_background_color_invalid);
+    RUN(test_terminal_rgb_color_negative);
+    RUN(test_terminal_move_to);
+    RUN(test_terminal_move_to_invalid);
+    RUN(test_terminal_move_to_column);
+    RUN(test_terminal_move_to_column_invalid);
+    RUN(test_terminal_escape_timeout_roundtrip);
+    RUN(test_terminal_set_escape_timeout_out_of_range);
+    RUN(test_terminal_supports_color_returns_bool);
+    RUN(test_terminal_read_key_requires_raw_mode);
+    RUN(test_terminal_read_key_timeout_requires_raw_mode);
+    RUN(test_terminal_get_input_requires_raw_mode);
+    RUN(test_terminal_get_cursor_position_requires_raw_mode);
+    RUN(test_terminal_enable_mouse_requires_raw_mode);
+    RUN(test_terminal_write_requires_argument);
+    RUN(test_terminal_mouse_button_names);
+    RUN(test_terminal_mouse_event_format);
+    RUN(test_terminal_mouse_wheel_format);
+    RUN(test_terminal_decode_basic_keys);
+    RUN(test_terminal_decode_escape_arrows);
+    RUN(test_terminal_decode_ss3_and_alt);
+    RUN(test_terminal_decode_csi_tilde);
+    RUN(test_terminal_decode_csi_modifiers);
+    RUN(test_terminal_decode_mouse);
+    RUN(test_terminal_decode_utf8);
+    RUN(test_terminal_size);
+    RUN(test_terminal_test_harness_reads_scripted_keys);
+    RUN(test_terminal_test_harness_drains_to_failure);
+    RUN(test_terminal_test_harness_captures_output);
+    RUN(test_terminal_test_output_reads_mid_session);
+    RUN(test_terminal_test_get_input_parses_modifiers);
+    RUN(test_terminal_test_remaining_and_feed);
+    RUN(test_terminal_test_session_reports_as_terminal);
+    RUN(test_terminal_test_read_key_timeout_drains_to_timeout);
+
+    return SUMMARY();
+}

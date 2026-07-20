@@ -1,0 +1,30 @@
+# Type checker: records and field access
+record Vector2 {
+    number x,
+    number y
+}
+
+record Transform {
+    Vector2 position,
+    number rotation,
+    number scale
+}
+
+function number distance(Vector2 a, Vector2 b) {
+    number dx = a.x - b.x
+    number dy = a.y - b.y
+    return Math.square_root(dx * dx + dy * dy) |> Result.unwrap_or(0.0)
+}
+
+Transform t = Transform { position = Vector2 { x = 0.0, y = 0.0 }, rotation = 0.0, scale = 1.0 }
+Transform t2 = t with { position = t.position with { x = 5.0 } }
+
+# Default field values and shorthand field initialisation.
+record Settings {
+    number gain = 1.0,
+    boolean active = true
+}
+
+Settings defaults = Settings {}
+number gain = 2.0
+Settings custom = Settings { gain }

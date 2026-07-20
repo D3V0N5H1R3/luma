@@ -1,0 +1,56 @@
+# VM: structured concurrency — task_scope, spawn, await, channels, Task combinators.
+function integer square(integer n) {
+    return n * n
+}
+
+@main
+function void main() {
+    # task_scope fan-out collected as an array.
+    array<integer> results = task_scope {
+        spawn square(2)
+        spawn square(3)
+        spawn square(4)
+    }
+    print(Array.length(results))
+
+    # spawn + await a single task.
+    task_scope {
+        task<integer> t = spawn square(5)
+        integer v = await t
+        print(v)
+    }
+
+    # Task combinators over a small task array.
+    task_scope {
+        task<integer> a = spawn square(6)
+        task<integer> b = spawn square(7)
+        array<integer> all = Result.unwrap_or(Task.all([a, b]), [])
+        print(Array.length(all))
+    }
+
+    # Unbounded channel: send then receive on the same thread.
+    channel<integer> ch = Channel.new()
+    boolean _s = Channel.send(ch, 42)
+    result<integer> r = Channel.receive(ch)
+    print(Result.unwrap_or(r, 0))
+    Channel.close(ch)
+
+    # Buffered channel: non-blocking try API, then drain after close.
+    channel<integer> cb = Channel.new_buffered(4)
+    boolean _t = Channel.try_send(cb, 1)
+    boolean _u = Channel.send(cb, 2)
+    Channel.close(cb)
+    array<integer> drained = Channel.receive_all(cb)
+    print(Array.length(drained))
+
+    # select on a ready channel, then closed-channel error paths.
+    channel<integer> sc = Channel.new()
+    boolean _ss = Channel.send(sc, 99)
+    result<(integer, integer)> chosen = Channel.select([sc])
+    print(Result.is_success(chosen))
+    Channel.close(sc)
+    boolean closed_send = Channel.send(sc, 1)
+    print(closed_send)
+    result<integer> closed_recv = Channel.try_receive(sc)
+    print(Result.is_failure(closed_recv))
+}

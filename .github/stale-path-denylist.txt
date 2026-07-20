@@ -1,0 +1,18 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — Stale path denylist
+#
+# Patterns (POSIX extended regex, one per line) for source files,
+# directories, and CMake modules that have been removed or renamed.
+# The Docs Consistency workflow (.github/workflows/docs.yml) fails
+# if any of these appear in the documentation or prompt files,
+# catching references that outlived the thing they pointed at.
+#
+# Lines starting with '#' and blank lines are ignored. Add a pattern
+# here whenever you delete or rename a path that documentation might
+# still mention.
+#
+# This list is intentionally empty at the project baseline: with a
+# fresh Git history there are no prior paths to guard against. It
+# grows from here — add the first pattern the next time you remove or
+# rename a path the docs might still reference.
+# ─────────────────────────────────────────────────────────────

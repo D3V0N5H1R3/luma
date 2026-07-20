@@ -1,0 +1,73 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — VS Code Extension CI Workflow
+#
+# Builds and validates the VS Code extension on every push and
+# PR targeting main that touches VS Code extension source files.
+# ─────────────────────────────────────────────────────────────
+
+name: CI — VS Code Extension
+
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - ".github/actions/build-vscode-extension/**"
+      - ".github/workflows/ci-vscode.yml"
+      - "extensions/vscode/**"
+      - "extensions/shared/**"
+      - "extensions/tests/**"
+  pull_request:
+    branches: [main]
+    paths: *paths
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vscode:
+    name: VS Code Extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Build and package extension
+        uses: ./.github/actions/build-vscode-extension
+
+      - name: Lint extension (ESLint)
+        working-directory: extensions/vscode
+        run: npm run lint:eslint
+
+      - name: Check extension formatting (Prettier)
+        working-directory: extensions/vscode
+        run: npm run format:check
+
+      - name: Run extension unit tests
+        working-directory: extensions/vscode
+        run: npm run test:unit
+
+      - name: Run cross-extension validation tests
+        working-directory: extensions
+        run: |
+          node tests/validate-defaults.test.mjs
+          node tests/validate-download.test.mjs
+          node tests/validate-download-constants.test.mjs
+          node tests/validate-resolution-order.test.mjs
+          node tests/validate-snippets.test.mjs
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Check generated files are up to date
+        working-directory: extensions/shared
+        run: python ci-check-generated.py

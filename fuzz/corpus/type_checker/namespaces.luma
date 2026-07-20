@@ -1,0 +1,68 @@
+# Type checker corpus seed: namespace member resolution.
+# Exercises qualified type annotations and constructors, wildcard `use`,
+# selective `use`, namespace-qualified type aliases and choices, and internal
+# members that resolve from within their declaring namespace but are excluded
+# from wildcard imports.
+
+namespace Collections {
+    record Pair {
+        integer first,
+        integer second
+    }
+
+    type IntList = array<integer>
+
+    function integer sum_pair(Pair p) {
+        return p.first + p.second
+    }
+
+    internal function integer bump(integer n) {
+        return n + 1
+    }
+
+    function integer via_bump(integer n) {
+        return Collections.bump(n)
+    }
+}
+
+# Qualified type annotation, qualified constructor, qualified call.
+Collections.Pair qualified_pair = Collections.Pair { first = 1, second = 2 }
+integer qualified_sum = Collections.sum_pair(qualified_pair)
+integer qualified_bumped = Collections.via_bump(10)
+
+# Wildcard import brings bare member names into scope.
+use Collections
+
+Pair bare_pair = Pair { first = 3, second = 4 }
+Collections.IntList numbers = [1, 2, 3]
+integer bare_sum = sum_pair(bare_pair)
+
+namespace Traffic {
+    choice Light { Red  Yellow  Green }
+
+    type Speed = number
+
+    function string describe(Light light) {
+        return match light {
+        case Traffic.Light.Red { "stop" }
+        case Traffic.Light.Yellow { "slow" }
+        case Traffic.Light.Green { "go" }
+        }
+    }
+}
+
+# Selective import exposes only the named member (type aliases are
+# qualified-access only, so Speed stays qualified below).
+use Traffic.Light
+
+Light current = Light.Green
+Traffic.Speed limit = 50.0
+string label = Traffic.describe(current)
+
+# A qualified choice value used directly as a match scrutinee.
+Traffic.Light raw = Traffic.Light.Yellow
+string raw_label = match raw {
+case Traffic.Light.Red { "r" }
+case Traffic.Light.Yellow { "y" }
+case Traffic.Light.Green { "g" }
+}

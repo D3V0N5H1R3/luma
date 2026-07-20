@@ -1,0 +1,60 @@
+# Parser: try/catch/finally in all forms, nested, with non-local exits.
+function void cleanup_forms() {
+    try {
+        print("a")
+    } catch(err) {
+        print(err)
+    }
+
+    try {
+        print("b")
+    } finally {
+        print("done")
+    }
+
+    try {
+        print("c")
+    } catch(err) {
+        print(err)
+    } finally {
+        print("done")
+    }
+}
+
+function integer non_local_exits(integer n) {
+    mutable integer total = 0
+
+    for i in 0 .. n {
+        try {
+            if i == 0 {
+                continue
+            }
+
+            if i == 5 {
+                break
+            }
+
+            total += i
+        } catch(_err) {
+            return total
+        } finally {
+            total += 1
+        }
+    }
+
+    return total
+}
+
+function void nested() {
+    try {
+        try {
+            print("inner")
+        } catch(err) {
+            print(err)
+        } finally {
+            print("inner-finally")
+        }
+    } finally {
+        print("outer-finally")
+    }
+}

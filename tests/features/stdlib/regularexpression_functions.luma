@@ -1,0 +1,206 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — RegularExpression Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_regularexpression_matches() {
+    result<boolean> ok_result = RegularExpression.matches("hello123", "[a-z]+[0-9]+")
+
+    assert(Result.is_success(ok_result))
+    assert(Result.unwrap(ok_result))
+
+    result<boolean> no_match_result = RegularExpression.matches("hello", "^[0-9]+$")
+
+    assert(Result.is_success(no_match_result))
+    assert(!Result.unwrap(no_match_result))
+
+    result<boolean> invalid_result = RegularExpression.matches("hello", "[")
+
+    assert(!Result.is_success(invalid_result))
+}
+
+@test
+function void test_regularexpression_find() {
+    result<RegularExpression.Match> find_result = RegularExpression.find("abc123def", "[0-9]+")
+
+    assert(Result.is_success(find_result))
+
+    RegularExpression.Match m = Result.unwrap(find_result)
+
+    assert(m.text == "123")
+    assert(m.position == 3)
+    assert(m.length == 3)
+
+    result<RegularExpression.Match> no_match_result = RegularExpression.find("abcdef", "[0-9]+")
+
+    assert(!Result.is_success(no_match_result))
+}
+
+@test
+function void test_regularexpression_find_all() {
+    result<array<RegularExpression.Match>> find_all_result =
+    RegularExpression.find_all("one1two2three3", "[0-9]")
+
+    assert(Result.is_success(find_all_result))
+
+    array<RegularExpression.Match> matches = Result.unwrap(find_all_result)
+
+    assert(Array.length(matches) == 3)
+    assert(matches[0].text == "1")
+    assert(matches[2].text == "3")
+
+    result<array<RegularExpression.Match>> invalid_result = RegularExpression.find_all("text", "[")
+
+    assert(!Result.is_success(invalid_result))
+}
+
+@test
+function void test_regularexpression_replace() {
+    result<string> replace_result = RegularExpression.replace("foo bar baz", "o+", "0")
+
+    assert(Result.is_success(replace_result))
+    assert(Result.unwrap(replace_result) == "f0 bar baz")
+}
+
+@test
+function void test_regularexpression_split() {
+    result<array<string>> split_result = RegularExpression.split("a1b2c3d", "[0-9]")
+
+    assert(Result.is_success(split_result))
+
+    array<string> parts = Result.unwrap(split_result)
+
+    assert(Array.length(parts) == 4)
+    assert(parts[0] == "a")
+    assert(parts[3] == "d")
+
+    result<array<string>> invalid_result = RegularExpression.split("text", "[")
+
+    assert(!Result.is_success(invalid_result))
+}
+
+@test
+function void test_regularexpression_is_valid() {
+    assert(RegularExpression.is_valid("[a-z]+"))
+    assert(RegularExpression.is_valid("^\\d{3}$"))
+    assert(!RegularExpression.is_valid("["))
+}
+
+@test
+function void test_regularexpression_replace_all() {
+    result<string> replace_all_result = RegularExpression.replace_all("abc123def456", "[0-9]+", "#")
+
+    assert(Result.is_success(replace_all_result))
+    assert(Result.unwrap(replace_all_result) == "abc#def#")
+
+    result<string> invalid_result = RegularExpression.replace_all("text", "[", "#")
+
+    assert(!Result.is_success(invalid_result))
+}
+
+@test
+function void test_regularexpression_find_capture_groups() {
+    RegularExpression.Match m =
+    RegularExpression.find("alice@example.com", "([a-z]+)@([a-z]+)\\.([a-z]+)")
+    |> Result.unwrap()
+
+    assert(m.text == "alice@example.com")
+    assert(Array.length(m.groups) == 3)
+    assert(m.groups[0].text == "alice")
+    assert(m.groups[0].position == 0)
+    assert(m.groups[0].length == 5)
+    assert(m.groups[1].text == "example")
+    assert(m.groups[2].text == "com")
+}
+
+@test
+function void test_regularexpression_find_no_groups() {
+    RegularExpression.Match m =
+    RegularExpression.find("abc123", "[0-9]+") |> Result.unwrap()
+
+    assert(m.text == "123")
+    assert(Array.length(m.groups) == 0)
+}
+
+@test
+function void test_regularexpression_find_all_capture_groups() {
+    array<RegularExpression.Match> matches =
+    RegularExpression.find_all("width=100 height=200", "([a-z]+)=([0-9]+)")
+    |> Result.unwrap()
+
+    assert(Array.length(matches) == 2)
+    assert(matches[0].groups[0].text == "width")
+    assert(matches[0].groups[1].text == "100")
+    assert(matches[1].groups[0].text == "height")
+    assert(matches[1].groups[1].text == "200")
+}
+
+@test
+function void test_regularexpression_find_no_match() {
+    result<RegularExpression.Match> no_match = RegularExpression.find("abcdef", "[0-9]+")
+
+    assert(!Result.is_success(no_match))
+}
+
+@test
+function void test_regularexpression_replace_first_only() {
+    # replace substitutes only the first match; the trailing run is left intact,
+    # which distinguishes it from replace_all.
+    result<string> first_only = RegularExpression.replace("aaa bbb aaa", "a+", "X")
+
+    assert(Result.is_success(first_only))
+    assert(Result.unwrap(first_only) == "X bbb aaa")
+
+    result<string> all = RegularExpression.replace_all("aaa bbb aaa", "a+", "X")
+
+    assert(Result.is_success(all))
+    assert(Result.unwrap(all) == "X bbb X")
+}
+
+@test
+function void test_regularexpression_redos_rejected() {
+    # Nested quantifiers risk catastrophic backtracking and are refused before
+    # the pattern reaches the regex engine.
+    assert(!RegularExpression.is_valid("(a+)+"))
+    assert(!RegularExpression.is_valid("((a+))+"))
+    assert(!RegularExpression.is_valid("(?:a+)+"))
+
+    # A single, non-nested quantifier is still accepted.
+    assert(RegularExpression.is_valid("(a+)b"))
+
+    # Ambiguous alternation under repetition is also catastrophic-backtracking
+    # prone and refused: the alternatives overlap on their first token.
+    assert(!RegularExpression.is_valid("(a|aa)+"))
+    assert(!RegularExpression.is_valid("(.|a)+"))
+    assert(!RegularExpression.is_valid("(a|)+"))
+
+    # Disjoint alternation (no shared first token) stays accepted.
+    assert(RegularExpression.is_valid("(cat|dog)+"))
+    assert(RegularExpression.is_valid("(a|b|c)+"))
+
+    # Every operation reports a failure result for a dangerous pattern.
+    assert(!Result.is_success(RegularExpression.matches("aaaa", "(a+)+")))
+    assert(!Result.is_success(RegularExpression.find("aaaa", "(a+)+")))
+    assert(!Result.is_success(RegularExpression.find_all("aaaa", "(a+)+")))
+    assert(!Result.is_success(RegularExpression.replace("aaaa", "(a+)+", "x")))
+    assert(!Result.is_success(RegularExpression.replace_all("aaaa", "(a+)+", "x")))
+    assert(!Result.is_success(RegularExpression.split("aaaa", "(a+)+")))
+}
+
+@test
+function void test_regularexpression_oversized_pattern() {
+    # A pattern beyond the 10,000-byte limit is rejected by is_valid even though
+    # it is otherwise benign.
+    string oversized = Result.unwrap(String.repeat("a", 10001))
+
+    assert(!RegularExpression.is_valid(oversized))
+
+    # Comfortably under the limit, the same shape is accepted.
+    string within_limit = Result.unwrap(String.repeat("a", 9000))
+
+    assert(RegularExpression.is_valid(within_limit))
+}
+

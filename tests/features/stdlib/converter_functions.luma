@@ -1,0 +1,305 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Converter Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_converter_to_boolean() {
+    result<boolean> true_result = Converter.to_boolean("true")
+
+    assert(Result.is_success(true_result))
+    assert(Result.unwrap(true_result))
+
+    result<boolean> false_result = Converter.to_boolean("false")
+
+    assert(Result.is_success(false_result))
+    assert(!Result.unwrap(false_result))
+
+    result<boolean> invalid_result = Converter.to_boolean("maybe")
+
+    assert(!Result.is_success(invalid_result))
+}
+
+@test
+function void test_converter_to_integer() {
+    result<integer> int_result = Converter.to_integer(3.9)
+
+    assert(Result.is_success(int_result))
+    assert(Result.unwrap(int_result) == 3)
+
+    result<integer> int_result2 = Converter.to_integer(3.0)
+
+    assert(Result.is_success(int_result2))
+    assert(Result.unwrap(int_result2) == 3)
+
+    result<integer> str_result = Converter.to_integer("42")
+
+    assert(Result.is_success(str_result))
+    assert(Result.unwrap(str_result) == 42)
+
+    result<integer> invalid_result = Converter.to_integer("hello")
+
+    assert(!Result.is_success(invalid_result))
+}
+
+@test
+function void test_converter_to_number() {
+    result<number> num_result = Converter.to_number(42)
+
+    assert(Result.is_success(num_result))
+    assert(Math.approximately_equal(Result.unwrap(num_result), 42.0))
+
+    result<number> str_result = Converter.to_number("3.14")
+
+    assert(Result.is_success(str_result))
+    assert(Result.unwrap(str_result) > 3.13)
+    assert(Result.unwrap(str_result) < 3.15)
+
+    result<number> invalid_result = Converter.to_number("hello")
+
+    assert(!Result.is_success(invalid_result))
+}
+
+@test
+function void test_converter_to_string() {
+    assert(Converter.to_string(42) == "42")
+    assert(Converter.to_string(true) == "true")
+}
+
+@test
+function void test_converter_hex() {
+    assert(Converter.to_hexadecimal(255) == "ff")
+
+    result<integer> hex_result = Converter.from_hexadecimal("ff")
+
+    assert(Result.is_success(hex_result))
+    assert(Result.unwrap(hex_result) == 255)
+
+    result<integer> invalid_hex = Converter.from_hexadecimal("xyz")
+
+    assert(!Result.is_success(invalid_hex))
+}
+
+@test
+function void test_converter_binary() {
+    assert(Converter.to_binary(10) == "1010")
+
+    result<integer> binary_result = Converter.from_binary("1010")
+
+    assert(Result.is_success(binary_result))
+    assert(Result.unwrap(binary_result) == 10)
+
+    result<integer> invalid_binary = Converter.from_binary("222")
+
+    assert(!Result.is_success(invalid_binary))
+}
+
+@test
+function void test_converter_ordinal() {
+    assert(Converter.ordinal(1) == "1st")
+    assert(Converter.ordinal(2) == "2nd")
+    assert(Converter.ordinal(3) == "3rd")
+    assert(Converter.ordinal(4) == "4th")
+    assert(Converter.ordinal(11) == "11th")
+    assert(Converter.ordinal(21) == "21st")
+}
+
+@test
+function void test_converter_roman() {
+    result<string> roman_result = Converter.to_roman(14)
+
+    assert(Result.is_success(roman_result))
+    assert(Result.unwrap(roman_result) == "XIV")
+
+    result<string> roman_result2 = Converter.to_roman(2024)
+
+    assert(Result.is_success(roman_result2))
+    assert(Result.unwrap(roman_result2) == "MMXXIV")
+
+    result<string> invalid_roman = Converter.to_roman(0)
+
+    assert(!Result.is_success(invalid_roman))
+
+    result<integer> from_roman_result = Converter.from_roman("XIV")
+
+    assert(Result.is_success(from_roman_result))
+    assert(Result.unwrap(from_roman_result) == 14)
+}
+
+@test
+function void test_converter_number_to_words() {
+    assert(Converter.number_to_words(0) == "zero")
+    assert(Converter.number_to_words(42) == "forty two")
+    assert(Converter.number_to_words(100) == "one hundred")
+}
+
+@test
+function void test_converter_character_codepoint() {
+    result<integer> cp_a = Converter.character_to_codepoint("A")
+
+    assert(Result.is_success(cp_a))
+    assert(Result.unwrap(cp_a) == 65)
+
+    result<string> char_65 = Converter.codepoint_to_character(65)
+
+    assert(Result.is_success(char_65))
+    assert(Result.unwrap(char_65) == "A")
+
+    result<integer> cp_a2 = Converter.character_to_codepoint("a")
+
+    assert(Result.is_success(cp_a2))
+    assert(Result.unwrap(cp_a2) == 97)
+
+    result<string> char_97 = Converter.codepoint_to_character(97)
+
+    assert(Result.is_success(char_97))
+    assert(Result.unwrap(char_97) == "a")
+
+    result<integer> empty_result = Converter.character_to_codepoint("")
+
+    assert(!Result.is_success(empty_result))
+
+    result<string> invalid_cp = Converter.codepoint_to_character(-1)
+
+    assert(!Result.is_success(invalid_cp))
+}
+
+@test
+function void test_converter_to_integer_overflow() {
+    result<integer> overflow_result = Converter.to_integer(1.0e19)
+
+    assert(Result.is_failure(overflow_result))
+
+    result<integer> ok_result = Converter.to_integer(3.9)
+
+    assert(Result.is_success(ok_result))
+    assert(Result.unwrap(ok_result) == 3)
+}
+
+@test
+function void test_converter_to_integer_edge_cases() {
+    assert(Result.unwrap(Converter.to_integer("-42")) == -42)
+    assert(Result.unwrap(Converter.to_integer(42)) == 42)
+
+    # Truncation toward zero for negative numbers.
+    assert(Result.unwrap(Converter.to_integer(-3.9)) == -3)
+
+    # Partial and invalid parses fail.
+    assert(Result.is_failure(Converter.to_integer("3.14")))
+    assert(Result.is_failure(Converter.to_integer("12abc")))
+    assert(Result.is_failure(Converter.to_integer("")))
+
+    # Out-of-range string must fail rather than overflow.
+    assert(Result.is_failure(Converter.to_integer("99999999999999999999999")))
+}
+
+@test
+function void test_converter_to_number_edge_cases() {
+    assert(Math.approximately_equal(Result.unwrap(Converter.to_number("-2.5")), -2.5))
+    assert(Math.approximately_equal(Result.unwrap(Converter.to_number("1e3")), 1000.0))
+
+    assert(Result.is_failure(Converter.to_number("3.1.4")))
+    assert(Result.is_failure(Converter.to_number("")))
+}
+
+@test
+function void test_converter_hex_edge_cases() {
+    assert(Converter.to_hexadecimal(0) == "0")
+    assert(Converter.to_hexadecimal(4294967295) == "ffffffff")
+
+    # Uppercase and 0x-prefixed input both parse.
+    assert(Result.unwrap(Converter.from_hexadecimal("FF")) == 255)
+    assert(Result.unwrap(Converter.from_hexadecimal("0x1f")) == 31)
+
+    # Round-trip.
+    assert(Result.unwrap(Converter.from_hexadecimal(Converter.to_hexadecimal(48879))) == 48879)
+
+    assert(Result.is_failure(Converter.from_hexadecimal("")))
+    assert(Result.is_failure(Converter.from_hexadecimal("ffg")))
+}
+
+@test
+function void test_converter_binary_edge_cases() {
+    assert(Converter.to_binary(0) == "0")
+    assert(Converter.to_binary(-10) == "-1010")
+    assert(Converter.to_binary(255) == "11111111")
+
+    # Round-trip.
+    assert(Result.unwrap(Converter.from_binary(Converter.to_binary(48879))) == 48879)
+
+    # A "0b" prefix and out-of-base digits both fail.
+    assert(Result.is_failure(Converter.from_binary("0b101")))
+    assert(Result.is_failure(Converter.from_binary("222")))
+    assert(Result.is_failure(Converter.from_binary("")))
+}
+
+@test
+function void test_converter_ordinal_edge_cases() {
+    # The 11..13 exception always takes "th".
+    assert(Converter.ordinal(11) == "11th")
+    assert(Converter.ordinal(12) == "12th")
+    assert(Converter.ordinal(13) == "13th")
+    assert(Converter.ordinal(111) == "111th")
+    assert(Converter.ordinal(112) == "112th")
+    assert(Converter.ordinal(113) == "113th")
+
+    assert(Converter.ordinal(22) == "22nd")
+    assert(Converter.ordinal(23) == "23rd")
+    assert(Converter.ordinal(101) == "101st")
+    assert(Converter.ordinal(0) == "0th")
+    assert(Converter.ordinal(-1) == "-1st")
+}
+
+@test
+function void test_converter_roman_edge_cases() {
+    assert(Result.unwrap(Converter.to_roman(1)) == "I")
+    assert(Result.unwrap(Converter.to_roman(3999)) == "MMMCMXCIX")
+
+    # Out-of-range values fail.
+    assert(Result.is_failure(Converter.to_roman(4000)))
+    assert(Result.is_failure(Converter.to_roman(-5)))
+
+    # Subtractive forms and lowercase input.
+    assert(Result.unwrap(Converter.from_roman("MCMXCIV")) == 1994)
+    assert(Result.unwrap(Converter.from_roman("xiv")) == 14)
+
+    # Round-trip a mid-range value through both directions.
+    assert(Result.unwrap(Converter.from_roman(Result.unwrap(Converter.to_roman(2727)))) == 2727)
+
+    # Malformed numerals are rejected by the round-trip validation.
+    assert(Result.is_failure(Converter.from_roman("IIII")))
+    assert(Result.is_failure(Converter.from_roman("VV")))
+    assert(Result.is_failure(Converter.from_roman("ABC")))
+}
+
+@test
+function void test_converter_number_to_words_edge_cases() {
+    assert(Converter.number_to_words(-5) == "negative five")
+    assert(Converter.number_to_words(1234) == "one thousand two hundred thirty four")
+    assert(Converter.number_to_words(1000000) == "one million")
+    assert(Converter.number_to_words(1000000000) == "one billion")
+}
+
+@test
+function void test_converter_codepoint_multibyte() {
+    # 2-, 3-, and 4-byte UTF-8 round-trips through encode + decode.
+    integer accent = Result.unwrap(
+        Converter.character_to_codepoint(Result.unwrap(Converter.codepoint_to_character(233))))
+    assert(accent == 233)
+
+    integer star = Result.unwrap(
+        Converter.character_to_codepoint(Result.unwrap(Converter.codepoint_to_character(9733))))
+    assert(star == 9733)
+
+    integer emoji = Result.unwrap(
+        Converter.character_to_codepoint(Result.unwrap(Converter.codepoint_to_character(128512))))
+    assert(emoji == 128512)
+
+    # One past the maximum Unicode codepoint fails.
+    assert(Result.is_failure(Converter.codepoint_to_character(1114112)))
+
+    # Surrogate halves (U+D800..U+DFFF) are not valid scalar values and fail.
+    assert(Result.is_failure(Converter.codepoint_to_character(55296)))
+}

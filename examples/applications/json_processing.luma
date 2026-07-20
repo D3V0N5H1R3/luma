@@ -1,0 +1,83 @@
+# ═══════════════════════════════════════════════════════════
+# JSON Processing
+#
+# Demonstrates the Json module — serialisation, parsing,
+# validation, and round-tripping Luma values through JSON.
+# ═══════════════════════════════════════════════════════════
+
+record Person {
+    string name,
+    number age,
+    string city
+}
+
+function string pretty_person(Person person) {
+    return "${person.name} (age ${person.age}) from ${person.city}"
+}
+
+@main
+function void main() {
+    # ── Record formatting ──
+    print("=== Record Formatting ===")
+
+    Person alice = Person { name = "Alice", age = 30, city = "Paris" }
+
+    print(pretty_person(alice))
+
+    # ── Serialize primitives ──
+    print("=== JSON Serialisation ===")
+    print("integer : ${Json.serialize(42)}")
+    print("string  : ${Json.serialize("hello")}")
+    print("boolean : ${Json.serialize(true)}")
+    print("null    : ${Json.serialize(none)}")
+    print("array   : ${Json.serialize([1, 2, 3])}")
+
+    # ── Round-trip an array ──
+    print("\n=== Round-trip ===")
+
+    array<integer> original = [10, 20, 30, 40, 50]
+    string json = Json.serialize(original)
+
+    print("Serialised : ${json}")
+
+    array<integer> restored = Json.deserialize(json) |> Result.unwrap()
+    number length = Array.length(restored)
+
+    print("Deserialised: ${length} elements")
+
+    # ── Pretty-print ──
+    print("\n=== Pretty Print ===")
+
+    dictionary<string> config = {
+        "host": "localhost",
+        "port": "8080",
+        "debug": "true"
+    }
+    string pretty = Json.serialize_pretty(config)
+
+    print(pretty)
+
+    # ── Validation ──
+    print("\n=== Validation ===")
+
+    array<string> samples = [
+        "{\"valid\": true}",
+        "[1, 2, 3]",
+        "\"just a string\"",
+        "{bad json",
+        ""
+    ]
+
+    result<none> _ = samples |> Array.each((string sample) -> {
+        string label = if Json.is_valid(sample) { "valid" } else { "invalid" }
+        string display = if String.length(sample) > 20 {
+            "${String.substring(sample, 0, 20)} .. ."
+        } else if String.length(sample) == 0 {
+            "(empty)"
+        } else {
+            sample
+        }
+
+        print("  ${label}: ${display}")
+    })
+}

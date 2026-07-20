@@ -1,0 +1,4 @@
+# Include resolver: basic include statement
+include "nonexistent_file.luma"
+
+x = 42

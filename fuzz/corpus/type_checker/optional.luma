@@ -1,0 +1,87 @@
+# Type checker: optional<T> assignment rules (none, some(v), and a plain
+# value are all assignable to optional<T>), '?' propagation return-type
+# enforcement, optional chaining with auto-flatten, combinator signatures,
+# match destructuring, string interpolation, and null-coalescing.
+
+record Inner { string name }
+
+record Outer { optional<Inner> child }
+
+function optional<integer> from_none() {
+    optional<integer> a = none
+
+    return a
+}
+
+function optional<string> from_value() {
+    optional<string> c = "hello"
+
+    return c
+}
+
+# '?' requires the enclosing function to return optional<T>.
+function optional<integer> propagate(optional<integer> x, optional<integer> y) {
+    integer first = x?
+    integer second = y?
+
+    return some(first + second)
+}
+
+# Optional chaining auto-flattens: o?.child is optional<Inner>, not nested.
+function optional<Inner> chain(optional<Outer> o) {
+    return o?.child
+}
+
+function string describe(optional<integer> o) {
+    return match o {
+    case some(v) { "got ${v}" }
+    case none    { "nothing" }
+    }
+}
+
+function integer coalesce(optional<integer> o) {
+    return o ?? 0
+}
+
+function integer combinators(optional<integer> o) {
+    return o
+    |> Optional.map((integer i) -> i * 2)
+    |> Optional.filter((integer i) -> i > 0)
+    |> Optional.and_then((integer i) -> some(i + 1))
+    |> Optional.unwrap_or(0)
+}
+
+function boolean inspect(optional<integer> o) {
+    return Optional.is_some(o) && Optional.contains(o, 7)
+}
+
+# flat_map / flatten / to_result / zip / or / tap / unwrap / is_none exercise the
+# remaining Optional type-signature refinement branches (refine_optional_return).
+function optional<integer> bind(optional<integer> o) {
+    return Optional.flat_map(o, (integer i) -> some(i + 1))
+}
+
+function optional<integer> collapse(optional<optional<integer>> o) {
+    return Optional.flatten(o)
+}
+
+function result<integer> as_result(optional<integer> o) {
+    return Optional.to_result(o, "missing")
+}
+
+function optional<(integer, string)> pair(optional<integer> a, optional<string> b) {
+    return Optional.zip(a, b)
+}
+
+function optional<integer> side_effect(optional<integer> o) {
+    return Optional.or(Optional.tap(o, (integer i) -> { print(i) }), some(0))
+}
+
+function integer force(optional<integer> o) {
+    if Optional.is_none(o) {
+        return 0
+    }
+
+    return Optional.unwrap(o)
+}
+

@@ -1,0 +1,167 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Named Arguments
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────────
+# Helper functions
+# ───────────────────────────────────────────────────────────
+
+function string create_user(string name, integer age, boolean active) {
+    if active {
+        return "${name} (${age})"
+    }
+
+    return "${name} (inactive)"
+}
+
+function integer subtract(integer a, integer b) {
+    return a - b
+}
+
+function string greet(string greeting, string name) {
+    return "${greeting}, ${name}!"
+}
+
+# ───────────────────────────────────────────────────────────
+# All named arguments
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_all_named_any_order() {
+    string u1 = create_user(name: "Alice", age: 30, active: true)
+    string u2 = create_user(active: false, name: "Bob", age: 25)
+
+    assert(u1 == "Alice (30)")
+    assert(u2 == "Bob (inactive)")
+}
+
+# ───────────────────────────────────────────────────────────
+# Mixed positional and named
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_mixed_positional_and_named() {
+    string u = create_user("Charlie", active: true, age: 35)
+
+    assert(u == "Charlie (35)")
+}
+
+# ───────────────────────────────────────────────────────────
+# Named arguments preserve semantics
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_named_argument_order_matters_for_subtraction() {
+    integer r1 = subtract(a: 10, b: 3)
+    integer r2 = subtract(b: 3, a: 10)
+
+    assert(r1 == 7)
+    assert(r2 == 7)
+}
+
+# ───────────────────────────────────────────────────────────
+# Named with string arguments
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_named_string_arguments() {
+    string msg = greet(greeting: "Hello", name: "World")
+
+    assert(msg == "Hello, World!")
+}
+
+# ───────────────────────────────────────────────────────────
+# Named arguments with pipe operator
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_named_with_pipe() {
+    # Pipe fills the first positional param (greeting); name is supplied as named.
+    string msg = "Hi" |> greet(name: "World")
+
+    assert(msg == "Hi, World!")
+}
+
+@test
+function void test_named_pipe_reorder() {
+    # Pipe fills first positional param; named fills the second.
+    integer r = 10 |> subtract(b: 3)
+
+    assert(r == 7)
+}
+
+# ───────────────────────────────────────────────────────────
+# Named arguments with default parameters
+# ───────────────────────────────────────────────────────────
+
+function string format_name(string first, string last, string separator = " ") {
+    return "${first}${separator}${last}"
+}
+
+@test
+function void test_named_with_defaults() {
+    # Use default separator.
+    string full = format_name(first: "Alice", last: "Smith")
+
+    assert(full == "Alice Smith")
+}
+
+@test
+function void test_named_override_default() {
+    string full = format_name(first: "Alice", last: "Smith", separator: "-")
+
+    assert(full == "Alice-Smith")
+}
+
+@test
+function void test_named_override_default_reordered() {
+    string full = format_name(separator: ", ", last: "Smith", first: "Alice")
+
+    assert(full == "Alice, Smith")
+}
+
+# ───────────────────────────────────────────────────────────
+# Expression as named argument value
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_named_with_expression_value() {
+    integer r = subtract(a: 5 + 5, b: 2 * 1)
+
+    assert(r == 8)
+}
+
+# ───────────────────────────────────────────────────────────
+# All positional baseline
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_all_positional_still_works() {
+    string u = create_user("Zara", 20, true)
+
+    assert(u == "Zara (20)")
+}
+
+# ───────────────────────────────────────────────────────────
+# Negative — unknown named argument is a runtime error
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_unknown_named_argument_throws() {
+    # 'count' matches no parameter of subtract, so binding fails at runtime.
+    # The call still type-checks (two arguments, arity matches), so the error
+    # surfaces from the VM rather than the type checker.
+    mutable string caught = ""
+
+    try {
+        integer _ = subtract(a: 10, count: 3)
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.length(caught) > 0, "unknown named argument should throw")
+    assert("unknown named argument" in caught)
+}

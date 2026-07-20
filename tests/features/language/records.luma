@@ -1,0 +1,267 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Records
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+record Vector {
+    number x,
+    number y
+}
+
+@test
+function void test_record_creation() {
+    Vector vector = Vector { x = 1.0, y = 2.0 }
+
+    assert(Math.approximately_equal(vector.x, 1.0))
+    assert(Math.approximately_equal(vector.y, 2.0))
+}
+
+@test
+function void test_record_mutation() {
+    mutable Vector vector = Vector { x = 0.0, y = 0.0 }
+    vector.x = 5.0
+    vector.y = 10.0
+
+    assert(Math.approximately_equal(vector.x, 5.0))
+    assert(Math.approximately_equal(vector.y, 10.0))
+}
+
+@test
+function void test_record_in_function() {
+    Vector origin = Vector { x = 0.0, y = 0.0 }
+    Vector target = Vector { x = 3.0, y = 4.0 }
+
+    number delta_x = origin.x - target.x
+    number delta_y = origin.y - target.y
+
+    result<number> distance_result = Math.square_root(delta_x * delta_x + delta_y * delta_y)
+
+    assert(Result.is_success(distance_result))
+    assert(Math.approximately_equal(Result.unwrap(distance_result), 5.0))
+}
+
+@test
+function void test_record_field_assignment_in_array() {
+    array<Vector> points = [Vector { x = 0.0, y = 0.0 }, Vector { x = 1.0, y = 1.0 }]
+    points[0].x = 99.0
+
+    assert(Math.approximately_equal(points[0].x, 99.0))
+}
+
+# ─── Record structural equality ───────────────────────────
+
+@test
+function void test_record_equality_same_fields() {
+    Vector a = Vector { x = 1.0, y = 2.0 }
+    Vector b = Vector { x = 1.0, y = 2.0 }
+
+    assert(a == b)
+}
+
+@test
+function void test_record_inequality_different_fields() {
+    Vector a = Vector { x = 1.0, y = 2.0 }
+    Vector b = Vector { x = 9.0, y = 2.0 }
+
+    assert(a != b)
+}
+
+@test
+function void test_record_equality_after_mutation() {
+    mutable Vector a = Vector { x = 0.0, y = 0.0 }
+    Vector b = Vector { x = 0.0, y = 0.0 }
+
+    assert(a == b)
+
+    a.x = 5.0
+
+    assert(a != b)
+}
+
+@test
+function void test_record_with_syntax() {
+    Vector v1 = Vector { x = 1.0, y = 2.0 }
+    Vector v2 = v1 with { x = 5.0 }
+
+    # Original is unchanged
+    assert(Math.approximately_equal(v1.x, 1.0))
+    assert(Math.approximately_equal(v1.y, 2.0))
+
+    # Copy has override applied
+    assert(Math.approximately_equal(v2.x, 5.0))
+    assert(Math.approximately_equal(v2.y, 2.0))
+}
+
+@test
+function void test_record_with_multiple_fields() {
+    Vector v1 = Vector { x = 1.0, y = 2.0 }
+    Vector v2 = v1 with { x = 10.0, y = 20.0 }
+
+    assert(Math.approximately_equal(v2.x, 10.0))
+    assert(Math.approximately_equal(v2.y, 20.0))
+}
+
+# ─── Shorthand field initialisation ─────────────────────────
+
+@test
+function void test_record_shorthand_field_init() {
+    # `Vector { x, y }` is shorthand for `Vector { x = x, y = y }`.
+    number x = 3.0
+    number y = 7.0
+    Vector v = Vector { x, y }
+
+    assert(Math.approximately_equal(v.x, 3.0))
+    assert(Math.approximately_equal(v.y, 7.0))
+}
+
+@test
+function void test_record_shorthand_mixed_with_explicit() {
+    # Shorthand and explicit fields may be combined in one literal.
+    number x = 1.0
+    Vector v = Vector { x, y = 8.0 }
+
+    assert(Math.approximately_equal(v.x, 1.0))
+    assert(Math.approximately_equal(v.y, 8.0))
+}
+
+# ─── Default field values ─────────────────────────────────
+
+record Config {
+    string host = "localhost",
+    integer port = 8080,
+    boolean secure = false
+}
+
+record PartialDefault {
+    string name,
+    integer retries = 3
+}
+
+@test
+function void test_record_default_all_fields() {
+    Config c = Config {}
+
+    assert(c.host == "localhost")
+    assert(c.port == 8080)
+    assert(!c.secure)
+}
+
+@test
+function void test_record_default_partial_override() {
+    Config c = Config { port = 443, secure = true }
+
+    assert(c.host == "localhost")
+    assert(c.port == 443)
+    assert(c.secure)
+}
+
+@test
+function void test_record_default_full_override() {
+    Config c = Config { host = "example.com", port = 443, secure = true }
+
+    assert(c.host == "example.com")
+    assert(c.port == 443)
+    assert(c.secure)
+}
+
+@test
+function void test_record_default_required_field_provided() {
+    PartialDefault pd = PartialDefault { name = "Alice" }
+
+    assert(pd.name == "Alice")
+    assert(pd.retries == 3)
+}
+
+@test
+function void test_record_default_required_field_both_provided() {
+    PartialDefault pd = PartialDefault { name = "Bob", retries = 5 }
+
+    assert(pd.name == "Bob")
+    assert(pd.retries == 5)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Negative tests — record error conditions
+# ═══════════════════════════════════════════════════════════
+
+# Note: Missing fields, wrong field types, and nonexistent field access
+# are caught at compile time by the type checker (tested in
+# type_checker_test.cpp). Below we test runtime error conditions.
+
+record SafeRecord {
+    string name,
+    integer value
+}
+
+@test
+function void test_record_value_semantics_no_aliasing() {
+    SafeRecord a = SafeRecord { name = "original", value = 1 }
+    mutable SafeRecord b = a
+
+    # Mutating b should not affect a (value semantics).
+    b.name = "modified"
+
+    assert(a.name == "original", "original should be unchanged after copy mutation")
+    assert(b.name == "modified")
+}
+
+@test
+function void test_record_with_preserves_original() {
+    SafeRecord original = SafeRecord { name = "test", value = 42 }
+    SafeRecord modified = original with { value = 99 }
+
+    assert(original.value == 42, "with should not modify original")
+    assert(modified.value == 99, "with should produce new record")
+    assert(modified.name == "test", "with should preserve unmodified fields")
+}
+
+# ─── Nested record mutation ───
+
+record Inner { integer val }
+
+record Outer { Inner inner, string label }
+
+@test
+function void test_nested_record_equality() {
+    Outer a = Outer { inner = Inner { val = 1 }, label = "x" }
+    Outer b = Outer { inner = Inner { val = 1 }, label = "x" }
+    Outer c = Outer { inner = Inner { val = 2 }, label = "x" }
+
+    assert(a == b, "nested records with same fields should be equal")
+    assert(a != c, "nested records with different inner fields should differ")
+}
+
+@test
+function void test_nested_record_field_mutation() {
+    mutable Outer o = Outer { inner = Inner { val = 1 }, label = "a" }
+    o.inner.val = 42
+
+    assert(o.inner.val == 42, "nested field mutation should update the inner record")
+    assert(o.label == "a", "sibling field should be unchanged")
+}
+
+@test
+function void test_nested_record_with() {
+    Outer o = Outer { inner = Inner { val = 1 }, label = "first" }
+    Outer o2 = o with { inner = o.inner with { val = 99 } }
+
+    # Original is unchanged (value semantics, all the way down).
+    assert(o.inner.val == 1, "with should not mutate the original's inner record")
+    assert(o.label == "first")
+
+    # Copy has the nested override applied; other fields preserved.
+    assert(o2.inner.val == 99, "nested with should override the inner field")
+    assert(o2.label == "first", "nested with should preserve sibling fields")
+}
+
+# ─── String representation ────────────────────────────────
+
+@test
+function void test_record_string_representation() {
+    Inner i = Inner { val = 7 }
+
+    # Records render as `Type { field = value, ... }`.
+    assert("${i}" == "Inner { val = 7 }")
+}

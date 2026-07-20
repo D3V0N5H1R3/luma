@@ -1,0 +1,264 @@
+# Concurrency benchmarks: task_scope, channels, producer/consumer.
+
+# --- Helper functions ---
+
+function integer bench_trivial_work() {
+    return 1 + 1
+}
+
+function integer bench_compute_square(integer n) {
+    return n * n
+}
+
+function integer bench_task_increment(integer n) {
+    return n + 1
+}
+
+function integer bench_produce_values(channel<integer> ch, integer count) {
+    for i in 0 .. count {
+        boolean _ = Channel.send(ch, i)
+    }
+    Channel.close(ch)
+    return count
+}
+
+function integer bench_consume_values(channel<integer> ch, integer count) {
+    mutable integer total = 0
+    for _ in 0 .. count {
+        match Channel.receive(ch) {
+            success(value) { total += value }
+            failure(_) {}
+        }
+    }
+    return total
+}
+
+function dictionary<integer> bench_build_channel_dict(integer count) {
+    mutable dictionary<integer> d = {}
+    for i in 0 .. count {
+        d = Dictionary.set(d, Converter.to_string(i), i)
+    }
+    return d
+}
+
+# --- Benchmarks ---
+
+function BenchResult run_concurrency_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    st = time_it(st, "task_scope spawn (10 tasks)", 100, () -> {
+        array<integer> _results = task_scope {
+            for _ in 0 .. 10 {
+                spawn bench_trivial_work()
+            }
+        }
+    })
+
+    st = time_it(st, "channel send/receive (100 msgs)", 50, () -> {
+        channel<integer> ch = Channel.new_buffered(100)
+        for i in 0 .. 100 {
+            boolean _ = Channel.send(ch, i)
+        }
+        for _ in 0 .. 100 {
+            result<integer> _recv = Channel.receive(ch)
+        }
+        Channel.close(ch)
+    })
+
+    st = time_it(st, "producer/consumer (channel)", 50, () -> {
+        channel<integer> ch = Channel.new_buffered(100)
+        array<integer> _results = task_scope {
+            spawn bench_produce_values(ch, 100)
+            spawn bench_consume_values(ch, 100)
+        }
+    })
+
+    st = time_it(st, "task_scope fan-out (20 tasks)", 50, () -> {
+        array<integer> _results = task_scope {
+            for i in 0 .. 20 {
+                spawn bench_compute_square(i)
+            }
+        }
+    })
+
+    # --- Task combinators ---
+
+    st = time_it(st, "Task.all (5 tasks)", 50, () -> {
+        array<integer> _results = task_scope {
+            mutable array<task<integer>> tasks = []
+            for i in 0 .. 5 {
+                tasks = Array.push(tasks, spawn bench_compute_square(i))
+            }
+            result<array<integer>> _all = Task.all(tasks)
+        }
+    })
+
+    st = time_it(st, "Task.race (3 tasks)", 50, () -> {
+        array<integer> _results = task_scope {
+            mutable array<task<integer>> tasks = []
+            for _ in 0 .. 3 {
+                tasks = Array.push(tasks, spawn bench_trivial_work())
+            }
+            result<integer> _winner = Task.race(tasks)
+        }
+    })
+
+    st = time_it(st, "Task.map (transform result)", 100, () -> {
+        array<integer> _results = task_scope {
+            task<integer> t = spawn bench_compute_square(5)
+            result<integer> _mapped = Task.map(t, (integer x) -> x + 1)
+        }
+    })
+
+    st = time_it(st, "Task.is_done check", 100, () -> {
+        array<integer> _results = task_scope {
+            task<integer> t = spawn bench_trivial_work()
+            result<boolean> _done = Task.is_done(t)
+        }
+    })
+
+    st = time_it(st, "Task.any (3 tasks)", 50, () -> {
+        array<integer> _results = task_scope {
+            mutable array<task<integer>> tasks = []
+            for i in 0 .. 3 {
+                tasks = Array.push(tasks, spawn bench_compute_square(i))
+            }
+            result<integer> _winner = Task.any(tasks)
+        }
+    })
+
+    st = time_it(st, "Task.sequence (5 tasks)", 50, () -> {
+        array<integer> _results = task_scope {
+            mutable array<task<integer>> tasks = []
+            for i in 0 .. 5 {
+                tasks = Array.push(tasks, spawn bench_compute_square(i))
+            }
+            result<array<integer>> _seq = Task.sequence(tasks)
+        }
+    })
+
+    st = time_it(st, "Task.map_n (5 tasks)", 50, () -> {
+        array<integer> _results = task_scope {
+            mutable array<task<integer>> tasks = []
+            for i in 0 .. 5 {
+                tasks = Array.push(tasks, spawn bench_compute_square(i))
+            }
+            result<array<integer>> _mapped = Task.map_n(tasks, (integer x) -> x + 1)
+        }
+    })
+
+    st = time_it(st, "Task.flat_map (chain)", 100, () -> {
+        array<integer> _results = task_scope {
+            task<integer> t = spawn bench_compute_square(5)
+            result<integer> _chained = Task.flat_map(t, (integer x) -> spawn bench_task_increment(x))
+        }
+    })
+
+    st = time_it(st, "Task.timeout (success)", 100, () -> {
+        array<integer> _results = task_scope {
+            task<integer> t = spawn bench_compute_square(5)
+            result<integer> _timed = Task.timeout(t, 5000)
+        }
+    })
+
+    st = time_it(st, "Task.retry (succeeds first try)", 100, () -> {
+        result<integer> _retry = Task.retry(3, () -> success(42))
+    })
+
+    # Awaits the task first, so this times Task.cancel + Task.is_cancelled on an
+    # already-completed task (the no-op cancel path). Cancelling a still-running
+    # task is non-deterministic and would add timing variance, so the
+    # completed-task path is measured deliberately.
+    st = time_it(st, "Task.cancel + is_cancelled", 100, () -> {
+        array<integer> _results = task_scope {
+            task<integer> t = spawn bench_compute_square(5)
+            integer _r = await t
+            boolean _c = Task.cancel(t)
+            boolean _ic = Task.is_cancelled(t)
+        }
+    })
+
+    # --- Channel non-blocking operations ---
+
+    st = time_it(st, "channel try_send/try_receive (100 msgs)", 50, () -> {
+        channel<integer> ch = Channel.new_buffered(100)
+        for i in 0 .. 100 {
+            boolean _ = Channel.try_send(ch, i)
+        }
+        for _ in 0 .. 100 {
+            result<integer> _recv = Channel.try_receive(ch)
+        }
+        Channel.close(ch)
+    })
+
+    st = time_it(st, "channel select (ready)", 100, () -> {
+        channel<integer> ch = Channel.new_buffered(1)
+        boolean _ = Channel.send(ch, 7)
+        result<(integer, integer)> _sel = Channel.select([ch])
+        Channel.close(ch)
+    })
+
+    # --- Channel throughput variants ---
+
+    st = time_it(st, "unbounded channel send/receive (100 msgs)", 50, () -> {
+        channel<integer> ch = Channel.new()
+        for i in 0 .. 100 {
+            boolean _ = Channel.send(ch, i)
+        }
+        for _ in 0 .. 100 {
+            result<integer> _recv = Channel.receive(ch)
+        }
+        Channel.close(ch)
+    })
+
+    st = time_it(st, "channel receive_all (drain 100)", 50, () -> {
+        channel<integer> ch = Channel.new_buffered(100)
+        for i in 0 .. 100 {
+            boolean _ = Channel.send(ch, i)
+        }
+        Channel.close(ch)
+        array<integer> _all = Channel.receive_all(ch)
+    })
+
+    st = time_it(st, "channel send_timeout/receive_timeout (100 msgs)", 50, () -> {
+        channel<integer> ch = Channel.new_buffered(100)
+        for i in 0 .. 100 {
+            result<boolean> _s = Channel.send_timeout(ch, i, 1000)
+        }
+        for _ in 0 .. 100 {
+            result<integer> _recv = Channel.receive_timeout(ch, 1000)
+        }
+        Channel.close(ch)
+    })
+
+    # --- Scope shapes ---
+
+    st = time_it(st, "nested task_scope (inner + outer spawn)", 50, () -> {
+        array<integer> _outer = task_scope {
+            array<integer> _inner = task_scope {
+                for i in 0 .. 4 {
+                    spawn bench_compute_square(i)
+                }
+            }
+            spawn bench_trivial_work()
+        }
+    })
+
+    # --- Value deep-copy across a channel ---
+
+    # Each Channel.send() deep-copies its value (the value-semantics boundary
+    # between tasks), so sending a large dictionary exercises Value::deep_copy()
+    # for dictionaries. Guards the bulk O(n) dictionary copy against regressing
+    # to the per-entry O(n^2) set() dedup scan.
+    dictionary<integer> bench_channel_dict = bench_build_channel_dict(400)
+    st = time_it(st, "channel send large dict (400 keys)", 50, () -> {
+        channel<dictionary<integer>> ch = Channel.new_buffered(8)
+        for _ in 0 .. 8 {
+            boolean _sent = Channel.send(ch, bench_channel_dict)
+        }
+        Channel.close(ch)
+        array<dictionary<integer>> _all = Channel.receive_all(ch)
+    })
+
+    return st
+}

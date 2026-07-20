@@ -1,0 +1,72 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Test Annotation
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_assert_basic() {
+    assert(1 + 1 == 2)
+}
+
+@test
+function void test_assert_with_message() {
+    integer sum_result = 2 + 2
+
+    assert(sum_result == 4, "expected 4 but got ${sum_result}")
+}
+
+# A @test function may call ordinary (non-annotated) helper functions.
+function integer _triple(integer value) {
+    return value * 3
+}
+
+@test
+function void test_assert_multiple_conditions() {
+    # Every assertion in a test function must hold for the test to pass.
+    assert(true)
+    assert(1 < 2)
+    assert("a" != "b")
+    assert(!false)
+}
+
+@test
+function void test_assert_compound_boolean() {
+    boolean a = true
+    boolean b = false
+
+    assert(a && !b)
+    assert(a || b)
+    assert(!(a && b))
+}
+
+@test
+function void test_assert_on_helper_result() {
+    assert(_triple(4) == 12)
+}
+
+@test
+function void test_assert_interpolated_message() {
+    integer expected = 10
+    integer actual = 5 + 5
+
+    assert(actual == expected, "expected ${expected} but got ${actual}")
+}
+
+@test
+function void test_assert_isolation_first() {
+    # Each @test owns its local state; this `value` must not leak.
+    integer value = 1
+
+    assert(value == 1)
+}
+
+@test
+function void test_assert_isolation_second() {
+    # A second test re-declares `value` independently, proving the runner
+    # does not share mutable state between tests.
+    integer value = 99
+
+    assert(value == 99)
+}

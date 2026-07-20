@@ -1,0 +1,151 @@
+# Type-heavy path benchmarks: records, choice types, ADT traversal.
+
+# --- Helper types ---
+
+record BenchPoint {
+    number x,
+    number y
+}
+
+record BenchLine {
+    BenchPoint start,
+    BenchPoint finish
+}
+
+record BenchConfig {
+    string host = "localhost",
+    integer port = 8080,
+    boolean secure = false
+}
+
+choice BenchShape {
+    Circle(number radius)
+    Rectangle(number width, number height)
+    Triangle(number base, number height)
+    Point
+}
+
+choice BenchList {
+    Nil
+    Cons(integer head, BenchList tail)
+}
+
+choice BenchDirection { North  South  East  West }
+
+function integer bench_list_length(BenchList list) {
+    return match list {
+    case BenchList.Nil { 0 }
+    case BenchList.Cons(_, t) { 1 + bench_list_length(t) }
+    }
+}
+
+function string bench_direction_label(BenchDirection d) {
+    return match d {
+    case BenchDirection.North { "N" }
+    case BenchDirection.South { "S" }
+    case BenchDirection.East  { "E" }
+    case BenchDirection.West  { "W" }
+    }
+}
+
+# --- Benchmarks ---
+
+function BenchResult run_type_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    st = time_it(st, "record construction", 10000, () -> {
+        BenchPoint _p = BenchPoint { x = 3.14, y = 2.71 }
+    })
+
+    st = time_it(st, "record with-expression copy", 10000, () -> {
+        BenchPoint p = BenchPoint { x = 1.0, y = 2.0 }
+        BenchPoint _p2 = p with { x = 5.0 }
+    })
+
+    st = time_it(st, "record field access", 50000, () -> {
+        BenchPoint p = BenchPoint { x = 42.0, y = 99.0 }
+        number _sum = p.x + p.y
+    })
+
+    st = time_it(st, "record field mutation", 50000, () -> {
+        mutable BenchPoint p = BenchPoint { x = 1.0, y = 2.0 }
+        p.x = 42.0
+        p.y = 99.0
+        number _sum = p.x + p.y
+    })
+
+    st = time_it(st, "record structural equality", 10000, () -> {
+        BenchPoint a = BenchPoint { x = 1.0, y = 2.0 }
+        BenchPoint b = BenchPoint { x = 1.0, y = 2.0 }
+        boolean _eq = a == b
+    })
+
+    st = time_it(st, "nested record construction + access", 10000, () -> {
+        BenchLine line = BenchLine {
+        start = BenchPoint { x = 0.0, y = 0.0 },
+        finish = BenchPoint { x = 3.0, y = 4.0 }
+        }
+        number _reach = line.start.x + line.finish.y
+    })
+
+    st = time_it(st, "record default-value construction", 10000, () -> {
+        BenchConfig _c = BenchConfig { port = 443 }
+    })
+
+    st = time_it(st, "choice type construction", 10000, () -> {
+        BenchShape _s1 = BenchShape.Circle(5.0)
+        BenchShape _s2 = BenchShape.Rectangle(10.0, 20.0)
+        BenchShape _s3 = BenchShape.Triangle(3.0, 4.0)
+    })
+
+    st = time_it(st, "choice type match (4 arms)", 10000, () -> {
+        BenchShape s = BenchShape.Rectangle(10.0, 20.0)
+        number _area = match s {
+        case BenchShape.Circle(r) { 3.14159 * r * r }
+        case BenchShape.Rectangle(w, h) { w * h }
+        case BenchShape.Triangle(b, h) { 0.5 * b * h }
+        case BenchShape.Point { 0.0 }
+        }
+    })
+
+    st = time_it(st, "choice unit-variant construction + compare", 10000, () -> {
+        BenchDirection d = BenchDirection.North
+        boolean _eq = d == BenchDirection.North
+        boolean _ne = d != BenchDirection.South
+    })
+
+    st = time_it(st, "choice unit-variant match (4 arms)", 10000, () -> {
+        BenchDirection d = BenchDirection.East
+        string _label = bench_direction_label(d)
+    })
+
+    st = time_it(st, "choice structural equality", 10000, () -> {
+        BenchShape a = BenchShape.Rectangle(10.0, 20.0)
+        BenchShape b = BenchShape.Rectangle(10.0, 20.0)
+        BenchShape c = BenchShape.Circle(5.0)
+        boolean _eq = a == b
+        boolean _ne = a != c
+    })
+
+    st = time_it(st, "ADT recursive traversal", 5000, () -> {
+        BenchList list = BenchList.Cons(1, BenchList.Cons(2, BenchList.Cons(3,
+        BenchList.Cons(4, BenchList.Cons(5, BenchList.Nil)))))
+        integer _len = bench_list_length(list)
+    })
+
+    st = time_it(st, "optional construction + unwrap_or", 10000, () -> {
+        optional<integer> o = some(42)
+        integer _v = Optional.unwrap_or(o, 0)
+    })
+
+    st = time_it(st, "integer to number coercion", 10000, () -> {
+        integer i = 21
+        number _n = i * 2.5
+    })
+
+    st = time_it(st, "type_of dispatch", 10000, () -> {
+        string _t = type_of(42)
+    })
+
+    return st
+}

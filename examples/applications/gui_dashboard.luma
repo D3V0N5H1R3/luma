@@ -1,0 +1,287 @@
+# GraphicalUi Dashboard — demonstrates charts, tabs, grid layout, toolbar,
+# components, accessibility, error boundaries, and auto-refresh subscriptions.
+#
+# A sales analytics dashboard with multiple chart types, tabbed navigation,
+# and a grid layout for key metrics. Shows all seven chart widgets, the
+# tabs container, toolbar, grid layout, progress bars, and custom styling.
+# Metric cards are reusable components and charts have ARIA labels.
+
+function widget view_metric_card(string title, string value, string icon_name,
+                                 string delta, boolean positive) {
+    # Each metric card is a component — only re-renders when its data changes.
+    return GraphicalUi.component("metric_${title}", "${value}|${delta}", (string _v) -> {
+        dictionary<string> delta_tone = if positive {
+            {"color": GraphicalUi.VAR_SUCCESS,
+             "background_color": "var(--gui-success-subtle-bg)"}
+        } else {
+            {"color": GraphicalUi.VAR_ERROR,
+             "background_color": "var(--gui-error-subtle-bg)"}
+        }
+
+        return GraphicalUi.accessible(
+            GraphicalUi.panel(title, [
+                GraphicalUi.row([
+                    GraphicalUi.icon(icon_name, 22),
+                    GraphicalUi.heading(value, 2)
+                ], {"align_items": "center"}),
+                GraphicalUi.row([
+                    GraphicalUi.icon(if positive { "arrow-up" } else { "arrow-down" }, 14),
+                    GraphicalUi.label(delta,
+                        {"font_size": GraphicalUi.VAR_TEXT_XS, "font_weight": "600"})
+                ], GraphicalUi.merge_styles(
+                    {"display": "inline-flex", "padding": "2px 8px",
+                     "border_radius": "999px", "align_items": "center",
+                     "gap": GraphicalUi.VAR_SPACE_XS},
+                    delta_tone
+                ))
+            ]),
+            { "role": "region", "aria_label": "${title}: ${value}, change ${delta}" }
+        )
+    })
+}
+
+# Stat/chart grids choose their column count by device class rather than relying
+# solely on the automatic phone reflow: 1 column on phones, 2 on tablets, 4 on
+# desktops (and 1/2 for the chart pairs). responsive() re-resolves on resize, so
+# the grids re-render with the right density at every width.
+function dictionary<string> stat_grid_columns() {
+    return GraphicalUi.responsive({
+        "0": {"grid_template_columns": "1fr"},
+        "641": {"grid_template_columns": "repeat(2, minmax(0, 1fr))"},
+        "1024": {"grid_template_columns": "repeat(4, minmax(0, 1fr))"}
+    })
+}
+
+function dictionary<string> pair_grid_columns() {
+    return GraphicalUi.responsive({
+        "0": {"grid_template_columns": "1fr"},
+        "641": {"grid_template_columns": "repeat(2, minmax(0, 1fr))"}
+    })
+}
+
+function widget view_overview_tab() {
+    array<string> months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
+    array<number> revenue = [12400.0, 15800.0, 13200.0, 17600.0, 19100.0, 21500.0]
+    array<number> expenses = [8200.0, 9100.0, 8800.0, 10400.0, 11200.0, 12000.0]
+
+    return GraphicalUi.column([
+        # Key metrics — 1 col phone / 2 col tablet / 4 col desktop.
+        GraphicalUi.grid(4, [
+            view_metric_card("Revenue", "$21,500", "credit_card", "+12.4%", true),
+            view_metric_card("Orders", "384", "shopping_cart", "+4.1%", true),
+            view_metric_card("Customers", "1,247", "users", "+8.0%", true),
+            view_metric_card("Growth", "+12.4%", "trending_up", "-1.2%", false)
+        ], stat_grid_columns()),
+
+        # Revenue trend line chart
+        GraphicalUi.accessible(
+            GraphicalUi.panel("Revenue Trend", [
+                GraphicalUi.line_chart(months, revenue,
+                    {"x_label": "Month", "y_label": "Revenue ($)"})
+            ]),
+            { "role": "img", "aria_label": "Revenue trend over six months" }
+        ),
+
+        # Side-by-side charts — stack on phones, pair on tablet and up.
+        GraphicalUi.grid(2, [
+            GraphicalUi.panel("Expenses by Month", [
+                GraphicalUi.area_chart(months, expenses,
+                    {"x_label": "Month", "y_label": "Expenses ($)"})
+            ]),
+            GraphicalUi.panel("Quarterly Revenue", [
+                GraphicalUi.horizontal_bar_chart(
+                    ["Q1", "Q2"],
+                    [41400.0, 58200.0],
+                    {"x_label": "Revenue ($)", "y_label": "Quarter"}
+                )
+            ])
+        ], pair_grid_columns())
+    ], GraphicalUi.spacing(16))
+}
+
+function widget view_products_tab() {
+    array<string> categories = ["Electronics", "Clothing", "Books", "Home", "Sports"]
+    array<number> sales = [8400.0, 5200.0, 3100.0, 4800.0, 2900.0]
+    array<number> units = [142.0, 238.0, 410.0, 195.0, 87.0]
+
+    return GraphicalUi.column([
+        GraphicalUi.grid(2, [
+            GraphicalUi.panel("Sales by Category", [
+                GraphicalUi.vertical_bar_chart(categories, sales,
+                    {"x_label": "Category", "y_label": "Sales ($)"})
+            ]),
+            GraphicalUi.panel("Category Distribution", [
+                GraphicalUi.pie_chart(categories, sales, {"legend": true})
+            ])
+        ], pair_grid_columns()),
+
+        GraphicalUi.grid(2, [
+            GraphicalUi.panel("Units Sold", [
+                GraphicalUi.donut_chart(categories, units, "1,072 total", {"legend": true})
+            ]),
+            GraphicalUi.panel("Price vs Volume", [
+                GraphicalUi.scatter_plot(
+                    [59.15, 21.85, 7.56, 24.62, 33.33],
+                    [142.0, 238.0, 410.0, 195.0, 87.0],
+                    "Avg Price ($)",
+                    "Units Sold"
+                )
+            ])
+        ], pair_grid_columns())
+    ], GraphicalUi.spacing(16))
+}
+
+function widget view_targets_tab() {
+    return GraphicalUi.column([
+        GraphicalUi.panel("Quarterly Targets", [
+            GraphicalUi.label("Q1 Revenue — $41,400 / $45,000"),
+            GraphicalUi.progress_bar(41400, 45000),
+            GraphicalUi.label("Q2 Revenue — $58,200 / $55,000"),
+            GraphicalUi.progress_bar(55000, 55000),
+            GraphicalUi.label("New Customers — 1,247 / 1,500"),
+            GraphicalUi.progress(1247, 1500),
+            GraphicalUi.label("Order Fulfilment — 96.2%"),
+            GraphicalUi.progress(962, 1000)
+        ], GraphicalUi.spacing(8)),
+
+        GraphicalUi.alert("Q2 revenue target exceeded by 5.8%!", GraphicalUi.SUCCESS),
+        GraphicalUi.alert("Customer acquisition is 16.9% below target.", GraphicalUi.WARNING)
+    ], GraphicalUi.spacing(12))
+}
+
+function widget view_dashboard(dictionary model) {
+    integer active_tab = model["active_tab"]
+    string last_updated = model["last_updated"]
+
+    return GraphicalUi.column([
+        # Toolbar with title and info
+        GraphicalUi.toolbar([
+            GraphicalUi.icon("briefcase", 20),
+            GraphicalUi.heading("Sales Dashboard", 1),
+            GraphicalUi.flexible_space(),
+            GraphicalUi.label("Last updated: ${last_updated}",
+                {"color": GraphicalUi.VAR_FG, "font_size": GraphicalUi.VAR_TEXT_SM})
+        ]),
+
+        GraphicalUi.separator(),
+
+        # Tabbed content — wrapped in an error boundary for resilience.
+        GraphicalUi.error_boundary(
+            (string err) -> GraphicalUi.column([
+                GraphicalUi.alert(
+                    "This section couldn't be displayed. Try another tab — the dashboard "
+                    + "refreshes on its own every 30 seconds.",
+                    GraphicalUi.ERROR),
+                GraphicalUi.label("Technical details: ${err}",
+                    {"color": "color-mix(in srgb, ${GraphicalUi.VAR_FG} 65%, ${GraphicalUi.VAR_BG})",
+                     "font_size": GraphicalUi.VAR_TEXT_XS})
+            ], GraphicalUi.spacing(8)),
+            () -> GraphicalUi.tabs(
+                ["Overview", "Products", "Targets"],
+                active_tab,
+                (integer index) -> Dictionary.set(model, "active_tab", index),
+                [
+                    view_overview_tab(),
+                    view_products_tab(),
+                    view_targets_tab()
+                ],
+                { "id": "main_tabs" }
+            )
+        )
+    ], GraphicalUi.spacing(8))
+}
+
+# Auto-refresh: update the "last updated" timestamp every 30 seconds.
+function array<dictionary<string>> dashboard_subscriptions(dictionary _model) {
+    return [
+        GraphicalUi.on_tick("refresh", 30000, () -> "refresh")
+    ]
+}
+
+@main
+function void main() {
+    GraphicalUi.app(dashboard_config())
+}
+
+# Current local time for the "Last updated" label. DateTime.format returns a
+# result<string> using YYYY/MM/DD/hh/mm/ss placeholders, so unwrap it to show a
+# plain timestamp rather than the raw result value.
+function string current_timestamp() {
+    result<string> formatted = DateTime.format(DateTime.now_unix(), "YYYY-MM-DD hh:mm")
+    return match formatted {
+        success(value) { value }
+        failure(_error) { "unknown" }
+    }
+}
+
+function dictionary dashboard_model() {
+    mutable dictionary model = {"active_tab": 0}
+    model["last_updated"] = current_timestamp()
+    return model
+}
+
+# Refresh reducer: stamps the new time and announces it so assistive tech is told
+# the figures updated. Split out (rather than inlined in update()) so the tail
+# value is an explicit return and the config lambda stays expression-bodied.
+function dictionary refresh_dashboard(dictionary model) {
+    dictionary updated = Dictionary.set(model, "last_updated", current_timestamp())
+    return GraphicalUi.with_command(updated, GraphicalUi.announce(
+        "Dashboard refreshed at ${Dictionary.get_or(updated, "last_updated", "")}."))
+}
+
+# Exposed as a named function (rather than inlined in main) so the tab switching
+# and the auto-refresh reducer can be driven by the @test blocks below.  The tabs
+# widget carries an `id` so it can be located and its select handler fired.
+function dictionary dashboard_config() {
+    mutable dictionary config = {"_": "gui_config"}
+    config["title"] = "Luma Sales Dashboard"
+    config["width"] = 960
+    config["height"] = 700
+    config["fullscreen"] = true
+    config["model"] = dashboard_model()
+    config["view"] = view_dashboard
+    config["update"] = (dictionary model, string msg) -> if msg == "refresh" {
+        refresh_dashboard(model)
+    } else {
+        model
+    }
+    config["subscribe"] = dashboard_subscriptions
+
+    return config
+}
+
+# ─── Interaction tests ─────────────────────────────────────
+
+@test
+function void test_tab_select_switches_active_tab() {
+    array<integer> products_tab = [1]
+    dictionary outcome = GraphicalUi.test_event(dashboard_config(), dashboard_model(),
+        "main_tabs", "change", products_tab)
+    assert(Dictionary.get_or(outcome, "active_tab", -1) == 1)
+}
+
+@test
+function void test_tab_select_targets_tab() {
+    array<integer> targets_tab = [2]
+    dictionary outcome = GraphicalUi.test_event(dashboard_config(), dashboard_model(),
+        "main_tabs", "change", targets_tab)
+    assert(Dictionary.get_or(outcome, "active_tab", -1) == 2)
+}
+
+@test
+function void test_refresh_message_keeps_active_tab() {
+    dictionary outcome = GraphicalUi.test_message(dashboard_config(), dashboard_model(), "refresh")
+    assert(Dictionary.get_or(outcome, "active_tab", -1) == 0)
+}
+
+@test
+function void test_unknown_message_is_noop() {
+    dictionary outcome = GraphicalUi.test_message(dashboard_config(), dashboard_model(), "noop")
+    assert(Dictionary.get_or(outcome, "active_tab", -1) == 0)
+}
+
+@test
+function void test_renders_dashboard_heading() {
+    dictionary heading = GraphicalUi.test_find(dashboard_config(), dashboard_model(), "Sales Dashboard")
+    assert(Dictionary.get_or(heading, "type", "") == "heading")
+}

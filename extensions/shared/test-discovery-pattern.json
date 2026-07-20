@@ -1,0 +1,26 @@
+{
+    "description": "Canonical patterns for discovering Luma annotations in source files. The VS Code extension is generated from this file (extensions/vscode/src/generated/test-discovery.ts) because it discovers annotations with regular expressions. The tree-sitter based Zed extension implements the SAME contract natively and cannot consume these regexes: Zed (languages/luma/runnables.scm) uses tree-sitter queries instead. Update every implementation in tandem when the annotation or function-declaration grammar changes.",
+    "annotation": "@test",
+    "test_function": {
+        "description": "Matches an @test-annotated function declaration. Capture group 1 is the function name. Allows preceding annotations and an optional generic/qualified return type.",
+        "regex": "^(?:@\\w+\\s+)*@test\\s*\\n?\\s*function\\s+(?:<[^>]*>\\s+)?[\\w<>,\\s[\\]().|]+?\\s+(\\w+)\\s*\\(",
+        "flags": "gm",
+        "capture_groups": {
+            "1": "function_name"
+        }
+    },
+    "test_annotation": {
+        "description": "Matches a standalone @test annotation line (the file contains tests).",
+        "regex": "^@test\\s*$",
+        "flags": "m"
+    },
+    "main_annotation": {
+        "description": "Matches a standalone @main annotation line (the file is runnable).",
+        "regex": "^@main\\s*$",
+        "flags": "m"
+    },
+    "implementations": [
+        "extensions/vscode/src/generated/test-discovery.ts (generated — regex)",
+        "extensions/zed/languages/luma/runnables.scm (tree-sitter query)"
+    ]
+}

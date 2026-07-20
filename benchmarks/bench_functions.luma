@@ -1,0 +1,114 @@
+# Function call benchmarks: overhead, recursion, closures.
+
+# --- Helper functions ---
+
+function integer bench_int_identity(integer x) {
+    return x
+}
+
+function integer bench_fib(integer n) {
+    if n <= 1 {
+        return n
+    }
+    return bench_fib(n - 1) + bench_fib(n - 2)
+}
+
+function integer bench_add_pair(integer a, integer b) {
+    return a + b
+}
+
+function integer bench_combine_three(integer a, integer b, integer c) {
+    return a * 100 + b * 10 + c
+}
+
+function integer bench_with_default(integer x, integer step = 1) {
+    return x + step
+}
+
+function integer bench_tail_loop(integer n, integer acc) {
+    if n <= 0 {
+        return acc
+    }
+    return bench_tail_loop(n - 1, acc + 1)
+}
+
+function integer bench_apply_fn(function(integer) -> integer f, integer x) {
+    return f(x)
+}
+
+function function(integer) -> integer bench_make_adder(integer base) {
+    return (integer x) -> base + x
+}
+
+function void bench_do_nothing() {
+    return
+}
+
+# --- Benchmarks ---
+
+function BenchResult run_function_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    st = time_it(st, "function call overhead", 50000, () -> {
+        integer _result = bench_int_identity(42)
+    })
+
+    st = time_it(st, "void function call", 50000, () -> {
+        bench_do_nothing()
+    })
+
+    st = time_it(st, "named argument call", 50000, () -> {
+        integer _result = bench_add_pair(a: 1, b: 2)
+    })
+
+    st = time_it(st, "mixed positional + named call", 50000, () -> {
+        # One leading positional argument plus two reordered named arguments
+        # exercises the VM's combined positional + named binding path.
+        integer _result = bench_combine_three(1, c: 3, b: 2)
+    })
+
+    st = time_it(st, "default parameter call", 50000, () -> {
+        integer _result = bench_with_default(41)
+    })
+
+    st = time_it(st, "higher-order call", 20000, () -> {
+        integer _result = bench_apply_fn((integer n) -> n + 1, 41)
+    })
+
+    st = time_it(st, "recursive fibonacci(15)", 50, () -> {
+        integer _result = bench_fib(15)
+    })
+
+    st = time_it(st, "tail recursion (depth 2000)", 500, () -> {
+        integer _result = bench_tail_loop(2000, 0)
+    })
+
+    st = time_it(st, "closure capture", 10000, () -> {
+        integer x = 42
+        function() -> integer f = () -> x + 1
+        integer _result = f()
+    })
+
+    st = time_it(st, "closure factory + call", 10000, () -> {
+        function(integer) -> integer add = bench_make_adder(10)
+        integer _result = add(5)
+    })
+
+    st = time_it(st, "block-body lambda call", 20000, () -> {
+        function(integer) -> integer sq = (integer n) -> {
+            integer t = n * n
+            return t + 1
+        }
+        integer _result = sq(7)
+    })
+
+    st = time_it(st, "multi-capture closure", 10000, () -> {
+        integer a = 10
+        integer b = 20
+        integer c = 30
+        function() -> integer f = () -> a + b + c
+        integer _result = f()
+    })
+
+    return st
+}

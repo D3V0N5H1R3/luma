@@ -1,0 +1,39 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — Reusable Resolve Linux Distro Matrix
+#
+# Reads the distro list from .github/linux-distros.json and
+# publishes it as a job matrix. The list lives in that single
+# file so it is defined once and shared; this reusable workflow
+# is the single glue job that loads it, consumed by both ci.yml
+# (build coverage) and release.yml (release validation).
+# ─────────────────────────────────────────────────────────────
+
+name: Reusable — Resolve Linux Distro Matrix
+
+on:
+  workflow_call:
+    outputs:
+      matrix:
+        description: The parsed .github/linux-distros.json matrix, ready for fromJSON.
+        value: ${{ jobs.resolve.outputs.matrix }}
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Resolve Linux distro matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.load.outputs.matrix }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Load distro matrix
+        id: load
+        run: echo "matrix=$(jq -c . .github/linux-distros.json)" >> "$GITHUB_OUTPUT"

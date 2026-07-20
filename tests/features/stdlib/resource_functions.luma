@@ -1,0 +1,283 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Resource Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_resource_with_returns_body_value() {
+    # Body return value is propagated.
+    integer out = Resource.with(42, (integer v) -> v, (integer _v) -> none)
+
+    assert(out == 42)
+}
+
+@test
+function void test_resource_with_cleanup_does_not_affect_return() {
+    # Verify cleanup runs but its return value is discarded;
+    # the body's return value is what Resource.with returns.
+    integer body_value = 99
+
+    integer out = Resource.with(
+        body_value,
+        (integer v) -> v,
+        (integer _v) -> 0
+    )
+
+    assert(out == 99)
+}
+
+@test
+function void test_resource_with_string_transform() {
+    string out = Resource.with(
+        "hello",
+        (string v) -> String.uppercase(v),
+        (string _v) -> none
+    )
+
+    assert(out == "HELLO")
+}
+
+@test
+function void test_resource_with_file_cleanup() {
+    # Write, read, then delete — cleanup simulates close.
+    result<boolean> _w = FileSystem.write_file("_test_resource_tmp.txt", "data")
+
+    string content = Resource.with(
+        "_test_resource_tmp.txt",
+        (string path) -> Result.unwrap(FileSystem.read_file(path)),
+        (string path) -> FileSystem.delete(path)
+    )
+
+    assert(content == "data")
+    assert(!Result.unwrap(FileSystem.exists("_test_resource_tmp.txt")))
+}
+
+# ─── Negative tests ─────────────────────────────────────
+
+@test
+function void test_resource_with_cleanup_runs_on_error() {
+    # Cleanup must execute even when the body throws.
+    reference<boolean> cleanup_ran = Reference.new(false)
+    mutable string caught = ""
+
+    try {
+        Resource.with(
+            "res",
+            (string _v) -> {
+                assert(false, "force error")
+                return "unreachable"
+            },
+            (string _v) -> Reference.set(cleanup_ran, true)
+        )
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.length(caught) > 0, "body error should propagate")
+    assert(Reference.get(cleanup_ran), "cleanup must run even on error")
+}
+
+# ─── Resource.using ──────────────────────────────────────
+
+@test
+function void test_resource_using_returns_body_value() {
+    integer out = Resource.using(
+        () -> 42,
+        (integer v) -> v * 2,
+        (integer _v) -> none
+    )
+
+    assert(out == 84)
+}
+
+@test
+function void test_resource_using_release_runs() {
+    reference<boolean> released = Reference.new(false)
+
+    integer out = Resource.using(
+        () -> 10,
+        (integer v) -> v,
+        (integer _v) -> Reference.set(released, true)
+    )
+
+    assert(out == 10)
+    assert(Reference.get(released), "release must run after body")
+}
+
+@test
+function void test_resource_using_release_runs_on_error() {
+    reference<boolean> released = Reference.new(false)
+    mutable string caught = ""
+
+    try {
+        Resource.using(
+            () -> "res",
+            (string _v) -> {
+                assert(false, "force error")
+                return "unreachable"
+            },
+            (string _v) -> Reference.set(released, true)
+        )
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.length(caught) > 0, "body error should propagate")
+    assert(Reference.get(released), "release must run even on error")
+}
+
+@test
+function void test_resource_using_acquire_failure_skips_release() {
+    reference<boolean> released = Reference.new(false)
+    mutable string caught = ""
+
+    try {
+        Resource.using(
+            () -> {
+                assert(false, "acquire fails")
+                return 0
+            },
+            (integer _v) -> none,
+            (integer _v) -> Reference.set(released, true)
+        )
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.length(caught) > 0, "acquire error should propagate")
+    assert(!Reference.get(released), "release must NOT run when acquire fails")
+}
+
+# ─── Cleanup / release on the success path ───────────────
+
+@test
+function void test_resource_with_cleanup_runs_on_success() {
+    # Cleanup must run after a successful body, not only on error.
+    reference<boolean> cleanup_ran = Reference.new(false)
+
+    integer out = Resource.with(
+        7,
+        (integer v) -> v + 1,
+        (integer _v) -> Reference.set(cleanup_ran, true)
+    )
+
+    assert(out == 8)
+    assert(Reference.get(cleanup_ran), "cleanup must run on the success path")
+}
+
+@test
+function void test_resource_nested_with() {
+    # Nested scopes: inner value propagates outward and both cleanups run.
+    reference<integer> cleanups = Reference.new(0)
+
+    integer out = Resource.with(
+        10,
+        (integer outer) -> Resource.with(
+            outer + 5,
+            (integer inner) -> inner * 2,
+            (integer _v) -> Reference.update(cleanups, (integer n) -> n + 1)
+        ),
+        (integer _v) -> Reference.update(cleanups, (integer n) -> n + 1)
+    )
+
+    assert(out == 30, "nested body value propagates outward")
+    assert(Reference.get(cleanups) == 2, "both cleanups must run")
+}
+
+# ─── Errors raised by cleanup / release ──────────────────
+
+@test
+function void test_resource_with_cleanup_error_on_success_propagates() {
+    # Body succeeds but cleanup throws — the cleanup error must propagate.
+    mutable string caught = ""
+
+    try {
+        string _out = Resource.with(
+            "res",
+            (string v) -> v,
+            (string _v) -> {
+                assert(false, "cleanup boom")
+                return none
+            }
+        )
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "cleanup boom"), "cleanup error should propagate")
+}
+
+@test
+function void test_resource_with_body_error_suppresses_cleanup_error() {
+    # Body and cleanup both throw — the body error wins; the cleanup error is
+    # swallowed (logged, not rethrown) so the original failure is not masked.
+    mutable string caught = ""
+
+    try {
+        Resource.with(
+            "res",
+            (string _v) -> {
+                assert(false, "BODY_FAILURE")
+                return "unreachable"
+            },
+            (string _v) -> {
+                assert(false, "CLEANUP_FAILURE")
+                return none
+            }
+        )
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "BODY_FAILURE"), "body error should propagate")
+    assert(!String.contains(caught, "CLEANUP_FAILURE"), "cleanup error must be suppressed")
+}
+
+@test
+function void test_resource_using_release_error_on_success_propagates() {
+    # Body succeeds but release throws — the release error must propagate.
+    mutable string caught = ""
+
+    try {
+        integer _out = Resource.using(
+            () -> 10,
+            (integer v) -> v + 1,
+            (integer _v) -> {
+                assert(false, "release boom")
+                return none
+            }
+        )
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "release boom"), "release error should propagate")
+}
+
+@test
+function void test_resource_using_body_error_suppresses_release_error() {
+    # Body and release both throw — the body error wins; the release error is
+    # swallowed (logged, not rethrown) so the original failure is not masked.
+    mutable string caught = ""
+
+    try {
+        Resource.using(
+            () -> "acquired",
+            (string _v) -> {
+                assert(false, "BODY_FAILURE")
+                return "unreachable"
+            },
+            (string _v) -> {
+                assert(false, "RELEASE_FAILURE")
+                return none
+            }
+        )
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "BODY_FAILURE"), "body error should propagate")
+    assert(!String.contains(caught, "RELEASE_FAILURE"), "release error must be suppressed")
+}

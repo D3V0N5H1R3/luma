@@ -1,0 +1,53 @@
+# VM: recursive and generic choice types executed end-to-end.
+# Reaches MakeChoiceConstructor, match destructuring, structural
+# equality, and unit-variant dispatch through the VM.
+
+choice Color { Red  Green  Blue }
+
+choice Expr {
+    Num(integer value)
+    Add(Expr left, Expr right)
+    Mul(Expr left, Expr right)
+}
+
+function integer eval_expr(Expr e) {
+    return match e {
+    case Expr.Num(v) { v }
+    case Expr.Add(l, r) { eval_expr(l) + eval_expr(r) }
+    case Expr.Mul(l, r) { eval_expr(l) * eval_expr(r) }
+    }
+}
+
+choice List<T> {
+    Nil
+    Cons(T head, List<T> tail)
+}
+
+function integer list_sum(List<integer> xs) {
+    return match xs {
+    case List.Nil { 0 }
+    case List.Cons(h, t) { h + list_sum(t) }
+    }
+}
+
+function string color_label(Color c) {
+    return match c {
+    case Color.Red   { "red" }
+    case Color.Green { "green" }
+    case Color.Blue  { "blue" }
+    }
+}
+
+@main
+function void main() {
+    Expr e = Expr.Mul(Expr.Add(Expr.Num(3), Expr.Num(4)), Expr.Num(5))
+    print(eval_expr(e))
+
+    List<integer> xs = List.Cons(1, List.Cons(2, List.Cons(3, List.Nil)))
+    print(list_sum(xs))
+
+    Color a = Color.Green
+    Color b = Color.Green
+    print(a == b)
+    print(color_label(a))
+}

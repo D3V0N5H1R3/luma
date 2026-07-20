@@ -1,0 +1,7 @@
+# Closures and higher-order functions
+function integer apply(function(integer) -> integer f, integer x) {
+    return f(x)
+}
+
+function(integer) -> function(integer) -> integer adder = (integer a) -> (integer b) -> a + b
+integer result = apply(adder(5), 10)

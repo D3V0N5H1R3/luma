@@ -1,0 +1,105 @@
+# VM: result construction, Result.* combinators, '?' propagation,
+# error-pipe, and match destructuring executed end-to-end.
+# Reaches MakeResult, error-payload propagation, typed-error match,
+# and structured failure metadata through the VM.
+
+choice MathError { DivisionByZero  Overflow }
+
+function result<integer> safe_divide(integer a, integer b) {
+    if b == 0 {
+        return failure("division by zero")
+    }
+
+    return success(a / b)
+}
+
+function result<number, MathError> typed_divide(number a, number b) {
+    if b == 0 {
+        return failure(MathError.DivisionByZero)
+    }
+
+    return success(a / b)
+}
+
+function integer double_it(integer n) {
+    return n * 2
+}
+
+# '?' propagation across two fallible calls.
+function result<integer> compute() {
+    integer first = safe_divide(100, 5)?
+    integer second = safe_divide(first, 2)?
+
+    return success(first + second)
+}
+
+@main
+function void main() {
+    result<integer> chained = success(1)
+    |> Result.map((integer x) -> x + 1)
+    |> Result.flat_map((integer x) -> success(x * 10))
+
+    print(Result.unwrap_or(chained, 0))
+
+    # Error-pipe chain with a plain left value.
+    result<integer> piped = 21 !> double_it() !> double_it()
+    print(Result.unwrap_or(piped, 0))
+
+    result<(integer, integer)> zipped = Result.zip(success(1), success(2))
+    array<result<integer>> items = [success(1), success(2), success(3)]
+    result<array<integer>> collected = Result.collect(items)
+
+    print(Result.is_success(zipped) && Result.is_success(collected))
+
+    string folded = Result.fold(compute(), (integer _v) -> "ok", (string e) -> e)
+    print(folded)
+
+    result<number, MathError> bad = typed_divide(1.0, 0.0)
+    string label = match bad {
+        success(_v) { "ok" }
+        failure(e) {
+            match e {
+            case MathError.DivisionByZero { "div0" }
+            case MathError.Overflow { "ovf" }
+            }
+        }
+    }
+
+    print(label)
+
+    # Structured metadata from a stdlib failure.
+    result<integer> oob = Array.get([1, 2, 3], 9)
+    print(Result.error_code(oob))
+    print(Result.source_function(oob))
+
+    # Remaining combinators executed end-to-end through the VM.
+    result<integer> recovered = Result.recover(failure("e"), (string _e) -> 0)
+    result<integer> rescued = Result.or_else(failure("e"), (string _e) -> success(0))
+    result<integer> kept = Result.filter(success(5), (integer x) -> x > 0, "small")
+    result<integer> tapped = Result.tap(success(7), (integer v) -> print(v))
+    result<integer> wrapped = Result.map_failure(failure("e"), (string m) -> "wrapped: " + m)
+    result<integer> bimapped = Result.bimap(success(5), (integer v) -> v * 2, (string _e) -> 0)
+    result<integer> flat = Result.flatten(success(success(9)))
+
+    print(Result.unwrap_or(recovered, -1))
+    print(Result.unwrap_or(rescued, -1))
+    print(Result.unwrap_or(kept, -1))
+    print(Result.unwrap_or(tapped, -1))
+    print(Result.is_failure(wrapped))
+    print(Result.unwrap_or(bimapped, -1))
+    print(Result.unwrap_or(flat, -1))
+
+    # Typed map_* variants over each scalar inner type.
+    result<number> mn = Result.map_number(success(21), (number x) -> x * 2.0)
+    result<string> ms = Result.map_string(success("hi"), (string s) -> String.uppercase(s))
+    result<boolean> mb = Result.map_boolean(success(true), (boolean b) -> !b)
+    result<integer> mi = Result.map_integer(success(5), (integer n) -> n * 2)
+
+    print(Result.unwrap_or(ms, "?"))
+    print(Result.is_success(mn) && Result.is_success(mb) && Result.is_success(mi))
+
+    # success → optional and direct unwrap.
+    optional<integer> opt = Result.to_optional(success(99))
+    print(Optional.unwrap_or(opt, -1))
+    print(Result.unwrap(success(123)))
+}

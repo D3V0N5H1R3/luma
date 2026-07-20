@@ -1,0 +1,76 @@
+#include "stdlib/stdlib_catalog_internal.hpp"
+
+namespace luma::stdlib::detail {
+
+void register_date_time_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                                  const ParamShorthands& p) {
+    append_specs(
+        specs,
+        {
+            m.fn("add_days", 2, "(timestamp: number, days: number)", R::number_type(),
+                 {p.number, p.number}),
+            m.fn("add_hours", 2, "(timestamp: number, hours: number)", R::number_type(),
+                 {p.number, p.number}),
+            m.fn("add_months", 2, "(timestamp: number, months: integer)", R::result_number(),
+                 {p.number, p.integer}),
+            m.fn("add_milliseconds", 2, "(timestamp: number, ms: integer)", R::number_type(),
+                 {p.number, p.integer}),
+            m.fn("add_seconds", 2, "(timestamp: number, seconds: number)", R::number_type(),
+                 {p.number, p.number}),
+            m.fn("add_years", 2, "(timestamp: number, years: integer)", R::result_number(),
+                 {p.number, p.integer}),
+            m.fn("day_of_month", 1, "(timestamp: number)", R::result_integer(), {p.number}),
+            m.fn("day_of_week", 1, "(timestamp: number)", R::result_integer(), {p.number}),
+            m.fn("days_in_month", 2, "(year: integer, month: integer)", R::result_integer(),
+                 {p.integer, p.integer}),
+            m.fn("difference_days", 2, "(start: number, end: number)", R::number_type(),
+                 {p.number, p.number}),
+            m.fn("difference_hours", 2, "(start: number, end: number)", R::number_type(),
+                 {p.number, p.number}),
+            m.fn("difference_months", 2, "(start: number, end: number)", R::result_integer(),
+                 {p.number, p.number}),
+            m.fn("difference_milliseconds", 2, "(start: number, end: number)", R::number_type(),
+                 {p.number, p.number}),
+            m.fn("difference_seconds", 2, "(start: number, end: number)", R::number_type(),
+                 {p.number, p.number}),
+            m.fn("difference_years", 2, "(start: number, end: number)", R::result_integer(),
+                 {p.number, p.number}),
+            m.fn("from_iso_string", 1, "(iso: string)", R::result_number(), {p.string}),
+            m.fn("from_offset", 2, "(timestamp: number, offset: number)", R::result_number(),
+                 {p.number, p.number}),
+            m.fn("from_parts", 6,
+                 "(year: integer, month: integer, day: integer, hour: integer, minute: integer, "
+                 "second: "
+                 "integer)",
+                 R::result_number(),
+                 {p.integer, p.integer, p.integer, p.integer, p.integer, p.integer}),
+            m.fn("from_parts_offset", 7,
+                 "(year: integer, month: integer, day: integer, hour: integer, minute: integer, "
+                 "second: "
+                 "integer, offset: number)",
+                 R::result_number(),
+                 {p.integer, p.integer, p.integer, p.integer, p.integer, p.integer, p.number}),
+            m.fn("format", 2, "(timestamp: number, pattern: string)", R::result_string(),
+                 {p.number, p.string}),
+            m.fn("hour", 1, "(timestamp: number)", R::result_integer(), {p.number}),
+            m.fn("is_after", 2, "(a: number, b: number)", R::boolean_type(), {p.number, p.number}),
+            m.fn("is_before", 2, "(a: number, b: number)", R::boolean_type(), {p.number, p.number}),
+            m.fn("is_leap_year", 1, "(year: integer)", R::boolean_type(), {p.integer}),
+            m.fn("minute", 1, "(timestamp: number)", R::result_integer(), {p.number}),
+            m.fn("month", 1, "(timestamp: number)", R::result_integer(), {p.number}),
+            m.fn("milliseconds_since_start", 0, "()", R::number_type()),
+            m.fn("now_iso_string", 0, "()", R::result_string()),
+            m.fn("now_unix", 0, "()", R::number_type()),
+            m.fn("offset_hours", 1, "(offset: number)", R::number_type(), {p.number}),
+            m.fn("second", 1, "(timestamp: number)", R::result_integer(), {p.number}),
+            m.fn("to_iso_string", 1, "(timestamp: number)", R::result_string(), {p.number}),
+            m.fn("to_iso_string_offset", 2, "(timestamp: number, offset: number)",
+                 R::result_string(), {p.number, p.number}),
+            m.fn("to_offset", 2, "(timestamp: number, offset: number)", R::result_number(),
+                 {p.number, p.number}),
+            m.fn("to_parts", 1, "(timestamp: number)", R::result(named::time_parts()), {p.number}),
+            m.fn("year", 1, "(timestamp: number)", R::result_integer(), {p.number}),
+        });
+}
+
+} // namespace luma::stdlib::detail

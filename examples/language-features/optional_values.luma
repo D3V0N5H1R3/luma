@@ -1,0 +1,92 @@
+# ═══════════════════════════════════════════════════════════
+# Optional Values
+#
+# Demonstrates optional<T>, some(), none, the ?? operator,
+# optional chaining (?. and ?[), and the Optional module.
+# ═══════════════════════════════════════════════════════════
+
+record User {
+    string name,
+    string email
+}
+
+record Profile {
+    User user,
+    optional<string> bio,
+    optional<array<string>> tags
+}
+
+function optional<User> find_user(array<User> users, string name) {
+    for user in users {
+        if user.name == name {
+            return some(user)
+        }
+    }
+
+    return none
+}
+
+function string format_profile(Profile profile) {
+    string bio_text = profile.bio ?? "No bio provided"
+
+    string tags_label = match profile.tags {
+    case some(t) { Array.join(t, ", ") }
+    case none    { "none" }
+    }
+
+    return "${profile.user.name} — ${bio_text} [tags: ${tags_label}]"
+}
+
+@main
+function void main() {
+    array<User> users = [
+        User { name = "Alice", email = "alice@example.com" },
+        User { name = "Bob", email = "bob@example.com" },
+        User { name = "Carol", email = "carol@example.com" }
+    ]
+
+    # Finding users — returns optional<User>
+    optional<User> found = find_user(users, "Bob")
+    optional<User> missing = find_user(users, "Dave")
+
+    string found_name = found?.name ?? "unknown"
+    string missing_name = missing?.name ?? "unknown"
+
+    print("Found: ${found_name}")
+    print("Missing: ${missing_name}")
+
+    # Optional chaining with ?.
+    optional<User> maybe = none
+    string email = maybe?.email ?? "no email"
+
+    print("Email: ${email}")
+
+    # Profiles with optional fields
+    array<Profile> profiles = [
+        Profile { user = users[0], bio = some("Luma enthusiast"), tags = some(["dev", "luma"]) },
+        Profile { user = users[1], bio = none, tags = some(["tester"]) },
+        Profile { user = users[2], bio = some("New here"), tags = none }
+    ]
+
+    for profile in profiles {
+        print(format_profile(profile))
+    }
+
+    # Optional module combinators with pipes
+    print("")
+    print("Optional pipeline:")
+
+    string label = some(42)
+    |> Optional.filter((integer i) -> i > 0)
+    |> Optional.map((integer i) -> "positive: ${i}")
+    |> Optional.unwrap_or("not positive")
+
+    print("  ${label}")
+
+    optional<integer> empty = none
+    string fallback = empty
+    |> Optional.map((integer i) -> "value: ${i}")
+    |> Optional.unwrap_or("no value")
+
+    print("  ${fallback}")
+}

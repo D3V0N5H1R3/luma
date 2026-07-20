@@ -1,0 +1,302 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Type Aliases
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+type UserId = string
+
+type Score = number
+
+type Predicate = function(integer) -> boolean
+
+type IntList = array<integer>
+
+type ScoreMap = dictionary<number>
+
+function UserId get_user_id() {
+    return "user-123"
+}
+
+function Score add_scores(Score first, Score second) {
+    return first + second
+}
+
+function boolean apply_predicate(Predicate p, integer value) {
+    return p(value)
+}
+
+function result<UserId> find_user(boolean exists) {
+    if exists {
+        return success("user-found")
+    }
+
+    return failure("not found")
+}
+
+# ───────────────────────────────────────────────────────────
+# Basic type alias usage
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_type_alias() {
+    UserId id = "user-42"
+    Score points = 99.0
+
+    assert(id == "user-42")
+    assert(Math.approximately_equal(points, 99.0))
+}
+
+@test
+function void test_type_alias_in_function_signature() {
+    UserId user_id = get_user_id()
+
+    assert(user_id == "user-123")
+
+    Score total = add_scores(10.0, 20.0)
+
+    assert(Math.approximately_equal(total, 30.0))
+}
+
+@test
+function void test_type_alias_interchangeable() {
+    UserId user_id = "abc"
+    string user_id_as_string = user_id
+
+    assert(user_id_as_string == "abc")
+
+    Score score_value = 5.0
+    number score_as_number = score_value
+
+    assert(Math.approximately_equal(score_as_number, 5.0))
+}
+
+# ───────────────────────────────────────────────────────────
+# Function type aliases
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_function_type_alias() {
+    Predicate is_positive = (integer x) -> x > 0
+
+    assert(is_positive(5))
+    assert(!is_positive(-3))
+}
+
+@test
+function void test_function_type_alias_as_parameter() {
+    boolean val = apply_predicate((integer x) -> x % 2 == 0, 4)
+
+    assert(val)
+}
+
+# ───────────────────────────────────────────────────────────
+# Collection type aliases
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_array_type_alias() {
+    IntList numbers = [10, 20, 30]
+
+    assert(Array.length(numbers) == 3)
+    assert(numbers[1] == 20)
+}
+
+@test
+function void test_dictionary_type_alias() {
+    ScoreMap scores = {"math": 95.0, "science": 87.5}
+
+    assert(Math.approximately_equal(scores["math"], 95.0))
+    assert(Dictionary.length(scores) == 2)
+}
+
+# ───────────────────────────────────────────────────────────
+# Type aliases with other features
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_type_alias_in_array() {
+    array<UserId> user_ids = ["u1", "u2", "u3"]
+
+    assert(Array.length(user_ids) == 3)
+    assert(user_ids[0] == "u1")
+}
+
+@test
+function void test_type_alias_in_dictionary() {
+    dictionary<Score> grades = {"alice": 90.0, "bob": 85.0}
+
+    assert(Math.approximately_equal(grades["alice"], 90.0))
+}
+
+@test
+function void test_type_alias_with_result() {
+    UserId found = find_user(true) |> Result.unwrap()
+
+    assert(found == "user-found")
+
+    result<UserId> not_found = find_user(false)
+
+    assert(Result.is_failure(not_found))
+}
+
+# ───────────────────────────────────────────────────────────
+# Additional type alias tests
+# ───────────────────────────────────────────────────────────
+
+# Alias with optional.
+type MaybeScore = optional<number>
+
+@test
+function void test_type_alias_optional() {
+    MaybeScore present = some(95.0)
+    MaybeScore absent = none
+
+    assert(Optional.is_some(present))
+    assert(!Optional.is_some(absent))
+}
+
+# Alias of a tuple.
+type Coordinate = (number, number)
+
+@test
+function void test_type_alias_tuple() {
+    Coordinate point = (3.0, 4.0)
+
+    assert(Math.approximately_equal(point.0, 3.0))
+    assert(Math.approximately_equal(point.1, 4.0))
+}
+
+# Alias used in function signature with pipe.
+@test
+function void test_type_alias_in_pipe() {
+    IntList numbers = [3, 1, 4, 1, 5]
+    integer length = numbers |> Array.length()
+
+    assert(length == 5)
+}
+
+# Alias interchangeable in array operations.
+@test
+function void test_type_alias_in_map() {
+    IntList nums = [1, 2, 3]
+    IntList doubled = Result.unwrap(Array.map(nums, (integer x) -> x * 2))
+
+    assert(doubled[0] == 2)
+    assert(doubled[2] == 6)
+}
+
+# Alias in dictionary value context.
+type NameList = array<string>
+
+@test
+function void test_type_alias_complex() {
+    NameList team = ["Alice", "Bob", "Charlie"]
+
+    assert(Array.length(team) == 3)
+    assert(Array.contains(team, "Bob"))
+}
+
+# ───────────────────────────────────────────────────────────
+# Chained aliases — an alias of another alias
+# ───────────────────────────────────────────────────────────
+
+type Quantity = integer
+type Count = Quantity
+
+@test
+function void test_chained_type_alias() {
+    Count items = 7
+    integer raw = items
+
+    assert(items == 7)
+    assert(raw == 7)
+}
+
+# ───────────────────────────────────────────────────────────
+# Alias as a record field type
+# ───────────────────────────────────────────────────────────
+
+type PlayerName = string
+
+record Player {
+    PlayerName name,
+    Score score
+}
+
+@test
+function void test_type_alias_as_record_field() {
+    Player p = Player { name = "Alice", score = 50.0 }
+
+    assert(p.name == "Alice")
+    assert(Math.approximately_equal(p.score, 50.0))
+
+    # The alias field is interchangeable with its underlying type.
+    string raw_name = p.name
+
+    assert(raw_name == "Alice")
+}
+
+# ───────────────────────────────────────────────────────────
+# Alias as a choice variant payload
+# ───────────────────────────────────────────────────────────
+
+choice GameEvent {
+    Scored(Score points)
+    Quit
+}
+
+@test
+function void test_type_alias_as_choice_payload() {
+    GameEvent event = GameEvent.Scored(12.5)
+
+    number outcome = match event {
+    case GameEvent.Scored(p) { p }
+    case GameEvent.Quit { 0.0 }
+    }
+
+    assert(Math.approximately_equal(outcome, 12.5))
+}
+
+# ───────────────────────────────────────────────────────────
+# Nested generic aliases
+# ───────────────────────────────────────────────────────────
+
+type Pair<T> = (T, T)
+
+@test
+function void test_nested_generic_type_alias() {
+    array<Pair<integer>> points = [(1, 2), (3, 4)]
+
+    assert(Array.length(points) == 2)
+    assert(points[0].0 == 1)
+    assert(points[1].1 == 4)
+}
+
+@test
+function void test_generic_type_alias_in_dictionary() {
+    dictionary<Pair<number>> ranges = {"x": (0.0, 10.0), "y": (-5.0, 5.0)}
+
+    Pair<number> x_range = ranges["x"]
+
+    assert(Math.approximately_equal(x_range.0, 0.0))
+    assert(Math.approximately_equal(x_range.1, 10.0))
+}
+
+# ───────────────────────────────────────────────────────────
+# Alias used in a match expression
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_type_alias_in_match() {
+    Score grade = 85.0
+
+    string letter = match grade {
+    case >= 90.0 { "A" }
+    case >= 80.0 { "B" }
+    else { "C" }
+    }
+
+    assert(letter == "B")
+}

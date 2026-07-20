@@ -1,0 +1,115 @@
+# Standard library benchmarks: Math, Result, RegularExpression.
+
+function BenchResult run_stdlib_benchmarks(BenchResult state) {
+    mutable BenchResult st = state
+
+    # --- Math ---
+
+    st = time_it(st, "Math trig functions", 10000, () -> {
+        result<number> _s = Math.sine(1.5)
+        result<number> _c = Math.cosine(1.5)
+        result<number> _t = Math.tangent(0.5)
+    })
+
+    st = time_it(st, "Math power/sqrt", 10000, () -> {
+        result<number> _p = Math.power(2.0, 10.0)
+        result<number> _s = Math.square_root(144.0)
+        result<number> _l = Math.log_e(100.0)
+    })
+
+    # Operand hoisted out of the timed body so this measures the statistical
+    # functions, not construction of the 10-element array (10 exceeds the cheap
+    # 3-5 element inline threshold the suite keeps in place elsewhere).
+    array<number> stat_data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
+    st = time_it(st, "Math statistical (10 elem)", 1000, () -> {
+        result<number> _mean = Math.mean(stat_data)
+        result<number> _med = Math.median(stat_data)
+        result<number> _std = Math.standard_deviation(stat_data)
+    })
+
+    st = time_it(st, "Math integer functions", 10000, () -> {
+        result<integer> _f = Math.factorial(12)
+        result<integer> _g = Math.greatest_common_divisor(48, 36)
+        result<integer> _l = Math.least_common_multiple(12, 18)
+        boolean _p = Math.is_prime(9973)
+    })
+
+    st = time_it(st, "Math rounding and sign", 10000, () -> {
+        result<integer> _fl = Math.floor(3.7)
+        result<integer> _ce = Math.ceil(3.2)
+        result<integer> _ro = Math.round(3.5)
+        result<integer> _tr = Math.truncate(-3.7)
+        integer _sg = Math.sign(-42)
+        result<integer> _ab = Math.absolute(-7)
+    })
+
+    st = time_it(st, "Math interpolation", 10000, () -> {
+        result<number> _c = Math.clamp(15.0, 0.0, 10.0)
+        result<number> _le = Math.lerp(0.0, 100.0, 0.42)
+        result<number> _re = Math.remap(5.0, 0.0, 10.0, 0.0, 100.0)
+        result<number> _ss = Math.smooth_step(0.0, 1.0, 0.5)
+    })
+
+    st = time_it(st, "Math inverse and hyperbolic", 10000, () -> {
+        result<number> _as = Math.arc_sine(0.5)
+        result<number> _at = Math.arc_tangent(1.0)
+        result<number> _a2 = Math.atan2(1.0, 1.0)
+        number _hy = Math.hypot(3.0, 4.0)
+        number _cr = Math.cube_root(27.0)
+        number _ht = Math.hyperbolic_tangent(0.5)
+    })
+
+    # --- Result ---
+
+    st = time_it(st, "Result chaining (map)", 10000, () -> {
+        result<integer> _result = Result.map_integer(success(10), (integer x) -> x * 2)
+    })
+
+    # --- RegularExpression ---
+
+    st = time_it(st, "RegularExpression.find", 1000, () -> {
+        result<RegularExpression.Match> _m = RegularExpression.find(
+            "user@example.com sent 42 messages",
+            "[a-z]+@[a-z]+\\.[a-z]+"
+        )
+    })
+
+    st = time_it(st, "RegularExpression.replace_all", 1000, () -> {
+        result<string> _result = RegularExpression.replace_all(
+            "foo123 bar456 baz789",
+            "[0-9]+",
+            "X"
+        )
+    })
+
+    st = time_it(st, "RegularExpression.matches", 1000, () -> {
+        result<boolean> _m = RegularExpression.matches(
+            "user@example.com sent 42 messages",
+            "[a-z]+@[a-z]+\\.[a-z]+"
+        )
+    })
+
+    st = time_it(st, "RegularExpression.find_all", 1000, () -> {
+        result<array<RegularExpression.Match>> _m = RegularExpression.find_all(
+            "foo123 bar456 baz789 qux012",
+            "[0-9]+"
+        )
+    })
+
+    st = time_it(st, "RegularExpression.split", 1000, () -> {
+        result<array<string>> _parts = RegularExpression.split(
+            "a1b2c3d4e5f6g7h8",
+            "[0-9]"
+        )
+    })
+
+    st = time_it(st, "RegularExpression.is_valid", 1000, () -> {
+        boolean _v = RegularExpression.is_valid("[a-z]+@[a-z]+\\.[a-z]+")
+    })
+
+    st = time_it(st, "RegularExpression.is_valid (ReDoS reject)", 1000, () -> {
+        boolean _v = RegularExpression.is_valid("(a+)+b")
+    })
+
+    return st
+}

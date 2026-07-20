@@ -1,0 +1,12 @@
+# Luma release SHA-256 checksums — shared conformance fixture.
+# Consumed verbatim by the VS Code and Zed checksum-parser tests and by
+# validate-download.test.mjs so the three independent parsers stay in agreement.
+# Cases below: double-space separator, single-space separator, "*" binary-mode
+# marker, an uppercase digest (must normalise to lowercase), blank lines, comment
+# lines, and a too-short (non-64-hex) digest that every parser must ignore.
+1111111111111111111111111111111111111111111111111111111111111111  luma_lsp-linux-x86_64.tar.gz
+2222222222222222222222222222222222222222222222222222222222222222 luma_lsp-macos-aarch64.tar.gz
+3333333333333333333333333333333333333333333333333333333333333333  *luma_dap-windows-x86_64.zip
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA  luma-linux-x86_64.tar.gz
+
+deadbeef  ignored-short-hash.tar.gz

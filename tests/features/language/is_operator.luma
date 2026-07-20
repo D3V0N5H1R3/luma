@@ -1,0 +1,324 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — is<T>() Operator
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+# ═══════════════════════════════════════════════════════════
+
+# ─── Primitive types ─────────────────────────────────────
+
+@test
+function void test_is_integer_true() {
+    integer n = 42
+
+    assert(is<integer>(n))
+}
+
+@test
+function void test_is_integer_false() {
+    number n = 3.14
+
+    assert(!is<integer>(n))
+}
+
+@test
+function void test_is_number_true() {
+    number x = 1.5
+
+    assert(is<number>(x))
+}
+
+@test
+function void test_is_number_widens_integer() {
+    # integer widens to number per the type system
+    integer n = 10
+
+    assert(is<number>(n))
+}
+
+@test
+function void test_is_string_true() {
+    string s = "hello"
+
+    assert(is<string>(s))
+}
+
+@test
+function void test_is_string_false() {
+    integer n = 1
+
+    assert(!is<string>(n))
+}
+
+@test
+function void test_is_boolean_true() {
+    boolean b = true
+
+    assert(is<boolean>(b))
+}
+
+@test
+function void test_is_boolean_false() {
+    string s = "true"
+
+    assert(!is<boolean>(s))
+}
+
+# ─── None ────────────────────────────────────────────────
+
+@test
+function void test_is_none_true() {
+    optional<integer> x = none
+
+    assert(is<none>(x))
+}
+
+@test
+function void test_is_none_false() {
+    integer n = 0
+
+    assert(!is<none>(n))
+}
+
+# ─── Arrays ──────────────────────────────────────────────
+
+@test
+function void test_is_array_true() {
+    array<integer> arr = [1, 2, 3]
+
+    assert(is<array<integer>>(arr))
+}
+
+@test
+function void test_is_array_false() {
+    string s = "not an array"
+
+    assert(!is<array<integer>>(s))
+}
+
+# ─── Dictionaries ────────────────────────────────────────
+
+@test
+function void test_is_dictionary_true() {
+    dictionary<integer> d = { "a": 1, "b": 2 }
+
+    assert(is<dictionary<integer>>(d))
+}
+
+@test
+function void test_is_dictionary_false() {
+    string s = "not a dictionary"
+
+    assert(!is<dictionary<integer>>(s))
+}
+
+@test
+function void test_is_dictionary_untyped_true() {
+    dictionary<string> d = { "k": "v" }
+
+    assert(is<dictionary>(d))
+}
+
+# ─── Records ─────────────────────────────────────────────
+
+record Point {
+    number x,
+    number y
+}
+
+record Color {
+    string name
+}
+
+@test
+function void test_is_record_true() {
+    Point p = Point { x = 1.0, y = 2.0 }
+
+    assert(is<Point>(p))
+}
+
+@test
+function void test_is_record_wrong_type() {
+    Color c = Color { name = "red" }
+
+    assert(!is<Point>(c))
+}
+
+# ─── Choice types ─────────────────────────────────────────
+
+choice Shape {
+    Circle(number radius)
+    Rectangle(number width, number height)
+    Square
+}
+
+@test
+function void test_is_choice_true() {
+    Shape s = Shape.Circle(5.0)
+
+    assert(is<Shape>(s))
+}
+
+@test
+function void test_is_choice_false() {
+    string s = "hello"
+
+    assert(!is<Shape>(s))
+}
+
+@test
+function void test_is_choice_unit_true() {
+    Shape s = Shape.Square
+
+    assert(is<Shape>(s))
+}
+
+# ─── Result type ─────────────────────────────────────────
+
+@test
+function void test_is_result_true() {
+    result<integer> r = success(42)
+
+    assert(is<result<integer>>(r))
+}
+
+@test
+function void test_is_result_false() {
+    integer n = 42
+
+    assert(!is<result<integer>>(n))
+}
+
+# ─── Tuples ──────────────────────────────────────────────
+
+@test
+function void test_is_tuple_true() {
+    (integer, string) t = (1, "hello")
+
+    assert(is<(integer, string)>(t))
+}
+
+@test
+function void test_is_tuple_wrong_types() {
+    (integer, string) t = (1, "hello")
+
+    assert(!is<(string, integer)>(t))
+}
+
+# ─── Nested type arguments ───────────────────────────────
+# is<T> verifies type arguments at every nesting level.
+
+@test
+function void test_is_nested_array_true() {
+    array<array<integer>> v = [[1, 2], [3]]
+
+    assert(is<array<array<integer>>>(v))
+}
+
+@test
+function void test_is_nested_array_wrong_element() {
+    array<array<string>> v = [["a"], ["b"]]
+
+    assert(!is<array<array<integer>>>(v))
+}
+
+@test
+function void test_is_dictionary_value_wrong() {
+    dictionary<string> d = { "a": "x" }
+
+    assert(!is<dictionary<integer>>(d))
+}
+
+@test
+function void test_is_dictionary_nested_array_true() {
+    dictionary<array<integer>> d = { "a": [1, 2] }
+
+    assert(is<dictionary<array<integer>>>(d))
+}
+
+@test
+function void test_is_dictionary_nested_array_wrong() {
+    dictionary<array<string>> d = { "a": ["x"] }
+
+    assert(!is<dictionary<array<integer>>>(d))
+}
+
+@test
+function void test_is_result_inner_wrong() {
+    result<string> r = success("hi")
+
+    assert(!is<result<integer>>(r))
+}
+
+@test
+function void test_is_reference_inner_true() {
+    reference<integer> r = Reference.new(5)
+
+    assert(is<reference<integer>>(r))
+}
+
+@test
+function void test_is_reference_inner_wrong() {
+    reference<string> r = Reference.new("hi")
+
+    assert(!is<reference<integer>>(r))
+}
+
+@test
+function void test_is_optional_some_true() {
+    optional<integer> o = some(5)
+
+    assert(is<optional<integer>>(o))
+}
+
+@test
+function void test_is_optional_none_true() {
+    optional<integer> o = none
+
+    assert(is<optional<integer>>(o))
+}
+
+@test
+function void test_is_optional_some_wrong() {
+    optional<string> o = some("hi")
+
+    assert(!is<optional<integer>>(o))
+}
+
+@test
+function void test_is_tuple_nested_true() {
+    (integer, array<integer>) t = (1, [2, 3])
+
+    assert(is<(integer, array<integer>)>(t))
+}
+
+@test
+function void test_is_tuple_nested_wrong() {
+    (integer, array<string>) t = (1, ["x"])
+
+    assert(!is<(integer, array<integer>)>(t))
+}
+
+# ─── Used in conditional ─────────────────────────────────
+
+@test
+function void test_is_in_if_condition() {
+    integer n = 99
+
+    mutable boolean is_found = false
+
+    if is<integer>(n) {
+        is_found = true
+    }
+
+    assert(is_found)
+}
+
+@test
+function void test_is_as_expression_value() {
+    string s = "hello"
+
+    boolean b = is<string>(s)
+
+    assert(b)
+}

@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "bash": "python3 scripts/agent-hooks/format_cpp_on_edit.py",
+        "powershell": "python scripts/agent-hooks/format_cpp_on_edit.py",
+        "timeout": 30
+      }
+    ]
+  }
+}

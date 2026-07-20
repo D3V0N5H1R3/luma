@@ -1,0 +1,6 @@
+@main
+function void main() {
+    mutable integer x = 1
+    x = x
+    print(x)
+}

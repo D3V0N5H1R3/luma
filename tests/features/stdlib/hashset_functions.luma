@@ -1,0 +1,412 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — HashSet Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_hashset_new_is_empty() {
+    assert(HashSet.new() |> HashSet.is_empty())
+    assert((HashSet.new() |> HashSet.length()) == 0)
+}
+
+@test
+function void test_hashset_from_array() {
+    integer len = HashSet.from_array([1, 2, 2, 3, 3, 3]) |> HashSet.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_hashset_from_array_strings() {
+    integer len = HashSet.from_array(["a", "b", "a", "c"]) |> HashSet.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_hashset_add() {
+    integer len = HashSet.new()
+    |> HashSet.add(1)
+    |> HashSet.add(2)
+    |> HashSet.add(1)
+    |> HashSet.length()
+
+    assert(len == 2)
+}
+
+@test
+function void test_hashset_contains() {
+    assert(HashSet.from_array([10, 20, 30]) |> HashSet.contains(10))
+    assert(HashSet.from_array([10, 20, 30]) |> HashSet.contains(20))
+    assert(!(HashSet.from_array([10, 20, 30]) |> HashSet.contains(99)))
+}
+
+@test
+function void test_hashset_remove() {
+    integer len = HashSet.from_array([1, 2, 3])
+    |> HashSet.remove(2)
+    |> HashSet.length()
+
+    assert(len == 2)
+    assert(!(HashSet.from_array([1, 2, 3]) |> HashSet.remove(2) |> HashSet.contains(2)))
+}
+
+@test
+function void test_hashset_union() {
+    integer len = HashSet.union(
+        HashSet.from_array([1, 2, 3]),
+        HashSet.from_array([3, 4, 5])
+    ) |> HashSet.length()
+
+    assert(len == 5)
+}
+
+@test
+function void test_hashset_intersection() {
+    integer len = HashSet.intersection(
+        HashSet.from_array([1, 2, 3]),
+        HashSet.from_array([2, 3, 4])
+    ) |> HashSet.length()
+
+    assert(len == 2)
+}
+
+@test
+function void test_hashset_difference() {
+    integer len = HashSet.difference(
+        HashSet.from_array([1, 2, 3]),
+        HashSet.from_array([2, 3, 4])
+    ) |> HashSet.length()
+
+    assert(len == 1)
+}
+
+@test
+function void test_hashset_is_subset() {
+    assert(HashSet.is_subset(
+        HashSet.from_array([1, 2]),
+        HashSet.from_array([1, 2, 3])
+    ))
+
+    assert(!HashSet.is_subset(
+        HashSet.from_array([1, 2, 4]),
+        HashSet.from_array([1, 2, 3])
+    ))
+}
+
+@test
+function void test_hashset_is_superset() {
+    assert(HashSet.is_superset(
+        HashSet.from_array([1, 2, 3]),
+        HashSet.from_array([1, 2])
+    ))
+
+    assert(!HashSet.is_superset(
+        HashSet.from_array([1, 2]),
+        HashSet.from_array([1, 2, 3])
+    ))
+}
+
+@test
+function void test_hashset_is_disjoint() {
+    assert(HashSet.is_disjoint(
+        HashSet.from_array([1, 2]),
+        HashSet.from_array([3, 4])
+    ))
+
+    assert(!HashSet.is_disjoint(
+        HashSet.from_array([1, 2, 3]),
+        HashSet.from_array([3, 4, 5])
+    ))
+}
+
+@test
+function void test_hashset_equals() {
+    assert(HashSet.equals(
+        HashSet.from_array([1, 2, 3]),
+        HashSet.from_array([3, 2, 1])
+    ))
+
+    assert(!HashSet.equals(
+        HashSet.from_array([1, 2]),
+        HashSet.from_array([1, 2, 3])
+    ))
+}
+
+@test
+function void test_hashset_to_array() {
+    integer len = HashSet.from_array([1, 2, 3])
+    |> HashSet.to_array()
+    |> Array.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_hashset_to_set() {
+    integer len = HashSet.from_array([1, 2, 3])
+    |> HashSet.to_set()
+    |> Set.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_hashset_from_set() {
+    integer len = Set.from_array([1, 2, 3])
+    |> HashSet.from_set()
+    |> HashSet.length()
+
+    assert(len == 3)
+}
+
+# ─── HashSet.symmetric_difference ─────────────────────────
+
+@test
+function void test_hashset_symmetric_difference_basic() {
+    integer len = HashSet.symmetric_difference(
+        HashSet.from_array([1, 2, 3]),
+        HashSet.from_array([2, 3, 4])
+    ) |> HashSet.length()
+
+    assert(len == 2)
+}
+
+@test
+function void test_hashset_symmetric_difference_disjoint() {
+    integer len = HashSet.symmetric_difference(
+        HashSet.from_array([1, 2]),
+        HashSet.from_array([3, 4])
+    ) |> HashSet.length()
+
+    assert(len == 4)
+}
+
+# ─── HashSet.partition ────────────────────────────────────
+
+@test
+function void test_hashset_partition_basic() {
+    result<(hash_set, hash_set)> r = HashSet.from_array([1, 2, 3, 4, 5])
+    |> HashSet.partition((integer x) -> x > 3)
+
+    assert(Result.is_success(r))
+
+    (hash_set matches, hash_set rest) = Result.unwrap(r)
+
+    assert(HashSet.length(matches) == 2)
+    assert(HashSet.length(rest) == 3)
+    assert(HashSet.contains(matches, 4))
+    assert(HashSet.contains(matches, 5))
+}
+
+@test
+function void test_hashset_partition_none_match() {
+    result<(hash_set, hash_set)> r = HashSet.from_array([1, 2, 3])
+    |> HashSet.partition((integer x) -> x > 10)
+
+    (hash_set matches, hash_set rest) = Result.unwrap(r)
+
+    assert(HashSet.length(matches) == 0)
+    assert(HashSet.length(rest) == 3)
+}
+
+@test
+function void test_hashset_partition_all_match() {
+    result<(hash_set, hash_set)> r = HashSet.from_array([1, 2, 3])
+    |> HashSet.partition((integer x) -> x > 0)
+
+    (hash_set matches, hash_set rest) = Result.unwrap(r)
+
+    assert(HashSet.length(matches) == 3)
+    assert(HashSet.length(rest) == 0)
+}
+
+# ── HashSet.filter ──
+
+@test
+function void test_hashset_filter_basic() {
+    result<hash_set> r = HashSet.from_array([1, 2, 3, 4, 5])
+    |> HashSet.filter((integer x) -> x > 3)
+
+    assert(Result.is_success(r))
+    assert((Result.unwrap(r) |> HashSet.length()) == 2)
+    assert(Result.unwrap(r) |> HashSet.contains(4))
+    assert(Result.unwrap(r) |> HashSet.contains(5))
+}
+
+@test
+function void test_hashset_filter_none_match() {
+    result<hash_set> r = HashSet.from_array([1, 2, 3])
+    |> HashSet.filter((integer x) -> x > 10)
+
+    assert((Result.unwrap(r) |> HashSet.length()) == 0)
+}
+
+@test
+function void test_hashset_filter_all_match() {
+    result<hash_set> r = HashSet.from_array([1, 2, 3])
+    |> HashSet.filter((integer x) -> x > 0)
+
+    assert((Result.unwrap(r) |> HashSet.length()) == 3)
+}
+
+# ── HashSet.reduce ──
+
+@test
+function void test_hashset_reduce_sum() {
+    result<integer> r = HashSet.from_array([10, 20, 30])
+    |> HashSet.reduce(0, (integer acc, integer x) -> acc + x)
+
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == 60)
+}
+
+@test
+function void test_hashset_reduce_empty() {
+    result<integer> r = HashSet.new()
+    |> HashSet.reduce(99, (integer acc, integer x) -> acc + x)
+
+    assert(Result.unwrap(r) == 99)
+}
+
+@test
+function void test_hashset_reduce_string_concat() {
+    result<string> r = HashSet.from_array(["x", "y", "z"])
+    |> HashSet.reduce("", (string acc, string x) -> acc + x)
+
+    assert(Result.is_success(r))
+    assert(String.length(Result.unwrap(r)) == 3)
+}
+
+# ───────────────────────────────────────────────────────────
+# map, each
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_hashset_map() {
+    hash_set mapped = Result.unwrap(HashSet.map(HashSet.from_array([1, 2, 3]), (integer x) -> x + 100))
+
+    assert(HashSet.contains(mapped, 101))
+    assert(HashSet.contains(mapped, 103))
+}
+
+@test
+function void test_hashset_each() {
+    reference<integer> total = Reference.new(0)
+    result<none> r = HashSet.each(HashSet.from_array([1, 2, 3]), (integer x) -> {
+        Reference.set(total, Reference.get(total) + x)
+    })
+
+    assert(Result.is_success(r))
+    assert(Reference.get(total) == 6)
+}
+
+# ───────────────────────────────────────────────────────────
+# Element types, immutability, and membership
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_hashset_string_element_membership() {
+    hash_set words = HashSet.from_array(["apple", "banana", "apple", "cherry"])
+
+    assert(HashSet.length(words) == 3)
+    assert(HashSet.contains(words, "banana"))
+    assert(!HashSet.contains(words, "durian"))
+}
+
+@test
+function void test_hashset_number_element_membership() {
+    hash_set nums = HashSet.from_array([1.5, 2.5, 1.5, 3.5])
+
+    assert(HashSet.length(nums) == 3)
+    assert(HashSet.contains(nums, 2.5))
+    assert(!HashSet.contains(nums, 9.5))
+}
+
+@test
+function void test_hashset_boolean_element_membership() {
+    hash_set flags = HashSet.from_array([true, false, true])
+
+    assert(HashSet.length(flags) == 2)
+    assert(HashSet.contains(flags, false))
+}
+
+@test
+function void test_hashset_add_is_immutable() {
+    hash_set base = HashSet.from_array([1, 2])
+    hash_set bigger = HashSet.add(base, 3)
+
+    # add returns a new set; the original receiver is unchanged.
+    assert(HashSet.length(base) == 2)
+    assert(HashSet.length(bigger) == 3)
+    assert(!HashSet.contains(base, 3))
+}
+
+@test
+function void test_hashset_remove_absent_is_noop() {
+    integer len = HashSet.from_array([1, 2, 3])
+    |> HashSet.remove(99)
+    |> HashSet.length()
+
+    assert(len == 3)
+}
+
+@test
+function void test_hashset_union_membership() {
+    hash_set combined = HashSet.union(
+        HashSet.from_array([1, 2]),
+        HashSet.from_array([3, 4])
+    )
+
+    assert(HashSet.contains(combined, 1))
+    assert(HashSet.contains(combined, 4))
+    assert(HashSet.length(combined) == 4)
+}
+
+@test
+function void test_hashset_difference_membership() {
+    hash_set only_a = HashSet.difference(
+        HashSet.from_array([1, 2, 3]),
+        HashSet.from_array([2, 3, 4])
+    )
+
+    assert(HashSet.contains(only_a, 1))
+    assert(!HashSet.contains(only_a, 2))
+    assert(HashSet.length(only_a) == 1)
+}
+
+@test
+function void test_hashset_set_roundtrip() {
+    hash_set restored = HashSet.from_array([1, 2, 3])
+    |> HashSet.to_set()
+    |> HashSet.from_set()
+
+    assert(HashSet.length(restored) == 3)
+    assert(HashSet.contains(restored, 2))
+}
+
+@test
+function void test_hashset_chained_operations() {
+    integer len = HashSet.from_array([1, 2, 3, 4, 5, 6])
+    |> HashSet.add(7)
+    |> HashSet.remove(1)
+    |> HashSet.length()
+
+    assert(len == 6)
+}
+
+# ───────────────────────────────────────────────────────────
+# Error propagation (negative)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_hashset_map_failure_propagates() {
+    # Mapping each element to a non-hashable value (an array) cannot be hashed,
+    # so the error-handling wrapper surfaces it as a failure result rather than
+    # aborting execution.
+    result<hash_set> r = HashSet.map(HashSet.from_array([1, 2, 3]), (integer x) -> [x])
+
+    assert(Result.is_failure(r))
+}
