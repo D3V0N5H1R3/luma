@@ -118,6 +118,17 @@ jobs:
         with:
           packages: ${{ matrix.cc }} ${{ matrix.cxx }}
 
+      # Only the gcc-14 job runs the headless example sweep, which includes the
+      # GraphicalUi (gui_*, solaris_*) examples. Without WebKitGTK the module
+      # compiles to its "unavailable" stub and every GUI example fails, so this
+      # job needs the WebKit development package that provides webkit2gtk-4.1.
+      # macOS (system WebKit) and Windows (WebView2) already have a backend.
+      - name: Install WebKitGTK (headless GUI examples)
+        if: matrix.compiler == 'gcc-14'
+        uses: ./.github/actions/apt-install
+        with:
+          packages: libwebkit2gtk-4.1-dev
+
       # AddressSanitizer reserves a large shadow-memory region at a fixed
       # address. The ubuntu-24.04 runners raised the default ASLR entropy to
       # vm.mmap_rnd_bits=32, which the sanitizer runtimes do not support, so
