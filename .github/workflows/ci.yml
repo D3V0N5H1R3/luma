@@ -197,7 +197,10 @@ jobs:
   static-analysis:
     name: Static Analysis (clang-tidy)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Parallelised across cores, the full-codebase sweep finishes well under
+    # this; the margin covers cold-runner variance (the previous serial sweep
+    # hit the old 30-minute ceiling once every file began compiling cleanly).
+    timeout-minutes: 45
 
     steps:
       - name: Checkout source
@@ -224,12 +227,14 @@ jobs:
       # The real-bug categories escalated to errors are defined once in
       # .clang-tidy (WarningsAsErrors); CI relies on that single source of truth
       # rather than passing its own --warnings-as-errors. Style checks stay
-      # advisory. `-exec ... {} +` batches files like xargs and returns non-zero
-      # if any invocation fails, without the word-splitting of `find | xargs`.
+      # advisory. Files are analysed in parallel (one clang-tidy process per
+      # core) because a single-threaded sweep of the whole codebase exceeds the
+      # job timeout; null-delimited paths avoid word-splitting and xargs exits
+      # non-zero if any invocation fails.
       - name: Run clang-tidy
         run: |
-          find core language-server/source debugger/source shared -name '*.cpp' \
-            -exec clang-tidy -p build {} +
+          find core language-server/source debugger/source shared -name '*.cpp' -print0 \
+            | xargs -0 -P "$(nproc)" -n 1 clang-tidy -p build
 
   formatting:
     name: Formatting (clang-format)
