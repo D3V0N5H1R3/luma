@@ -130,10 +130,11 @@ jobs:
           packages: libwebkit2gtk-4.1-dev
 
       # AddressSanitizer reserves a large shadow-memory region at a fixed
-      # address. The ubuntu-24.04 runners raised the default ASLR entropy to
-      # vm.mmap_rnd_bits=32, which the sanitizer runtimes do not support, so
-      # every instrumented binary crashes at startup with no diagnostic. Lower
-      # the entropy to a supported value. See google/sanitizers#1614.
+      # address. CI runners with high ASLR entropy (vm.mmap_rnd_bits up to 32)
+      # can place the randomized PIE executable over that region, crashing every
+      # instrumented binary at startup with no diagnostic. Lower the entropy to a
+      # supported value; the sanitizer link flags additionally build the binaries
+      # non-PIE (see cmake/LumaCompilerFlags.cmake). See google/sanitizers#1614.
       - name: Reduce ASLR entropy for sanitizers
         if: matrix.sanitizers
         run: sudo sysctl -w vm.mmap_rnd_bits=28
@@ -366,16 +367,14 @@ jobs:
           packages: clang
 
       # ThreadSanitizer maps a large shadow-memory region at fixed high
-      # addresses at startup. On the ubuntu-24.04 runners' default ASLR entropy
-      # (vm.mmap_rnd_bits=32) a randomized mmap/stack placement can collide with
-      # that region and crash every instrumented binary before it emits a
-      # diagnostic. Lowering mmap_rnd_bits alone is enough for ASan/UBSan but
-      # not for TSan's larger shadow, so also disable ASLR entirely for this
-      # throwaway runner. See google/sanitizers#1614.
-      - name: Disable ASLR for ThreadSanitizer
-        run: |
-          sudo sysctl -w vm.mmap_rnd_bits=28
-          sudo sysctl -w kernel.randomize_va_space=0
+      # addresses at startup. On CI runners with high ASLR entropy
+      # (vm.mmap_rnd_bits up to 32) a randomized executable/mmap placement can
+      # collide with that region and crash every instrumented binary before it
+      # emits a diagnostic. Lower the entropy to a supported value AND link the
+      # binaries non-PIE (-no-pie below) so the executable loads at a fixed low
+      # address clear of the shadow. See google/sanitizers#1614.
+      - name: Reduce ASLR entropy for ThreadSanitizer
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
 
       - name: Configure
         run: |
@@ -383,7 +382,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread -no-pie"
 
       - name: Build
         run: cmake --build build-tsan --parallel "$(nproc)"
