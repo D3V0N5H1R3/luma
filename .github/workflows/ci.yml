@@ -314,10 +314,13 @@ jobs:
 
       - name: Collect coverage
         run: |
+          # gcc-13's gcov can emit spurious negative execution counts for
+          # inlined system-header code (e.g. char_traits.h); lcov 2.x treats
+          # that as a fatal "negative" error, so allow it alongside "mismatch".
           lcov --capture --directory build --output-file coverage.info \
-               --ignore-errors mismatch
+               --ignore-errors mismatch,negative
           lcov --remove coverage.info '/usr/*' '*/tests/*' \
-               --output-file coverage-filtered.info
+               --output-file coverage-filtered.info --ignore-errors negative
           lcov --list coverage-filtered.info
 
       - name: Check coverage threshold
