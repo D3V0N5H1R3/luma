@@ -118,6 +118,15 @@ jobs:
         with:
           packages: ${{ matrix.cc }} ${{ matrix.cxx }}
 
+      # AddressSanitizer reserves a large shadow-memory region at a fixed
+      # address. The ubuntu-24.04 runners raised the default ASLR entropy to
+      # vm.mmap_rnd_bits=32, which the sanitizer runtimes do not support, so
+      # every instrumented binary crashes at startup with no diagnostic. Lower
+      # the entropy to a supported value. See google/sanitizers#1614.
+      - name: Reduce ASLR entropy for sanitizers
+        if: matrix.sanitizers
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
       - name: Configure and build
         uses: ./.github/actions/cmake-build
         with:
@@ -336,6 +345,14 @@ jobs:
         uses: ./.github/actions/apt-install
         with:
           packages: clang
+
+      # ThreadSanitizer maps a large shadow-memory region at startup, which
+      # fails on the ubuntu-24.04 runners' default ASLR entropy
+      # (vm.mmap_rnd_bits=32) and crashes every instrumented binary before it
+      # can emit a diagnostic. Lower the entropy to a value the sanitizer
+      # runtimes support. See google/sanitizers#1614.
+      - name: Reduce ASLR entropy for ThreadSanitizer
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
 
       - name: Configure
         run: |
