@@ -191,7 +191,18 @@ void register_filesystem_content(const EnvPtr& env) {
                 "FileSystem.get_modified_time", args[0], loc, false,
                 [](const std::filesystem::path& safe_path) -> Value {
                     const auto ftime = std::filesystem::last_write_time(safe_path);
+#if defined(__cpp_lib_chrono) && __cpp_lib_chrono >= 201907L
                     const auto sctp = std::chrono::clock_cast<std::chrono::system_clock>(ftime);
+#else
+                    // Apple libc++ (and some other standard libraries) do not yet
+                    // provide std::chrono::clock_cast.  Rebase the file-clock time
+                    // point onto the system clock instead; millisecond precision is
+                    // sufficient for a modified-time query.
+                    const auto sctp =
+                        std::chrono::system_clock::now() +
+                        std::chrono::duration_cast<std::chrono::system_clock::duration>(
+                            ftime - std::filesystem::file_time_type::clock::now());
+#endif
                     const auto epoch = sctp.time_since_epoch();
                     const auto secs =
                         std::chrono::duration_cast<std::chrono::milliseconds>(epoch).count();
