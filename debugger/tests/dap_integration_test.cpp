@@ -2308,6 +2308,14 @@ void test_structured_values() {
 // run with a non-zero status, which the test runner treats as a failure.
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int /*argc*/, char* argv[]) {
+#ifndef _WIN32
+    // The tests write DAP requests to the luma_dap child's stdin pipe. If the
+    // child has already exited (e.g. after a terminate/disconnect handshake),
+    // that write delivers SIGPIPE, whose default disposition would kill the
+    // whole test binary before ::write can return EPIPE. Ignore it so the
+    // failed write instead surfaces as a normal error for that one case.
+    ::signal(SIGPIPE, SIG_IGN);
+#endif
     std::cout << "=== DAP Integration Tests ===\n\n";
 
     // Determine paths based on executable location.
