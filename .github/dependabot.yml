@@ -1,7 +1,34 @@
 version: 2
 
 updates:
+  # GitHub Actions workflow and composite-action dependencies.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # npm dependencies for the editor extensions and their test tooling.
+  - package-ecosystem: "npm"
+    directories:
+      - "/extensions/vscode"
+      - "/extensions/tests"
+      - "/extensions/zed/grammars/tree-sitter-luma"
+    schedule:
+      interval: "weekly"
+    groups:
+      npm:
+        patterns: ["*"]
+
+  # Cargo (Rust) dependencies for the Zed extension and its Tree-sitter grammar.
+  - package-ecosystem: "cargo"
+    directories:
+      - "/extensions/zed"
+      - "/extensions/zed/grammars/tree-sitter-luma"
+    schedule:
+      interval: "weekly"
+    groups:
+      cargo:
+        patterns: ["*"]
