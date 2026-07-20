@@ -255,19 +255,12 @@ static void test_process_run_nonzero_exit_code() {
                 7);
 }
 
-static void test_process_run_nonexistent_command_platform_behavior() {
-#ifdef _WIN32
-    // CreateProcessA cannot start a missing image, surfaced as a failure result.
+static void test_process_run_nonexistent_command_fails() {
+    // A command that does not exist cannot be launched. Windows CreateProcessA
+    // reports this directly; on POSIX the child's execvp failure is relayed to
+    // the parent through a close-on-exec self-pipe. Either way Process.run
+    // reports a failure result on every platform.
     ASSERT_EVAL_FAILURE("Process.run(\"_luma_nonexistent_command_xyz_123\")");
-#else
-    // POSIX execvp fails inside the child, which _exit(127)s; the parent still
-    // reaps a normal exit, so Process.run reports success with code 127.
-    const auto v = eval("Process.run(\"_luma_nonexistent_command_xyz_123\")");
-
-    ASSERT_RESULT_SUCCESS(v);
-    ASSERT_TRUE(v.as_result()->owned_inner->as_record()->find_field("exit_code")->as_integer() ==
-                127);
-#endif
 }
 
 int main() {
@@ -302,7 +295,7 @@ int main() {
     RUN(test_process_set_environment_variable_rejects_non_string);
     RUN(test_process_exit_out_of_range_throws);
     RUN(test_process_run_nonzero_exit_code);
-    RUN(test_process_run_nonexistent_command_platform_behavior);
+    RUN(test_process_run_nonexistent_command_fails);
 
     return SUMMARY();
 }
