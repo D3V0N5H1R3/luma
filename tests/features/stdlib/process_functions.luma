@@ -52,8 +52,16 @@ function void test_process_get_args() {
 
 @test
 function void test_process_run() {
-    # Use "cmd /c echo" on Windows since echo is a shell built-in
-    result<Process.ProcessResult> output = Process.run("cmd /c echo hello")
+    # `echo` is a cmd.exe built-in on Windows (needs "cmd /c") but a standalone
+    # binary on POSIX, so pick the command for the host platform.  The "OS"
+    # environment variable is set to "Windows_NT" on Windows and unset elsewhere.
+    mutable string command = "echo hello"
+
+    if (Process.has_environment_variable("OS")) {
+        command = "cmd /c echo hello"
+    }
+
+    result<Process.ProcessResult> output = Process.run(command)
 
     assert(Result.is_success(output))
 
@@ -75,8 +83,16 @@ function void test_process_run_nonexistent_command() {
 
 @test
 function void test_process_run_nonzero_exit_code() {
-    # A command that exits with a non-zero code.
-    result<Process.ProcessResult> r = Process.run("cmd /c exit 42")
+    # A command that exits with a non-zero code.  Process.run execs directly
+    # without a shell, so the shell is named explicitly: "cmd /c exit 42" on
+    # Windows, "sh -c \"exit 42\"" on POSIX.
+    mutable string command = "sh -c \"exit 42\""
+
+    if (Process.has_environment_variable("OS")) {
+        command = "cmd /c exit 42"
+    }
+
+    result<Process.ProcessResult> r = Process.run(command)
 
     assert(Result.is_success(r), "command should execute successfully")
 

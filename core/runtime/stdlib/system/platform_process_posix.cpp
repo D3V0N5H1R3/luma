@@ -2,6 +2,7 @@
 // Compiled only on non-Windows platforms (see core/runtime/CMakeLists.txt).
 
 #include <array>
+#include <cerrno>
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
@@ -12,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -61,11 +63,30 @@ std::pair<int, std::string> execute_command(std::string_view cmd) {
 
     argv.push_back(nullptr);
 
+    // Self-pipe to detect an execvp failure in the child.  The write end is
+    // marked close-on-exec, so a successful exec closes it and the parent's read
+    // returns EOF, whereas a failed exec writes errno before _exit.  This lets
+    // the parent report an unknown command as a launch failure (negative exit
+    // code) instead of surfacing the child's 127 exit as a successful run,
+    // matching the Windows CreateProcessA path.
+    std::array<int, 2> exec_err_fd{};
+
+    if (pipe(exec_err_fd.data()) == -1) {
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+
+        return {-1, ""};
+    }
+
+    fcntl(exec_err_fd[1], F_SETFD, fcntl(exec_err_fd[1], F_GETFD) | FD_CLOEXEC);
+
     const pid_t pid = fork();
 
     if (pid == -1) {
         close(pipe_fd[0]);
         close(pipe_fd[1]);
+        close(exec_err_fd[0]);
+        close(exec_err_fd[1]);
 
         return {-1, ""};
     }
@@ -76,16 +97,40 @@ std::pair<int, std::string> execute_command(std::string_view cmd) {
         // async-signal-safe calls are permitted here (argv was built before
         // the fork above), so the child touches no allocator locks.
         close(pipe_fd[0]);
+        close(exec_err_fd[0]);
         dup2(pipe_fd[1], STDOUT_FILENO);
         dup2(pipe_fd[1], STDERR_FILENO);
         close(pipe_fd[1]);
 
         execvp(argv[0], argv.data());
+
+        // execvp only returns on failure.  Report errno to the parent through
+        // the close-on-exec pipe (write() is async-signal-safe), then exit.
+        const int exec_errno = errno;
+        const ssize_t written = write(exec_err_fd[1], &exec_errno, sizeof(exec_errno));
+
+        (void)written;
+
         _exit(127);
     }
 
     // Parent — read from the pipe.
     close(pipe_fd[1]);
+    close(exec_err_fd[1]);
+
+    // A successful exec closed the child's write end (read returns EOF); a
+    // failed exec delivered errno, meaning the command could not be launched.
+    int child_exec_errno{0};
+    const ssize_t exec_err_read = read(exec_err_fd[0], &child_exec_errno, sizeof(child_exec_errno));
+
+    close(exec_err_fd[0]);
+
+    if (exec_err_read == static_cast<ssize_t>(sizeof(child_exec_errno))) {
+        close(pipe_fd[0]);
+        waitpid(pid, nullptr, 0);
+
+        return {-1, ""};
+    }
 
     std::string output{};
     std::array<char, k_pipe_buffer_size> buffer{};
