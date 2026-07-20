@@ -34,6 +34,13 @@ inputs:
     description: Extra arguments appended to the CMake configure command.
     required: false
     default: ""
+  parallel:
+    description: >-
+      Explicit build parallelism (job count). Leave empty to use the detected
+      core count. Lower it for memory-heavy builds (e.g. sanitizers) to avoid
+      exhausting the runner's RAM.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -81,4 +88,19 @@ runs:
       env:
         BUILD_TYPE: ${{ inputs.build-type }}
         BUILD_DIR: ${{ inputs.build-dir }}
-      run: cmake --build "${BUILD_DIR}" --config "${BUILD_TYPE}" --parallel
+        PARALLEL: ${{ inputs.parallel }}
+      # An explicit job count is required. `cmake --build --parallel` with no
+      # number expands to `make -j` (UNLIMITED jobs) under the Unix Makefiles
+      # generator, spawning hundreds of concurrent compiles that exhaust the
+      # runner's RAM and get the VM OOM-killed ("runner received a shutdown
+      # signal"). Default to the detected core count — portable across Linux
+      # (nproc), macOS (sysctl), and Git-bash on Windows — overridable via the
+      # `parallel` input for memory-heavy (e.g. sanitizer) builds.
+      run: |
+        jobs="${PARALLEL:-}"
+        if [ -z "${jobs}" ]; then
+          jobs="$(nproc 2>/dev/null \
+            || sysctl -n hw.ncpu 2>/dev/null \
+            || echo "${NUMBER_OF_PROCESSORS:-2}")"
+        fi
+        cmake --build "${BUILD_DIR}" --config "${BUILD_TYPE}" --parallel "${jobs}"
