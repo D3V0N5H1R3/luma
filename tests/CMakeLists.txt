@@ -381,11 +381,16 @@ luma_add_test(NAME dap_test_tcp_transport
 
 # DAP integration test — spawns luma_dap as a subprocess and sends
 # scripted DAP messages over stdio to verify end-to-end behavior.
+# This suite launches the debuggee dozens of times over loopback, so it is
+# inherently slow (~145s on the Linux CI runners). macOS runners add
+# per-exec Gatekeeper overhead on each spawn and exceed the previous 180s
+# ceiling, so the timeout is generous to keep the suite reliable rather than
+# flaky. A genuine hang still fails the job well within the 35-minute budget.
 luma_add_test(NAME dap_integration_test
     SOURCES  ${PROJECT_SOURCE_DIR}/debugger/tests/dap_integration_test.cpp
     LIBS     luma_shared
     INCLUDES ${PROJECT_SOURCE_DIR}/debugger/source
-    TIMEOUT  180
+    TIMEOUT  360
     LABELS   dap integration)
 
 # ── Luma feature test suites ──
