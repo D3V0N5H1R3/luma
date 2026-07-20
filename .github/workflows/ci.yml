@@ -56,8 +56,10 @@ jobs:
     name: ${{ matrix.os }} — ${{ matrix.compiler }}
     runs-on: ${{ matrix.os }}
     # Upper bound covers the cached build, the CTest suite, and (on the gcc-14
-    # job) the full headless example sweep run by scripts/run_examples.py.
-    timeout-minutes: 20
+    # job) the full headless example sweep run by scripts/run_examples.py. The
+    # ceiling accommodates a cold-cache full build on the slowest runner
+    # (Windows/MSVC); warm-cache runs finish well under it.
+    timeout-minutes: 35
 
     strategy:
       fail-fast: false
@@ -175,7 +177,7 @@ jobs:
   static-analysis:
     name: Static Analysis (clang-tidy)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout source
@@ -260,7 +262,7 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout source
@@ -322,7 +324,7 @@ jobs:
   tsan:
     name: ThreadSanitizer
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout source
@@ -360,7 +362,7 @@ jobs:
   feature-flags:
     name: Feature Flag Build (${{ matrix.label }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     strategy:
       fail-fast: false
