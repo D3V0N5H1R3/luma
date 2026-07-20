@@ -3,7 +3,8 @@
 //
 // Lints the project's first-party CSS. Currently this is the GraphicalUi
 // override sheet (external/gui-framework/gui-overrides.css); vendored,
-// minified third-party stylesheets (*.min.css) are excluded.
+// minified third-party stylesheets (*.min.css) are excluded, as are the
+// deliberately malformed CSS fuzzer seed inputs under fuzz/corpus/.
 //
 // Extends stylelint-config-standard. The override sheet deliberately styles a
 // classless framework (Pico CSS) via element and attribute selectors, so the
@@ -21,7 +22,7 @@
 
 export default {
     extends: ["stylelint-config-standard"],
-    ignoreFiles: ["**/*.min.css", "**/node_modules/**"],
+    ignoreFiles: ["**/*.min.css", "**/node_modules/**", "**/fuzz/corpus/**"],
     rules: {
         "no-descending-specificity": null,
     },
