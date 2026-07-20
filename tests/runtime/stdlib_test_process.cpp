@@ -32,7 +32,13 @@ static void test_process_get_args_with_values() {
 
 static void test_process_run_returns_record() {
     // Process.run should return result<ProcessResult> with exit_code and output fields.
+#ifdef _WIN32
+    // `echo` is a cmd.exe builtin on Windows, so it must be invoked via `cmd /c`.
     const auto v = eval("Process.run(\"cmd /c echo hello\")");
+#else
+    // On POSIX `echo` is a standalone binary resolved through PATH by execvp.
+    const auto v = eval("Process.run(\"echo hello\")");
+#endif
 
     ASSERT_RESULT_SUCCESS(v);
 
