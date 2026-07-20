@@ -10,6 +10,17 @@ project(luma VERSION ${LUMA_VERSION} LANGUAGES CXX C)
 
 find_package(Threads REQUIRED)
 
+# ─────────── Position-independent code ───────────
+# Executables are linked as PIE (-pie) for ASLR hardening (see
+# cmake/LumaCompilerFlags.cmake). A PIE executable can only link objects that are
+# themselves position-independent, so every static library it pulls in — both
+# first-party and vendored — must be compiled -fPIC. Ubuntu's GCC defaults to PIE
+# and so happens to satisfy this, but distros whose GCC does not (e.g. Fedora)
+# fail to link with "relocation R_X86_64_32S ... can not be used when making a PIE
+# object". Enabling PIC globally makes the requirement explicit and portable; it
+# is a no-op on Windows and macOS, where code is already relocatable.
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # ─────────── Build-system regeneration (Visual Studio generator) ───────────
 # The Visual Studio (MSBuild) generator attaches a build-system regeneration
 # check — the ZERO_CHECK mechanism, shown as "Building Custom Rule .../
