@@ -34,9 +34,9 @@ jobs:
     uses: ./.github/workflows/reusable-linux-build.yml
     with:
       image: arm64v8/debian:bookworm
-      cc: gcc-13
-      cxx: g++-13
-      install-cmd: apt-get update -q && apt-get install -y cmake gcc-13 g++-13 make
+      cc: gcc-12
+      cxx: g++-12
+      install-cmd: apt-get update -q && apt-get install -y cmake gcc-12 g++-12 make
       platform: linux/arm64
       upload-artifact: ${{ inputs.upload-artifact }}
       artifact-name: ${{ inputs.artifact-name }}
