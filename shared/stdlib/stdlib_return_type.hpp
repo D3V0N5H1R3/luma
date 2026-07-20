@@ -1,6 +1,7 @@
 #ifndef LUMA_STDLIB_RETURN_TYPE_HPP
 #define LUMA_STDLIB_RETURN_TYPE_HPP
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
