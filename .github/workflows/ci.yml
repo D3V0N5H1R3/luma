@@ -240,12 +240,16 @@ jobs:
       # advisory. The file list is sorted for a stable assignment, sliced into
       # this shard (round-robin: file N goes to shard N mod 4 — the union of all
       # shards is every file, with none shared), then analysed in parallel (one
-      # clang-tidy process per core). Newline-delimited is safe here because the
+      # clang-tidy process per core). Windows-only *_win32.cpp files are excluded:
+      # they are not in this Linux build's compile_commands.json, so clang-tidy
+      # would parse them with default flags and fail on their unconditional
+      # <windows.h>/<io.h> includes. Newline-delimited is safe here because the
       # project's snake_case source-file convention means no path contains a
       # space or newline. xargs exits non-zero if any invocation fails.
       - name: Run clang-tidy (shard ${{ matrix.shard }} of 4)
         run: |
           find core language-server/source debugger/source shared -name '*.cpp' \
+            ! -name '*_win32.cpp' \
             | sort \
             | awk 'NR % 4 == ${{ matrix.shard }}' \
             | xargs -P "$(nproc)" -n 1 clang-tidy -p build

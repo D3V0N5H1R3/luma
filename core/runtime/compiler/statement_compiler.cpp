@@ -323,6 +323,7 @@ void Compiler::compile_try(const TryStatement& stmt) {
             }
 
             const auto err_slot = resolve_local(to_string(HiddenVar::Error));
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the local was just declared above.
             emit_u16(Op::GetLocal, *err_slot, stmt.location);
         }
         emit(Op::Rethrow, stmt.location);

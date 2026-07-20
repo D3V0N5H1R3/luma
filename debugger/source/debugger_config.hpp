@@ -15,7 +15,7 @@ inline constexpr std::chrono::milliseconds k_default_evaluation_timeout{5000};
 inline constexpr std::size_t k_max_cache_entries = 256;
 
 // Maximum length of a single expression string (64 KiB).
-inline constexpr std::size_t k_max_code_size = 64 * 1024;
+inline constexpr std::size_t k_max_code_size = std::size_t{64} * 1024;
 } // namespace expression
 
 // Variable inspection limits.
@@ -42,7 +42,7 @@ inline constexpr std::size_t k_default_snapshot_interval = 1;
 inline constexpr std::size_t k_default_max_snapshots = 10000;
 
 // Maximum total memory budget for snapshots (bytes) — 64 MB.
-inline constexpr std::size_t k_default_max_memory_bytes = 64 * 1024 * 1024;
+inline constexpr std::size_t k_default_max_memory_bytes = std::size_t{64} * 1024 * 1024;
 
 // Upper bound on memory-budget evictions performed while making room for a
 // single new snapshot.  Bounds the eviction loop so one capture cannot spin

@@ -164,6 +164,7 @@ std::int64_t current_process_id() {
 }
 
 int set_environment_variable(const std::string& name, const std::string& value) {
+    // NOLINTNEXTLINE(concurrency-mt-unsafe): no thread-safe std alternative for setenv.
     return setenv(name.c_str(), value.c_str(), 1);
 }
 

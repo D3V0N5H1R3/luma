@@ -348,6 +348,7 @@ JsonValue LspCompletionHandler::handle_generic_completions(const CompletionConte
         provider_registry.append_all(provider_ctx, items);
 
         // ── Parameters and local variables via ScopeStack ──
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): scopes is engaged whenever cached is.
         for (const auto& sym : scopes->collect_visible_symbols()) {
             if (sym.origin == ScopeKind::Module &&
                 cached->semantic.symbols.user_functions.contains(sym.name)) {

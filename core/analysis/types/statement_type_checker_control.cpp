@@ -173,10 +173,13 @@ void StatementTypeChecker::visit_if_statement(const IfStatement& stmt) {
             // A variable's consumed flag after a branch, falling back to its
             // pre-branch state when the branch left it untouched.
             const auto consumed_after = [&](const TypeScope::OwnershipSnapshot& snapshot) {
-                const auto match = std::ranges::find_if(
-                    snapshot, [&](const auto& entry) { return entry.first == name; });
+                for (const auto& entry : snapshot) {
+                    if (entry.first == name) {
+                        return entry.second;
+                    }
+                }
 
-                return match != snapshot.end() ? match->second : was_consumed_before;
+                return was_consumed_before;
             };
 
             const bool consumed_in_then = consumed_after(after_then);

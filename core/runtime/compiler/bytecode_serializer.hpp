@@ -114,6 +114,10 @@ struct DeserializeResult {
         return bytecode.has_value();
     }
 
+    // These accessors deliberately mirror std::optional's contract: the caller must
+    // confirm the result is engaged (via operator bool) before dereferencing.  A debug
+    // assert guards misuse, and every call site checks first, so the access is safe.
+    // NOLINTBEGIN(bugprone-unchecked-optional-access)
     [[nodiscard]] const DeserializedBytecode& operator*() const noexcept {
         assert(bytecode.has_value() && "dereferencing empty DeserializeResult");
         return *bytecode;
@@ -133,6 +137,8 @@ struct DeserializeResult {
         assert(bytecode.has_value() && "dereferencing empty DeserializeResult");
         return &*bytecode;
     }
+
+    // NOLINTEND(bugprone-unchecked-optional-access)
 };
 
 class BytecodeSerializer {

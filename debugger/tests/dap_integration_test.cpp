@@ -211,6 +211,21 @@ public:
         return JsonValue::parse(body);
     }
 
+    // Wait for the adapter to exit and report whether it finished cleanly (exit
+    // code 0).  Used to tell a benign clean shutdown apart from a crash when a
+    // write races the adapter's exit.
+    bool wait_exited_cleanly() {
+        if (process_ == INVALID_HANDLE_VALUE) {
+            return true;
+        }
+        WaitForSingleObject(process_, 5000);
+        DWORD code = 1;
+        if (GetExitCodeProcess(process_, &code) == 0) {
+            return false;
+        }
+        return code == 0;
+    }
+
     void close() {
         if (child_stdin_write_ != INVALID_HANDLE_VALUE) {
             CloseHandle(child_stdin_write_);
@@ -353,6 +368,22 @@ public:
         }
 
         return JsonValue::parse(body);
+    }
+
+    // Wait for the adapter to exit and report whether it finished cleanly (exit
+    // code 0, not killed by a signal).  Used to tell a benign clean shutdown apart
+    // from a crash when a write races the adapter's exit.
+    bool wait_exited_cleanly() {
+        if (pid_ <= 0) {
+            return true;
+        }
+        int status = 0;
+        const pid_t r = waitpid(pid_, &status, 0);
+        pid_ = -1;
+        if (r <= 0) {
+            return true;
+        }
+        return WIFEXITED(status) && WEXITSTATUS(status) == 0;
     }
 
     void close() {
@@ -514,9 +545,22 @@ struct PollResult {
 
 PollResult poll_request(DapProcess& proc, const std::string& command,
                         const JsonValue& args = JsonValue(), int timeout_ms = 4000) {
-    proc.send_message(make_request(command, args));
-
     PollResult result;
+
+    // The debuggee is free-running and can terminate at any moment; a write that
+    // races the adapter's clean exit surfaces as a "failed to write" error.  Treat
+    // a clean adapter exit as termination (the success condition for this stress
+    // test), but let a crash-induced write failure propagate as a real failure.
+    try {
+        proc.send_message(make_request(command, args));
+    } catch (const std::runtime_error&) {
+        if (!proc.wait_exited_cleanly()) {
+            throw;
+        }
+        result.terminated = true;
+        return result;
+    }
+
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
 
     while (std::chrono::steady_clock::now() < deadline) {
