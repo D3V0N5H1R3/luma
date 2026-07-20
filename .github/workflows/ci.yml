@@ -458,7 +458,7 @@ jobs:
       cxx: ${{ matrix.cxx }}
       install-cmd: ${{ matrix.install-cmd }}
 
-  # ── Raspberry Pi OS (ARM64 via QEMU emulation) ──
+  # ── Raspberry Pi OS (native ARM64 runner) ──
   build-rpi:
     name: Raspberry Pi OS (ARM64)
     uses: ./.github/workflows/build-raspberry-pi.yml

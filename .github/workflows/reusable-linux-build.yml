@@ -37,6 +37,11 @@ on:
         required: false
         type: string
         default: ""
+      runner:
+        description: Runner label to execute on (e.g. ubuntu-latest, ubuntu-24.04-arm).
+        required: false
+        type: string
+        default: ubuntu-latest
       upload-artifact:
         description: Whether to package and upload the built binaries.
         required: false
@@ -53,9 +58,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    # A single upper bound covers both fast native distro builds and the
-    # slower QEMU-emulated ARM64 build.
+    runs-on: ${{ inputs.runner }}
+    # A single upper bound covers the native distro builds and the native
+    # ARM64 build; it is deliberately generous for a cold-cache full build.
     timeout-minutes: 30
 
     steps:

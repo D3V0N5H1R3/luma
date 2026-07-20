@@ -1,11 +1,13 @@
 # ─────────────────────────────────────────────────────────────
 # Luma — Reusable Raspberry Pi OS Build (ARM64)
 #
-# Builds and tests Luma for Raspberry Pi OS (ARM64) by emulating
-# linux/arm64 via QEMU on top of Debian. The toolchain parameters
-# (image, compilers, install command) are defined here once so ci.yml
-# and release.yml share a single definition; callers opt into artifact
-# upload for release builds.
+# Builds and tests Luma for Raspberry Pi OS (ARM64) on a native
+# GitHub-hosted ARM64 Linux runner (free for public repositories),
+# running the arm64 Debian container directly — no QEMU emulation,
+# which is far too slow to build this codebase within a CI timeout.
+# The toolchain parameters (image, compilers, install command) are
+# defined here once so ci.yml and release.yml share a single
+# definition; callers opt into artifact upload for release builds.
 #
 # Debian trixie (GCC 14) is used as the ARM64 proxy rather than the
 # bookworm base of current Raspberry Pi OS: Luma requires a C++20
@@ -43,6 +45,8 @@ jobs:
       cc: gcc
       cxx: g++
       install-cmd: apt-get update -q && apt-get install -y cmake gcc g++ make
-      platform: linux/arm64
+      # Run on a native ARM64 runner so the arm64 container executes without
+      # QEMU; leaving platform empty skips the emulation setup entirely.
+      runner: ubuntu-24.04-arm
       upload-artifact: ${{ inputs.upload-artifact }}
       artifact-name: ${{ inputs.artifact-name }}

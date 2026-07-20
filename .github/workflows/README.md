@@ -88,7 +88,7 @@ Internal `workflow_call` components — never triggered directly, only invoked b
 | Workflow                                                 | Trigger                   | Purpose                                                            |
 | -------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------ |
 | [`reusable-linux-build.yml`](reusable-linux-build.yml)   | Called by other workflows | Build and test inside a Linux container image.                     |
-| [`build-raspberry-pi.yml`](build-raspberry-pi.yml)       | Called by other workflows | Raspberry Pi OS (ARM64) build via QEMU; wraps the container build. |
+| [`build-raspberry-pi.yml`](build-raspberry-pi.yml)       | Called by other workflows | Raspberry Pi OS (ARM64) build on a native ARM64 runner; wraps the container build. |
 | [`resolve-distro-matrix.yml`](resolve-distro-matrix.yml) | Called by other workflows | Expose linux-distros.json as a job matrix.                         |
 
 ---
@@ -102,7 +102,7 @@ ci.yml
 ├── resolve-distro-matrix.yml      reads .github/linux-distros.json → matrix
 ├── reusable-linux-build.yml       one job per distro in the matrix
 └── build-raspberry-pi.yml
-    └── reusable-linux-build.yml   Raspberry Pi OS (ARM64) via QEMU
+    └── reusable-linux-build.yml   Raspberry Pi OS (ARM64), native runner
 
 release.yml
 ├── resolve-distro-matrix.yml

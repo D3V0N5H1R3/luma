@@ -91,7 +91,7 @@ jobs:
             luma_dap-*
           retention-days: 30
 
-  # ── Raspberry Pi OS release binary (ARM64 via QEMU) ──
+  # ── Raspberry Pi OS release binary (native ARM64 runner) ──
   build-rpi:
     name: Build — Raspberry Pi OS (ARM64)
     uses: ./.github/workflows/build-raspberry-pi.yml
