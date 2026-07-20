@@ -8,6 +8,6 @@
     "generate": "tree-sitter generate"
   },
   "devDependencies": {
-    "tree-sitter-cli": "0.24.7"
+    "tree-sitter-cli": "0.26.11"
   }
 }

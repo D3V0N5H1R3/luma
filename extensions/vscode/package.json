@@ -500,22 +500,22 @@
         "package": "npm run compile && vsce package"
     },
     "dependencies": {
-        "vscode-languageclient": "9.0.1"
+        "vscode-languageclient": "10.1.0"
     },
     "devDependencies": {
-        "@eslint/js": "^9.39.4",
+        "@eslint/js": "^10.0.1",
         "@types/mocha": "^10.0.10",
-        "@types/node": "^20.19.41",
-        "@types/vscode": "^1.120.0",
-        "@vscode/test-electron": "^2.5.2",
-        "@vscode/vsce": "^3.9.1",
-        "esbuild": "^0.28.0",
-        "eslint": "^9.39.4",
-        "glob": "^10.5.0",
-        "globals": "^17.6.0",
-        "mocha": "^10.8.2",
-        "prettier": "^3.8.4",
-        "typescript": "^5.9.3",
-        "typescript-eslint": "^8.61.1"
+        "@types/node": "^26.1.1",
+        "@types/vscode": "^1.125.0",
+        "@vscode/test-electron": "^3.0.0",
+        "@vscode/vsce": "^3.9.2",
+        "esbuild": "^0.28.1",
+        "eslint": "^10.7.0",
+        "glob": "^13.0.6",
+        "globals": "^17.7.0",
+        "mocha": "^11.7.6",
+        "prettier": "^3.9.5",
+        "typescript": "^7.0.2",
+        "typescript-eslint": "^8.64.0"
     }
 }
