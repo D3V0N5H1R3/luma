@@ -1,11 +1,11 @@
 {
   "include": [
     {
-      "distro": "Debian (bookworm)",
-      "image": "debian:bookworm",
-      "cc": "gcc-12",
-      "cxx": "g++-12",
-      "install-cmd": "apt-get update -q && apt-get install -y cmake gcc-12 g++-12 make"
+      "distro": "Debian (trixie)",
+      "image": "debian:trixie",
+      "cc": "gcc",
+      "cxx": "g++",
+      "install-cmd": "apt-get update -q && apt-get install -y cmake gcc g++ make"
     },
     {
       "distro": "Kali Linux",

@@ -2,10 +2,16 @@
 # Luma — Reusable Raspberry Pi OS Build (ARM64)
 #
 # Builds and tests Luma for Raspberry Pi OS (ARM64) by emulating
-# linux/arm64 via QEMU on top of Debian bookworm. The toolchain
-# parameters (image, compilers, install command) are defined here
-# once so ci.yml and release.yml share a single definition;
-# callers opt into artifact upload for release builds.
+# linux/arm64 via QEMU on top of Debian. The toolchain parameters
+# (image, compilers, install command) are defined here once so ci.yml
+# and release.yml share a single definition; callers opt into artifact
+# upload for release builds.
+#
+# Debian trixie (GCC 14) is used as the ARM64 proxy rather than the
+# bookworm base of current Raspberry Pi OS: Luma requires a C++20
+# <format> implementation, which only ships in libstdc++ 13+, whereas
+# bookworm's default toolchain is GCC 12. Trixie exercises the same
+# linux/arm64 target with a toolchain new enough to build the project.
 #
 # Thin wrapper over reusable-linux-build.yml.
 # ─────────────────────────────────────────────────────────────
@@ -33,10 +39,10 @@ jobs:
   build:
     uses: ./.github/workflows/reusable-linux-build.yml
     with:
-      image: arm64v8/debian:bookworm
-      cc: gcc-12
-      cxx: g++-12
-      install-cmd: apt-get update -q && apt-get install -y cmake gcc-12 g++-12 make
+      image: arm64v8/debian:trixie
+      cc: gcc
+      cxx: g++
+      install-cmd: apt-get update -q && apt-get install -y cmake gcc g++ make
       platform: linux/arm64
       upload-artifact: ${{ inputs.upload-artifact }}
       artifact-name: ${{ inputs.artifact-name }}
