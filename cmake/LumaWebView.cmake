@@ -45,8 +45,11 @@ else()
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)
         # IMPORTED_TARGET bundles all pkg-config metadata (include dirs, library
-        # dirs, link flags) into a single CMake target.
-        pkg_check_modules(WEBKITGTK IMPORTED_TARGET webkit2gtk-4.1)
+        # dirs, link flags) into a single CMake target. GLOBAL promotes it to
+        # global scope: luma_core links it PUBLIC (see core/runtime/CMakeLists.txt),
+        # so the imported target must be visible in every directory that consumes
+        # luma_core, not just the core/runtime scope where this file is included.
+        pkg_check_modules(WEBKITGTK IMPORTED_TARGET GLOBAL webkit2gtk-4.1)
     endif()
     if(WEBKITGTK_FOUND)
         set(_webview_libraries PkgConfig::webkit2gtk-4.1)
