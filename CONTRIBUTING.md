@@ -2,6 +2,10 @@
 
 Thank you for your interest in contributing to the Luma programming language.
 
+This project and everyone participating in it is governed by the Luma
+[Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to
+uphold this code.
+
 ---
 
 ## Table of Contents
