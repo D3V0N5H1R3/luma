@@ -64,6 +64,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # The first three entries are the primary per-platform builds: normal
+        # optimized executables that are tested and uploaded as the downloadable
+        # binaries (luma-<os>-<compiler>). Only the Ubuntu GCC 14 job also runs
+        # the headless example sweep (scripts/run_examples.py), so it alone
+        # installs WebKitGTK for the GraphicalUi examples.
+        #
+        # The fourth entry (Ubuntu GCC 13 + sanitizers) is a runtime-safety
+        # check, NOT a build meant for use: it enables AddressSanitizer + UBSan
+        # (-DLUMA_FEATURE_SANITIZERS=ON) to catch buffer overflows,
+        # use-after-free, and undefined behaviour. Its uploaded binary is
+        # instrumented — slower, built non-PIE, and dependent on the sanitizer
+        # runtime — so download the plain gcc-14 artifact if you just want to run
+        # Luma on Linux. See build.instructions.md section 5 (Sanitizer
+        # Configuration) and cmake/LumaCompilerFlags.cmake.
         include:
           - os: ubuntu-latest
             compiler: gcc-14
@@ -89,6 +103,9 @@ jobs:
             lsp_binary: build/Release/luma_lsp.exe
             dap_binary: build/Release/luma_dap.exe
 
+          # Runtime-safety check (ASan + UBSan) — see the matrix note above; the
+          # uploaded binary is instrumented, not for general use. GCC 13 matches
+          # the coverage job's pinned toolchain.
           - os: ubuntu-latest
             compiler: gcc-13-sanitizers
             cc: gcc-13
