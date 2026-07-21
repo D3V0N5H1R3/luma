@@ -9,7 +9,7 @@
 # c-cpp entry to build-mode: manual (see the commented block).
 # ─────────────────────────────────────────────────────────────
 
-name: "CodeQL"
+name: "CodeQL Advanced"
 
 on:
   push:
