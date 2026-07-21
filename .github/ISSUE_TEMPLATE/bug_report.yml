@@ -1,0 +1,109 @@
+name: Bug report
+description: Report a defect in the Luma interpreter, standard library, or tooling.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill out the
+        sections below so we can reproduce and fix the problem quickly.
+
+        > **Security vulnerabilities:** do **not** report them here. Follow the
+        > private process in
+        > [SECURITY.md](https://github.com/D3V0N5H1R3/luma/blob/main/SECURITY.md)
+        > instead.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checklist
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I reproduced this on the latest `main` (or a recent release), not an old checkout.
+          required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      description: Which part of Luma is affected?
+      options:
+        - Interpreter (lexer / parser / type checker / compiler / VM)
+        - Standard library (a Module.function)
+        - Language server (luma_lsp)
+        - Debugger (luma_dap)
+        - VS Code extension
+        - Zed extension
+        - Build system / CMake
+        - Documentation
+        - Other / not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Luma version
+      description: Output of `luma --version`, or the commit SHA you built from.
+      placeholder: "e.g. luma 0.5.0 (abc1234)"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: Compiler / toolchain
+      description: Compiler and version. Most relevant for build issues.
+      placeholder: "e.g. gcc 14.2, clang 18, MSVC 19.51"
+    validations:
+      required: false
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: >-
+        The smallest Luma program (and the exact command) that triggers the bug.
+        Please paste it as a fenced code block so indentation is preserved.
+      placeholder: |
+        Command: luma repro.luma
+
+        ```luma
+        @main
+        function void main() {
+            # minimal code that triggers the bug
+        }
+        ```
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: >-
+        What actually happened? Include the full error message, exit code, or
+        incorrect output, pasted verbatim.
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Stack traces, screenshots, editor/LSP logs, or anything else that helps.
+    validations:
+      required: false
