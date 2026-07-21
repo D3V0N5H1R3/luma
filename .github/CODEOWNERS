@@ -47,6 +47,17 @@
 /scripts/               @D3V0N5H1R3
 
 # ── Vendored third-party code: intentionally UNOWNED ──
-# A pattern with no owner removes code-owner review for these paths,
-# so routine vendored-dependency bumps don't require maintainer sign-off.
+# A bare pattern (no owner) removes code-owner review, so routine
+# vendored-dependency bumps don't require maintainer sign-off. This
+# covers the genuinely third-party trees under external/: lit-html,
+# lucide, mbedtls, miniz, pico-css, uplot, and webview.
 /external/
+
+# First-party code that happens to live under external/ IS owned. These
+# more-specific rules override the blanket /external/ rule above (last
+# match wins):
+#   - gui-framework/ : the project's own GraphicalUi renderer and charts
+#     (JS/CSS/tests), which has its own CI gate (ci-gui-framework.yml).
+#   - README.md      : the project's own doc describing the vendored deps.
+/external/gui-framework/  @D3V0N5H1R3
+/external/README.md       @D3V0N5H1R3
