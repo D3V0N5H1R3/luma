@@ -22,6 +22,7 @@ uphold this code.
 - [Branch Naming](#branch-naming)
 - [Commit Messages](#commit-messages)
 - [Pull Request Workflow](#pull-request-workflow)
+- [Releasing](#releasing)
 - [Code Style](#code-style)
 - [Error Handling](#error-handling)
 - [Reporting Issues](#reporting-issues)
@@ -420,6 +421,67 @@ Follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
 4. Request a review.
 
 5. Once approved, the PR will be merged with a merge commit (`--no-ff`).
+
+---
+
+## Releasing
+
+Luma produces builds in two distinct places. Knowing which is which saves a lot of confusion:
+
+| | **Actions build artifacts** | **GitHub Releases** |
+| --- | --- | --- |
+| Produced by | [`ci.yml`](.github/workflows/ci.yml) on every build | [`release.yml`](.github/workflows/release.yml) when a version tag is pushed |
+| Lifetime | **Temporary** — auto-deleted after 7 days (`retention-days: 7`; the coverage report keeps 14) | **Permanent** — kept until you delete the release |
+| Where | An Actions run's **Artifacts** section (`https://github.com/D3V0N5H1R3/luma/actions`), or `gh run download <run-id>` | The repository's **Releases** page (`https://github.com/D3V0N5H1R3/luma/releases`), or `gh release download <tag>` |
+| Named | `luma-<os>-<compiler>` (e.g. `luma-ubuntu-latest-gcc`) | `luma-<os>-<arch>.tar.gz` / `.zip` per platform, plus a `SHA256SUMS` manifest |
+| Use it for | Debugging or smoke-testing the build from one specific commit | Distributing a version to users — the canonical download |
+
+Because [`ci.yml`](.github/workflows/ci.yml) is path-filtered, a docs- or workflow-only
+commit does not trigger a build, so the newest artifacts may sit on an earlier
+commit than `HEAD`. Release assets never expire, so they are what users should download.
+
+### Cutting a release
+
+Releases are **tag-triggered**: pushing a tag that matches `v*.*.*` (that is,
+`vMAJOR.MINOR.PATCH`) runs [`release.yml`](.github/workflows/release.yml), which builds
+every platform (Linux x86_64, Linux aarch64 / Raspberry Pi, macOS, Windows), validates
+on the Linux distros, packages the VS Code `.vsix`, generates a changelog from the commit
+log since the previous tag, and publishes a GitHub Release with all binaries and a
+`SHA256SUMS` manifest attached.
+
+1. Update the [`VERSION`](VERSION) file — the single source of truth for the project
+   version — on `main`, and commit it:
+
+    ```bash
+    # e.g. bump 0.5.0 -> 0.5.1
+    git switch main && git pull
+    # edit VERSION, then:
+    git commit -am "chore: bump version to 0.5.1"
+    git push
+    ```
+
+2. Create an **annotated** tag whose version matches `VERSION`, prefixed with `v`, and
+   push it:
+
+    ```bash
+    git tag -a v0.5.1 -m "Release version 0.5.1"
+    git push origin v0.5.1
+    ```
+
+3. Watch the **Release** workflow run under
+   [Actions](https://github.com/D3V0N5H1R3/luma/actions). When it finishes, the new
+   release (with its binaries) appears on the
+   [Releases](https://github.com/D3V0N5H1R3/luma/releases) page. It publishes
+   immediately — there is no manual draft step.
+
+The two editor extensions publish from their own tag prefixes —
+`vscode-v*.*.*` ([`release-vscode.yml`](.github/workflows/release-vscode.yml), to the
+Visual Studio Marketplace) and `zed-v*.*.*`
+([`release-zed.yml`](.github/workflows/release-zed.yml)) — so they can be versioned
+independently of the interpreter. See
+[.github/workflows/README.md](.github/workflows/README.md) (§6 Releases) for the
+workflow index and [Git tag conventions](instructions/git.instructions.md) for the tag
+commands.
 
 ---
 

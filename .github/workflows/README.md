@@ -73,6 +73,8 @@ Heavier quality gates that run on a timer or on request rather than on every cha
 
 Tag-triggered publishing; each responds to its own tag prefix. [`release.yml`](release.yml) builds the interpreter for every platform and cuts the main GitHub Release (bundling the VS Code extension archive alongside the binaries), while the two extension workflows handle their own stores.
 
+For the step-by-step release procedure — how these tag-triggered Releases differ from the temporary CI build artifacts, and how to cut one — see [Releasing](../../CONTRIBUTING.md#releasing) in the contributing guide.
+
 | Workflow                                   | Trigger             | Purpose                                                         |
 | ------------------------------------------ | ------------------- | --------------------------------------------------------------- |
 | [`release.yml`](release.yml)               | Tag `v*.*.*`        | Build cross-platform binaries and publish a GitHub Release.     |
