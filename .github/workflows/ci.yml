@@ -371,20 +371,17 @@ jobs:
     name: ThreadSanitizer
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Non-blocking: on the current GitHub-hosted ubuntu-latest image every
-    # ThreadSanitizer-instrumented binary crashes with a bare SIGSEGV at process
-    # startup — before main(), with NO TSan diagnostic — because libtsan cannot
-    # map its large fixed-address shadow region against the runner's memory
-    # layout. This is an environment/runner-image limitation, not a data race in
-    # Luma: the Address/UB sanitizer job (which shares the same shadow-mapping
-    # mechanism, with a smaller shadow) builds and passes cleanly and is the
-    # effective sanitizer gate. Both documented mitigations were tried and are
-    # insufficient for TSan specifically — reducing ASLR entropy
-    # (vm.mmap_rnd_bits=28), disabling ASLR entirely (kernel.randomize_va_space=0),
-    # and linking non-PIE (-no-pie) all still segfault at startup. The job is
-    # kept (not deleted) so it recovers automatically if a future runner image
-    # fixes the mapping; continue-on-error stops it blocking the run until then.
-    # See google/sanitizers#1614.
+    # ThreadSanitizer requires a position-independent executable: unlike
+    # AddressSanitizer, its shadow layout assumes the app is PIE. The -no-pie
+    # workaround the ASan matrix uses (to dodge the ubuntu-24.04 high-ASLR shadow
+    # collision) is therefore actively wrong here and was the likely cause of the
+    # earlier crash-before-main. This job links PIE and only lowers the ASLR
+    # entropy to a libtsan-supported value (see google/sanitizers#1614).
+    #
+    # Kept non-blocking ONLY until the first green run confirms TSan starts and
+    # passes cleanly and any false positives are curated in
+    # scripts/tsan_suppressions.txt; continue-on-error is removed in the next
+    # change so real data races block the build.
     continue-on-error: true
 
     steps:
@@ -398,10 +395,9 @@ jobs:
         with:
           packages: clang
 
-      # Best-effort shadow-collision mitigations (see the job-level comment for
-      # why they are currently insufficient on hosted runners): lower ASLR
-      # entropy to a value libtsan supports, and link the binaries non-PIE so
-      # the executable loads at a fixed low address clear of the shadow.
+      # ubuntu-24.04 raised the default ASLR entropy to vm.mmap_rnd_bits=32, which
+      # libtsan cannot map its shadow against; lower it to the supported value.
+      # No -no-pie here — TSan requires PIE (see the job-level comment).
       - name: Reduce ASLR entropy for ThreadSanitizer
         run: sudo sysctl -w vm.mmap_rnd_bits=28
 
@@ -411,7 +407,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread -no-pie"
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
 
       - name: Build
         run: cmake --build build-tsan --parallel "$(nproc)"
