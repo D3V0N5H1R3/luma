@@ -1,0 +1,52 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — Code Owners
+#
+# Auto-requests review from the listed owners when matching files
+# change. Last matching pattern wins, so the catch-all default is
+# first and the more specific rules follow.
+#
+# Enforced as a merge gate only when the `main` ruleset has
+# "Require review from Code Owners" enabled. While the project has a
+# single maintainer, keep that setting OFF: GitHub does not let a PR
+# author approve their own PR, so a lone required code owner would
+# deadlock every self-opened PR. This file still auto-requests review
+# and documents ownership, and is ready for collaborators or teams.
+# ─────────────────────────────────────────────────────────────
+
+# Default owner for everything in the repo.
+*                       @D3V0N5H1R3
+
+# ── Interpreter core (front-end + back-end) ──
+/core/                  @D3V0N5H1R3
+/shared/                @D3V0N5H1R3
+
+# ── Tooling ──
+/language-server/       @D3V0N5H1R3
+/debugger/              @D3V0N5H1R3
+/extensions/            @D3V0N5H1R3
+
+# ── Tests, examples, benchmarks, fuzzing ──
+/tests/                 @D3V0N5H1R3
+/examples/              @D3V0N5H1R3
+/benchmarks/            @D3V0N5H1R3
+/fuzz/                  @D3V0N5H1R3
+
+# ── Build system ──
+/cmake/                 @D3V0N5H1R3
+/CMakeLists.txt         @D3V0N5H1R3
+/CMakePresets.json      @D3V0N5H1R3
+
+# ── Documentation & project guidance ──
+/documents/             @D3V0N5H1R3
+/instructions/          @D3V0N5H1R3
+*.md                    @D3V0N5H1R3
+
+# ── CI / automation / agent config (highest-sensitivity) ──
+/.github/               @D3V0N5H1R3
+/.claude/               @D3V0N5H1R3
+/scripts/               @D3V0N5H1R3
+
+# ── Vendored third-party code: intentionally UNOWNED ──
+# A pattern with no owner removes code-owner review for these paths,
+# so routine vendored-dependency bumps don't require maintainer sign-off.
+/external/
