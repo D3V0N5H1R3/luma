@@ -30,7 +30,13 @@ jobs:
   build:
     name: Build — ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # Each runner does a cold-cache full build (all binaries and every test
+    # executable), the CTest suite, and packaging. The Windows/MSVC runner is the
+    # slowest and cannot finish a cold build within 15 minutes — the previous
+    # limit cancelled it mid-compile, failing the build job and skipping the whole
+    # release. 35 matches ci.yml's proven ceiling for the same cold-cache build on
+    # the slowest runner; warm-cache runs finish well under it.
+    timeout-minutes: 35
 
     strategy:
       # Build every platform even if one fails, so a release shows the full
