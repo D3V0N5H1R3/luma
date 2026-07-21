@@ -35,9 +35,14 @@ Thank you for your interest in contributing to the Luma programming language.
 
 All compilers must support C++20. Building the interpreter, language server, and
 debugger needs only a C++20 toolchain and CMake 3.21 or later — every
-third-party library is vendored and built from source. **Python 3.10 or later**
-is additionally required to run the helper scripts under `scripts/` (test
-runners, the Git hook installer, and coverage).
+third-party library is vendored and built from source. These versions are hard
+minimums: Luma relies on the C++20 library features `std::format` and
+`std::chrono::clock_cast`, which libstdc++ provides only from **GCC 13** onward,
+so GCC 12 and earlier cannot build the project (for example, the default `g++`
+on Raspberry Pi OS and Debian 12 "bookworm" is GCC 12 — install GCC 13 or newer
+and configure with `-DCMAKE_CXX_COMPILER=g++-13`). **Python 3.10 or later** is
+additionally required to run the helper scripts under `scripts/` (test runners,
+the Git hook installer, and coverage).
 
 Some optional components need extra tooling:
 

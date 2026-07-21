@@ -24,7 +24,7 @@ This guide explains how to set up a development environment for working on the L
 
 The following are required to build and run the project on Windows, Linux, or macOS:
 
-- A C++20-compliant compiler (GCC 13+, Clang 15+, or MSVC 2022+).
+- A C++20-compliant compiler (GCC 13+, Clang 15+, or MSVC 2022+). These are hard minimums: Luma uses the C++20 library features `std::format` and `std::chrono::clock_cast`, which libstdc++ provides only from GCC 13 onward, so GCC 12 and earlier cannot build the project. On distributions whose default `g++` is still GCC 12 — notably Raspberry Pi OS and Debian 12 ("bookworm") — install GCC 13 or newer and select it with `-DCMAKE_CXX_COMPILER=g++-13`.
 - CMake ≥ 3.21.
 - Python 3.10 or later (for the helper scripts under `scripts/`, including the Luma feature-test runner `scripts/run_luma_tests.py`).
 

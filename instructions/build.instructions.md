@@ -199,7 +199,7 @@ Run a fuzzer with an optional corpus directory:
 
 - **Windows (MSVC)** — use the `msvc` / `msvc-release` presets with Visual Studio or VS Code. Always pass `--config Release` (or `Debug`) with `cmake --build` for multi-config generators.
 - **macOS (Xcode)** — use the `xcode` / `xcode-release` presets. The `--config` flag is required here too.
-- **Linux** — GCC and Clang are both fully supported. The `default` preset works out of the box.
+- **Linux** — GCC and Clang are both fully supported. The `default` preset works out of the box. The minimum is **GCC 13** (or Clang 15): Luma uses `std::format` and `std::chrono::clock_cast`, which libstdc++ ships only from GCC 13, so GCC 12 and earlier — such as the default `g++` on Raspberry Pi OS and Debian 12 "bookworm" — cannot build the project. Install GCC 13+ and pass `-DCMAKE_CXX_COMPILER=g++-13` when configuring.
 
 ---
 
