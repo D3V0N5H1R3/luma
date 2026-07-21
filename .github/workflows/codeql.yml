@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — CodeQL Analysis Workflow (advanced setup)
+#
+# Runs CodeQL static analysis on every push and PR targeting main,
+# plus a weekly scheduled scan. Each first-party language is
+# analysed with CodeQL's buildless extractor (build-mode: none):
+# no project build is required, which keeps the scan fast and
+# robust. For slightly higher C/C++ precision you can switch the
+# c-cpp entry to build-mode: manual (see the commented block).
+# ─────────────────────────────────────────────────────────────
+
+name: "CodeQL"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 4 * * 1" # Weekly Monday 04:23 UTC.
+
+permissions:
+  actions: read
+  contents: read
+  packages: read
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: c-cpp
+            build-mode: none
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        with:
+          category: "/language:${{ matrix.language }}"
