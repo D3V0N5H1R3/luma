@@ -29,7 +29,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const registry = new FeatureRegistry();
     context.subscriptions.push(registry);
 
-    const output_channel = vscode.window.createOutputChannel("Luma Language Server");
+    // vscode-languageclient 10 requires the client's `outputChannel` to be a
+    // `LogOutputChannel` (it logs through the channel's level-aware methods), so
+    // create a log channel with `{ log: true }`.
+    const output_channel = vscode.window.createOutputChannel("Luma Language Server", {
+        log: true,
+    });
     registry.register(output_channel);
 
     const language_status = createLanguageStatus();
