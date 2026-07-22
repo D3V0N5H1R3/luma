@@ -199,6 +199,23 @@ below by role.
 | Table | `Solaris.table(array<string> headers, array<array<string>> rows)` | A read-only data grid. |
 | Progress | `Solaris.progress(number value, number max)` | A determinate progress bar. |
 | Image | `Solaris.image(string source)` | A picture from a path or URL. |
+| Line chart | `Solaris.line_chart(array<string> labels, array<number> values)` | Plots `values` as a line over the `labels`. |
+| Bar chart | `Solaris.bar_chart(array<string> labels, array<number> values)` | One vertical bar per label, sized by its value. |
+| Pie chart | `Solaris.pie_chart(array<string> labels, array<number> values)` | One slice per label, sized by its value. |
+
+The three charts share one shape: a `labels` array names each data point and a
+`values` array gives its size, so the two arrays line up index for index. Size a
+chart with the usual `width`/`height` modifiers and give it a `label` for
+screen-reader users, exactly like any other component:
+
+```luma
+Solaris.bar_chart(["Mon", "Tue", "Wed"], [12, 19, 7])
+    |> Solaris.height(Length.Fixed(220.0))
+    |> Solaris.label("Sales this week")
+```
+
+Because the values can be plain whole numbers like `[12, 19, 7]`, a beginner
+never has to think about the `integer`-versus-`number` distinction here.
 
 ### Navigation and overlays
 
@@ -558,7 +575,7 @@ things are deliberately out of scope for the surface:
   `on_change` to a `text_field`, `on_toggle` to a `switch`, and so on. A control
   left without its handler is **inert** — interacting with it does nothing — so a
   forgotten handler is a harmless no-op, never a corrupted model.
-- **Advanced components** (charts, routers, drag-and-drop) are not part of the
+- **Advanced components** (routers, drag-and-drop) are not part of the
   Solaris surface yet. Applications needing them can use the raw
   [`GraphicalUi`](Luma_GraphicalUi_Guide.md) module directly.
 

@@ -528,6 +528,9 @@ _Effects_ below).
 | `Solaris.table` | `(array<string> headers, array<array<string>> rows) -> View` | A read-only data grid |
 | `Solaris.progress` | `(number value, number max) -> View` | A determinate progress bar |
 | `Solaris.image` | `(string source) -> View` | A picture from a path or URL |
+| `Solaris.line_chart` | `(array<string> labels, array<number> values) -> View` | A line chart plotting `values` over `labels` |
+| `Solaris.bar_chart` | `(array<string> labels, array<number> values) -> View` | A vertical bar chart, one bar per label |
+| `Solaris.pie_chart` | `(array<string> labels, array<number> values) -> View` | A pie chart, one slice per label |
 | `Solaris.tabs` | `(array<string> labels, integer active, array<View> panels) -> View` | Panel switcher (pair with `on_tab`) |
 | `Solaris.menu` | `(string label, array<string> items) -> View` | In-page dropdown menu (pair with `on_select`) |
 | `Solaris.dialog` | `(string title, boolean open, array<View> children) -> View` | A modal (pair with `on_close`) |

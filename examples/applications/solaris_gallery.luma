@@ -151,7 +151,19 @@ function View gallery_data(GalleryModel model) {
                 ["Theme", model.theme],
                 ["Notifications", "${model.notifications}"]
             ]),
-        Solaris.progress(model.volume, 100.0) |> Solaris.rounded(Radius.Full)
+        Solaris.progress(model.volume, 100.0) |> Solaris.rounded(Radius.Full),
+
+        # Charts — data-visualisation components. You pass only labels and
+        # values; Solaris reconciles them onto the engine's chart widgets, so
+        # the same width/height/rounded modifiers apply.
+        Solaris.text("Weekly sign-ups") |> Solaris.muted(),
+        Solaris.bar_chart(
+            ["Mon", "Tue", "Wed", "Thu", "Fri"],
+            [8, 12, 6, 14, 9]) |> Solaris.height(Length.Fixed(200.0)),
+        Solaris.text("Four-week trend") |> Solaris.muted(),
+        Solaris.line_chart(
+            ["Wk 1", "Wk 2", "Wk 3", "Wk 4"],
+            [20, 34, 28, 41]) |> Solaris.height(Length.Fixed(200.0))
     ]) |> Solaris.gap(Spacing.L)
 }
 
