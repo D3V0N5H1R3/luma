@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/D3V0N5H1R3/luma/security/advisories/new
+    about: Please report security issues privately, never as a public issue. See SECURITY.md.
+  - name: Contributing guide
+    url: https://github.com/D3V0N5H1R3/luma/blob/main/CONTRIBUTING.md
+    about: How to build, test, and submit changes to Luma.

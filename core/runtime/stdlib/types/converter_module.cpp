@@ -122,6 +122,23 @@ constexpr std::array<const char*, 10> tens_words{
 // Parse `s` as an integer in `base`, requiring the whole string to be consumed.
 // Returns success(value), or failure(err_msg) on a parse error or trailing input.
 [[nodiscard]] Value parse_in_base(const std::string& s, int base, std::string_view err_msg) {
+    // glibc's strtoll accepts a "0b"/"0B" prefix for base 2 (a C23 extension) while
+    // the MSVC runtime does not, which would make from_binary platform-dependent.
+    // Reject the binary prefix explicitly so parsing behaves identically everywhere.
+    // (A "0x" prefix for base 16 is standard C and accepted consistently, so it is
+    // deliberately left for std::stoll to handle.)
+    if (base == 2) {
+        std::string_view body{s};
+
+        if (!body.empty() && (body.front() == '+' || body.front() == '-')) {
+            body.remove_prefix(1);
+        }
+
+        if (body.size() >= 2 && body[0] == '0' && (body[1] == 'b' || body[1] == 'B')) {
+            return make_failure_value(std::string{err_msg});
+        }
+    }
+
     try {
         std::size_t pos{0};
 

@@ -20,6 +20,7 @@
 #include <system_error>
 
 #include "analysis/source/source_location.hpp"
+#include "common/file_time.hpp"
 #include "common/platform_utils.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -191,7 +192,7 @@ void register_filesystem_content(const EnvPtr& env) {
                 "FileSystem.get_modified_time", args[0], loc, false,
                 [](const std::filesystem::path& safe_path) -> Value {
                     const auto ftime = std::filesystem::last_write_time(safe_path);
-                    const auto sctp = std::chrono::clock_cast<std::chrono::system_clock>(ftime);
+                    const auto sctp = file_time_to_system_clock(ftime);
                     const auto epoch = sctp.time_since_epoch();
                     const auto secs =
                         std::chrono::duration_cast<std::chrono::milliseconds>(epoch).count();

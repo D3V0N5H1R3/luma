@@ -37,6 +37,11 @@ on:
         required: false
         type: string
         default: ""
+      runner:
+        description: Runner label to execute on (e.g. ubuntu-latest, ubuntu-24.04-arm).
+        required: false
+        type: string
+        default: ubuntu-latest
       upload-artifact:
         description: Whether to package and upload the built binaries.
         required: false
@@ -53,21 +58,21 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    # A single upper bound covers both fast native distro builds and the
-    # slower QEMU-emulated ARM64 build.
+    runs-on: ${{ inputs.runner }}
+    # A single upper bound covers the native distro builds and the native
+    # ARM64 build; it is deliberately generous for a cold-cache full build.
     timeout-minutes: 30
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       # Only needed when the requested platform differs from the runner's.
       - name: Set up QEMU for emulation
         if: inputs.platform != ''
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
 
       - name: Build and test
         env:

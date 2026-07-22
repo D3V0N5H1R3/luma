@@ -518,6 +518,7 @@ public:
     // partial).  Handles integer×integer, number×number, and mixed numeric
     // pairs, plus string×string.  All other type combinations return
     // std::partial_ordering::unordered.
+    // NOLINTNEXTLINE(bugprone-exception-escape): guarded by is_*() checks; cannot throw.
     [[nodiscard]] friend std::partial_ordering operator<=>(const Value& a,
                                                            const Value& b) noexcept {
         if (a.is_integer() && b.is_integer()) {

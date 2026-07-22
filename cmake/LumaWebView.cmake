@@ -21,6 +21,7 @@ option(LUMA_REQUIRE_WEBVIEW "Require WebView support (fatal error if not found)"
 
 set(_webview_found FALSE)
 set(_webview_libraries "")
+set(_webview_include_dirs "")
 set(_webview_compile_options "")
 
 if(NOT LUMA_FEATURE_WEBVIEW)
@@ -44,12 +45,21 @@ elseif(APPLE)
 else()
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)
-        # IMPORTED_TARGET bundles all pkg-config metadata (include dirs, library
-        # dirs, link flags) into a single CMake target.
-        pkg_check_modules(WEBKITGTK IMPORTED_TARGET webkit2gtk-4.1)
+        pkg_check_modules(WEBKITGTK webkit2gtk-4.1)
     endif()
     if(WEBKITGTK_FOUND)
-        set(_webview_libraries PkgConfig::webkit2gtk-4.1)
+        # Use pkg-config's raw result variables (plain strings), NOT an
+        # IMPORTED_TARGET. luma_core links these libraries PUBLIC, so they must
+        # propagate to its consumers (the luma executable, tests) which live in
+        # other directories. A pkg_check_modules IMPORTED_TARGET is directory-
+        # scoped: even with the GLOBAL keyword it did not reliably resolve for
+        # those consumers, failing the generate step with "target
+        # PkgConfig::webkit2gtk-4.1 not found". The full library paths in
+        # WEBKITGTK_LINK_LIBRARIES carry no such scope. The include dirs and
+        # cflags are attached to the luma_webview INTERFACE target below.
+        set(_webview_libraries ${WEBKITGTK_LINK_LIBRARIES})
+        set(_webview_include_dirs ${WEBKITGTK_INCLUDE_DIRS})
+        set(_webview_compile_options ${WEBKITGTK_CFLAGS_OTHER})
         set(_webview_found TRUE)
     endif()
 endif()
@@ -60,8 +70,15 @@ add_library(luma_webview INTERFACE)
 # first-party code. Note: clang-tidy's static-analyzer diagnostics ignore system,
 # external and header-filter settings, so the two analyzer checks that fire inside
 # webview.h are instead carved out by name in the root .clang-tidy.
+#
+# On Linux the bundled webview.h pulls in the WebKitGTK headers, so the backend's
+# own include dirs (${_webview_include_dirs}, empty on other platforms) are added
+# here too — as SYSTEM, since they are third-party. They are carried on the
+# INTERFACE target rather than linked PUBLIC on luma_core so the compile-time
+# requirements stay PRIVATE to the targets that actually compile WebView code.
 target_include_directories(luma_webview SYSTEM INTERFACE
-    ${PROJECT_SOURCE_DIR}/external/webview)
+    ${PROJECT_SOURCE_DIR}/external/webview
+    ${_webview_include_dirs})
 
 if(_webview_found)
     target_compile_definitions(luma_webview INTERFACE LUMA_HAS_WEBVIEW=1)

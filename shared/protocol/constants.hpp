@@ -11,7 +11,7 @@ namespace luma::protocol {
 // Language-level limits that can be overridden at runtime via LUMA_LIMIT_*
 // environment variables live in ResourceLimits (common/resource_limits.hpp).
 
-inline constexpr std::size_t k_default_max_message_bytes = 50 * 1024 * 1024;
+inline constexpr std::size_t k_default_max_message_bytes = std::size_t{50} * 1024 * 1024;
 inline constexpr std::size_t k_default_max_header_length = 8192;
 inline constexpr std::size_t k_default_max_resync_iterations = 1000;
 inline constexpr std::size_t k_read_buffer_size = 8192;

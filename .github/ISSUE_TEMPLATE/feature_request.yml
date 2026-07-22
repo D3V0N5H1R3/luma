@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest a language feature, standard-library addition, or tooling improvement.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement! Describing the **problem** you want
+        to solve — not only the solution — helps us find the best design.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checklist
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Language feature (syntax / type system / semantics)
+        - Standard library (new module or function)
+        - Language server (luma_lsp)
+        - Debugger (luma_dap)
+        - Editor extension (VS Code / Zed)
+        - Tooling / build / CI
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do, and why is it hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: >-
+        Describe the feature. For language or stdlib changes, a short example of
+        how it would look in Luma is very helpful.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about, and why you prefer this one.
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Links, prior art in other languages, or anything else relevant.
+    validations:
+      required: false

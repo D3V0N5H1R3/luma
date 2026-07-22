@@ -193,7 +193,15 @@ endfunction()
 # ─────────── Instrumentation helpers (sanitizers / coverage) ───────────
 
 set(LUMA_SANITIZE_COMPILE_FLAGS -fsanitize=address,undefined -fno-omit-frame-pointer)
-set(LUMA_SANITIZE_LINK_FLAGS    -fsanitize=address,undefined)
+# Link sanitizer executables as non-PIE. The project builds position-independent
+# code globally (CMAKE_POSITION_INDEPENDENT_CODE ON), which otherwise links the
+# instrumented binaries as PIE. On CI runners with high ASLR entropy the
+# randomized PIE load base can collide with the sanitizer's fixed shadow-memory
+# region, crashing every binary at startup before any diagnostic is printed. A
+# non-PIE executable loads at a fixed low address that never overlaps the shadow
+# — the canonical fix for "instrumented binary segfaults at startup". PIC objects
+# link into a non-PIE executable without issue.
+set(LUMA_SANITIZE_LINK_FLAGS    -fsanitize=address,undefined -no-pie)
 set(LUMA_COVERAGE_COMPILE_FLAGS --coverage -fprofile-arcs -ftest-coverage)
 set(LUMA_COVERAGE_LINK_FLAGS    --coverage)
 

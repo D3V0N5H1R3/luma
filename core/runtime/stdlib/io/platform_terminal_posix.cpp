@@ -81,9 +81,12 @@ std::string_view disable_mouse() {
 }
 
 bool supports_color() {
-    // Check TERM and COLORTERM env vars.
+    // Check TERM and COLORTERM env vars.  std::getenv has no thread-safe std
+    // alternative; these read at startup with no concurrent setenv, so it is safe.
+    // NOLINTBEGIN(concurrency-mt-unsafe)
     const char* term = std::getenv("TERM");
     const char* colorterm = std::getenv("COLORTERM");
+    // NOLINTEND(concurrency-mt-unsafe)
 
     if (colorterm != nullptr) {
         return true;
@@ -99,6 +102,7 @@ bool supports_color() {
 }
 
 bool supports_true_color() {
+    // NOLINTNEXTLINE(concurrency-mt-unsafe): no thread-safe std alternative; read at startup only.
     const char* colorterm = std::getenv("COLORTERM");
 
     if (colorterm != nullptr) {

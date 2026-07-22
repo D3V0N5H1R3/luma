@@ -1,13 +1,15 @@
 # ─────────────────────────────────────────────────────────────
-# Luma — CodeQL Analysis Workflow
+# Luma — CodeQL Analysis Workflow (advanced setup)
 #
-# Runs GitHub's CodeQL static analysis over the C++ sources on
-# every push and PR targeting main, plus a weekly scheduled scan.
-# The project is built manually so CodeQL can observe the full
-# compilation.
+# Runs CodeQL static analysis on every push and PR targeting main,
+# plus a weekly scheduled scan. Each first-party language is
+# analysed with CodeQL's buildless extractor (build-mode: none):
+# no project build is required, which keeps the scan fast and
+# robust. For slightly higher C/C++ precision you can switch the
+# c-cpp entry to build-mode: manual (see the commented block).
 # ─────────────────────────────────────────────────────────────
 
-name: "CodeQL"
+name: "CodeQL Advanced"
 
 on:
   push:
@@ -20,6 +22,7 @@ on:
 permissions:
   actions: read
   contents: read
+  packages: read
   security-events: write
 
 concurrency:
@@ -28,26 +31,36 @@ concurrency:
 
 jobs:
   analyze:
-    name: Analyze (C++)
+    name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: c-cpp
+            build-mode: none
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        uses: github/codeql-action/init@e0647621c2984b5ed2f768cb892365bf2a616ad1 # v4.37.2
         with:
-          languages: c-cpp
-          build-mode: manual
-
-      - name: Configure and build
-        uses: ./.github/actions/cmake-build
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@9e0d7b8d25671d64c341c19c0152d693099fb5ba # v4.35.5
+        uses: github/codeql-action/analyze@e0647621c2984b5ed2f768cb892365bf2a616ad1 # v4.37.2
         with:
-          category: "/language:c-cpp"
+          category: "/language:${{ matrix.language }}"

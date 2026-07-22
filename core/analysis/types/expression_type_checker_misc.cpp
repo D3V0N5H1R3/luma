@@ -46,6 +46,7 @@ TypeInfo ExpressionTypeChecker::visit_lambda(const LambdaExpression& expr) {
 
     if (expr.return_type) {
         tc_.context().current_return_type = tc_.resolve_type(*expr.return_type);
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): assigned on the line above.
         func_type.return_type = std::make_shared<TypeInfo>(*tc_.context().current_return_type);
     } else {
         tc_.context().current_return_type = TypeInfo::make(TypeInfo::Kind::StdlibAny);

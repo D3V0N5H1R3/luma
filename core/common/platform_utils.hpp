@@ -48,6 +48,7 @@ namespace luma {
     }
     return std::nullopt;
 #else
+    // NOLINTNEXTLINE(concurrency-mt-unsafe): no thread-safe std alternative; read at startup only.
     const char* val = std::getenv(name);
 
     if (val) {

@@ -20,6 +20,9 @@ cmake -B build \
   -DCMAKE_C_COMPILER="${CC}" \
   -DCMAKE_CXX_COMPILER="${CXX}"
 
-cmake --build build --parallel
+# An explicit job count is required: `--parallel` with no number becomes
+# `make -j` (unlimited) under the Makefiles generator, which spawns hundreds of
+# compiles and OOM-kills the container. Bound it to the detected core count.
+cmake --build build --parallel "$(nproc)"
 
 ctest --test-dir build --output-on-failure -C Release

@@ -159,11 +159,13 @@ namespace {
 // abort). Centralizing the security-critical count → validate → reserve shape
 // keeps the allocation guard identical across every section, so a hardening fix
 // cannot silently lag in one block. The wire format is unchanged.
-template <std::unsigned_integral CountT, typename Container, typename LimitFn,
+template <std::unsigned_integral CountT, typename ReaderT, typename Container, typename LimitFn,
           typename ReadElementFn>
-[[nodiscard]] bool read_bounded_array(BytecodeSerializer::Reader& r, Container& out,
-                                      LimitFn within_limit, ReadElementFn read_element) {
-    const CountT count = r.read_int<CountT>();
+[[nodiscard]] bool read_bounded_array(ReaderT& r, Container& out, LimitFn within_limit,
+                                      ReadElementFn read_element) {
+    // `r` is of dependent type `ReaderT`, so `read_int` is a dependent template
+    // name and needs the `template` disambiguator under gcc/clang (MSVC is lax).
+    const CountT count = r.template read_int<CountT>();
     if (r.error() || !within_limit(count)) {
         return false;
     }

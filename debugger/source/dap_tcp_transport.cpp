@@ -101,7 +101,7 @@ std::optional<std::string> TcpTransport::read_auth_line() {
 
     while (true) {
         char c{};
-        const int n = ::recv(client_socket_, &c, 1, 0);
+        const auto n = ::recv(client_socket_, &c, 1, 0);
 
         if (n <= 0) {
             return std::nullopt;
@@ -158,7 +158,7 @@ void TcpTransport::close() {
 
 std::size_t TcpTransport::read_raw(std::span<char> buf) {
     const auto chunk = (std::min)(buf.size(), static_cast<std::size_t>(INT_MAX));
-    const int n = ::recv(client_socket_, buf.data(), static_cast<int>(chunk), 0);
+    const auto n = ::recv(client_socket_, buf.data(), static_cast<int>(chunk), 0);
 
     if (n < 0) {
         throw protocol::ConnectionClosed("Read error on socket");
@@ -176,7 +176,7 @@ void TcpTransport::write_message(const JsonValue& message) {
         std::size_t sent = 0;
 
         while (sent < data.size()) {
-            const int n =
+            const auto n =
                 ::send(client_socket_, data.data() + sent, static_cast<int>(data.size() - sent), 0);
 
             if (n <= 0) {
