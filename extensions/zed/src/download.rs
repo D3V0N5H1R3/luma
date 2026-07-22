@@ -422,7 +422,10 @@ pub(crate) fn verify_checksum(file_path: &str, expected_hash: &str) -> Result<()
     let mut hasher = Sha256::new();
     hasher.update(&data);
     let result = hasher.finalize();
-    let actual_hash = format!("{result:x}");
+    // sha2 0.11's `finalize()` returns a `hybrid_array::Array`, which no longer
+    // implements `LowerHex` (unlike the `GenericArray` of 0.10), so format each
+    // byte to lowercase hex explicitly rather than with `{result:x}`.
+    let actual_hash: String = result.iter().map(|byte| format!("{byte:02x}")).collect();
 
     if actual_hash != expected_hash.to_lowercase() {
         return Err(format!(
