@@ -45,16 +45,21 @@ suite("withRetry", () => {
     });
 
     test("should include context in error message", async () => {
+        // `context` is free-form descriptive text, not a URL to be validated.
+        // Assert on a plain sentinel rather than a URL literal so this stays a
+        // message-content check (a URL literal in .includes() trips CodeQL's
+        // js/incomplete-url-substring-sanitization heuristic — a false positive
+        // here since no URL is being sanitized).
         await assert.rejects(
             () =>
                 withRetry(
                     async () => {
                         throw new Error("network error");
                     },
-                    { maxRetries: 0, baseDelay: 1, context: "https://example.com" },
+                    { maxRetries: 0, baseDelay: 1, context: "the release server" },
                 ),
             (err: Error) => {
-                assert.ok(err.message.includes("https://example.com"));
+                assert.ok(err.message.includes("the release server"));
                 return true;
             },
         );

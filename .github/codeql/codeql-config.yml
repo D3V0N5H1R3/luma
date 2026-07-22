@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — CodeQL configuration
+#
+# Excludes vendored third-party code under external/ from CodeQL
+# analysis. Those libraries (mbedtls, miniz, webview, lit-html,
+# uplot, …) are built from upstream source and are not maintained
+# in this repository, so their findings are not actionable here and
+# must not be patched locally (that would fork upstream). This
+# mirrors how the clang-tidy HeaderFilterRegex restricts diagnostics
+# to first-party directories.
+#
+# paths-ignore is honoured for every language in codeql.yml because
+# each one is analysed with build-mode: none (buildless extraction),
+# which supports path filtering for compiled languages (C/C++) too.
+# ─────────────────────────────────────────────────────────────
+name: "Luma CodeQL config"
+
+paths-ignore:
+  - external
