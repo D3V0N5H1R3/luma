@@ -274,7 +274,13 @@ VariableInspector::lock_frame_and_vm(int frame_id, const ThreadResolver& resolve
     OrderedUniqueLock<DapLockId> lock(state->mutex, DapLockId::PerThread);
     VM* vm = state->vm; // nullptr if the thread already exited.
 
-    if (vm == nullptr) {
+    // Treat a running (non-paused) thread as unresolved, exactly like an exited
+    // one: only a STOPPED thread has a stable stack/locals to inspect.  A
+    // free-running task VM concurrently mutates its frames and value stack, so
+    // dereferencing it through the returned VMIntrospector would race the
+    // execution thread and can crash the adapter (SIGSEGV).  is_paused is
+    // guarded by the ThreadState lock acquired above.
+    if (vm == nullptr || !state->is_paused) {
         // Unresolved: return nullopt and let the local `lock` release
         // state->mutex as it destructs on scope exit.
         return LockedFrame{

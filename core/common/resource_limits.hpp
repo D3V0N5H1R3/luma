@@ -24,7 +24,7 @@ namespace luma {
 // because they affect data structure sizing or are baked into compiled bytecode.
 namespace CompileTimeLimits {
 
-constexpr std::size_t k_one_megabyte = 1024 * 1024;
+constexpr std::size_t k_one_megabyte = std::size_t{1024} * 1024;
 
 // Maximum VM value-stack depth (number of Value slots).
 constexpr std::size_t max_vm_stack_depth = 65536;
@@ -100,7 +100,7 @@ struct ResourceLimits {
     static inline int max_interpolation_depth = 32;
 
     // Maximum byte size of a single source file.
-    static inline std::size_t max_source_size = 64 * 1024 * 1024; // 64 MB
+    static inline std::size_t max_source_size = std::size_t{64} * 1024 * 1024; // 64 MB
 
     // ── Container sizes ──
 
@@ -137,7 +137,7 @@ struct ResourceLimits {
     // ── String limits ──
 
     // Maximum byte length of a single string value.
-    static inline std::size_t max_string_size = 256 * 1024 * 1024; // 256 MB
+    static inline std::size_t max_string_size = std::size_t{256} * 1024 * 1024; // 256 MB
 
     // Maximum repeat count for String.repeat().
     static inline std::int64_t max_string_repeat = 10'000'000;
@@ -183,29 +183,29 @@ struct ResourceLimits {
     // ── Process and environment ──
 
     // Maximum byte length of command output captured by Process.run().
-    static inline std::size_t max_process_output_size = 64 * 1024 * 1024; // 64 MB
+    static inline std::size_t max_process_output_size = std::size_t{64} * 1024 * 1024; // 64 MB
 
     // Maximum byte length of an environment variable name or value.
-    static inline std::size_t max_env_size = 32 * 1024; // 32 KB
+    static inline std::size_t max_env_size = std::size_t{32} * 1024; // 32 KB
 
     // ── HTTP limits ──
 
     // Maximum byte size of HTTP response headers.
-    static inline std::size_t max_http_header_size = 16 * 1024; // 16 KB
+    static inline std::size_t max_http_header_size = std::size_t{16} * 1024; // 16 KB
 
     // Maximum byte size of an HTTP response body.
-    static inline std::size_t max_http_body_size = 256 * 1024 * 1024; // 256 MB
+    static inline std::size_t max_http_body_size = std::size_t{256} * 1024 * 1024; // 256 MB
 
     // Maximum number of HTTP response headers retained before header parsing stops.
     static inline std::size_t max_http_header_count = 256;
 
     // Maximum byte size of a single HTTP response header value; longer values are
     // truncated to this length.
-    static inline std::size_t max_http_header_value_size = 8 * 1024; // 8 KB
+    static inline std::size_t max_http_header_value_size = std::size_t{8} * 1024; // 8 KB
 
     // Maximum byte size of a raw HTTP response (headers plus body) read before the
     // reader bails out.
-    static inline std::size_t max_http_response_size = 64 * 1024 * 1024; // 64 MB
+    static inline std::size_t max_http_response_size = std::size_t{64} * 1024 * 1024; // 64 MB
 
     // ── Loop limits ──
 
@@ -340,12 +340,12 @@ struct RuntimeConstraints {
         c.max_set_size = 100'000;
         c.max_graph_vertices = 10'000;
         c.max_graph_edges = 100'000;
-        c.max_string_size = 1024 * 1024; // 1 MB
+        c.max_string_size = std::size_t{1024} * 1024; // 1 MB
         c.max_string_repeat = 100'000;
         c.max_pad_width = 100'000;
         c.max_levenshtein_input = 1'000;
         c.max_while_iterations = 1'000'000;
-        c.max_process_output_size = 1024 * 1024; // 1 MB
+        c.max_process_output_size = std::size_t{1024} * 1024; // 1 MB
         c.max_open_sockets = 10;
         c.max_channel_queue_size = 10'000;
         c.max_task_queue_size = 1'000;
@@ -353,7 +353,7 @@ struct RuntimeConstraints {
         c.max_regex_input_size = 64'000;  // 64 KB (vs 1 MB default)
         c.max_json_nesting_depth = 32;
         c.max_json_elements = 10'000;
-        c.max_http_body_size = 1024 * 1024; // 1 MB
+        c.max_http_body_size = std::size_t{1024} * 1024; // 1 MB
         return c;
     }
 };

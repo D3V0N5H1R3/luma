@@ -7,6 +7,8 @@
 #ifdef _WIN32
 #include <fcntl.h>
 #include <io.h>
+#else
+#include <csignal>
 #endif
 
 #include "dap_server.hpp"
@@ -14,6 +16,16 @@
 #include "dap_transport.hpp"
 
 int main(int argc, char* argv[]) try { // NOLINT(bugprone-exception-escape)
+#ifndef _WIN32
+    // luma_dap speaks the Debug Adapter Protocol over stdout.  When the editor
+    // (or a test harness) closes the connection, the next write to the broken
+    // pipe delivers SIGPIPE, whose default disposition terminates the process
+    // before the transport's write can return an error.  Ignore it so a broken
+    // pipe instead surfaces as a ConnectionClosed exception and the adapter
+    // shuts down cleanly (exit 0) rather than being killed by the signal.
+    ::signal(SIGPIPE, SIG_IGN);
+#endif
+
     // Parse --port flag for TCP mode.
     std::uint16_t tcp_port = 0;
     std::string auth_token;

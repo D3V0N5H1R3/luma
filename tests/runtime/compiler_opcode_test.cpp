@@ -872,8 +872,28 @@ constexpr std::array<OpcodeExpectation, 105> k_opcode_expectations{{
 
 static_assert(k_opcode_expectations.size() == static_cast<std::size_t>(Op::EndModule) + 1,
               "characterization table must cover every defined opcode");
+
+// AddressSanitizer instruments every access to a global variable, which makes
+// the address of `opcode_table` (reached here through find_opcode_info) not a
+// core constant expression.  GCC then rejects this static_assert with
+// "'(&opcode_table[0]) != 0' is not a constant expression".  The identical
+// check runs at run time in test_opcode_metadata_characterization below, which
+// executes under ASan, so nothing is lost by skipping the compile-time form
+// there.  Detect ASan via GCC's __SANITIZE_ADDRESS__ and Clang's __has_feature.
+#if defined(__SANITIZE_ADDRESS__)
+#define LUMA_OPCODE_TEST_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define LUMA_OPCODE_TEST_ASAN 1
+#endif
+#endif
+
+#if !defined(LUMA_OPCODE_TEST_ASAN)
 static_assert(opcode_metadata_matches(),
               "opcode metadata drifted from the R02 characterization baseline");
+#endif
+
+#undef LUMA_OPCODE_TEST_ASAN
 
 } // namespace
 

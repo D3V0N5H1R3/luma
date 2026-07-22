@@ -9,7 +9,15 @@
 # ─── Process.run returns a ProcessResult record ──────────
 
 function void show_process_result() {
-    result<Process.ProcessResult> r = Process.run("cmd /c echo Hello from Luma")
+    # `echo` is a cmd.exe built-in on Windows but a standalone binary on POSIX,
+    # so choose the command for the host platform ("OS" is set only on Windows).
+    mutable string command = "echo Hello from Luma"
+
+    if (Process.has_environment_variable("OS")) {
+        command = "cmd /c echo Hello from Luma"
+    }
+
+    result<Process.ProcessResult> r = Process.run(command)
 
     match r {
         success(pr) {

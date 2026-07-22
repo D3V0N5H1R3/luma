@@ -572,6 +572,7 @@ void Parser::parse_pattern_literal(MatchPattern::PatternData& pattern) {
 
         advance();
     } else if (check(TokenType::IntegerLiteral)) {
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the lexer always sets the payload.
         pattern = MatchArm::IntegerPatternData{std::get<std::int64_t>(*current().literal)};
 
         advance();

@@ -24,10 +24,12 @@
 #endif
 #include <windows.h>
 #elif defined(__linux__)
-// Forward-declared to avoid pulling the GTK development headers into this
-// translation unit; the symbol is provided by the GTK library that the
-// bundled webview backend already links against.
-extern "C" void gtk_window_maximize(void* window);
+// The bundled webview backend already pulls in the GTK development headers on
+// Linux (webview.h includes <gtk/gtk.h>), so call GTK's real
+// gtk_window_maximize(GtkWindow*) directly. A local `extern "C"` forward
+// declaration taking a void* — used before the WebKitGTK headers were on the
+// include path — clashes with GTK's own prototype once they are.
+#include <gtk/gtk.h>
 #endif
 
 namespace luma {
@@ -42,7 +44,7 @@ void maximize_native_window([[maybe_unused]] webview_t webview) {
         ShowWindow(hwnd, SW_MAXIMIZE);
     }
 #elif defined(__linux__)
-    if (void* window = webview_get_window(webview)) {
+    if (auto* window = static_cast<GtkWindow*>(webview_get_window(webview))) {
         gtk_window_maximize(window);
     }
 #endif

@@ -372,14 +372,19 @@ ExpressionPtr Parser::parse_primary_literal() {
     if (check(TokenType::IntegerLiteral)) {
         const auto& token = advance();
 
-        return std::make_unique<LiteralExpression>(location,
-                                                   std::get<std::int64_t>(*token.literal));
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the lexer always sets the payload.
+        const auto value = std::get<std::int64_t>(*token.literal);
+
+        return std::make_unique<LiteralExpression>(location, value);
     }
 
     if (check(TokenType::NumberLiteral)) {
         const auto& token = advance();
 
-        return std::make_unique<LiteralExpression>(location, std::get<double>(*token.literal));
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the lexer always sets the payload.
+        const auto value = std::get<double>(*token.literal);
+
+        return std::make_unique<LiteralExpression>(location, value);
     }
 
     if (check(TokenType::BooleanLiteral)) {

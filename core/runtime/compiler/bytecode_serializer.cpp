@@ -163,7 +163,9 @@ template <std::unsigned_integral CountT, typename ReaderT, typename Container, t
           typename ReadElementFn>
 [[nodiscard]] bool read_bounded_array(ReaderT& r, Container& out, LimitFn within_limit,
                                       ReadElementFn read_element) {
-    const CountT count = r.read_int<CountT>();
+    // `r` is of dependent type `ReaderT`, so `read_int` is a dependent template
+    // name and needs the `template` disambiguator under gcc/clang (MSVC is lax).
+    const CountT count = r.template read_int<CountT>();
     if (r.error() || !within_limit(count)) {
         return false;
     }

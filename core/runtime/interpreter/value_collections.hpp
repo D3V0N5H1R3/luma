@@ -694,6 +694,7 @@ struct SetValue : CollectionObject {
     /// Returns true if the set contains the given value (O(1) amortised).
     [[nodiscard]] bool contains(const Value& value) const {
         return hash_index_.find(value, [this](auto& idx) {
+            // NOLINTNEXTLINE(bugprone-inc-dec-in-conditions): loop counter, not a real condition.
             for (std::size_t i{0}; i < elements.size(); ++i) {
                 idx.emplace(elements[i], i);
             }

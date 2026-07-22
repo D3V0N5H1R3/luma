@@ -172,7 +172,7 @@ inline constexpr int deleted = 3;
 namespace limits {
 
 inline constexpr std::size_t max_background_files = 10'000;
-inline constexpr std::uintmax_t max_file_bytes = 10 * 1024 * 1024;
+inline constexpr std::uintmax_t max_file_bytes = std::uintmax_t{10} * 1024 * 1024;
 inline constexpr std::size_t max_cache_size = 600;
 inline constexpr std::size_t max_workspace_symbols = 1000;
 

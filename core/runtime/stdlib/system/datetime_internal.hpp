@@ -79,7 +79,17 @@ constexpr double k_max_offset_minutes = 14.0 * 60.0;  // UTC+14:00
         return std::nullopt;
     }
 
-    return static_cast<double>(*t);
+    const auto ts = static_cast<double>(*t);
+
+    // Bound the result to the supported calendar range (year 0001-9999).  A 64-bit
+    // POSIX timegm accepts years far outside this range, whereas Windows _mkgmtime
+    // rejects them; clamping here keeps out-of-range arithmetic (e.g. add_months
+    // with an extreme count) failing consistently on every platform.
+    if (ts < datetime_limits::k_min_unix_timestamp || ts > datetime_limits::k_max_unix_timestamp) {
+        return std::nullopt;
+    }
+
+    return ts;
 }
 
 } // namespace luma::datetime_detail

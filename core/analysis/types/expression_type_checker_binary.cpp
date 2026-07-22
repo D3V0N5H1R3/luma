@@ -37,13 +37,18 @@ namespace {
 // visit_binary() before dispatching to per-family helpers.
 void ExpressionTypeChecker::check_binary_constant_folding(const BinaryExpression& expr,
                                                           const TypeInfo& left_type) {
+    // Resolve integer-literal operands once.  get_integer_value() yields a value
+    // exactly when the operand is an integer literal (equivalent to
+    // is_integer_literal()), so these optionals also serve as the literal guards.
+    const auto left_int = get_integer_value(*expr.left);
+    const auto right_int = get_integer_value(*expr.right);
+
     // Division by zero: detect when the divisor is literal 0.
     if ((expr.op == TokenType::Slash || expr.op == TokenType::Percent ||
          expr.op == TokenType::SlashSlash) &&
-        is_integer_literal(*expr.right)) {
-        const auto msg = compile_time_arithmetic::check_division(*get_integer_value(*expr.right),
-                                                                 expr.op == TokenType::SlashSlash ||
-                                                                     expr.op == TokenType::Percent);
+        right_int) {
+        const auto msg = compile_time_arithmetic::check_division(
+            *right_int, expr.op == TokenType::SlashSlash || expr.op == TokenType::Percent);
         if (msg) {
             emit_err(*msg, expr.location, "the divisor is always zero — this will crash at runtime",
                      DiagnosticCode::DivisionByZero);
@@ -59,9 +64,9 @@ void ExpressionTypeChecker::check_binary_constant_folding(const BinaryExpression
     }
 
     // Integer overflow: detect when both operands are integer literals.
-    if (is_integer_literal(*expr.left) && is_integer_literal(*expr.right)) {
-        const auto left_val = *get_integer_value(*expr.left);
-        const auto right_val = *get_integer_value(*expr.right);
+    if (left_int && right_int) {
+        const auto left_val = *left_int;
+        const auto right_val = *right_int;
 
         switch (expr.op) {
             case TokenType::Plus:
@@ -107,10 +112,8 @@ void ExpressionTypeChecker::check_binary_constant_folding(const BinaryExpression
 
     // Shift amount out of range: detect when shift amount is a literal
     // outside [0, 63].
-    if ((expr.op == TokenType::LessLess || expr.op == TokenType::GreaterGreater) &&
-        is_integer_literal(*expr.right)) {
-        const auto msg =
-            compile_time_arithmetic::check_shift_amount(*get_integer_value(*expr.right));
+    if ((expr.op == TokenType::LessLess || expr.op == TokenType::GreaterGreater) && right_int) {
+        const auto msg = compile_time_arithmetic::check_shift_amount(*right_int);
         if (msg) {
             emit_err(*msg, expr.location, "shift amount must be between 0 and 63",
                      DiagnosticCode::ShiftOutOfRange);
@@ -118,11 +121,9 @@ void ExpressionTypeChecker::check_binary_constant_folding(const BinaryExpression
     }
 
     // String repeat: detect negative or excessive literal repeat count.
-    if (expr.op == TokenType::Star && left_type.kind == TypeInfo::Kind::String &&
-        is_integer_literal(*expr.right)) {
+    if (expr.op == TokenType::Star && left_type.kind == TypeInfo::Kind::String && right_int) {
         const auto msg = compile_time_arithmetic::check_string_repeat(
-            *get_integer_value(*expr.right),
-            static_cast<std::size_t>(ResourceLimits::max_string_repeat));
+            *right_int, static_cast<std::size_t>(ResourceLimits::max_string_repeat));
         if (msg) {
             emit_err(*msg, expr.location, "reduce the repeat count to avoid excessive memory usage",
                      DiagnosticCode::InvalidRepeatCount);
