@@ -201,23 +201,18 @@ constexpr ValueCategory operator|(ValueCategory a, ValueCategory b) noexcept {
     using enum ValueCategory;
     switch (type) {
         case ValueType::Null:
-            return Primitive;
         case ValueType::Bool:
             return Primitive;
         case ValueType::Integer:
-            return Numeric | Primitive;
         case ValueType::Number:
             return Numeric | Primitive;
         case ValueType::String:
             return Primitive | Iterable;
         case ValueType::Array:
-            return Collection | Iterable;
         case ValueType::Dictionary:
             return Collection | Iterable;
         case ValueType::Tuple:
-            return None;
         case ValueType::Result:
-            return None;
         case ValueType::Record:
             return None;
         case ValueType::Range:
@@ -225,29 +220,21 @@ constexpr ValueCategory operator|(ValueCategory a, ValueCategory b) noexcept {
         case ValueType::Choice:
             return None;
         case ValueType::Function:
-            return Callable;
         case ValueType::NativeFunction:
             return Callable;
         case ValueType::Task:
-            return None;
         case ValueType::Channel:
-            return None;
         case ValueType::Socket:
             return None;
         case ValueType::Queue:
-            return Collection | Iterable;
         case ValueType::Stack:
-            return Collection | Iterable;
         case ValueType::Set:
             return Collection | Iterable;
         case ValueType::Xml:
             return Collection;
         case ValueType::KeyValueStore:
-            return Collection | Iterable;
         case ValueType::HashSet:
-            return Collection | Iterable;
         case ValueType::LinkedList:
-            return Collection | Iterable;
         case ValueType::BinaryTree:
             return Collection | Iterable;
         case ValueType::Graph:

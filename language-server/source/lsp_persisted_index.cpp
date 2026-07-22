@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "common/file_time.hpp"
 #include "lsp_binary_format.hpp"
 
 namespace luma::lsp {
@@ -203,7 +204,7 @@ std::size_t PersistedIndex::validate() {
         if (entry.last_modified != 0) {
             auto ftime = std::filesystem::last_write_time(file_path, ec);
             if (!ec) {
-                auto sctp = std::chrono::clock_cast<std::chrono::system_clock>(ftime);
+                auto sctp = file_time_to_system_clock(ftime);
                 auto epoch = static_cast<std::uint64_t>(
                     std::chrono::duration_cast<std::chrono::seconds>(sctp.time_since_epoch())
                         .count());

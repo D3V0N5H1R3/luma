@@ -25,7 +25,7 @@ namespace luma::collection_helpers {
 // ─────────── Formatting helpers ───────────
 
 // Safety limits to prevent unbounded output when formatting large containers.
-constexpr std::size_t k_max_format_output = 1024 * 1024; // 1 MB
+constexpr std::size_t k_max_format_output = std::size_t{1024} * 1024; // 1 MB
 constexpr std::size_t k_max_format_items = 1000;
 
 // Format a container's elements as a comma-separated list between delimiters.

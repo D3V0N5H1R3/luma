@@ -167,9 +167,10 @@ static void test_bounded_uniform_in_range_property() {
     const std::int64_t ranges[][2] = {{-5, 5},      {0, 1},      {-100, -100}, {i64_min, i64_max},
                                       {i64_min, 0}, {0, i64_max}};
 
+    const std::uint64_t raw_probes[] = {0, 1, 7, 12345, u64_max / 2U, u64_max - 1U, u64_max};
+
     for (const auto& range : ranges) {
-        for (const std::uint64_t raw :
-             {0ULL, 1ULL, 7ULL, 12345ULL, u64_max / 2U, u64_max - 1U, u64_max}) {
+        for (const std::uint64_t raw : raw_probes) {
             std::int64_t out{0};
             std::size_t calls{0};
 

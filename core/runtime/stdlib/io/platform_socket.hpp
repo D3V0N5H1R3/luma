@@ -85,6 +85,7 @@ inline std::string last_error() {
 
     return msg;
 #else
+    // NOLINTNEXTLINE(concurrency-mt-unsafe): no thread-safe std alternative; errno is thread-local.
     return std::string{strerror(errno)};
 #endif
 }
@@ -136,7 +137,7 @@ inline bool set_timeout(SocketHandle h, int ms) {
     struct timeval tv {};
 
     tv.tv_sec = ms / 1000;
-    tv.tv_usec = (ms % 1000) * 1000;
+    tv.tv_usec = static_cast<decltype(tv.tv_usec)>(ms % 1000) * 1000;
 
     return setsockopt(h, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == 0 &&
            setsockopt(h, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) == 0;
@@ -255,7 +256,7 @@ namespace luma {
     struct timeval tv {};
 
     tv.tv_sec = timeout_ms / 1000;
-    tv.tv_usec = (timeout_ms % 1000) * 1000;
+    tv.tv_usec = static_cast<decltype(tv.tv_usec)>(timeout_ms % 1000) * 1000;
 
     const int sel = select(platform_socket::select_nfds(sock), nullptr, &wr, &ex, &tv);
 

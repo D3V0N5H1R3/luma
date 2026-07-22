@@ -146,7 +146,22 @@ void register_graph_ordering(const EnvPtr& env) {
                     return false;
                 };
 
+                // Iterate roots in deterministic (sorted) order.  `adjacency` is a
+                // hash map whose iteration order differs between standard libraries,
+                // which would make the traversal-depth guard fire on some platforms
+                // but not others; a stable root order keeps behaviour identical.  A
+                // snapshot vector is used (not the ordered `colour` map) because dfs
+                // mutates `colour` via operator[], which could invalidate iterators.
+                std::vector<std::string> roots;
+                roots.reserve(g->adjacency.size());
+
                 for (const auto& [v, _] : g->adjacency) {
+                    roots.push_back(v);
+                }
+
+                std::ranges::sort(roots);
+
+                for (const auto& v : roots) {
                     if (colour[v] == 0 && dfs(v, 0)) {
                         return Value{true};
                     }
@@ -179,7 +194,19 @@ void register_graph_ordering(const EnvPtr& env) {
                     return false;
                 };
 
+                // Iterate roots in deterministic (sorted) order (see the directed
+                // branch above) so the traversal-depth guard behaves identically
+                // across platforms.
+                std::vector<std::string> roots;
+                roots.reserve(g->adjacency.size());
+
                 for (const auto& [v, _] : g->adjacency) {
+                    roots.push_back(v);
+                }
+
+                std::ranges::sort(roots);
+
+                for (const auto& v : roots) {
                     if (!visited.contains(v)) {
                         if (dfs(v, std::nullopt, 0)) {
                             return Value{true};

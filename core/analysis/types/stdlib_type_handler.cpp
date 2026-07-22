@@ -65,8 +65,12 @@ const TypeInfo* StdlibTypeHandler::get_return_type(std::string_view name) const 
 
 const StdlibTypeHandler::ArityInfo* StdlibTypeHandler::get_arity(std::string_view name) const {
     const auto it = functions_.find(name);
-    if (it != functions_.end() && it->second.arity.has_value()) {
-        return &*it->second.arity;
+    if (it == functions_.end()) {
+        return nullptr;
+    }
+    const auto& arity = it->second.arity;
+    if (arity.has_value()) {
+        return &*arity;
     }
     return nullptr;
 }

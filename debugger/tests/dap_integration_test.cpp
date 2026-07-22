@@ -211,6 +211,32 @@ public:
         return JsonValue::parse(body);
     }
 
+    // Wait for the adapter to exit and report whether it finished cleanly (exit
+    // code 0).  Used to tell a benign clean shutdown apart from a crash when a
+    // write races the adapter's exit.  Records a human-readable classification of
+    // the exit code in last_exit_detail_ (crashes surface as large NTSTATUS-style
+    // codes such as 0xC0000005) so a failing run is self-describing.
+    bool wait_exited_cleanly() {
+        if (process_ == INVALID_HANDLE_VALUE) {
+            last_exit_detail_ = "already reaped";
+            return true;
+        }
+        WaitForSingleObject(process_, 5000);
+        DWORD code = 1;
+        if (GetExitCodeProcess(process_, &code) == 0) {
+            last_exit_detail_ = "GetExitCodeProcess failed";
+            return false;
+        }
+        last_exit_detail_ =
+            std::format("exited with code {} (0x{:08X})", static_cast<unsigned long>(code),
+                        static_cast<unsigned long>(code));
+        return code == 0;
+    }
+
+    [[nodiscard]] const std::string& last_exit_detail() const noexcept {
+        return last_exit_detail_;
+    }
+
     void close() {
         if (child_stdin_write_ != INVALID_HANDLE_VALUE) {
             CloseHandle(child_stdin_write_);
@@ -236,6 +262,7 @@ private:
     HANDLE child_stdin_write_{INVALID_HANDLE_VALUE};
     HANDLE child_stdout_read_{INVALID_HANDLE_VALUE};
     HANDLE child_stdout_write_{INVALID_HANDLE_VALUE};
+    std::string last_exit_detail_{"not waited"};
 };
 
 #else
@@ -355,6 +382,43 @@ public:
         return JsonValue::parse(body);
     }
 
+    // Wait for the adapter to exit and report whether it finished cleanly (exit
+    // code 0, not killed by a signal).  Used to tell a benign clean shutdown apart
+    // from a crash when a write races the adapter's exit.  Records a
+    // human-readable classification of the exit (exit code vs terminating signal)
+    // in last_exit_detail_ so a failing CI run pinpoints *why* the adapter exited
+    // non-cleanly instead of only reporting the opaque write failure.
+    bool wait_exited_cleanly() {
+        if (pid_ <= 0) {
+            last_exit_detail_ = "already reaped";
+            return true;
+        }
+        int status = 0;
+        const pid_t r = waitpid(pid_, &status, 0);
+        pid_ = -1;
+        if (r <= 0) {
+            last_exit_detail_ = "waitpid failed";
+            return true;
+        }
+        if (WIFEXITED(status)) {
+            const int code = WEXITSTATUS(status);
+            last_exit_detail_ = "exited with code " + std::to_string(code);
+            return code == 0;
+        }
+        if (WIFSIGNALED(status)) {
+            const int sig = WTERMSIG(status);
+            last_exit_detail_ =
+                "killed by signal " + std::to_string(sig) + " (" + signal_name(sig) + ")";
+            return false;
+        }
+        last_exit_detail_ = "unknown wait status " + std::to_string(status);
+        return false;
+    }
+
+    [[nodiscard]] const std::string& last_exit_detail() const noexcept {
+        return last_exit_detail_;
+    }
+
     void close() {
         if (write_fd_ >= 0) {
             ::close(write_fd_);
@@ -374,9 +438,35 @@ public:
     }
 
 private:
+    static const char* signal_name(int sig) noexcept {
+        switch (sig) {
+            case SIGSEGV:
+                return "SIGSEGV";
+            case SIGABRT:
+                return "SIGABRT";
+            case SIGBUS:
+                return "SIGBUS";
+            case SIGILL:
+                return "SIGILL";
+            case SIGFPE:
+                return "SIGFPE";
+            case SIGKILL:
+                return "SIGKILL";
+            case SIGTERM:
+                return "SIGTERM";
+            case SIGPIPE:
+                return "SIGPIPE";
+            case SIGINT:
+                return "SIGINT";
+            default:
+                return "other";
+        }
+    }
+
     pid_t pid_{-1};
     int write_fd_{-1};
     int read_fd_{-1};
+    std::string last_exit_detail_{"not waited"};
 };
 #endif
 
@@ -514,9 +604,26 @@ struct PollResult {
 
 PollResult poll_request(DapProcess& proc, const std::string& command,
                         const JsonValue& args = JsonValue(), int timeout_ms = 4000) {
-    proc.send_message(make_request(command, args));
-
     PollResult result;
+
+    // The debuggee is free-running and can terminate at any moment; a write that
+    // races the adapter's clean exit surfaces as a "failed to write" error.  Treat
+    // a clean adapter exit as termination (the success condition for this stress
+    // test), but let a crash-induced write failure propagate as a real failure.
+    try {
+        proc.send_message(make_request(command, args));
+    } catch (const std::runtime_error& write_error) {
+        if (!proc.wait_exited_cleanly()) {
+            // Preserve the fail-on-non-clean-exit semantics, but attach the exact
+            // adapter exit classification (signal name/number or exit code) so a
+            // rare CI failure is self-diagnosing instead of an opaque write error.
+            throw std::runtime_error(std::string(write_error.what()) + " — adapter " +
+                                     proc.last_exit_detail());
+        }
+        result.terminated = true;
+        return result;
+    }
+
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
 
     while (std::chrono::steady_clock::now() < deadline) {
@@ -2308,6 +2415,14 @@ void test_structured_values() {
 // run with a non-zero status, which the test runner treats as a failure.
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int /*argc*/, char* argv[]) {
+#ifndef _WIN32
+    // The tests write DAP requests to the luma_dap child's stdin pipe. If the
+    // child has already exited (e.g. after a terminate/disconnect handshake),
+    // that write delivers SIGPIPE, whose default disposition would kill the
+    // whole test binary before ::write can return EPIPE. Ignore it so the
+    // failed write instead surfaces as a normal error for that one case.
+    ::signal(SIGPIPE, SIG_IGN);
+#endif
     std::cout << "=== DAP Integration Tests ===\n\n";
 
     // Determine paths based on executable location.

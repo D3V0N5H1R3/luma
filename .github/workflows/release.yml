@@ -30,7 +30,13 @@ jobs:
   build:
     name: Build — ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # Each runner does a cold-cache full build (all binaries and every test
+    # executable), the CTest suite, and packaging. The Windows/MSVC runner is the
+    # slowest and cannot finish a cold build within 15 minutes — the previous
+    # limit cancelled it mid-compile, failing the build job and skipping the whole
+    # release. 35 matches ci.yml's proven ceiling for the same cold-cache build on
+    # the slowest runner; warm-cache runs finish well under it.
+    timeout-minutes: 35
 
     strategy:
       # Build every platform even if one fails, so a release shows the full
@@ -52,12 +58,12 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Cache build directory
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build
           key: cmake-release-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'core/**', 'shared/**', 'debugger/**', 'language-server/**') }}
@@ -91,7 +97,7 @@ jobs:
             luma_dap-*
           retention-days: 30
 
-  # ── Raspberry Pi OS release binary (ARM64 via QEMU) ──
+  # ── Raspberry Pi OS release binary (native ARM64 runner) ──
   build-rpi:
     name: Build — Raspberry Pi OS (ARM64)
     uses: ./.github/workflows/build-raspberry-pi.yml
@@ -130,7 +136,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -154,7 +160,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -185,7 +191,7 @@ jobs:
           cat SHA256SUMS
 
       - name: Create release
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           body_path: release-notes.md
           files: |

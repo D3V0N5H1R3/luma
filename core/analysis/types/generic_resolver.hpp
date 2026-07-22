@@ -147,8 +147,9 @@ public:
             // Restore in reverse order so repeated keys unwind to the value
             // that was live before the guard first overwrote them.
             for (auto it = saved_.rbegin(); it != saved_.rend(); ++it) {
-                if (it->second) {
-                    bindings_.insert_or_assign(it->first, *it->second);
+                const auto& saved_value = it->second;
+                if (saved_value) {
+                    bindings_.insert_or_assign(it->first, *saved_value);
                 } else {
                     bindings_.erase(it->first);
                 }

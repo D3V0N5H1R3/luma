@@ -73,6 +73,8 @@ Heavier quality gates that run on a timer or on request rather than on every cha
 
 Tag-triggered publishing; each responds to its own tag prefix. [`release.yml`](release.yml) builds the interpreter for every platform and cuts the main GitHub Release (bundling the VS Code extension archive alongside the binaries), while the two extension workflows handle their own stores.
 
+For the step-by-step release procedure — how these tag-triggered Releases differ from the temporary CI build artifacts, and how to cut one — see [Releasing](../../CONTRIBUTING.md#releasing) in the contributing guide.
+
 | Workflow                                   | Trigger             | Purpose                                                         |
 | ------------------------------------------ | ------------------- | --------------------------------------------------------------- |
 | [`release.yml`](release.yml)               | Tag `v*.*.*`        | Build cross-platform binaries and publish a GitHub Release.     |
@@ -88,7 +90,7 @@ Internal `workflow_call` components — never triggered directly, only invoked b
 | Workflow                                                 | Trigger                   | Purpose                                                            |
 | -------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------ |
 | [`reusable-linux-build.yml`](reusable-linux-build.yml)   | Called by other workflows | Build and test inside a Linux container image.                     |
-| [`build-raspberry-pi.yml`](build-raspberry-pi.yml)       | Called by other workflows | Raspberry Pi OS (ARM64) build via QEMU; wraps the container build. |
+| [`build-raspberry-pi.yml`](build-raspberry-pi.yml)       | Called by other workflows | Raspberry Pi OS (ARM64) build on a native ARM64 runner; wraps the container build. |
 | [`resolve-distro-matrix.yml`](resolve-distro-matrix.yml) | Called by other workflows | Expose linux-distros.json as a job matrix.                         |
 
 ---
@@ -102,7 +104,7 @@ ci.yml
 ├── resolve-distro-matrix.yml      reads .github/linux-distros.json → matrix
 ├── reusable-linux-build.yml       one job per distro in the matrix
 └── build-raspberry-pi.yml
-    └── reusable-linux-build.yml   Raspberry Pi OS (ARM64) via QEMU
+    └── reusable-linux-build.yml   Raspberry Pi OS (ARM64), native runner
 
 release.yml
 ├── resolve-distro-matrix.yml
@@ -113,7 +115,46 @@ release.yml
 
 ---
 
-## 9 — Related Documentation
+## 9 — Required Status Checks (Branch Protection)
+
+If you gate merges to `main` on status checks (through a branch protection rule or a repository ruleset), the **path filters above decide which checks are safe to require**. A required check only clears a pull request once it reports a result — and a path-filtered workflow that a given PR doesn't trigger never reports one, leaving that PR stuck on _"Expected — waiting for status to be reported."_ Requiring a path-filtered check therefore deadlocks every PR that doesn't touch its paths: a docs-only PR would wait forever on the C++ build matrix.
+
+Only [`codeql.yml`](codeql.yml) runs on every pull request regardless of paths, so its four `Analyze (…)` checks are the only ones safe to require **unconditionally**:
+
+- `Analyze (c-cpp)`
+- `Analyze (actions)`
+- `Analyze (javascript-typescript)`
+- `Analyze (python)`
+
+To hard-require the build/test/lint checks as well without deadlocking unrelated PRs, either leave them **advisory** (they still run and show on every PR — they just don't block the merge), or first make each workflow always report: move its `paths:` filter off the `on:` trigger and onto a `changes` gate job so skipped work reports success instead of never running.
+
+Two caveats when picking checks:
+
+- **`ThreadSanitizer`** ([`ci.yml`](ci.yml)) is `continue-on-error` — it never fails the run, so requiring it enforces nothing; leave it out. The `ubuntu-latest — gcc-13-sanitizers` build (AddressSanitizer + UBSan) is the gating sanitizer check.
+- A check only appears in the ruleset picker **after it has run against a PR at least once**, so open one pull request and let CI run before selecting from the list. Reusable-workflow checks (the distro and Raspberry Pi builds) appear under a `Caller / Callee` name.
+
+For reference, the checks each pull-request-triggered workflow reports:
+
+| Workflow                                       | Reported checks (job names)                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`codeql.yml`](codeql.yml)                     | `Analyze (c-cpp)`, `Analyze (actions)`, `Analyze (javascript-typescript)`, `Analyze (python)`                                                                                                                                                                                                                                                                                                                            |
+| [`ci.yml`](ci.yml)                             | `ubuntu-latest — gcc-14`, `macos-latest — clang`, `windows-latest — msvc`, `ubuntu-latest — gcc-13-sanitizers`, `Static Analysis (clang-tidy) (0–3)`, `Formatting (clang-format)`, `Warning Flag Sync`, `Code Coverage`, `Feature Flag Build (no-tls)`, `Feature Flag Build (no-webview)`, `Resolve Linux distro matrix`, the four distro builds (`Debian (trixie)`, `Kali Linux`, `Fedora`, `Arch Linux`), `Raspberry Pi OS (ARM64)`, and `ThreadSanitizer` (non-gating) |
+| [`docs.yml`](docs.yml)                         | `Documentation Consistency`                                                                                                                                                                                                                                                                                                                                                                                              |
+| [`ci-cmake.yml`](ci-cmake.yml)                 | `cmakelint`                                                                                                                                                                                                                                                                                                                                                                                                              |
+| [`ci-css.yml`](ci-css.yml)                     | `stylelint`                                                                                                                                                                                                                                                                                                                                                                                                              |
+| [`ci-markdown.yml`](ci-markdown.yml)           | `markdownlint`                                                                                                                                                                                                                                                                                                                                                                                                           |
+| [`ci-powershell.yml`](ci-powershell.yml)       | `PSScriptAnalyzer`                                                                                                                                                                                                                                                                                                                                                                                                       |
+| [`ci-python.yml`](ci-python.yml)               | `ruff`                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| [`ci-shell.yml`](ci-shell.yml)                 | `ShellCheck`                                                                                                                                                                                                                                                                                                                                                                                                             |
+| [`ci-gui-framework.yml`](ci-gui-framework.yml) | `node --test`                                                                                                                                                                                                                                                                                                                                                                                                            |
+| [`ci-vscode.yml`](ci-vscode.yml)               | `VS Code Extension`                                                                                                                                                                                                                                                                                                                                                                                                      |
+| [`ci-zed.yml`](ci-zed.yml)                     | `Zed Extension`, `Tree-sitter Grammar Tests`                                                                                                                                                                                                                                                                                                                                                                             |
+
+[`benchmark.yml`](benchmark.yml) and [`fuzz.yml`](fuzz.yml) don't run on pull requests, so they can't be required.
+
+---
+
+## 10 — Related Documentation
 
 - [github-actions.instructions.md](../../instructions/github-actions.instructions.md) — the conventions these workflows follow (triggers, permissions, caching, security).
 - [github-actions-recipes.instructions.md](../../instructions/github-actions-recipes.instructions.md) — copy-paste workflow recipes and debugging guidance.

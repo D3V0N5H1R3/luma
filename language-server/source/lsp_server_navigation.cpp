@@ -519,6 +519,7 @@ JsonValue LspNavigationHandler::handle_selection_range(const JsonValue& params) 
         // Innermost: token range.
         if (tok_range.has_value()) {
             current = JsonValue(JsonValue::ObjectType{
+                // NOLINTNEXTLINE(bugprone-unchecked-optional-access): guarded by has_value() above.
                 {"range", serialise_range(*tok_range)},
                 {"parent", std::move(current)},
             });

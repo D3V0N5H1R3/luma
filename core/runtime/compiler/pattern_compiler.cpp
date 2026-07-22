@@ -236,6 +236,7 @@ PatternCompiler::compile_match_arm_bindings(const MatchArm& arm, SourceLocation 
         (void)api_.declare_local(to_string(HiddenVar::MatchSubject), false, loc);
         binding_local_count = 1;
 
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the local was just declared above.
         auto subject_slot = *api_.resolve_local(to_string(HiddenVar::MatchSubject));
         binding_local_count += emit_choice_field_bindings(arm, subject_slot, loc);
     }
