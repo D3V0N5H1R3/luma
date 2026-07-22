@@ -32,6 +32,8 @@ The interpreter, language server, and debugger build from those tools alone — 
 
 - **`GraphicalUi` on Linux** requires the WebKitGTK development headers and `pkg-config` (for example `sudo apt-get install libwebkit2gtk-4.1-dev pkg-config` on Debian/Ubuntu). Without them the build still succeeds but the module is disabled (compiled as a stub); pass `-DLUMA_FEATURE_WEBVIEW=OFF` to disable it deliberately. Windows (WebView2) and macOS (WebKit) need no extra package.
 
+> **Tip:** To skip local installation entirely, open the repository in [GitHub Codespaces](../.devcontainer/README.md) or a VS Code Dev Container. The container image provides every prerequisite above — GCC 14, CMake, Python, WebKitGTK, and the C++ lint tooling — and builds the interpreter on first launch. See [.devcontainer/README.md](../.devcontainer/README.md).
+
 Each editor has additional, optional requirements (extensions or plugins) listed under its section in [Editor Integration](#8--editor-integration). Building an editor extension from source needs its own toolchain — Node.js for Visual Studio Code, Rust (with the `wasm32-wasip1` target) for Zed — as documented in each extension's README.
 
 ---
