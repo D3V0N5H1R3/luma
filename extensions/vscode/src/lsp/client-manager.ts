@@ -66,10 +66,13 @@ interface ClientCreationOptions {
  */
 export class ClientManager {
     private readonly folder_clients = new Map<string, FolderClient>();
-    private readonly output_channel: vscode.OutputChannel;
+    private readonly output_channel: vscode.LogOutputChannel;
     private readonly language_status: vscode.LanguageStatusItem;
 
-    constructor(output_channel: vscode.OutputChannel, language_status: vscode.LanguageStatusItem) {
+    constructor(
+        output_channel: vscode.LogOutputChannel,
+        language_status: vscode.LanguageStatusItem,
+    ) {
         this.output_channel = output_channel;
         this.language_status = language_status;
     }
