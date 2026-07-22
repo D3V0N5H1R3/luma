@@ -509,7 +509,7 @@
         "@types/vscode": "^1.120.0",
         "@vscode/test-electron": "^2.5.2",
         "@vscode/vsce": "^3.9.1",
-        "esbuild": "^0.28.0",
+        "esbuild": "^0.28.1",
         "eslint": "^9.39.4",
         "glob": "^10.5.0",
         "globals": "^17.6.0",
