@@ -1,0 +1,79 @@
+// ─────────────────────────────────────────────────────────────
+// Luma — Dev Container / GitHub Codespaces configuration
+//
+// Opens the repository in a Linux container with the full C++20 toolchain the
+// interpreter, language server, and debugger need, plus the Node and Rust
+// toolchains the VS Code and Zed extensions use. See .devcontainer/README.md.
+// ─────────────────────────────────────────────────────────────
+{
+    "name": "Luma — C++20 Interpreter",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+
+    // Node (VS Code extension: ESLint / Prettier + unit tests) and Rust with the
+    // wasm32-wasip1 target (Zed extension: cargo fmt, Tree-sitter) round out the
+    // toolchain so the whole repo — not just the C++ core — is buildable and
+    // lintable here. Prebuilds absorb the one-time install cost; drop either
+    // feature if you only work on the interpreter.
+    "features": {
+        "ghcr.io/devcontainers/features/node:1": {
+            "version": "lts"
+        },
+        "ghcr.io/devcontainers/features/rust:1": {
+            "profile": "minimal",
+            "targets": "wasm32-wasip1"
+        }
+    },
+
+    // The interpreter build is CPU-bound and the test suite is sizeable; request
+    // a 4-core machine so a cold build (~5-8 min) and ctest (~3 min) stay
+    // comfortable. Enabling prebuilds on the repo skips both on launch.
+    "hostRequirements": {
+        "cpus": 4,
+        "memory": "8gb",
+        "storage": "32gb"
+    },
+
+    // onCreate: one-time developer CLI tooling (the Ruff version ci-python.yml
+    // pins). Runs during Codespaces prebuilds.
+    "onCreateCommand": "bash .devcontainer/bootstrap.sh",
+
+    // updateContent: build the interpreter, LSP, and DAP so the Codespace opens
+    // ready to run. Placed here (not postCreate) so prebuilds bake a warm build/
+    // into the image and rebuild it incrementally when sources change. Bound the
+    // job count to the core count — an unbounded `make -j` OOM-kills the
+    // container (see scripts/container-build.sh).
+    "updateContentCommand": "cmake --preset default && cmake --build build --parallel $(nproc)",
+
+    // postAttach: a one-line pointer to the common entry points on every attach.
+    "postAttachCommand": "echo 'Luma ready — build: cmake --build build --parallel $(nproc) | test: ctest --test-dir build --output-on-failure | run: build/luma examples/language-features/hello.luma'",
+
+    "remoteEnv": {
+        "CC": "gcc-14",
+        "CXX": "g++-14",
+        "PATH": "${containerEnv:PATH}:/home/vscode/.local/bin"
+    },
+
+    "customizations": {
+        "vscode": {
+            // Mirrors the core of .vscode/extensions.json so a Codespace comes
+            // with the C++, Luma, and lint tooling already installed (workspace
+            // recommendations only *suggest*; these are auto-installed).
+            "extensions": [
+                "ms-vscode.cpptools-extension-pack",
+                "D3V0N5H1R3.luma-language",
+                "charliermarsh.ruff",
+                "DavidAnson.vscode-markdownlint",
+                "stylelint.vscode-stylelint",
+                "github.vscode-github-actions",
+                "github.copilot",
+                "github.copilot-chat",
+                "github.vscode-pull-request-github"
+            ],
+            "settings": {
+                "cmake.configureOnOpen": true
+            }
+        }
+    }
+}

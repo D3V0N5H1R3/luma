@@ -117,6 +117,11 @@ Two optional extras pull in more tooling:
 
 ## Installation
 
+> **Tip:** To try Luma without installing a local toolchain, open the repository
+> in [GitHub Codespaces](.devcontainer/README.md) (**Code → Codespaces → Create
+> codespace**). The dev container ships the full C++20 toolchain and builds the
+> interpreter automatically.
+
 Luma currently ships as source. Clone the repository and build it with CMake. The
 project provides [CMake presets](CMakePresets.json), so the recommended build is:
 
