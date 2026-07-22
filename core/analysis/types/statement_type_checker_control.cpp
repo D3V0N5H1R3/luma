@@ -169,13 +169,20 @@ void StatementTypeChecker::visit_if_statement(const IfStatement& stmt) {
         // it was consumed in BOTH branches.  If consumed in only one
         // branch, mark it consumed (conservative — prevents use-after-
         // move on the path where it was consumed).
-        for (const auto& [name, was_consumed_before] : before) {
+        for (const auto& entry : before) {
+            // Bind plain locals rather than capturing the structured binding
+            // by reference in the lambda below: clang-analyzer mis-models a
+            // captured structured-binding reference as an undefined pointer
+            // (a known core.NullDereference false positive).
+            const auto& name = entry.first;
+            const bool was_consumed_before = entry.second;
+
             // A variable's consumed flag after a branch, falling back to its
             // pre-branch state when the branch left it untouched.
             const auto consumed_after = [&](const TypeScope::OwnershipSnapshot& snapshot) {
-                for (const auto& entry : snapshot) {
-                    if (entry.first == name) {
-                        return entry.second;
+                for (const auto& snapshot_entry : snapshot) {
+                    if (snapshot_entry.first == name) {
+                        return snapshot_entry.second;
                     }
                 }
 

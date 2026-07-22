@@ -64,6 +64,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # The first three entries are the primary per-platform builds: normal
+        # optimized executables that are tested and uploaded as the downloadable
+        # binaries (luma-<os>-<compiler>). Only the Ubuntu GCC 14 job also runs
+        # the headless example sweep (scripts/run_examples.py), so it alone
+        # installs WebKitGTK for the GraphicalUi examples.
+        #
+        # The fourth entry (Ubuntu GCC 13 + sanitizers) is a runtime-safety
+        # check, NOT a build meant for use: it enables AddressSanitizer + UBSan
+        # (-DLUMA_FEATURE_SANITIZERS=ON) to catch buffer overflows,
+        # use-after-free, and undefined behaviour. Its uploaded binary is
+        # instrumented — slower, built non-PIE, and dependent on the sanitizer
+        # runtime — so download the plain gcc-14 artifact if you just want to run
+        # Luma on Linux. See build.instructions.md section 5 (Sanitizer
+        # Configuration) and cmake/LumaCompilerFlags.cmake.
         include:
           - os: ubuntu-latest
             compiler: gcc-14
@@ -89,6 +103,9 @@ jobs:
             lsp_binary: build/Release/luma_lsp.exe
             dap_binary: build/Release/luma_dap.exe
 
+          # Runtime-safety check (ASan + UBSan) — see the matrix note above; the
+          # uploaded binary is instrumented, not for general use. GCC 13 matches
+          # the coverage job's pinned toolchain.
           - os: ubuntu-latest
             compiler: gcc-13-sanitizers
             cc: gcc-13
@@ -100,12 +117,12 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Cache build directory
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build
           key: cmake-${{ runner.os }}-${{ matrix.compiler }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'core/**', 'shared/**', 'debugger/**', 'language-server/**') }}
@@ -177,7 +194,7 @@ jobs:
       # skip list, so CI gets the same coverage developers get locally.
       - name: Set up Python
         if: matrix.compiler == 'gcc-14'
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
@@ -214,7 +231,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -261,7 +278,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -287,12 +304,12 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
@@ -309,7 +326,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -361,7 +378,7 @@ jobs:
           retention-days: 14
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5.5.4
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: coverage-filtered.info
           fail_ci_if_error: false
@@ -371,25 +388,27 @@ jobs:
     name: ThreadSanitizer
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Non-blocking: on the current GitHub-hosted ubuntu-latest image every
-    # ThreadSanitizer-instrumented binary crashes with a bare SIGSEGV at process
-    # startup — before main(), with NO TSan diagnostic — because libtsan cannot
-    # map its large fixed-address shadow region against the runner's memory
-    # layout. This is an environment/runner-image limitation, not a data race in
-    # Luma: the Address/UB sanitizer job (which shares the same shadow-mapping
-    # mechanism, with a smaller shadow) builds and passes cleanly and is the
-    # effective sanitizer gate. Both documented mitigations were tried and are
-    # insufficient for TSan specifically — reducing ASLR entropy
-    # (vm.mmap_rnd_bits=28), disabling ASLR entirely (kernel.randomize_va_space=0),
-    # and linking non-PIE (-no-pie) all still segfault at startup. The job is
-    # kept (not deleted) so it recovers automatically if a future runner image
-    # fixes the mapping; continue-on-error stops it blocking the run until then.
-    # See google/sanitizers#1614.
+    # ThreadSanitizer is configured correctly here — it links a
+    # position-independent executable (unlike the ASan matrix, whose -no-pie
+    # dodge of the ubuntu-24.04 high-ASLR shadow collision is actively wrong for
+    # TSan) and lowers the ASLR entropy to a libtsan-supported value
+    # (google/sanitizers#1614).
+    #
+    # It is nonetheless kept NON-BLOCKING: on the current hosted ubuntu-24.04
+    # image, libtsan cannot map its shadow memory and every luma_core-linked
+    # binary SIGSEGVs before main() with no TSan diagnostic. This reproduced
+    # across every configuration tried (ASLR off, mmap_rnd_bits=28, -no-pie, and
+    # PIE), so it is a runner-image/libtsan limitation outside this repo's
+    # control, not a data race. The gcc-13 AddressSanitizer/UBSan job is the
+    # active, gating sanitizer check; TSan is retained (correctly configured, so
+    # it self-heals automatically when a future runner image ships a working
+    # libtsan) purely as best-effort race detection. Do NOT remove
+    # continue-on-error until a run confirms TSan actually starts on the image.
     continue-on-error: true
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -398,10 +417,9 @@ jobs:
         with:
           packages: clang
 
-      # Best-effort shadow-collision mitigations (see the job-level comment for
-      # why they are currently insufficient on hosted runners): lower ASLR
-      # entropy to a value libtsan supports, and link the binaries non-PIE so
-      # the executable loads at a fixed low address clear of the shadow.
+      # ubuntu-24.04 raised the default ASLR entropy to vm.mmap_rnd_bits=32, which
+      # libtsan cannot map its shadow against; lower it to the supported value.
+      # No -no-pie here — TSan requires PIE (see the job-level comment).
       - name: Reduce ASLR entropy for ThreadSanitizer
         run: sudo sysctl -w vm.mmap_rnd_bits=28
 
@@ -411,7 +429,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread -no-pie"
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
 
       - name: Build
         run: cmake --build build-tsan --parallel "$(nproc)"
@@ -443,7 +461,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 

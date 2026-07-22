@@ -224,6 +224,16 @@ std::vector<StackFrame> DebugSession::get_stack_trace(int thread_id) const {
     const auto lock = thread_state_manager_.lock_state(*state);
     std::vector<StackFrame> result;
 
+    // DAP semantics: only a STOPPED thread has a stable stack to report.  A
+    // free-running task VM concurrently mutates its call-frame vector (growth
+    // reallocation, pops on OP_RETURN, FunctionValue teardown on task exit), so
+    // reading it here would race the execution thread and can crash the adapter
+    // (SIGSEGV).  Report no frames for a thread that is not paused; is_paused is
+    // guarded by the ThreadState lock acquired above.
+    if (!state->is_paused) {
+        return result;
+    }
+
     VM* target_vm = state->vm;
 
     if (target_vm == nullptr) {

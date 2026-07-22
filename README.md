@@ -95,8 +95,16 @@ build/luma
 | Windows  | MSVC 2022 or later | CMake 3.21+  |
 
 All compilers must support C++20. The interpreter, language server, and debugger
-build from these tools alone — every third-party library is vendored. Two
-optional extras pull in more tooling:
+build from these tools alone — every third-party library is vendored.
+
+> **Note:** These versions are hard minimums, not recommendations. Luma uses the
+> C++20 library features `std::format` and `std::chrono::clock_cast`, which
+> libstdc++ ships only from **GCC 13** — so GCC 12 and earlier fail to build. On
+> distributions whose default `g++` is still GCC 12, notably Raspberry Pi OS and
+> Debian 12 ("bookworm"), install GCC 13 or newer and select it when configuring
+> (`-DCMAKE_CXX_COMPILER=g++-13`).
+
+Two optional extras pull in more tooling:
 
 - **`GraphicalUi` on Linux** needs the WebKitGTK development headers and
   `pkg-config` — for example `sudo apt-get install libwebkit2gtk-4.1-dev pkg-config`
@@ -108,6 +116,11 @@ optional extras pull in more tooling:
   Git hook installer) need **Python 3.10 or later**.
 
 ## Installation
+
+> **Tip:** To try Luma without installing a local toolchain, open the repository
+> in [GitHub Codespaces](.devcontainer/README.md) (**Code → Codespaces → Create
+> codespace**). The dev container ships the full C++20 toolchain and builds the
+> interpreter automatically.
 
 Luma currently ships as source. Clone the repository and build it with CMake. The
 project provides [CMake presets](CMakePresets.json), so the recommended build is:
