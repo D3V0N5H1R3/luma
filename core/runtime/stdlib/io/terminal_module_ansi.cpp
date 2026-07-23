@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 
+#include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
@@ -52,6 +53,35 @@ auto movement_body(char code) {
     return make_failure_value(error_msg(
         "Terminal", function,
         std::format("unknown color '{}'. Valid colors: {}", color_name, valid_color_names())));
+}
+
+// Resolves a colour argument that may be either a Terminal.Color choice variant
+// or a colour-name string to the lowercase colour name used by color_map(),
+// mirroring the dual choice/string acceptance of Decimal.round.  A choice maps
+// its variant (BrightBlack → "bright_black"); a string passes through unchanged
+// so an unknown name still yields the domain "unknown color" failure result.  A
+// value of any other type is a programmer error and throws — the choice path is
+// total, so the typed form never fails.
+[[nodiscard]] std::string resolve_color_name(const Value& arg, std::string_view fn,
+                                             const SourceLocation& loc) {
+    if (arg.is_choice()) {
+        const auto& variant = arg.as_choice()->variant;
+
+        if (auto name = color_name_from_variant(variant)) {
+            return std::string{*name};
+        }
+
+        throw RuntimeError{std::format("{}: unknown colour 'Terminal.Color.{}'", fn, variant), loc,
+                           "use a Terminal.Color variant, e.g. Terminal.Color.Red"};
+    }
+
+    if (arg.is_string()) {
+        return arg.as_string();
+    }
+
+    throw RuntimeError{
+        std::format("{}: colour must be a Terminal.Color or a colour-name string", fn), loc,
+        "pass a Terminal.Color variant (e.g. Terminal.Color.Red) or a string (e.g. \"red\")"};
 }
 
 // True when every RGB component is within the representable 0-255 range.
@@ -293,10 +323,10 @@ void register_terminal_ansi(const EnvPtr& env) {
 
     ModuleBuilder{"Terminal", env}
         .func("color", 2)
-        .raw_body([](std::span<const Value> args, SourceLocation) -> Value {
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             prepare();
 
-            const auto& color_name = args[0].as_string();
+            const auto color_name = resolve_color_name(args[0], "Terminal.color", loc);
             const auto fg = fg_code_for(color_name);
 
             if (fg.empty()) {
@@ -306,10 +336,10 @@ void register_terminal_ansi(const EnvPtr& env) {
             return make_success_value(Value{std::format("{}{}\033[39m", fg, args[1].to_string())});
         })
         .func("background_color", 2)
-        .raw_body([](std::span<const Value> args, SourceLocation) -> Value {
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             prepare();
 
-            const auto& color_name = args[0].as_string();
+            const auto color_name = resolve_color_name(args[0], "Terminal.background_color", loc);
             const auto bg = bg_code_for(color_name);
 
             if (bg.empty()) {

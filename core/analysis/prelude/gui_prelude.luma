@@ -93,6 +93,19 @@ choice Scheme {
     Auto
 }
 
+# A colour value: a small semantic palette plus a `Custom` escape hatch for any
+# CSS colour string. Use it wherever a raw colour string went before (accent,
+# theme overrides) — a mistyped variant is now a compile error, and the palette
+# is discoverable via autocomplete. Build a custom colour with `Solaris.hex`.
+choice Color {
+    Primary,
+    Success,
+    Warning,
+    Danger,
+    Muted,
+    Custom(string hex)
+}
+
 # ── THE IMMUTABLE VIEW TREE ──
 #
 # A `View` is a plain value describing one piece of UI. `view` returns a tree
@@ -1046,9 +1059,33 @@ namespace Solaris {
         return Solaris.theme(config, {"accent": color})
     }
 
+    # Set the accent colour from a typed Color (semantic token or Solaris.hex).
+    # The typed sibling of `accent` — a mistyped colour becomes a compile error.
+    function dictionary accent_color(dictionary config, Color chosen) {
+        return Solaris.theme(config, {"accent": Solaris.color_value(chosen)})
+    }
+
     # Set the UI font family.
     function dictionary font(dictionary config, string family) {
         return Solaris.theme(config, {"font": family})
+    }
+
+    # Construct a custom Color from any CSS colour string (hex, rgb(), named).
+    function Color hex(string value) {
+        return Color.Custom(value)
+    }
+
+    # Resolve a Color to its CSS string, so a typed Color can be used in any
+    # `theme` override (e.g. {"background": Solaris.color_value(Color.Muted)}).
+    function string color_value(Color chosen) {
+        return match chosen {
+            case Color.Primary     { GraphicalUi.VAR_PRIMARY }
+            case Color.Success     { GraphicalUi.VAR_SUCCESS }
+            case Color.Warning     { GraphicalUi.VAR_WARNING }
+            case Color.Danger      { GraphicalUi.VAR_ERROR }
+            case Color.Muted       { GraphicalUi.VAR_TEXT_MUTED }
+            case Color.Custom(raw) { raw }
+        }
     }
 
     # Force a colour scheme at startup (Light, Dark, or Auto — Auto follows the OS).

@@ -185,13 +185,30 @@ void MatchExhaustivenessChecker::check_boolean_coverage(const std::vector<MatchA
 void MatchExhaustivenessChecker::check_choice_coverage(const std::vector<MatchArm>& arms,
                                                        const TypeInfo& subject_type,
                                                        const SourceLocation& loc) {
-    const auto it = tc_.choices().find(subject_type.name);
+    // A user choice is keyed in choices() by its (bare) name, so a direct find
+    // succeeds.  A namespaced stdlib choice (e.g. Json.Value) is keyed by its
+    // qualified name, yet the subject type carries only the bare type name
+    // ("Value"), so the direct find misses — fall back to a declaration whose
+    // bare name matches.  Without this, exhaustiveness would be silently
+    // unenforced for every namespaced stdlib choice (Weekday, Month, Color, …).
+    const ChoiceDeclaration* choice_decl = nullptr;
 
-    if (it == tc_.choices().end()) {
+    if (const auto it = tc_.choices().find(subject_type.name); it != tc_.choices().end()) {
+        choice_decl = it->second;
+    } else {
+        for (const auto& [key, decl] : tc_.choices()) {
+            if (decl->name == subject_type.name) {
+                choice_decl = decl;
+                break;
+            }
+        }
+    }
+
+    if (choice_decl == nullptr) {
         return;
     }
 
-    const auto& variants = it->second->variants;
+    const auto& variants = choice_decl->variants;
     StringSet covered;
 
     // Records the variant named by a choice/variant pattern. An arm and an
@@ -336,13 +353,27 @@ bool MatchExhaustivenessChecker::is_choice_exhaustive(const std::vector<MatchArm
         return false;
     }
 
-    const auto ch_it = tc_.choices().find(choice_type);
+    // Mirror check_choice_coverage: a namespaced stdlib choice is keyed by its
+    // qualified name while the arms carry only the bare type name, so fall back
+    // to a declaration whose bare name matches when the direct find misses.
+    const ChoiceDeclaration* choice_decl = nullptr;
 
-    if (ch_it == tc_.choices().end()) {
+    if (const auto ch_it = tc_.choices().find(choice_type); ch_it != tc_.choices().end()) {
+        choice_decl = ch_it->second;
+    } else {
+        for (const auto& [key, decl] : tc_.choices()) {
+            if (decl->name == choice_type) {
+                choice_decl = decl;
+                break;
+            }
+        }
+    }
+
+    if (choice_decl == nullptr) {
         return false;
     }
 
-    for (const auto& variant : ch_it->second->variants) {
+    for (const auto& variant : choice_decl->variants) {
         if (!covered_variants.contains(variant.name)) {
             return false;
         }

@@ -1,0 +1,123 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Order / Ordering
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+# ═══════════════════════════════════════════════════════════
+
+# An exhaustive match over every Ordering variant. With no else branch it only
+# type-checks if the choice declares exactly these three variants, so it doubles
+# as a check that the top-level Ordering choice is fully registered.
+function string ordering_label(Ordering o) {
+    return match o {
+    case Ordering.Less    { "less" }
+    case Ordering.Equal   { "equal" }
+    case Ordering.Greater { "greater" }
+    }
+}
+
+@test
+function void test_order_of_basic() {
+    assert(Order.of(1, 2) == Ordering.Less)
+    assert(Order.of(2, 2) == Ordering.Equal)
+    assert(Order.of(3, 2) == Ordering.Greater)
+
+    # Works for strings and booleans too (false < true).
+    assert(Order.of("apple", "banana") == Ordering.Less)
+    assert(Order.of(true, false) == Ordering.Greater)
+}
+
+@test
+function void test_order_is_exhaustive() {
+    assert(ordering_label(Ordering.Less) == "less")
+    assert(ordering_label(Ordering.Equal) == "equal")
+    assert(ordering_label(Ordering.Greater) == "greater")
+
+    # Variants compare by identity, and the type annotates a local.
+    Ordering o = Order.of(5, 1)
+    assert(o == Ordering.Greater)
+    assert(o != Ordering.Less)
+}
+
+@test
+function void test_order_reverse() {
+    assert(Order.reverse(Ordering.Less) == Ordering.Greater)
+    assert(Order.reverse(Ordering.Equal) == Ordering.Equal)
+    assert(Order.reverse(Ordering.Greater) == Ordering.Less)
+}
+
+@test
+function void test_order_then_tie_break() {
+    # A decisive first key wins; an Equal first key defers to the second.
+    assert(Order.then(Ordering.Less, Ordering.Greater) == Ordering.Less)
+    assert(Order.then(Ordering.Equal, Ordering.Less) == Ordering.Less)
+    assert(Order.then(Ordering.Equal, Ordering.Equal) == Ordering.Equal)
+}
+
+@test
+function void test_order_number_bridge() {
+    # to_number bridges to the numeric comparator Array.sort expects.
+    assert(Math.approximately_equal(Order.to_number(Ordering.Less), -1.0))
+    assert(Math.approximately_equal(Order.to_number(Ordering.Equal), 0.0))
+    assert(Math.approximately_equal(Order.to_number(Ordering.Greater), 1.0))
+
+    # from_number bridges back from any negative/zero/positive comparator result.
+    assert(Order.from_number(-42.0) == Ordering.Less)
+    assert(Order.from_number(0.0) == Ordering.Equal)
+    assert(Order.from_number(42.0) == Ordering.Greater)
+
+    # from_number ∘ to_number is the identity on every variant.
+    assert(Order.from_number(Order.to_number(Ordering.Less)) == Ordering.Less)
+    assert(Order.from_number(Order.to_number(Ordering.Equal)) == Ordering.Equal)
+    assert(Order.from_number(Order.to_number(Ordering.Greater)) == Ordering.Greater)
+}
+
+# ─── Multi-key sort ──────────────────────────────────────
+# The motivating use case: sort "by last name, then first name". Order.then
+# chains the two comparisons, and Order.to_number bridges the Ordering back to
+# the numeric comparator that Array.sort expects — so the typed, self-documenting
+# choice interoperates with the existing numeric sort convention.
+
+record Person {
+    string last,
+    string first
+}
+
+@test
+function void test_order_multi_key_sort() {
+    array<Person> people = [
+        Person { last = "Smith", first = "Zoe" },
+        Person { last = "Jones", first = "Alice" },
+        Person { last = "Smith", first = "Adam" },
+        Person { last = "Jones", first = "Bob" }
+    ]
+
+    array<Person> sorted = Result.unwrap(
+        Array.sort(people, (Person a, Person b) -> Order.to_number(
+            Order.then(Order.of(a.last, b.last), Order.of(a.first, b.first))
+        ))
+    )
+
+    # Jones before Smith; within each surname, first names ascend.
+    assert(sorted[0].last == "Jones")
+    assert(sorted[0].first == "Alice")
+    assert(sorted[1].last == "Jones")
+    assert(sorted[1].first == "Bob")
+    assert(sorted[2].last == "Smith")
+    assert(sorted[2].first == "Adam")
+    assert(sorted[3].last == "Smith")
+    assert(sorted[3].first == "Zoe")
+}
+
+@test
+function void test_order_reverse_sort() {
+    # Reversing the Ordering yields a descending sort.
+    array<integer> sorted = Result.unwrap(
+        Array.sort([3, 1, 4, 1, 5], (integer a, integer b) ->
+            Order.to_number(Order.reverse(Order.of(a, b))))
+    )
+
+    assert(sorted[0] == 5)
+    assert(sorted[1] == 4)
+    assert(sorted[4] == 1)
+}

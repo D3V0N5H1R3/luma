@@ -41,6 +41,35 @@ static void test_filesystem_stem() {
     ASSERT_EQ(eval("FileSystem.stem(\"dir/hello.txt\")").as_string(), "hello");
 }
 
+static void test_filesystem_split_path() {
+    // split_path returns a bare PathParts record (no result — it never fails).
+    const auto v = eval("FileSystem.split_path(\"dir/hello.txt\")");
+
+    ASSERT_TRUE(v.is_record());
+
+    const auto& rec = *v.as_record();
+
+    ASSERT_EQ(rec.type_name, "PathParts");
+    ASSERT_EQ(rec.find_field("parent")->as_string(), "dir");
+    ASSERT_EQ(rec.find_field("name")->as_string(), "hello.txt");
+    ASSERT_EQ(rec.find_field("stem")->as_string(), "hello");
+    ASSERT_EQ(rec.find_field("extension")->as_string(), ".txt");
+}
+
+static void test_filesystem_split_path_no_extension() {
+    // A bare name has an empty parent and extension, and a stem equal to the name.
+    const auto v = eval("FileSystem.split_path(\"README\")");
+
+    ASSERT_TRUE(v.is_record());
+
+    const auto& rec = *v.as_record();
+
+    ASSERT_EQ(rec.find_field("parent")->as_string(), "");
+    ASSERT_EQ(rec.find_field("name")->as_string(), "README");
+    ASSERT_EQ(rec.find_field("stem")->as_string(), "README");
+    ASSERT_EQ(rec.find_field("extension")->as_string(), "");
+}
+
 static void test_filesystem_append_file() {
     const LumaTempFile file{"_test_io_app.txt", "a"};
     eval(R"(FileSystem.append_file("_test_io_app.txt", "b"))");
@@ -472,6 +501,8 @@ int main() {
     RUN(test_filesystem_is_absolute);
     RUN(test_filesystem_rename_directory_not_a_dir);
     RUN(test_filesystem_stem);
+    RUN(test_filesystem_split_path);
+    RUN(test_filesystem_split_path_no_extension);
     RUN(test_filesystem_new_functions_registered);
     RUN(test_filesystem_is_symlink_regular_file);
     RUN(test_filesystem_get_modified_time);

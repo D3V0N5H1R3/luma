@@ -425,6 +425,116 @@ static void test_http_parse_response_malformed_status_code() {
     ASSERT_EQ(resp.reason, "");
 }
 
+// ─── Http: Http.Request record + Http.send (typed request) ────────────────────
+
+static void test_http_request_of_builds_typed_record() {
+    // Http.request_of(method, url) yields an Http.Request record carrying the
+    // Http.Method choice natively, with default headers/body/timeout.
+    const auto v = eval(R"(Http.request_of(Http.Method.Get, "http://example.com/api"))");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, "Request");
+
+    const auto* method = v.as_record()->find_field("method");
+
+    ASSERT_TRUE(method && method->is_choice());
+    ASSERT_EQ(method->as_choice()->type_name, "Method");
+    ASSERT_EQ(method->as_choice()->variant, "Get");
+
+    const auto* url = v.as_record()->find_field("url");
+
+    ASSERT_TRUE(url && url->is_string());
+    ASSERT_EQ(url->as_string(), "http://example.com/api");
+
+    const auto* headers = v.as_record()->find_field("headers");
+
+    ASSERT_TRUE(headers && headers->is_dictionary());
+    ASSERT_TRUE(headers->as_dictionary()->entries.empty());
+
+    const auto* body = v.as_record()->find_field("body");
+
+    ASSERT_TRUE(body && body->is_string());
+    ASSERT_EQ(body->as_string(), "");
+
+    const auto* timeout = v.as_record()->find_field("timeout_ms");
+
+    ASSERT_TRUE(timeout && timeout->is_integer());
+    ASSERT_EQ(timeout->as_integer(), static_cast<std::int64_t>(30000));
+}
+
+static void test_http_request_with_builds_full_record() {
+    // Http.request_with(method, url, headers, body, timeout_ms) captures every field.
+    const auto v = eval(
+        R"(Http.request_with(Http.Method.Post, "http://example.com", {"X-Test": "1"}, "payload", 5000))");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, "Request");
+
+    const auto* method = v.as_record()->find_field("method");
+
+    ASSERT_TRUE(method && method->is_choice());
+    ASSERT_EQ(method->as_choice()->variant, "Post");
+
+    const auto* headers = v.as_record()->find_field("headers");
+
+    ASSERT_TRUE(headers && headers->is_dictionary());
+
+    const auto* header = headers->as_dictionary()->find("X-Test");
+
+    ASSERT_TRUE(header && header->is_string());
+    ASSERT_EQ(header->as_string(), "1");
+
+    const auto* body = v.as_record()->find_field("body");
+
+    ASSERT_TRUE(body && body->is_string());
+    ASSERT_EQ(body->as_string(), "payload");
+
+    const auto* timeout = v.as_record()->find_field("timeout_ms");
+
+    ASSERT_TRUE(timeout && timeout->is_integer());
+    ASSERT_EQ(timeout->as_integer(), static_cast<std::int64_t>(5000));
+}
+
+static void test_http_request_with_clamps_negative_timeout() {
+    // A negative timeout is clamped to 0.
+    const auto v =
+        eval(R"(Http.request_with(Http.Method.Get, "http://x", {}, "", -1).timeout_ms)");
+
+    ASSERT_TRUE(v.is_integer());
+    ASSERT_EQ(v.as_integer(), static_cast<std::int64_t>(0));
+}
+
+static void test_http_request_of_rejects_non_choice_method() {
+    // A plain string is not an Http.Method choice — request_of rejects it.
+    ASSERT_TRUE(luma::test::eval_throws(R"(Http.request_of("GET", "http://x"))"));
+}
+
+static void test_http_send_rejects_non_request() {
+    // Http.send only accepts an Http.Request record.
+    ASSERT_TRUE(luma::test::eval_throws(R"(Http.send("not a request"))"));
+    ASSERT_TRUE(luma::test::eval_throws(R"(Http.send(Http.parse_url("http://example.com")))"));
+}
+
+static void test_http_send_reaches_request_pipeline() {
+    // Http.send reads the Http.Method choice back to a verb and drives the request
+    // pipeline; the SSRF guard blocks loopback deterministically (no network).
+    ASSERT_EVAL_FAILURE(
+        R"(Http.send(Http.request_of(Http.Method.Get, "http://127.0.0.1/admin")))");
+}
+
+static void test_http_send_empty_url_fails() {
+    // A request with an empty url fails with a clear error before any network.
+    ASSERT_EVAL_FAILURE(R"(Http.send(Http.request_of(Http.Method.Get, "")))");
+}
+
+static void test_http_request_functions_registered() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Http.request_of"));
+    ASSERT_TRUE(env->has("Http.request_with"));
+    ASSERT_TRUE(env->has("Http.send"));
+}
+
 int main() {
     RUN(test_http_build_query);
     RUN(test_http_https_reaches_request_pipeline);
@@ -469,6 +579,15 @@ int main() {
     RUN(test_http_parse_response_no_reason_phrase);
     RUN(test_http_parse_response_multiword_reason);
     RUN(test_http_parse_response_malformed_status_code);
+
+    RUN(test_http_request_of_builds_typed_record);
+    RUN(test_http_request_with_builds_full_record);
+    RUN(test_http_request_with_clamps_negative_timeout);
+    RUN(test_http_request_of_rejects_non_choice_method);
+    RUN(test_http_send_rejects_non_request);
+    RUN(test_http_send_reaches_request_pipeline);
+    RUN(test_http_send_empty_url_fails);
+    RUN(test_http_request_functions_registered);
 
     return SUMMARY();
 }

@@ -352,3 +352,71 @@ function void test_http_request_with_method_choice() {
 
     assert(!Result.is_success(r))
 }
+
+# ═══════════════════════════════════════════════════════════
+# Http.Request record + Http.send (typed request)
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_http_request_of_builds_typed_record() {
+    # Http.request_of carries the Http.Method choice natively (no stringifying),
+    # with default headers, empty body, and the default timeout.
+    Http.Request req = Http.request_of(Http.Method.Get, "http://example.com/api")
+
+    assert(req.method == Http.Method.Get)
+    assert(req.url == "http://example.com/api")
+    assert(req.body == "")
+    assert(req.timeout_ms == 30000)
+}
+
+@test
+function void test_http_request_with_builds_full_record() {
+    # Http.request_with captures every field of the request.
+    dictionary<string> headers = {"X-Test": "1"}
+    Http.Request req = Http.request_with(Http.Method.Post, "http://example.com", headers, "payload", 5000)
+
+    assert(req.method == Http.Method.Post)
+    assert(req.url == "http://example.com")
+    assert(req.headers["X-Test"] == "1")
+    assert(req.body == "payload")
+    assert(req.timeout_ms == 5000)
+}
+
+# The request's method field is a real Http.Method choice, so an exhaustive match
+# over it type-checks only if every variant is covered — proving the choice is
+# carried natively rather than stringified.
+function string request_verb(Http.Request req) {
+    return match req.method {
+    case Http.Method.Get     { "GET" }
+    case Http.Method.Post    { "POST" }
+    case Http.Method.Put     { "PUT" }
+    case Http.Method.Patch   { "PATCH" }
+    case Http.Method.Delete  { "DELETE" }
+    case Http.Method.Head    { "HEAD" }
+    case Http.Method.Options { "OPTIONS" }
+    }
+}
+
+@test
+function void test_http_request_method_is_matchable() {
+    assert(request_verb(Http.request_of(Http.Method.Delete, "http://x")) == "DELETE")
+    assert(request_verb(Http.request_of(Http.Method.Put, "http://x")) == "PUT")
+}
+
+@test
+function void test_http_send_reaches_pipeline() {
+    # Http.send reads the method choice back to a verb and drives the request
+    # pipeline; the SSRF guard blocks loopback deterministically (no network).
+    Http.Request req = Http.request_of(Http.Method.Get, "http://127.0.0.1/admin")
+    result<Http.Response> r = Http.send(req)
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_http_send_empty_url_fails() {
+    Http.Request req = Http.request_of(Http.Method.Get, "")
+    result<Http.Response> r = Http.send(req)
+
+    assert(!Result.is_success(r))
+}

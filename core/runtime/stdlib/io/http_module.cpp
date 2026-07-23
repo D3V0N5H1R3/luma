@@ -18,6 +18,7 @@
 
 #include "runtime/stdlib/io/http_module.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <format>
@@ -25,6 +26,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
@@ -71,6 +73,31 @@ constexpr int k_http_default_timeout_ms = 30000;
     throw RuntimeError{
         std::format("Http.method_to_string: unknown HTTP method 'Http.Method.{}'", variant), loc,
         "use an Http.Method variant: Get, Post, Put, Patch, Delete, Head, Options"};
+}
+
+// Builds an empty dictionary<string> value, used for a request's default headers.
+[[nodiscard]] Value make_empty_headers() {
+    auto dict = std::make_shared<DictionaryValue>();
+    dict->rebuild_index();
+
+    return Value{std::move(dict)};
+}
+
+// Assembles an Http.Request record { method, url, headers, body, timeout_ms }.
+// The record carries the Http.Method choice natively — no stringified verb — so a
+// request stays typed and discoverable, mirroring how Http.Response is a record.
+// Consumed by Http.send, which reads the choice back out with http_verb_from_method.
+[[nodiscard]] Value make_request_record(Value method, std::string url, Value headers,
+                                        std::string body, std::int64_t timeout_ms) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Request";
+    rec->fields.emplace_back("method", std::move(method));
+    rec->fields.emplace_back("url", Value{std::move(url)});
+    rec->fields.emplace_back("headers", std::move(headers));
+    rec->fields.emplace_back("body", Value{std::move(body)});
+    rec->fields.emplace_back("timeout_ms", Value{timeout_ms});
+
+    return Value{std::move(rec)};
 }
 
 } // namespace
@@ -257,6 +284,92 @@ void register_http_ns(const EnvPtr& env) {
             }
 
             return Value{http_verb_from_method(args[0].as_choice()->variant, loc)};
+        })
+        // Http.request_of(method, url) -> Http.Request
+        // Builds a typed request with empty headers, an empty body, and the default
+        // timeout — the common case.  Use Http.request_with for full control.  The
+        // Http.Method choice is stored directly (no stringifying), so the request is
+        // discoverable and symmetrical with the Http.Response record.
+        .func("request_of", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_choice()) {
+                throw RuntimeError{
+                    std::string{"Http.request_of: expected an Http.Method choice"}, loc,
+                    "pass an Http.Method variant, e.g. Http.Method.Get"};
+            }
+
+            const auto& url = expect_string(args[1], "Http.request_of", loc);
+
+            return make_request_record(args[0], url, make_empty_headers(), std::string{},
+                                       k_http_default_timeout_ms);
+        })
+        // Http.request_with(method, url, headers, body, timeout_ms) -> Http.Request
+        // Builds a fully-specified typed request.  A negative timeout is clamped to 0.
+        .func("request_with", 5)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_choice()) {
+                throw RuntimeError{
+                    std::string{"Http.request_with: expected an Http.Method choice"}, loc,
+                    "pass an Http.Method variant, e.g. Http.Method.Post"};
+            }
+
+            const auto& url = expect_string(args[1], "Http.request_with", loc);
+            (void)expect_dict(args[2], "Http.request_with", loc);
+            const auto& body = expect_string(args[3], "Http.request_with", loc);
+            const auto timeout_ms = expect_integer(args[4], "Http.request_with", loc);
+
+            return make_request_record(args[0], url, args[2], body,
+                                       std::max<std::int64_t>(timeout_ms, 0));
+        })
+        // Http.send(request) -> result<Http.Response>
+        // Performs the request described by an Http.Request record and returns the typed
+        // response, mirroring Http.get/post but driven by a typed request rather than an
+        // options dictionary.  The Http.Method choice is read back out here.
+        .func("send", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_record() || args[0].as_record()->type_name != "Request") {
+                throw RuntimeError{
+                    std::string{"Http.send: expected an Http.Request record"}, loc,
+                    "build one with Http.request_of(method, url) or Http.request_with(...)"};
+            }
+
+            const auto& rec = *args[0].as_record();
+
+            const auto* method_val = rec.find_field("method");
+            const auto* url_val = rec.find_field("url");
+            const auto* headers_val = rec.find_field("headers");
+            const auto* body_val = rec.find_field("body");
+            const auto* timeout_val = rec.find_field("timeout_ms");
+
+            if (method_val == nullptr || !method_val->is_choice()) {
+                throw RuntimeError{
+                    std::string{"Http.send: request has no valid method"}, loc,
+                    "build the request with Http.request_of / Http.request_with"};
+            }
+
+            const auto verb = http_verb_from_method(method_val->as_choice()->variant, loc);
+            const auto url = (url_val != nullptr && url_val->is_string()) ? url_val->as_string()
+                                                                          : std::string{};
+            const auto body = (body_val != nullptr && body_val->is_string()) ? body_val->as_string()
+                                                                             : std::string{};
+
+            int timeout{k_http_default_timeout_ms};
+
+            if (timeout_val != nullptr && timeout_val->is_integer()) {
+                timeout = static_cast<int>(std::max<std::int64_t>(timeout_val->as_integer(), 0));
+            }
+
+            std::vector<std::pair<std::string, std::string>> headers;
+
+            if (headers_val != nullptr && headers_val->is_dictionary()) {
+                headers = extract_headers(*headers_val->as_dictionary(), loc);
+            }
+
+            if (url.empty()) {
+                return make_failure_value(std::string{"Http.send: request has an empty url"});
+            }
+
+            return do_http_request(verb, url, body, headers, timeout, loc);
         })
         // Http.download(url, output_path) -> result<string>
         .func("download", 2)

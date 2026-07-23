@@ -7,18 +7,31 @@ void register_json_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
     append_specs(
         specs,
         {
+            m.fn("as_array", 1, "(value: Json.Value)", R::result(R::array(named::json_value())),
+                 {p.any}),
+            m.fn("as_boolean", 1, "(value: Json.Value)", R::result_boolean(), {p.any}),
+            m.fn("as_number", 1, "(value: Json.Value)", R::result_number(), {p.any}),
+            m.fn("as_object", 1, "(value: Json.Value)", R::result(R::dict(named::json_value())),
+                 {p.any}),
+            m.fn("as_string", 1, "(value: Json.Value)", R::result_string(), {p.any}),
             m.fn("deserialize", 1, "(json: string)", R::result_any(), {p.string}),
+            m.fn("field", 2, "(value: Json.Value, key: string)", R::optional(named::json_value()),
+                 {p.any, p.string}),
             m.fn("get", 2, "(json: string, key: string)", R::result_any(), {p.string, p.string}),
             m.fn("get_path", 2, "(json: string, path: string)", R::result_any(),
                  {p.string, p.string}),
+            m.fn("index", 2, "(value: Json.Value, i: integer)", R::optional(named::json_value()),
+                 {p.any, p.integer}),
             m.fn("is_valid", 1, "(json: string)", R::boolean_type(), {p.string}),
             m.fn("merge", 2, "(a: string, b: string)", R::result_string(), {p.string, p.string}),
+            m.fn("parse", 1, "(text: string)", R::result(named::json_value()), {p.string}),
             m.fn("serialize", 1, "(value: T)", R::string_type(), {p.any}),
             m.fn("serialize_pretty", 1, "(value: T)", R::string_type(), {p.any}),
             m.fn("set", 3, "(json: string, key: string, value: T)", R::result_string(),
                  {p.string, p.string, p.any}),
             m.fn("set_path", 3, "(json: string, path: string, value: T)", R::result_string(),
                  {p.string, p.string, p.any}),
+            m.fn("to_string", 1, "(value: Json.Value)", R::string_type(), {p.any}),
         });
 }
 

@@ -384,3 +384,233 @@ function void test_json_merge_non_objects_fails() {
 
     assert(Result.is_failure(r))
 }
+
+# ═══════════════════════════════════════════════════════════
+# Json.Value — the statically-typed JSON ADT
+# ═══════════════════════════════════════════════════════════
+
+# Exhaustive match over every Json.Value variant, with NO else branch.  This
+# only type-checks if the choice declares exactly these six variants, so it
+# doubles as a check that Json.Value is fully registered and annotatable.
+function string describe(Json.Value v) {
+    return match v {
+    case Json.Value.JsonObject(_fields) { "object" }
+    case Json.Value.JsonArray(_items)   { "array" }
+    case Json.Value.JsonString(_s)      { "string" }
+    case Json.Value.JsonNumber(_n)      { "number" }
+    case Json.Value.JsonBool(_b)        { "bool" }
+    case Json.Value.JsonNull            { "null" }
+    }
+}
+
+@test
+function void test_json_value_parse_object() {
+    Json.Value v = Result.unwrap(Json.parse("{\"a\": 1}"))
+
+    assert(describe(v) == "object", "object should describe as object")
+}
+
+@test
+function void test_json_value_parse_array() {
+    Json.Value v = Result.unwrap(Json.parse("[1, 2, 3]"))
+
+    assert(describe(v) == "array", "array should describe as array")
+}
+
+@test
+function void test_json_value_parse_string() {
+    Json.Value v = Result.unwrap(Json.parse("\"hello\""))
+
+    assert(describe(v) == "string", "string should describe as string")
+}
+
+@test
+function void test_json_value_parse_number() {
+    Json.Value v = Result.unwrap(Json.parse("42"))
+
+    assert(describe(v) == "number", "number should describe as number")
+}
+
+@test
+function void test_json_value_parse_boolean() {
+    Json.Value v = Result.unwrap(Json.parse("true"))
+
+    assert(describe(v) == "bool", "boolean should describe as bool")
+}
+
+@test
+function void test_json_value_parse_null() {
+    Json.Value v = Result.unwrap(Json.parse("null"))
+
+    assert(describe(v) == "null", "null should describe as null")
+}
+
+@test
+function void test_json_value_parse_invalid_is_failure() {
+    result<Json.Value> parsed = Json.parse("{not valid}")
+
+    assert(Result.is_failure(parsed), "malformed JSON should parse to a failure")
+}
+
+@test
+function void test_json_value_as_string() {
+    Json.Value v = Result.unwrap(Json.parse("\"hi\""))
+    string s = Result.unwrap(Json.as_string(v))
+
+    assert(s == "hi", "as_string should extract the string payload")
+}
+
+@test
+function void test_json_value_as_string_wrong_type_is_failure() {
+    Json.Value v = Result.unwrap(Json.parse("42"))
+    result<string> extracted = Json.as_string(v)
+
+    assert(Result.is_failure(extracted), "as_string on a number should fail")
+}
+
+@test
+function void test_json_value_as_number() {
+    Json.Value v = Result.unwrap(Json.parse("3.5"))
+    number n = Result.unwrap(Json.as_number(v))
+
+    assert(Math.approximately_equal(n, 3.5), "as_number should extract the numeric payload")
+}
+
+@test
+function void test_json_value_as_boolean() {
+    Json.Value v = Result.unwrap(Json.parse("true"))
+    boolean b = Result.unwrap(Json.as_boolean(v))
+
+    assert(b, "as_boolean should extract the boolean payload")
+}
+
+@test
+function void test_json_value_as_array() {
+    Json.Value v = Result.unwrap(Json.parse("[1, 2, 3]"))
+    array<Json.Value> items = Result.unwrap(Json.as_array(v))
+
+    assert(Array.length(items) == 3, "as_array should extract the three elements")
+}
+
+@test
+function void test_json_value_as_object() {
+    Json.Value v = Result.unwrap(Json.parse("{\"a\": 1, \"b\": 2}"))
+    dictionary<Json.Value> fields = Result.unwrap(Json.as_object(v))
+
+    assert(Dictionary.has(fields, "a"), "as_object should expose key a")
+    assert(Dictionary.has(fields, "b"), "as_object should expose key b")
+}
+
+@test
+function void test_json_value_field_some() {
+    Json.Value v = Result.unwrap(Json.parse("{\"name\": \"luma\"}"))
+
+    match Json.field(v, "name") {
+    case some(name_value) {
+        string name = Result.unwrap(Json.as_string(name_value))
+
+        assert(name == "luma", "field should return the value at key name")
+    }
+    case none {
+        assert(false, "field name should be present")
+    }
+    }
+}
+
+@test
+function void test_json_value_field_missing_is_none() {
+    Json.Value v = Result.unwrap(Json.parse("{\"a\": 1}"))
+
+    match Json.field(v, "missing") {
+    case some(_x) {
+        assert(false, "missing key should be none")
+    }
+    case none {
+        assert(true, "missing key is none")
+    }
+    }
+}
+
+@test
+function void test_json_value_field_on_non_object_is_none() {
+    Json.Value v = Result.unwrap(Json.parse("[1, 2]"))
+
+    match Json.field(v, "a") {
+    case some(_x) {
+        assert(false, "field on an array should be none")
+    }
+    case none {
+        assert(true, "field on an array is none")
+    }
+    }
+}
+
+@test
+function void test_json_value_index_some() {
+    Json.Value v = Result.unwrap(Json.parse("[10, 20, 30]"))
+
+    match Json.index(v, 1) {
+    case some(second) {
+        number n = Result.unwrap(Json.as_number(second))
+
+        assert(Math.approximately_equal(n, 20.0), "index 1 should be 20")
+    }
+    case none {
+        assert(false, "index 1 should be present")
+    }
+    }
+}
+
+@test
+function void test_json_value_index_out_of_bounds_is_none() {
+    Json.Value v = Result.unwrap(Json.parse("[10, 20]"))
+
+    match Json.index(v, 5) {
+    case some(_x) {
+        assert(false, "out-of-bounds index should be none")
+    }
+    case none {
+        assert(true, "out-of-bounds index is none")
+    }
+    }
+}
+
+@test
+function void test_json_value_nested_access() {
+    Json.Value v = Result.unwrap(Json.parse("{\"user\": {\"age\": 30}}"))
+
+    match Json.field(v, "user") {
+    case some(user_value) {
+        match Json.field(user_value, "age") {
+        case some(age_value) {
+            number age = Result.unwrap(Json.as_number(age_value))
+
+            assert(Math.approximately_equal(age, 30.0), "nested field user.age should be 30")
+        }
+        case none {
+            assert(false, "age should be present")
+        }
+        }
+    }
+    case none {
+        assert(false, "user should be present")
+    }
+    }
+}
+
+@test
+function void test_json_value_to_string_roundtrip() {
+    Json.Value v = Result.unwrap(Json.parse("{\"b\": [2, 3], \"a\": 1}"))
+    string serialized = Json.to_string(v)
+
+    # Keys are emitted in sorted order and integral numbers carry no decimal.
+    assert(serialized == "{\"a\":1,\"b\":[2,3]}", "to_string should round-trip with sorted keys")
+}
+
+@test
+function void test_json_value_to_string_fraction() {
+    Json.Value v = Result.unwrap(Json.parse("2.5"))
+    string serialized = Json.to_string(v)
+
+    assert(serialized == "2.5", "to_string should preserve a fractional number")
+}

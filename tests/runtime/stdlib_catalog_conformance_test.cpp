@@ -42,15 +42,16 @@ static void test_all_registered_functions_are_in_catalog() {
     int uncataloged_count = 0;
 
     // Collect all bindings that look like stdlib functions (contain a dot).
-    env->for_each_binding([&](const std::string& name, const Value& /*value*/) {
+    env->for_each_binding([&](const std::string& name, const Value& value) {
         if (name.find('.') == std::string::npos) {
             return; // Skip non-namespaced builtins (print, assert, etc.)
         }
 
         if (!cat.contains(name)) {
-            // Choice type variants (e.g. "Log.Level.Info") have two dots
-            // and are not function entries in the catalog.
-            if (std::count(name.begin(), name.end(), '.') >= 2) {
+            // Choice type variants (e.g. "Log.Level.Info" or the top-level
+            // "Ordering.Less") are registered as choice-valued globals, not
+            // function entries in the catalog — skip them by value kind.
+            if (value.is_choice()) {
                 return;
             }
 

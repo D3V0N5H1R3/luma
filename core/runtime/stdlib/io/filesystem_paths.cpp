@@ -115,6 +115,25 @@ void register_filesystem_paths(const EnvPtr& env) {
                 args, "FileSystem.stem", loc,
                 [](const std::filesystem::path& p) { return p.stem().string(); });
         })
+        // FileSystem.split_path decomposes a path into its parts in one call.
+        // Pure string manipulation (no I/O), so it needs no sandbox guard and
+        // never fails — it mirrors FileSystem.parent/name/stem/extension bundled
+        // into a single FileSystem.PathParts record.
+        .func("split_path", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            expect_all_strings(args, "FileSystem.split_path", loc, path_args_hint);
+
+            const std::filesystem::path p{args[0].as_string()};
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "PathParts";
+            rec->fields.emplace_back("parent", Value{p.parent_path().string()});
+            rec->fields.emplace_back("name", Value{p.filename().string()});
+            rec->fields.emplace_back("stem", Value{p.stem().string()});
+            rec->fields.emplace_back("extension", Value{p.extension().string()});
+
+            return Value{std::move(rec)};
+        })
         .func("normalize", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return pure_path_query(

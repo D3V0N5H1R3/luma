@@ -82,6 +82,18 @@ namespace {
             if (desc.named_type == "Log.Level") {
                 return TypeInfo::make_named(K::Choice, "Log.Level");
             }
+            if (desc.named_type == "DateTime.Weekday") {
+                return TypeInfo::make_named(K::Choice, "DateTime.Weekday");
+            }
+            if (desc.named_type == "DateTime.Month") {
+                return TypeInfo::make_named(K::Choice, "DateTime.Month");
+            }
+            if (desc.named_type == "Ordering") {
+                return TypeInfo::make_named(K::Choice, "Ordering");
+            }
+            if (desc.named_type == "Json.Value") {
+                return TypeInfo::make_named(K::Choice, "Json.Value");
+            }
             return TypeInfo::make_named(K::Record, desc.named_type);
 
         case RK::Unspecified:

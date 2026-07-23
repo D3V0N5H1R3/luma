@@ -15,6 +15,10 @@ void register_json_ns(const EnvPtr& env);
 // Internal sub-registration (split for readability).
 void register_json_parser(const EnvPtr& env);
 
+// Internal sub-registration — the typed Json.Value ADT (parse / to_string /
+// accessors).  Split into json_value_module.cpp.
+void register_json_value(const EnvPtr& env);
+
 // Internal — serialize a Value to JSON.  Shared between
 // json_module.cpp and json_module_parser.cpp.
 void json_serialize_value(const Value& val, std::string& out, int indent, int depth, bool pretty);

@@ -25,6 +25,44 @@ static void test_terminal_color_invalid() {
     ASSERT_EVAL_FAILURE("Terminal.color(\"not_a_color\", \"text\")");
 }
 
+// ─── Terminal.Color choice (type-safe colour, choice-or-string) ───────────────
+
+static void test_terminal_color_choice() {
+    // A Terminal.Color variant selects the same ANSI code as its string name.
+    const auto v = eval("Terminal.color(Terminal.Color.Red, \"warning\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& out = v.as_result()->owned_inner->as_string();
+
+    ASSERT_TRUE(out.find("warning") != std::string::npos);
+    ASSERT_TRUE(out.find("\033[31m") != std::string::npos);
+}
+
+static void test_terminal_color_choice_bright() {
+    // A bright variant maps PascalCase → snake_case (BrightBlack → bright_black).
+    const auto v = eval("Terminal.color(Terminal.Color.BrightBlack, \"dim\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->as_string().find("\033[90m") != std::string::npos);
+}
+
+static void test_terminal_color_choice_matches_string() {
+    // The choice form and the equivalent string produce identical output.
+    const auto by_choice = eval("Terminal.color(Terminal.Color.Green, \"ok\")");
+    const auto by_string = eval("Terminal.color(\"green\", \"ok\")");
+
+    ASSERT_RESULT_SUCCESS(by_choice);
+    ASSERT_RESULT_SUCCESS(by_string);
+    ASSERT_EQ(by_choice.as_result()->owned_inner->as_string(),
+              by_string.as_result()->owned_inner->as_string());
+}
+
+static void test_terminal_color_rejects_non_color_arg() {
+    // A non-string, non-choice colour argument is a programmer error and throws.
+    ASSERT_TRUE(luma::test::eval_throws("Terminal.color(123, \"text\")"));
+}
+
 static void test_terminal_columns_rows() {
     auto v = eval("Terminal.columns()");
 
@@ -179,6 +217,18 @@ static void test_terminal_background_color() {
 
 static void test_terminal_background_color_invalid() {
     ASSERT_EVAL_FAILURE("Terminal.background_color(\"not_a_color\", \"text\")");
+}
+
+static void test_terminal_background_color_choice() {
+    // Terminal.background_color accepts a Terminal.Color variant too.
+    const auto v = eval("Terminal.background_color(Terminal.Color.Yellow, \"warn\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& out = v.as_result()->owned_inner->as_string();
+
+    ASSERT_TRUE(out.find("warn") != std::string::npos);
+    ASSERT_TRUE(out.find("\033[43m") != std::string::npos);
 }
 
 static void test_terminal_rgb_background_color() {
@@ -559,6 +609,10 @@ int main() {
     RUN(test_terminal_bold);
     RUN(test_terminal_color);
     RUN(test_terminal_color_invalid);
+    RUN(test_terminal_color_choice);
+    RUN(test_terminal_color_choice_bright);
+    RUN(test_terminal_color_choice_matches_string);
+    RUN(test_terminal_color_rejects_non_color_arg);
     RUN(test_terminal_columns_rows);
     RUN(test_terminal_is_mouse);
     RUN(test_terminal_is_raw_mode);
@@ -574,6 +628,7 @@ int main() {
     RUN(test_terminal_text_styles);
     RUN(test_terminal_background_color);
     RUN(test_terminal_background_color_invalid);
+    RUN(test_terminal_background_color_choice);
     RUN(test_terminal_rgb_background_color);
     RUN(test_terminal_rgb_background_color_invalid);
     RUN(test_terminal_rgb_color_negative);

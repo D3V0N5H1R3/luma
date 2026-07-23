@@ -105,9 +105,29 @@ namespace named {
     return ReturnTypeDesc::named("Log.Level");
 }
 
+[[nodiscard]] inline ReturnTypeDesc weekday() {
+    return ReturnTypeDesc::named("DateTime.Weekday");
+}
+
+[[nodiscard]] inline ReturnTypeDesc month() {
+    return ReturnTypeDesc::named("DateTime.Month");
+}
+
+[[nodiscard]] inline ReturnTypeDesc ordering() {
+    return ReturnTypeDesc::named("Ordering");
+}
+
+[[nodiscard]] inline ReturnTypeDesc json_value() {
+    return ReturnTypeDesc::named("Json.Value");
+}
+
 // Record / result types (identified by a PascalCase name).
 [[nodiscard]] inline ReturnTypeDesc response() {
     return ReturnTypeDesc::named("Response");
+}
+
+[[nodiscard]] inline ReturnTypeDesc request() {
+    return ReturnTypeDesc::named("Request");
 }
 
 [[nodiscard]] inline ReturnTypeDesc match() {
@@ -132,6 +152,10 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc file_info() {
     return ReturnTypeDesc::named("FileInfo");
+}
+
+[[nodiscard]] inline ReturnTypeDesc path_parts() {
+    return ReturnTypeDesc::named("PathParts");
 }
 
 [[nodiscard]] inline ReturnTypeDesc summary() {
@@ -361,6 +385,9 @@ void register_reference_functions(std::vector<FunctionSpec>& specs, const Module
 
 void register_resource_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                  const ParamShorthands& p);
+
+void register_order_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                              const ParamShorthands& p);
 
 } // namespace luma::stdlib::detail
 

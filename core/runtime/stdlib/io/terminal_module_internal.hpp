@@ -70,6 +70,11 @@ void emit_unlocked(std::string_view sequence);
 /// Look up a background ANSI code by color name. Returns empty view if unknown.
 [[nodiscard]] std::string_view bg_code_for(std::string_view name);
 
+/// Map a Terminal.Color choice variant (PascalCase, e.g. "BrightBlack") to the
+/// lowercase colour name used by color_map() (e.g. "bright_black").  Returns
+/// nullopt for an unrecognised variant.
+[[nodiscard]] std::optional<std::string_view> color_name_from_variant(std::string_view variant);
+
 struct TerminalDimensions {
     int cols{80};
     int rows{24};

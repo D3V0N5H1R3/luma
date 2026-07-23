@@ -215,6 +215,7 @@ set(LUMA_RUNTIME_TESTS
     stdlib_test_converter
     stdlib_test_csv
     stdlib_test_datetime
+    stdlib_test_order
     stdlib_test_encoder
     stdlib_test_hash
     stdlib_test_json
@@ -483,6 +484,7 @@ set(LUMA_FEATURE_TESTS_STDLIB
     log_functions.luma
     math_functions.luma
     optional_functions.luma
+    order_functions.luma
     process_functions.luma
     queue_functions.luma
     random_functions.luma

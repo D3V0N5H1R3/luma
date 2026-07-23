@@ -50,6 +50,7 @@ void register_json_ns(const EnvPtr& env) {
         });
 
     register_json_parser(env);
+    register_json_value(env);
 }
 
 // =============================================================================
