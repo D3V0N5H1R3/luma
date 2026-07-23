@@ -368,21 +368,32 @@ bool MatchExhaustivenessChecker::is_choice_exhaustive(const std::vector<MatchArm
         return false;
     }
 
-    std::string choice_type;
     StringSet covered_variants;
-    bool all_choice{true};
+
+    // Resolve the choice declaration from the first choice/variant arm, then
+    // check every other arm names that same declaration by identity — not by
+    // raw type-name string.  An arm's type name may be qualified for a
+    // namespaced choice ("Signals.Command") or bare for a `use`-imported one
+    // ("Command"), so a match that mixes both forms for a single choice (e.g. a
+    // three-part `Signals.Command.Turn` arm alongside a two-part `Command.Move`
+    // arm) is still recognised as covering one choice.  Comparing the raw names
+    // would spuriously reject that mix and, via definite-return analysis, report
+    // a fully-covered match as falling through.
+    const ChoiceDeclaration* choice_decl{nullptr};
 
     for (const auto& arm : arms) {
         if (arm.kind() != MatchArm::Kind::ChoiceCase && arm.kind() != MatchArm::Kind::VariantCase) {
-            all_choice = false;
-            break;
+            return false;
         }
 
-        if (choice_type.empty()) {
-            choice_type = arm.enum_type();
-        } else if (arm.enum_type() != choice_type) {
-            all_choice = false;
-            break;
+        if (choice_decl == nullptr) {
+            choice_decl = find_choice_for_arms(tc_.choices(), arm.enum_type(), arms);
+
+            if (choice_decl == nullptr) {
+                return false;
+            }
+        } else if (!enum_type_names_choice(tc_.choices(), arm.enum_type(), choice_decl)) {
+            return false;
         }
 
         // A guarded arm participates in choice-type detection but does not cover
@@ -400,15 +411,6 @@ bool MatchExhaustivenessChecker::is_choice_exhaustive(const std::vector<MatchArm
             }
         }
     }
-
-    if (!all_choice || choice_type.empty()) {
-        return false;
-    }
-
-    // The arms carry the choice's canonical (qualified for a namespaced choice)
-    // name, so the matched choice resolves directly and unambiguously — even
-    // when another choice shares its bare name.
-    const ChoiceDeclaration* choice_decl = find_choice_for_arms(tc_.choices(), choice_type, arms);
 
     if (choice_decl == nullptr) {
         return false;
