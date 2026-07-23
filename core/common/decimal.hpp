@@ -45,6 +45,13 @@ enum class RoundingMode : std::uint8_t {
 // Returns std::nullopt for an unknown name.
 [[nodiscard]] std::optional<RoundingMode> parse_rounding_mode(std::string_view name);
 
+// Maps a PascalCase `Decimal.RoundingMode` choice-variant name to its enum
+// value. Recognised names: "HalfUp", "HalfEven", "HalfDown", "Up", "Down",
+// "Ceiling", "Floor" — one per RoundingMode variant. Returns std::nullopt for
+// an unknown name. The names must stay in lock-step with the variants declared
+// for the stdlib `Decimal.RoundingMode` choice type.
+[[nodiscard]] std::optional<RoundingMode> rounding_mode_from_variant(std::string_view variant);
+
 class Decimal {
 public:
     // Constructs zero (coefficient 0, scale 0).

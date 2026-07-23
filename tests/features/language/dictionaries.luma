@@ -145,9 +145,13 @@ function void test_dictionary_filter() {
 function void test_dictionary_to_array() {
     dictionary<integer> entries = {"x": 1}
 
-    array<(string, integer)> pairs = Dictionary.to_array(entries)
+    array<Dictionary.KeyValue> pairs = Dictionary.to_array(entries)
 
     assert(Array.length(pairs) == 1)
+
+    Dictionary.KeyValue first = pairs[0]
+    assert(first.key == "x")
+    assert(first.value == 1)
 }
 
 @test

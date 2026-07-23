@@ -531,3 +531,42 @@ function void test_filesystem_list_directories_contains_created() {
     boolean _ = Result.unwrap_or(FileSystem.delete_directory("_test_ld_parent"), false)
 }
 
+@test
+function void test_filesystem_metadata_file() {
+    assert(Result.is_success(FileSystem.write_file("_test_meta.txt", "hello")))
+
+    result<FileSystem.FileInfo> r = FileSystem.metadata("_test_meta.txt")
+
+    assert(Result.is_success(r), "metadata succeeds")
+
+    FileSystem.FileInfo info = Result.unwrap(r)
+
+    assert(info.size == 5, "size is 5 bytes")
+    assert(info.is_file, "is a file")
+    assert(!info.is_directory, "not a directory")
+    assert(!info.is_symlink, "not a symlink")
+    assert(info.modified_time > 1577836800.0, "modified after 2020")
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_meta.txt"), false)
+}
+
+@test
+function void test_filesystem_metadata_directory() {
+    result<FileSystem.FileInfo> r = FileSystem.metadata(".")
+
+    assert(Result.is_success(r), "metadata succeeds for a directory")
+
+    FileSystem.FileInfo info = Result.unwrap(r)
+
+    assert(info.is_directory, "is a directory")
+    assert(!info.is_file, "not a regular file")
+    assert(info.size == 0, "directory reports size 0")
+}
+
+@test
+function void test_filesystem_metadata_nonexistent() {
+    result<FileSystem.FileInfo> r = FileSystem.metadata("_nonexistent_meta_file.txt")
+
+    assert(Result.is_failure(r), "metadata fails on a missing path")
+}
+

@@ -28,6 +28,15 @@ std::string divi(const std::string& a, const std::string& b, int scale) {
     return "Result.unwrap(Decimal.divide(" + a + ", " + b + ", " + std::to_string(scale) + "))";
 }
 
+// A Luma expression that divides two decimal expressions at the given scale
+// using an explicit rounding mode, unwrapping the result. `mode` is a raw Luma
+// expression — either a mode string ("half_up") or a Decimal.RoundingMode
+// variant (Decimal.RoundingMode.HalfUp).
+std::string divw(const std::string& a, const std::string& b, int scale, const std::string& mode) {
+    return "Result.unwrap(Decimal.divide_with(" + a + ", " + b + ", " + std::to_string(scale) +
+           ", " + mode + "))";
+}
+
 // Whether two decimal expressions are equal (scale-insensitive).
 bool dequals(const std::string& a, const std::string& b) {
     return eval("Decimal.equals(" + a + ", " + b + ")").as_bool();
@@ -138,6 +147,44 @@ LUMA_TEST(decimal_divide_failures) {
     ASSERT_RESULT_FAILURE(eval("Decimal.divide(" + dec("10") + ", " + dec("3") + ", -1)"));
 }
 
+LUMA_TEST(decimal_divide_with_string_mode) {
+    // divide_with matches divide's half-up default when given "half_up".
+    ASSERT_TRUE(dequals(divw(dec("10"), dec("3"), 4, "\"half_up\""), dec("3.3333")));
+    // 2/3 at scale 3 differs by mode: down truncates, up/half_up round the digit.
+    ASSERT_EQ(to_str(divw(dec("2"), dec("3"), 3, "\"down\"")), std::string("0.666"));
+    ASSERT_EQ(to_str(divw(dec("2"), dec("3"), 3, "\"up\"")), std::string("0.667"));
+    ASSERT_EQ(to_str(divw(dec("2"), dec("3"), 3, "\"half_up\"")), std::string("0.667"));
+}
+
+LUMA_TEST(decimal_divide_with_choice_mode) {
+    // The Decimal.RoundingMode choice variants drive the same behaviour as the
+    // equivalent mode strings.
+    ASSERT_EQ(to_str(divw(dec("2"), dec("3"), 3, "Decimal.RoundingMode.Down")),
+              std::string("0.666"));
+    ASSERT_EQ(to_str(divw(dec("2"), dec("3"), 3, "Decimal.RoundingMode.Up")), std::string("0.667"));
+    ASSERT_TRUE(
+        dequals(divw(dec("1"), dec("8"), 3, "Decimal.RoundingMode.HalfEven"), dec("0.125")));
+    // Choice and string forms agree.
+    ASSERT_TRUE(dequals(divw(dec("10"), dec("3"), 4, "Decimal.RoundingMode.HalfUp"),
+                        divw(dec("10"), dec("3"), 4, "\"half_up\"")));
+}
+
+LUMA_TEST(decimal_divide_with_failures) {
+    // Domain failures surface as result failures, exactly like Decimal.divide.
+    ASSERT_RESULT_FAILURE(
+        eval("Decimal.divide_with(" + dec("10") + ", " + dec("0") + ", 2, \"half_up\")"));
+    ASSERT_RESULT_FAILURE(
+        eval("Decimal.divide_with(" + dec("10") + ", " + dec("3") + ", -1, \"half_up\")"));
+    // Choice-form divide by zero fails the same way.
+    ASSERT_RESULT_FAILURE(eval("Decimal.divide_with(" + dec("10") + ", " + dec("0") +
+                               ", 2, Decimal.RoundingMode.HalfUp)"));
+}
+
+LUMA_TEST(decimal_divide_with_bad_mode_throws) {
+    // An unknown mode string is a programmer error (mirrors Decimal.round).
+    ASSERT_THROWS(eval("Decimal.divide_with(" + dec("10") + ", " + dec("3") + ", 2, \"bogus\")"));
+}
+
 // ─── Rounding ───
 
 LUMA_TEST(decimal_round_positive_modes) {
@@ -182,6 +229,28 @@ LUMA_TEST(decimal_round_edge_cases) {
     ASSERT_TRUE(dequals("Decimal.round(" + dec("12.6") + ", -3, \"half_up\")", dec("13")));
     // An unknown rounding mode is a programmer error.
     ASSERT_THROWS(eval("Decimal.round(" + dec("1.5") + ", 2, \"bogus\")"));
+}
+
+LUMA_TEST(decimal_round_accepts_choice_mode) {
+    // Decimal.round accepts a Decimal.RoundingMode variant as well as a string,
+    // producing identical results (the dual-acceptance win).
+    const std::string v = dec("2.345");
+    ASSERT_EQ(to_str("Decimal.round(" + v + ", 2, Decimal.RoundingMode.HalfUp)"),
+              std::string("2.35"));
+    ASSERT_EQ(to_str("Decimal.round(" + v + ", 2, Decimal.RoundingMode.HalfEven)"),
+              std::string("2.34"));
+    ASSERT_EQ(to_str("Decimal.round(" + v + ", 2, Decimal.RoundingMode.Down)"),
+              std::string("2.34"));
+    ASSERT_EQ(to_str("Decimal.round(" + v + ", 2, Decimal.RoundingMode.Ceiling)"),
+              std::string("2.35"));
+    // Banker's rounding ties to even via the choice variant.
+    ASSERT_EQ(to_str("Decimal.round(" + dec("2.5") + ", 0, Decimal.RoundingMode.HalfEven)"),
+              std::string("2"));
+    ASSERT_EQ(to_str("Decimal.round(" + dec("3.5") + ", 0, Decimal.RoundingMode.HalfEven)"),
+              std::string("4"));
+    // The choice and string forms agree for the same mode.
+    ASSERT_TRUE(dequals("Decimal.round(" + v + ", 2, Decimal.RoundingMode.HalfUp)",
+                        "Decimal.round(" + v + ", 2, \"half_up\")"));
 }
 
 // ─── Comparison & equality ───

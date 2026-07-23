@@ -8,6 +8,7 @@
 #include <format>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <numbers>
 #include <numeric>
 #include <optional>
@@ -194,6 +195,42 @@ void register_math_statistics(const EnvPtr& env) {
             }
 
             return make_success_value(Value{std::sqrt(compute_variance(elems))});
+        })
+        .func("summarize", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& elems = *expect_array(args[0], "Math.summarize", loc)->elements;
+
+            if (auto fail = check_not_empty(elems, "Math.summarize")) {
+                return *std::move(fail);
+            }
+
+            // One pass: sort once for min / max / median, then reuse the sorted
+            // values for the mean.  Variance is computed over the original
+            // elements (order-independent), matching Math.standard_deviation.
+            const auto vals = sorted_doubles(elems);
+            const auto n = vals.size();
+
+            double sum{0.0};
+            for (const double v : vals) {
+                sum += v;
+            }
+            const double mean = sum / static_cast<double>(n);
+
+            const double median =
+                (n % 2 == 0) ? (vals[(n / 2) - 1] + vals[n / 2]) / 2.0 : vals[n / 2];
+
+            const double std_dev = std::sqrt(compute_variance(elems));
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Summary";
+            rec->fields.emplace_back("count", Value{static_cast<std::int64_t>(n)});
+            rec->fields.emplace_back("minimum", Value{vals.front()});
+            rec->fields.emplace_back("maximum", Value{vals.back()});
+            rec->fields.emplace_back("mean", Value{mean});
+            rec->fields.emplace_back("median", Value{median});
+            rec->fields.emplace_back("standard_deviation", Value{std_dev});
+
+            return make_success_value(Value{std::move(rec)});
         })
         .func("percentile", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

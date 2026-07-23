@@ -153,3 +153,91 @@ function void test_decimal_conversions() {
     assert(Math.approximately_equal(Decimal.to_number(dec("0.5")), 0.5))
     assert(Math.approximately_equal(Decimal.to_number(dec("-2.25")), -2.25))
 }
+
+# ═══════════════════════════════════════════════════════════
+# RoundingMode choice type
+# ═══════════════════════════════════════════════════════════
+
+# A match over every Decimal.RoundingMode variant. Being exhaustive (no else),
+# it only type-checks if the choice declares exactly these seven variants — so
+# this doubles as a check that the type is fully registered and annotatable.
+function string mode_label(Decimal.RoundingMode mode) {
+    return match mode {
+    case Decimal.RoundingMode.HalfUp   { "half_up" }
+    case Decimal.RoundingMode.HalfDown { "half_down" }
+    case Decimal.RoundingMode.HalfEven { "half_even" }
+    case Decimal.RoundingMode.Up       { "up" }
+    case Decimal.RoundingMode.Down     { "down" }
+    case Decimal.RoundingMode.Ceiling  { "ceiling" }
+    case Decimal.RoundingMode.Floor    { "floor" }
+    }
+}
+
+@test
+function void test_decimal_rounding_mode_is_exhaustive() {
+    # Each variant maps to its expected label through an exhaustive match.
+    assert(mode_label(Decimal.RoundingMode.HalfUp) == "half_up")
+    assert(mode_label(Decimal.RoundingMode.HalfDown) == "half_down")
+    assert(mode_label(Decimal.RoundingMode.HalfEven) == "half_even")
+    assert(mode_label(Decimal.RoundingMode.Up) == "up")
+    assert(mode_label(Decimal.RoundingMode.Down) == "down")
+    assert(mode_label(Decimal.RoundingMode.Ceiling) == "ceiling")
+    assert(mode_label(Decimal.RoundingMode.Floor) == "floor")
+
+    # Variants compare by identity, and the type annotates a local.
+    Decimal.RoundingMode m = Decimal.RoundingMode.HalfEven
+    assert(m == Decimal.RoundingMode.HalfEven)
+    assert(m != Decimal.RoundingMode.HalfUp)
+}
+
+@test
+function void test_decimal_round_accepts_choice_mode() {
+    decimal v = dec("2.345")
+
+    # The choice form produces identical results to the string form.
+    assert(Decimal.to_string(Decimal.round(v, 2, Decimal.RoundingMode.HalfUp)) == "2.35")
+    assert(Decimal.to_string(Decimal.round(v, 2, Decimal.RoundingMode.HalfEven)) == "2.34")
+    assert(Decimal.to_string(Decimal.round(v, 2, Decimal.RoundingMode.HalfDown)) == "2.34")
+    assert(Decimal.to_string(Decimal.round(v, 2, Decimal.RoundingMode.Up)) == "2.35")
+    assert(Decimal.to_string(Decimal.round(v, 2, Decimal.RoundingMode.Down)) == "2.34")
+    assert(Decimal.to_string(Decimal.round(v, 2, Decimal.RoundingMode.Floor)) == "2.34")
+    assert(Decimal.to_string(Decimal.round(v, 2, Decimal.RoundingMode.Ceiling)) == "2.35")
+
+    # Banker's rounding via the choice variant.
+    assert(Decimal.to_string(Decimal.round(dec("2.5"), 0, Decimal.RoundingMode.HalfEven)) == "2")
+    assert(Decimal.to_string(Decimal.round(dec("3.5"), 0, Decimal.RoundingMode.HalfEven)) == "4")
+
+    # The existing string form still works (non-breaking).
+    assert(Decimal.to_string(Decimal.round(v, 2, "half_up")) == "2.35")
+}
+
+@test
+function void test_decimal_divide_with() {
+    # divide_with matches divide's half-up default when given HalfUp.
+    result<decimal> a = Decimal.divide_with(dec("10"), dec("3"), 4, Decimal.RoundingMode.HalfUp)
+    assert(Result.is_success(a))
+    assert(Decimal.equals(Result.unwrap(a), dec("3.3333")))
+
+    # The mode genuinely changes the result: 2/3 at scale 3.
+    result<decimal> down = Decimal.divide_with(dec("2"), dec("3"), 3, Decimal.RoundingMode.Down)
+    assert(Result.is_success(down))
+    assert(Decimal.to_string(Result.unwrap(down)) == "0.666")
+
+    result<decimal> up = Decimal.divide_with(dec("2"), dec("3"), 3, Decimal.RoundingMode.Up)
+    assert(Result.is_success(up))
+    assert(Decimal.to_string(Result.unwrap(up)) == "0.667")
+
+    # The legacy string form is accepted too (mirrors Decimal.round).
+    result<decimal> str_mode = Decimal.divide_with(dec("2"), dec("3"), 3, "down")
+    assert(Result.is_success(str_mode))
+    assert(Decimal.to_string(Result.unwrap(str_mode)) == "0.666")
+
+    # Domain failures surface as result failures, not crashes.
+    result<decimal> div_zero =
+        Decimal.divide_with(dec("10"), dec("0"), 2, Decimal.RoundingMode.HalfUp)
+    assert(!Result.is_success(div_zero))
+
+    result<decimal> neg_scale =
+        Decimal.divide_with(dec("10"), dec("3"), -1, Decimal.RoundingMode.HalfUp)
+    assert(!Result.is_success(neg_scale))
+}

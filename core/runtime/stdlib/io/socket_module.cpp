@@ -195,6 +195,24 @@ constexpr std::int64_t k_max_port = 65535;
     return std::nullopt;
 }
 
+// Build a Socket.Address record { host: string, port: integer } from a resolved
+// socket address.  IPv6-aware via sockaddr_host_port (no fragile "host:port"
+// string parsing), mirroring the host/port fields of Socket.UdpPacket.
+[[nodiscard]] Value make_address_record(const struct sockaddr_storage& addr) {
+    const auto hp = sockaddr_host_port(addr);
+
+    if (!hp) {
+        return socket_failure("resolve address");
+    }
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Address";
+    rec->fields.emplace_back("host", Value{hp->host});
+    rec->fields.emplace_back("port", Value{static_cast<std::int64_t>(hp->port)});
+
+    return make_success_value(Value{std::move(rec)});
+}
+
 } // namespace
 
 // ─── Module registration ─────────────────────────────────────────────────────
@@ -485,6 +503,49 @@ void register_socket_ns(const EnvPtr& env) {
             const std::string result{format_sockaddr(addr)};
 
             return make_success_value(Value{result});
+        })
+        // Socket.local_address_parts(socket s) -> result<Socket.Address>
+        // Like local_address, but returns a structured { host, port } record so
+        // the caller need not re-parse a "host:port" string (IPv6-safe).
+        .func("local_address_parts", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& sv = expect_socket(args[0], "Socket.local_address_parts", loc);
+
+            if (auto err = check_socket_open(sv)) {
+                return *err;
+            }
+
+            struct sockaddr_storage addr {};
+
+            auto addr_len = static_cast<socklen_t>(sizeof(addr));
+
+            if (getsockname(sv->handle.load(), reinterpret_cast<struct sockaddr*>(&addr),
+                            &addr_len) != 0) {
+                return socket_failure("get local address");
+            }
+
+            return make_address_record(addr);
+        })
+        // Socket.remote_address_parts(socket s) -> result<Socket.Address>
+        // Like remote_address, but returns a structured { host, port } record.
+        .func("remote_address_parts", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& sv = expect_socket(args[0], "Socket.remote_address_parts", loc);
+
+            if (auto err = check_socket_open(sv)) {
+                return *err;
+            }
+
+            struct sockaddr_storage addr {};
+
+            auto addr_len = static_cast<socklen_t>(sizeof(addr));
+
+            if (getpeername(sv->handle.load(), reinterpret_cast<struct sockaddr*>(&addr),
+                            &addr_len) != 0) {
+                return socket_failure("get remote address");
+            }
+
+            return make_address_record(addr);
         })
         // Socket.udp_create() -> result<socket>
         // Create an unbound UDP socket.

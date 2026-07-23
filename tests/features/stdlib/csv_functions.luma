@@ -307,3 +307,43 @@ function void test_csv_count_rows_unterminated_fails() {
 
     assert(Result.is_failure(r))
 }
+
+# ───────────────────────────────────────────────────────────
+# Csv.Dialect — typed parse/format options
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_csv_default_dialect() {
+    Csv.Dialect d = Csv.default_dialect()
+
+    assert(d.delimiter == ",")
+    assert(d.quote == "\"")
+}
+
+@test
+function void test_csv_dialect_custom() {
+    Csv.Dialect d = Csv.dialect(";", "'")
+
+    assert(d.delimiter == ";")
+    assert(d.quote == "'")
+}
+
+@test
+function void test_csv_deserialize_with_dialect() {
+    array<array<string>> rows = Csv.deserialize_with("a;b\n1;2", Csv.dialect(";", "\""))
+    |> Result.unwrap()
+
+    assert(Array.length(rows) == 2)
+    assert(rows[0][0] == "a")
+    assert(rows[1][1] == "2")
+}
+
+@test
+function void test_csv_serialize_with_dialect() {
+    string csv = Csv.serialize_with([["a", "b"], ["1", "2"]], Csv.dialect(";", "\""))
+    |> Result.unwrap()
+
+    assert(String.contains(csv, "a;b"))
+    assert(String.contains(csv, "1;2"))
+}
+

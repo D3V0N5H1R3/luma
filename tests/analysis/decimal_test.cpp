@@ -336,6 +336,23 @@ static void test_rounding_mode_names() {
     ASSERT_FALSE(parse_rounding_mode("HALF_UP").has_value());
 }
 
+static void test_rounding_mode_from_variant() {
+    // Every PascalCase Decimal.RoundingMode variant maps to its enum value.
+    ASSERT_TRUE(rounding_mode_from_variant("HalfUp") == RoundingMode::HalfUp);
+    ASSERT_TRUE(rounding_mode_from_variant("HalfDown") == RoundingMode::HalfDown);
+    ASSERT_TRUE(rounding_mode_from_variant("HalfEven") == RoundingMode::HalfEven);
+    ASSERT_TRUE(rounding_mode_from_variant("Up") == RoundingMode::Up);
+    ASSERT_TRUE(rounding_mode_from_variant("Down") == RoundingMode::Down);
+    ASSERT_TRUE(rounding_mode_from_variant("Ceiling") == RoundingMode::Ceiling);
+    ASSERT_TRUE(rounding_mode_from_variant("Floor") == RoundingMode::Floor);
+
+    // The lowercase string names are NOT valid variant names, and vice versa.
+    ASSERT_FALSE(rounding_mode_from_variant("half_up").has_value());
+    ASSERT_FALSE(rounding_mode_from_variant("halfup").has_value());
+    ASSERT_FALSE(rounding_mode_from_variant("HalfUpp").has_value());
+    ASSERT_FALSE(rounding_mode_from_variant("").has_value());
+}
+
 // ═══════════════════════════════════════════════════════════
 // A realistic money scenario
 // ═══════════════════════════════════════════════════════════
@@ -394,6 +411,7 @@ int main() {
 
     RUN(test_hash_matches_equality);
     RUN(test_rounding_mode_names);
+    RUN(test_rounding_mode_from_variant);
     RUN(test_money_arithmetic);
 
     return SUMMARY();

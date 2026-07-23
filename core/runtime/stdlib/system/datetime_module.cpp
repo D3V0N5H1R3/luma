@@ -6,11 +6,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
 #include "common/narrow_int.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -449,6 +453,97 @@ static void register_datetime_parsing(const EnvPtr& env) {
         .func("is_after", 2)
         .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
             return Value{args[0].to_numeric() > args[1].to_numeric()};
+        })
+        .func("break_duration", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            const double total = args[0].to_numeric();
+            const double abs_total = std::abs(total);
+
+            // Round to the nearest millisecond.  Non-finite or astronomically
+            // large inputs saturate to INT64_MAX so the conversion below is
+            // always defined behaviour.
+            const double ms_d = std::isfinite(abs_total) ? std::round(abs_total * 1000.0) : 0.0;
+            // static_cast<double>(INT64_MAX) rounds up to 2^63, which is *not*
+            // representable as an int64_t — so compare with >= and saturate
+            // rather than casting a clamped 2^63 (which would be undefined).
+            constexpr double k_ms_ceiling =
+                static_cast<double>(std::numeric_limits<std::int64_t>::max());
+            const std::int64_t total_ms = (ms_d >= k_ms_ceiling)
+                                              ? std::numeric_limits<std::int64_t>::max()
+                                              : static_cast<std::int64_t>(ms_d);
+
+            const std::int64_t days = total_ms / 86'400'000;
+            const std::int64_t hours = (total_ms / 3'600'000) % 24;
+            const std::int64_t minutes = (total_ms / 60'000) % 60;
+            const std::int64_t seconds = (total_ms / 1'000) % 60;
+            const std::int64_t milliseconds = total_ms % 1'000;
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Duration";
+            rec->fields.emplace_back("days", Value{days});
+            rec->fields.emplace_back("hours", Value{hours});
+            rec->fields.emplace_back("minutes", Value{minutes});
+            rec->fields.emplace_back("seconds", Value{seconds});
+            rec->fields.emplace_back("milliseconds", Value{milliseconds});
+            rec->fields.emplace_back("negative", Value{total < 0.0 && total_ms != 0});
+
+            return Value{std::move(rec)};
+        })
+        .func("format_duration", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_record()) {
+                throw RuntimeError{"DateTime.format_duration: expected a DateTime.Duration record",
+                                   loc};
+            }
+
+            const auto& rec = args[0].as_record();
+            const auto component = [&rec](std::string_view name) -> std::int64_t {
+                const Value* v = rec->find_field(name);
+                return (v != nullptr && v->is_integer()) ? v->as_integer() : 0;
+            };
+
+            const std::int64_t days = component("days");
+            const std::int64_t hours = component("hours");
+            const std::int64_t minutes = component("minutes");
+            const std::int64_t seconds = component("seconds");
+            const std::int64_t milliseconds = component("milliseconds");
+
+            const Value* neg = rec->find_field("negative");
+            const bool negative = neg != nullptr && neg->is_bool() && neg->as_bool();
+
+            std::vector<std::string> parts;
+            if (days > 0) {
+                parts.push_back(std::format("{}d", days));
+            }
+            if (hours > 0) {
+                parts.push_back(std::format("{}h", hours));
+            }
+            if (minutes > 0) {
+                parts.push_back(std::format("{}m", minutes));
+            }
+            if (seconds > 0) {
+                parts.push_back(std::format("{}s", seconds));
+            }
+            if (milliseconds > 0) {
+                parts.push_back(std::format("{}ms", milliseconds));
+            }
+
+            std::string out;
+            if (parts.empty()) {
+                out = "0s";
+            } else {
+                for (std::size_t i = 0; i < parts.size(); ++i) {
+                    if (i > 0) {
+                        out += ' ';
+                    }
+                    out += parts[i];
+                }
+            }
+            if (negative) {
+                out = "-" + out;
+            }
+
+            return Value{std::move(out)};
         });
 }
 

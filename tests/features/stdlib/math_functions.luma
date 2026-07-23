@@ -611,3 +611,27 @@ function void test_math_correlation_failures() {
     assert(Result.is_failure(Math.correlation([1], [1])), "fewer than two points should fail")
 }
 
+@test
+function void test_math_summarize() {
+    result<Math.Summary> r = Math.summarize([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])
+
+    assert(Result.is_success(r), "summarize of non-empty array should succeed")
+
+    Math.Summary s = Result.unwrap(r)
+
+    assert(s.count == 8, "count should be 8")
+    assert(Math.approximately_equal(s.minimum, 2.0), "minimum should be 2.0")
+    assert(Math.approximately_equal(s.maximum, 9.0), "maximum should be 9.0")
+    assert(Math.approximately_equal(s.mean, 5.0), "mean should be 5.0")
+    assert(Math.approximately_equal(s.median, 4.5), "median should be 4.5")
+    assert(s.standard_deviation > 1.9, "standard_deviation should exceed 1.9")
+    assert(s.standard_deviation < 2.1, "standard_deviation should be under 2.1")
+}
+
+@test
+function void test_math_summarize_empty() {
+    result<Math.Summary> r = Math.summarize([])
+
+    assert(Result.is_failure(r), "summarize of an empty array should fail")
+}
+

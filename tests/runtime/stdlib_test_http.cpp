@@ -56,6 +56,7 @@ static void test_http_module() {
     ASSERT_TRUE(env->has("Http.delete_with"));
     ASSERT_TRUE(env->has("Http.patch_with"));
     ASSERT_TRUE(env->has("Http.put_with"));
+    ASSERT_TRUE(env->has("Http.method_to_string"));
 }
 
 static void test_http_parse_query() {
@@ -130,6 +131,24 @@ static void test_http_bearer_auth_empty() {
 
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), "Bearer ");
+}
+
+// ─── Http: method_to_string (Http.Method choice → verb string) ────────────────
+
+static void test_http_method_to_string_all_verbs() {
+    // Each Http.Method variant converts to its uppercase HTTP verb.
+    ASSERT_EQ(eval("Http.method_to_string(Http.Method.Get)").as_string(), "GET");
+    ASSERT_EQ(eval("Http.method_to_string(Http.Method.Post)").as_string(), "POST");
+    ASSERT_EQ(eval("Http.method_to_string(Http.Method.Put)").as_string(), "PUT");
+    ASSERT_EQ(eval("Http.method_to_string(Http.Method.Patch)").as_string(), "PATCH");
+    ASSERT_EQ(eval("Http.method_to_string(Http.Method.Delete)").as_string(), "DELETE");
+    ASSERT_EQ(eval("Http.method_to_string(Http.Method.Head)").as_string(), "HEAD");
+    ASSERT_EQ(eval("Http.method_to_string(Http.Method.Options)").as_string(), "OPTIONS");
+}
+
+static void test_http_method_to_string_rejects_non_choice() {
+    // A plain string is not an Http.Method choice — the converter rejects it.
+    ASSERT_TRUE(luma::test::eval_throws(R"(Http.method_to_string("GET"))"));
 }
 
 static void test_http_new_functions_registered() {
@@ -416,6 +435,8 @@ int main() {
     RUN(test_http_basic_auth_empty_credentials);
     RUN(test_http_bearer_auth);
     RUN(test_http_bearer_auth_empty);
+    RUN(test_http_method_to_string_all_verbs);
+    RUN(test_http_method_to_string_rejects_non_choice);
     RUN(test_http_new_functions_registered);
     RUN(test_http_parse_url_default_http_port);
     RUN(test_http_parse_url_https_default_port);

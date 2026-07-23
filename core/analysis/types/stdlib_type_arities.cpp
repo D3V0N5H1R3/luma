@@ -127,6 +127,29 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("integer", "day"), field("integer", "hour"), field("integer", "minute"),
                    field("integer", "second"));
 
+        add_record(st, "DateTime.Duration", field("integer", "days"), field("integer", "hours"),
+                   field("integer", "minutes"), field("integer", "seconds"),
+                   field("integer", "milliseconds"), field("boolean", "negative"));
+
+        add_record(st, "FileSystem.FileInfo", field("integer", "size"),
+                   field("number", "modified_time"), field("boolean", "is_directory"),
+                   field("boolean", "is_file"), field("boolean", "is_symlink"));
+
+        add_record(st, "Math.Summary", field("integer", "count"), field("number", "minimum"),
+                   field("number", "maximum"), field("number", "mean"), field("number", "median"),
+                   field("number", "standard_deviation"));
+
+        add_record(st, "Socket.Address", field("string", "host"), field("integer", "port"));
+
+        add_record(st, "Csv.Dialect", field("string", "delimiter"), field("string", "quote"));
+
+        // Dictionary.to_array emits these key/value pairs at runtime (each a
+        // record with type_name "KeyValue").  The `value` field carries the
+        // dictionary's value type V, so it has no single concrete type here — a
+        // `.value` access resolves permissively, exactly like a field access on
+        // any other stdlib record returned by a module call.
+        add_record(st, "Dictionary.KeyValue", field("string", "key"), field("V", "value"));
+
         add_record(st, "Http.Response", field("integer", "status"), field("string", "reason"),
                    field("string", "body"), field_of(dict_ann("string"), "headers"));
 
@@ -161,6 +184,44 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Off", .fields = {}});
 
             st.choice_map["Log.Level"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Decimal.RoundingMode ────────────────────────
+        // Variant names must match rounding_mode_from_variant() in
+        // core/common/decimal.cpp exactly (PascalCase, one per RoundingMode).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "RoundingMode");
+            ch->variants.push_back(ChoiceVariant{.name = "HalfUp", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "HalfDown", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "HalfEven", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Up", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Down", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Ceiling", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Floor", .fields = {}});
+
+            st.choice_map["Decimal.RoundingMode"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Http.Method ─────────────────────────────────
+        // Variant names must match http_verb_from_method() in
+        // core/runtime/stdlib/io/http_module.cpp exactly (PascalCase, one per
+        // HTTP verb).  Converted to a verb string via Http.method_to_string,
+        // which a program then passes under Http.request's "method" option key
+        // (the options dictionary is homogeneous, so it cannot hold the choice
+        // directly).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Method");
+            ch->variants.push_back(ChoiceVariant{.name = "Get", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Post", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Put", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Patch", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Delete", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Head", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Options", .fields = {}});
+
+            st.choice_map["Http.Method"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

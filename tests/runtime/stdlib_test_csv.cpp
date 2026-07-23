@@ -23,6 +23,8 @@ static void test_csv_module() {
     ASSERT_TRUE(env->has("Csv.serialize_records"));
     ASSERT_TRUE(env->has("Csv.header"));
     ASSERT_TRUE(env->has("Csv.count_rows"));
+    ASSERT_TRUE(env->has("Csv.default_dialect"));
+    ASSERT_TRUE(env->has("Csv.dialect"));
 }
 
 static void test_csv_parse() {
@@ -142,6 +144,49 @@ static void test_csv_serialize_with_custom_quote() {
                         R"({"delimiter": ";", "quote": "'"}) |> Result.unwrap())");
 
     ASSERT_TRUE(v.as_string().find("'a;b'") != std::string::npos);
+}
+
+// ─── Csv.Dialect typed options ───────────────────────────────────────────────
+
+static void test_csv_default_dialect() {
+    // The default dialect is a Csv.Dialect record with RFC 4180 defaults.
+    const auto v = eval("Csv.default_dialect()");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Dialect"});
+    ASSERT_EQ(v.as_record()->find_field("delimiter")->as_string(), ",");
+    ASSERT_EQ(v.as_record()->find_field("quote")->as_string(), "\"");
+}
+
+static void test_csv_dialect_custom_fields() {
+    // Csv.dialect builds a typed options record from explicit delimiter/quote.
+    const auto v = eval(R"(Csv.dialect(";", "'"))");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Dialect"});
+    ASSERT_EQ(v.as_record()->find_field("delimiter")->as_string(), ";");
+    ASSERT_EQ(v.as_record()->find_field("quote")->as_string(), "'");
+}
+
+static void test_csv_deserialize_with_dialect() {
+    // A Csv.Dialect record is accepted by deserialize_with alongside the dict.
+    const auto v =
+        eval(R"(Csv.deserialize_with("a;b\n1;2", Csv.dialect(";", "\"")) |> Result.unwrap())");
+
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), 2U);
+
+    const auto& row1 = *(*v.as_array()->elements)[1].as_array()->elements;
+    ASSERT_EQ(row1[0].as_string(), "1");
+    ASSERT_EQ(row1[1].as_string(), "2");
+}
+
+static void test_csv_serialize_with_dialect() {
+    const auto v = eval(
+        R"(Csv.serialize_with([["a", "b"], ["1", "2"]], Csv.dialect(";", "\"")) |> Result.unwrap())");
+
+    ASSERT_TRUE(v.as_string().find("a;b") != std::string::npos);
+    ASSERT_TRUE(v.as_string().find("1;2") != std::string::npos);
 }
 
 // ─── RFC 4180 quoting / line endings ─────────────────────────────────────────
@@ -297,6 +342,7 @@ int main() {
     RUN(test_csv_count_rows_empty);
     RUN(test_csv_count_rows_quoted_newline);
     RUN(test_csv_count_rows_unterminated_fails);
+    RUN(test_csv_default_dialect);
     RUN(test_csv_deserialize_crlf);
     RUN(test_csv_deserialize_escaped_quote);
     RUN(test_csv_deserialize_multiline_field);
@@ -306,7 +352,9 @@ int main() {
     RUN(test_csv_deserialize_records_values);
     RUN(test_csv_deserialize_unterminated_quote_fails);
     RUN(test_csv_deserialize_with_delimiter);
+    RUN(test_csv_deserialize_with_dialect);
     RUN(test_csv_deserialize_with_non_dict_throws);
+    RUN(test_csv_dialect_custom_fields);
     RUN(test_csv_header);
     RUN(test_csv_header_empty_fails);
     RUN(test_csv_header_unterminated_fails);
@@ -330,6 +378,7 @@ int main() {
     RUN(test_csv_serialize_roundtrip);
     RUN(test_csv_serialize_with_custom_quote);
     RUN(test_csv_serialize_with_delimiter);
+    RUN(test_csv_serialize_with_dialect);
     RUN(test_csv_serialize_with_row_not_array_throws);
     return SUMMARY();
 }

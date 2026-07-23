@@ -208,6 +208,31 @@ std::optional<RoundingMode> parse_rounding_mode(std::string_view name) {
     return std::nullopt;
 }
 
+std::optional<RoundingMode> rounding_mode_from_variant(std::string_view variant) {
+    if (variant == "HalfUp") {
+        return RoundingMode::HalfUp;
+    }
+    if (variant == "HalfEven") {
+        return RoundingMode::HalfEven;
+    }
+    if (variant == "HalfDown") {
+        return RoundingMode::HalfDown;
+    }
+    if (variant == "Up") {
+        return RoundingMode::Up;
+    }
+    if (variant == "Down") {
+        return RoundingMode::Down;
+    }
+    if (variant == "Ceiling") {
+        return RoundingMode::Ceiling;
+    }
+    if (variant == "Floor") {
+        return RoundingMode::Floor;
+    }
+    return std::nullopt;
+}
+
 Decimal::Decimal(std::int64_t value) {
     if (value == 0) {
         return;

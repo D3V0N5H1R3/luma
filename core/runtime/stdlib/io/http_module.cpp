@@ -18,11 +18,15 @@
 
 #include "runtime/stdlib/io/http_module.hpp"
 
+#include <array>
 #include <cstdint>
 #include <format>
 #include <fstream>
 #include <string>
+#include <string_view>
+#include <utility>
 
+#include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
@@ -37,6 +41,37 @@ namespace {
 // Default request timeout for the Http module.  Deliberately larger than the
 // GraphicalUi HTTP commands' 8 s default, which run synchronously on the UI thread.
 constexpr int k_http_default_timeout_ms = 30000;
+
+// Resolves an `Http.Method` choice variant to its uppercase HTTP verb.  Backs
+// Http.method_to_string, which lets a program name a verb type-safely (autocomplete,
+// exhaustive match, no typos) and feed it to the generic Http.request path — whose
+// options travel in a homogeneous dictionary<string>, so the choice is converted to a
+// string here rather than carried in the dictionary itself.  An unknown variant is
+// impossible for a genuine Http.Method value (the type checker guarantees it); the throw
+// guards against some other choice type being passed by mistake.
+[[nodiscard]] std::string http_verb_from_method(std::string_view variant,
+                                                const SourceLocation& loc) {
+    // Variant names mirror the Http.Method choice in stdlib_type_arities.cpp.
+    static constexpr std::array<std::pair<std::string_view, std::string_view>, 7> verbs{{
+        {"Get", "GET"},
+        {"Post", "POST"},
+        {"Put", "PUT"},
+        {"Patch", "PATCH"},
+        {"Delete", "DELETE"},
+        {"Head", "HEAD"},
+        {"Options", "OPTIONS"},
+    }};
+
+    for (const auto& [name, verb] : verbs) {
+        if (name == variant) {
+            return std::string{verb};
+        }
+    }
+
+    throw RuntimeError{
+        std::format("Http.method_to_string: unknown HTTP method 'Http.Method.{}'", variant), loc,
+        "use an Http.Method variant: Get, Post, Put, Patch, Delete, Head, Options"};
+}
 
 } // namespace
 
@@ -173,6 +208,7 @@ void register_http_ns(const EnvPtr& env) {
                 return {};
             };
 
+            // The "method" option is a string verb; a missing value defaults to GET.
             const auto method = get_opt("method").empty() ? std::string{"GET"} : get_opt("method");
             const auto url = get_opt("url");
             const auto body = get_opt("body");
@@ -207,6 +243,20 @@ void register_http_ns(const EnvPtr& env) {
             }
 
             return do_http_request(method, url, body, headers, timeout, loc);
+        })
+        // Http.method_to_string(Http.Method) -> string
+        // Converts an Http.Method choice to its uppercase HTTP verb, so a program can
+        // name a verb type-safely and pass it under the "method" option of Http.request
+        // (whose options dictionary holds strings, not choices).
+        .func("method_to_string", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_choice()) {
+                throw RuntimeError{
+                    std::string{"Http.method_to_string: expected an Http.Method choice"}, loc,
+                    "pass an Http.Method variant, e.g. Http.Method.Post"};
+            }
+
+            return Value{http_verb_from_method(args[0].as_choice()->variant, loc)};
         })
         // Http.download(url, output_path) -> result<string>
         .func("download", 2)

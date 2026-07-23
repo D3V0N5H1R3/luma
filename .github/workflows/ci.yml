@@ -57,9 +57,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     # Upper bound covers the cached build, the CTest suite, and (on the gcc-14
     # job) the full headless example sweep run by scripts/run_examples.py. The
-    # ceiling accommodates a cold-cache full build on the slowest runner
-    # (Windows/MSVC); warm-cache runs finish well under it.
-    timeout-minutes: 35
+    # ceiling accommodates the slowest entry: the gcc-13 sanitizer build, whose
+    # ASan/UBSan-instrumented, non-PIE binaries compile and test noticeably
+    # slower than the plain jobs (~35 min, versus ~12-28 min for
+    # gcc-14/clang/MSVC) and were intermittently hitting the previous 35-minute
+    # limit. Warm-cache plain runs finish well under this.
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false

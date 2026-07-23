@@ -292,3 +292,63 @@ function void test_http_request_missing_url_fails() {
 
     assert(!Result.is_success(r))
 }
+
+# ═══════════════════════════════════════════════════════════
+# Method choice type (type-safe HTTP verbs)
+# ═══════════════════════════════════════════════════════════
+
+# An exhaustive match over every Http.Method variant. With no else branch it
+# only type-checks if the choice declares exactly these seven variants, so it
+# doubles as a check that Http.Method is fully registered and annotatable.
+function string method_label(Http.Method method) {
+    return match method {
+    case Http.Method.Get     { "GET" }
+    case Http.Method.Post    { "POST" }
+    case Http.Method.Put     { "PUT" }
+    case Http.Method.Patch   { "PATCH" }
+    case Http.Method.Delete  { "DELETE" }
+    case Http.Method.Head    { "HEAD" }
+    case Http.Method.Options { "OPTIONS" }
+    }
+}
+
+@test
+function void test_http_method_is_exhaustive() {
+    # Each variant maps to its verb through an exhaustive match.
+    assert(method_label(Http.Method.Get) == "GET")
+    assert(method_label(Http.Method.Post) == "POST")
+    assert(method_label(Http.Method.Put) == "PUT")
+    assert(method_label(Http.Method.Patch) == "PATCH")
+    assert(method_label(Http.Method.Delete) == "DELETE")
+    assert(method_label(Http.Method.Head) == "HEAD")
+    assert(method_label(Http.Method.Options) == "OPTIONS")
+
+    # Variants compare by identity, and the type annotates a local.
+    Http.Method m = Http.Method.Post
+    assert(m == Http.Method.Post)
+    assert(m != Http.Method.Get)
+}
+
+@test
+function void test_http_method_to_string() {
+    # The converter yields the uppercase HTTP verb for each variant.
+    assert(Http.method_to_string(Http.Method.Get) == "GET")
+    assert(Http.method_to_string(Http.Method.Post) == "POST")
+    assert(Http.method_to_string(Http.Method.Put) == "PUT")
+    assert(Http.method_to_string(Http.Method.Patch) == "PATCH")
+    assert(Http.method_to_string(Http.Method.Delete) == "DELETE")
+    assert(Http.method_to_string(Http.Method.Head) == "HEAD")
+    assert(Http.method_to_string(Http.Method.Options) == "OPTIONS")
+}
+
+@test
+function void test_http_request_with_method_choice() {
+    # Http.method_to_string lets a program pick the verb type-safely and feed it
+    # to the generic Http.request path. The options dictionary stays all-string,
+    # so it type-checks; the request fails deterministically (unreachable host).
+    result<Http.Response> r = Http.request(
+        {"method": Http.method_to_string(Http.Method.Post), "url": "http://localhost:1", "body": ""},
+        {})
+
+    assert(!Result.is_success(r))
+}

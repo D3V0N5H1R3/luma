@@ -3,8 +3,10 @@
 #include <cstdint>
 #include <format>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
@@ -53,6 +55,66 @@ namespace {
     }
 
     return opts;
+}
+
+// Read the delimiter / quote from a Csv.Dialect record { delimiter, quote }.
+[[nodiscard]] CsvOptions parse_options(const RecordValue& rec) {
+    CsvOptions opts;
+
+    if (const auto* val = rec.find_field("delimiter"); val != nullptr && val->is_string()) {
+        const auto& s = val->as_string();
+
+        if (!s.empty()) {
+            opts.delimiter = s[0];
+        }
+    }
+
+    if (const auto* val = rec.find_field("quote"); val != nullptr && val->is_string()) {
+        const auto& s = val->as_string();
+
+        if (!s.empty()) {
+            opts.quote = s[0];
+        }
+    }
+
+    return opts;
+}
+
+// Accept CSV options as either a typed Csv.Dialect record or the legacy options
+// dictionary with "delimiter"/"quote" keys.  Accepting both keeps the typed
+// record additive — existing dictionary callers keep working unchanged.
+[[nodiscard]] CsvOptions options_from_value(const Value& value, std::string_view func_name,
+                                            SourceLocation loc) {
+    if (value.is_record()) {
+        return parse_options(*value.as_record());
+    }
+
+    if (value.is_dictionary()) {
+        return parse_options(*value.as_dictionary());
+    }
+
+    throw RuntimeError{
+        std::format("{}: options must be a Csv.Dialect record or a dictionary", func_name), loc,
+        "pass Csv.dialect(delimiter, quote), Csv.default_dialect(), or a dictionary with "
+        "\"delimiter\"/\"quote\" keys"};
+}
+
+// Build a Csv.Dialect record { delimiter, quote }.  The record is produced by a
+// module call (Csv.dialect / Csv.default_dialect) rather than hand-constructed,
+// matching how every other stdlib record is returned — so beginners get a typed,
+// discoverable options shape without the magic dictionary keys.
+[[nodiscard]] Value make_dialect_record(std::string delimiter, std::string quote) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Dialect";
+    rec->fields.emplace_back("delimiter", Value{std::move(delimiter)});
+    rec->fields.emplace_back("quote", Value{std::move(quote)});
+
+    return Value{std::move(rec)};
+}
+
+// RFC 4180 defaults: comma delimiter, double quote.
+[[nodiscard]] Value make_default_dialect() {
+    return make_dialect_record(",", "\"");
 }
 
 [[nodiscard]] Value rows_to_value(const std::vector<std::vector<std::string>>& rows) {
@@ -211,10 +273,21 @@ void register_csv_ns(const EnvPtr& env) {
         .func("deserialize_with", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             (void)expect_string(args[0], "Csv.deserialize_with", loc);
-            (void)expect_dict(args[1], "Csv.deserialize_with", loc);
 
-            return parse_csv_to_rows_result(
-                args[0].as_string(), parse_options(*args[1].as_dictionary()), "deserialize_with");
+            const auto opts = options_from_value(args[1], "Csv.deserialize_with", loc);
+
+            return parse_csv_to_rows_result(args[0].as_string(), opts, "deserialize_with");
+        })
+        .func("default_dialect", 0)
+        .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
+            return make_default_dialect();
+        })
+        .func("dialect", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& delimiter = expect_string(args[0], "Csv.dialect", loc);
+            const auto& quote = expect_string(args[1], "Csv.dialect", loc);
+
+            return make_dialect_record(delimiter, quote);
         })
         .func("serialize", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -235,7 +308,7 @@ void register_csv_ns(const EnvPtr& env) {
         .func("serialize_with", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto& data = *expect_array(args[0], "Csv.serialize_with", loc)->elements;
-            const auto opts = parse_options(*expect_dict(args[1], "Csv.serialize_with", loc));
+            const auto opts = options_from_value(args[1], "Csv.serialize_with", loc);
 
             const auto rows = array_to_rows(data, "Csv.serialize_with", loc);
 
