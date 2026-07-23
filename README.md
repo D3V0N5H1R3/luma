@@ -11,7 +11,7 @@ Luma is currently in **alpha**. The language, interpreter, standard library, and
 
 | Component         | Status                    | Notes                                                                                                                                                     |
 | ----------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Language & Stdlib | ✅ Feature-Complete | 38 standard library modules including GraphicalUi, plus the Solaris beginner-first GUI surface built on it — with commands, subscriptions, components, routing, and accessibility. See [User Manual][manual] and [Standard Library Reference][stdlib]. |
+| Language & Stdlib | ✅ Feature-Complete | 39 standard library modules including GraphicalUi, plus the Solaris beginner-first GUI surface built on it — with commands, subscriptions, components, routing, and accessibility. See [User Manual][manual] and [Standard Library Reference][stdlib]. |
 | Interpreter       | ✅ Feature-Complete | Bytecode compiler and stack-based VM. See [Architecture][arch] for details.                                                                               |
 | REPL              | ✅ Feature-Complete | Includes history, multi-line input, and file loading.                                                                                                     |
 | Debugger (DAP)    | ✅ Feature-Complete | Supports breakpoints, stepping, and variable inspection.                                                                                                  |
@@ -185,7 +185,7 @@ On Windows, replace `build/luma` with `build\Release\luma.exe` in the commands a
 | Document                             | Contents                                                  |
 | ------------------------------------ | --------------------------------------------------------- |
 | [User Manual][manual]                | Complete language reference and tutorial.                 |
-| [Standard Library Reference][stdlib] | All 38 standard library modules and built-in functions.   |
+| [Standard Library Reference][stdlib] | All 39 standard library modules and built-in functions.   |
 | [Software Architecture][arch]        | Interpreter pipeline and module design.                   |
 | [Performance Guide](documents/Luma_Performance_Guide.md) | Performance characteristics and optimisation advice.  |
 | [Error Handling](documents/Luma_Error_Handling.md)       | Error categories and `result` / `optional` conventions. |

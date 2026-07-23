@@ -143,6 +143,15 @@ luma_add_fuzz_target(fuzz_hash                    fuzz_hash.cpp                 
 # analysis-stage fuzzers above.
 luma_add_fuzz_target(fuzz_path                    fuzz_path.cpp                   luma_analysis)
 
+# Exact base-10 decimal parser trust boundary.  Decimal::parse and from_double
+# (core/common/decimal.hpp) behind Decimal.from_string / Decimal.from_number
+# scan untrusted text and hostile doubles into an arbitrary-precision base-10
+# value under a digit-count limit.  decimal.cpp is compiled into the luma_common
+# OBJECT library that luma_analysis embeds, so this target links the analysis
+# library like fuzz_path and fuzz_hash above.  A canonical-text round-trip oracle
+# checks parse(to_string(x)) == x.
+luma_add_fuzz_target(fuzz_decimal                 fuzz_decimal.cpp                luma_analysis)
+
 # Bounded-integer trust boundary.  bounded_uniform and its UB-free helpers
 # (core/runtime/stdlib/system/random_bounded.hpp) behind Random.generate_integer and
 # Random.secure_integer draw a uniform value in an untrusted [lo, hi] range via

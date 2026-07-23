@@ -6,6 +6,7 @@ export const LUMA_BUILTIN_TYPE_SET = new Set([
     "boolean",
     "integer",
     "number",
+    "decimal",
     "string",
     "void",
     "array",

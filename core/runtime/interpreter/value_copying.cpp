@@ -182,6 +182,7 @@ Value Value::deep_copy() const {
         case ValueType::Range:
         case ValueType::Channel:
         case ValueType::Socket:
+        case ValueType::Decimal:
             return *this;
     }
 

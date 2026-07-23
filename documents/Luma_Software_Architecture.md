@@ -491,7 +491,7 @@ _Note:_ The Type Checker operates on the merged AST produced by the Include Reso
 
 ### 4.11 Standard Library
 
-**Responsibility:** Provide all built-in functions and constants organised into 38 namespaces defined by the language (String, Array, Dictionary, Math, Result, Converter, DateTime, Console, FileSystem, RegularExpression, Process, Random, Encoder, Resource, Set, Channel, Task, Terminal, GraphicalUi, Socket, Optional, Reference, Queue, Stack, Log, Json, Csv, Xml, LinearAlgebra, Calculus, Hash, Compression, Http, KeyValueStore, HashSet, LinkedList, BinaryTree, Graph) plus the core built-ins (`print`, `assert`, `type_of`) — 39 registration units in total. Note: `success` and `failure` are language keywords parsed into dedicated AST nodes (`SuccessExpression`, `FailureExpression`), not runtime functions.
+**Responsibility:** Provide all built-in functions and constants organised into 39 namespaces defined by the language (String, Array, Dictionary, Math, Result, Converter, DateTime, Decimal, Console, FileSystem, RegularExpression, Process, Random, Encoder, Resource, Set, Channel, Task, Terminal, GraphicalUi, Socket, Optional, Reference, Queue, Stack, Log, Json, Csv, Xml, LinearAlgebra, Calculus, Hash, Compression, Http, KeyValueStore, HashSet, LinkedList, BinaryTree, Graph) plus the core built-ins (`print`, `assert`, `type_of`) — 40 registration units in total. Note: `success` and `failure` are language keywords parsed into dedicated AST nodes (`SuccessExpression`, `FailureExpression`), not runtime functions.
 
 **Interface:**
 
@@ -2014,7 +2014,7 @@ When the interpreter is started with `--box` (or `-b`), the `register_all` funct
 - `Socket` — TCP and UDP networking
 - `Xml` — XML file I/O
 
-All other modules (`Array`, `BinaryTree`, `Calculus`, `Channel`, `Compression`, `Converter`, `DateTime`, `Dictionary`, `Encoder`, `Graph`, `Hash`, `HashSet`, `Json`, `LinearAlgebra`, `LinkedList`, `Log`, `Math`, `Optional`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, and `Hash.sha512_file`. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
+All other modules (`Array`, `BinaryTree`, `Calculus`, `Channel`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `Graph`, `Hash`, `HashSet`, `Json`, `LinearAlgebra`, `LinkedList`, `Log`, `Math`, `Optional`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, and `Hash.sha512_file`. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
 
 Attempting to call a function from a sandbox-blocked module produces a clear error message (`'Module.function' is not available in sandbox mode (--box)`) instead of the generic "undefined variable" error. The `Environment` class maintains a set of blocked module prefixes that is checked during variable lookup.
 

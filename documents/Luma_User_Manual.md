@@ -190,7 +190,7 @@ For Unicode-safe character access by codepoint index, use `String.character_at`.
 
 > **When to use which:** Use `integer` for **indices and range bounds** — array subscripts, string offsets, loop counters that index into collections, and range end-points (`0..n`). Use `number` for **all other numeric values** — counts, sizes, quantities, measurements, scores, IDs, and mathematical computations. This keeps the intent clear: if a variable is typed `integer`, it addresses a position or delimits a range.
 
-> **Floating-point precision:** `number` uses IEEE-754 64-bit representation, so some decimal values cannot be represented exactly. For example, `0.1 + 0.2 == 0.3` evaluates to `false`. When comparing `number` values for near-equality, use `Math.approximately_equal(a, b)` instead of `==`.
+> **Floating-point precision:** `number` uses IEEE-754 64-bit representation, so some decimal values cannot be represented exactly. For example, `0.1 + 0.2 == 0.3` evaluates to `false`. When comparing `number` values for near-equality, use `Math.approximately_equal(a, b)` instead of `==`. For exact base-10 arithmetic — money in particular — use the `decimal` type and the `Decimal` module, where `0.1 + 0.2` is exactly `0.3`.
 
 Integer literals may be written in **decimal**, **hexadecimal** (`0x` / `0X` prefix), or **binary** (`0b` / `0B` prefix):
 
@@ -231,6 +231,7 @@ string  str = s ?? "default" # "default"
 | BinaryTree | `binary_tree`          | Sorted binary search tree                                |
 | Channel    | `channel<T>`           | Typed message-passing channel                            |
 | Choice     | _TypeName_             | User-defined closed variant set (declared with `choice`) |
+| Decimal    | `decimal`              | Exact base-10 decimal number (see the `Decimal` module)  |
 | Dictionary | `dictionary<T>`        | String-keyed map (key is always `string`)                |
 | Interface  | _TypeName_             | Structural field constraint (compile-time only)          |
 | Lambda     | `function(T,...) -> T` | First-class function value                               |
@@ -2564,6 +2565,7 @@ string t = format_title("hello")
 - `Converter`
 - `Csv`
 - `DateTime`
+- `Decimal`
 - `Dictionary`
 - `Encoder`
 - `FileSystem`
@@ -2595,7 +2597,7 @@ string t = format_title("hello")
 - `Terminal`
 - `Xml`
 
-All 38 are available fully qualified without `use`.
+All 39 are available fully qualified without `use`.
 
 ---
 

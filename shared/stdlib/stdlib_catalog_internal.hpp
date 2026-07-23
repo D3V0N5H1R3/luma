@@ -89,6 +89,10 @@ namespace named {
     return ReturnTypeDesc::named("socket");
 }
 
+[[nodiscard]] inline ReturnTypeDesc decimal() {
+    return ReturnTypeDesc::named("decimal");
+}
+
 [[nodiscard]] inline ReturnTypeDesc xml() {
     return ReturnTypeDesc::named("xml");
 }
@@ -205,6 +209,8 @@ struct ParamShorthands {
     ReturnTypeDesc set, xml, kv_store, queue, stack, linked_list, hash_set, binary_tree, graph;
     // UI types
     ReturnTypeDesc widget;
+    // Exact-decimal type
+    ReturnTypeDesc decimal;
 };
 
 // ─── Per-module registration functions ──────────────────────────────────────
@@ -298,6 +304,9 @@ void register_linear_algebra_functions(std::vector<FunctionSpec>& specs, const M
 
 void register_calculus_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                  const ParamShorthands& p);
+
+void register_decimal_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                                const ParamShorthands& p);
 
 void register_task_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                              const ParamShorthands& p);

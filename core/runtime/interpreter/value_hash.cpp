@@ -89,6 +89,11 @@ std::size_t hash_value_structural(const Value& v, int depth) noexcept {
     if (v.is_string()) {
         return std::hash<std::string>{}(v.as_string());
     }
+    if (v.is_decimal()) {
+        // Hash the canonical (trailing-zero-stripped) value so equal decimals of
+        // different scale (1.5 and 1.50) hash identically, matching Value::equals.
+        return v.as_decimal()->value.hash();
+    }
 
     // Seed with the type tag so that, e.g., empty arrays and empty dicts never collide.
     const auto type_seed = std::hash<int>{}(static_cast<int>(v.value_type()));

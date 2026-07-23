@@ -152,6 +152,9 @@ std::string Value::to_string() const {
             [](const std::shared_ptr<ReferenceValue>& v) -> std::string {
                 return format_reference_value(*v);
             },
+            [](const std::shared_ptr<DecimalValue>& v) -> std::string {
+                return v->value.to_string();
+            },
         },
         data_);
 }
@@ -182,6 +185,7 @@ std::string Value::display_type_name() const {
                 return v->display_type_name();
             },
             [](const std::shared_ptr<ReferenceValue>&) -> std::string { return "reference"; },
+            [](const std::shared_ptr<DecimalValue>&) -> std::string { return "decimal"; },
         },
         data_);
 }

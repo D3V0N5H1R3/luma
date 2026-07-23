@@ -53,6 +53,7 @@ using detail::ParamShorthands;
         .binary_tree = named::binary_tree(),
         .graph = named::graph(),
         .widget = named::widget(),
+        .decimal = named::decimal(),
     };
 
     // ── Unified registration table ──
@@ -152,6 +153,9 @@ using detail::ParamShorthands;
         {.module_name = "Calculus",
          .cap = Capability::None,
          .register_fn = detail::register_calculus_functions},
+        {.module_name = "Decimal",
+         .cap = Capability::None,
+         .register_fn = detail::register_decimal_functions},
         {.module_name = "Task",
          .cap = Capability::None,
          .register_fn = detail::register_task_functions},

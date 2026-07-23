@@ -76,6 +76,9 @@ namespace {
             if (desc.named_type == "socket") {
                 return TypeInfo::make(K::Socket);
             }
+            if (desc.named_type == "decimal") {
+                return TypeInfo::make(K::Decimal);
+            }
             if (desc.named_type == "Log.Level") {
                 return TypeInfo::make_named(K::Choice, "Log.Level");
             }

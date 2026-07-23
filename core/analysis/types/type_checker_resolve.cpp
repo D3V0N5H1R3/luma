@@ -240,6 +240,7 @@ TypeInfo TypeChecker::resolve_named_type(const TypeAnnotation& ann, bool cacheab
         PrimitiveTypeEntry{.name = "none", .kind = TypeInfo::Kind::None},
         PrimitiveTypeEntry{.name = "void", .kind = TypeInfo::Kind::Void},
         PrimitiveTypeEntry{.name = "socket", .kind = TypeInfo::Kind::Socket},
+        PrimitiveTypeEntry{.name = "decimal", .kind = TypeInfo::Kind::Decimal},
     };
 
     for (const auto& entry : primitive_types) {

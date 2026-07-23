@@ -1,0 +1,155 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Decimal Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+#
+# The Decimal module provides exact base-10 arithmetic, so money and
+# other decimal maths behave the way people expect — unlike the
+# IEEE-754 `number` type, where 0.1 + 0.2 is not exactly 0.3.
+# ═══════════════════════════════════════════════════════════
+
+# Parse a decimal literal, failing the test if the input is malformed.
+function decimal dec(string text) {
+    result<decimal> parsed = Decimal.from_string(text)
+    assert(Result.is_success(parsed))
+    return Result.unwrap(parsed)
+}
+
+@test
+function void test_decimal_from_string() {
+    decimal a = dec("0.1")
+    assert(Decimal.to_string(a) == "0.1")
+
+    decimal b = dec("-12.34")
+    assert(Decimal.to_string(b) == "-12.34")
+
+    decimal c = dec("1000000")
+    assert(Decimal.to_string(c) == "1000000")
+
+    # Malformed input fails rather than crashing.
+    result<decimal> bad = Decimal.from_string("not a number")
+    assert(!Result.is_success(bad))
+
+    result<decimal> empty = Decimal.from_string("")
+    assert(!Result.is_success(empty))
+}
+
+@test
+function void test_decimal_exact_addition() {
+    # The headline: IEEE-754 gets this wrong, decimal does not.
+    decimal sum = Decimal.add(dec("0.1"), dec("0.2"))
+
+    assert(Decimal.equals(sum, dec("0.3")))
+    assert(Decimal.to_string(sum) == "0.3")
+    assert(Decimal.compare(sum, dec("0.3")) == 0)
+}
+
+@test
+function void test_decimal_money_totals() {
+    # Adding three cent amounts stays exact.
+    decimal total = Decimal.add(Decimal.add(dec("19.99"), dec("5.01")), dec("0.25"))
+
+    assert(Decimal.equals(total, dec("25.25")))
+    assert(Decimal.to_string(total) == "25.25")
+}
+
+@test
+function void test_decimal_subtract_and_multiply() {
+    assert(Decimal.equals(Decimal.subtract(dec("0.3"), dec("0.1")), dec("0.2")))
+    assert(Decimal.equals(Decimal.subtract(dec("5"), dec("8")), dec("-3")))
+
+    assert(Decimal.equals(Decimal.multiply(dec("0.1"), dec("0.2")), dec("0.02")))
+    assert(Decimal.equals(Decimal.multiply(dec("1.11"), dec("1.11")), dec("1.2321")))
+
+    # Arbitrary precision — well beyond a 64-bit integer.
+    decimal big = Decimal.add(dec("99999999999999999999"), dec("1"))
+    assert(Decimal.to_string(big) == "100000000000000000000")
+}
+
+@test
+function void test_decimal_divide() {
+    result<decimal> third = Decimal.divide(dec("10"), dec("3"), 4)
+    assert(Result.is_success(third))
+    assert(Decimal.equals(Result.unwrap(third), dec("3.3333")))
+
+    result<decimal> eighth = Decimal.divide(dec("1"), dec("8"), 3)
+    assert(Result.is_success(eighth))
+    assert(Decimal.equals(Result.unwrap(eighth), dec("0.125")))
+
+    # Division by zero is a failure, not a crash.
+    result<decimal> undefined = Decimal.divide(dec("10"), dec("0"), 2)
+    assert(!Result.is_success(undefined))
+
+    # A negative scale is rejected.
+    result<decimal> bad_scale = Decimal.divide(dec("10"), dec("3"), -1)
+    assert(!Result.is_success(bad_scale))
+}
+
+@test
+function void test_decimal_round_modes() {
+    decimal v = dec("2.345")
+
+    assert(Decimal.to_string(Decimal.round(v, 2, "half_up")) == "2.35")
+    assert(Decimal.to_string(Decimal.round(v, 2, "half_even")) == "2.34")
+    assert(Decimal.to_string(Decimal.round(v, 2, "half_down")) == "2.34")
+    assert(Decimal.to_string(Decimal.round(v, 2, "up")) == "2.35")
+    assert(Decimal.to_string(Decimal.round(v, 2, "down")) == "2.34")
+    assert(Decimal.to_string(Decimal.round(v, 2, "floor")) == "2.34")
+    assert(Decimal.to_string(Decimal.round(v, 2, "ceiling")) == "2.35")
+
+    # Banker's rounding breaks ties toward the even neighbour.
+    assert(Decimal.to_string(Decimal.round(dec("2.5"), 0, "half_even")) == "2")
+    assert(Decimal.to_string(Decimal.round(dec("3.5"), 0, "half_even")) == "4")
+}
+
+@test
+function void test_decimal_round_small_magnitude() {
+    # Values with fewer coefficient digits than their scale (0.01 is one digit at
+    # scale 2). Rounding away more digits than are stored must round toward zero
+    # rather than fail.
+    assert(Decimal.to_string(Decimal.round(dec("0.01"), 0, "half_up")) == "0")
+    assert(Decimal.to_string(Decimal.round(dec("0.6"), 0, "half_up")) == "1")
+    assert(Decimal.to_string(Decimal.round(dec("0.005"), 2, "half_up")) == "0.01")
+    assert(Decimal.to_string(Decimal.round(dec("0.005"), 1, "half_up")) == "0.0")
+    assert(Decimal.to_string(Decimal.round(dec("-0.01"), 0, "floor")) == "-1")
+}
+
+@test
+function void test_decimal_compare_and_equals() {
+    # Equality and comparison ignore trailing-zero scale differences.
+    assert(Decimal.equals(dec("1.5"), dec("1.50")))
+    assert(Decimal.compare(dec("1.5"), dec("1.50")) == 0)
+
+    assert(Decimal.compare(dec("1"), dec("2")) == -1)
+    assert(Decimal.compare(dec("2"), dec("1")) == 1)
+    assert(!Decimal.equals(dec("1"), dec("2")))
+}
+
+@test
+function void test_decimal_predicates_and_sign() {
+    assert(Decimal.is_zero(dec("0")))
+    assert(Decimal.is_zero(dec("0.00")))
+    assert(!Decimal.is_zero(dec("0.01")))
+
+    assert(Decimal.is_negative(dec("-1")))
+    assert(!Decimal.is_negative(dec("1")))
+    assert(!Decimal.is_negative(dec("0")))
+
+    assert(Decimal.equals(Decimal.negate(dec("1.5")), dec("-1.5")))
+    assert(Decimal.equals(Decimal.absolute(dec("-2.5")), dec("2.5")))
+}
+
+@test
+function void test_decimal_conversions() {
+    # from_number recovers the shortest exact decimal.
+    assert(Decimal.to_string(Decimal.from_number(0.1)) == "0.1")
+    assert(Decimal.to_string(Decimal.from_integer(42)) == "42")
+
+    assert(Decimal.scale(dec("1.5")) == 1)
+    assert(Decimal.scale(dec("0.125")) == 3)
+    assert(Decimal.scale(dec("42")) == 0)
+
+    assert(Math.approximately_equal(Decimal.to_number(dec("0.5")), 0.5))
+    assert(Math.approximately_equal(Decimal.to_number(dec("-2.25")), -2.25))
+}

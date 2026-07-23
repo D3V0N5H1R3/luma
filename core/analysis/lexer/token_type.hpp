@@ -68,6 +68,7 @@ enum class TokenType {
     BinaryTreeType,
     BooleanType,
     ChannelType,
+    DecimalType,
     DictionaryType,
     GraphType,
     HashSetType,
@@ -217,6 +218,7 @@ inline constexpr auto k_token_type_names = std::to_array<std::string_view>({
     "binary_tree",     // BinaryTreeType
     "boolean",         // BooleanType
     "channel",         // ChannelType
+    "decimal",         // DecimalType
     "dictionary",      // DictionaryType
     "graph",           // GraphType
     "hash_set",        // HashSetType
@@ -354,6 +356,7 @@ inline constexpr auto k_keywords = std::to_array<KeywordSpelling>({
     {"channel", TokenType::ChannelType, KeywordKind::BuiltinType},
     {"choice", TokenType::Choice, KeywordKind::Word},
     {"continue", TokenType::Continue, KeywordKind::Word},
+    {"decimal", TokenType::DecimalType, KeywordKind::BuiltinType},
     {"dictionary", TokenType::DictionaryType, KeywordKind::BuiltinType},
     {"downcast", TokenType::Downcast, KeywordKind::Word},
     {"else", TokenType::Else, KeywordKind::Word},

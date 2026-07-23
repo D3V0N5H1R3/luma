@@ -119,6 +119,7 @@ configure time with `-DLUMA_FUZZ_QUICK_TIME=<secs>`.
 | `fuzz_csv`              | `Csv` codec layer                        | Parses arbitrary bytes as RFC 4180 CSV; serialise→parse round-trips (oracle) |
 | `fuzz_xml`              | `Xml` stdlib parser                      | Parses arbitrary bytes as `Xml.deserialize` input; canonical serialise→parse round-trips byte-for-byte (oracle) |
 | `fuzz_datetime`         | `DateTime` ISO-8601 codec                | Parses arbitrary bytes as ISO-8601 timestamps; format→parse round-trips (oracle) |
+| `fuzz_decimal`          | `Decimal` base-10 parser                 | Parses arbitrary bytes as decimal text (and coerces doubles); canonical text→re-parse round-trips (oracle) |
 | `fuzz_protocol`         | `shared/protocol` transport              | Parses Content-Length framed LSP/DAP messages from a byte stream       |
 | `fuzz_compression`      | `Compression` codec layer                | Decodes arbitrary bytes as deflate/gzip/RLE; round-trips valid data (oracle) |
 | `fuzz_encoder`          | `Encoder` Base64 / URL codecs            | Decodes arbitrary bytes as Base64/Base64URL/percent-encoding; round-trips valid data (oracle) |
@@ -135,7 +136,7 @@ configure time with `-DLUMA_FUZZ_QUICK_TIME=<secs>`.
 
 ### Trust boundaries and oracles
 
-The last nineteen targets close gaps beyond the compile pipeline:
+The last twenty targets close gaps beyond the compile pipeline:
 
 - **`fuzz_bytecode_deserializer`** feeds arbitrary bytes to
   `BytecodeSerializer::deserialize` — the hand-written binary reader behind the
@@ -190,6 +191,14 @@ The last nineteen targets close gaps beyond the compile pipeline:
   with hostile doubles (including NaN and infinities) to exercise its range
   guards. A round-trip oracle checks that any instant the parser accepts and the
   formatter can represent renders to canonical text that re-parses unchanged.
+- **`fuzz_decimal`** drives the `Decimal` base-10 parser
+  (`core/common/decimal.hpp`) behind `Decimal.from_string`. `Decimal::parse` is a
+  hand-written reader that pulls an optional sign, a digit run, an optional
+  fractional part and an optional `eNN` exponent out of untrusted text, so
+  arbitrary bytes must never crash it; `Decimal::from_double` is additionally
+  driven with hostile doubles (including NaN and infinities) to exercise its
+  guards. A round-trip oracle checks that any value the parser accepts renders to
+  canonical text that re-parses to an equal decimal.
 - **`fuzz_protocol`** streams arbitrary bytes through the shared `Content-Length`
   message-framing transport via an in-memory subclass.
 - **`fuzz_compression`** drives the `Compression` codec layer

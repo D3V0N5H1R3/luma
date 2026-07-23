@@ -156,6 +156,13 @@ foreach(test IN LISTS LUMA_COMMON_HEADER_TESTS)
         LABELS  analysis)
 endforeach()
 
+# decimal_test exercises the Decimal implementation directly (compiled in) so it
+# stays independent of the runtime libraries.
+luma_add_test(NAME decimal_test
+    SOURCES analysis/decimal_test.cpp ${PROJECT_SOURCE_DIR}/core/common/decimal.cpp
+    LIBS    ""
+    LABELS  analysis)
+
 # ── Platform tests ──
 
 # safe_getenv is cross-platform (std::getenv / _dupenv_s), so it runs on every OS.
@@ -188,6 +195,7 @@ set(LUMA_RUNTIME_TESTS
     stdlib_test_math
     stdlib_test_calculus
     stdlib_test_linearalgebra
+    stdlib_test_decimal
     stdlib_test_binarytree
     stdlib_test_graph
     stdlib_test_hashset
@@ -459,6 +467,7 @@ set(LUMA_FEATURE_TESTS_STDLIB
     converter_functions.luma
     csv_functions.luma
     datetime_functions.luma
+    decimal_functions.luma
     encoder_functions.luma
     filesystem_functions.luma
     graph_functions.luma

@@ -7,4 +7,5 @@ luma_add_library(luma_common OBJECT
     resource_limits.cpp
     base64_codec.cpp
     string_utils.cpp
+    decimal.cpp
 )

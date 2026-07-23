@@ -148,6 +148,7 @@ void Value::verify_type_consistency() const {
         // 17: shared_ptr<CollectionObject> — resolved via CollectionKind below
         ValueType::Null,      // 17: placeholder for CollectionObject
         ValueType::Reference, // 18: shared_ptr<ReferenceValue>
+        ValueType::Decimal,   // 19: shared_ptr<DecimalValue>
     };
 
     const auto idx = data_.index();

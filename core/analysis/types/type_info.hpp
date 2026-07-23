@@ -45,6 +45,7 @@ struct TypeInfo {
         Boolean,
         Channel,
         Choice,
+        Decimal,
         Dictionary,
         Func,
         Integer,
@@ -319,6 +320,8 @@ struct TypeMetadata {
             return {"integer", "Numeric", false, true};
         case K::Number:
             return {"number", "Numeric", false, true};
+        case K::Decimal:
+            return {"decimal", "Numeric", false, true};
         case K::String:
             return {"string", "Primitive", false, true};
         case K::None:

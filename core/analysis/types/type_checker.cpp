@@ -84,10 +84,11 @@ bool TypeChecker::is_stdlib_namespace(std::string_view name) const {
 std::string TypeChecker::suggest_type_name(std::string_view unknown) const {
     // Collect all known type names.
     static constexpr auto builtins = std::to_array<std::string_view>({
-        "boolean",   "integer",    "number",          "string",      "none",  "void",
-        "array",     "dictionary", "result",          "optional",    "task",  "channel",
-        "reference", "socket",     "widget",          "xml",         "graph", "binary_tree",
-        "hash_set",  "set",        "key_value_store", "linked_list", "queue", "stack",
+        "boolean",     "integer",   "number",     "decimal",         "string",      "none",
+        "void",        "array",     "dictionary", "result",          "optional",    "task",
+        "channel",     "reference", "socket",     "widget",          "xml",         "graph",
+        "binary_tree", "hash_set",  "set",        "key_value_store", "linked_list", "queue",
+        "stack",
     });
 
     std::vector<std::string_view> candidates(builtins.begin(), builtins.end());
