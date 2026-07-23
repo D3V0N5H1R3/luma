@@ -11,14 +11,14 @@
 function void demo_integer_literals() {
     print("=== Integer literals ===")
 
-    integer decimal    = 255
+    integer base_ten   = 255
     integer hex        = 0xFF
     integer binary     = 0b11111111
 
-    print("decimal  = ${decimal}")
+    print("decimal  = ${base_ten}")
     print("hex      = ${hex}")
     print("binary   = ${binary}")
-    print("all equal: ${decimal == hex && hex == binary}")
+    print("all equal: ${base_ten == hex && hex == binary}")
 }
 
 # ── Bitwise operators ──

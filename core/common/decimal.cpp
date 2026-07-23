@@ -327,8 +327,9 @@ std::optional<Decimal> Decimal::from_double(double value) {
     if (std::isnan(value) || std::isinf(value)) {
         return std::nullopt;
     }
-    char buffer[64];
-    const auto conversion = std::to_chars(buffer, buffer + sizeof(buffer), value);
+    constexpr std::size_t buffer_size = 64;
+    char buffer[buffer_size];
+    const auto conversion = std::to_chars(buffer, buffer + buffer_size, value);
     if (conversion.ec != std::errc()) {
         return std::nullopt;
     }
