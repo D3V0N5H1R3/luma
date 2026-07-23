@@ -80,9 +80,8 @@ namespace {
         if (auto mode = parse_rounding_mode(name)) {
             return *mode;
         }
-        throw RuntimeError{
-            std::format("{}: unknown rounding mode '{}'", fn, name), loc,
-            "use one of: half_up, half_even, half_down, up, down, ceiling, floor"};
+        throw RuntimeError{std::format("{}: unknown rounding mode '{}'", fn, name), loc,
+                           "use one of: half_up, half_even, half_down, up, down, ceiling, floor"};
     }
     throw RuntimeError{
         std::format("{}: mode must be a Decimal.RoundingMode or a mode string", fn), loc,

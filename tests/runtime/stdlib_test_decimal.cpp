@@ -159,9 +159,11 @@ LUMA_TEST(decimal_divide_with_string_mode) {
 LUMA_TEST(decimal_divide_with_choice_mode) {
     // The Decimal.RoundingMode choice variants drive the same behaviour as the
     // equivalent mode strings.
-    ASSERT_EQ(to_str(divw(dec("2"), dec("3"), 3, "Decimal.RoundingMode.Down")), std::string("0.666"));
+    ASSERT_EQ(to_str(divw(dec("2"), dec("3"), 3, "Decimal.RoundingMode.Down")),
+              std::string("0.666"));
     ASSERT_EQ(to_str(divw(dec("2"), dec("3"), 3, "Decimal.RoundingMode.Up")), std::string("0.667"));
-    ASSERT_TRUE(dequals(divw(dec("1"), dec("8"), 3, "Decimal.RoundingMode.HalfEven"), dec("0.125")));
+    ASSERT_TRUE(
+        dequals(divw(dec("1"), dec("8"), 3, "Decimal.RoundingMode.HalfEven"), dec("0.125")));
     // Choice and string forms agree.
     ASSERT_TRUE(dequals(divw(dec("10"), dec("3"), 4, "Decimal.RoundingMode.HalfUp"),
                         divw(dec("10"), dec("3"), 4, "\"half_up\"")));
@@ -180,8 +182,7 @@ LUMA_TEST(decimal_divide_with_failures) {
 
 LUMA_TEST(decimal_divide_with_bad_mode_throws) {
     // An unknown mode string is a programmer error (mirrors Decimal.round).
-    ASSERT_THROWS(
-        eval("Decimal.divide_with(" + dec("10") + ", " + dec("3") + ", 2, \"bogus\")"));
+    ASSERT_THROWS(eval("Decimal.divide_with(" + dec("10") + ", " + dec("3") + ", 2, \"bogus\")"));
 }
 
 // ─── Rounding ───
@@ -238,7 +239,8 @@ LUMA_TEST(decimal_round_accepts_choice_mode) {
               std::string("2.35"));
     ASSERT_EQ(to_str("Decimal.round(" + v + ", 2, Decimal.RoundingMode.HalfEven)"),
               std::string("2.34"));
-    ASSERT_EQ(to_str("Decimal.round(" + v + ", 2, Decimal.RoundingMode.Down)"), std::string("2.34"));
+    ASSERT_EQ(to_str("Decimal.round(" + v + ", 2, Decimal.RoundingMode.Down)"),
+              std::string("2.34"));
     ASSERT_EQ(to_str("Decimal.round(" + v + ", 2, Decimal.RoundingMode.Ceiling)"),
               std::string("2.35"));
     // Banker's rounding ties to even via the choice variant.
