@@ -293,9 +293,8 @@ void register_http_ns(const EnvPtr& env) {
         .func("request_of", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             if (!args[0].is_choice()) {
-                throw RuntimeError{
-                    std::string{"Http.request_of: expected an Http.Method choice"}, loc,
-                    "pass an Http.Method variant, e.g. Http.Method.Get"};
+                throw RuntimeError{std::string{"Http.request_of: expected an Http.Method choice"},
+                                   loc, "pass an Http.Method variant, e.g. Http.Method.Get"};
             }
 
             const auto& url = expect_string(args[1], "Http.request_of", loc);
@@ -308,9 +307,8 @@ void register_http_ns(const EnvPtr& env) {
         .func("request_with", 5)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             if (!args[0].is_choice()) {
-                throw RuntimeError{
-                    std::string{"Http.request_with: expected an Http.Method choice"}, loc,
-                    "pass an Http.Method variant, e.g. Http.Method.Post"};
+                throw RuntimeError{std::string{"Http.request_with: expected an Http.Method choice"},
+                                   loc, "pass an Http.Method variant, e.g. Http.Method.Post"};
             }
 
             const auto& url = expect_string(args[1], "Http.request_with", loc);
@@ -342,14 +340,13 @@ void register_http_ns(const EnvPtr& env) {
             const auto* timeout_val = rec.find_field("timeout_ms");
 
             if (method_val == nullptr || !method_val->is_choice()) {
-                throw RuntimeError{
-                    std::string{"Http.send: request has no valid method"}, loc,
-                    "build the request with Http.request_of / Http.request_with"};
+                throw RuntimeError{std::string{"Http.send: request has no valid method"}, loc,
+                                   "build the request with Http.request_of / Http.request_with"};
             }
 
             const auto verb = http_verb_from_method(method_val->as_choice()->variant, loc);
-            const auto url = (url_val != nullptr && url_val->is_string()) ? url_val->as_string()
-                                                                          : std::string{};
+            const auto url =
+                (url_val != nullptr && url_val->is_string()) ? url_val->as_string() : std::string{};
             const auto body = (body_val != nullptr && body_val->is_string()) ? body_val->as_string()
                                                                              : std::string{};
 

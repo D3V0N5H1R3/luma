@@ -449,8 +449,8 @@ static void test_json_value_as_array_success() {
 }
 
 static void test_json_value_as_object_success() {
-    const auto v =
-        eval(R"(Json.parse("{\"a\": 1}") |> Result.unwrap() |> Json.as_object() |> Result.unwrap())");
+    const auto v = eval(
+        R"(Json.parse("{\"a\": 1}") |> Result.unwrap() |> Json.as_object() |> Result.unwrap())");
     ASSERT_TRUE(v.is_dictionary());
 }
 
@@ -497,8 +497,8 @@ static void test_json_value_index_on_non_array_none() {
 static void test_json_value_to_string_roundtrip_object() {
     // Keys are emitted in sorted order (shared JsonValue uses std::map); integral
     // numbers render without a decimal point.
-    const auto v = eval(
-        R"(Json.parse("{\"b\": [2, 3], \"a\": 1}") |> Result.unwrap() |> Json.to_string())");
+    const auto v =
+        eval(R"(Json.parse("{\"b\": [2, 3], \"a\": 1}") |> Result.unwrap() |> Json.to_string())");
     ASSERT_EQ(v.as_string(), R"({"a":1,"b":[2,3]})");
 }
 

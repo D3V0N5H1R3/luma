@@ -497,8 +497,7 @@ static void test_http_request_with_builds_full_record() {
 
 static void test_http_request_with_clamps_negative_timeout() {
     // A negative timeout is clamped to 0.
-    const auto v =
-        eval(R"(Http.request_with(Http.Method.Get, "http://x", {}, "", -1).timeout_ms)");
+    const auto v = eval(R"(Http.request_with(Http.Method.Get, "http://x", {}, "", -1).timeout_ms)");
 
     ASSERT_TRUE(v.is_integer());
     ASSERT_EQ(v.as_integer(), static_cast<std::int64_t>(0));
@@ -518,8 +517,7 @@ static void test_http_send_rejects_non_request() {
 static void test_http_send_reaches_request_pipeline() {
     // Http.send reads the Http.Method choice back to a verb and drives the request
     // pipeline; the SSRF guard blocks loopback deterministically (no network).
-    ASSERT_EVAL_FAILURE(
-        R"(Http.send(Http.request_of(Http.Method.Get, "http://127.0.0.1/admin")))");
+    ASSERT_EVAL_FAILURE(R"(Http.send(Http.request_of(Http.Method.Get, "http://127.0.0.1/admin")))");
 }
 
 static void test_http_send_empty_url_fails() {

@@ -152,9 +152,9 @@ void register_http_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
                  R::result(named::response()), {p.dict_any, p.dict_any}),
             m.fn("request_of", 2, "(method: Http.Method, url: string)", named::request(),
                  {p.any, p.string}),
-            m.fn("request_with",
-                 5, "(method: Http.Method, url: string, headers: dictionary<string>, "
-                    "body: string, timeout_ms: integer)",
+            m.fn("request_with", 5,
+                 "(method: Http.Method, url: string, headers: dictionary<string>, "
+                 "body: string, timeout_ms: integer)",
                  named::request(), {p.any, p.string, p.dict_any, p.string, p.integer}),
             m.fn("send", 1, "(request: Http.Request)", R::result(named::response()), {p.any}),
         });

@@ -438,7 +438,8 @@ void register_datetime_ns(const EnvPtr& env) {
             const auto tm = to_tm(args[0].to_numeric());
 
             if (!tm) {
-                return make_failure_value(error_msg("DateTime", "weekday", k_timestamp_range_error));
+                return make_failure_value(
+                    error_msg("DateTime", "weekday", k_timestamp_range_error));
             }
 
             // tm_wday: 0 = Sunday. Convert to ISO-8601 1 = Monday … 7 = Sunday.
@@ -485,7 +486,8 @@ void register_datetime_ns(const EnvPtr& env) {
             const auto tm = to_tm(args[0].to_numeric());
 
             if (!tm) {
-                return make_failure_value(error_msg("DateTime", "month_of", k_timestamp_range_error));
+                return make_failure_value(
+                    error_msg("DateTime", "month_of", k_timestamp_range_error));
             }
 
             // tm_mon: 0 = January.  Convert to 1 = January … 12 = December.

@@ -11,8 +11,6 @@
 // parsed JsonValue tree into a Luma ChoiceValue tree, and Json.to_string does
 // the reverse and reuses JsonValue's tested serialisation and escaping.
 
-#include "runtime/stdlib/text/json_module.hpp"
-
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -34,6 +32,7 @@
 #include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/stdlib/common/native_function_validation.hpp"
 #include "runtime/stdlib/common/stdlib_error_helpers.hpp"
+#include "runtime/stdlib/text/json_module.hpp"
 
 namespace luma {
 
@@ -68,8 +67,7 @@ constexpr std::string_view k_json_value_type = "Value";
     // JSON integers and reals both fold into the single JsonNumber(number)
     // variant — Luma's `number` is a double.
     if (node.is_integer()) {
-        return make_json_variant("JsonNumber",
-                                 {Value{static_cast<double>(node.as_integer())}});
+        return make_json_variant("JsonNumber", {Value{static_cast<double>(node.as_integer())}});
     }
 
     if (node.is_number()) {
