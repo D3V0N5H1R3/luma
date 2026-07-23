@@ -225,3 +225,87 @@ function void test_every_produces_a_real_subscription() {
 function void test_on_key_press_produces_a_real_subscription() {
     assert(Solaris.on_key_press("keys", "Enter", CounterMsg.Reset) != Solaris.no_command())
 }
+
+# ═══════════════════════════════════════════════════════════
+# Charts — line, bar, and pie components reconcile onto the
+# engine's chart widgets. A tiny chart-rooted app lets the
+# GraphicalUi headless harness render each chart, so the widget
+# `type`, its `labels`/`values` data, and modifier pass-through
+# can be asserted without opening a window.
+# ═══════════════════════════════════════════════════════════
+
+record ChartModel {
+    string kind = "bar"
+}
+
+# The chart app never dispatches a message in these tests; a no-op
+# update keeps the app well-typed for the reconciler.
+function ChartModel chart_update(ChartModel model, integer _msg) {
+    return model
+}
+
+# A single chart at the view root, so `test_render` returns the
+# chart widget directly. The `kind` field selects the chart type
+# (and a "tall" variant that also exercises a sizing modifier).
+function View chart_view(ChartModel model) {
+    array<string> labels = ["Jan", "Feb", "Mar"]
+    array<number> values = [10, 25, 18]
+    return match model.kind {
+        case == "line" { Solaris.line_chart(labels, values) }
+        case == "pie"  { Solaris.pie_chart(labels, values) }
+        case == "tall" {
+            Solaris.bar_chart(labels, values) |> Solaris.height(Length.Fixed(300.0))
+        }
+        else { Solaris.bar_chart(labels, values) }
+    }
+}
+
+function dictionary chart_app() {
+    return Solaris.app("Solaris Charts", ChartModel {}, chart_update, chart_view)
+}
+
+# ─── Reconciler: each chart type maps onto its engine widget ──
+
+@test
+function void test_bar_chart_reconciles_to_vertical_bar_chart() {
+    dictionary tree = GraphicalUi.test_render(chart_app(), ChartModel { kind = "bar" })
+    assert(Dictionary.get_or(tree, "type", "") == "vertical_bar_chart")
+}
+
+@test
+function void test_line_chart_reconciles_to_line_chart() {
+    dictionary tree = GraphicalUi.test_render(chart_app(), ChartModel { kind = "line" })
+    assert(Dictionary.get_or(tree, "type", "") == "line_chart")
+}
+
+@test
+function void test_pie_chart_reconciles_to_pie_chart() {
+    dictionary tree = GraphicalUi.test_render(chart_app(), ChartModel { kind = "pie" })
+    assert(Dictionary.get_or(tree, "type", "") == "pie_chart")
+}
+
+# ─── Data: labels and values carry through to the widget ───
+
+@test
+function void test_chart_carries_labels_and_values() {
+    dictionary tree = GraphicalUi.test_render(chart_app(), ChartModel { kind = "bar" })
+    array<string> labels = Dictionary.get_or(tree, "labels", [])
+    array<number> values = Dictionary.get_or(tree, "values", [])
+    assert(Array.length(labels) == 3)
+    assert(labels[0] == "Jan")
+    assert(Array.length(values) == 3)
+    assert(Math.approximately_equal(values[1], 25.0))
+}
+
+# ─── Modifiers: width/height/rounded/label apply unchanged ──
+#
+# A sizing modifier flows through `common_style` into the chart
+# widget's CSS style bag (presentation options like axis labels
+# would be lifted out; a plain size stays in the style).
+
+@test
+function void test_chart_height_modifier_passes_through_to_style() {
+    dictionary tree = GraphicalUi.test_render(chart_app(), ChartModel { kind = "tall" })
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "height", "") == "300.0px")
+}

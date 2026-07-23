@@ -123,7 +123,7 @@ record View {
     boolean has_toggle = false,
     string key_id = "",
     string aria_label = "",
-    # Data carried by richer components (choices, ranges, tabs, tables, icons).
+    # Data carried by richer components (choices, ranges, tabs, tables, charts, icons).
     array<string> options = [],
     string selected = "",
     number num_value = 0.0,
@@ -135,6 +135,8 @@ record View {
     boolean horizontal = false,
     array<string> headers = [],
     array<array<string>> rows = [],
+    # Numeric series plotted by the chart components; `options` holds the labels.
+    array<number> values = [],
     function(string) -> any on_select = (string s) -> s,
     boolean has_select = false,
     function(number) -> any on_slide = (number n) -> n,
@@ -295,6 +297,27 @@ namespace Solaris {
     # A simple data table of string cells, with a header row.
     function View table(array<string> headers, array<array<string>> rows) {
         return View { kind = "table", headers = headers, rows = rows }
+    }
+
+    # ── CHARTS — plot a numeric series against category `labels`. Each renders
+    #    through the engine's chart widget, so the width/height/rounded/label/key
+    #    modifiers apply unchanged. `labels` and `values` line up by position;
+    #    give them the same length. Integer values widen to numbers automatically,
+    #    so `[10, 20, 30]` is fine. ──
+
+    # A line chart connecting each value across the category `labels`.
+    function View line_chart(array<string> labels, array<number> values) {
+        return View { kind = "line_chart", options = labels, values = values }
+    }
+
+    # A vertical bar chart with one bar per `labels` entry, sized by `values`.
+    function View bar_chart(array<string> labels, array<number> values) {
+        return View { kind = "bar_chart", options = labels, values = values }
+    }
+
+    # A pie chart dividing the whole into slices named by `labels`, sized by `values`.
+    function View pie_chart(array<string> labels, array<number> values) {
+        return View { kind = "pie_chart", options = labels, values = values }
     }
 
     # A tab strip over `panels`. `active` is the shown tab index; attach
@@ -921,6 +944,16 @@ namespace Solaris {
             }
             case == "table" {
                 GraphicalUi.table(node.headers, node.rows)
+            }
+            case == "line_chart" {
+                GraphicalUi.line_chart(node.options, node.values, Solaris.common_style(node))
+            }
+            case == "bar_chart" {
+                GraphicalUi.vertical_bar_chart(node.options, node.values,
+                    Solaris.common_style(node))
+            }
+            case == "pie_chart" {
+                GraphicalUi.pie_chart(node.options, node.values, Solaris.common_style(node))
             }
             case == "sidebar" {
                 GraphicalUi.column(Solaris.child_widgets(node), Solaris.container_style(node))
