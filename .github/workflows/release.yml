@@ -34,9 +34,9 @@ jobs:
     # executable), the CTest suite, and packaging. The Windows/MSVC runner is the
     # slowest and cannot finish a cold build within 15 minutes — the previous
     # limit cancelled it mid-compile, failing the build job and skipping the whole
-    # release. 35 matches ci.yml's proven ceiling for the same cold-cache build on
-    # the slowest runner; warm-cache runs finish well under it.
-    timeout-minutes: 35
+    # release. 45 matches ci.yml's ceiling for the same cold-cache build on the
+    # slowest runner; warm-cache runs finish well under it.
+    timeout-minutes: 45
 
     strategy:
       # Build every platform even if one fails, so a release shows the full
