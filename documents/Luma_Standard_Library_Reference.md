@@ -273,17 +273,26 @@ Parse and serialise comma-separated values.
 | Function                         | Parameter Types                              | Return Type                         | Description                                                       |
 | -------------------------------- | -------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------- |
 | `Csv.count_rows(s)`              | `(string)`                                   | `result<integer>`                   | Number of data rows (excludes header)                             |
+| `Csv.default_dialect()`          | `()`                                         | `Csv.Dialect`                       | Default dialect (comma delimiter, double quote)                   |
+| `Csv.dialect(delimiter, quote)`  | `(string, string)`                           | `Csv.Dialect`                       | Build a typed dialect from a delimiter and quote character        |
 | `Csv.deserialize_records(s)`     | `(string)`                                   | `result<array<dictionary<string>>>` | Parse CSV with header row into records                            |
 | `Csv.deserialize(s)`             | `(string)`                                   | `result<array<array<string>>>`      | Parse CSV string into rows of fields                              |
 | `Csv.header(s)`                  | `(string)`                                   | `result<array<string>>`             | Extract header row                                                |
-| `Csv.deserialize_with(s, opts)`  | `(string, dictionary<string>)`               | `result<array<array<string>>>`      | Parse with custom delimiter/quoting                               |
+| `Csv.deserialize_with(s, opts)`  | `(string, Csv.Dialect \| dictionary<string>)` | `result<array<array<string>>>`     | Parse with custom delimiter/quoting                               |
 | `Csv.read_file(path)`            | `(string)`                                   | `result<array<dictionary<string>>>` | Read and parse CSV file                                           |
 | `Csv.serialize(rows)`            | `(array<array<string>>)`                     | `result<string>`                    | Serialise rows to CSV string; fail if row is not array            |
 | `Csv.serialize_records(records)` | `(array<dictionary<string>>)`                | `string`                            | Serialise records to CSV with header                              |
-| `Csv.serialize_with(rows, opts)` | `(array<array<string>>, dictionary<string>)` | `result<string>`                    | Serialise with custom delimiter/quoting; fail if row is not array |
+| `Csv.serialize_with(rows, opts)` | `(array<array<string>>, Csv.Dialect \| dictionary<string>)` | `result<string>`     | Serialise with custom delimiter/quoting; fail if row is not array |
 | `Csv.write_file(path, records)`  | `(string, array<dictionary<string>>)`        | `result<boolean>`                   | Write records to CSV file                                         |
 
-Quoted fields, embedded commas, and escaped quotes are handled. Supported option keys for `parse_with`/`serialize_with`: `"delimiter"` (single char), `"quote"` (single char).
+Quoted fields, embedded commas, and escaped quotes are handled. `Csv.deserialize_with` /
+`Csv.serialize_with` accept options as either a typed **`Csv.Dialect`** record (built with
+`Csv.dialect(delimiter, quote)` or `Csv.default_dialect()`) or the legacy options dictionary with
+`"delimiter"` (single char) and `"quote"` (single char) keys — the record form is type-checked and
+discoverable, so a mistyped field is a compile error rather than a silently ignored key.
+
+**`Csv.Dialect`** record fields: `delimiter: string` (single character), `quote: string` (single
+character).
 
 ## 9 — DateTime
 
@@ -295,6 +304,7 @@ Quoted fields, embedded commas, and escaped quotes are handled. Supported option
 | `DateTime.add_milliseconds(ts, n)`         | `(number, integer)`                                      | `number`                     | Add `n` milliseconds to a Unix timestamp                                 |
 | `DateTime.add_seconds(ts, n)`              | `(number, number)`                                       | `number`                     | Add `n` seconds to a Unix timestamp                                      |
 | `DateTime.add_years(ts, n)`                | `(number, integer)`                                      | `result<number>`             | Add `n` calendar years (clamps Feb 29); fail if out of range             |
+| `DateTime.break_duration(total_seconds)`   | `(number)`                                               | `DateTime.Duration`          | Break a span in seconds into a `days`/`hours`/`minutes`/`seconds`/`milliseconds` record (with a `negative` flag) |
 | `DateTime.day_of_month(ts)`                | `(number)`                                               | `result<integer>`            | Day of month (1–31); fail if out of supported range (year 0001–9999)     |
 | `DateTime.day_of_week(ts)`                 | `(number)`                                               | `result<integer>`            | 1 (Monday) to 7 (Sunday); fail if out of range                           |
 | `DateTime.days_in_month(year, month)`      | `(integer, integer)`                                     | `result<integer>`            | Days in given month; fail if month not in [1, 12]                        |
@@ -307,6 +317,7 @@ Quoted fields, embedded commas, and escaped quotes are handled. Supported option
 | `DateTime.from_iso_string(s)`              | `(string)`                                               | `result<number>`             | Parse ISO 8601 string to Unix timestamp                                  |
 | `DateTime.from_parts(y, m, d, h, min, s)`  | `(integer, integer, integer, integer, integer, integer)` | `result<number>`             | Build timestamp from components; fail if out of range                    |
 | `DateTime.format(ts, pattern)`             | `(number, string)`                                       | `result<string>`             | Format timestamp; placeholders: YYYY, MM, DD, hh, mm, ss                 |
+| `DateTime.format_duration(d)`              | `(DateTime.Duration)`                                    | `string`                     | Render a `DateTime.Duration` as `"1d 2h 3m 4s 5ms"` (zero components omitted; `"0s"` when empty; `-` prefix when negative) |
 | `DateTime.hour(ts)`                        | `(number)`                                               | `result<integer>`            | Hour (0–23); fail if out of range                                        |
 | `DateTime.is_after(a, b)`                  | `(number, number)`                                       | `boolean`                    | Whether timestamp `a` is after `b`                                       |
 | `DateTime.is_before(a, b)`                 | `(number, number)`                                       | `boolean`                    | Whether timestamp `a` is before `b`                                      |
@@ -335,6 +346,10 @@ All `DateTime` timestamps are in UTC. The following functions convert between UT
 
 Valid offsets range from −720 (UTC−12:00) to +840 (UTC+14:00) minutes. Out-of-range offsets return `failure`. A zero offset produces the `"Z"` suffix in ISO strings.
 
+`DateTime.TimeParts` record fields: `year`, `month`, `day`, `hour`, `minute`, `second` (all `integer`).
+
+`DateTime.Duration` record fields: `days`, `hours`, `minutes`, `seconds`, `milliseconds` (all `integer`), and `negative` (`boolean`). `break_duration` splits a `number` span in seconds into this human-readable breakdown — the `hours`/`minutes`/`seconds` components are normalised (0–23, 0–59, 0–59) and the sign is carried in `negative` — and `format_duration` renders it back into a compact string such as `"1h 2m 5s"`.
+
 ## 10 — Decimal
 
 Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where `0.1 + 0.2` is not exactly `0.3`), a `decimal` stores its value in base 10, so money and other decimal maths behave the way people expect. `decimal` is a distinct opaque type built on an arbitrary-precision coefficient, so it never silently loses precision the way `number` does.
@@ -346,7 +361,8 @@ Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where
 | `Decimal.absolute(d)`           | `(decimal)`                  | `decimal`         | Absolute value                                                      |
 | `Decimal.add(a, b)`             | `(decimal, decimal)`         | `decimal`         | Exact sum                                                           |
 | `Decimal.compare(a, b)`         | `(decimal, decimal)`         | `integer`         | `-1`, `0`, or `1` (scale-insensitive: `1.5` compares equal to `1.50`) |
-| `Decimal.divide(a, b, scale)`   | `(decimal, decimal, integer)` | `result<decimal>` | Quotient rounded (half-up) to `scale` fractional digits; fail on divide-by-zero or negative scale |
+| `Decimal.divide(a, b, scale)`   | `(decimal, decimal, integer)` | `result<decimal>` | Quotient rounded (half-up) to `scale` fractional digits; fail on divide-by-zero or negative scale. Use `Decimal.divide_with` to choose the rounding mode |
+| `Decimal.divide_with(a, b, scale, mode)` | `(decimal, decimal, integer, RoundingMode \| string)` | `result<decimal>` | Quotient rounded using `mode` to `scale` fractional digits; fail on divide-by-zero or negative scale |
 | `Decimal.equals(a, b)`          | `(decimal, decimal)`         | `boolean`         | Value equality, ignoring trailing-zero scale (`1.5` equals `1.50`)  |
 | `Decimal.from_integer(i)`       | `(integer)`                  | `decimal`         | Exact decimal from an integer                                       |
 | `Decimal.from_number(n)`        | `(number)`                   | `decimal`         | Shortest exact decimal for a `number`; throws on NaN or infinity    |
@@ -355,23 +371,25 @@ Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where
 | `Decimal.is_zero(d)`            | `(decimal)`                  | `boolean`         | Whether `d` is zero                                                 |
 | `Decimal.multiply(a, b)`        | `(decimal, decimal)`         | `decimal`         | Exact product; throws if the result would exceed the maximum decimal size |
 | `Decimal.negate(d)`             | `(decimal)`                  | `decimal`         | Additive inverse (`-d`)                                             |
-| `Decimal.round(d, places, mode)` | `(decimal, integer, string)` | `decimal`         | Round to `places` fractional digits using `mode`; throws on an unknown mode |
+| `Decimal.round(d, places, mode)` | `(decimal, integer, RoundingMode \| string)` | `decimal`         | Round to `places` fractional digits using `mode` (a `Decimal.RoundingMode` variant or the equivalent mode string); throws on an unknown mode string |
 | `Decimal.scale(d)`              | `(decimal)`                  | `integer`         | Number of stored fractional digits                                 |
 | `Decimal.subtract(a, b)`        | `(decimal, decimal)`         | `decimal`         | Exact difference                                                   |
 | `Decimal.to_number(d)`          | `(decimal)`                  | `number`          | Nearest IEEE-754 `number` (may lose precision)                     |
 | `Decimal.to_string(d)`          | `(decimal)`                  | `string`          | Canonical text; preserves the value's scale (e.g. `"2.50"`)         |
 
-**Rounding modes** — the `mode` argument to `Decimal.round` (and the implicit half-up used by `Decimal.divide`) is one of the following strings:
+**Rounding modes** — the `mode` argument to `Decimal.round` and `Decimal.divide_with` is a `Decimal.RoundingMode` choice value (the discoverable, match-exhaustive form) or, for convenience, the equivalent lowercase string. `Decimal.divide` always uses half-up; reach for `Decimal.divide_with` when you need another mode. The seven modes are:
 
-| Mode          | Behaviour                                                            |
-| ------------- | ------------------------------------------------------------------- |
-| `"half_up"`   | Ties round away from zero (`2.5` → `3`, `-2.5` → `-3`)               |
-| `"half_down"` | Ties round toward zero (`2.5` → `2`)                                 |
-| `"half_even"` | Ties round to the even neighbour — banker's rounding (`2.5` → `2`, `3.5` → `4`) |
-| `"up"`        | Always away from zero                                                |
-| `"down"`      | Always toward zero (truncate)                                        |
-| `"ceiling"`   | Toward positive infinity                                             |
-| `"floor"`     | Toward negative infinity                                             |
+| Variant (`Decimal.RoundingMode`) | String        | Behaviour                                                            |
+| -------------------------------- | ------------- | ------------------------------------------------------------------- |
+| `HalfUp`                         | `"half_up"`   | Ties round away from zero (`2.5` → `3`, `-2.5` → `-3`)               |
+| `HalfDown`                       | `"half_down"` | Ties round toward zero (`2.5` → `2`)                                 |
+| `HalfEven`                       | `"half_even"` | Ties round to the even neighbour — banker's rounding (`2.5` → `2`, `3.5` → `4`) |
+| `Up`                             | `"up"`        | Always away from zero                                                |
+| `Down`                           | `"down"`      | Always toward zero (truncate)                                        |
+| `Ceiling`                        | `"ceiling"`   | Toward positive infinity                                             |
+| `Floor`                          | `"floor"`     | Toward negative infinity                                             |
+
+Access a variant as `Decimal.RoundingMode.HalfEven`. Because it is a choice type, a `match` over a `Decimal.RoundingMode` is exhaustive and editors autocomplete the variants — a mistyped variant is a compile error, whereas a mistyped mode _string_ is only caught at runtime.
 
 Equality and comparison are **scale-insensitive** — the value `1.5` equals `1.50` — but `Decimal.to_string` and `Decimal.scale` preserve the scale a value was created or computed with, so arithmetic that widens the scale (for example adding `1.50` and `2.25`) keeps the extra digits until you `Decimal.round` it. `Decimal` is always available and needs no imports.
 
@@ -389,6 +407,10 @@ function void main() {
     # Split a bill and round to cents (half-up).
     result<decimal> share = Decimal.divide(Result.unwrap(Decimal.from_string("100.00")), Decimal.from_integer(3), 2)
     print(Decimal.to_string(Result.unwrap(share)))   # 33.33
+
+    # Choose a rounding mode with the discoverable, type-safe choice.
+    result<decimal> truncated = Decimal.divide_with(Result.unwrap(Decimal.from_string("2")), Result.unwrap(Decimal.from_string("3")), 3, Decimal.RoundingMode.Down)
+    print(Decimal.to_string(Result.unwrap(truncated)))  # 0.666
 }
 ```
 
@@ -426,6 +448,8 @@ Dictionaries preserve insertion order. All reads and writes use string keys.
 | `Dictionary.to_array(d)`          | `(dictionary<T>)`                                 | `array<KeyValue>`                        | Each element is a record with `.key` (`string`) and `.value` fields                             |
 | `Dictionary.to_entries(d)`        | `(dictionary<T>)`                                 | `array<(string, T)>`                     | Each element is a `(key, value)` tuple                                                          |
 | `Dictionary.values(d)`            | `(dictionary<T>)`                                 | `array<T>`                               | Array of values                                                                                 |
+
+`Dictionary.KeyValue` record fields: `key: string`, `value` (the dictionary's value type `V`). It is the element type of `Dictionary.to_array`, so a program can annotate the result as `array<Dictionary.KeyValue>` and read `.key`/`.value` directly. Use `Dictionary.to_entries` instead when you want `(key, value)` tuples rather than records.
 
 ## 12 — Encoder
 
@@ -465,6 +489,7 @@ Transform the representation of a string without changing its type (e.g. Base64,
 | `FileSystem.list_directories(path)`       | `(string)`                | `result<array<string>>` | List subdirectories                                   |
 | `FileSystem.list_files(path)`             | `(string)`                | `result<array<string>>` | List files in a directory                             |
 | `FileSystem.list_recursively(path)`       | `(string)`                | `result<array<string>>` | Recursively list all files beneath a directory        |
+| `FileSystem.metadata(path)`               | `(string)`                | `result<FileSystem.FileInfo>` | Gather size, modified time, and kind in one call; fail if the path does not exist |
 | `FileSystem.name(path)`                   | `(string)`                | `string`                | File name (e.g. `"file.txt"`)                         |
 | `FileSystem.normalize(path)`              | `(string)`                | `string`                | Normalise path (e.g. `"a/b/../c"` → `"a/c"`)          |
 | `FileSystem.parent(path)`                 | `(string)`                | `string`                | Parent directory                                      |
@@ -480,6 +505,8 @@ Transform the representation of a string without changing its type (e.g. Base64,
 | `FileSystem.write_lines(path, lines)`     | `(string, array<string>)` | `result<boolean>`       | Write array of lines to file                          |
 
 `copy`, `delete`, `delete_directory`, `list_directories`, and `list_files` reject symbolic links and return `failure` to prevent symlink-following attacks.
+
+`FileSystem.FileInfo` record fields: `size` (`integer`, bytes; `0` for directories and other non-regular files), `modified_time` (`number`, fractional seconds since the Unix epoch, matching `get_modified_time`), `is_directory` (`boolean`), `is_file` (`boolean`), `is_symlink` (`boolean`). `metadata` answers in one call what `size`, `get_modified_time`, `is_directory`, `is_file`, and `is_symlink` answer individually; the `is_symlink` flag reflects the path itself (it is not followed) while the size, time, and directory/file flags follow symlinks.
 
 > **Security note** — `append_file`, `read_file`, `read_lines`, `write_file`, and `write_lines` validate that the resolved path stays within the current working directory, which blocks cross-directory symlink traversal (e.g. a symlink pointing to `/etc/passwd` is rejected). However, a symbolic link that points to another file **within** the working directory is followed transparently. If your program accepts a user-supplied file path, validate that the resolved path refers to the expected file before reading or writing.
 
@@ -1242,6 +1269,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.get(url)`                       | `(string)`                                 | `result<Http.Response>` | GET request                                                          |
 | `Http.get_with(url, headers)`         | `(string, dictionary<string>)`             | `result<Http.Response>` | GET with custom headers                                              |
 | `Http.head(url)`                      | `(string)`                                 | `result<Http.Response>` | HEAD request                                                         |
+| `Http.method_to_string(method)`       | `(Http.Method)`                            | `string`                | Convert an `Http.Method` variant to its uppercase HTTP verb           |
 | `Http.parse_query(qs)`                | `(string)`                                 | `dictionary<string>`    | Parse query string into dictionary                                   |
 | `Http.parse_url(url)`                 | `(string)`                                 | `Http.UrlParts`         | Parse URL into record with `scheme`, `host`, `port`, `path`, `query` |
 | `Http.patch(url, body)`               | `(string, string)`                         | `result<Http.Response>` | PATCH request                                                        |
@@ -1253,6 +1281,14 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.request(opts, headers)`         | `(dictionary<string>, dictionary<string>)` | `result<Http.Response>` | Generic request (`opts` has `"method"` and `"url"` keys)             |
 
 `Http.Response` record fields: `status` (`integer`), `reason` (`string`), `body` (`string`), `headers` (`dictionary<string>`).
+
+`Http.Method` is a choice type with variants `Get`, `Post`, `Put`, `Patch`, `Delete`, `Head`, and `Options` — a type-safe, match-exhaustive way to name an HTTP verb (autocomplete lists them all; a typo is a compile error). Because a Luma dictionary literal is homogeneous, an `Http.Method` value cannot be stored directly under the `"method"` key of `Http.request`'s options dictionary alongside the string `"url"`. Instead, convert it with `Http.method_to_string` so the options dictionary stays all-string:
+
+```luma
+result<Http.Response> r = Http.request(
+    {"method": Http.method_to_string(Http.Method.Post), "url": u, "body": body},
+    headers)
+```
 
 > **Security note** — HTTP header names and values are validated to reject carriage-return (`\r`) and line-feed (`\n`) characters. Supplying headers that contain these characters returns a `failure` result to prevent CRLF header injection.
 
@@ -1476,9 +1512,12 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.square_root(x)`                 | `(number)`                       | `result<number>`  | Square root; fail if `x` is negative                                             |
 | `Math.standard_deviation(arr)`        | `(array<number>)`                | `result<number>`  | Standard deviation; fail if empty                                                |
 | `Math.sum(arr)`                       | `(array<number>)`                | `result<integer \| number>` | Sum of all elements; fail on a non-numeric element                               |
+| `Math.summarize(arr)`                 | `(array<number>)`                | `result<Math.Summary>` | Descriptive statistics (count, min, max, mean, median, std. dev.) in one pass; fail if empty |
 | `Math.tangent(x)`                     | `(number)`                       | `result<number>`  | Tangent; fail if result is NaN or infinite                                       |
 | `Math.truncate(x)`                    | `(number)`                       | `result<integer>` | Truncate toward zero; fail on overflow                                           |
 | `Math.variance(arr)`                  | `(array<number>)`                | `result<number>`  | Variance; fail if empty                                                          |
+
+`Math.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
 
 **Constants:**
 
@@ -1780,8 +1819,10 @@ Cross-platform TCP and UDP networking.
 | `Socket.is_connected(s)`               | `(socket)`                          | `boolean`                  | Whether the socket handle is valid                           |
 | `Socket.listen(host, port)`            | `(string, integer)`                 | `result<socket>`           | Bind and listen for TCP connections                          |
 | `Socket.local_address(s)`              | `(socket)`                          | `result<string>`           | Local `"host:port"`                                          |
+| `Socket.local_address_parts(s)`        | `(socket)`                          | `result<Socket.Address>`   | Local address as a `{ host, port }` record (IPv6-safe; no string parsing) |
 | `Socket.receive(s, max)`               | `(socket, integer)`                 | `result<string>`           | Receive up to `max` bytes                                    |
 | `Socket.remote_address(s)`             | `(socket)`                          | `result<string>`           | Remote `"host:port"`                                         |
+| `Socket.remote_address_parts(s)`       | `(socket)`                          | `result<Socket.Address>`   | Remote address as a `{ host, port }` record (IPv6-safe; no string parsing) |
 | `Socket.send(s, data)`                 | `(socket, string)`                  | `result<integer>`          | Send data; returns bytes sent                                |
 | `Socket.set_timeout(s, ms)`            | `(socket, integer)`                 | `result<boolean>`          | Set send/recv timeout (does not affect connect)              |
 | `Socket.udp_bind(s, host, port)`       | `(socket, string, integer)`         | `result<boolean>`          | Bind UDP socket to address                                   |
@@ -1790,6 +1831,8 @@ Cross-platform TCP and UDP networking.
 | `Socket.udp_send(s, data, host, port)` | `(socket, string, string, integer)` | `result<integer>`          | Send UDP datagram                                            |
 
 > **Resource limit** — A program may hold only a bounded number of open sockets at the same time (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_OPEN_SOCKETS`). Attempting to create more returns `failure("socket limit reached — too many open sockets")`. Close sockets that are no longer needed to stay within the limit.
+
+`Socket.Address` record fields: `host: string`, `port: integer`. Returned by `Socket.local_address_parts` and `Socket.remote_address_parts` so the caller reads the host and port directly instead of splitting a `"host:port"` string (which is fragile for IPv6). Mirrors the `host`/`port` fields of `Socket.UdpPacket`.
 
 ---
 

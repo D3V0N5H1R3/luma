@@ -56,6 +56,40 @@ namespace {
     return static_cast<int>(places);
 }
 
+// Resolves a rounding-mode argument that may be either a `Decimal.RoundingMode`
+// choice variant or one of the legacy lowercase mode strings, mirroring the dual
+// string/choice acceptance of Log.set_level.  Throws a RuntimeError on an
+// unrecognised value: an invalid string is a programmer typo, and an invalid
+// choice variant is impossible because the type checker guarantees it — so this
+// preserves today's "bad mode is a runtime error, not a domain failure" contract
+// of Decimal.round.
+[[nodiscard]] RoundingMode resolve_rounding_mode(const Value& mode_arg, std::string_view fn,
+                                                 const SourceLocation& loc) {
+    if (mode_arg.is_choice()) {
+        const auto& variant = mode_arg.as_choice()->variant;
+        if (auto mode = rounding_mode_from_variant(variant)) {
+            return *mode;
+        }
+        throw RuntimeError{
+            std::format("{}: unknown rounding mode 'Decimal.RoundingMode.{}'", fn, variant), loc,
+            "use a Decimal.RoundingMode variant: HalfUp, HalfDown, HalfEven, Up, Down, "
+            "Ceiling, Floor"};
+    }
+    if (mode_arg.is_string()) {
+        const auto& name = mode_arg.as_string();
+        if (auto mode = parse_rounding_mode(name)) {
+            return *mode;
+        }
+        throw RuntimeError{
+            std::format("{}: unknown rounding mode '{}'", fn, name), loc,
+            "use one of: half_up, half_even, half_down, up, down, ceiling, floor"};
+    }
+    throw RuntimeError{
+        std::format("{}: mode must be a Decimal.RoundingMode or a mode string", fn), loc,
+        "pass a Decimal.RoundingMode variant (e.g. Decimal.RoundingMode.HalfUp) or a string "
+        "(e.g. \"half_up\")"};
+}
+
 } // namespace
 
 void register_decimal_ns(const EnvPtr& env) {
@@ -138,19 +172,40 @@ void register_decimal_ns(const EnvPtr& env) {
             }
             return make_success_value(make_decimal(std::move(*quotient)));
         })
+        .func("divide_with", 4)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& dividend = arg_decimal(args[0], "Decimal.divide_with", loc);
+            const auto& divisor = arg_decimal(args[1], "Decimal.divide_with", loc);
+            const auto scale = expect_integer(args[2], "Decimal.divide_with", loc);
+            // Resolve the mode before the domain checks so a mode typo (a
+            // programmer error) surfaces even when the divisor is zero.
+            const auto mode = resolve_rounding_mode(args[3], "Decimal.divide_with", loc);
+            if (scale < 0) {
+                return failure_msg("Decimal", "divide_with", "scale must be zero or greater",
+                                   error_codes::invalid_argument);
+            }
+            if (scale > static_cast<std::int64_t>(Decimal::k_max_digits)) {
+                return failure_msg("Decimal", "divide_with", "scale is too large",
+                                   error_codes::size_limit_exceeded);
+            }
+            if (divisor.is_zero()) {
+                return failure_msg("Decimal", "divide_with", "division by zero",
+                                   error_codes::division_by_zero);
+            }
+            auto quotient = dividend.divide(divisor, static_cast<int>(scale), mode);
+            if (!quotient) {
+                return failure_msg("Decimal", "divide_with", "result is too large to represent",
+                                   error_codes::size_limit_exceeded);
+            }
+            return make_success_value(make_decimal(std::move(*quotient)));
+        })
         // ─── Rounding ───
         .func("round", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto& value = arg_decimal(args[0], "Decimal.round", loc);
             const auto places = expect_integer(args[1], "Decimal.round", loc);
-            const auto& mode_name = expect_string(args[2], "Decimal.round", loc);
-            const auto mode = parse_rounding_mode(mode_name);
-            if (!mode) {
-                throw RuntimeError{
-                    std::format("Decimal.round: unknown rounding mode '{}'", mode_name), loc,
-                    "use one of: half_up, half_even, half_down, up, down, ceiling, floor"};
-            }
-            return make_decimal(value.round(clamp_places(places), *mode));
+            const auto mode = resolve_rounding_mode(args[2], "Decimal.round", loc);
+            return make_decimal(value.round(clamp_places(places), mode));
         })
         // ─── Comparison ───
         .func("compare", 2)

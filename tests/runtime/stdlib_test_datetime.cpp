@@ -318,6 +318,72 @@ static void test_datetime_to_parts_out_of_range() {
     ASSERT_EVAL_FAILURE("DateTime.to_parts(-99999999999.0)");
 }
 
+static void test_datetime_break_duration_components() {
+    // 3725 s = 1 h 2 m 5 s.
+    const auto v = eval("DateTime.break_duration(3725.0)");
+
+    ASSERT_TRUE(v.is_record());
+
+    const auto& rec = *v.as_record();
+
+    ASSERT_EQ(rec.find_field("days")->as_integer(), 0);
+    ASSERT_EQ(rec.find_field("hours")->as_integer(), 1);
+    ASSERT_EQ(rec.find_field("minutes")->as_integer(), 2);
+    ASSERT_EQ(rec.find_field("seconds")->as_integer(), 5);
+    ASSERT_EQ(rec.find_field("milliseconds")->as_integer(), 0);
+    ASSERT_FALSE(rec.find_field("negative")->as_bool());
+}
+
+static void test_datetime_break_duration_fractional_and_days() {
+    // 90061.5 s = 1 d 1 h 1 m 1 s 500 ms.
+    const auto v = eval("DateTime.break_duration(90061.5)");
+    const auto& rec = *v.as_record();
+
+    ASSERT_EQ(rec.find_field("days")->as_integer(), 1);
+    ASSERT_EQ(rec.find_field("hours")->as_integer(), 1);
+    ASSERT_EQ(rec.find_field("minutes")->as_integer(), 1);
+    ASSERT_EQ(rec.find_field("seconds")->as_integer(), 1);
+    ASSERT_EQ(rec.find_field("milliseconds")->as_integer(), 500);
+}
+
+static void test_datetime_break_duration_negative() {
+    const auto v = eval("DateTime.break_duration(-3725.0)");
+    const auto& rec = *v.as_record();
+
+    ASSERT_TRUE(rec.find_field("negative")->as_bool());
+    ASSERT_EQ(rec.find_field("hours")->as_integer(), 1);
+    ASSERT_EQ(rec.find_field("minutes")->as_integer(), 2);
+    ASSERT_EQ(rec.find_field("seconds")->as_integer(), 5);
+}
+
+static void test_datetime_break_duration_zero() {
+    const auto v = eval("DateTime.break_duration(0.0)");
+    const auto& rec = *v.as_record();
+
+    ASSERT_EQ(rec.find_field("days")->as_integer(), 0);
+    ASSERT_EQ(rec.find_field("milliseconds")->as_integer(), 0);
+    // A zero span is not negative.
+    ASSERT_FALSE(rec.find_field("negative")->as_bool());
+}
+
+static void test_datetime_format_duration() {
+    ASSERT_EQ(eval("DateTime.format_duration(DateTime.break_duration(3725.0))").as_string(),
+              std::string("1h 2m 5s"));
+    ASSERT_EQ(eval("DateTime.format_duration(DateTime.break_duration(90.0))").as_string(),
+              std::string("1m 30s"));
+    ASSERT_EQ(eval("DateTime.format_duration(DateTime.break_duration(0.5))").as_string(),
+              std::string("500ms"));
+    ASSERT_EQ(eval("DateTime.format_duration(DateTime.break_duration(90061.5))").as_string(),
+              std::string("1d 1h 1m 1s 500ms"));
+}
+
+static void test_datetime_format_duration_zero_and_negative() {
+    ASSERT_EQ(eval("DateTime.format_duration(DateTime.break_duration(0.0))").as_string(),
+              std::string("0s"));
+    ASSERT_EQ(eval("DateTime.format_duration(DateTime.break_duration(-3725.0))").as_string(),
+              std::string("-1h 2m 5s"));
+}
+
 static void test_datetime_add_milliseconds() {
     const auto v = eval("DateTime.add_milliseconds(1000.0, 500)");
 
@@ -637,6 +703,12 @@ int main() {
     RUN(test_datetime_from_parts_feb_29);
     RUN(test_datetime_to_parts_values);
     RUN(test_datetime_to_parts_out_of_range);
+    RUN(test_datetime_break_duration_components);
+    RUN(test_datetime_break_duration_fractional_and_days);
+    RUN(test_datetime_break_duration_negative);
+    RUN(test_datetime_break_duration_zero);
+    RUN(test_datetime_format_duration);
+    RUN(test_datetime_format_duration_zero_and_negative);
     RUN(test_datetime_add_milliseconds);
     RUN(test_datetime_difference_milliseconds);
     RUN(test_datetime_now_unix);

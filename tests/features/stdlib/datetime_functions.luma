@@ -475,3 +475,51 @@ function void test_datetime_non_finite_input() {
     assert(Result.is_failure(DateTime.to_parts(nan_val)), "to_parts(nan) should fail")
     assert(Result.is_failure(DateTime.format(nan_val, "YYYY")), "format(nan) should fail")
 }
+
+@test
+function void test_datetime_break_duration_components() {
+    DateTime.Duration d = DateTime.break_duration(3725.0)
+
+    assert(d.days == 0, "days")
+    assert(d.hours == 1, "hours")
+    assert(d.minutes == 2, "minutes")
+    assert(d.seconds == 5, "seconds")
+    assert(d.milliseconds == 0, "milliseconds")
+    assert(!d.negative, "not negative")
+}
+
+@test
+function void test_datetime_break_duration_days_and_millis() {
+    DateTime.Duration d = DateTime.break_duration(90061.5)
+
+    assert(d.days == 1, "days")
+    assert(d.hours == 1, "hours")
+    assert(d.minutes == 1, "minutes")
+    assert(d.seconds == 1, "seconds")
+    assert(d.milliseconds == 500, "milliseconds")
+}
+
+@test
+function void test_datetime_break_duration_negative() {
+    DateTime.Duration d = DateTime.break_duration(-3725.0)
+
+    assert(d.negative, "negative")
+    assert(d.hours == 1, "hours")
+    assert(d.minutes == 2, "minutes")
+    assert(d.seconds == 5, "seconds")
+}
+
+@test
+function void test_datetime_format_duration() {
+    assert(DateTime.format_duration(DateTime.break_duration(3725.0)) == "1h 2m 5s", "1h 2m 5s")
+    assert(DateTime.format_duration(DateTime.break_duration(90.0)) == "1m 30s", "1m 30s")
+    assert(DateTime.format_duration(DateTime.break_duration(0.5)) == "500ms", "500ms")
+    assert(DateTime.format_duration(DateTime.break_duration(90061.5)) == "1d 1h 1m 1s 500ms",
+        "full breakdown")
+}
+
+@test
+function void test_datetime_format_duration_zero_and_negative() {
+    assert(DateTime.format_duration(DateTime.break_duration(0.0)) == "0s", "zero")
+    assert(DateTime.format_duration(DateTime.break_duration(-3725.0)) == "-1h 2m 5s", "negative")
+}

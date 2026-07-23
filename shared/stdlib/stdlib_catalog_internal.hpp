@@ -114,8 +114,28 @@ namespace named {
     return ReturnTypeDesc::named("Match");
 }
 
+[[nodiscard]] inline ReturnTypeDesc dialect() {
+    return ReturnTypeDesc::named("Dialect");
+}
+
+[[nodiscard]] inline ReturnTypeDesc key_value() {
+    return ReturnTypeDesc::named("KeyValue");
+}
+
 [[nodiscard]] inline ReturnTypeDesc time_parts() {
     return ReturnTypeDesc::named("TimeParts");
+}
+
+[[nodiscard]] inline ReturnTypeDesc duration() {
+    return ReturnTypeDesc::named("Duration");
+}
+
+[[nodiscard]] inline ReturnTypeDesc file_info() {
+    return ReturnTypeDesc::named("FileInfo");
+}
+
+[[nodiscard]] inline ReturnTypeDesc summary() {
+    return ReturnTypeDesc::named("Summary");
 }
 
 [[nodiscard]] inline ReturnTypeDesc process_result() {
@@ -136,6 +156,10 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc udp_packet() {
     return ReturnTypeDesc::named("UdpPacket");
+}
+
+[[nodiscard]] inline ReturnTypeDesc address() {
+    return ReturnTypeDesc::named("Address");
 }
 
 [[nodiscard]] inline ReturnTypeDesc url_parts() {

@@ -262,6 +262,40 @@ LUMA_TEST(math_standard_deviation_empty) {
     ASSERT_EVAL_FAILURE("Math.standard_deviation([])");
 }
 
+LUMA_TEST(math_summarize) {
+    const auto v = eval("Math.summarize([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->type_name, std::string{"Summary"});
+    ASSERT_EQ(rec->find_field("count")->as_integer(), static_cast<std::int64_t>(8));
+    ASSERT_NEAR(rec->find_field("minimum")->as_number(), 2.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("maximum")->as_number(), 9.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("mean")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("median")->as_number(), 4.5, 1e-9);
+    ASSERT_TRUE(rec->find_field("standard_deviation")->as_number() > 1.9);
+    ASSERT_TRUE(rec->find_field("standard_deviation")->as_number() < 2.1);
+}
+
+LUMA_TEST(math_summarize_single) {
+    const auto v = eval("Math.summarize([42.0])");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->find_field("count")->as_integer(), static_cast<std::int64_t>(1));
+    ASSERT_NEAR(rec->find_field("minimum")->as_number(), 42.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("maximum")->as_number(), 42.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("mean")->as_number(), 42.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("median")->as_number(), 42.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("standard_deviation")->as_number(), 0.0, 1e-9);
+}
+
+LUMA_TEST(math_summarize_empty) {
+    ASSERT_EVAL_FAILURE("Math.summarize([])");
+}
+
 LUMA_TEST(math_sum) {
     ASSERT_EVAL_NUM("Math.sum([1.0, 2.0, 3.0])", 6.0);
 

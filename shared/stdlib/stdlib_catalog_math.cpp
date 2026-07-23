@@ -66,6 +66,8 @@ void register_math_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
             m.fn("standard_deviation", 1, "(values: array<number>)", R::result_number(),
                  {p.array_any}),
             m.fn("sum", 1, "(values: array<number>)", R::result_number(), {p.array_any}),
+            m.fn("summarize", 1, "(values: array<number>)", R::result(named::summary()),
+                 {p.array_any}),
             m.fn("tangent", 1, "(angle: number)", R::result_number(), {p.number}),
             m.constant("tau", R::number_type()),
             m.fn("truncate", 1, "(value: number)", R::result_integer(), {p.number}),

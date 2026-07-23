@@ -38,7 +38,9 @@ static void test_socket_module() {
     ASSERT_TRUE(env->has("Socket.set_timeout"));
     ASSERT_TRUE(env->has("Socket.is_connected"));
     ASSERT_TRUE(env->has("Socket.local_address"));
+    ASSERT_TRUE(env->has("Socket.local_address_parts"));
     ASSERT_TRUE(env->has("Socket.remote_address"));
+    ASSERT_TRUE(env->has("Socket.remote_address_parts"));
     ASSERT_TRUE(env->has("Socket.udp_create"));
     ASSERT_TRUE(env->has("Socket.udp_bind"));
     ASSERT_TRUE(env->has("Socket.udp_send"));
@@ -89,6 +91,26 @@ static void test_socket_local_address_after_listen() {
     ASSERT_TRUE(v.is_string());
     ASSERT_TRUE(v.as_string().rfind("127.0.0.1:", 0) == 0);
     ASSERT_TRUE(v.as_string() != "127.0.0.1:0");
+}
+
+static void test_socket_local_address_parts_after_listen() {
+    // local_address_parts returns a structured Socket.Address record: the host
+    // field is the loopback address and the port field is the kernel-assigned
+    // non-zero ephemeral port (no "host:port" string parsing needed).
+    const auto v = eval("socket srv = Result.unwrap(Socket.listen(\"127.0.0.1\", 0))\n"
+                        "Result.unwrap(Socket.local_address_parts(srv))\n");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Address"});
+
+    const auto* host = v.as_record()->find_field("host");
+    const auto* port = v.as_record()->find_field("port");
+    ASSERT_TRUE(host != nullptr);
+    ASSERT_TRUE(port != nullptr);
+    ASSERT_TRUE(host->is_string());
+    ASSERT_EQ(host->as_string(), std::string{"127.0.0.1"});
+    ASSERT_TRUE(port->is_integer());
+    ASSERT_TRUE(port->as_integer() > 0);
 }
 
 static void test_socket_is_connected_reflects_lifetime() {
@@ -263,6 +285,12 @@ static void test_socket_remote_address_on_unconnected_fails() {
                         "Socket.remote_address(s)\n");
 }
 
+static void test_socket_remote_address_parts_on_unconnected_fails() {
+    // The structured variant fails the same way on an unconnected socket.
+    ASSERT_EVAL_FAILURE("socket s = Result.unwrap(Socket.udp_create())\n"
+                        "Socket.remote_address_parts(s)\n");
+}
+
 static void test_socket_listen_rejects_invalid_port() {
     ASSERT_EVAL_FAILURE("Socket.listen(\"127.0.0.1\", 99999)");
 }
@@ -290,11 +318,13 @@ int main() {
     RUN(test_socket_listen_rejects_invalid_port);
     RUN(test_socket_listen_rejects_non_string_host);
     RUN(test_socket_local_address_after_listen);
+    RUN(test_socket_local_address_parts_after_listen);
     RUN(test_socket_module);
     RUN(test_socket_operations_reject_non_socket);
     RUN(test_socket_receive_on_closed_fails);
     RUN(test_socket_receive_rejects_non_positive_max_bytes);
     RUN(test_socket_remote_address_on_unconnected_fails);
+    RUN(test_socket_remote_address_parts_on_unconnected_fails);
     RUN(test_socket_send_on_closed_fails);
     RUN(test_socket_set_timeout_rejects_negative);
     RUN(test_socket_set_timeout_returns_true);

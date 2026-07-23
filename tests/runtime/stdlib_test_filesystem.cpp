@@ -69,6 +69,47 @@ static void test_filesystem_write_read_lines() {
     ASSERT_EQ(v.as_result()->owned_inner->as_array()->elements->size(), 2U);
 }
 
+static void test_filesystem_metadata_file() {
+    const LumaTempFile file{"_test_io_meta.txt", "hello"};
+
+    const auto v = eval("FileSystem.metadata(\"_test_io_meta.txt\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = *v.as_result()->owned_inner->as_record();
+
+    ASSERT_EQ(rec.find_field("size")->as_integer(), 5);
+    ASSERT_TRUE(rec.find_field("is_file")->as_bool());
+    ASSERT_FALSE(rec.find_field("is_directory")->as_bool());
+    ASSERT_FALSE(rec.find_field("is_symlink")->as_bool());
+    // Modified time is a Unix timestamp — after 2020-01-01.
+    ASSERT_TRUE(rec.find_field("modified_time")->is_number());
+    ASSERT_TRUE(rec.find_field("modified_time")->as_number() > 1577836800.0);
+}
+
+static void test_filesystem_metadata_directory() {
+    const auto v = eval("FileSystem.metadata(\".\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = *v.as_result()->owned_inner->as_record();
+
+    ASSERT_TRUE(rec.find_field("is_directory")->as_bool());
+    ASSERT_FALSE(rec.find_field("is_file")->as_bool());
+    // A directory reports size 0 rather than failing.
+    ASSERT_EQ(rec.find_field("size")->as_integer(), 0);
+}
+
+static void test_filesystem_metadata_nonexistent() {
+    ASSERT_EVAL_FAILURE("FileSystem.metadata(\"_nonexistent_meta_file.txt\")");
+}
+
+static void test_filesystem_metadata_rejects_traversal() {
+    // Path traversal is a security violation, so metadata throws (like every
+    // other FileSystem function) rather than returning a failure result.
+    ASSERT_THROWS(eval("FileSystem.metadata(\"../escape.txt\")"));
+}
+
 static void test_filesystem_read_lines_rejects_oversized_file() {
     // read_lines caps the number of lines, but a single enormous newline-free
     // line would let std::getline allocate the whole file before that check
@@ -440,6 +481,10 @@ int main() {
     RUN(test_filesystem_read_file_missing);
     RUN(test_filesystem_write_read_file);
     RUN(test_filesystem_write_read_lines);
+    RUN(test_filesystem_metadata_file);
+    RUN(test_filesystem_metadata_directory);
+    RUN(test_filesystem_metadata_nonexistent);
+    RUN(test_filesystem_metadata_rejects_traversal);
     RUN(test_filesystem_read_lines_rejects_oversized_file);
     RUN(test_sandbox_disables_dangerous_modules);
     RUN(test_sandbox_gates_file_io_in_safe_modules);

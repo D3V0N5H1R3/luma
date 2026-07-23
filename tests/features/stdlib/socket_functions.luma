@@ -267,6 +267,29 @@ function void test_local_address_has_loopback_host() {
     Socket.close(server)
 }
 
+@test
+function void test_local_address_parts_fields() {
+    # local_address_parts returns a structured Socket.Address record instead of a
+    # "host:port" string, so host and port are read directly (no manual split).
+    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
+
+    Socket.Address addr = Result.unwrap(Socket.local_address_parts(server))
+    assert(addr.host == "127.0.0.1", "address host should be the loopback host")
+    assert(addr.port > 0, "listen on port 0 should assign a real, non-zero port")
+
+    Socket.close(server)
+}
+
+@test
+function void test_remote_address_parts_on_unconnected() {
+    socket s = Result.unwrap(Socket.udp_create())
+
+    result<Socket.Address> r = Socket.remote_address_parts(s)
+    assert(Result.is_failure(r), "remote_address_parts on an unconnected socket should fail")
+
+    Socket.close(s)
+}
+
 # ─── UDP packet fields ───
 
 @test

@@ -181,7 +181,15 @@ static void test_dictionary_to_array() {
     const auto& elem = (*v.as_array()->elements)[0];
 
     ASSERT_TRUE(elem.is_record());
+    ASSERT_EQ(elem.as_record()->type_name, std::string{"KeyValue"});
     ASSERT_EQ(elem.as_record()->fields.size(), 2U);
+
+    const auto* key = elem.as_record()->find_field("key");
+    const auto* value = elem.as_record()->find_field("value");
+    ASSERT_TRUE(key != nullptr);
+    ASSERT_TRUE(value != nullptr);
+    ASSERT_EQ(key->as_string(), std::string{"x"});
+    ASSERT_EQ(value->as_integer(), 1);
 }
 
 // ─── to_entries / from_entries ────────────────────────────────────────

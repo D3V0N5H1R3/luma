@@ -200,6 +200,67 @@ void register_filesystem_content(const EnvPtr& env) {
                     return make_success_value(Value{static_cast<double>(secs) / 1000.0});
                 });
         })
+        .func("metadata", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return fs_validated_string_op(
+                "FileSystem.metadata", args[0], loc, false,
+                [](const std::filesystem::path& safe_path) -> Value {
+                    std::error_code ec;
+
+                    // Query the link status first (does not follow symlinks) so a
+                    // dangling or symlinked entry is still reported rather than
+                    // treated as absent.
+                    const auto sym_status = std::filesystem::symlink_status(safe_path, ec);
+                    if (ec || !std::filesystem::exists(sym_status)) {
+                        return make_failure_value(
+                            error_msg("FileSystem", "metadata",
+                                      std::format("path does not exist '{}'", safe_path.string())));
+                    }
+
+                    const bool symlink = std::filesystem::is_symlink(sym_status);
+
+                    // Follow symlinks for the type/size/time queries so the fields
+                    // agree with size / is_directory / is_file / get_modified_time.
+                    std::error_code status_ec;
+                    const auto status = std::filesystem::status(safe_path, status_ec);
+                    const bool directory = std::filesystem::is_directory(status);
+                    const bool regular_file = std::filesystem::is_regular_file(status);
+
+                    // file_size is only meaningful for regular files; report 0 for
+                    // directories and other kinds rather than failing the call.
+                    std::int64_t byte_count = 0;
+                    if (regular_file) {
+                        std::error_code size_ec;
+                        const auto sz = std::filesystem::file_size(safe_path, size_ec);
+                        if (!size_ec) {
+                            byte_count = static_cast<std::int64_t>(sz);
+                        }
+                    }
+
+                    // Modified time as fractional seconds since the Unix epoch,
+                    // matching FileSystem.get_modified_time.
+                    double modified_seconds = 0.0;
+                    std::error_code time_ec;
+                    const auto ftime = std::filesystem::last_write_time(safe_path, time_ec);
+                    if (!time_ec) {
+                        const auto sctp = file_time_to_system_clock(ftime);
+                        const auto epoch = sctp.time_since_epoch();
+                        const auto ms =
+                            std::chrono::duration_cast<std::chrono::milliseconds>(epoch).count();
+                        modified_seconds = static_cast<double>(ms) / 1000.0;
+                    }
+
+                    auto rec = std::make_shared<RecordValue>();
+                    rec->type_name = "FileInfo";
+                    rec->fields.emplace_back("size", Value{byte_count});
+                    rec->fields.emplace_back("modified_time", Value{modified_seconds});
+                    rec->fields.emplace_back("is_directory", Value{directory});
+                    rec->fields.emplace_back("is_file", Value{regular_file});
+                    rec->fields.emplace_back("is_symlink", Value{symlink});
+
+                    return make_success_value(Value{std::move(rec)});
+                });
+        })
         .func("list_recursively", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return fs_validated_string_op(
