@@ -58,21 +58,23 @@ void bind_choice_fields(TypeCheckingServices& tc, const MatchArm& arm, const Typ
 
     const auto ch_it = tc.choices().find(arm.enum_type());
 
-    // A user choice is keyed in choices() by its (bare) name, so the direct
-    // find above succeeds.  A namespaced stdlib choice (e.g. Json.Value) is
-    // keyed by its qualified name, but the parser records only the bare type
-    // name ("Value") as the arm's enum_type — so fall back to matching a
-    // declaration whose bare name equals it and that actually declares the
-    // arm's variant (the variant check disambiguates any bare-name clash).
+    // The arm's enum_type is the choice's canonical name — qualified for a
+    // namespaced choice (e.g. "Json.Value") — so the direct find above resolves
+    // it unambiguously, even when another choice shares its bare name.  A bare
+    // name still occurs for a `use`-imported choice matched via a two-part
+    // pattern; fall back to a declaration whose bare name matches and that
+    // actually declares the arm's variant (the variant check disambiguates any
+    // bare-name clash).
     const ChoiceDeclaration* choice_decl_ptr =
         ch_it != tc.choices().end() ? ch_it->second : nullptr;
 
     if (choice_decl_ptr == nullptr) {
         for (const auto& [key, decl] : tc.choices()) {
             const bool bare_name_matches = decl->name == arm.enum_type();
-            const bool declares_variant = std::ranges::any_of(
-                decl->variants,
-                [&](const ChoiceVariant& v) { return v.name == arm.enum_variant(); });
+            const bool declares_variant =
+                std::ranges::any_of(decl->variants, [&](const ChoiceVariant& v) {
+                    return v.name == arm.enum_variant();
+                });
 
             if (bare_name_matches && declares_variant) {
                 choice_decl_ptr = decl;

@@ -193,7 +193,14 @@ std::optional<TypeInfo> TypeChecker::resolve_user_named(const StringMap<const T*
         return TypeInfo::make(TypeInfo::Kind::Unknown);
     }
 
-    const auto& name = it->second->name;
+    // Choice identity uses the (possibly qualified) map key, not the bare
+    // declaration name.  A namespaced choice (e.g. Terminal.Color, keyed
+    // "Terminal.Color") and a top-level choice named Color (keyed "Color") must
+    // stay distinguishable; collapsing both to the bare name "Color" would
+    // defeat assignability and match-exhaustiveness checks.  Records and
+    // interfaces keep their bare declaration name — their identity is
+    // bare-name based, and record/interface names do not collide this way.
+    const auto& name = (kind == TypeInfo::Kind::Choice) ? it->first : it->second->name;
 
     if (!ann.type_params().empty()) {
         std::vector<TypeInfo> type_args;

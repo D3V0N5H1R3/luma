@@ -11,6 +11,66 @@ namespace luma {
 
 namespace {
 
+// Resolve the choice declaration a match's arms refer to.
+//
+// A match's subject type and its arm patterns now carry the choice's canonical
+// name — qualified for a namespaced choice (e.g. "Terminal.Color") — so the
+// direct lookup is unambiguous even when two choices share a bare name
+// (Terminal.Color vs a top-level Color).  A bare name still occurs for a
+// `use`-imported choice matched via a two-part pattern (`use Traffic` then
+// `case Light.Red`); the fallback then matches a declaration by its bare name,
+// disambiguating any bare-name clash by variant membership.
+[[nodiscard]] const ChoiceDeclaration*
+find_choice_for_arms(const StringMap<const ChoiceDeclaration*>& choices, std::string_view type_name,
+                     const std::vector<MatchArm>& arms) {
+    if (const auto it = choices.find(type_name); it != choices.end()) {
+        return it->second;
+    }
+
+    for (const auto& [key, decl] : choices) {
+        if (std::string_view{decl->name} != type_name) {
+            continue;
+        }
+
+        const bool declares_a_matched_variant = std::ranges::any_of(arms, [&](const MatchArm& arm) {
+            if (arm.kind() != MatchArm::Kind::ChoiceCase &&
+                arm.kind() != MatchArm::Kind::VariantCase) {
+                return false;
+            }
+
+            return std::ranges::any_of(decl->variants, [&](const ChoiceVariant& variant) {
+                return variant.name == arm.enum_variant();
+            });
+        });
+
+        if (declares_a_matched_variant) {
+            return decl;
+        }
+    }
+
+    return nullptr;
+}
+
+// Does an arm's `enum_type` name the given choice declaration?
+//
+// A match arm can name its choice with a qualified ("Signals.Command") or bare
+// ("Command") type name, while its subject may carry the other form — e.g. a
+// namespace-internal function whose bare `Command` parameter is matched with
+// three-part `Signals.Command.*` arms.  When the arm's type name is a live map
+// key, trust the direct pointer comparison (this also keeps two choices sharing
+// a bare name distinct — Terminal.Color vs a top-level Color).  Only when the
+// name is not a key (e.g. a `use`-imported alias that was never registered) fall
+// back to the declaration's bare name.
+[[nodiscard]] bool enum_type_names_choice(const StringMap<const ChoiceDeclaration*>& choices,
+                                          std::string_view enum_type,
+                                          const ChoiceDeclaration* choice_decl) {
+    if (const auto it = choices.find(enum_type); it != choices.end()) {
+        return it->second == choice_decl;
+    }
+
+    return enum_type == std::string_view{choice_decl->name};
+}
+
 struct BooleanCoverage {
     bool has_true{false};
     bool has_false{false};
@@ -185,24 +245,12 @@ void MatchExhaustivenessChecker::check_boolean_coverage(const std::vector<MatchA
 void MatchExhaustivenessChecker::check_choice_coverage(const std::vector<MatchArm>& arms,
                                                        const TypeInfo& subject_type,
                                                        const SourceLocation& loc) {
-    // A user choice is keyed in choices() by its (bare) name, so a direct find
-    // succeeds.  A namespaced stdlib choice (e.g. Json.Value) is keyed by its
-    // qualified name, yet the subject type carries only the bare type name
-    // ("Value"), so the direct find misses — fall back to a declaration whose
-    // bare name matches.  Without this, exhaustiveness would be silently
-    // unenforced for every namespaced stdlib choice (Weekday, Month, Color, …).
-    const ChoiceDeclaration* choice_decl = nullptr;
-
-    if (const auto it = tc_.choices().find(subject_type.name); it != tc_.choices().end()) {
-        choice_decl = it->second;
-    } else {
-        for (const auto& [key, decl] : tc_.choices()) {
-            if (decl->name == subject_type.name) {
-                choice_decl = decl;
-                break;
-            }
-        }
-    }
+    // Resolve the matched choice.  The subject type carries the choice's
+    // canonical (qualified for a namespaced choice) name, so a namespaced
+    // stdlib choice (Weekday, Month, Terminal.Color, …) resolves directly and
+    // unambiguously — even when another choice shares its bare name.
+    const ChoiceDeclaration* choice_decl =
+        find_choice_for_arms(tc_.choices(), subject_type.name, arms);
 
     if (choice_decl == nullptr) {
         return;
@@ -219,7 +267,11 @@ void MatchExhaustivenessChecker::check_choice_coverage(const std::vector<MatchAr
             return;
         }
 
-        if (entry.enum_type().empty() || entry.enum_type() == subject_type.name) {
+        // An arm covers a variant when its type names the matched choice —
+        // whether it was written with the choice's qualified or bare name, and
+        // regardless of which form the subject carries.
+        if (entry.enum_type().empty() ||
+            enum_type_names_choice(tc_.choices(), entry.enum_type(), choice_decl)) {
             covered.insert(entry.enum_variant());
         }
     };
@@ -353,21 +405,10 @@ bool MatchExhaustivenessChecker::is_choice_exhaustive(const std::vector<MatchArm
         return false;
     }
 
-    // Mirror check_choice_coverage: a namespaced stdlib choice is keyed by its
-    // qualified name while the arms carry only the bare type name, so fall back
-    // to a declaration whose bare name matches when the direct find misses.
-    const ChoiceDeclaration* choice_decl = nullptr;
-
-    if (const auto ch_it = tc_.choices().find(choice_type); ch_it != tc_.choices().end()) {
-        choice_decl = ch_it->second;
-    } else {
-        for (const auto& [key, decl] : tc_.choices()) {
-            if (decl->name == choice_type) {
-                choice_decl = decl;
-                break;
-            }
-        }
-    }
+    // The arms carry the choice's canonical (qualified for a namespaced choice)
+    // name, so the matched choice resolves directly and unambiguously — even
+    // when another choice shares its bare name.
+    const ChoiceDeclaration* choice_decl = find_choice_for_arms(tc_.choices(), choice_type, arms);
 
     if (choice_decl == nullptr) {
         return false;

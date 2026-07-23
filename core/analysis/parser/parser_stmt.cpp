@@ -521,8 +521,12 @@ Parser::QualifiedVariant Parser::parse_qualified_variant_name() {
     std::string type_name;
 
     if (check(TokenType::Identifier) && check_at(1, TokenType::Dot)) {
-        // Three-part: Namespace.Type.Variant — first is namespace, store bare type name.
-        type_name = advance().lexeme;
+        // Three-part: Namespace.Type.Variant — store the qualified type name
+        // ("Namespace.Type").  This matches how a namespaced choice is keyed in
+        // the type checker (choices_["Namespace.Type"]), so exhaustiveness and
+        // field binding do a direct, unambiguous lookup even when two choices
+        // share a bare name (e.g. Terminal.Color vs a top-level Color).
+        type_name = first + "." + advance().lexeme;
 
         expect(TokenType::Dot);
     } else {
