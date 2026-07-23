@@ -559,6 +559,7 @@ module.exports = grammar({
                 "boolean",
                 "integer",
                 "number",
+                "decimal",
                 "string",
                 "void",
                 "array",

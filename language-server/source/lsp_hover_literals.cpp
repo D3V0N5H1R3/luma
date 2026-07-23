@@ -22,6 +22,10 @@ const std::unordered_map<TokenType, std::string_view, TokenTypeHash>& get_litera
          "```luma\nboolean\n```\n\nPrimitive type representing `true` or `false`."},
         {TokenType::ChannelType,
          "```luma\nchannel<T>\n```\n\nA typed message channel for communicating between tasks."},
+        {TokenType::DecimalType,
+         "```luma\ndecimal\n```\n\nExact base-10 decimal for correct money arithmetic "
+         "(unlike `number`, `0.1 + 0.2` is exactly `0.3`). Built and operated on with the "
+         "`Decimal` module."},
         {TokenType::DictionaryType,
          "```luma\ndictionary<V>\n```\n\nString-keyed map with values of type `V`."},
         {TokenType::GraphType, "```luma\ngraph\n```\n\nDirected or undirected graph of named "

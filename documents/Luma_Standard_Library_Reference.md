@@ -17,36 +17,37 @@ This reference was previously part of the [User Manual](Luma_User_Manual.md). Fo
 7. [Converter](#7--converter)
 8. [Csv](#8--csv)
 9. [DateTime](#9--datetime)
-10. [Dictionary](#10--dictionary)
-11. [Encoder](#11--encoder)
-12. [FileSystem](#12--filesystem)
-13. [Graph](#13--graph)
-14. [Solaris and GraphicalUi](#14--solaris-and-graphicalui)
-15. [Hash](#15--hash)
-16. [HashSet](#16--hashset)
-17. [Http](#17--http)
-18. [Console](#18--console)
-19. [Json](#19--json)
-20. [KeyValueStore](#20--keyvaluestore)
-21. [LinearAlgebra](#21--linearalgebra)
-22. [LinkedList](#22--linkedlist)
-23. [Log](#23--log)
-24. [Math](#24--math)
-25. [Optional](#25--optional)
-26. [Process](#26--process)
-27. [Queue](#27--queue)
-28. [Random](#28--random)
-29. [Reference](#29--reference)
-30. [RegularExpression](#30--regularexpression)
-31. [Resource](#31--resource)
-32. [Result](#32--result)
-33. [Set](#33--set)
-34. [Socket](#34--socket)
-35. [Stack](#35--stack)
-36. [String](#36--string)
-37. [Task](#37--task)
-38. [Terminal](#38--terminal)
-39. [Xml](#39--xml)
+10. [Decimal](#10--decimal)
+11. [Dictionary](#11--dictionary)
+12. [Encoder](#12--encoder)
+13. [FileSystem](#13--filesystem)
+14. [Graph](#14--graph)
+15. [Solaris and GraphicalUi](#15--solaris-and-graphicalui)
+16. [Hash](#16--hash)
+17. [HashSet](#17--hashset)
+18. [Http](#18--http)
+19. [Console](#19--console)
+20. [Json](#20--json)
+21. [KeyValueStore](#21--keyvaluestore)
+22. [LinearAlgebra](#22--linearalgebra)
+23. [LinkedList](#23--linkedlist)
+24. [Log](#24--log)
+25. [Math](#25--math)
+26. [Optional](#26--optional)
+27. [Process](#27--process)
+28. [Queue](#28--queue)
+29. [Random](#29--random)
+30. [Reference](#30--reference)
+31. [RegularExpression](#31--regularexpression)
+32. [Resource](#32--resource)
+33. [Result](#33--result)
+34. [Set](#34--set)
+35. [Socket](#35--socket)
+36. [Stack](#36--stack)
+37. [String](#37--string)
+38. [Task](#38--task)
+39. [Terminal](#39--terminal)
+40. [Xml](#40--xml)
 
 - [See Also](#see-also)
 
@@ -334,7 +335,64 @@ All `DateTime` timestamps are in UTC. The following functions convert between UT
 
 Valid offsets range from −720 (UTC−12:00) to +840 (UTC+14:00) minutes. Out-of-range offsets return `failure`. A zero offset produces the `"Z"` suffix in ISO strings.
 
-## 10 — Dictionary
+## 10 — Decimal
+
+Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where `0.1 + 0.2` is not exactly `0.3`), a `decimal` stores its value in base 10, so money and other decimal maths behave the way people expect. `decimal` is a distinct opaque type built on an arbitrary-precision coefficient, so it never silently loses precision the way `number` does.
+
+> **`decimal` vs `number`** — Use `decimal` for currency and any calculation where exact base-10 results matter. Use `number` for measurements, scientific values, and anything where a fast binary float is fine. There is no operator overloading: combine decimals with `Decimal.add`, `Decimal.subtract`, `Decimal.multiply`, and `Decimal.divide` rather than `+`/`-`/`*`/`/`. Parsing (`from_string`) and division (`divide`) return `result` because they can fail in everyday use; the other operations return a plain value and only raise a runtime error on misuse or overflow (see `from_number`, `round`, and `multiply` below).
+
+| Function                        | Parameter Types              | Return Type       | Description                                                          |
+| ------------------------------- | ---------------------------- | ----------------- | ------------------------------------------------------------------- |
+| `Decimal.absolute(d)`           | `(decimal)`                  | `decimal`         | Absolute value                                                      |
+| `Decimal.add(a, b)`             | `(decimal, decimal)`         | `decimal`         | Exact sum                                                           |
+| `Decimal.compare(a, b)`         | `(decimal, decimal)`         | `integer`         | `-1`, `0`, or `1` (scale-insensitive: `1.5` compares equal to `1.50`) |
+| `Decimal.divide(a, b, scale)`   | `(decimal, decimal, integer)` | `result<decimal>` | Quotient rounded (half-up) to `scale` fractional digits; fail on divide-by-zero or negative scale |
+| `Decimal.equals(a, b)`          | `(decimal, decimal)`         | `boolean`         | Value equality, ignoring trailing-zero scale (`1.5` equals `1.50`)  |
+| `Decimal.from_integer(i)`       | `(integer)`                  | `decimal`         | Exact decimal from an integer                                       |
+| `Decimal.from_number(n)`        | `(number)`                   | `decimal`         | Shortest exact decimal for a `number`; throws on NaN or infinity    |
+| `Decimal.from_string(s)`        | `(string)`                   | `result<decimal>` | Parse decimal text (optional sign, digits, `.`, optional `eNN` exponent); fail on malformed input |
+| `Decimal.is_negative(d)`        | `(decimal)`                  | `boolean`         | Whether `d` is less than zero                                       |
+| `Decimal.is_zero(d)`            | `(decimal)`                  | `boolean`         | Whether `d` is zero                                                 |
+| `Decimal.multiply(a, b)`        | `(decimal, decimal)`         | `decimal`         | Exact product; throws if the result would exceed the maximum decimal size |
+| `Decimal.negate(d)`             | `(decimal)`                  | `decimal`         | Additive inverse (`-d`)                                             |
+| `Decimal.round(d, places, mode)` | `(decimal, integer, string)` | `decimal`         | Round to `places` fractional digits using `mode`; throws on an unknown mode |
+| `Decimal.scale(d)`              | `(decimal)`                  | `integer`         | Number of stored fractional digits                                 |
+| `Decimal.subtract(a, b)`        | `(decimal, decimal)`         | `decimal`         | Exact difference                                                   |
+| `Decimal.to_number(d)`          | `(decimal)`                  | `number`          | Nearest IEEE-754 `number` (may lose precision)                     |
+| `Decimal.to_string(d)`          | `(decimal)`                  | `string`          | Canonical text; preserves the value's scale (e.g. `"2.50"`)         |
+
+**Rounding modes** — the `mode` argument to `Decimal.round` (and the implicit half-up used by `Decimal.divide`) is one of the following strings:
+
+| Mode          | Behaviour                                                            |
+| ------------- | ------------------------------------------------------------------- |
+| `"half_up"`   | Ties round away from zero (`2.5` → `3`, `-2.5` → `-3`)               |
+| `"half_down"` | Ties round toward zero (`2.5` → `2`)                                 |
+| `"half_even"` | Ties round to the even neighbour — banker's rounding (`2.5` → `2`, `3.5` → `4`) |
+| `"up"`        | Always away from zero                                                |
+| `"down"`      | Always toward zero (truncate)                                        |
+| `"ceiling"`   | Toward positive infinity                                             |
+| `"floor"`     | Toward negative infinity                                             |
+
+Equality and comparison are **scale-insensitive** — the value `1.5` equals `1.50` — but `Decimal.to_string` and `Decimal.scale` preserve the scale a value was created or computed with, so arithmetic that widens the scale (for example adding `1.50` and `2.25`) keeps the extra digits until you `Decimal.round` it. `Decimal` is always available and needs no imports.
+
+```luma
+@main
+function void main() {
+    # The classic floating-point surprise, done exactly.
+    decimal a = Result.unwrap(Decimal.from_string("0.1"))
+    decimal b = Result.unwrap(Decimal.from_string("0.2"))
+    decimal sum = Decimal.add(a, b)
+
+    print(Decimal.to_string(sum))          # 0.3
+    print(Converter.to_string(Decimal.equals(sum, Result.unwrap(Decimal.from_string("0.3")))))  # true
+
+    # Split a bill and round to cents (half-up).
+    result<decimal> share = Decimal.divide(Result.unwrap(Decimal.from_string("100.00")), Decimal.from_integer(3), 2)
+    print(Decimal.to_string(Result.unwrap(share)))   # 33.33
+}
+```
+
+## 11 — Dictionary
 
 Dictionaries preserve insertion order. All reads and writes use string keys.
 
@@ -369,7 +427,7 @@ Dictionaries preserve insertion order. All reads and writes use string keys.
 | `Dictionary.to_entries(d)`        | `(dictionary<T>)`                                 | `array<(string, T)>`                     | Each element is a `(key, value)` tuple                                                          |
 | `Dictionary.values(d)`            | `(dictionary<T>)`                                 | `array<T>`                               | Array of values                                                                                 |
 
-## 11 — Encoder
+## 12 — Encoder
 
 Transform the representation of a string without changing its type (e.g. Base64, URL percent-encoding).
 
@@ -384,7 +442,7 @@ Transform the representation of a string without changing its type (e.g. Base64,
 | `Encoder.encode_base64url(s)` | `(string)`      | `result<string>` | Encode to URL-safe Base64 (no padding) |
 | `Encoder.encode_url(s)`       | `(string)`      | `result<string>` | RFC 3986 percent-encoding              |
 
-## 12 — FileSystem
+## 13 — FileSystem
 
 | Function                                  | Parameter Types           | Return Type             | Description                                           |
 | ----------------------------------------- | ------------------------- | ----------------------- | ----------------------------------------------------- |
@@ -425,7 +483,7 @@ Transform the representation of a string without changing its type (e.g. Base64,
 
 > **Security note** — `append_file`, `read_file`, `read_lines`, `write_file`, and `write_lines` validate that the resolved path stays within the current working directory, which blocks cross-directory symlink traversal (e.g. a symlink pointing to `/etc/passwd` is rejected). However, a symbolic link that points to another file **within** the working directory is followed transparently. If your program accepts a user-supplied file path, validate that the resolved path refers to the expected file before reading or writing.
 
-## 13 — Graph
+## 14 — Graph
 
 A weighted graph supporting directed and undirected edges. Vertices are identified by strings. All operations are immutable.
 
@@ -458,7 +516,7 @@ A weighted graph supporting directed and undirected edges. Vertices are identifi
 | `Graph.vertex_count(g)`                  | `(graph)`                         | `integer`                                | Number of vertices                                          |
 | `Graph.vertices(g)`                      | `(graph)`                         | `array<string>`                          | All vertex labels                                           |
 
-## 14 — Solaris and GraphicalUi
+## 15 — Solaris and GraphicalUi
 
 Luma's GUI story is two layers under one section:
 
@@ -1116,7 +1174,7 @@ Accessibility functions add ARIA attributes, manage focus, and provide screen re
 
 The `attributes` dictionary accepts `"role"` and any key starting with `"aria_"` (underscores are converted to hyphens in the rendered HTML).
 
-## 15 — Hash
+## 16 — Hash
 
 Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 
@@ -1134,7 +1192,7 @@ Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 | `Hash.sha512(s)`                | `(string)`                 | `string`         | SHA-512 digest (128-char hex)  |
 | `Hash.verify(algo, data, hash)` | `(string, string, string)` | `boolean`        | Verify hash matches data       |
 
-## 16 — HashSet
+## 17 — HashSet
 
 A hash-based set providing O(1) average-case membership testing. Supports hashable primitive types (boolean, integer, number, string). All operations are immutable — they return a new hash set.
 
@@ -1166,7 +1224,7 @@ A hash-based set providing O(1) average-case membership testing. Supports hashab
 | `HashSet.to_set(hs)`                      | `(hash_set)`                         | `set`                          | Convert to `Set`                                               |
 | `HashSet.union(hs, other)`                | `(hash_set, hash_set)`               | `hash_set`                     | Union of two sets                                              |
 
-## 17 — Http
+## 18 — Http
 
 Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https://` URLs return an error result.
 
@@ -1197,7 +1255,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 
 > **Proxy support** — When the `HTTPS_PROXY`, `HTTP_PROXY`, or `ALL_PROXY` environment variables are set (lower-case variants are also honoured), requests are routed through the named HTTP proxy: `https` URLs use a `CONNECT` tunnel (TLS remains end-to-end with the origin server, so certificate verification is unaffected), and plain `http` URLs are forwarded with an absolute-form request line. `NO_PROXY` (comma-separated host or domain suffixes) bypasses the proxy for matching hosts. Proxy credentials supplied in the proxy URL's userinfo are sent via `Proxy-Authorization`. SSRF protection still applies to the request target: requests resolving to private, loopback, or otherwise reserved addresses are rejected even when a proxy is configured.
 
-## 18 — Console
+## 19 — Console
 
 | Function                       | Parameter Types | Return Type       | Description                                                               |
 | ------------------------------ | --------------- | ----------------- | ------------------------------------------------------------------------- |
@@ -1210,7 +1268,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 
 > **Console vs FileSystem:** `Console` handles console I/O — reading from stdin and writing to stdout/stderr. `FileSystem` handles file content — reading, writing, and appending data — as well as file metadata and paths (checking existence, querying size, listing directories, copying, renaming, and manipulating path components). Use `Console` for interactive console I/O; use `FileSystem` to read, write, and manage files and directories.
 
-## 19 — Json
+## 20 — Json
 
 Serialise and deserialise Luma values as JSON.
 
@@ -1234,7 +1292,7 @@ Supported types: `integer`, `number`, `string`, `boolean`, `none` (→ JSON `nul
 
 `Json.merge` merges two JSON object strings; keys from the second object overwrite those in the first. Both inputs must be JSON objects.
 
-## 20 — KeyValueStore
+## 21 — KeyValueStore
 
 Persistent file-backed key-value store. Keys and values are strings. The store uses a tab-separated format with proper escaping. Mutation functions (`set`, `remove`, `set_many`, `clear`) return `result<key_value_store>` — `success` with a new copy of the store, or `failure` if the store is read-only.
 
@@ -1259,7 +1317,7 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.to_dictionary(s)`            | `(key_value_store)`                     | `dictionary<string>`      | Convert to dictionary                             |
 | `KeyValueStore.values(s)`                   | `(key_value_store)`                     | `array<string>`           | All values                                        |
 
-## 21 — LinearAlgebra
+## 22 — LinearAlgebra
 
 Vector and matrix operations using arrays of numbers.
 
@@ -1306,7 +1364,7 @@ Vector and matrix operations using arrays of numbers.
 | `LinearAlgebra.transpose(m)`          | `(array<array<number>>)`                       | `array<array<number>>`         | Transpose matrix                |
 | `LinearAlgebra.zero_matrix(r, c)`     | `(integer, integer)`                           | `array<array<number>>`         | r×c zero matrix                 |
 
-## 22 — LinkedList
+## 23 — LinkedList
 
 A doubly-linked list with O(1) prepend/append and O(n) indexed access. All operations are immutable — they return a new linked list.
 
@@ -1342,7 +1400,7 @@ A doubly-linked list with O(1) prepend/append and O(n) indexed access. All opera
 
 > **Performance note:** LinkedList operations (`prepend`, `append`, `remove_at`, etc.) create a full deep copy of the list, making each mutation O(n). For performance-critical workloads with frequent mutations, consider using `Array` instead, which offers O(1) amortized `push` and `pop`.
 
-## 23 — Log
+## 24 — Log
 
 Structured logging with configurable levels. Messages are written to stderr by default.
 
@@ -1364,7 +1422,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 
 `Log.set_output` accepts a file path or one of the special strings `"stderr"` (default) or `"stdout"`. When given a file path it appends to the file, creating it if it does not exist.
 
-## 24 — Math
+## 25 — Math
 
 | Function                              | Parameter Types                  | Return Type       | Description                                                                      |
 | ------------------------------------- | -------------------------------- | ----------------- | -------------------------------------------------------------------------------- |
@@ -1428,7 +1486,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.tau`      | `number` | 6.283185307179586 |
 | `Math.infinity` | `number` | ∞                 |
 
-## 25 — Optional
+## 26 — Optional
 
 Functions for working with `optional<T>` values. All functions are available as `Optional.function_name(...)` without a `use` declaration.
 
@@ -1482,7 +1540,7 @@ string label = some(42)
 print(label) # "positive: 42"
 ```
 
-## 26 — Process
+## 27 — Process
 
 | Function                                        | Parameter Types    | Return Type                     | Description                                                              |
 | ----------------------------------------------- | ------------------ | ------------------------------- | ------------------------------------------------------------------------ |
@@ -1500,7 +1558,7 @@ print(label) # "positive: 42"
 
 `Process.ProcessResult` record fields: `exit_code` (`integer`), `output` (`string`).
 
-## 27 — Queue
+## 28 — Queue
 
 Immutable FIFO (first-in, first-out) queue. All mutating operations return a new queue, leaving the original unchanged.
 
@@ -1521,7 +1579,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Queue.reduce(q, init, fn)` | `(queue, U, function(U, T) -> U)` | `result<U>`              | Fold elements; fail if callback throws                 |
 | `Queue.to_array(q)`         | `(queue)`                         | `array<T>`               | Convert to array                                       |
 
-## 28 — Random
+## 29 — Random
 
 | Function                          | Parameter Types       | Return Type        | Description                                                                     |
 | --------------------------------- | --------------------- | ------------------ | ------------------------------------------------------------------------------- |
@@ -1541,7 +1599,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 
 **Cryptographically secure functions.** The `secure_*` variants use AES-CTR-DRBG (via Mbed TLS) seeded from platform entropy. They are suitable for generating tokens, secrets, and session identifiers. Requires TLS support (`LUMA_FEATURE_TLS=ON`, enabled by default).
 
-## 29 — Reference
+## 30 — Reference
 
 Mutable reference cells — shared mutable containers that preserve identity across closure capture boundaries. All functions are available as `Reference.function_name(...)` without a `use` declaration.
 
@@ -1593,7 +1651,7 @@ integer value = Reference.new(42) |> Reference.get()       # 42
 string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 ```
 
-## 30 — RegularExpression
+## 31 — RegularExpression
 
 | Function                                          | Parameter Types            | Return Type                              | Description                                                   |
 | ------------------------------------------------- | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
@@ -1620,7 +1678,7 @@ print(m.groups[2].text)  # "com"
 
 > **Resource limits** — Regular expression patterns are capped at a maximum byte size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_REGEX_PATTERN_SIZE`). Patterns exceeding the limit return `failure` (or `false` from `is_valid`). The regex engine uses the ECMAScript dialect provided by the C++ standard library. There is no built-in protection against catastrophic backtracking — patterns with nested quantifiers such as `(a+)+b` can take exponential time on non-matching input. When processing untrusted patterns, keep them simple and avoid nested repetition operators (`*`, `+`, `{n,m}` inside groups that are themselves repeated).
 
-## 31 — Resource
+## 32 — Resource
 
 `Resource.with` guarantees that a cleanup function is called after a body function runs, regardless of whether the body throws a runtime error. It is the Luma equivalent of a `finally`-based cleanup block, expressed as a library function.
 
@@ -1672,11 +1730,11 @@ string content = Resource.using(
 )
 ```
 
-## 32 — Result
+## 33 — Result
 
 See the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--result-and-optional).
 
-## 33 — Set
+## 34 — Set
 
 `Set` values are a distinct type (not arrays). Use `Set.from_array` to create a set and `Set.to_array` to convert back.
 
@@ -1707,7 +1765,7 @@ See the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--resul
 | `Set.to_array(s)`                    | `(set)`                         | `array<T>`           | Convert to array                                               |
 | `Set.union(s, other)`                | `(set, set)`                    | `set`                | Elements in `s` or `other`                                     |
 
-## 34 — Socket
+## 35 — Socket
 
 Cross-platform TCP and UDP networking.
 
@@ -1732,7 +1790,7 @@ Cross-platform TCP and UDP networking.
 
 ---
 
-## 35 — Stack
+## 36 — Stack
 
 Immutable LIFO (last-in, first-out) stack. All mutating operations return a new stack.
 
@@ -1753,7 +1811,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `Stack.reduce(s, init, fn)` | `(stack, U, function(U, T) -> U)` | `result<U>`              | Fold elements; fail if callback throws                          |
 | `Stack.to_array(s)`         | `(stack)`                         | `array<T>`               | Convert to array                                                |
 
-## 36 — String
+## 37 — String
 
 | Function                            | Parameter Types                | Return Type       | Description                                                                     |
 | ----------------------------------- | ------------------------------ | ----------------- | ------------------------------------------------------------------------------- |
@@ -1827,7 +1885,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 
 > **Resource limits** — `String.center`, `String.pad_left`, and `String.pad_right` cap their target `width`, and `String.repeat` caps its repeat count and result size. See the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits) for Luma's resource limits and their `LUMA_LIMIT_*` overrides.
 
-## 37 — Task
+## 38 — Task
 
 Concurrency combinators for `spawn`/`await` tasks.
 
@@ -1892,7 +1950,7 @@ Using `spawn` outside a `task_scope` still works (fire-and-forget) but produces 
 
 > **Resource limit** — The internal task queue holds a bounded number of pending tasks (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`). Spawning beyond this limit throws a runtime error (`task queue is full — too many pending tasks`). Design your program to await tasks before spawning more to stay within this limit.
 
-## 38 — Terminal
+## 39 — Terminal
 
 Terminal UI control — cursor movement, colors, styling, screen management, and mouse input.
 
@@ -2031,7 +2089,7 @@ function void test_counter_responds_to_keys() {
 
 The same machinery is reachable without Luma code via the `LUMA_TERMINAL_INPUT` environment variable (one key per line), which the example runner (`scripts/run_examples.py`) uses to drive the raw-mode example programs unattended.
 
-## 39 — Xml
+## 40 — Xml
 
 Parse, build, query, and serialise XML documents. XML nodes are opaque values.
 

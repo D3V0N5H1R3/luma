@@ -84,6 +84,7 @@ LUMA_VALUE_TYPE_FOR(NativeFunctionValue, NativeFunction);
 LUMA_VALUE_TYPE_FOR(TaskValue,           Task);
 LUMA_VALUE_TYPE_FOR(ChannelValue,        Channel);
 LUMA_VALUE_TYPE_FOR(SocketValue,         Socket);
+LUMA_VALUE_TYPE_FOR(DecimalValue,        Decimal);
 LUMA_VALUE_TYPE_FOR(ReferenceValue,      Reference);
 LUMA_VALUE_TYPE_FOR(QueueValue,          Queue);
 LUMA_VALUE_TYPE_FOR(StackValue,          Stack);
@@ -102,14 +103,14 @@ LUMA_VALUE_TYPE_FOR(GraphValue,          Graph);
 
 template <typename T>
 concept ValueVariantMember = detail::is_variant_member<
-    T,
-    std::variant<
-        NullValue, bool, std::int64_t, double, std::string, std::shared_ptr<ArrayValue>,
-        std::shared_ptr<DictionaryValue>, std::shared_ptr<TupleValue>, std::shared_ptr<ResultValue>,
-        std::shared_ptr<RecordValue>, std::shared_ptr<RangeValue>, std::shared_ptr<ChoiceValue>,
-        std::shared_ptr<FunctionValue>, std::shared_ptr<NativeFunctionValue>,
-        std::shared_ptr<TaskValue>, std::shared_ptr<ChannelValue>, std::shared_ptr<SocketValue>,
-        std::shared_ptr<CollectionObject>, std::shared_ptr<ReferenceValue>>>::value;
+    T, std::variant<NullValue, bool, std::int64_t, double, std::string, std::shared_ptr<ArrayValue>,
+                    std::shared_ptr<DictionaryValue>, std::shared_ptr<TupleValue>,
+                    std::shared_ptr<ResultValue>, std::shared_ptr<RecordValue>,
+                    std::shared_ptr<RangeValue>, std::shared_ptr<ChoiceValue>,
+                    std::shared_ptr<FunctionValue>, std::shared_ptr<NativeFunctionValue>,
+                    std::shared_ptr<TaskValue>, std::shared_ptr<ChannelValue>,
+                    std::shared_ptr<SocketValue>, std::shared_ptr<CollectionObject>,
+                    std::shared_ptr<ReferenceValue>, std::shared_ptr<DecimalValue>>>::value;
 
 // Compound value type whose shared_ptr is stored directly in Value::Variant.
 template <typename T>
@@ -175,7 +176,8 @@ public:
         std::shared_ptr<RecordValue>, std::shared_ptr<RangeValue>, std::shared_ptr<ChoiceValue>,
         std::shared_ptr<FunctionValue>, std::shared_ptr<NativeFunctionValue>,
         std::shared_ptr<TaskValue>, std::shared_ptr<ChannelValue>, std::shared_ptr<SocketValue>,
-        std::shared_ptr<CollectionObject>, std::shared_ptr<ReferenceValue>>;
+        std::shared_ptr<CollectionObject>, std::shared_ptr<ReferenceValue>,
+        std::shared_ptr<DecimalValue>>;
 
     Value() = default;
 
@@ -296,6 +298,10 @@ public:
 
     [[nodiscard]] bool is_socket() const {
         return type_ == ValueType::Socket;
+    }
+
+    [[nodiscard]] bool is_decimal() const {
+        return type_ == ValueType::Decimal;
     }
 
     [[nodiscard]] bool is_queue() const {
@@ -427,6 +433,10 @@ public:
 
     [[nodiscard]] const std::shared_ptr<SocketValue>& as_socket() const {
         return std::get<std::shared_ptr<SocketValue>>(data_);
+    }
+
+    [[nodiscard]] const std::shared_ptr<DecimalValue>& as_decimal() const {
+        return std::get<std::shared_ptr<DecimalValue>>(data_);
     }
 
     [[nodiscard]] std::shared_ptr<QueueValue> as_queue() const {

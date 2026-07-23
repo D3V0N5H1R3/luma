@@ -217,6 +217,12 @@ bool Value::equals(const Value& other) const {
         case ValueType::Reference:
             return other.is_reference() && as_reference().get() == other.as_reference().get();
 
+        // Exact decimals compare by value, so 1.5 and 1.50 are equal — matching
+        // the value-based hash so they behave correctly as dictionary/set keys.
+        case ValueType::Decimal:
+            return other.is_decimal() &&
+                   as_decimal()->value.compare(other.as_decimal()->value) == 0;
+
         // Collection subtypes — delegates to virtual equals_to().
         case ValueType::Queue:
         case ValueType::Stack:

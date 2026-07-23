@@ -242,6 +242,15 @@ expect_socket(const Value& v, std::string_view name, const SourceLocation& loc) 
     return v.as_socket();
 }
 
+// Helper: extract a decimal from a Value, throwing if not a decimal.
+[[nodiscard]] inline std::shared_ptr<DecimalValue>
+expect_decimal(const Value& v, std::string_view name, const SourceLocation& loc) {
+    validate_type(
+        v, [](const Value& val) { return val.is_decimal(); }, "decimal", name, loc,
+        "create a decimal with Decimal.from_string() or Decimal.from_number() first");
+    return v.as_decimal();
+}
+
 // Helper: extract a key-value store from a Value, throwing if not a key_value_store.
 [[nodiscard]] inline std::shared_ptr<KeyValueStoreValue>
 expect_key_value_store(const Value& v, std::string_view name, const SourceLocation& loc) {

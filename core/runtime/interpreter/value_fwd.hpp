@@ -100,6 +100,7 @@ struct ChannelValue;
 struct ChoiceValue;
 struct LinkedListNode;
 struct CompiledFunction; // Compile-time bytecode (chunk.hpp).
+struct DecimalValue;
 struct DictionaryValue;
 struct FunctionValue; // Runtime closure (value_collections.hpp).
 struct GraphValue;
@@ -171,6 +172,7 @@ enum class ValueType : std::uint8_t {
     BinaryTree,
     Graph,
     Reference,
+    Decimal,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -241,6 +243,8 @@ constexpr ValueCategory operator|(ValueCategory a, ValueCategory b) noexcept {
             return Collection;
         case ValueType::Reference:
             return None;
+        case ValueType::Decimal:
+            return Numeric | Primitive;
     }
     return None;
 }

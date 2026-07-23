@@ -49,8 +49,8 @@ enum class EvalMode {
 
 // Shared, immutable standard-library prototype environment.
 //
-// register_all() builds all 38 stdlib module namespaces (each defining dozens
-// of native functions), so doing it per eval() throws away ~37/38 of that work
+// register_all() builds all 39 stdlib module namespaces (each defining dozens
+// of native functions), so doing it per eval() throws away ~38/39 of that work
 // for a source that references a single module.  Instead we register the full
 // stdlib exactly once per test process into a prototype scope, and layer a
 // fresh child environment on top for each eval() (see eval_impl).
@@ -102,7 +102,7 @@ enum class EvalMode {
     const auto result = compile_for_eval(program);
 
     // Layer a fresh child scope over the shared stdlib prototype so this eval's
-    // own globals stay isolated while the 38 modules are registered only once.
+    // own globals stay isolated while the 39 modules are registered only once.
     const auto env = Environment::create(eval_std_prototype());
 
     VM vm{env};

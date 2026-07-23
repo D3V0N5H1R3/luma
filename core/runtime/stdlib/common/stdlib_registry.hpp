@@ -27,6 +27,7 @@
 #include "runtime/stdlib/io/socket_module.hpp"
 #include "runtime/stdlib/io/terminal_module.hpp"
 #include "runtime/stdlib/math/calculus_module.hpp"
+#include "runtime/stdlib/math/decimal_module.hpp"
 #include "runtime/stdlib/math/linearalgebra_module.hpp"
 #include "runtime/stdlib/math/math_module.hpp"
 #include "runtime/stdlib/system/compression_module.hpp"
@@ -106,6 +107,7 @@ inline constexpr ModuleEntry kModules[] = {
     {"Channel", register_channel_ns, nullptr, false, false},
     {"Converter", register_converter_ns, nullptr, false, false},
     {"DateTime", register_datetime_ns, nullptr, false, false},
+    {"Decimal", register_decimal_ns, nullptr, false, false},
     {"Dictionary", register_dictionary_ns, nullptr, false, false},
     {"Encoder", register_encoder_ns, nullptr, false, false},
     {"Graph", register_graph_ns, nullptr, false, false},

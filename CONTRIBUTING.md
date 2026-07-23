@@ -338,6 +338,7 @@ Available fuzz targets:
 | `fuzz_csv`                   | `Csv` codec                     |
 | `fuzz_xml`                   | `Xml` parser                    |
 | `fuzz_datetime`              | `DateTime` ISO-8601 codec       |
+| `fuzz_decimal`               | `Decimal` base-10 parser        |
 | `fuzz_protocol`              | `shared/protocol` transport     |
 | `fuzz_compression`           | `Compression` codec             |
 | `fuzz_encoder`               | `Encoder` Base64 / URL codecs   |

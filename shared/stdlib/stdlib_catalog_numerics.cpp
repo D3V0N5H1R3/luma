@@ -111,4 +111,35 @@ void register_calculus_functions(std::vector<FunctionSpec>& specs, const ModuleB
         });
 }
 
+void register_decimal_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                                const ParamShorthands& p) {
+    append_specs(
+        specs,
+        {
+            m.fn("absolute", 1, "(d: decimal)", named::decimal(), {p.decimal}),
+            m.fn("add", 2, "(a: decimal, b: decimal)", named::decimal(), {p.decimal, p.decimal}),
+            m.fn("compare", 2, "(a: decimal, b: decimal)", R::integer_type(),
+                 {p.decimal, p.decimal}),
+            m.fn("divide", 3, "(a: decimal, b: decimal, scale: integer)",
+                 R::result(named::decimal()), {p.decimal, p.decimal, p.integer}),
+            m.fn("equals", 2, "(a: decimal, b: decimal)", R::boolean_type(),
+                 {p.decimal, p.decimal}),
+            m.fn("from_integer", 1, "(value: integer)", named::decimal(), {p.integer}),
+            m.fn("from_number", 1, "(value: number)", named::decimal(), {p.number}),
+            m.fn("from_string", 1, "(text: string)", R::result(named::decimal()), {p.string}),
+            m.fn("is_negative", 1, "(d: decimal)", R::boolean_type(), {p.decimal}),
+            m.fn("is_zero", 1, "(d: decimal)", R::boolean_type(), {p.decimal}),
+            m.fn("multiply", 2, "(a: decimal, b: decimal)", named::decimal(),
+                 {p.decimal, p.decimal}),
+            m.fn("negate", 1, "(d: decimal)", named::decimal(), {p.decimal}),
+            m.fn("round", 3, "(d: decimal, places: integer, mode: string)", named::decimal(),
+                 {p.decimal, p.integer, p.string}),
+            m.fn("scale", 1, "(d: decimal)", R::integer_type(), {p.decimal}),
+            m.fn("subtract", 2, "(a: decimal, b: decimal)", named::decimal(),
+                 {p.decimal, p.decimal}),
+            m.fn("to_number", 1, "(d: decimal)", R::number_type(), {p.decimal}),
+            m.fn("to_string", 1, "(d: decimal)", R::string_type(), {p.decimal}),
+        });
+}
+
 } // namespace luma::stdlib::detail

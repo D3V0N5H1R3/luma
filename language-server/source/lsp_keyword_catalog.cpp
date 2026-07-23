@@ -14,7 +14,7 @@ namespace luma::lsp {
 // compile time; the lsp_test_unit "keyword catalog" test additionally lexes
 // each entry to confirm the lexer still treats it as a keyword, guarding
 // against silent drift between this list and the lexer.
-inline constexpr std::array<std::string_view, 60> k_reserved_keyword_names = {
+inline constexpr std::array<std::string_view, 61> k_reserved_keyword_names = {
     // Keywords
     "await",
     "borrow",
@@ -59,6 +59,7 @@ inline constexpr std::array<std::string_view, 60> k_reserved_keyword_names = {
     "binary_tree",
     "boolean",
     "channel",
+    "decimal",
     "dictionary",
     "graph",
     "hash_set",
@@ -79,7 +80,7 @@ inline constexpr std::array<std::string_view, 60> k_reserved_keyword_names = {
     "xml",
 };
 
-static_assert(k_reserved_keyword_names.size() == 60,
+static_assert(k_reserved_keyword_names.size() == 61,
               "Reserved keyword count drifted — sync with Lexer::keyword_type "
               "in core/analysis/lexer/lexer.cpp");
 
@@ -100,6 +101,7 @@ std::vector<std::pair<std::string, std::string>> get_type_keywords() {
         {"boolean", "primitive type"},
         {"integer", "primitive type"},
         {"number", "primitive type"},
+        {"decimal", "exact base-10 number"},
         {"string", "primitive type"},
         {"void", "return type"},
         {"array", "generic container"},

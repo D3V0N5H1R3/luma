@@ -109,6 +109,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/decimal.hpp"
 #include "common/string_hash.hpp"
 #include "runtime/interpreter/lazy_hash_index.hpp"
 #include "runtime/interpreter/value_type.hpp"
@@ -636,6 +637,18 @@ struct SocketValue {
         }
         return *this;
     }
+};
+
+// An exact base-10 decimal value.  Wraps the immutable luma::Decimal so it can
+// live in the Value variant behind a shared_ptr, mirroring the other opaque
+// scalar-like handle types.  Immutable: every Decimal operation yields a new
+// value, so the wrapper is freely shareable.
+struct DecimalValue {
+    Decimal value;
+
+    DecimalValue() = default;
+
+    explicit DecimalValue(Decimal decimal) : value{std::move(decimal)} {}
 };
 
 // ──────────── Collection subtypes ────────────

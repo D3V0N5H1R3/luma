@@ -118,6 +118,9 @@ std::string TypeInfo::to_string() const {
         case Kind::Number:
             return "number";
 
+        case Kind::Decimal:
+            return "decimal";
+
         case Kind::String:
             return "string";
 
