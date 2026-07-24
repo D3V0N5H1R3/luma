@@ -85,8 +85,8 @@ inline constexpr int k_mouse_drag_limit = 64;
 // format_mouse_button/format_mouse_event can emit for malformed input
 // ("unknown_*", "wheel_unknown") are intentionally absent, so they decode to
 // none rather than a bogus variant.
-[[nodiscard]] inline std::optional<std::string_view> mouse_event_kind_variant(
-    std::string_view kind) {
+[[nodiscard]] inline std::optional<std::string_view>
+mouse_event_kind_variant(std::string_view kind) {
     if (kind == "left_press") {
         return "LeftPress";
     }

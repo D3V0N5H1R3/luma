@@ -15,8 +15,8 @@ void register_log_functions(std::vector<FunctionSpec>& specs, const ModuleBuilde
                                  {p.string, p.string}),
                             m.fn("set_format", 1, "(format: string)", R::void_type(), {p.string}),
                             m.fn("set_level", 1, "(level: Level)", R::void_type(), {p.log_level}),
-                            m.fn("set_output", 1, "(target: Log.Output | string)",
-                                 R::result_void(), {p.any}),
+                            m.fn("set_output", 1, "(target: Log.Output | string)", R::result_void(),
+                                 {p.any}),
                             m.fn("warn", 1, "(message: string)", R::void_type(), {p.string}),
                         });
 }

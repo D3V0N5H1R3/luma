@@ -530,10 +530,8 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ChoiceVariant element;
             element.name = "Element";
             element.fields.push_back(Parameter{.type = ann("string"), .name = "tag"});
-            element.fields.push_back(
-                Parameter{.type = dict_ann("string"), .name = "attributes"});
-            element.fields.push_back(
-                Parameter{.type = array_ann("Xml.Node"), .name = "children"});
+            element.fields.push_back(Parameter{.type = dict_ann("string"), .name = "attributes"});
+            element.fields.push_back(Parameter{.type = array_ann("Xml.Node"), .name = "children"});
             ch->variants.push_back(std::move(element));
 
             ch->variants.push_back(payload_variant("Text", ann("string"), "content"));

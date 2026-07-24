@@ -300,8 +300,7 @@ void leave_raw_mode() {
     }
 
     const std::string_view kind = body.substr(0, first);
-    const std::optional<std::string_view> variant =
-        terminal_detail::mouse_event_kind_variant(kind);
+    const std::optional<std::string_view> variant = terminal_detail::mouse_event_kind_variant(kind);
     if (!variant) {
         return Value{NullValue{}};
     }
@@ -343,7 +342,8 @@ void leave_raw_mode() {
         {"unknown", "Unknown"},
     };
 
-    const auto make_key = [](std::string_view variant, std::optional<Value> payload = std::nullopt) {
+    const auto make_key = [](std::string_view variant,
+                             std::optional<Value> payload = std::nullopt) {
         auto cv = std::make_shared<ChoiceValue>();
         cv->type_name = "Key";
         cv->variant = std::string{variant};

@@ -208,9 +208,9 @@ inline void register_stdlib_postamble(const EnvPtr& env, bool sandbox) {
 
                 auto ctor = std::make_shared<NativeFunctionValue>();
                 ctor->name = full;
-                ctor->function = [type_name = std::move(type_name),
-                                  variant_name = std::move(variant_name),
-                                  field_count](std::span<const Value> args, SourceLocation) -> Value {
+                ctor->function =
+                    [type_name = std::move(type_name), variant_name = std::move(variant_name),
+                     field_count](std::span<const Value> args, SourceLocation) -> Value {
                     auto cv = std::make_shared<ChoiceValue>();
                     cv->type_name = type_name;
                     cv->variant = variant_name;

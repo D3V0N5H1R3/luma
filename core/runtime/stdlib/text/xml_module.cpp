@@ -72,14 +72,14 @@ void validate_xml_name(std::string_view name, std::string_view function,
     };
 
     switch (node.node_type) {
-    case XmlValue::NodeType::Text:
-        return make_node("Text", {Value{node.tag_or_content}});
-    case XmlValue::NodeType::Comment:
-        return make_node("Comment", {Value{node.tag_or_content}});
-    case XmlValue::NodeType::CData:
-        return make_node("CData", {Value{node.tag_or_content}});
-    case XmlValue::NodeType::Element:
-        break;
+        case XmlValue::NodeType::Text:
+            return make_node("Text", {Value{node.tag_or_content}});
+        case XmlValue::NodeType::Comment:
+            return make_node("Comment", {Value{node.tag_or_content}});
+        case XmlValue::NodeType::CData:
+            return make_node("CData", {Value{node.tag_or_content}});
+        case XmlValue::NodeType::Element:
+            break;
     }
 
     auto attributes = std::make_shared<DictionaryValue>();

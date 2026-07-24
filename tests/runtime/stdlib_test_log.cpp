@@ -43,7 +43,7 @@ namespace {
 // expression instead of the default string-path form.  Used to prove the typed
 // Log.Output.File(path) variant writes to a file identically to the string form.
 [[nodiscard]] std::string capture_log_output_via(const std::string& set_output_expr,
-                                                  const std::string& program) {
+                                                 const std::string& program) {
     const TempFile log_file{std::filesystem::path{"_test_log_capture.log"}, ""};
 
     eval("Log.reset()\n" + set_output_expr + "\n" + program + "\nLog.reset()\n");

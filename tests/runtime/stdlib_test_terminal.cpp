@@ -415,15 +415,20 @@ static void test_terminal_parse_mouse_event_roundtrip() {
 
 static void test_terminal_parse_mouse_event_none() {
     // Anything that is not a well-formed, recognised mouse event decodes to none.
-    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"enter\")").is_null());          // not a mouse string
-    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press:10\")").is_null()); // missing column
-    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press:10:5:0\")").is_null()); // extra field
-    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:zoom:1:2\")").is_null()); // unknown kind
-    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press:x:5\")").is_null()); // non-integer row
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"enter\")").is_null()); // not a mouse string
+    ASSERT_TRUE(
+        eval("Terminal.parse_mouse_event(\"mouse:left_press:10\")").is_null()); // missing column
+    ASSERT_TRUE(
+        eval("Terminal.parse_mouse_event(\"mouse:left_press:10:5:0\")").is_null()); // extra field
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:zoom:1:2\")").is_null());  // unknown kind
+    ASSERT_TRUE(
+        eval("Terminal.parse_mouse_event(\"mouse:left_press:x:5\")").is_null()); // non-integer row
     ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press::5\")").is_null()); // empty row
-    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press:-1:5\")").is_null()); // negative row
-    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press:1:-5\")").is_null()); // negative column
-    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"\")").is_null());               // empty string
+    ASSERT_TRUE(
+        eval("Terminal.parse_mouse_event(\"mouse:left_press:-1:5\")").is_null()); // negative row
+    ASSERT_TRUE(
+        eval("Terminal.parse_mouse_event(\"mouse:left_press:1:-5\")").is_null()); // negative column
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"\")").is_null());              // empty string
 }
 
 static void test_terminal_parse_key_named() {

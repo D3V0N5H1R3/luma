@@ -809,7 +809,8 @@ static void test_datetime_interval_end_before_start_fails() {
 }
 
 static void test_datetime_interval_duration() {
-    const auto v = eval("DateTime.interval_duration(Result.unwrap(DateTime.interval(100.0, 250.0)))");
+    const auto v =
+        eval("DateTime.interval_duration(Result.unwrap(DateTime.interval(100.0, 250.0)))");
     ASSERT_EQ(v.as_number(), 150.0);
 }
 
