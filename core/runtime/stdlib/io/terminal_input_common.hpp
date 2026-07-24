@@ -2,10 +2,11 @@
 #define LUMA_STDLIB_TERMINAL_INPUT_COMMON_HPP
 
 /// @file terminal_input_common.hpp
-/// @brief Mouse event formatting helpers shared by the POSIX and Win32
-///        terminal input backends.
+/// @brief Mouse event formatting (and inverse decoding) helpers shared by the
+///        POSIX and Win32 terminal input backends and Terminal.parse_mouse_event.
 
 #include <format>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -73,6 +74,60 @@ inline constexpr int k_mouse_drag_limit = 64;
     }
 
     return std::format("mouse:{}_{}:{}:{}", btn, action, row, col);
+}
+
+// Inverse of the `<kind>` token that format_mouse_event emits: maps a mouse
+// event kind (e.g. "left_press", "wheel_up") to its Terminal.MouseEventKind
+// variant name (e.g. "LeftPress", "WheelUp"), or nullopt for an unrecognised
+// token.  Keeping this beside format_mouse_event keeps the two in lockstep; the
+// returned names must match the Terminal.MouseEventKind ChoiceDeclaration in
+// core/analysis/types/stdlib_type_arities.cpp exactly.  The degenerate tokens
+// format_mouse_button/format_mouse_event can emit for malformed input
+// ("unknown_*", "wheel_unknown") are intentionally absent, so they decode to
+// none rather than a bogus variant.
+[[nodiscard]] inline std::optional<std::string_view> mouse_event_kind_variant(
+    std::string_view kind) {
+    if (kind == "left_press") {
+        return "LeftPress";
+    }
+    if (kind == "left_release") {
+        return "LeftRelease";
+    }
+    if (kind == "left_drag") {
+        return "LeftDrag";
+    }
+    if (kind == "middle_press") {
+        return "MiddlePress";
+    }
+    if (kind == "middle_release") {
+        return "MiddleRelease";
+    }
+    if (kind == "middle_drag") {
+        return "MiddleDrag";
+    }
+    if (kind == "right_press") {
+        return "RightPress";
+    }
+    if (kind == "right_release") {
+        return "RightRelease";
+    }
+    if (kind == "right_drag") {
+        return "RightDrag";
+    }
+    if (kind == "wheel_up") {
+        return "WheelUp";
+    }
+    if (kind == "wheel_down") {
+        return "WheelDown";
+    }
+    if (kind == "wheel_left") {
+        return "WheelLeft";
+    }
+    if (kind == "wheel_right") {
+        return "WheelRight";
+    }
+
+    return std::nullopt;
 }
 
 } // namespace luma::terminal_detail

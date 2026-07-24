@@ -338,6 +338,157 @@ static void test_terminal_mouse_wheel_format() {
     ASSERT_EQ(terminal_detail::format_mouse_event(65, 1, 2, false), "mouse:wheel_down:2:1");
 }
 
+// ── Terminal.MouseEvent (typed decode of "mouse:<kind>:ROW:COL") ──────────────
+
+static void test_terminal_mouse_event_kind_variant() {
+    using luma::terminal_detail::mouse_event_kind_variant;
+
+    // Every kind format_mouse_event can emit maps to a Terminal.MouseEventKind
+    // variant — the two must stay in lockstep.
+    ASSERT_EQ(mouse_event_kind_variant("left_press").value(), "LeftPress");
+    ASSERT_EQ(mouse_event_kind_variant("left_release").value(), "LeftRelease");
+    ASSERT_EQ(mouse_event_kind_variant("left_drag").value(), "LeftDrag");
+    ASSERT_EQ(mouse_event_kind_variant("middle_press").value(), "MiddlePress");
+    ASSERT_EQ(mouse_event_kind_variant("middle_release").value(), "MiddleRelease");
+    ASSERT_EQ(mouse_event_kind_variant("middle_drag").value(), "MiddleDrag");
+    ASSERT_EQ(mouse_event_kind_variant("right_press").value(), "RightPress");
+    ASSERT_EQ(mouse_event_kind_variant("right_release").value(), "RightRelease");
+    ASSERT_EQ(mouse_event_kind_variant("right_drag").value(), "RightDrag");
+    ASSERT_EQ(mouse_event_kind_variant("wheel_up").value(), "WheelUp");
+    ASSERT_EQ(mouse_event_kind_variant("wheel_down").value(), "WheelDown");
+    ASSERT_EQ(mouse_event_kind_variant("wheel_left").value(), "WheelLeft");
+    ASSERT_EQ(mouse_event_kind_variant("wheel_right").value(), "WheelRight");
+
+    // The degenerate tokens format_mouse_button/format_mouse_event emit for
+    // malformed input have no variant, so they decode to none, not a bogus kind.
+    ASSERT_FALSE(mouse_event_kind_variant("unknown_press").has_value());
+    ASSERT_FALSE(mouse_event_kind_variant("wheel_unknown").has_value());
+    ASSERT_FALSE(mouse_event_kind_variant("").has_value());
+}
+
+static void test_terminal_parse_mouse_event() {
+    // A well-formed event decodes into a Terminal.MouseEvent record whose kind is
+    // the matching Terminal.MouseEventKind choice and whose row/column are the
+    // integer coordinates (row first, per "mouse:<kind>:ROW:COL").
+    const auto v = eval("Terminal.parse_mouse_event(\"mouse:left_press:10:5\")");
+
+    ASSERT_TRUE(v.is_record());
+
+    const auto& rec = *v.as_record();
+
+    ASSERT_EQ(rec.type_name, "MouseEvent");
+    ASSERT_TRUE(rec.find_field("kind")->is_choice());
+    ASSERT_EQ(rec.find_field("kind")->as_choice()->type_name, "MouseEventKind");
+    ASSERT_EQ(rec.find_field("kind")->as_choice()->variant, "LeftPress");
+    ASSERT_EQ(rec.find_field("row")->as_integer(), 10);
+    ASSERT_EQ(rec.find_field("column")->as_integer(), 5);
+}
+
+static void test_terminal_parse_mouse_event_kinds() {
+    // Release, drag, and wheel kinds all decode to their variants.
+    const auto release = eval("Terminal.parse_mouse_event(\"mouse:right_release:2:7\")");
+    ASSERT_TRUE(release.is_record());
+    ASSERT_EQ(release.as_record()->find_field("kind")->as_choice()->variant, "RightRelease");
+
+    const auto drag = eval("Terminal.parse_mouse_event(\"mouse:middle_drag:4:3\")");
+    ASSERT_TRUE(drag.is_record());
+    ASSERT_EQ(drag.as_record()->find_field("kind")->as_choice()->variant, "MiddleDrag");
+    ASSERT_EQ(drag.as_record()->find_field("row")->as_integer(), 4);
+    ASSERT_EQ(drag.as_record()->find_field("column")->as_integer(), 3);
+
+    const auto wheel = eval("Terminal.parse_mouse_event(\"mouse:wheel_up:1:1\")");
+    ASSERT_TRUE(wheel.is_record());
+    ASSERT_EQ(wheel.as_record()->find_field("kind")->as_choice()->variant, "WheelUp");
+}
+
+static void test_terminal_parse_mouse_event_roundtrip() {
+    // Feeding format_mouse_event's own output back through the parser recovers the
+    // event — the decoder is the exact inverse of the encoder the backends use.
+    const std::string raw = terminal_detail::format_mouse_event(2, 5, 10, true);
+    const auto v = eval("Terminal.parse_mouse_event(\"" + raw + "\")");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->find_field("kind")->as_choice()->variant, "RightRelease");
+    ASSERT_EQ(v.as_record()->find_field("row")->as_integer(), 10);
+    ASSERT_EQ(v.as_record()->find_field("column")->as_integer(), 5);
+}
+
+static void test_terminal_parse_mouse_event_none() {
+    // Anything that is not a well-formed, recognised mouse event decodes to none.
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"enter\")").is_null());          // not a mouse string
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press:10\")").is_null()); // missing column
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press:10:5:0\")").is_null()); // extra field
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:zoom:1:2\")").is_null()); // unknown kind
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press:x:5\")").is_null()); // non-integer row
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press::5\")").is_null()); // empty row
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press:-1:5\")").is_null()); // negative row
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"mouse:left_press:1:-5\")").is_null()); // negative column
+    ASSERT_TRUE(eval("Terminal.parse_mouse_event(\"\")").is_null());               // empty string
+}
+
+static void test_terminal_parse_key_named() {
+    // Every named key the decoder emits maps to its unit Terminal.Key variant.
+    const auto expect_variant = [](const std::string& name, const std::string& variant) {
+        const auto v = eval("Terminal.parse_key(\"" + name + "\")");
+        ASSERT_TRUE(v.is_choice());
+        ASSERT_EQ(v.as_choice()->type_name, "Key");
+        ASSERT_EQ(v.as_choice()->variant, variant);
+        ASSERT_TRUE(v.as_choice()->fields.empty()); // unit variants carry no payload
+    };
+
+    expect_variant("enter", "Enter");
+    expect_variant("escape", "Escape");
+    expect_variant("tab", "Tab");
+    expect_variant("backspace", "Backspace");
+    expect_variant("space", "Space");
+    expect_variant("up", "Up");
+    expect_variant("down", "Down");
+    expect_variant("left", "Left");
+    expect_variant("right", "Right");
+    expect_variant("home", "Home");
+    expect_variant("end", "End");
+    expect_variant("page_up", "PageUp");
+    expect_variant("page_down", "PageDown");
+    expect_variant("insert", "Insert");
+    expect_variant("delete", "Delete");
+    expect_variant("unknown", "Unknown");
+}
+
+static void test_terminal_parse_key_function() {
+    // 'f' + positive integer decodes to Function(n), carrying the number.
+    const auto expect_function = [](const std::string& name, std::int64_t n) {
+        const auto v = eval("Terminal.parse_key(\"" + name + "\")");
+        ASSERT_TRUE(v.is_choice());
+        ASSERT_EQ(v.as_choice()->variant, "Function");
+        ASSERT_EQ(v.as_choice()->fields.size(), 1U);
+        ASSERT_EQ(v.as_choice()->fields[0].as_integer(), n);
+    };
+
+    expect_function("f1", 1);
+    expect_function("f5", 5);
+    expect_function("f12", 12);
+}
+
+static void test_terminal_parse_key_character() {
+    // parse_key is total: any unrecognised key becomes Character(text), so a
+    // program can always match without an optional. This also covers the strings
+    // that merely look like function keys but are not (f0, f, fx).
+    const auto expect_character = [](const std::string& name, const std::string& text) {
+        const auto v = eval("Terminal.parse_key(\"" + name + "\")");
+        ASSERT_TRUE(v.is_choice());
+        ASSERT_EQ(v.as_choice()->variant, "Character");
+        ASSERT_EQ(v.as_choice()->fields.size(), 1U);
+        ASSERT_EQ(v.as_choice()->fields[0].as_string(), text);
+    };
+
+    expect_character("a", "a");
+    expect_character("Z", "Z");
+    expect_character("5", "5");
+    expect_character("f", "f");   // too short to be a function key
+    expect_character("f0", "f0"); // 0 is not a positive function-key index
+    expect_character("fx", "fx"); // 'x' is not an integer
+}
+
 // ── terminal key decoder (platform-independent escape/key parsing) ──
 
 // Build a byte_reader that yields each byte of `rest` (as an unsigned value),
@@ -648,6 +799,14 @@ int main() {
     RUN(test_terminal_mouse_button_names);
     RUN(test_terminal_mouse_event_format);
     RUN(test_terminal_mouse_wheel_format);
+    RUN(test_terminal_mouse_event_kind_variant);
+    RUN(test_terminal_parse_mouse_event);
+    RUN(test_terminal_parse_mouse_event_kinds);
+    RUN(test_terminal_parse_mouse_event_roundtrip);
+    RUN(test_terminal_parse_mouse_event_none);
+    RUN(test_terminal_parse_key_named);
+    RUN(test_terminal_parse_key_function);
+    RUN(test_terminal_parse_key_character);
     RUN(test_terminal_decode_basic_keys);
     RUN(test_terminal_decode_escape_arrows);
     RUN(test_terminal_decode_ss3_and_alt);

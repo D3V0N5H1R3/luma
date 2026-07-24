@@ -3,11 +3,15 @@
 #include <algorithm>
 #include <cstdint>
 #include <format>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
+#include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
@@ -44,6 +48,57 @@ void validate_xml_name(std::string_view name, std::string_view function,
     if (!is_valid_xml_name(name)) {
         throw RuntimeError{std::format("{}: invalid XML name '{}'", function, name), loc};
     }
+}
+
+// Convert an XmlValue tree into the equivalent Xml.Node choice tree.  Element
+// carries its tag, an attribute dictionary, and its ordered children (every node
+// type — text, comment, and CDATA included — so a match over the ADT sees the
+// full document, unlike Xml.children which keeps only element children).  Text /
+// Comment / CData carry their raw content string.  Depth is bounded exactly like
+// deep_clone / the serializer: a programmatically built tree is not limited by
+// the parser's nesting cap, so guard the native recursion with a catchable error.
+[[nodiscard]] Value xml_to_node(const XmlValue& node, int depth, const SourceLocation& loc) {
+    if (depth > CompileTimeLimits::max_xml_depth) {
+        throw RuntimeError{"Xml.to_node: XML nesting too deep", loc};
+    }
+
+    const auto make_node = [](std::string variant, std::vector<Value> fields) {
+        auto cv = std::make_shared<ChoiceValue>();
+        cv->type_name = "Node";
+        cv->variant = std::move(variant);
+        cv->fields = std::move(fields);
+
+        return Value{std::move(cv)};
+    };
+
+    switch (node.node_type) {
+    case XmlValue::NodeType::Text:
+        return make_node("Text", {Value{node.tag_or_content}});
+    case XmlValue::NodeType::Comment:
+        return make_node("Comment", {Value{node.tag_or_content}});
+    case XmlValue::NodeType::CData:
+        return make_node("CData", {Value{node.tag_or_content}});
+    case XmlValue::NodeType::Element:
+        break;
+    }
+
+    auto attributes = std::make_shared<DictionaryValue>();
+    // Pre-build the empty hash index so each set() below is O(1).
+    attributes->rebuild_index();
+
+    for (const auto& [key, value] : node.attributes) {
+        attributes->set(key, Value{value});
+    }
+
+    auto children = std::make_shared<ArrayValue>();
+    children->elements->reserve(node.children.size());
+
+    for (const auto& child : node.children) {
+        children->elements->push_back(xml_to_node(*child, depth + 1, loc));
+    }
+
+    return make_node("Element", {Value{node.tag_or_content}, Value{std::move(attributes)},
+                                 Value{std::move(children)}});
 }
 
 } // namespace
@@ -260,6 +315,12 @@ void register_xml_ns(const EnvPtr& env) {
             }
 
             return Value{std::move(dict)};
+        })
+        .func("to_node", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto node = expect_xml(args[0], "Xml.to_node", loc);
+
+            return xml_to_node(*node, 0, loc);
         })
         .func("from_dictionary", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

@@ -66,6 +66,7 @@ void register_graph_functions(std::vector<FunctionSpec>& specs, const ModuleBuil
             m.fn("edge_count", 1, "(g: graph)", R::integer_type(), {p.graph}),
             m.fn("edge_weight", 3, "(g: graph, from: string, to: string)", R::result_number(),
                  {p.graph, p.string, p.string}),
+            m.fn("edges", 1, "(g: graph)", R::array(named::edge()), {p.graph}),
             m.fn("has_cycle", 1, "(g: graph)", R::boolean_type(), {p.graph}),
             m.fn("has_edge", 3, "(g: graph, from: string, to: string)", R::boolean_type(),
                  {p.graph, p.string, p.string}),

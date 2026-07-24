@@ -39,6 +39,21 @@ namespace {
     return eval("Log.reset()\n" + set_expr + "\nLog.get_level()");
 }
 
+// Like capture_log_output, but the caller supplies the exact Log.set_output(...)
+// expression instead of the default string-path form.  Used to prove the typed
+// Log.Output.File(path) variant writes to a file identically to the string form.
+[[nodiscard]] std::string capture_log_output_via(const std::string& set_output_expr,
+                                                  const std::string& program) {
+    const TempFile log_file{std::filesystem::path{"_test_log_capture.log"}, ""};
+
+    eval("Log.reset()\n" + set_output_expr + "\n" + program + "\nLog.reset()\n");
+
+    std::string content = read_file_text(log_file.path());
+    content.erase(std::remove(content.begin(), content.end(), '\r'), content.end());
+
+    return content;
+}
+
 } // namespace
 
 // ─── Registration ───
@@ -205,6 +220,31 @@ static void test_log_default_format_after_reset() {
 
     ASSERT_TRUE(out.find("[INFO] ready") != std::string::npos);
     ASSERT_TRUE(out.find('Z') != std::string::npos);
+}
+
+// ─── Typed Log.Output target (Stderr / Stdout / File) ───
+
+static void test_log_set_output_typed_file_writes() {
+    // The typed Log.Output.File(path) variant routes output to the file exactly
+    // like the string-path form the other capture tests use.
+    const auto out = capture_log_output_via(
+        R"LUMA(Log.set_output(Log.Output.File("_test_log_capture.log")))LUMA",
+        R"LUMA(Log.set_format("\${level}::\${message}")
+Log.info("typed"))LUMA");
+
+    ASSERT_EQ(out, "INFO::typed\n");
+}
+
+static void test_log_set_output_typed_streams_return_success() {
+    // The Stdout / Stderr variants are accepted and report success. Bracket each
+    // with reset() so the redirect never leaks into another test.
+    eval("Log.reset()");
+    const auto to_stdout = eval("Log.set_output(Log.Output.Stdout)");
+    ASSERT_RESULT_SUCCESS(to_stdout);
+
+    const auto to_stderr = eval("Log.set_output(Log.Output.Stderr)");
+    ASSERT_RESULT_SUCCESS(to_stderr);
+    eval("Log.reset()");
 }
 
 // ─── Level filtering ───
@@ -420,6 +460,8 @@ int main() {
     RUN(test_log_format_preserves_unknown_placeholder);
     RUN(test_log_format_literal_prefix);
     RUN(test_log_default_format_after_reset);
+    RUN(test_log_set_output_typed_file_writes);
+    RUN(test_log_set_output_typed_streams_return_success);
 
     // Level filtering.
     RUN(test_log_level_filtering_suppresses_below_threshold);

@@ -113,6 +113,15 @@ namespace {
             if (desc.named_type == "Http.StatusClass") {
                 return TypeInfo::make_named(K::Choice, "Http.StatusClass");
             }
+            if (desc.named_type == "Log.Output") {
+                return TypeInfo::make_named(K::Choice, "Log.Output");
+            }
+            if (desc.named_type == "Terminal.Key") {
+                return TypeInfo::make_named(K::Choice, "Terminal.Key");
+            }
+            if (desc.named_type == "Xml.Node") {
+                return TypeInfo::make_named(K::Choice, "Xml.Node");
+            }
             return TypeInfo::make_named(K::Record, desc.named_type);
 
         case RK::Unspecified:

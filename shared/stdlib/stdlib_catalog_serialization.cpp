@@ -108,6 +108,7 @@ void register_xml_functions(std::vector<FunctionSpec>& specs, const ModuleBuilde
             m.fn("text", 1, "(node: xml)", R::result_string(), {p.xml}),
             m.fn("text_at", 2, "(node: xml, path: string)", R::result_string(), {p.xml, p.string}),
             m.fn("to_dictionary", 1, "(node: xml)", R::dict_string(), {p.xml}),
+            m.fn("to_node", 1, "(node: xml)", named::xml_node(), {p.xml}),
             m.fn("write_file", 2, "(path: string, node: xml)", R::result_void(), {p.string, p.xml},
                  Capability::FileSystem),
         });

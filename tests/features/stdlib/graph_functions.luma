@@ -410,3 +410,70 @@ function void test_graph_all_pairs_shortest_paths_negative_cycle_fails() {
     |> Graph.all_pairs_shortest_paths()
     |> Result.is_failure())
 }
+
+# ───────────────────────────────────────────────────────────
+# Graph.Edge / Graph.edges
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_graph_edges_directed_order_and_fields() {
+    # Directed edges are enumerated verbatim as Graph.Edge { from, to, weight }
+    # records in deterministic order: vertices sorted by name, then each
+    # vertex's out-edges sorted — no need to iterate vertices × neighbours and
+    # re-query weights by hand.
+    array<Graph.Edge> es = Graph.directed()
+    |> Graph.add_edge("b", "c", 2.0)
+    |> Graph.add_edge("a", "b", 1.0)
+    |> Graph.add_edge("a", "c", 3.0)
+    |> Graph.edges()
+
+    assert(Array.length(es) == 3, "three directed edges")
+
+    Graph.Edge e0 = es[0]
+    assert(e0.from == "a", "edge 0 from a")
+    assert(e0.to == "b", "edge 0 to b")
+    assert(Math.approximately_equal(e0.weight, 1.0, 0.001), "edge 0 weight 1")
+
+    assert(es[1].from == "a", "edge 1 from a")
+    assert(es[1].to == "c", "edge 1 to c")
+    assert(Math.approximately_equal(es[1].weight, 3.0, 0.001), "edge 1 weight 3")
+
+    assert(es[2].from == "b", "edge 2 from b")
+    assert(es[2].to == "c", "edge 2 to c")
+    assert(Math.approximately_equal(es[2].weight, 2.0, 0.001), "edge 2 weight 2")
+}
+
+@test
+function void test_graph_edges_count_invariant() {
+    # The number of enumerated edges equals Graph.edge_count: undirected edges
+    # (stored once per endpoint internally) are de-duplicated to a single Edge,
+    # and a self-loop counts once.
+    graph g = Graph.undirected()
+    |> Graph.add_edge("a", "b", 1.0)
+    |> Graph.add_edge("b", "c", 2.0)
+    |> Graph.add_edge("a", "a", 5.0)
+
+    assert(Array.length(Graph.edges(g)) == Graph.edge_count(g),
+           "edges() length matches edge_count")
+}
+
+@test
+function void test_graph_edges_undirected_single_representative() {
+    # An undirected edge a—z is enumerated once, oriented as (from < to).
+    array<Graph.Edge> es = Graph.undirected()
+    |> Graph.add_edge("z", "a", 7.0)
+    |> Graph.edges()
+
+    assert(Array.length(es) == 1, "one undirected edge")
+    assert(es[0].from == "a", "oriented from a")
+    assert(es[0].to == "z", "oriented to z")
+    assert(Math.approximately_equal(es[0].weight, 7.0, 0.001), "weight preserved")
+}
+
+@test
+function void test_graph_edges_empty() {
+    # A graph with no edges enumerates to an empty array, not an error.
+    array<Graph.Edge> es = Graph.undirected() |> Graph.edges()
+
+    assert(Array.length(es) == 0, "no edges")
+}

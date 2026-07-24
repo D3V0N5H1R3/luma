@@ -551,6 +551,85 @@ static void test_graph_add_vertex_non_string_throws() {
     ASSERT_THROWS(eval(R"(Graph.undirected() |> Graph.add_vertex(42))"));
 }
 
+// ── Graph.edges: structured edge enumeration (array<Graph.Edge>) ──
+
+static void test_graph_edges_directed_order_and_fields() {
+    // Directed edges are emitted verbatim in deterministic (from, to, weight)
+    // order: vertices sorted by name, then each vertex's out-edges sorted.
+    const auto v = eval(R"(
+        Graph.directed()
+        |> Graph.add_edge("b", "c", 2.0)
+        |> Graph.add_edge("a", "b", 1.0)
+        |> Graph.add_edge("a", "c", 3.0)
+        |> Graph.edges()
+    )");
+
+    ASSERT_TRUE(v.is_array());
+
+    const auto& es = *v.as_array()->elements;
+    ASSERT_EQ(es.size(), std::size_t{3});
+
+    // Each element is a Graph.Edge record { from, to, weight }.
+    const auto edge_at = [&](std::size_t i, const std::string& from, const std::string& to,
+                             double weight) {
+        ASSERT_TRUE(es.at(i).is_record());
+        const auto& rec = *es.at(i).as_record();
+        ASSERT_EQ(rec.type_name, "Edge");
+        ASSERT_EQ(rec.find_field("from")->as_string(), from);
+        ASSERT_EQ(rec.find_field("to")->as_string(), to);
+        ASSERT_NEAR(rec.find_field("weight")->as_number(), weight, 1e-9);
+    };
+
+    edge_at(0, "a", "b", 1.0);
+    edge_at(1, "a", "c", 3.0);
+    edge_at(2, "b", "c", 2.0);
+}
+
+static void test_graph_edges_count_invariant() {
+    // The number of enumerated edges must equal Graph.edge_count — undirected
+    // edges (stored once per endpoint) are de-duplicated to a single Edge.
+    const auto v = eval(R"(
+        Graph.undirected()
+        |> Graph.add_edge("a", "b", 1.0)
+        |> Graph.add_edge("b", "c", 2.0)
+        |> Graph.add_edge("a", "a", 5.0)
+        |> Graph.edges()
+    )");
+
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), std::size_t{3});
+
+    const auto count = eval(R"(
+        Graph.undirected()
+        |> Graph.add_edge("a", "b", 1.0)
+        |> Graph.add_edge("b", "c", 2.0)
+        |> Graph.add_edge("a", "a", 5.0)
+        |> Graph.edge_count()
+    )");
+    ASSERT_EQ(count.as_integer(), std::int64_t{3});
+}
+
+static void test_graph_edges_undirected_single_representative() {
+    // An undirected edge a—b is enumerated once, as (from<to), not twice.
+    const auto v = eval(R"(
+        Graph.undirected()
+        |> Graph.add_edge("z", "a", 7.0)
+        |> Graph.edges()
+    )");
+
+    ASSERT_TRUE(v.is_array());
+    const auto& es = *v.as_array()->elements;
+    ASSERT_EQ(es.size(), std::size_t{1});
+    ASSERT_EQ(es.at(0).as_record()->find_field("from")->as_string(), "a");
+    ASSERT_EQ(es.at(0).as_record()->find_field("to")->as_string(), "z");
+}
+
+static void test_graph_edges_empty() {
+    const auto v = eval(R"(Graph.undirected() |> Graph.edges())");
+    ASSERT_TRUE(v.is_array());
+    ASSERT_TRUE(v.as_array()->elements->empty());
+}
+
 int main() {
     RUN(test_graph_add_edge);
     RUN(test_graph_add_edge_invalid_weight_throws);
@@ -599,6 +678,10 @@ int main() {
     RUN(test_graph_topological_sort_undirected_fails);
     RUN(test_graph_vertex_count);
     RUN(test_graph_vertices);
+    RUN(test_graph_edges_directed_order_and_fields);
+    RUN(test_graph_edges_count_invariant);
+    RUN(test_graph_edges_undirected_single_representative);
+    RUN(test_graph_edges_empty);
     RUN(test_graph_has_cycle_depth_guarded);
     return SUMMARY();
 }

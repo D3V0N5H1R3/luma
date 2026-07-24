@@ -780,6 +780,76 @@ static void test_iso_codec_oracle_corpus() {
     }
 }
 
+// ─── DateTime.Interval: validating range record + helpers ────────
+
+static void test_datetime_interval_valid() {
+    // A well-formed interval (end >= start) succeeds and carries start/end as
+    // plain number timestamps in a DateTime.Interval record.
+    const auto v = eval("DateTime.interval(100.0, 200.0)");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+    ASSERT_TRUE(inner.is_record());
+    ASSERT_EQ(inner.as_record()->type_name, "Interval");
+    ASSERT_EQ(inner.as_record()->find_field("start")->as_number(), 100.0);
+    ASSERT_EQ(inner.as_record()->find_field("end")->as_number(), 200.0);
+}
+
+static void test_datetime_interval_empty_is_valid() {
+    // A zero-length interval (start == end) is permitted.
+    const auto v = eval("DateTime.interval(50.0, 50.0)");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_record()->find_field("start")->as_number(), 50.0);
+}
+
+static void test_datetime_interval_end_before_start_fails() {
+    // end < start is a domain error surfaced as a result failure, not a throw.
+    ASSERT_EVAL_FAILURE("DateTime.interval(200.0, 100.0)");
+}
+
+static void test_datetime_interval_duration() {
+    const auto v = eval("DateTime.interval_duration(Result.unwrap(DateTime.interval(100.0, 250.0)))");
+    ASSERT_EQ(v.as_number(), 150.0);
+}
+
+static void test_datetime_interval_contains_closed() {
+    // Intervals are closed: both endpoints are contained.
+    ASSERT_EQ(eval("DateTime.interval_contains(Result.unwrap(DateTime.interval(100.0, 200.0)), "
+                   "100.0)")
+                  .as_bool(),
+              true);
+    ASSERT_EQ(eval("DateTime.interval_contains(Result.unwrap(DateTime.interval(100.0, 200.0)), "
+                   "200.0)")
+                  .as_bool(),
+              true);
+    ASSERT_EQ(eval("DateTime.interval_contains(Result.unwrap(DateTime.interval(100.0, 200.0)), "
+                   "150.0)")
+                  .as_bool(),
+              true);
+    ASSERT_EQ(eval("DateTime.interval_contains(Result.unwrap(DateTime.interval(100.0, 200.0)), "
+                   "99.0)")
+                  .as_bool(),
+              false);
+    ASSERT_EQ(eval("DateTime.interval_contains(Result.unwrap(DateTime.interval(100.0, 200.0)), "
+                   "201.0)")
+                  .as_bool(),
+              false);
+}
+
+static void test_datetime_intervals_overlap() {
+    const auto overlap = [](const std::string& a, const std::string& b) {
+        return eval("DateTime.intervals_overlap(Result.unwrap(DateTime.interval(" + a +
+                    ")), Result.unwrap(DateTime.interval(" + b + ")))")
+            .as_bool();
+    };
+
+    ASSERT_EQ(overlap("100.0, 200.0", "150.0, 250.0"), true);  // partial overlap
+    ASSERT_EQ(overlap("100.0, 200.0", "120.0, 180.0"), true);  // containment
+    ASSERT_EQ(overlap("100.0, 200.0", "200.0, 300.0"), true);  // touching (closed) counts
+    ASSERT_EQ(overlap("100.0, 200.0", "201.0, 300.0"), false); // disjoint
+}
+
 int main() {
     RUN(test_datetime_add_days);
     RUN(test_datetime_add_hours);
@@ -867,5 +937,11 @@ int main() {
     RUN(test_iso_codec_format_non_finite);
     RUN(test_iso_codec_round_trip);
     RUN(test_iso_codec_oracle_corpus);
+    RUN(test_datetime_interval_valid);
+    RUN(test_datetime_interval_empty_is_valid);
+    RUN(test_datetime_interval_end_before_start_fails);
+    RUN(test_datetime_interval_duration);
+    RUN(test_datetime_interval_contains_closed);
+    RUN(test_datetime_intervals_overlap);
     return SUMMARY();
 }

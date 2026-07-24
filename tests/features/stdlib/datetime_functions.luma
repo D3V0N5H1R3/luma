@@ -675,3 +675,79 @@ function void test_datetime_month_number_roundtrip() {
         assert(DateTime.month_number(m) == n)
     }
 }
+
+# ───────────────────────────────────────────────────────────
+# DateTime.Interval — validating range record + helpers
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_datetime_interval_valid() {
+    # A well-formed interval (end >= start) succeeds and carries start/end as
+    # plain number timestamps in a DateTime.Interval record — no hand-rolled
+    # pair of loose numbers.
+    result<DateTime.Interval> made = DateTime.interval(100.0, 200.0)
+
+    match made {
+        success(iv) {
+            assert(Math.approximately_equal(iv.start, 100.0, 0.001), "start preserved")
+            assert(Math.approximately_equal(iv.end, 200.0, 0.001), "end preserved")
+        }
+        failure(_e) {
+            assert(false, "valid interval should succeed")
+        }
+    }
+}
+
+@test
+function void test_datetime_interval_empty_is_valid() {
+    # A zero-length interval (start == end) is permitted.
+    DateTime.Interval iv = Result.unwrap(DateTime.interval(50.0, 50.0))
+
+    assert(Math.approximately_equal(iv.start, 50.0, 0.001), "start")
+    assert(Math.approximately_equal(iv.end, 50.0, 0.001), "end")
+}
+
+@test
+function void test_datetime_interval_end_before_start_fails() {
+    # end < start is a domain error surfaced as a result failure, not a throw.
+    assert(Result.is_failure(DateTime.interval(200.0, 100.0)),
+           "end before start should fail")
+}
+
+@test
+function void test_datetime_interval_duration() {
+    DateTime.Interval iv = Result.unwrap(DateTime.interval(100.0, 250.0))
+
+    assert(Math.approximately_equal(DateTime.interval_duration(iv), 150.0, 0.001),
+           "duration is end - start")
+}
+
+@test
+function void test_datetime_interval_contains_closed() {
+    # Intervals are closed: both endpoints are contained.
+    DateTime.Interval iv = Result.unwrap(DateTime.interval(100.0, 200.0))
+
+    assert(DateTime.interval_contains(iv, 100.0), "start endpoint contained")
+    assert(DateTime.interval_contains(iv, 200.0), "end endpoint contained")
+    assert(DateTime.interval_contains(iv, 150.0), "interior contained")
+    assert(!DateTime.interval_contains(iv, 99.0), "before start excluded")
+    assert(!DateTime.interval_contains(iv, 201.0), "after end excluded")
+}
+
+@test
+function void test_datetime_intervals_overlap() {
+    DateTime.Interval base = Result.unwrap(DateTime.interval(100.0, 200.0))
+
+    # Partial overlap.
+    assert(DateTime.intervals_overlap(base,
+        Result.unwrap(DateTime.interval(150.0, 250.0))), "partial overlap")
+    # Full containment.
+    assert(DateTime.intervals_overlap(base,
+        Result.unwrap(DateTime.interval(120.0, 180.0))), "containment")
+    # Touching at a shared closed endpoint counts as overlap.
+    assert(DateTime.intervals_overlap(base,
+        Result.unwrap(DateTime.interval(200.0, 300.0))), "touching counts")
+    # Fully disjoint.
+    assert(!DateTime.intervals_overlap(base,
+        Result.unwrap(DateTime.interval(201.0, 300.0))), "disjoint")
+}

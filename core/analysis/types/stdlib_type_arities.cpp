@@ -131,6 +131,12 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("integer", "minutes"), field("integer", "seconds"),
                    field("integer", "milliseconds"), field("boolean", "negative"));
 
+        // DateTime.interval() constructs these range records (type_name "Interval").
+        // Timestamps stay plain `number` seconds — the record only pairs a start and
+        // end so contains/overlap/duration take one typed range instead of two loose
+        // numbers.  The validating constructor guarantees end >= start.
+        add_record(st, "DateTime.Interval", field("number", "start"), field("number", "end"));
+
         add_record(st, "FileSystem.FileInfo", field("integer", "size"),
                    field("number", "modified_time"), field("boolean", "is_directory"),
                    field("boolean", "is_file"), field("boolean", "is_symlink"),
@@ -153,6 +159,14 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // `.value` access resolves permissively, exactly like a field access on
         // any other stdlib record returned by a module call.
         add_record(st, "Dictionary.KeyValue", field("string", "key"), field("V", "value"));
+
+        // Graph.edges emits these edge records at runtime (each a record with
+        // type_name "Edge").  A structured, deterministic enumeration of a graph's
+        // edges — the typed "list the edges" answer that otherwise means iterating
+        // vertices × neighbours and re-querying edge_weight.  Mirrors the
+        // Dictionary.KeyValue + Dictionary.to_array enumeration pattern.
+        add_record(st, "Graph.Edge", field("string", "from"), field("string", "to"),
+                   field("number", "weight"));
 
         add_record(st, "Http.Response", field("integer", "status"), field("string", "reason"),
                    field("string", "body"), field_of(dict_ann("string"), "headers"));
@@ -193,6 +207,15 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
 
         add_record(st, "Terminal.InputEvent", field("string", "key"), field("boolean", "shift"),
                    field("boolean", "ctrl"), field("boolean", "alt"));
+
+        // Typed decode of a "mouse:<kind>:<row>:<col>" event string (as produced
+        // by Terminal.get_input / read_key in mouse mode), returned by
+        // Terminal.parse_mouse_event.  The `kind` field carries the
+        // Terminal.MouseEventKind choice (fully-qualified so the annotation
+        // resolves to the choice, like FileSystem.FileInfo.kind); row and column
+        // are 1-based, mirroring Terminal.CursorPosition.
+        add_record(st, "Terminal.MouseEvent", field("Terminal.MouseEventKind", "kind"),
+                   field("integer", "row"), field("integer", "column"));
 
         // ── DateTime.Weekday ────────────────────────────
         // Variant names must match k_weekday_names in
@@ -247,6 +270,33 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Off", .fields = {}});
 
             st.choice_map["Log.Level"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Log.Output ──────────────────────────────────
+        // Where Log writes formatted lines.  Stderr / Stdout are the two standard
+        // streams; File(path) carries its destination path as a payload.  Log.set_output
+        // accepts this choice or the equivalent string ("stderr" / "stdout" / a path),
+        // mirroring the Log.Level dual-form — the typed form makes a stream-vs-path typo a
+        // compile error instead of silently creating a file named "stdout".  Variant names
+        // must match the set_output variant handling in
+        // core/runtime/stdlib/system/log_module.cpp exactly (PascalCase).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Output");
+
+            // File carries a path payload, so it is a payload-bearing variant (like
+            // Json.Value's) rather than a bare unit variant; Stderr / Stdout are unit
+            // variants.  A Parameter holds a move-only default_value, so build the payload
+            // variant by moving the Parameter into the fields vector.
+            ChoiceVariant file_variant;
+            file_variant.name = "File";
+            file_variant.fields.push_back(Parameter{.type = ann("string"), .name = "path"});
+
+            ch->variants.push_back(ChoiceVariant{.name = "Stderr", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Stdout", .fields = {}});
+            ch->variants.push_back(std::move(file_variant));
+
+            st.choice_map["Log.Output"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 
@@ -318,6 +368,81 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choices.push_back(std::move(ch));
         }
 
+        // ── Terminal.MouseEventKind ─────────────────────
+        // Variant names must match mouse_event_kind_variant() in
+        // core/runtime/stdlib/io/terminal_input_common.hpp exactly (PascalCase).
+        // Total over every kind format_mouse_event emits, so a match over a
+        // Terminal.MouseEvent.kind is exhaustive and typo-proof — the typed
+        // replacement for hand-splitting a "mouse:<kind>:<row>:<col>" string.
+        // Button events pair each of left/middle/right with press/release/drag;
+        // wheel events cover the four scroll directions.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "MouseEventKind");
+            ch->variants.push_back(ChoiceVariant{.name = "LeftPress", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "LeftRelease", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "LeftDrag", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "MiddlePress", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "MiddleRelease", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "MiddleDrag", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "RightPress", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "RightRelease", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "RightDrag", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "WheelUp", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "WheelDown", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "WheelLeft", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "WheelRight", .fields = {}});
+
+            st.choice_map["Terminal.MouseEventKind"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Terminal.Key ────────────────────────────────
+        // Total decode of a Terminal.InputEvent.key string into an exhaustive,
+        // typo-proof choice, so key handling is a match instead of a chain of
+        // string equality tests ("enter", "f1", …).  Variant names/shapes must
+        // match parse_key_value() in core/runtime/stdlib/io/terminal_module.cpp.
+        // Character carries the literal text of a printable key (a single grapheme
+        // in practice); Function carries the F-key number (F1 → Function(1)).
+        // Unknown covers the decoder's "unknown" fallback and any unrecognised
+        // token, keeping parse_key total.  Recursive-free, so no self-reference.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Key");
+
+            // Parameter is move-only (see Json.Value), so build payload variants
+            // by moving the Parameter into the fields vector.
+            auto payload_variant = [](std::string variant_name, TypeAnnotation type,
+                                      std::string field_name) {
+                ChoiceVariant variant;
+                variant.name = std::move(variant_name);
+                variant.fields.push_back(
+                    Parameter{.type = std::move(type), .name = std::move(field_name)});
+
+                return variant;
+            };
+
+            ch->variants.push_back(payload_variant("Character", ann("string"), "value"));
+            ch->variants.push_back(payload_variant("Function", ann("integer"), "number"));
+            ch->variants.push_back(ChoiceVariant{.name = "Enter", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Escape", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Tab", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Backspace", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Space", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Up", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Down", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Left", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Right", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Home", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "End", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "PageUp", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "PageDown", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Insert", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Delete", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Unknown", .fields = {}});
+
+            st.choice_map["Terminal.Key"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
         // ── Ordering ────────────────────────────────────
         // Top-level choice (no namespace) mirroring Rust's std::cmp::Ordering.
         // Variant names must match ordering_from_sign() in
@@ -372,6 +497,50 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "JsonNull", .fields = {}});
 
             st.choice_map["Json.Value"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Xml.Node ────────────────────────────────────
+        // Recursive XML ADT mirroring Json.Value — the typed view over the opaque
+        // `xml` runtime type, so a parsed document can be walked with an exhaustive
+        // `match` instead of the untyped tag/children/text accessors.  Element
+        // carries its tag, attribute dictionary, and ordered child nodes (every
+        // node type, not just elements); Text / Comment / CData carry their raw
+        // content string.  Variant names/shapes must match xml_to_node() in
+        // core/runtime/stdlib/text/xml_module.cpp exactly.  The recursive children
+        // annotation MUST use the qualified name "Xml.Node" so the resolver finds
+        // this choice in choices_ (a bare "Node" would not resolve).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Node");
+
+            // Parameter is move-only (see Json.Value), so payload variants are
+            // built by moving each Parameter into the fields vector.
+            auto payload_variant = [](std::string variant_name, TypeAnnotation type,
+                                      std::string field_name) {
+                ChoiceVariant variant;
+                variant.name = std::move(variant_name);
+                variant.fields.push_back(
+                    Parameter{.type = std::move(type), .name = std::move(field_name)});
+
+                return variant;
+            };
+
+            // Element has three payload fields, so it is built directly rather
+            // than via the single-field payload_variant helper above.
+            ChoiceVariant element;
+            element.name = "Element";
+            element.fields.push_back(Parameter{.type = ann("string"), .name = "tag"});
+            element.fields.push_back(
+                Parameter{.type = dict_ann("string"), .name = "attributes"});
+            element.fields.push_back(
+                Parameter{.type = array_ann("Xml.Node"), .name = "children"});
+            ch->variants.push_back(std::move(element));
+
+            ch->variants.push_back(payload_variant("Text", ann("string"), "content"));
+            ch->variants.push_back(payload_variant("Comment", ann("string"), "content"));
+            ch->variants.push_back(payload_variant("CData", ann("string"), "content"));
+
+            st.choice_map["Xml.Node"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 
