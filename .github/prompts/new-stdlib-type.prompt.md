@@ -15,6 +15,8 @@ Add a new record or choice type to a Luma standard library module. Follow the ex
 5. Study the existing stdlib types in `core/analysis/types/stdlib_type_arities.cpp` (e.g. the `Http.Response` record and the `Log.Level` choice) to see how records and choice types are declared and registered in `storage()`.
 6. Implement the type by following the section below for its kind — [For a Record Type](#for-a-record-type) or [For a Choice Type](#for-a-choice-type) — then complete the shared [Common Steps](#common-steps).
 
+> **Adding a plain constant, not a type?** A named constant such as `Math.pi` is registered like a nullary function (runtime `.constant(...)` / `env->define(...)` plus a catalog `m.constant(...)` entry) and never touches the type-arities `storage()` below. Follow the [For a Named Constant](new-stdlib-function.prompt.md#for-a-named-constant) section of `new-stdlib-function.prompt.md` instead.
+
 ## For a Record Type
 
 1. Add a `RecordDeclaration` in the `storage()` function in `core/analysis/types/stdlib_type_arities.cpp`.

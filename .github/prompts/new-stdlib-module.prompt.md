@@ -10,7 +10,7 @@ Add a new standard library module to Luma. Follow the existing module patterns.
 
 This prompt covers creating the module skeleton and wiring it into the runtime, catalog, type checker, build, and docs. For the per-item work inside the module, follow:
 
-- [new-stdlib-function.prompt.md](new-stdlib-function.prompt.md) for each function.
+- [new-stdlib-function.prompt.md](new-stdlib-function.prompt.md) for each function or named constant.
 - [new-stdlib-type.prompt.md](new-stdlib-type.prompt.md) for each record or choice type.
 
 ## Steps
