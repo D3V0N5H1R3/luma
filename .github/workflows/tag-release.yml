@@ -1,0 +1,158 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — Tag Release Workflow
+#
+# Manually dispatched. Reads the single-source-of-truth VERSION
+# file, validates it as a strict MAJOR.MINOR.PATCH version, and
+# creates + pushes the matching `v<VERSION>` tag. That tag is what
+# release.yml (on: push: tags: ["v*.*.*"]) consumes to build and
+# publish the GitHub Release.
+#
+# Because a tag pushed by the default GITHUB_TOKEN does NOT trigger
+# another workflow (GitHub blocks recursive workflow runs), the tag
+# is pushed with a dedicated Personal Access Token / GitHub App
+# token stored as the `RELEASE_PAT` secret so release.yml fires. If
+# `RELEASE_PAT` is not configured, the run fails fast with an
+# explanatory message rather than pushing a tag that would silently
+# never trigger a release.
+#
+# The `confirm_version` input must exactly match the VERSION file —
+# a guard against accidental dispatches. Use `dry_run: true` to
+# validate everything and report the tag that WOULD be created
+# without touching the remote.
+# ─────────────────────────────────────────────────────────────
+
+name: Tag Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_version:
+        description: "Version to release — must exactly match the VERSION file (e.g. 0.5.0)"
+        required: true
+        type: string
+      dry_run:
+        description: "Validate only; do not create or push the tag"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Serialise release-tag creation so two dispatches cannot race to
+# create the same tag. Never cancel an in-flight tag push.
+concurrency:
+  group: tag-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Create release tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Verify release token is configured
+        env:
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+        run: |
+          if [ -z "$RELEASE_PAT" ]; then
+            echo "::error::The RELEASE_PAT secret is not set. A tag pushed by the" \
+                 "default GITHUB_TOKEN will not trigger release.yml. Configure a" \
+                 "Personal Access Token (or GitHub App token) with 'contents:write'" \
+                 "as the RELEASE_PAT repository secret and re-run."
+            exit 1
+          fi
+
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history + tags so the "tag already exists" guard is reliable.
+          fetch-depth: 0
+          # Persist the release token so the later `git push` is authenticated
+          # with a token whose push DOES trigger release.yml.
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - name: Read and validate version
+        id: version
+        env:
+          CONFIRM_VERSION: ${{ inputs.confirm_version }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f VERSION ]; then
+            echo "::error::VERSION file not found at repository root."
+            exit 1
+          fi
+
+          # Trim surrounding whitespace / trailing newline.
+          version="$(tr -d '[:space:]' < VERSION)"
+          echo "VERSION file contains: '${version}'"
+
+          # Strict MAJOR.MINOR.PATCH — kept in lockstep with release.yml's
+          # `v*.*.*` tag filter, which only matches three dot-separated
+          # segments (no pre-release or build metadata).
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::VERSION '${version}' is not a valid MAJOR.MINOR.PATCH" \
+                 "version. release.yml only builds tags matching 'v*.*.*'."
+            exit 1
+          fi
+
+          # Guard against accidental dispatch: the human-entered version must
+          # match the file exactly.
+          if [ "$CONFIRM_VERSION" != "$version" ]; then
+            echo "::error::confirm_version input ('${CONFIRM_VERSION}') does not" \
+                 "match the VERSION file ('${version}'). Bump VERSION first, or" \
+                 "correct the input, then re-run."
+            exit 1
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure tag does not already exist
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          # Local check (we fetched all tags via fetch-depth: 0).
+          if git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::Tag '${TAG}' already exists locally. Bump the VERSION" \
+                 "file to release a new version."
+            exit 1
+          fi
+
+          # Remote check, in case a tag exists on the remote but not locally.
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag '${TAG}' already exists on origin. Bump the VERSION" \
+                 "file to release a new version."
+            exit 1
+          fi
+
+          echo "Tag '${TAG}' is available."
+
+      - name: Create and push tag
+        if: ${{ !inputs.dry_run }}
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG" -m "Release version ${VERSION}"
+          git push origin "$TAG"
+
+          echo "Created and pushed annotated tag '${TAG}'."
+          echo "release.yml will now build and publish the release for '${TAG}'."
+
+      - name: Dry-run summary
+        if: ${{ inputs.dry_run }}
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          echo "Dry run: validation passed. Would create and push tag '${TAG}'."
+          echo "Re-run with dry_run disabled to cut the release."

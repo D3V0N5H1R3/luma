@@ -461,8 +461,19 @@ log since the previous tag, and publishes a GitHub Release with all binaries and
     git push
     ```
 
-2. Create an **annotated** tag whose version matches `VERSION`, prefixed with `v`, and
-   push it:
+2. Create the `v`-prefixed tag that matches `VERSION`. Use **either** option:
+
+    **A. Automated (recommended) — [`tag-release.yml`](.github/workflows/tag-release.yml).**
+    From the repository's **Actions → Tag Release** page, run the workflow (`workflow_dispatch`)
+    and enter the new version in the `confirm_version` input. It reads [`VERSION`](VERSION),
+    validates it is a strict `MAJOR.MINOR.PATCH` version, confirms your input matches the file,
+    checks the `v<VERSION>` tag does not already exist, then creates and pushes the annotated
+    tag for you — which triggers [`release.yml`](.github/workflows/release.yml). Tick `dry_run`
+    first to validate without pushing. This requires the one-time `RELEASE_PAT` secret setup
+    described below.
+
+    **B. Manual.** Create an **annotated** tag whose version matches `VERSION`, prefixed with
+    `v`, and push it:
 
     ```bash
     git tag -a v0.5.1 -m "Release version 0.5.1"
@@ -483,6 +494,34 @@ independently of the interpreter. See
 [.github/workflows/README.md](.github/workflows/README.md) (§6 Releases) for the
 workflow index and [Git tag conventions](instructions/git.instructions.md) for the tag
 commands.
+
+#### One-time setup: the `RELEASE_PAT` secret
+
+The automated [`tag-release.yml`](.github/workflows/tag-release.yml) workflow needs a
+`RELEASE_PAT` repository secret. This is required because a tag pushed with the default
+`GITHUB_TOKEN` does **not** trigger another workflow (GitHub deliberately blocks recursive
+workflow runs), so the tag must be pushed with a separate token for
+[`release.yml`](.github/workflows/release.yml) to fire. The workflow fails fast with an
+explanatory message if the secret is missing, so it never pushes a tag that would silently
+never release.
+
+Configure it once (a repository **admin** with a Personal Access Token, or a GitHub App
+token, is needed):
+
+1. Create a **fine-grained Personal Access Token**: GitHub → your **Settings** →
+   **Developer settings** → **Personal access tokens** → **Fine-grained tokens** →
+   **Generate new token**.
+2. Scope it to the `D3V0N5H1R3/luma` repository (**Only select repositories**), set a short
+   expiry, and under **Repository permissions** grant **Contents: Read and write** (this
+   covers pushing tags). Leave everything else at **No access**.
+3. **Generate token** and copy the value — it is shown only once.
+4. In the `D3V0N5H1R3/luma` repository, go to **Settings → Secrets and variables → Actions
+   → New repository secret**, name it exactly `RELEASE_PAT`, paste the token, and save.
+5. Rotate the token before it expires and update the secret; if it lapses, the workflow's
+   first step reports that `RELEASE_PAT` is not set.
+
+> A classic PAT with the `repo` scope works too, but a fine-grained token limited to this
+> repository with only `Contents: write` is the least-privilege choice.
 
 ---
 
