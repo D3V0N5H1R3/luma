@@ -106,6 +106,7 @@ static void test_hash_module() {
     ASSERT_TRUE(env->has("Hash.sha256_file"));
     ASSERT_TRUE(env->has("Hash.sha512_file"));
     ASSERT_TRUE(env->has("Hash.verify"));
+    ASSERT_TRUE(env->has("Hash.digest"));
     ASSERT_TRUE(env->has("Hash.algorithms"));
 }
 
@@ -200,11 +201,49 @@ static void test_hash_verify() {
 }
 
 static void test_hash_verify_all_algorithms() {
-    // verify round-trips against every digest algorithm it accepts.
+    // verify round-trips against every digest algorithm it accepts, including
+    // crc32 (rendered as an 8-hex-digit checksum).
     ASSERT_TRUE(eval(R"(Hash.verify("md5", "hello", Hash.md5("hello")))").as_bool());
     ASSERT_TRUE(eval(R"(Hash.verify("sha1", "hello", Hash.sha1("hello")))").as_bool());
     ASSERT_TRUE(eval(R"(Hash.verify("sha256", "hello", Hash.sha256("hello")))").as_bool());
     ASSERT_TRUE(eval(R"(Hash.verify("sha512", "hello", Hash.sha512("hello")))").as_bool());
+    ASSERT_TRUE(eval(R"(Hash.verify("crc32", "hello", Hash.digest("crc32", "hello")))").as_bool());
+}
+
+// ─── Hash.Algorithm: choice-or-string dual form ──────────────────────────────
+
+static void test_hash_verify_accepts_choice() {
+    // verify accepts a Hash.Algorithm choice exactly like the equivalent string,
+    // so a typo becomes a compile error instead of a runtime failure.
+    ASSERT_TRUE(
+        eval(R"(Hash.verify(Hash.Algorithm.Sha256, "hello", Hash.sha256("hello")))").as_bool());
+    ASSERT_TRUE(eval(R"(Hash.verify(Hash.Algorithm.Md5, "hello", Hash.md5("hello")))").as_bool());
+    ASSERT_TRUE(eval(R"(Hash.verify(Hash.Algorithm.Crc32, "hello", Hash.digest("crc32", "hello")))")
+                    .as_bool());
+    ASSERT_FALSE(eval(R"(Hash.verify(Hash.Algorithm.Sha256, "hello", "wrong"))").as_bool());
+}
+
+static void test_hash_digest_choice_matches_string() {
+    // Hash.digest under a choice and the equivalent string produce identical hex.
+    ASSERT_EQ(eval(R"(Hash.digest(Hash.Algorithm.Sha256, "abc"))").as_string(),
+              eval(R"(Hash.digest("sha256", "abc"))").as_string());
+    ASSERT_EQ(eval(R"(Hash.digest(Hash.Algorithm.Md5, "abc"))").as_string(),
+              eval(R"(Hash.md5("abc"))").as_string());
+    ASSERT_EQ(eval(R"(Hash.digest(Hash.Algorithm.Sha512, "abc"))").as_string(),
+              eval(R"(Hash.sha512("abc"))").as_string());
+}
+
+static void test_hash_digest_crc32_hex() {
+    // crc32 renders as a fixed 8-hex-digit string; "abc" → 0x352441c2.
+    ASSERT_EQ(eval(R"(Hash.digest(Hash.Algorithm.Crc32, "abc"))").as_string(), "352441c2");
+    ASSERT_EQ(eval(R"(Hash.digest("crc32", "abc"))").as_string(), "352441c2");
+}
+
+static void test_hash_digest_rejects_unknown_and_non_string() {
+    // An unknown algorithm name throws; a non-choice, non-string algorithm throws.
+    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.digest("sha999", "input"))"));
+    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.digest(42, "input"))"));
+    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.digest("sha256", 42))"));
 }
 
 static void test_hash_verify_false() {
@@ -299,10 +338,10 @@ static void test_hash_verify_rejects_non_string() {
 }
 
 static void test_hash_verify_unknown_algorithm_throws() {
-    // An unrecognised algorithm name is a runtime error (md_type_from_name → NONE).
+    // An unrecognised algorithm name is a runtime error (compute_named_digest →
+    // nullopt).  crc32 is NOT here — it is a supported algorithm for verify/digest.
     ASSERT_TRUE(luma::test::eval_throws(R"(Hash.verify("sha999", "input", "expected"))"));
     ASSERT_TRUE(luma::test::eval_throws(R"(Hash.verify("", "input", "expected"))"));
-    ASSERT_TRUE(luma::test::eval_throws(R"(Hash.verify("crc32", "input", "expected"))"));
 }
 
 static void test_hash_verify_unknown_algorithm_message() {
@@ -334,6 +373,10 @@ int main() {
     RUN(test_hash_deterministic_and_distinct);
     RUN(test_hash_verify);
     RUN(test_hash_verify_all_algorithms);
+    RUN(test_hash_verify_accepts_choice);
+    RUN(test_hash_digest_choice_matches_string);
+    RUN(test_hash_digest_crc32_hex);
+    RUN(test_hash_digest_rejects_unknown_and_non_string);
     RUN(test_hash_verify_false);
     RUN(test_hash_verify_length_mismatch);
     RUN(test_hash_verify_wrong_algorithm_for_digest);

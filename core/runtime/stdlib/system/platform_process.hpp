@@ -30,6 +30,24 @@ inline constexpr std::size_t k_pipe_buffer_size{256};
 // May throw RuntimeError if the command string has mismatched quotes.
 [[nodiscard]] std::pair<int, std::string> execute_command(std::string_view cmd);
 
+// Result of execute_command_captured: the child's exit code plus its stdout and
+// stderr captured into SEPARATE buffers (unlike execute_command, which merges
+// both onto one stream).  A negative exit_code signals a spawn/execution
+// failure (or an output-size-limit overflow, which also empties the buffers).
+struct CapturedOutput {
+    int exit_code{-1};
+    std::string standard_output{};
+    std::string standard_error{};
+};
+
+// Execute a command, capturing stdout and stderr separately.  Like
+// execute_command, uses CreateProcess on Windows and fork + execvp on POSIX (no
+// shell, so no metacharacter injection) and may throw RuntimeError on mismatched
+// quotes.  Backs Process.execute / Process.CommandOutput.  Both streams are
+// drained concurrently (POSIX poll, Win32 helper thread) so neither can deadlock
+// by filling its pipe while the other is read.
+[[nodiscard]] CapturedOutput execute_command_captured(std::string_view cmd);
+
 // Return the current process identifier.
 [[nodiscard]] std::int64_t current_process_id();
 

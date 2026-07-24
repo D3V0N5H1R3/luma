@@ -133,7 +133,8 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
 
         add_record(st, "FileSystem.FileInfo", field("integer", "size"),
                    field("number", "modified_time"), field("boolean", "is_directory"),
-                   field("boolean", "is_file"), field("boolean", "is_symlink"));
+                   field("boolean", "is_file"), field("boolean", "is_symlink"),
+                   field("FileSystem.FileKind", "kind"));
 
         add_record(st, "FileSystem.PathParts", field("string", "parent"), field("string", "name"),
                    field("string", "stem"), field("string", "extension"));
@@ -178,6 +179,14 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
 
         add_record(st, "Process.ProcessResult", field("integer", "exit_code"),
                    field("string", "output"));
+
+        // Richer sibling of ProcessResult returned by Process.execute: captures
+        // stdout and stderr separately (which run/ProcessResult merges into one
+        // stream) plus a derived success flag.  Field names match the record
+        // built in core/runtime/stdlib/system/process_module.cpp exactly.
+        add_record(st, "Process.CommandOutput", field("integer", "exit_code"),
+                   field("string", "standard_output"), field("string", "standard_error"),
+                   field("boolean", "success"));
 
         add_record(st, "Terminal.CursorPosition", field("integer", "row"),
                    field("integer", "column"));
@@ -363,6 +372,98 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "JsonNull", .fields = {}});
 
             st.choice_map["Json.Value"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── FileSystem.FileKind ─────────────────────────
+        // Variant names must match make_file_kind_choice() in
+        // core/runtime/stdlib/io/filesystem_internal.hpp exactly (PascalCase).
+        // The single, mutually-exclusive answer to "what kind of thing is this
+        // path?", complementing the FileSystem.FileInfo is_directory / is_file /
+        // is_symlink booleans with an exhaustive, match-able choice.  Classified
+        // symlink-first (like lstat): a symbolic link is reported as Symlink even
+        // when its target is a directory or file.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "FileKind");
+            ch->variants.push_back(ChoiceVariant{.name = "File", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Directory", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Symlink", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Other", .fields = {}});
+
+            st.choice_map["FileSystem.FileKind"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── FileSystem.IoError ──────────────────────────
+        // Opt-in typed error surfaced via result<T, FileSystem.IoError> on the
+        // read_file_typed slice of FileSystem (leaving string-error read_file
+        // untouched).  Variant names must match make_io_error_choice() in
+        // core/runtime/stdlib/io/filesystem_internal.hpp exactly (PascalCase).
+        // A closed, match-able set of the common failure categories, replacing
+        // brittle substring matching on an opaque error string.  Prototype scope
+        // pending a maintainer decision on generalising typed I/O errors.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "IoError");
+            ch->variants.push_back(ChoiceVariant{.name = "NotFound", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "PermissionDenied", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "AlreadyExists", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "InvalidInput", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Other", .fields = {}});
+
+            st.choice_map["FileSystem.IoError"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Sign ────────────────────────────────────────
+        // Top-level choice (no namespace) mirroring Rust's num::signum / the sign
+        // of Ordering.  Variant names must match make_sign_choice() in
+        // core/runtime/stdlib/math/math_module.cpp exactly (Negative / Zero /
+        // Positive).  Math.sign_of returns it — a self-documenting alternative to
+        // the magic -1 / 0 / 1 of Math.sign ("does -1 mean negative or error?").
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Sign");
+            ch->variants.push_back(ChoiceVariant{.name = "Negative", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Zero", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Positive", .fields = {}});
+
+            st.choice_map["Sign"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Http.StatusClass ────────────────────────────
+        // Variant names must match make_status_class_choice() in
+        // core/runtime/stdlib/io/http_module.cpp exactly (PascalCase, one per HTTP
+        // status family per RFC 9110: 1xx-5xx).  Http.status_class classifies a raw
+        // Http.Response.status integer into an exhaustive, match-able family instead
+        // of hand-written `status >= 200 && status < 300` magic ranges.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "StatusClass");
+            ch->variants.push_back(ChoiceVariant{.name = "Informational", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Success", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Redirection", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "ClientError", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "ServerError", .fields = {}});
+
+            st.choice_map["Http.StatusClass"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Hash.Algorithm ──────────────────────────────
+        // Variant names must match algorithm_name_from_variant() in
+        // core/runtime/stdlib/system/hash_digest.cpp exactly (PascalCase →
+        // lowercase: Sha256 → "sha256").  Mirrors the set reported by
+        // Hash.algorithms().  Hash.verify / Hash.digest accept this choice or the
+        // equivalent string (the Terminal.Color | string dual-form precedent), so a
+        // typo like "sha-256" becomes a compile error instead of a runtime failure.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Algorithm");
+            ch->variants.push_back(ChoiceVariant{.name = "Md5", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Sha1", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Sha256", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Sha512", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Crc32", .fields = {}});
+
+            st.choice_map["Hash.Algorithm"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

@@ -174,3 +174,62 @@ function void test_process_set_environment_variable_name_with_equals() {
     assert(Result.is_failure(r), "variable name containing '=' should fail")
 }
 
+# ─── Process.execute — separate stdout / stderr capture (N06) ──────────────
+# Process.execute returns a Process.CommandOutput record that keeps stdout and
+# stderr in distinct fields (unlike Process.run, which merges them), plus a
+# derived success flag.  The host shell is named explicitly, mirroring the
+# Process.run tests: "cmd /c ..." on Windows, "sh -c ..." on POSIX.
+
+@test
+function void test_process_execute_captures_streams_separately() {
+    mutable string command = "sh -c \"echo out_line; echo err_line 1>&2\""
+
+    if (Process.has_environment_variable("OS")) {
+        command = "cmd /c \"echo out_line & echo err_line 1>&2\""
+    }
+
+    result<Process.CommandOutput> r = Process.execute(command)
+
+    assert(Result.is_success(r), "command should execute successfully")
+
+    Process.CommandOutput out = Result.unwrap(r)
+
+    assert(out.exit_code == 0, "exit code should be zero")
+    assert(out.success, "success flag should be true for a zero exit")
+    assert(String.contains(out.standard_output, "out_line"), "stdout should hold the out line")
+    assert(String.contains(out.standard_error, "err_line"), "stderr should hold the err line")
+    assert(!String.contains(out.standard_output, "err_line"), "stdout must not hold stderr text")
+}
+
+@test
+function void test_process_execute_nonzero_exit_sets_success_false() {
+    mutable string command = "sh -c \"exit 5\""
+
+    if (Process.has_environment_variable("OS")) {
+        command = "cmd /c exit 5"
+    }
+
+    result<Process.CommandOutput> r = Process.execute(command)
+
+    assert(Result.is_success(r), "a non-zero exit is still a captured result")
+
+    Process.CommandOutput out = Result.unwrap(r)
+
+    assert(out.exit_code == 5, "exit code should be 5")
+    assert(!out.success, "success flag should be false for a non-zero exit")
+}
+
+@test
+function void test_process_execute_nonexistent_command() {
+    result<Process.CommandOutput> r = Process.execute("_luma_nonexistent_command_xyz_123")
+
+    assert(Result.is_failure(r), "non-existent command should fail to launch")
+}
+
+@test
+function void test_process_execute_empty_command() {
+    result<Process.CommandOutput> r = Process.execute("")
+
+    assert(Result.is_failure(r), "empty command should fail")
+}
+

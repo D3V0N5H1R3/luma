@@ -29,6 +29,25 @@ constexpr double pi{std::numbers::pi};
 // Maximum input for int64_t factorial (21! overflows).
 constexpr std::int64_t k_max_factorial_input = 20;
 
+// Builds a top-level Sign choice value from a strcmp-style sign: a negative sign
+// is Negative, zero is Zero, and a positive sign is Positive.  The runtime short
+// name "Sign" matches the top-level Ordering pattern (make_ordering); the variant
+// names must match the Sign choice in core/analysis/types/stdlib_type_arities.cpp.
+[[nodiscard]] Value make_sign_choice(int sign) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Sign";
+
+    if (sign < 0) {
+        cv->variant = "Negative";
+    } else if (sign > 0) {
+        cv->variant = "Positive";
+    } else {
+        cv->variant = "Zero";
+    }
+
+    return Value{std::move(cv)};
+}
+
 [[nodiscard]] std::int64_t compute_gcd(std::int64_t first, std::int64_t second) {
     while (second != 0) {
         auto temp = second;
@@ -232,6 +251,23 @@ void register_math_ns(const EnvPtr& env) {
             }
 
             return Value{sign};
+        })
+        .func("sign_of", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // The exhaustive, self-documenting counterpart to Math.sign: match on
+            // Sign.Negative / Sign.Zero / Sign.Positive instead of the magic
+            // -1 / 0 / 1.  NaN has no sign, so — like Math.sign — it is treated as
+            // Zero (neither < nor > 0), keeping the choice total.
+            const auto x = expect_numeric(args[0], "Math.sign_of", loc);
+
+            int sign = 0;
+            if (x > 0) {
+                sign = 1;
+            } else if (x < 0) {
+                sign = -1;
+            }
+
+            return make_sign_choice(sign);
         })
         .checked_unary("sine", [](double x) { return std::sin(x); })
         .checked_unary("cosine", [](double x) { return std::cos(x); })

@@ -111,6 +111,10 @@ static void test_filesystem_metadata_file() {
     ASSERT_TRUE(rec.find_field("is_file")->as_bool());
     ASSERT_FALSE(rec.find_field("is_directory")->as_bool());
     ASSERT_FALSE(rec.find_field("is_symlink")->as_bool());
+    // The kind field mirrors the booleans as a single, match-able choice.
+    ASSERT_TRUE(rec.find_field("kind")->is_choice());
+    ASSERT_EQ(rec.find_field("kind")->as_choice()->type_name, "FileKind");
+    ASSERT_EQ(rec.find_field("kind")->as_choice()->variant, "File");
     // Modified time is a Unix timestamp — after 2020-01-01.
     ASSERT_TRUE(rec.find_field("modified_time")->is_number());
     ASSERT_TRUE(rec.find_field("modified_time")->as_number() > 1577836800.0);
@@ -127,6 +131,86 @@ static void test_filesystem_metadata_directory() {
     ASSERT_FALSE(rec.find_field("is_file")->as_bool());
     // A directory reports size 0 rather than failing.
     ASSERT_EQ(rec.find_field("size")->as_integer(), 0);
+    ASSERT_TRUE(rec.find_field("kind")->is_choice());
+    ASSERT_EQ(rec.find_field("kind")->as_choice()->variant, "Directory");
+}
+
+static void test_filesystem_kind_file() {
+    const LumaTempFile file{"_test_kind_file.txt", "hello"};
+
+    const auto v = eval("FileSystem.kind(\"_test_kind_file.txt\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "FileKind");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "File");
+}
+
+static void test_filesystem_kind_directory() {
+    const auto v = eval("FileSystem.kind(\".\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "FileKind");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "Directory");
+}
+
+static void test_filesystem_kind_nonexistent() {
+    // A path that does not exist fails, mirroring FileSystem.metadata.
+    ASSERT_EVAL_FAILURE("FileSystem.kind(\"_nonexistent_kind_file.txt\")");
+}
+
+static void test_filesystem_kind_rejects_traversal() {
+    // Path traversal is a security violation, so kind throws (like every other
+    // FileSystem function) rather than returning a failure result.
+    ASSERT_THROWS(eval("FileSystem.kind(\"../escape.txt\")"));
+}
+
+// ─── FileSystem.read_file_typed — result<string, FileSystem.IoError> (N08) ──
+// The opt-in typed-error read: failures surface a FileSystem.IoError choice as
+// the result's error value rather than the default string message.  read_file
+// itself is unchanged (still string-error).
+
+static void test_filesystem_read_file_typed_success() {
+    const LumaTempFile file{"_test_typed_read.txt", "typed hello"};
+
+    const auto v = eval("FileSystem.read_file_typed(\"_test_typed_read.txt\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_string());
+    ASSERT_EQ(v.as_result()->owned_inner->as_string(), "typed hello");
+}
+
+static void test_filesystem_read_file_typed_not_found() {
+    const auto v = eval("FileSystem.read_file_typed(\"_nonexistent_typed_read.txt\")");
+
+    ASSERT_RESULT_FAILURE(v);
+    // The error value is the typed IoError choice, not a string message.
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "IoError");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "NotFound");
+}
+
+static void test_filesystem_read_file_typed_directory_is_invalid_input() {
+    // Reading a directory as a file is a misuse of the API; the errno (EISDIR)
+    // maps to the InvalidInput variant.
+    const auto v = eval("FileSystem.read_file_typed(\".\")");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "IoError");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "InvalidInput");
+}
+
+static void test_filesystem_read_file_typed_traversal_is_invalid_input() {
+    // Unlike the throwing string-error functions, read_file_typed maps a rejected
+    // (traversing) path to a typed InvalidInput failure rather than throwing.
+    const auto v = eval("FileSystem.read_file_typed(\"../escape.txt\")");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "IoError");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "InvalidInput");
 }
 
 static void test_filesystem_metadata_nonexistent() {
@@ -516,6 +600,14 @@ int main() {
     RUN(test_filesystem_metadata_directory);
     RUN(test_filesystem_metadata_nonexistent);
     RUN(test_filesystem_metadata_rejects_traversal);
+    RUN(test_filesystem_kind_file);
+    RUN(test_filesystem_kind_directory);
+    RUN(test_filesystem_kind_nonexistent);
+    RUN(test_filesystem_kind_rejects_traversal);
+    RUN(test_filesystem_read_file_typed_success);
+    RUN(test_filesystem_read_file_typed_not_found);
+    RUN(test_filesystem_read_file_typed_directory_is_invalid_input);
+    RUN(test_filesystem_read_file_typed_traversal_is_invalid_input);
     RUN(test_filesystem_read_lines_rejects_oversized_file);
     RUN(test_sandbox_disables_dangerous_modules);
     RUN(test_sandbox_gates_file_io_in_safe_modules);

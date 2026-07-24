@@ -5,6 +5,7 @@
 // units.  Not part of the public stdlib surface — include only from
 // filesystem_*.cpp translation units.
 
+#include <cerrno>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -180,6 +181,152 @@ template <typename Project>
                                     const SourceLocation& loc, Project project) {
     expect_all_strings(args, function_name, loc, path_args_hint);
     return Value{project(std::filesystem::path{args[0].as_string()})};
+}
+
+/// Wraps a FileSystem.FileKind variant name in a ChoiceValue.  The runtime short
+/// name "FileKind" matches how DateTime.Weekday is built (make_weekday_choice);
+/// the type checker resolves the qualified "FileSystem.FileKind" separately.  The
+/// four variant names must match the ChoiceDeclaration in
+/// core/analysis/types/stdlib_type_arities.cpp exactly.
+[[nodiscard]] inline Value make_file_kind_choice(std::string_view variant) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "FileKind";
+    cv->variant = std::string{variant};
+    return Value{std::move(cv)};
+}
+
+/// Maps the three status booleans FileSystem.metadata already computes to a
+/// single, mutually-exclusive FileKind variant, classified symlink-first (like
+/// lstat): a symbolic link is reported as "Symlink" even when its target is a
+/// directory or regular file.  Anything that is none of these (device, fifo,
+/// socket, unknown) is "Other".  Shared by FileSystem.metadata and
+/// FileSystem.kind so the two always agree.
+[[nodiscard]] inline std::string_view file_kind_variant(bool is_symlink, bool is_directory,
+                                                        bool is_regular_file) {
+    if (is_symlink) {
+        return "Symlink";
+    }
+    if (is_directory) {
+        return "Directory";
+    }
+    if (is_regular_file) {
+        return "File";
+    }
+    return "Other";
+}
+
+/// Classifies the file kind of `safe_path`, following the same symlink-first
+/// precedence as FileSystem.metadata.  Returns std::nullopt when the path does
+/// not exist (not even as a dangling symlink), which FileSystem.kind maps to a
+/// result failure.
+[[nodiscard]] inline std::optional<std::string_view>
+classify_file_kind(const std::filesystem::path& safe_path) {
+    std::error_code ec;
+
+    // Query the link status first (does not follow symlinks) so a dangling or
+    // symlinked entry is reported as Symlink rather than treated as absent.
+    const auto sym_status = std::filesystem::symlink_status(safe_path, ec);
+    if (ec || !std::filesystem::exists(sym_status)) {
+        return std::nullopt;
+    }
+
+    const bool symlink = std::filesystem::is_symlink(sym_status);
+
+    // Follow symlinks for the directory / regular-file classification so the
+    // non-symlink kinds agree with is_directory / is_file.
+    std::error_code status_ec;
+    const auto status = std::filesystem::status(safe_path, status_ec);
+    const bool directory = std::filesystem::is_directory(status);
+    const bool regular_file = std::filesystem::is_regular_file(status);
+
+    return file_kind_variant(symlink, directory, regular_file);
+}
+
+/// Wraps a FileSystem.IoError variant name in a ChoiceValue.  Runtime short name
+/// "IoError" mirrors make_file_kind_choice (the type checker resolves the
+/// qualified "FileSystem.IoError" separately).  The five variant names must match
+/// the ChoiceDeclaration in core/analysis/types/stdlib_type_arities.cpp exactly.
+[[nodiscard]] inline Value make_io_error_choice(std::string_view variant) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "IoError";
+    cv->variant = std::string{variant};
+    return Value{std::move(cv)};
+}
+
+/// Maps a std::error_code to the closest FileSystem.IoError variant.  Uses
+/// error_condition equivalence (ec == std::errc::…) so a platform-specific
+/// system error still matches its portable category.  Anything without a named
+/// variant collapses to "Other".
+[[nodiscard]] inline std::string_view io_error_variant(const std::error_code& ec) {
+    if (ec == std::errc::no_such_file_or_directory) {
+        return "NotFound";
+    }
+    if (ec == std::errc::permission_denied || ec == std::errc::operation_not_permitted) {
+        return "PermissionDenied";
+    }
+    if (ec == std::errc::file_exists) {
+        return "AlreadyExists";
+    }
+    if (ec == std::errc::invalid_argument || ec == std::errc::is_a_directory) {
+        return "InvalidInput";
+    }
+    return "Other";
+}
+
+/// Builds a result<T, FileSystem.IoError> failure carrying the classified choice
+/// as its typed error value (rather than the default string message).
+[[nodiscard]] inline Value make_io_error_failure(const std::error_code& ec) {
+    return Value{ResultValue::failure(make_io_error_choice(io_error_variant(ec)))};
+}
+
+/// Reads a whole file into a result<string, FileSystem.IoError>, classifying any
+/// failure into a typed IoError variant instead of a string message.  This is the
+/// opt-in typed-error counterpart of read_file_within_limit; the path has already
+/// been validated by the caller.  Existence and directory checks run first (a
+/// reliable std::error_code source across platforms), then the open itself falls
+/// back to errno for permission-style failures.
+[[nodiscard]] inline Value read_file_typed_impl(const std::filesystem::path& safe_path) {
+    std::error_code ec;
+    const auto status = std::filesystem::status(safe_path, ec);
+
+    if (ec) {
+        return make_io_error_failure(ec);
+    }
+
+    if (!std::filesystem::exists(status)) {
+        return make_io_error_failure(std::make_error_code(std::errc::no_such_file_or_directory));
+    }
+
+    if (std::filesystem::is_directory(status)) {
+        return make_io_error_failure(std::make_error_code(std::errc::is_a_directory));
+    }
+
+    errno = 0;
+    std::ifstream ifs{safe_path, std::ios::binary};
+
+    if (!ifs) {
+        const int captured = errno;
+        const std::error_code open_ec = (captured != 0)
+                                            ? std::error_code{captured, std::generic_category()}
+                                            : std::make_error_code(std::errc::permission_denied);
+
+        return make_io_error_failure(open_ec);
+    }
+
+    std::error_code size_ec;
+    const auto file_bytes = std::filesystem::file_size(safe_path, size_ec);
+
+    if (size_ec) {
+        return make_io_error_failure(size_ec);
+    }
+
+    if (file_bytes > ResourceLimits::max_string_size) {
+        return make_io_error_failure(std::make_error_code(std::errc::file_too_large));
+    }
+
+    std::string file_content{std::istreambuf_iterator<char>{ifs}, std::istreambuf_iterator<char>{}};
+
+    return make_success_value(Value{std::move(file_content)});
 }
 
 } // namespace luma::filesystem_detail

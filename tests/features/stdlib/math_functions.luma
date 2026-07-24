@@ -635,3 +635,29 @@ function void test_math_summarize_empty() {
     assert(Result.is_failure(r), "summarize of an empty array should fail")
 }
 
+
+# ─── Sign (Math.sign_of) ───
+
+# Exhaustive match over every Sign variant.  Beyond labelling a sign, this
+# doubles as a check that the top-level Sign choice is fully registered and
+# exhaustively matchable — the compiler rejects a missing arm.
+function string sign_label(Sign s) {
+    return match s {
+    case Sign.Negative { "negative" }
+    case Sign.Zero     { "zero" }
+    case Sign.Positive { "positive" }
+    }
+}
+
+@test
+function void test_math_sign_of() {
+    # The self-documenting Sign counterpart to Math.sign's magic -1 / 0 / 1.
+    assert(Math.sign_of(-5) == Sign.Negative, "a negative integer is Negative")
+    assert(Math.sign_of(0) == Sign.Zero, "zero is Zero")
+    assert(Math.sign_of(7) == Sign.Positive, "a positive integer is Positive")
+
+    # Works for number as well as integer inputs.
+    assert(sign_label(Math.sign_of(-0.5)) == "negative")
+    assert(sign_label(Math.sign_of(0.0)) == "zero")
+    assert(sign_label(Math.sign_of(3.14)) == "positive")
+}

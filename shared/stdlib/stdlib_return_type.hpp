@@ -117,6 +117,15 @@ struct ReturnTypeDesc {
         return {Result, "", {std::move(value)}};
     }
 
+    // Two-parameter result<value, error> — used where a stdlib function surfaces
+    // a typed error type (e.g. FileSystem.read_file_typed -> result<string,
+    // FileSystem.IoError>) rather than the default string-error result<T>.  The
+    // signatures resolver keys off inner.size() == 2 to pick TypeInfo::make_result
+    // with an explicit error type.
+    [[nodiscard]] static ReturnTypeDesc result(ReturnTypeDesc value, ReturnTypeDesc error) {
+        return {Result, "", {std::move(value), std::move(error)}};
+    }
+
     [[nodiscard]] static ReturnTypeDesc optional(ReturnTypeDesc value) {
         return {Optional, "", {std::move(value)}};
     }

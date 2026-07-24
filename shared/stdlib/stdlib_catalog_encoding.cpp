@@ -21,6 +21,8 @@ void register_hash_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
                  {
                      m.fn("algorithms", 0, "()", R::array_string(), {}),
                      m.fn("crc32", 1, "(value: string)", R::integer_type(), {p.string}),
+                     m.fn("digest", 2, "(algorithm: Hash.Algorithm | string, input: string)",
+                          R::string_type(), {p.any, p.string}),
                      m.fn("hmac_sha256", 2, "(key: string, value: string)", R::string_type(),
                           {p.string, p.string}),
                      m.fn("hmac_sha512", 2, "(key: string, value: string)", R::string_type(),
@@ -31,8 +33,9 @@ void register_hash_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
                      m.fn("sha256_file", 1, "(path: string)", R::result_string(), {p.string}),
                      m.fn("sha512", 1, "(value: string)", R::string_type(), {p.string}),
                      m.fn("sha512_file", 1, "(path: string)", R::result_string(), {p.string}),
-                     m.fn("verify", 3, "(algorithm: string, input: string, expected: string)",
-                          R::boolean_type(), {p.string, p.string, p.string}),
+                     m.fn("verify", 3,
+                          "(algorithm: Hash.Algorithm | string, input: string, expected: string)",
+                          R::boolean_type(), {p.any, p.string, p.string}),
                  });
 }
 

@@ -47,6 +47,13 @@ namespace {
             return TypeInfo::make_dict(type_info_from_desc(desc.inner[0]));
 
         case RK::Result:
+            // A two-parameter descriptor carries an explicit error type
+            // (result<value, error>); the common single-parameter form uses the
+            // default string-error result<value>.
+            if (desc.inner.size() >= 2) {
+                return TypeInfo::make_result(type_info_from_desc(desc.inner[0]),
+                                             type_info_from_desc(desc.inner[1]));
+            }
             return TypeInfo::make_result(type_info_from_desc(desc.inner[0]));
 
         case RK::Optional:
@@ -93,6 +100,18 @@ namespace {
             }
             if (desc.named_type == "Json.Value") {
                 return TypeInfo::make_named(K::Choice, "Json.Value");
+            }
+            if (desc.named_type == "FileSystem.FileKind") {
+                return TypeInfo::make_named(K::Choice, "FileSystem.FileKind");
+            }
+            if (desc.named_type == "FileSystem.IoError") {
+                return TypeInfo::make_named(K::Choice, "FileSystem.IoError");
+            }
+            if (desc.named_type == "Sign") {
+                return TypeInfo::make_named(K::Choice, "Sign");
+            }
+            if (desc.named_type == "Http.StatusClass") {
+                return TypeInfo::make_named(K::Choice, "Http.StatusClass");
             }
             return TypeInfo::make_named(K::Record, desc.named_type);
 
