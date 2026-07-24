@@ -1,6 +1,7 @@
 #include "runtime/stdlib/system/datetime_module.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -181,6 +182,109 @@ validate_datetime_fields(std::int64_t raw_year, std::int64_t raw_month, std::int
     return std::nullopt;
 }
 
+// ─── DateTime.Weekday choice support ─────────────────────────────────────────
+// Variant names in ISO-8601 order: index 0 = Monday (1) … index 6 = Sunday (7).
+// Must match the DateTime.Weekday choice declared in stdlib_type_arities.cpp.
+constexpr std::array<std::string_view, 7> k_weekday_names{
+    {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}};
+
+constexpr std::string_view k_weekday_range_error =
+    "weekday number must be between 1 (Monday) and 7 (Sunday)";
+
+// Build a DateTime.Weekday choice value from an ISO-8601 weekday number
+// (1 = Monday … 7 = Sunday). The caller guarantees the number is in range.
+[[nodiscard]] Value make_weekday_choice(int iso_weekday) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Weekday";
+    cv->variant = std::string{k_weekday_names[static_cast<std::size_t>(iso_weekday - 1)]};
+
+    return Value{std::move(cv)};
+}
+
+// Resolve a DateTime.Weekday variant name to its ISO-8601 number
+// (1 = Monday … 7 = Sunday). Returns 0 when the name is not a Weekday variant.
+[[nodiscard]] int weekday_iso_from_variant(std::string_view variant) {
+    for (std::size_t i = 0; i < k_weekday_names.size(); ++i) {
+        if (k_weekday_names[i] == variant) {
+            return static_cast<int>(i) + 1;
+        }
+    }
+
+    return 0;
+}
+
+// Extract the validated ISO-8601 weekday number from a DateTime.Weekday choice
+// argument, throwing a RuntimeError if the argument is not a genuine Weekday.
+[[nodiscard]] int expect_weekday(const Value& arg, std::string_view func_name,
+                                 const SourceLocation& loc) {
+    if (!arg.is_choice()) {
+        throw RuntimeError{std::format("{}: expected a DateTime.Weekday choice", func_name), loc,
+                           "pass a DateTime.Weekday variant, e.g. DateTime.Weekday.Monday"};
+    }
+
+    const int iso = weekday_iso_from_variant(arg.as_choice()->variant);
+
+    if (iso == 0) {
+        throw RuntimeError{std::format("{}: unknown weekday 'DateTime.Weekday.{}'", func_name,
+                                       arg.as_choice()->variant),
+                           loc, "use a DateTime.Weekday variant: Monday … Sunday"};
+    }
+
+    return iso;
+}
+
+// ─── DateTime.Month choice support ───────────────────────────────────────────
+// Variant names in calendar order: index 0 = January (1) … index 11 = December (12).
+// Must match the DateTime.Month choice declared in stdlib_type_arities.cpp.
+constexpr std::array<std::string_view, 12> k_month_names{
+    {"January", "February", "March", "April", "May", "June", "July", "August", "September",
+     "October", "November", "December"}};
+
+constexpr std::string_view k_month_range_error =
+    "month number must be between 1 (January) and 12 (December)";
+
+// Build a DateTime.Month choice value from a 1-based month number
+// (1 = January … 12 = December). The caller guarantees the number is in range.
+[[nodiscard]] Value make_month_choice(int month) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Month";
+    cv->variant = std::string{k_month_names[static_cast<std::size_t>(month - 1)]};
+
+    return Value{std::move(cv)};
+}
+
+// Resolve a DateTime.Month variant name to its 1-based number
+// (1 = January … 12 = December). Returns 0 when the name is not a Month variant.
+[[nodiscard]] int month_number_from_variant(std::string_view variant) {
+    for (std::size_t i = 0; i < k_month_names.size(); ++i) {
+        if (k_month_names[i] == variant) {
+            return static_cast<int>(i) + 1;
+        }
+    }
+
+    return 0;
+}
+
+// Extract the validated 1-based month number from a DateTime.Month choice
+// argument, throwing a RuntimeError if the argument is not a genuine Month.
+[[nodiscard]] int expect_month(const Value& arg, std::string_view func_name,
+                               const SourceLocation& loc) {
+    if (!arg.is_choice()) {
+        throw RuntimeError{std::format("{}: expected a DateTime.Month choice", func_name), loc,
+                           "pass a DateTime.Month variant, e.g. DateTime.Month.January"};
+    }
+
+    const int month = month_number_from_variant(arg.as_choice()->variant);
+
+    if (month == 0) {
+        throw RuntimeError{std::format("{}: unknown month 'DateTime.Month.{}'", func_name,
+                                       arg.as_choice()->variant),
+                           loc, "use a DateTime.Month variant: January … December"};
+    }
+
+    return month;
+}
+
 } // namespace
 
 static void register_datetime_parsing(const EnvPtr& env);
@@ -324,6 +428,99 @@ void register_datetime_ns(const EnvPtr& env) {
             }
 
             return make_success_value(Value{*formatted});
+        })
+        // DateTime.weekday(timestamp) -> result<DateTime.Weekday>
+        // Type-safe companion to the integer DateTime.day_of_week: a match over the
+        // returned Weekday is exhaustive and autocompleted, and a mistyped day is a
+        // compile error rather than a magic-number comparison.
+        .func("weekday", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            const auto tm = to_tm(args[0].to_numeric());
+
+            if (!tm) {
+                return make_failure_value(
+                    error_msg("DateTime", "weekday", k_timestamp_range_error));
+            }
+
+            // tm_wday: 0 = Sunday. Convert to ISO-8601 1 = Monday … 7 = Sunday.
+            const int iso = tm->tm_wday == 0 ? 7 : tm->tm_wday;
+
+            return make_success_value(make_weekday_choice(iso));
+        })
+        // DateTime.weekday_from_number(n) -> result<DateTime.Weekday>
+        // Bridges the integer form (1 = Monday … 7 = Sunday) to the typed choice.
+        .func("weekday_from_number", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto n = expect_integer(args[0], "DateTime.weekday_from_number", loc);
+
+            if (n < 1 || n > 7) {
+                return make_failure_value(
+                    error_msg("DateTime", "weekday_from_number", k_weekday_range_error));
+            }
+
+            return make_success_value(make_weekday_choice(static_cast<int>(n)));
+        })
+        // DateTime.weekday_number(w) -> integer
+        // Bridges the typed choice back to the ISO-8601 integer (1 = Monday … 7 = Sunday).
+        .func("weekday_number", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const int iso = expect_weekday(args[0], "DateTime.weekday_number", loc);
+
+            return Value{static_cast<std::int64_t>(iso)};
+        })
+        // DateTime.weekday_name(w) -> string
+        // Returns the English day name ("Monday" … "Sunday") for a Weekday choice.
+        .func("weekday_name", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const int iso = expect_weekday(args[0], "DateTime.weekday_name", loc);
+
+            return Value{std::string{k_weekday_names[static_cast<std::size_t>(iso - 1)]}};
+        })
+        // DateTime.month_of(timestamp) -> result<DateTime.Month>
+        // Type-safe companion to the integer DateTime.month: a match over the
+        // returned Month is exhaustive and autocompleted, and a mistyped month is
+        // a compile error rather than a magic-number comparison.  Named month_of
+        // to avoid clashing with the existing integer DateTime.month accessor.
+        .func("month_of", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            const auto tm = to_tm(args[0].to_numeric());
+
+            if (!tm) {
+                return make_failure_value(
+                    error_msg("DateTime", "month_of", k_timestamp_range_error));
+            }
+
+            // tm_mon: 0 = January.  Convert to 1 = January … 12 = December.
+            return make_success_value(make_month_choice(tm->tm_mon + 1));
+        })
+        // DateTime.month_from_number(n) -> result<DateTime.Month>
+        // Bridges the integer form (1 = January … 12 = December) to the typed choice.
+        .func("month_from_number", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto n = expect_integer(args[0], "DateTime.month_from_number", loc);
+
+            if (n < 1 || n > 12) {
+                return make_failure_value(
+                    error_msg("DateTime", "month_from_number", k_month_range_error));
+            }
+
+            return make_success_value(make_month_choice(static_cast<int>(n)));
+        })
+        // DateTime.month_number(m) -> integer
+        // Bridges the typed choice back to the integer (1 = January … 12 = December).
+        .func("month_number", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const int month = expect_month(args[0], "DateTime.month_number", loc);
+
+            return Value{static_cast<std::int64_t>(month)};
+        })
+        // DateTime.month_name(m) -> string
+        // Returns the English month name ("January" … "December") for a Month choice.
+        .func("month_name", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const int month = expect_month(args[0], "DateTime.month_name", loc);
+
+            return Value{std::string{k_month_names[static_cast<std::size_t>(month - 1)]}};
         });
 
     register_datetime_arithmetic(env);

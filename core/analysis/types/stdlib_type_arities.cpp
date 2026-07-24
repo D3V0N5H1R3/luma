@@ -135,6 +135,9 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("number", "modified_time"), field("boolean", "is_directory"),
                    field("boolean", "is_file"), field("boolean", "is_symlink"));
 
+        add_record(st, "FileSystem.PathParts", field("string", "parent"), field("string", "name"),
+                   field("string", "stem"), field("string", "extension"));
+
         add_record(st, "Math.Summary", field("integer", "count"), field("number", "minimum"),
                    field("number", "maximum"), field("number", "mean"), field("number", "median"),
                    field("number", "standard_deviation"));
@@ -152,6 +155,14 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
 
         add_record(st, "Http.Response", field("integer", "status"), field("string", "reason"),
                    field("string", "body"), field_of(dict_ann("string"), "headers"));
+
+        // Http.Request carries the Http.Method choice natively (rather than a
+        // stringified verb in an options dictionary), so a request is typed,
+        // discoverable, and symmetrical with Http.Response.  Built by
+        // Http.request_of / Http.request_with and consumed by Http.send.
+        add_record(st, "Http.Request", field("Http.Method", "method"), field("string", "url"),
+                   field_of(dict_ann("string"), "headers"), field("string", "body"),
+                   field("integer", "timeout_ms"));
 
         add_record(st, "Http.UrlParts", field("string", "scheme"), field("string", "host"),
                    field("string", "port"), field("string", "path"), field("string", "query"));
@@ -173,6 +184,49 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
 
         add_record(st, "Terminal.InputEvent", field("string", "key"), field("boolean", "shift"),
                    field("boolean", "ctrl"), field("boolean", "alt"));
+
+        // ── DateTime.Weekday ────────────────────────────
+        // Variant names must match k_weekday_names in
+        // core/runtime/stdlib/system/datetime_module.cpp exactly (PascalCase,
+        // ISO-8601 order: Monday = 1 … Sunday = 7).  Complements the existing
+        // integer DateTime.day_of_week accessor with an exhaustive, type-safe form.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Weekday");
+            ch->variants.push_back(ChoiceVariant{.name = "Monday", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Tuesday", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Wednesday", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Thursday", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Friday", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Saturday", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Sunday", .fields = {}});
+
+            st.choice_map["DateTime.Weekday"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── DateTime.Month ──────────────────────────────
+        // Variant names must match k_month_names in
+        // core/runtime/stdlib/system/datetime_module.cpp exactly (PascalCase,
+        // calendar order: January = 1 … December = 12).  Complements the existing
+        // integer DateTime.month accessor with an exhaustive, type-safe form.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Month");
+            ch->variants.push_back(ChoiceVariant{.name = "January", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "February", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "March", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "April", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "May", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "June", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "July", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "August", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "September", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "October", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "November", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "December", .fields = {}});
+
+            st.choice_map["DateTime.Month"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
 
         // ── Log.Level ───────────────────────────────────
         {
@@ -222,6 +276,93 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Options", .fields = {}});
 
             st.choice_map["Http.Method"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Terminal.Color ──────────────────────────────
+        // Variant names map to the lowercase colour names in color_map() in
+        // core/runtime/stdlib/io/terminal_module.cpp (PascalCase → snake_case:
+        // BrightBlack → "bright_black").  Terminal.color / Terminal.background_color
+        // accept this choice or the equivalent string; the choice form is total, so
+        // a typo becomes a compile error instead of a runtime failure.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Color");
+            ch->variants.push_back(ChoiceVariant{.name = "Black", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Red", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Green", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Yellow", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Blue", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Magenta", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Cyan", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "White", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "BrightBlack", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "BrightRed", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "BrightGreen", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "BrightYellow", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "BrightBlue", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "BrightMagenta", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "BrightCyan", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "BrightWhite", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Default", .fields = {}});
+
+            st.choice_map["Terminal.Color"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Ordering ────────────────────────────────────
+        // Top-level choice (no namespace) mirroring Rust's std::cmp::Ordering.
+        // Variant names must match ordering_from_sign() in
+        // core/runtime/stdlib/types/order_module.cpp exactly (Less / Equal /
+        // Greater).  A comparison expressed as an exhaustive match over Ordering
+        // is self-documenting — no "does negative mean first?".  The Order module
+        // bridges to/from the existing numeric comparator via to_number /
+        // from_number, so both the choice and the numeric convention interoperate.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Ordering");
+            ch->variants.push_back(ChoiceVariant{.name = "Less", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Equal", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Greater", .fields = {}});
+
+            st.choice_map["Ordering"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Json.Value ──────────────────────────────────
+        // Recursive JSON ADT backed by shared/json/JsonValue — the first stdlib
+        // choice with payload-carrying variants.  It brings untrusted JSON under
+        // static, exhaustive typing: a match over Json.Value is the safe,
+        // teachable way to walk parsed data, closing Luma's "no any" gap while the
+        // permissive dynamic Json API (deserialize/get/serialize) stays intact.
+        // Variant names must match the constructors in
+        // core/runtime/stdlib/text/json_value_module.cpp exactly.  Recursive
+        // payload type annotations MUST use the qualified name "Json.Value" so the
+        // type resolver finds this choice in choices_ (a bare "Value" would not
+        // resolve).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Value");
+
+            // Parameter holds a unique_ptr (default_value), so it is move-only
+            // and cannot be placed in a braced std::initializer_list (which
+            // copies).  Build each single-payload variant by moving the
+            // Parameter into the fields vector instead.
+            auto payload_variant = [](std::string variant_name, TypeAnnotation type,
+                                      std::string field_name) {
+                ChoiceVariant variant;
+                variant.name = std::move(variant_name);
+                variant.fields.push_back(
+                    Parameter{.type = std::move(type), .name = std::move(field_name)});
+
+                return variant;
+            };
+
+            ch->variants.push_back(payload_variant("JsonObject", dict_ann("Json.Value"), "fields"));
+            ch->variants.push_back(payload_variant("JsonArray", array_ann("Json.Value"), "items"));
+            ch->variants.push_back(payload_variant("JsonString", ann("string"), "value"));
+            ch->variants.push_back(payload_variant("JsonNumber", ann("number"), "value"));
+            ch->variants.push_back(payload_variant("JsonBool", ann("boolean"), "value"));
+            ch->variants.push_back(ChoiceVariant{.name = "JsonNull", .fields = {}});
+
+            st.choice_map["Json.Value"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

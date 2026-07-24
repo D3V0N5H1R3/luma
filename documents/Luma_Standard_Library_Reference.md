@@ -34,20 +34,21 @@ This reference was previously part of the [User Manual](Luma_User_Manual.md). Fo
 24. [Log](#24--log)
 25. [Math](#25--math)
 26. [Optional](#26--optional)
-27. [Process](#27--process)
-28. [Queue](#28--queue)
-29. [Random](#29--random)
-30. [Reference](#30--reference)
-31. [RegularExpression](#31--regularexpression)
-32. [Resource](#32--resource)
-33. [Result](#33--result)
-34. [Set](#34--set)
-35. [Socket](#35--socket)
-36. [Stack](#36--stack)
-37. [String](#37--string)
-38. [Task](#38--task)
-39. [Terminal](#39--terminal)
-40. [Xml](#40--xml)
+27. [Order](#27--order)
+28. [Process](#28--process)
+29. [Queue](#29--queue)
+30. [Random](#30--random)
+31. [Reference](#31--reference)
+32. [RegularExpression](#32--regularexpression)
+33. [Resource](#33--resource)
+34. [Result](#34--result)
+35. [Set](#35--set)
+36. [Socket](#36--socket)
+37. [Stack](#37--stack)
+38. [String](#38--string)
+39. [Task](#39--task)
+40. [Terminal](#40--terminal)
+41. [Xml](#41--xml)
 
 - [See Also](#see-also)
 
@@ -324,12 +325,20 @@ character).
 | `DateTime.is_leap_year(year)`              | `(integer)`                                              | `boolean`                    | Whether `year` is a leap year                                            |
 | `DateTime.minute(ts)`                      | `(number)`                                               | `result<integer>`            | Minute (0–59); fail if out of range                                      |
 | `DateTime.month(ts)`                       | `(number)`                                               | `result<integer>`            | Month (1–12); fail if out of range                                       |
+| `DateTime.month_from_number(n)`            | `(integer)`                                              | `result<DateTime.Month>`     | `DateTime.Month` from 1 (January)–12 (December); fail if `n` not in [1, 12] |
+| `DateTime.month_name(m)`                   | `(DateTime.Month)`                                       | `string`                     | English month name, `"January"`–`"December"`                             |
+| `DateTime.month_number(m)`                 | `(DateTime.Month)`                                       | `integer`                    | Number of a month, 1 (January)–12 (December)                             |
+| `DateTime.month_of(ts)`                    | `(number)`                                               | `result<DateTime.Month>`     | Month of a timestamp as a `DateTime.Month` choice; fail if out of range  |
 | `DateTime.milliseconds_since_start()`      | `()`                                                     | `number`                     | Milliseconds since program start                                         |
 | `DateTime.now_iso_string()`                | `()`                                                     | `result<string>`             | Current time as `"YYYY-MM-DDTHH:MM:SSZ"`                                 |
 | `DateTime.now_unix()`                      | `()`                                                     | `number`                     | Current Unix timestamp                                                   |
 | `DateTime.second(ts)`                      | `(number)`                                               | `result<integer>`            | Second (0–59); fail if out of range                                      |
 | `DateTime.to_iso_string(ts)`               | `(number)`                                               | `result<string>`             | Format as `"YYYY-MM-DDTHH:MM:SSZ"`; fail if out of range                 |
 | `DateTime.to_parts(ts)`                    | `(number)`                                               | `result<DateTime.TimeParts>` | Record with year, month, day, hour, minute, second; fail if out of range |
+| `DateTime.weekday(ts)`                     | `(number)`                                               | `result<DateTime.Weekday>`   | Weekday of a timestamp as a `DateTime.Weekday` choice; fail if out of range |
+| `DateTime.weekday_from_number(n)`          | `(integer)`                                              | `result<DateTime.Weekday>`   | `DateTime.Weekday` from 1 (Monday)–7 (Sunday); fail if `n` not in [1, 7]  |
+| `DateTime.weekday_name(w)`                 | `(DateTime.Weekday)`                                     | `string`                     | English day name, `"Monday"`–`"Sunday"`                                   |
+| `DateTime.weekday_number(w)`               | `(DateTime.Weekday)`                                     | `integer`                    | ISO number of a weekday, 1 (Monday)–7 (Sunday)                           |
 | `DateTime.year(ts)`                        | `(number)`                                               | `result<integer>`            | Four-digit year; fail if out of range                                    |
 
 ### Timezone Support (Fixed UTC Offsets)
@@ -349,6 +358,25 @@ Valid offsets range from −720 (UTC−12:00) to +840 (UTC+14:00) minutes. Out-o
 `DateTime.TimeParts` record fields: `year`, `month`, `day`, `hour`, `minute`, `second` (all `integer`).
 
 `DateTime.Duration` record fields: `days`, `hours`, `minutes`, `seconds`, `milliseconds` (all `integer`), and `negative` (`boolean`). `break_duration` splits a `number` span in seconds into this human-readable breakdown — the `hours`/`minutes`/`seconds` components are normalised (0–23, 0–59, 0–59) and the sign is carried in `negative` — and `format_duration` renders it back into a compact string such as `"1h 2m 5s"`.
+
+`DateTime.Weekday` is a choice type with seven variants — `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday` — in ISO-8601 order (Monday = 1 … Sunday = 7). `DateTime.weekday(ts)` returns it for a timestamp, so a `match` over the result is exhaustive and autocompleted, and a mistyped day is a compile error rather than a magic number. It complements the integer `DateTime.day_of_week` (kept for index-style use): `DateTime.weekday_number` and `DateTime.weekday_from_number` bridge between the choice and the 1–7 integer, and `DateTime.weekday_name` gives the English day name.
+
+```luma
+match Result.unwrap(DateTime.weekday(DateTime.now_unix())) {
+case DateTime.Weekday.Saturday { print("weekend!") }
+case DateTime.Weekday.Sunday   { print("weekend!") }
+else                           { print("weekday") }
+}
+```
+
+`DateTime.Month` is a choice type with twelve variants — `January`, `February`, `March`, `April`, `May`, `June`, `July`, `August`, `September`, `October`, `November`, `December` — in calendar order (January = 1 … December = 12). `DateTime.month_of(ts)` returns it for a timestamp (named to avoid clashing with the integer `DateTime.month`, which is kept for index-style use), so a `match` over the result is exhaustive and autocompleted, and a mistyped month is a compile error rather than a magic number. `DateTime.month_number` and `DateTime.month_from_number` bridge between the choice and the 1–12 integer, and `DateTime.month_name` gives the English month name.
+
+```luma
+match Result.unwrap(DateTime.month_of(DateTime.now_unix())) {
+case DateTime.Month.December { print("year end!") }
+else                         { print(DateTime.month_name(Result.unwrap(DateTime.month_of(DateTime.now_unix())))) }
+}
+```
 
 ## 10 — Decimal
 
@@ -500,6 +528,7 @@ Transform the representation of a string without changing its type (e.g. Base64,
 | `FileSystem.rename(old, new)`             | `(string, string)`        | `result<boolean>`       | Rename a file                                         |
 | `FileSystem.rename_directory(old, new)`   | `(string, string)`        | `result<boolean>`       | Rename a directory; fail if path is not a directory   |
 | `FileSystem.size(path)`                   | `(string)`                | `result<integer>`       | File size in bytes                                    |
+| `FileSystem.split_path(path)`             | `(string)`                | `FileSystem.PathParts`  | Decompose a path into parent, name, stem, extension in one call |
 | `FileSystem.stem(path)`                   | `(string)`                | `string`                | File name without extension (e.g. `"hello"`)          |
 | `FileSystem.write_file(path, data)`       | `(string, string)`        | `result<boolean>`       | Write string to file                                  |
 | `FileSystem.write_lines(path, lines)`     | `(string, array<string>)` | `result<boolean>`       | Write array of lines to file                          |
@@ -507,6 +536,8 @@ Transform the representation of a string without changing its type (e.g. Base64,
 `copy`, `delete`, `delete_directory`, `list_directories`, and `list_files` reject symbolic links and return `failure` to prevent symlink-following attacks.
 
 `FileSystem.FileInfo` record fields: `size` (`integer`, bytes; `0` for directories and other non-regular files), `modified_time` (`number`, fractional seconds since the Unix epoch, matching `get_modified_time`), `is_directory` (`boolean`), `is_file` (`boolean`), `is_symlink` (`boolean`). `metadata` answers in one call what `size`, `get_modified_time`, `is_directory`, `is_file`, and `is_symlink` answer individually; the `is_symlink` flag reflects the path itself (it is not followed) while the size, time, and directory/file flags follow symlinks.
+
+`FileSystem.PathParts` record fields: `parent` (`string`), `name` (`string`), `stem` (`string`), `extension` (`string`). `split_path` answers in one typed call what `parent`, `name`, `stem`, and `extension` answer individually. It is pure string manipulation — no I/O — so it needs no filesystem access, works in sandbox mode, and never fails.
 
 > **Security note** — `append_file`, `read_file`, `read_lines`, `write_file`, and `write_lines` validate that the resolved path stays within the current working directory, which blocks cross-directory symlink traversal (e.g. a symlink pointing to `/etc/passwd` is rejected). However, a symbolic link that points to another file **within** the working directory is followed transparently. If your program accepts a user-supplied file path, validate that the resolved path refers to the expected file before reading or writing.
 
@@ -579,6 +610,7 @@ _Effects_ below).
 | `Length` | `Shrink`, `Fill`, `Fixed(number value)`, `FillPortion(integer weight)` |
 | `Radius` | `None`, `Small`, `Medium`, `Large`, `Full` |
 | `Scheme` | `Light`, `Dark`, `Auto` |
+| `Color` | `Primary`, `Success`, `Warning`, `Danger`, `Muted`, `Custom(string hex)` |
 
 `View` is a global `record` describing one piece of UI; `view` returns a tree of them.
 
@@ -655,6 +687,9 @@ _Effects_ below).
 | `Solaris.resizable` | `(dictionary, boolean) -> dictionary` | Whether the window may be resized |
 | `Solaris.fullscreen` · `devtools` | `(dictionary) -> dictionary` | Start fullscreen / open the inspector |
 | `Solaris.accent` · `font` | `(dictionary, string) -> dictionary` | Accent colour / UI font |
+| `Solaris.accent_color` | `(dictionary, Color) -> dictionary` | Accent from a typed `Color` (semantic token or `Solaris.hex`) |
+| `Solaris.hex` | `(string) -> Color` | Build a `Color.Custom` from any CSS colour string |
+| `Solaris.color_value` | `(Color) -> string` | Resolve a `Color` to its CSS string (for any `theme` override) |
 | `Solaris.color_scheme` | `(dictionary, Scheme) -> dictionary` | Pin light/dark or follow the OS |
 | `Solaris.theme` | `(dictionary, dictionary overrides) -> dictionary` | Advanced token overrides |
 | `Solaris.persist` | `(dictionary, string path) -> dictionary` | Save/restore the model across runs |
@@ -1279,8 +1314,18 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.put(url, body)`                 | `(string, string)`                         | `result<Http.Response>` | PUT request                                                          |
 | `Http.put_with(url, body, headers)`   | `(string, string, dictionary<string>)`     | `result<Http.Response>` | PUT with body and custom headers                                     |
 | `Http.request(opts, headers)`         | `(dictionary<string>, dictionary<string>)` | `result<Http.Response>` | Generic request (`opts` has `"method"` and `"url"` keys)             |
+| `Http.request_of(method, url)`        | `(Http.Method, string)`                    | `Http.Request`          | Build a typed request (empty headers/body, default 30 s timeout)     |
+| `Http.request_with(method, url, headers, body, timeout_ms)` | `(Http.Method, string, dictionary<string>, string, integer)` | `Http.Request` | Build a fully-specified typed request                    |
+| `Http.send(request)`                  | `(Http.Request)`                           | `result<Http.Response>` | Perform a typed `Http.Request` and return the response               |
 
 `Http.Response` record fields: `status` (`integer`), `reason` (`string`), `body` (`string`), `headers` (`dictionary<string>`).
+
+`Http.Request` record fields: `method` (`Http.Method`), `url` (`string`), `headers` (`dictionary<string>`), `body` (`string`), `timeout_ms` (`integer`). Unlike the `Http.request` options dictionary — which is homogeneous and so forces the verb to be stringified — an `Http.Request` carries the `Http.Method` choice natively, so the request is type-checked and discoverable and its method can be matched exhaustively. Build one with `Http.request_of` (common case) or `Http.request_with` (full control), then run it with `Http.send`:
+
+```luma
+Http.Request req = Http.request_of(Http.Method.Get, "http://example.com/api")
+result<Http.Response> r = Http.send(req)
+```
 
 `Http.Method` is a choice type with variants `Get`, `Post`, `Put`, `Patch`, `Delete`, `Head`, and `Options` — a type-safe, match-exhaustive way to name an HTTP verb (autocomplete lists them all; a typo is a compile error). Because a Luma dictionary literal is homogeneous, an `Http.Method` value cannot be stored directly under the `"method"` key of `Http.request`'s options dictionary alongside the string `"url"`. Instead, convert it with `Http.method_to_string` so the options dictionary stays all-string:
 
@@ -1311,17 +1356,26 @@ result<Http.Response> r = Http.request(
 
 Serialise and deserialise Luma values as JSON.
 
-| Function                       | Parameter Types       | Return Type                  | Description                                                                      |
-| ------------------------------ | --------------------- | ---------------------------- | -------------------------------------------------------------------------------- |
-| `Json.deserialize(s)`          | `(string)`            | `result<T>`                  | Parse JSON string                                                                |
-| `Json.get(json, path)`         | `(string, string)`    | `result<T>`                  | Navigate dot-separated path (e.g. `"user.age"`, `"items.0"`)                     |
-| `Json.get_path(json, path)`    | `(string, string)`    | `result<T>`                  | Read a value using dot and `[index]` path syntax; fail if missing                |
-| `Json.is_valid(s)`             | `(string)`            | `boolean`                    | Whether `s` is valid JSON                                                        |
-| `Json.merge(a, b)`             | `(string, string)`    | `result<string>`             | Merge two JSON objects; `b` wins on conflicts                                    |
-| `Json.serialize(v)`            | `(T)`                 | `string`                     | Serialise value to compact JSON                                                  |
-| `Json.serialize_pretty(v)`     | `(T)`                 | `string`                     | Serialise value to formatted JSON                                                |
-| `Json.set(json, path, v)`      | `(string, string, T)` | `result<string>`             | Replace key at path; return new JSON string                                      |
-| `Json.set_path(json, path, v)` | `(string, string, T)` | `result<string>`             | Replace the value at a dot/`[index]` path; return new JSON; fail on invalid path |
+| Function                       | Parameter Types       | Return Type                    | Description                                                                      |
+| ------------------------------ | --------------------- | ------------------------------ | -------------------------------------------------------------------------------- |
+| `Json.as_array(v)`             | `(Json.Value)`        | `result<array<Json.Value>>`    | Extract the array payload; fail if `v` is not a `JsonArray`                       |
+| `Json.as_boolean(v)`           | `(Json.Value)`        | `result<boolean>`              | Extract the boolean payload; fail if `v` is not a `JsonBool`                      |
+| `Json.as_number(v)`            | `(Json.Value)`        | `result<number>`               | Extract the numeric payload; fail if `v` is not a `JsonNumber`                    |
+| `Json.as_object(v)`            | `(Json.Value)`        | `result<dictionary<Json.Value>>` | Extract the object payload; fail if `v` is not a `JsonObject`                   |
+| `Json.as_string(v)`            | `(Json.Value)`        | `result<string>`               | Extract the string payload; fail if `v` is not a `JsonString`                    |
+| `Json.deserialize(s)`          | `(string)`            | `result<T>`                    | Parse JSON string                                                                |
+| `Json.field(v, key)`           | `(Json.Value, string)` | `optional<Json.Value>`        | Look up a key in a `JsonObject`; `none` if absent or `v` is not an object        |
+| `Json.get(json, path)`         | `(string, string)`    | `result<T>`                    | Navigate dot-separated path (e.g. `"user.age"`, `"items.0"`)                     |
+| `Json.get_path(json, path)`    | `(string, string)`    | `result<T>`                    | Read a value using dot and `[index]` path syntax; fail if missing                |
+| `Json.index(v, i)`             | `(Json.Value, integer)` | `optional<Json.Value>`       | Index into a `JsonArray`; `none` if out of bounds or `v` is not an array          |
+| `Json.is_valid(s)`             | `(string)`            | `boolean`                      | Whether `s` is valid JSON                                                        |
+| `Json.merge(a, b)`             | `(string, string)`    | `result<string>`               | Merge two JSON objects; `b` wins on conflicts                                    |
+| `Json.parse(s)`                | `(string)`            | `result<Json.Value>`           | Parse a JSON string into the typed `Json.Value` ADT                              |
+| `Json.serialize(v)`            | `(T)`                 | `string`                       | Serialise value to compact JSON                                                  |
+| `Json.serialize_pretty(v)`     | `(T)`                 | `string`                       | Serialise value to formatted JSON                                                |
+| `Json.set(json, path, v)`      | `(string, string, T)` | `result<string>`               | Replace key at path; return new JSON string                                      |
+| `Json.set_path(json, path, v)` | `(string, string, T)` | `result<string>`               | Replace the value at a dot/`[index]` path; return new JSON; fail on invalid path |
+| `Json.to_string(v)`            | `(Json.Value)`        | `string`                       | Serialise a `Json.Value` back to a compact JSON string                           |
 
 Supported types: `integer`, `number`, `string`, `boolean`, `none` (→ JSON `null`), `array`, and `dictionary`. Nested structures are handled recursively.
 
@@ -1330,6 +1384,47 @@ Supported types: `integer`, `number`, `string`, `boolean`, `none` (→ JSON `nul
 `Json.set` navigates to a key inside a JSON object string and returns a new serialised JSON string with that key replaced by the given value. The path must point to an existing key inside a JSON object.
 
 `Json.merge` merges two JSON object strings; keys from the second object overwrite those in the first. Both inputs must be JSON objects.
+
+### The typed `Json.Value` ADT
+
+The functions above round-trip through dynamic values the type checker cannot see into. For code that must walk untrusted JSON in a type-safe, exhaustive way, `Json.Value` is a recursive choice type with six variants:
+
+```luma
+choice Json.Value {
+    JsonObject(dictionary<Json.Value>)
+    JsonArray(array<Json.Value>)
+    JsonString(string)
+    JsonNumber(number)
+    JsonBool(boolean)
+    JsonNull
+}
+```
+
+`Json.parse(s)` returns a `result<Json.Value>`, so a `match` over the parsed value is exhaustive and autocompleted — "is this a string or an object?" becomes a compile-checked question rather than a stringly-typed guess. The `as_string` / `as_number` / `as_boolean` / `as_array` / `as_object` accessors extract a variant's payload as a `result` (failing on a type mismatch), while `field(v, key)` and `index(v, i)` return an `optional<Json.Value>` for safe navigation (`none` on a missing key, out-of-bounds index, or wrong container type). `Json.to_string(v)` serialises a `Json.Value` back to compact JSON, emitting object keys in sorted order and integral numbers without a trailing decimal. The existing dynamic `Json.deserialize` / `Json.get` / `Json.serialize` API is unchanged for simple cases.
+
+```luma
+function string summarise(Json.Value v) {
+    return match v {
+    case Json.Value.JsonObject(fields) { "object with ${Dictionary.length(fields)} keys" }
+    case Json.Value.JsonArray(items)   { "array of ${Array.length(items)}" }
+    case Json.Value.JsonString(s)      { "string: ${s}" }
+    case Json.Value.JsonNumber(n)      { "number: ${n}" }
+    case Json.Value.JsonBool(b)        { "bool: ${b}" }
+    case Json.Value.JsonNull           { "null" }
+    }
+}
+
+Json.Value doc = Result.unwrap(Json.parse("{\"user\": {\"age\": 30}}"))
+match Json.field(doc, "user") {
+case some(user) {
+    match Json.field(user, "age") {
+    case some(age_value) { print("age is ${Result.unwrap(Json.as_number(age_value))}") }
+    case none            { print("no age") }
+    }
+}
+case none { print("no user") }
+}
+```
 
 ## 21 — KeyValueStore
 
@@ -1582,7 +1677,66 @@ string label = some(42)
 print(label) # "positive: 42"
 ```
 
-## 27 — Process
+## 27 — Order
+
+Comparison utilities built around the `Ordering` choice type, a self-documenting
+alternative to raw `-1` / `0` / `1` comparison numbers. All functions are available
+as `Order.function_name(...)` without a `use` declaration.
+
+The `Ordering` choice type is **top-level** (not namespaced) and provides three
+variants: `Ordering.Less`, `Ordering.Equal`, `Ordering.Greater`. A `match` over an
+`Ordering` is exhaustive and autocompleted, so a mistyped or forgotten case becomes
+a compile error rather than a sign-convention bug ("does negative mean first?").
+
+| Function                | Parameter Types      | Return Type | Description                                                       |
+| ----------------------- | -------------------- | ----------- | ---------------------------------------------------------------- |
+| `Order.of(a, b)`        | `(any, any)`         | `Ordering`  | Compare two comparable primitives; runtime error if incomparable |
+| `Order.reverse(o)`      | `(Ordering)`         | `Ordering`  | Flip `Less` ↔ `Greater`; `Equal` unchanged                       |
+| `Order.then(first, second)` | `(Ordering, Ordering)` | `Ordering` | Return `first` unless it is `Equal`, then `second` (tie-break) |
+| `Order.to_number(o)`    | `(Ordering)`         | `number`    | Bridge to the numeric comparator: `-1.0` / `0.0` / `1.0`         |
+| `Order.from_number(n)`  | `(number)`           | `Ordering`  | Bridge from a negative / zero / positive comparator result       |
+
+`Order.of` compares strings, integers, numbers (with integer→number promotion), and
+booleans (`false` < `true`). Comparing values of incompatible types — or a `NaN` — is
+a programmer error and raises a runtime error, exactly like the numeric comparators it
+wraps.
+
+```luma
+Ordering c = Order.of(1, 2)          # Ordering.Less
+Ordering r = Order.reverse(c)        # Ordering.Greater
+
+string label = match Order.of(3, 3) {
+case Ordering.Less    { "before" }
+case Ordering.Equal   { "same" }
+case Ordering.Greater { "after" }
+}                                    # "same" — exhaustive, no else needed
+```
+
+The `to_number` / `from_number` bridges let the typed `Ordering` interoperate with the
+existing numeric comparator that `Array.sort` expects, which shines for multi-key sorts.
+`Order.then` chains comparisons so "sort by last name, then first name" reads directly:
+
+```luma
+record Person { string last, string first }
+
+array<Person> people = [
+    Person { last = "Smith", first = "Zoe" },
+    Person { last = "Jones", first = "Alice" },
+    Person { last = "Smith", first = "Adam" }
+]
+
+array<Person> sorted = Result.unwrap(
+    Array.sort(people, (Person a, Person b) -> Order.to_number(
+        Order.then(Order.of(a.last, b.last), Order.of(a.first, b.first))
+    ))
+)
+# Jones/Alice, Smith/Adam, Smith/Zoe
+```
+
+The existing numeric comparator convention (a `function(T, T) -> number` returning a
+negative, zero, or positive value) still works unchanged; `Order` is purely additive.
+
+## 28 — Process
 
 | Function                                        | Parameter Types    | Return Type                     | Description                                                              |
 | ----------------------------------------------- | ------------------ | ------------------------------- | ------------------------------------------------------------------------ |
@@ -1600,7 +1754,7 @@ print(label) # "positive: 42"
 
 `Process.ProcessResult` record fields: `exit_code` (`integer`), `output` (`string`).
 
-## 28 — Queue
+## 29 — Queue
 
 Immutable FIFO (first-in, first-out) queue. All mutating operations return a new queue, leaving the original unchanged.
 
@@ -1621,7 +1775,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Queue.reduce(q, init, fn)` | `(queue, U, function(U, T) -> U)` | `result<U>`              | Fold elements; fail if callback throws                 |
 | `Queue.to_array(q)`         | `(queue)`                         | `array<T>`               | Convert to array                                       |
 
-## 29 — Random
+## 30 — Random
 
 | Function                          | Parameter Types       | Return Type        | Description                                                                     |
 | --------------------------------- | --------------------- | ------------------ | ------------------------------------------------------------------------------- |
@@ -1641,7 +1795,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 
 **Cryptographically secure functions.** The `secure_*` variants use AES-CTR-DRBG (via Mbed TLS) seeded from platform entropy. They are suitable for generating tokens, secrets, and session identifiers. Requires TLS support (`LUMA_FEATURE_TLS=ON`, enabled by default).
 
-## 30 — Reference
+## 31 — Reference
 
 Mutable reference cells — shared mutable containers that preserve identity across closure capture boundaries. All functions are available as `Reference.function_name(...)` without a `use` declaration.
 
@@ -1693,7 +1847,7 @@ integer value = Reference.new(42) |> Reference.get()       # 42
 string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 ```
 
-## 31 — RegularExpression
+## 32 — RegularExpression
 
 | Function                                          | Parameter Types            | Return Type                              | Description                                                   |
 | ------------------------------------------------- | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
@@ -1720,7 +1874,7 @@ print(m.groups[2].text)  # "com"
 
 > **Resource limits** — Regular expression patterns are capped at a maximum byte size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_REGEX_PATTERN_SIZE`). Patterns exceeding the limit return `failure` (or `false` from `is_valid`). The regex engine uses the ECMAScript dialect provided by the C++ standard library. There is no built-in protection against catastrophic backtracking — patterns with nested quantifiers such as `(a+)+b` can take exponential time on non-matching input. When processing untrusted patterns, keep them simple and avoid nested repetition operators (`*`, `+`, `{n,m}` inside groups that are themselves repeated).
 
-## 32 — Resource
+## 33 — Resource
 
 `Resource.with` guarantees that a cleanup function is called after a body function runs, regardless of whether the body throws a runtime error. It is the Luma equivalent of a `finally`-based cleanup block, expressed as a library function.
 
@@ -1772,11 +1926,11 @@ string content = Resource.using(
 )
 ```
 
-## 33 — Result
+## 34 — Result
 
 See the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--result-and-optional).
 
-## 34 — Set
+## 35 — Set
 
 `Set` values are a distinct type (not arrays). Use `Set.from_array` to create a set and `Set.to_array` to convert back.
 
@@ -1807,7 +1961,7 @@ See the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--resul
 | `Set.to_array(s)`                    | `(set)`                         | `array<T>`           | Convert to array                                               |
 | `Set.union(s, other)`                | `(set, set)`                    | `set`                | Elements in `s` or `other`                                     |
 
-## 35 — Socket
+## 36 — Socket
 
 Cross-platform TCP and UDP networking.
 
@@ -1836,7 +1990,7 @@ Cross-platform TCP and UDP networking.
 
 ---
 
-## 36 — Stack
+## 37 — Stack
 
 Immutable LIFO (last-in, first-out) stack. All mutating operations return a new stack.
 
@@ -1857,7 +2011,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `Stack.reduce(s, init, fn)` | `(stack, U, function(U, T) -> U)` | `result<U>`              | Fold elements; fail if callback throws                          |
 | `Stack.to_array(s)`         | `(stack)`                         | `array<T>`               | Convert to array                                                |
 
-## 37 — String
+## 38 — String
 
 | Function                            | Parameter Types                | Return Type       | Description                                                                     |
 | ----------------------------------- | ------------------------------ | ----------------- | ------------------------------------------------------------------------------- |
@@ -1931,7 +2085,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 
 > **Resource limits** — `String.center`, `String.pad_left`, and `String.pad_right` cap their target `width`, and `String.repeat` caps its repeat count and result size. See the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits) for Luma's resource limits and their `LUMA_LIMIT_*` overrides.
 
-## 38 — Task
+## 39 — Task
 
 Concurrency combinators for `spawn`/`await` tasks.
 
@@ -1996,20 +2150,20 @@ Using `spawn` outside a `task_scope` still works (fire-and-forget) but produces 
 
 > **Resource limit** — The internal task queue holds a bounded number of pending tasks (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`). Spawning beyond this limit throws a runtime error (`task queue is full — too many pending tasks`). Design your program to await tasks before spawning more to stay within this limit.
 
-## 39 — Terminal
+## 40 — Terminal
 
 Terminal UI control — cursor movement, colors, styling, screen management, and mouse input.
 
 | Function                                       | Parameter Types                       | Return Type                       | Description                                                             |
 | ---------------------------------------------- | ------------------------------------- | --------------------------------- | ----------------------------------------------------------------------- |
-| `Terminal.background_color(name, text)`        | `(string, string)`                    | `result<string>`                  | Named background color; fail if color name unknown                      |
+| `Terminal.background_color(color, text)`        | `(Terminal.Color \| string, string)`  | `result<string>`                  | Named background color; accepts a `Terminal.Color` variant or string name |
 | `Terminal.bell()`                              | `()`                                  | `none`                            | Audible bell                                                            |
 | `Terminal.bold(text)`                          | `(string)`                            | `string`                          | Bold styled text                                                        |
 | `Terminal.clear_line()`                        | `()`                                  | `none`                            | Clear entire current line                                               |
 | `Terminal.clear_screen()`                      | `()`                                  | `none`                            | Clear screen and move to top-left                                       |
 | `Terminal.clear_to_end_of_line()`              | `()`                                  | `none`                            | Clear from cursor to end of line                                        |
 | `Terminal.clear_to_end_of_screen()`            | `()`                                  | `none`                            | Clear from cursor to end of screen                                      |
-| `Terminal.color(name, text)`                   | `(string, string)`                    | `result<string>`                  | Named foreground color; fail if color name unknown                      |
+| `Terminal.color(color, text)`                   | `(Terminal.Color \| string, string)`  | `result<string>`                  | Named foreground color; accepts a `Terminal.Color` variant or string name |
 | `Terminal.columns()`                           | `()`                                  | `integer`                         | Terminal width in columns                                               |
 | `Terminal.dim(text)`                           | `(string)`                            | `string`                          | Dim styled text                                                         |
 | `Terminal.disable_mouse()`                     | `()`                                  | `none`                            | Disable mouse event reporting                                           |
@@ -2077,6 +2231,17 @@ Mouse events are returned as strings: `"mouse:left_press:ROW:COL"`, `"mouse:left
 
 Available named colors: `black`, `blue`, `bright_black` .. `bright_white`, `cyan`, `default`, `green`, `magenta`, `red`, `white`, `yellow`.
 
+`Terminal.color` and `Terminal.background_color` also accept a `Terminal.Color` choice variant in place of the string name. Because the choice is a closed set, the typed form is caught by the type checker (a mistyped colour is a compile error, not a runtime `result` failure) and is autocompleted. `Terminal.Color` has 17 variants: `Black`, `Red`, `Green`, `Yellow`, `Blue`, `Magenta`, `Cyan`, `White`, `BrightBlack`, `BrightRed`, `BrightGreen`, `BrightYellow`, `BrightBlue`, `BrightMagenta`, `BrightCyan`, `BrightWhite`, `Default` — each maps to the identically named colour string. Both the string and choice forms return `result<string>` so the two call styles stay interchangeable.
+
+```luma
+# String form (unchanged) — a bad name fails at runtime:
+string a = Result.unwrap(Terminal.color("red", "error"))
+
+# Choice form — type-checked and autocompleted:
+string b = Result.unwrap(Terminal.color(Terminal.Color.Red, "error"))
+string c = Result.unwrap(Terminal.background_color(Terminal.Color.Yellow, "warning"))
+```
+
 `Terminal.is_terminal()` returns `true` when stdout is connected to an interactive terminal device (a TTY) — for example, when a program is run directly in a console or terminal emulator. It returns `false` when stdout is **piped** to another program (`luma app.luma | grep foo`), **redirected** to a file (`luma app.luma > out.txt`), or when the process is spawned without an attached terminal (for example by a CI runner or background job). Use this to conditionally enable ANSI escape codes, colors, or interactive UI only when output goes to a real terminal.
 
 ### Interaction Testing
@@ -2135,7 +2300,7 @@ function void test_counter_responds_to_keys() {
 
 The same machinery is reachable without Luma code via the `LUMA_TERMINAL_INPUT` environment variable (one key per line), which the example runner (`scripts/run_examples.py`) uses to drive the raw-mode example programs unattended.
 
-## 40 — Xml
+## 41 — Xml
 
 Parse, build, query, and serialise XML documents. XML nodes are opaque values.
 

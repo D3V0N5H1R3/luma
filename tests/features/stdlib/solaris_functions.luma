@@ -309,3 +309,51 @@ function void test_chart_height_modifier_passes_through_to_style() {
     dictionary style = Dictionary.get_or(tree, "style", {})
     assert(Dictionary.get_or(style, "height", "") == "300.0px")
 }
+
+# ═══════════════════════════════════════════════════════════
+# Colour tokens — the typed Color design token (semantic palette
+# plus a Custom(hex) escape hatch) resolves to CSS and drives the
+# accent, all headlessly. A mistyped colour is now a compile error.
+# ═══════════════════════════════════════════════════════════
+
+# color_value is itself an exhaustive match over Color (no else), so
+# calling it for every variant proves the token is fully registered.
+
+@test
+function void test_color_value_maps_semantic_tokens_to_theme_vars() {
+    assert(Solaris.color_value(Color.Primary) == GraphicalUi.VAR_PRIMARY)
+    assert(Solaris.color_value(Color.Success) == GraphicalUi.VAR_SUCCESS)
+    assert(Solaris.color_value(Color.Warning) == GraphicalUi.VAR_WARNING)
+    assert(Solaris.color_value(Color.Danger)  == GraphicalUi.VAR_ERROR)
+    assert(Solaris.color_value(Color.Muted)   == GraphicalUi.VAR_TEXT_MUTED)
+}
+
+@test
+function void test_hex_builds_a_custom_color() {
+    # Solaris.hex is the Custom constructor; color_value returns the raw string.
+    assert(Solaris.hex("#ff8800") == Color.Custom("#ff8800"))
+    assert(Solaris.color_value(Solaris.hex("#ff8800")) == "#ff8800")
+    assert(Solaris.color_value(Color.Custom("rgb(1, 2, 3)")) == "rgb(1, 2, 3)")
+}
+
+@test
+function void test_accent_color_sets_theme_accent_from_custom() {
+    dictionary config = counter_app() |> Solaris.accent_color(Solaris.hex("#3b82f6"))
+    dictionary applied = Dictionary.get_or(config, "theme", {})
+    assert(Dictionary.get_or(applied, "accent", "") == "#3b82f6")
+}
+
+@test
+function void test_accent_color_accepts_a_semantic_token() {
+    dictionary config = counter_app() |> Solaris.accent_color(Color.Success)
+    dictionary applied = Dictionary.get_or(config, "theme", {})
+    assert(Dictionary.get_or(applied, "accent", "") == GraphicalUi.VAR_SUCCESS)
+}
+
+@test
+function void test_string_accent_still_works() {
+    # The original string-based accent is untouched (purely additive).
+    dictionary config = counter_app() |> Solaris.accent("#101010")
+    dictionary applied = Dictionary.get_or(config, "theme", {})
+    assert(Dictionary.get_or(applied, "accent", "") == "#101010")
+}

@@ -523,3 +523,155 @@ function void test_datetime_format_duration_zero_and_negative() {
     assert(DateTime.format_duration(DateTime.break_duration(0.0)) == "0s", "zero")
     assert(DateTime.format_duration(DateTime.break_duration(-3725.0)) == "-1h 2m 5s", "negative")
 }
+
+# ─── DateTime.Weekday ────────────────────────────────────
+
+# An exhaustive match over every DateTime.Weekday variant. With no else branch
+# it only type-checks if the choice declares exactly these seven variants, so it
+# doubles as a check that DateTime.Weekday is fully registered and annotatable.
+function string weekday_abbrev(DateTime.Weekday w) {
+    return match w {
+    case DateTime.Weekday.Monday    { "Mon" }
+    case DateTime.Weekday.Tuesday   { "Tue" }
+    case DateTime.Weekday.Wednesday { "Wed" }
+    case DateTime.Weekday.Thursday  { "Thu" }
+    case DateTime.Weekday.Friday    { "Fri" }
+    case DateTime.Weekday.Saturday  { "Sat" }
+    case DateTime.Weekday.Sunday    { "Sun" }
+    }
+}
+
+@test
+function void test_datetime_weekday_from_timestamp() {
+    # 2024-03-15 is a Friday.
+    number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    DateTime.Weekday w = Result.unwrap(DateTime.weekday(timestamp))
+
+    assert(w == DateTime.Weekday.Friday)
+    assert(weekday_abbrev(w) == "Fri")
+    assert(DateTime.weekday_name(w) == "Friday")
+    assert(DateTime.weekday_number(w) == 5)
+
+    # The typed accessor agrees with the existing integer day_of_week accessor.
+    assert(DateTime.weekday_number(w) == Result.unwrap(DateTime.day_of_week(timestamp)))
+}
+
+@test
+function void test_datetime_weekday_is_exhaustive() {
+    # Each variant maps through the exhaustive match.
+    assert(weekday_abbrev(DateTime.Weekday.Monday) == "Mon")
+    assert(weekday_abbrev(DateTime.Weekday.Tuesday) == "Tue")
+    assert(weekday_abbrev(DateTime.Weekday.Wednesday) == "Wed")
+    assert(weekday_abbrev(DateTime.Weekday.Thursday) == "Thu")
+    assert(weekday_abbrev(DateTime.Weekday.Friday) == "Fri")
+    assert(weekday_abbrev(DateTime.Weekday.Saturday) == "Sat")
+    assert(weekday_abbrev(DateTime.Weekday.Sunday) == "Sun")
+
+    # Variants compare by identity, and the type annotates a local.
+    DateTime.Weekday w = DateTime.Weekday.Monday
+    assert(w == DateTime.Weekday.Monday)
+    assert(w != DateTime.Weekday.Sunday)
+}
+
+@test
+function void test_datetime_weekday_from_number() {
+    # 1 = Monday … 7 = Sunday.
+    assert(DateTime.weekday_name(Result.unwrap(DateTime.weekday_from_number(1))) == "Monday")
+    assert(DateTime.weekday_name(Result.unwrap(DateTime.weekday_from_number(7))) == "Sunday")
+    assert(Result.unwrap(DateTime.weekday_from_number(5)) == DateTime.Weekday.Friday)
+
+    # Out-of-range weekday numbers are rejected.
+    assert(Result.is_failure(DateTime.weekday_from_number(0)), "0 should fail")
+    assert(Result.is_failure(DateTime.weekday_from_number(8)), "8 should fail")
+}
+
+@test
+function void test_datetime_weekday_number_roundtrip() {
+    # weekday_number ∘ weekday_from_number is the identity on 1..7.
+    for n in 1 ..= 7 {
+        DateTime.Weekday w = Result.unwrap(DateTime.weekday_from_number(n))
+
+        assert(DateTime.weekday_number(w) == n)
+    }
+}
+
+# ─── DateTime.Month ──────────────────────────────────────
+
+# An exhaustive match over every DateTime.Month variant. With no else branch it
+# only type-checks if the choice declares exactly these twelve variants, so it
+# doubles as a check that DateTime.Month is fully registered and annotatable.
+function string month_abbrev(DateTime.Month m) {
+    return match m {
+    case DateTime.Month.January   { "Jan" }
+    case DateTime.Month.February  { "Feb" }
+    case DateTime.Month.March     { "Mar" }
+    case DateTime.Month.April     { "Apr" }
+    case DateTime.Month.May       { "May" }
+    case DateTime.Month.June      { "Jun" }
+    case DateTime.Month.July      { "Jul" }
+    case DateTime.Month.August    { "Aug" }
+    case DateTime.Month.September { "Sep" }
+    case DateTime.Month.October   { "Oct" }
+    case DateTime.Month.November  { "Nov" }
+    case DateTime.Month.December  { "Dec" }
+    }
+}
+
+@test
+function void test_datetime_month_from_timestamp() {
+    # 2024-03-15 is in March.
+    number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    DateTime.Month m = Result.unwrap(DateTime.month_of(timestamp))
+
+    assert(m == DateTime.Month.March)
+    assert(month_abbrev(m) == "Mar")
+    assert(DateTime.month_name(m) == "March")
+    assert(DateTime.month_number(m) == 3)
+
+    # The typed accessor agrees with the existing integer month accessor.
+    assert(DateTime.month_number(m) == Result.unwrap(DateTime.month(timestamp)))
+}
+
+@test
+function void test_datetime_month_is_exhaustive() {
+    # Each variant maps through the exhaustive match.
+    assert(month_abbrev(DateTime.Month.January) == "Jan")
+    assert(month_abbrev(DateTime.Month.February) == "Feb")
+    assert(month_abbrev(DateTime.Month.March) == "Mar")
+    assert(month_abbrev(DateTime.Month.April) == "Apr")
+    assert(month_abbrev(DateTime.Month.May) == "May")
+    assert(month_abbrev(DateTime.Month.June) == "Jun")
+    assert(month_abbrev(DateTime.Month.July) == "Jul")
+    assert(month_abbrev(DateTime.Month.August) == "Aug")
+    assert(month_abbrev(DateTime.Month.September) == "Sep")
+    assert(month_abbrev(DateTime.Month.October) == "Oct")
+    assert(month_abbrev(DateTime.Month.November) == "Nov")
+    assert(month_abbrev(DateTime.Month.December) == "Dec")
+
+    # Variants compare by identity, and the type annotates a local.
+    DateTime.Month m = DateTime.Month.January
+    assert(m == DateTime.Month.January)
+    assert(m != DateTime.Month.December)
+}
+
+@test
+function void test_datetime_month_from_number() {
+    # 1 = January … 12 = December.
+    assert(DateTime.month_name(Result.unwrap(DateTime.month_from_number(1))) == "January")
+    assert(DateTime.month_name(Result.unwrap(DateTime.month_from_number(12))) == "December")
+    assert(Result.unwrap(DateTime.month_from_number(3)) == DateTime.Month.March)
+
+    # Out-of-range month numbers are rejected.
+    assert(Result.is_failure(DateTime.month_from_number(0)), "0 should fail")
+    assert(Result.is_failure(DateTime.month_from_number(13)), "13 should fail")
+}
+
+@test
+function void test_datetime_month_number_roundtrip() {
+    # month_number ∘ month_from_number is the identity on 1..12.
+    for n in 1 ..= 12 {
+        DateTime.Month m = Result.unwrap(DateTime.month_from_number(n))
+
+        assert(DateTime.month_number(m) == n)
+    }
+}

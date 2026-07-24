@@ -58,11 +58,36 @@ void bind_choice_fields(TypeCheckingServices& tc, const MatchArm& arm, const Typ
 
     const auto ch_it = tc.choices().find(arm.enum_type());
 
-    if (ch_it == tc.choices().end()) {
+    // The arm's enum_type is the choice's canonical name — qualified for a
+    // namespaced choice (e.g. "Json.Value") — so the direct find above resolves
+    // it unambiguously, even when another choice shares its bare name.  A bare
+    // name still occurs for a `use`-imported choice matched via a two-part
+    // pattern; fall back to a declaration whose bare name matches and that
+    // actually declares the arm's variant (the variant check disambiguates any
+    // bare-name clash).
+    const ChoiceDeclaration* choice_decl_ptr =
+        ch_it != tc.choices().end() ? ch_it->second : nullptr;
+
+    if (choice_decl_ptr == nullptr) {
+        for (const auto& [key, decl] : tc.choices()) {
+            const bool bare_name_matches = decl->name == arm.enum_type();
+            const bool declares_variant =
+                std::ranges::any_of(decl->variants, [&](const ChoiceVariant& v) {
+                    return v.name == arm.enum_variant();
+                });
+
+            if (bare_name_matches && declares_variant) {
+                choice_decl_ptr = decl;
+                break;
+            }
+        }
+    }
+
+    if (choice_decl_ptr == nullptr) {
         return;
     }
 
-    const auto& choice_decl = *ch_it->second;
+    const auto& choice_decl = *choice_decl_ptr;
 
     // For generic choices, bind the type params for the duration of variant
     // field resolution so recursive field types resolve correctly, without

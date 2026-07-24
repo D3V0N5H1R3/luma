@@ -104,6 +104,34 @@ std::string_view bg_code_for(std::string_view name) {
     return it != map.end() ? it->second.bg_code : std::string_view{};
 }
 
+// Maps a Terminal.Color variant name (PascalCase) to the lowercase colour name
+// used by color_map().  The variant list must stay in step with the Terminal.Color
+// choice in core/analysis/types/stdlib_type_arities.cpp.
+std::optional<std::string_view> color_name_from_variant(std::string_view variant) {
+    static const std::unordered_map<std::string_view, std::string_view> table = {
+        {"Black", "black"},
+        {"Red", "red"},
+        {"Green", "green"},
+        {"Yellow", "yellow"},
+        {"Blue", "blue"},
+        {"Magenta", "magenta"},
+        {"Cyan", "cyan"},
+        {"White", "white"},
+        {"BrightBlack", "bright_black"},
+        {"BrightRed", "bright_red"},
+        {"BrightGreen", "bright_green"},
+        {"BrightYellow", "bright_yellow"},
+        {"BrightBlue", "bright_blue"},
+        {"BrightMagenta", "bright_magenta"},
+        {"BrightCyan", "bright_cyan"},
+        {"BrightWhite", "bright_white"},
+        {"Default", "default"},
+    };
+
+    const auto it = table.find(variant);
+    return it != table.end() ? std::optional<std::string_view>{it->second} : std::nullopt;
+}
+
 TerminalDimensions query_terminal_size() {
     TerminalDimensions dims;
 

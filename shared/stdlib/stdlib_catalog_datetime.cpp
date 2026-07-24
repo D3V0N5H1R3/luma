@@ -61,6 +61,10 @@ void register_date_time_functions(std::vector<FunctionSpec>& specs, const Module
             m.fn("is_leap_year", 1, "(year: integer)", R::boolean_type(), {p.integer}),
             m.fn("minute", 1, "(timestamp: number)", R::result_integer(), {p.number}),
             m.fn("month", 1, "(timestamp: number)", R::result_integer(), {p.number}),
+            m.fn("month_from_number", 1, "(n: integer)", R::result(named::month()), {p.integer}),
+            m.fn("month_name", 1, "(m: DateTime.Month)", R::string_type(), {p.any}),
+            m.fn("month_number", 1, "(m: DateTime.Month)", R::integer_type(), {p.any}),
+            m.fn("month_of", 1, "(timestamp: number)", R::result(named::month()), {p.number}),
             m.fn("milliseconds_since_start", 0, "()", R::number_type()),
             m.fn("now_iso_string", 0, "()", R::result_string()),
             m.fn("now_unix", 0, "()", R::number_type()),
@@ -72,6 +76,11 @@ void register_date_time_functions(std::vector<FunctionSpec>& specs, const Module
             m.fn("to_offset", 2, "(timestamp: number, offset: number)", R::result_number(),
                  {p.number, p.number}),
             m.fn("to_parts", 1, "(timestamp: number)", R::result(named::time_parts()), {p.number}),
+            m.fn("weekday", 1, "(timestamp: number)", R::result(named::weekday()), {p.number}),
+            m.fn("weekday_from_number", 1, "(n: integer)", R::result(named::weekday()),
+                 {p.integer}),
+            m.fn("weekday_name", 1, "(w: DateTime.Weekday)", R::string_type(), {p.any}),
+            m.fn("weekday_number", 1, "(w: DateTime.Weekday)", R::integer_type(), {p.any}),
             m.fn("year", 1, "(timestamp: number)", R::result_integer(), {p.number}),
         });
 }

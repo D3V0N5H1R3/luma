@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <limits>
+#include <string>
 
 #include "runtime/stdlib/system/datetime_codec.hpp"
 #include "stdlib_test_helpers.hpp"
@@ -261,6 +262,124 @@ static void test_datetime_hour_minute_second_valid() {
 static void test_datetime_day_of_week_valid() {
     // 2024-03-15 is a Friday → 5 (1 = Monday .. 7 = Sunday).
     ASSERT_EVAL_INT("DateTime.day_of_week(1710497400.0)", 5);
+}
+
+static void test_datetime_weekday_returns_choice() {
+    // 2024-03-15 is a Friday → DateTime.Weekday.Friday.
+    const auto v = eval("DateTime.weekday(1710497400.0)");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "Weekday");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "Friday");
+}
+
+static void test_datetime_weekday_out_of_range() {
+    // A timestamp outside the supported year 0001-9999 range fails.
+    ASSERT_EVAL_FAILURE("DateTime.weekday(-99999999999.0)");
+}
+
+static void test_datetime_weekday_from_number_valid() {
+    const auto mon = eval("DateTime.weekday_from_number(1)");
+    ASSERT_RESULT_SUCCESS(mon);
+    ASSERT_EQ(mon.as_result()->owned_inner->as_choice()->type_name, "Weekday");
+    ASSERT_EQ(mon.as_result()->owned_inner->as_choice()->variant, "Monday");
+
+    const auto sun = eval("DateTime.weekday_from_number(7)");
+    ASSERT_RESULT_SUCCESS(sun);
+    ASSERT_EQ(sun.as_result()->owned_inner->as_choice()->variant, "Sunday");
+}
+
+static void test_datetime_weekday_from_number_invalid() {
+    // Only 1..7 are valid ISO-8601 weekday numbers.
+    ASSERT_EVAL_FAILURE("DateTime.weekday_from_number(0)");
+    ASSERT_EVAL_FAILURE("DateTime.weekday_from_number(8)");
+}
+
+static void test_datetime_weekday_number() {
+    ASSERT_EQ(eval("DateTime.weekday_number(DateTime.Weekday.Monday)").as_integer(), 1);
+    ASSERT_EQ(eval("DateTime.weekday_number(DateTime.Weekday.Friday)").as_integer(), 5);
+    ASSERT_EQ(eval("DateTime.weekday_number(DateTime.Weekday.Sunday)").as_integer(), 7);
+}
+
+static void test_datetime_weekday_name() {
+    ASSERT_EQ(eval("DateTime.weekday_name(DateTime.Weekday.Wednesday)").as_string(), "Wednesday");
+    ASSERT_EQ(eval("DateTime.weekday_name(DateTime.Weekday.Sunday)").as_string(), "Sunday");
+}
+
+static void test_datetime_weekday_roundtrip() {
+    // weekday_number ∘ weekday_from_number is the identity on 1..7.
+    for (int n = 1; n <= 7; ++n) {
+        const auto expr = "DateTime.weekday_number(Result.unwrap(DateTime.weekday_from_number(" +
+                          std::to_string(n) + ")))";
+        ASSERT_EQ(eval(expr).as_integer(), n);
+    }
+}
+
+static void test_datetime_weekday_accessors_reject_non_weekday() {
+    // The choice-consuming accessors reject a non-choice and a foreign choice.
+    ASSERT_TRUE(luma::test::eval_throws("DateTime.weekday_number(5)"));
+    ASSERT_TRUE(luma::test::eval_throws(R"(DateTime.weekday_name("Monday"))"));
+    ASSERT_TRUE(luma::test::eval_throws("DateTime.weekday_number(Log.Level.Info)"));
+}
+
+static void test_datetime_month_of_returns_choice() {
+    // 2024-03-15 is in March → DateTime.Month.March.
+    const auto v = eval("DateTime.month_of(1710497400.0)");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "Month");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "March");
+}
+
+static void test_datetime_month_of_out_of_range() {
+    // A timestamp outside the supported year 0001-9999 range fails.
+    ASSERT_EVAL_FAILURE("DateTime.month_of(-99999999999.0)");
+}
+
+static void test_datetime_month_from_number_valid() {
+    const auto jan = eval("DateTime.month_from_number(1)");
+    ASSERT_RESULT_SUCCESS(jan);
+    ASSERT_EQ(jan.as_result()->owned_inner->as_choice()->type_name, "Month");
+    ASSERT_EQ(jan.as_result()->owned_inner->as_choice()->variant, "January");
+
+    const auto dec = eval("DateTime.month_from_number(12)");
+    ASSERT_RESULT_SUCCESS(dec);
+    ASSERT_EQ(dec.as_result()->owned_inner->as_choice()->variant, "December");
+}
+
+static void test_datetime_month_from_number_invalid() {
+    // Only 1..12 are valid month numbers.
+    ASSERT_EVAL_FAILURE("DateTime.month_from_number(0)");
+    ASSERT_EVAL_FAILURE("DateTime.month_from_number(13)");
+}
+
+static void test_datetime_month_number() {
+    ASSERT_EQ(eval("DateTime.month_number(DateTime.Month.January)").as_integer(), 1);
+    ASSERT_EQ(eval("DateTime.month_number(DateTime.Month.March)").as_integer(), 3);
+    ASSERT_EQ(eval("DateTime.month_number(DateTime.Month.December)").as_integer(), 12);
+}
+
+static void test_datetime_month_name() {
+    ASSERT_EQ(eval("DateTime.month_name(DateTime.Month.April)").as_string(), "April");
+    ASSERT_EQ(eval("DateTime.month_name(DateTime.Month.December)").as_string(), "December");
+}
+
+static void test_datetime_month_roundtrip() {
+    // month_number ∘ month_from_number is the identity on 1..12.
+    for (int n = 1; n <= 12; ++n) {
+        const auto expr = "DateTime.month_number(Result.unwrap(DateTime.month_from_number(" +
+                          std::to_string(n) + ")))";
+        ASSERT_EQ(eval(expr).as_integer(), n);
+    }
+}
+
+static void test_datetime_month_accessors_reject_non_month() {
+    // The choice-consuming accessors reject a non-choice and a foreign choice.
+    ASSERT_TRUE(luma::test::eval_throws("DateTime.month_number(3)"));
+    ASSERT_TRUE(luma::test::eval_throws(R"(DateTime.month_name("March"))"));
+    ASSERT_TRUE(luma::test::eval_throws("DateTime.month_number(DateTime.Weekday.Monday)"));
 }
 
 static void test_datetime_components_out_of_range() {
@@ -697,6 +816,22 @@ int main() {
     RUN(test_datetime_day_of_month_valid);
     RUN(test_datetime_hour_minute_second_valid);
     RUN(test_datetime_day_of_week_valid);
+    RUN(test_datetime_weekday_returns_choice);
+    RUN(test_datetime_weekday_out_of_range);
+    RUN(test_datetime_weekday_from_number_valid);
+    RUN(test_datetime_weekday_from_number_invalid);
+    RUN(test_datetime_weekday_number);
+    RUN(test_datetime_weekday_name);
+    RUN(test_datetime_weekday_roundtrip);
+    RUN(test_datetime_weekday_accessors_reject_non_weekday);
+    RUN(test_datetime_month_of_returns_choice);
+    RUN(test_datetime_month_of_out_of_range);
+    RUN(test_datetime_month_from_number_valid);
+    RUN(test_datetime_month_from_number_invalid);
+    RUN(test_datetime_month_number);
+    RUN(test_datetime_month_name);
+    RUN(test_datetime_month_roundtrip);
+    RUN(test_datetime_month_accessors_reject_non_month);
     RUN(test_datetime_components_out_of_range);
     RUN(test_datetime_from_parts_valid);
     RUN(test_datetime_from_parts_invalid_fields);

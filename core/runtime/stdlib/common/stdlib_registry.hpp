@@ -45,6 +45,7 @@
 #include "runtime/stdlib/text/xml_module.hpp"
 #include "runtime/stdlib/types/converter_module.hpp"
 #include "runtime/stdlib/types/optional_module.hpp"
+#include "runtime/stdlib/types/order_module.hpp"
 #include "runtime/stdlib/types/reference_module.hpp"
 #include "runtime/stdlib/types/result_module.hpp"
 #include "stdlib/stdlib_catalog.hpp"
@@ -121,6 +122,7 @@ inline constexpr ModuleEntry kModules[] = {
     {"LinkedList", register_linkedlist_ns, nullptr, false, false},
     {"Math", register_math_ns, nullptr, false, false},
     {"Optional", register_optional_ns, nullptr, false, false},
+    {"Order", register_order_ns, nullptr, false, false},
     {"Queue", register_queue_ns, nullptr, false, false},
     {"Random", register_random_ns, nullptr, false, false},
     {"Reference", register_reference_ns, nullptr, false, false},

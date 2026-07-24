@@ -228,8 +228,8 @@ static void test_namespace_qualified_record_creation() {
 }
 
 static void test_namespace_qualified_match_arm() {
-    // "case Traffic.Light.Red" should parse with enum_type == "Light"
-    // and enum_variant == "Red" (namespace prefix is stripped).
+    // "case Traffic.Light.Red" should parse with enum_type == "Traffic.Light"
+    // (the qualified type name) and enum_variant == "Red".
     const auto program = parse("namespace Traffic {\n"
                                "    choice Light {\n"
                                "        Red\n"
@@ -249,7 +249,7 @@ static void test_namespace_qualified_match_arm() {
 
     ASSERT_EQ(match.arms.size(), 2U);
     ASSERT_TRUE(match.arms[0].kind() == MatchArm::Kind::VariantCase);
-    ASSERT_EQ(match.arms[0].enum_type(), "Light");
+    ASSERT_EQ(match.arms[0].enum_type(), "Traffic.Light");
     ASSERT_EQ(match.arms[0].enum_variant(), "Red");
 }
 

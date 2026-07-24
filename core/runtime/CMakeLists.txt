@@ -92,6 +92,7 @@ luma_add_stdlib_library(data
         stdlib/text/json_module_parser.cpp
         stdlib/text/json_module_path.cpp
         stdlib/text/json_module_serializer.cpp
+        stdlib/text/json_value_module.cpp
         stdlib/text/csv_module.cpp
         stdlib/text/csv_codec.cpp
         stdlib/text/xml_module.cpp
@@ -137,6 +138,7 @@ luma_add_stdlib_library(utility
         stdlib/types/result_module.cpp
         stdlib/types/optional_module.cpp
         stdlib/types/reference_module.cpp
+        stdlib/types/order_module.cpp
         stdlib/system/resource_module.cpp
         stdlib/system/log_module.cpp
         stdlib/collections/keyvaluestore_module.cpp

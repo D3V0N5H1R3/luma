@@ -58,6 +58,43 @@ static void test_namespace_qualified_interface_type() {
                        "function number describe(Geo.Shape s) { return s.area }\n"));
 }
 
+// A return-position match may mix a qualified three-part arm
+// (Signals.Command.Move) with use-imported bare two-part arms (Command.Turn,
+// Command.Halt) for the same choice. Coverage is decided by the arms' choice
+// declaration identity, not their raw type-name strings (which differ between
+// the qualified and bare forms), so definite-return analysis must accept a
+// fully-covered mix. Regression guard for the choice-identity qualification.
+static void test_namespace_choice_mixed_arm_forms_returns() {
+    ASSERT_TRUE(
+        passes("namespace Signals {\n"
+               "    choice Command { Move(integer distance)  Turn(integer degrees)  Halt }\n"
+               "}\n"
+               "use Signals\n"
+               "function integer magnitude(Command command) {\n"
+               "    match command {\n"
+               "    case Signals.Command.Move(d) { return d }\n"
+               "    case Command.Turn(a)         { return a }\n"
+               "    case Command.Halt            { return 0 }\n"
+               "    }\n"
+               "}\n"));
+}
+
+// The identity-based coverage must not over-accept: a mixed-form match that
+// omits a variant is still non-exhaustive, so a concrete-typed function relying
+// on it can fall through: TypeError.
+static void test_namespace_choice_mixed_arm_forms_missing_variant() {
+    ASSERT_TRUE(fails("namespace Signals {\n"
+                      "    choice Command { Move(integer distance)  Turn(integer degrees)  Halt }\n"
+                      "}\n"
+                      "use Signals\n"
+                      "function integer magnitude(Command command) {\n"
+                      "    match command {\n"
+                      "    case Signals.Command.Move(d) { return d }\n"
+                      "    case Command.Turn(a)         { return a }\n"
+                      "    }\n"
+                      "}\n"));
+}
+
 // ─── Downcast ───
 
 static void test_downcast_valid() {
@@ -617,6 +654,8 @@ int main() {
     RUN(test_namespace_type_only);
     RUN(test_namespace_qualified_unknown_type);
     RUN(test_namespace_qualified_interface_type);
+    RUN(test_namespace_choice_mixed_arm_forms_returns);
+    RUN(test_namespace_choice_mixed_arm_forms_missing_variant);
     RUN(test_mutually_recursive_interfaces_terminate);
 
     // ─── Downcast ───

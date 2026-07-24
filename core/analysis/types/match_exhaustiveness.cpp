@@ -11,6 +11,66 @@ namespace luma {
 
 namespace {
 
+// Resolve the choice declaration a match's arms refer to.
+//
+// A match's subject type and its arm patterns now carry the choice's canonical
+// name — qualified for a namespaced choice (e.g. "Terminal.Color") — so the
+// direct lookup is unambiguous even when two choices share a bare name
+// (Terminal.Color vs a top-level Color).  A bare name still occurs for a
+// `use`-imported choice matched via a two-part pattern (`use Traffic` then
+// `case Light.Red`); the fallback then matches a declaration by its bare name,
+// disambiguating any bare-name clash by variant membership.
+[[nodiscard]] const ChoiceDeclaration*
+find_choice_for_arms(const StringMap<const ChoiceDeclaration*>& choices, std::string_view type_name,
+                     const std::vector<MatchArm>& arms) {
+    if (const auto it = choices.find(type_name); it != choices.end()) {
+        return it->second;
+    }
+
+    for (const auto& [key, decl] : choices) {
+        if (std::string_view{decl->name} != type_name) {
+            continue;
+        }
+
+        const bool declares_a_matched_variant = std::ranges::any_of(arms, [&](const MatchArm& arm) {
+            if (arm.kind() != MatchArm::Kind::ChoiceCase &&
+                arm.kind() != MatchArm::Kind::VariantCase) {
+                return false;
+            }
+
+            return std::ranges::any_of(decl->variants, [&](const ChoiceVariant& variant) {
+                return variant.name == arm.enum_variant();
+            });
+        });
+
+        if (declares_a_matched_variant) {
+            return decl;
+        }
+    }
+
+    return nullptr;
+}
+
+// Does an arm's `enum_type` name the given choice declaration?
+//
+// A match arm can name its choice with a qualified ("Signals.Command") or bare
+// ("Command") type name, while its subject may carry the other form — e.g. a
+// namespace-internal function whose bare `Command` parameter is matched with
+// three-part `Signals.Command.*` arms.  When the arm's type name is a live map
+// key, trust the direct pointer comparison (this also keeps two choices sharing
+// a bare name distinct — Terminal.Color vs a top-level Color).  Only when the
+// name is not a key (e.g. a `use`-imported alias that was never registered) fall
+// back to the declaration's bare name.
+[[nodiscard]] bool enum_type_names_choice(const StringMap<const ChoiceDeclaration*>& choices,
+                                          std::string_view enum_type,
+                                          const ChoiceDeclaration* choice_decl) {
+    if (const auto it = choices.find(enum_type); it != choices.end()) {
+        return it->second == choice_decl;
+    }
+
+    return enum_type == std::string_view{choice_decl->name};
+}
+
 struct BooleanCoverage {
     bool has_true{false};
     bool has_false{false};
@@ -185,13 +245,18 @@ void MatchExhaustivenessChecker::check_boolean_coverage(const std::vector<MatchA
 void MatchExhaustivenessChecker::check_choice_coverage(const std::vector<MatchArm>& arms,
                                                        const TypeInfo& subject_type,
                                                        const SourceLocation& loc) {
-    const auto it = tc_.choices().find(subject_type.name);
+    // Resolve the matched choice.  The subject type carries the choice's
+    // canonical (qualified for a namespaced choice) name, so a namespaced
+    // stdlib choice (Weekday, Month, Terminal.Color, …) resolves directly and
+    // unambiguously — even when another choice shares its bare name.
+    const ChoiceDeclaration* choice_decl =
+        find_choice_for_arms(tc_.choices(), subject_type.name, arms);
 
-    if (it == tc_.choices().end()) {
+    if (choice_decl == nullptr) {
         return;
     }
 
-    const auto& variants = it->second->variants;
+    const auto& variants = choice_decl->variants;
     StringSet covered;
 
     // Records the variant named by a choice/variant pattern. An arm and an
@@ -202,7 +267,11 @@ void MatchExhaustivenessChecker::check_choice_coverage(const std::vector<MatchAr
             return;
         }
 
-        if (entry.enum_type().empty() || entry.enum_type() == subject_type.name) {
+        // An arm covers a variant when its type names the matched choice —
+        // whether it was written with the choice's qualified or bare name, and
+        // regardless of which form the subject carries.
+        if (entry.enum_type().empty() ||
+            enum_type_names_choice(tc_.choices(), entry.enum_type(), choice_decl)) {
             covered.insert(entry.enum_variant());
         }
     };
@@ -299,21 +368,32 @@ bool MatchExhaustivenessChecker::is_choice_exhaustive(const std::vector<MatchArm
         return false;
     }
 
-    std::string choice_type;
     StringSet covered_variants;
-    bool all_choice{true};
+
+    // Resolve the choice declaration from the first choice/variant arm, then
+    // check every other arm names that same declaration by identity — not by
+    // raw type-name string.  An arm's type name may be qualified for a
+    // namespaced choice ("Signals.Command") or bare for a `use`-imported one
+    // ("Command"), so a match that mixes both forms for a single choice (e.g. a
+    // three-part `Signals.Command.Turn` arm alongside a two-part `Command.Move`
+    // arm) is still recognised as covering one choice.  Comparing the raw names
+    // would spuriously reject that mix and, via definite-return analysis, report
+    // a fully-covered match as falling through.
+    const ChoiceDeclaration* choice_decl{nullptr};
 
     for (const auto& arm : arms) {
         if (arm.kind() != MatchArm::Kind::ChoiceCase && arm.kind() != MatchArm::Kind::VariantCase) {
-            all_choice = false;
-            break;
+            return false;
         }
 
-        if (choice_type.empty()) {
-            choice_type = arm.enum_type();
-        } else if (arm.enum_type() != choice_type) {
-            all_choice = false;
-            break;
+        if (choice_decl == nullptr) {
+            choice_decl = find_choice_for_arms(tc_.choices(), arm.enum_type(), arms);
+
+            if (choice_decl == nullptr) {
+                return false;
+            }
+        } else if (!enum_type_names_choice(tc_.choices(), arm.enum_type(), choice_decl)) {
+            return false;
         }
 
         // A guarded arm participates in choice-type detection but does not cover
@@ -332,17 +412,11 @@ bool MatchExhaustivenessChecker::is_choice_exhaustive(const std::vector<MatchArm
         }
     }
 
-    if (!all_choice || choice_type.empty()) {
+    if (choice_decl == nullptr) {
         return false;
     }
 
-    const auto ch_it = tc_.choices().find(choice_type);
-
-    if (ch_it == tc_.choices().end()) {
-        return false;
-    }
-
-    for (const auto& variant : ch_it->second->variants) {
+    for (const auto& variant : choice_decl->variants) {
         if (!covered_variants.contains(variant.name)) {
             return false;
         }

@@ -57,6 +57,7 @@ void register_file_system_functions(std::vector<FunctionSpec>& specs, const Modu
                    m.fn("rename_directory", 2, "(from: string, to: string)", R::result_boolean(),
                         {p.string, p.string}),
                    m.fn("size", 1, "(path: string)", R::result_integer(), {p.string}),
+                   m.fn("split_path", 1, "(path: string)", named::path_parts(), {p.string}),
                    m.fn("stem", 1, "(path: string)", R::string_type(), {p.string}),
                    m.fn("write_file", 2, "(path: string, content: string)", R::result_boolean(),
                         {p.string, p.string}),
@@ -149,6 +150,13 @@ void register_http_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
                  R::result(named::response()), {p.string, p.string, p.dict_any}),
             m.fn("request", 2, "(options: dictionary, headers: dictionary)",
                  R::result(named::response()), {p.dict_any, p.dict_any}),
+            m.fn("request_of", 2, "(method: Http.Method, url: string)", named::request(),
+                 {p.any, p.string}),
+            m.fn("request_with", 5,
+                 "(method: Http.Method, url: string, headers: dictionary<string>, "
+                 "body: string, timeout_ms: integer)",
+                 named::request(), {p.any, p.string, p.dict_any, p.string, p.integer}),
+            m.fn("send", 1, "(request: Http.Request)", R::result(named::response()), {p.any}),
         });
 }
 

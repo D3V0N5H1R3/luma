@@ -1,5 +1,7 @@
 // Standard library tests: Json (Luma stdlib module).
 
+#include <cstddef>
+
 #include "runtime/stdlib/text/json_module.hpp"
 #include "stdlib_test_helpers.hpp"
 
@@ -373,6 +375,156 @@ static void test_json_is_valid_non_string_throws() {
     ASSERT_TRUE(luma::test::eval_throws("Json.is_valid(42)"));
 }
 
+// ── Json.Value typed ADT (parse / to_string / accessors) ────────────────────
+
+static void test_json_value_parse_object() {
+    const auto v = eval(R"(Json.parse("{\"a\": 1}"))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "Value");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "JsonObject");
+}
+
+static void test_json_value_parse_array() {
+    const auto v = eval(R"(Json.parse("[1, 2, 3]"))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "JsonArray");
+}
+
+static void test_json_value_parse_string() {
+    const auto v = eval(R"(Json.parse("\"hello\""))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "JsonString");
+}
+
+static void test_json_value_parse_number() {
+    const auto v = eval(R"(Json.parse("42"))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "JsonNumber");
+}
+
+static void test_json_value_parse_boolean() {
+    const auto v = eval(R"(Json.parse("true"))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "JsonBool");
+}
+
+static void test_json_value_parse_null() {
+    const auto v = eval(R"(Json.parse("null"))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "JsonNull");
+}
+
+static void test_json_value_parse_invalid_fails() {
+    ASSERT_EVAL_FAILURE(R"(Json.parse("{bad}"))");
+}
+
+static void test_json_value_as_string_success() {
+    const auto v =
+        eval(R"(Json.parse("\"hi\"") |> Result.unwrap() |> Json.as_string() |> Result.unwrap())");
+    ASSERT_EQ(v.as_string(), "hi");
+}
+
+static void test_json_value_as_string_wrong_type_fails() {
+    ASSERT_EVAL_FAILURE(R"(Json.parse("42") |> Result.unwrap() |> Json.as_string())");
+}
+
+static void test_json_value_as_number_success() {
+    const auto v =
+        eval(R"(Json.parse("42") |> Result.unwrap() |> Json.as_number() |> Result.unwrap())");
+    ASSERT_NEAR(v.to_numeric(), 42.0, 1e-9);
+}
+
+static void test_json_value_as_boolean_success() {
+    const auto v =
+        eval(R"(Json.parse("true") |> Result.unwrap() |> Json.as_boolean() |> Result.unwrap())");
+    ASSERT_TRUE(v.as_bool());
+}
+
+static void test_json_value_as_array_success() {
+    const auto v =
+        eval(R"(Json.parse("[1, 2, 3]") |> Result.unwrap() |> Json.as_array() |> Result.unwrap())");
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), static_cast<std::size_t>(3));
+}
+
+static void test_json_value_as_object_success() {
+    const auto v = eval(
+        R"(Json.parse("{\"a\": 1}") |> Result.unwrap() |> Json.as_object() |> Result.unwrap())");
+    ASSERT_TRUE(v.is_dictionary());
+}
+
+static void test_json_value_field_some() {
+    // field returns optional<Json.Value>; the "some" runtime shape is the bare
+    // Json.Value choice value.
+    const auto v = eval(R"(Json.parse("{\"a\": \"x\"}") |> Result.unwrap() |> Json.field("a"))");
+    ASSERT_TRUE(v.is_choice());
+    ASSERT_EQ(v.as_choice()->variant, "JsonString");
+}
+
+static void test_json_value_field_missing_key_none() {
+    // A missing key yields none, whose runtime shape is null.
+    const auto v = eval(R"(Json.parse("{\"a\": 1}") |> Result.unwrap() |> Json.field("missing"))");
+    ASSERT_TRUE(v.is_null());
+}
+
+static void test_json_value_field_on_non_object_none() {
+    const auto v = eval(R"(Json.parse("[1, 2]") |> Result.unwrap() |> Json.field("a"))");
+    ASSERT_TRUE(v.is_null());
+}
+
+static void test_json_value_index_some() {
+    const auto v = eval(R"(Json.parse("[10, 20, 30]") |> Result.unwrap() |> Json.index(1))");
+    ASSERT_TRUE(v.is_choice());
+    ASSERT_EQ(v.as_choice()->variant, "JsonNumber");
+}
+
+static void test_json_value_index_out_of_bounds_none() {
+    const auto v = eval(R"(Json.parse("[10, 20]") |> Result.unwrap() |> Json.index(5))");
+    ASSERT_TRUE(v.is_null());
+}
+
+static void test_json_value_index_negative_none() {
+    const auto v = eval(R"(Json.parse("[10, 20]") |> Result.unwrap() |> Json.index(-1))");
+    ASSERT_TRUE(v.is_null());
+}
+
+static void test_json_value_index_on_non_array_none() {
+    const auto v = eval(R"(Json.parse("{\"a\": 1}") |> Result.unwrap() |> Json.index(0))");
+    ASSERT_TRUE(v.is_null());
+}
+
+static void test_json_value_to_string_roundtrip_object() {
+    // Keys are emitted in sorted order (shared JsonValue uses std::map); integral
+    // numbers render without a decimal point.
+    const auto v =
+        eval(R"(Json.parse("{\"b\": [2, 3], \"a\": 1}") |> Result.unwrap() |> Json.to_string())");
+    ASSERT_EQ(v.as_string(), R"({"a":1,"b":[2,3]})");
+}
+
+static void test_json_value_to_string_string_quotes() {
+    const auto v = eval(R"(Json.parse("\"hi\"") |> Result.unwrap() |> Json.to_string())");
+    ASSERT_EQ(v.as_string(), "\"hi\"");
+}
+
+static void test_json_value_to_string_fraction_preserved() {
+    const auto v = eval(R"(Json.parse("1.5") |> Result.unwrap() |> Json.to_string())");
+    ASSERT_EQ(v.as_string(), "1.5");
+}
+
+static void test_json_value_module_registered() {
+    const auto env = luma::test::make_std_env();
+    ASSERT_TRUE(env->has("Json.parse"));
+    ASSERT_TRUE(env->has("Json.to_string"));
+    ASSERT_TRUE(env->has("Json.as_string"));
+    ASSERT_TRUE(env->has("Json.as_number"));
+    ASSERT_TRUE(env->has("Json.as_boolean"));
+    ASSERT_TRUE(env->has("Json.as_array"));
+    ASSERT_TRUE(env->has("Json.as_object"));
+    ASSERT_TRUE(env->has("Json.field"));
+    ASSERT_TRUE(env->has("Json.index"));
+}
+
 int main() {
     RUN(test_json_get_path_array_index);
     RUN(test_json_get_path_bracket_index_lenient);
@@ -444,5 +596,31 @@ int main() {
     RUN(test_json_deserialize_non_string_throws);
     RUN(test_json_is_valid_non_string_throws);
     RUN(test_json_parses_out_of_double_range_numbers);
+
+    // Json.Value typed ADT — parse, accessors, field/index, round-trip.
+    RUN(test_json_value_module_registered);
+    RUN(test_json_value_parse_object);
+    RUN(test_json_value_parse_array);
+    RUN(test_json_value_parse_string);
+    RUN(test_json_value_parse_number);
+    RUN(test_json_value_parse_boolean);
+    RUN(test_json_value_parse_null);
+    RUN(test_json_value_parse_invalid_fails);
+    RUN(test_json_value_as_string_success);
+    RUN(test_json_value_as_string_wrong_type_fails);
+    RUN(test_json_value_as_number_success);
+    RUN(test_json_value_as_boolean_success);
+    RUN(test_json_value_as_array_success);
+    RUN(test_json_value_as_object_success);
+    RUN(test_json_value_field_some);
+    RUN(test_json_value_field_missing_key_none);
+    RUN(test_json_value_field_on_non_object_none);
+    RUN(test_json_value_index_some);
+    RUN(test_json_value_index_out_of_bounds_none);
+    RUN(test_json_value_index_negative_none);
+    RUN(test_json_value_index_on_non_array_none);
+    RUN(test_json_value_to_string_roundtrip_object);
+    RUN(test_json_value_to_string_string_quotes);
+    RUN(test_json_value_to_string_fraction_preserved);
     return SUMMARY();
 }

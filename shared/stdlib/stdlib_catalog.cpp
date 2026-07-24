@@ -186,6 +186,9 @@ using detail::ParamShorthands;
         {.module_name = "Resource",
          .cap = Capability::None,
          .register_fn = detail::register_resource_functions},
+        {.module_name = "Order",
+         .cap = Capability::None,
+         .register_fn = detail::register_order_functions},
     };
 
     // Approximate total number of stdlib function and constant specs across all

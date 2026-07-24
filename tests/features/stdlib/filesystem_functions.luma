@@ -137,6 +137,23 @@ function void test_filesystem_stem() {
 }
 
 @test
+function void test_filesystem_split_path() {
+    # split_path bundles parent/name/stem/extension into one typed record.
+    FileSystem.PathParts parts = FileSystem.split_path("src/main.cpp")
+
+    assert(parts.parent == "src")
+    assert(parts.name == "main.cpp")
+    assert(parts.stem == "main")
+    assert(parts.extension == ".cpp")
+
+    # It agrees field-for-field with the individual path accessors.
+    assert(parts.parent == FileSystem.parent("src/main.cpp"))
+    assert(parts.name == FileSystem.name("src/main.cpp"))
+    assert(parts.stem == FileSystem.stem("src/main.cpp"))
+    assert(parts.extension == FileSystem.extension("src/main.cpp"))
+}
+
+@test
 function void test_filesystem_normalize() {
     string normalized_path = FileSystem.normalize("a/b/../c")
 

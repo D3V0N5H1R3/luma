@@ -456,3 +456,28 @@ function void test_namespace_choice_data_variant_match() {
 
     assert(bound == 7)
 }
+
+# ═══════════════════════════════════════════════════════════
+# Mixed qualified/bare arms for one namespace choice (regression)
+# ═══════════════════════════════════════════════════════════
+
+# A return-position match may mix a qualified three-part arm
+# (Signals.Command.Move) with use-imported bare two-part arms (Command.Turn,
+# Command.Halt) for the SAME choice.  Definite-return analysis must still treat
+# it as exhaustive — coverage is decided by the arms' choice declaration
+# identity, not by their raw (qualified-vs-bare) type-name strings, which differ
+# across the two forms.
+function integer magnitude_mixed(Command command) {
+    match command {
+    case Signals.Command.Move(d) { return d }
+    case Command.Turn(a)         { return a }
+    case Command.Halt            { return 0 }
+    }
+}
+
+@test
+function void test_namespace_choice_mixed_arm_forms() {
+    assert(magnitude_mixed(Signals.Command.Move(7)) == 7)
+    assert(magnitude_mixed(Command.Turn(90)) == 90)
+    assert(magnitude_mixed(Command.Halt) == 0)
+}
