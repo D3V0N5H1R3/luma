@@ -420,3 +420,58 @@ function void test_http_send_empty_url_fails() {
 
     assert(!Result.is_success(r))
 }
+
+# ─── Http.StatusClass (Http.status_class / Http.is_success) ───
+
+# Exhaustive match over every StatusClass variant, doubling as a registration
+# and exhaustiveness check for the choice.
+function string status_class_label(Http.StatusClass c) {
+    return match c {
+    case Http.StatusClass.Informational { "informational" }
+    case Http.StatusClass.Success       { "success" }
+    case Http.StatusClass.Redirection   { "redirection" }
+    case Http.StatusClass.ClientError   { "client_error" }
+    case Http.StatusClass.ServerError   { "server_error" }
+    }
+}
+
+@test
+function void test_http_status_class_families() {
+    # Each family boundary classifies into its RFC 9110 StatusClass.
+    result<Http.StatusClass> info = Http.status_class(100)
+    assert(Result.is_success(info))
+    assert(Result.unwrap(info) == Http.StatusClass.Informational)
+
+    assert(Result.unwrap(Http.status_class(200)) == Http.StatusClass.Success)
+    assert(Result.unwrap(Http.status_class(301)) == Http.StatusClass.Redirection)
+    assert(Result.unwrap(Http.status_class(404)) == Http.StatusClass.ClientError)
+    assert(Result.unwrap(Http.status_class(503)) == Http.StatusClass.ServerError)
+
+    assert(status_class_label(Result.unwrap(Http.status_class(404))) == "client_error")
+}
+
+@test
+function void test_http_status_class_out_of_range() {
+    # A code outside 100-599 has no family, so status_class fails.
+    assert(Result.is_failure(Http.status_class(99)))
+    assert(Result.is_failure(Http.status_class(600)))
+    assert(Result.is_failure(Http.status_class(0)))
+}
+
+# is_success reads the `status` field of a response.  A local record with a
+# `status` field stands in for Http.Response so the test stays hermetic (no
+# network) and strict-clean — constructing the stdlib Http.Response record
+# directly would warn "record type not found at compile time" and fail --strict.
+record MockResponse {
+    integer status
+}
+
+@test
+function void test_http_is_success() {
+    # is_success is true only for a 2xx status.
+    assert(Http.is_success(MockResponse { status = 200 }))
+    assert(Http.is_success(MockResponse { status = 204 }))
+    assert(!Http.is_success(MockResponse { status = 404 }))
+    assert(!Http.is_success(MockResponse { status = 500 }))
+    assert(!Http.is_success(MockResponse { status = 100 }))
+}

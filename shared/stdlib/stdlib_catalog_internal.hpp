@@ -117,8 +117,19 @@ namespace named {
     return ReturnTypeDesc::named("Ordering");
 }
 
+// Top-level choice (bare name, no namespace) — mirrors ordering() above.
+[[nodiscard]] inline ReturnTypeDesc sign() {
+    return ReturnTypeDesc::named("Sign");
+}
+
 [[nodiscard]] inline ReturnTypeDesc json_value() {
     return ReturnTypeDesc::named("Json.Value");
+}
+
+// Choice type — uses the fully-qualified name so the type checker resolves it as
+// Http.StatusClass (a bare name would fall through to the record default).
+[[nodiscard]] inline ReturnTypeDesc status_class() {
+    return ReturnTypeDesc::named("Http.StatusClass");
 }
 
 // Record / result types (identified by a PascalCase name).
@@ -154,6 +165,18 @@ namespace named {
     return ReturnTypeDesc::named("FileInfo");
 }
 
+// Choice type — uses the fully-qualified name so the type checker resolves it as
+// FileSystem.FileKind (a bare name would fall through to the record default).
+[[nodiscard]] inline ReturnTypeDesc file_kind() {
+    return ReturnTypeDesc::named("FileSystem.FileKind");
+}
+
+// Typed I/O error choice (fully-qualified, like file_kind).  Used as the error
+// parameter of result<T, FileSystem.IoError> on the read_file_typed slice.
+[[nodiscard]] inline ReturnTypeDesc file_io_error() {
+    return ReturnTypeDesc::named("FileSystem.IoError");
+}
+
 [[nodiscard]] inline ReturnTypeDesc path_parts() {
     return ReturnTypeDesc::named("PathParts");
 }
@@ -164,6 +187,10 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc process_result() {
     return ReturnTypeDesc::named("ProcessResult");
+}
+
+[[nodiscard]] inline ReturnTypeDesc command_output() {
+    return ReturnTypeDesc::named("CommandOutput");
 }
 
 [[nodiscard]] inline ReturnTypeDesc input_event() {

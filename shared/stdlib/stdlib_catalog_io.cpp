@@ -35,6 +35,7 @@ void register_file_system_functions(std::vector<FunctionSpec>& specs, const Modu
                    m.fn("is_relative", 1, "(path: string)", R::boolean_type(), {p.string}),
                    m.fn("is_symlink", 1, "(path: string)", R::result_boolean(), {p.string}),
                    m.variadic_fn("join", 2, "(parts: string...)", R::string_type(), {p.string}),
+                   m.fn("kind", 1, "(path: string)", R::result(named::file_kind()), {p.string}),
                    m.fn("list_directories", 1, "(path: string)",
                         R::result(R::array(R::string_type())), {p.string}),
                    m.fn("list_files", 1, "(path: string)", R::result(R::array(R::string_type())),
@@ -48,6 +49,8 @@ void register_file_system_functions(std::vector<FunctionSpec>& specs, const Modu
                    m.fn("read_file", 1, "(path: string)", R::result_string(), {p.string}),
                    m.fn("read_file_limited", 2, "(path: string, max_bytes: integer)",
                         R::result_string(), {p.string, p.integer}),
+                   m.fn("read_file_typed", 1, "(path: string)",
+                        R::result(R::string_type(), named::file_io_error()), {p.string}),
                    m.fn("read_lines", 1, "(path: string)", R::result(R::array(R::string_type())),
                         {p.string}),
                    m.fn("relative", 2, "(path: string, base: string)", R::string_type(),
@@ -72,6 +75,7 @@ void register_process_functions(std::vector<FunctionSpec>& specs, const ModuleBu
         specs,
         {
             m.fn("current_directory", 0, "()", R::result_string(), {}),
+            m.fn("execute", 1, "(command: string)", R::result(named::command_output()), {p.string}),
             m.fn("exit", 1, "(code: integer)", R::void_type(), {p.integer}),
             m.fn("get_arguments", 0, "()", R::array_string(), {}),
             m.fn("get_all_environment_variables", 0, "()", R::dict_string(), {}),
@@ -133,6 +137,7 @@ void register_http_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
             m.fn("get_with", 2, "(url: string, headers: dictionary<string>)",
                  R::result(named::response()), {p.string, p.dict_any}),
             m.fn("head", 1, "(url: string)", R::result(named::response()), {p.string}),
+            m.fn("is_success", 1, "(response: Http.Response)", R::boolean_type(), {p.any}),
             m.fn("method_to_string", 1, "(method: Http.Method)", R::string_type(), {p.any}),
             m.fn("parse_query", 1, "(query: string)", R::dict_string(), {p.string}),
             m.fn("parse_url", 1, "(url: string)", named::url_parts(), {p.string}),
@@ -157,6 +162,8 @@ void register_http_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
                  "body: string, timeout_ms: integer)",
                  named::request(), {p.any, p.string, p.dict_any, p.string, p.integer}),
             m.fn("send", 1, "(request: Http.Request)", R::result(named::response()), {p.any}),
+            m.fn("status_class", 1, "(status: integer)", R::result(named::status_class()),
+                 {p.integer}),
         });
 }
 

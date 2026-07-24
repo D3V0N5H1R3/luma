@@ -171,6 +171,36 @@ void register_process_ns(const EnvPtr& env) {
                 return failure_from_exception(e);
             }
         })
+        .func("execute", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& cmd = expect_string(args[0], "Process.execute", loc);
+
+            if (cmd.empty()) {
+                return make_failure_value("command string must not be empty");
+            }
+
+            try {
+                auto captured = platform_process::execute_command_captured(cmd);
+
+                if (captured.exit_code < 0) {
+                    return make_failure_value("failed to execute command");
+                }
+
+                auto rec = std::make_shared<RecordValue>();
+                rec->type_name = "CommandOutput";
+                rec->fields.emplace_back("exit_code",
+                                         Value{static_cast<std::int64_t>(captured.exit_code)});
+                rec->fields.emplace_back("standard_output",
+                                         Value{std::move(captured.standard_output)});
+                rec->fields.emplace_back("standard_error",
+                                         Value{std::move(captured.standard_error)});
+                rec->fields.emplace_back("success", Value{captured.exit_code == 0});
+
+                return make_success_value(Value{std::move(rec)});
+            } catch (const RuntimeError& e) {
+                return failure_from_exception(e);
+            }
+        })
         .func("get_process_id", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
             return Value{platform_process::current_process_id()};

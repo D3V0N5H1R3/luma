@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -51,8 +52,81 @@ constexpr std::array<HashAlgorithmSpec, 2> k_hmac_algorithms{{
     return MBEDTLS_MD_NONE;
 }
 
-// Comma-separated list of the digest algorithms accepted by Hash.verify,
-// built from k_digest_algorithms so the hint cannot drift from md_type_from_name.
+// Maps a Hash.Algorithm choice variant to its canonical lowercase algorithm name.
+// The variant names must match the Hash.Algorithm choice in
+// core/analysis/types/stdlib_type_arities.cpp; Crc32 is included here even though
+// it is not an mbedtls digest, because compute_named_digest handles it separately.
+[[nodiscard]] std::optional<std::string_view>
+algorithm_name_from_variant(std::string_view variant) {
+    if (variant == "Md5") {
+        return "md5";
+    }
+    if (variant == "Sha1") {
+        return "sha1";
+    }
+    if (variant == "Sha256") {
+        return "sha256";
+    }
+    if (variant == "Sha512") {
+        return "sha512";
+    }
+    if (variant == "Crc32") {
+        return "crc32";
+    }
+
+    return std::nullopt;
+}
+
+// Resolves an algorithm argument that may be either a Hash.Algorithm choice or a
+// lowercase algorithm-name string to the canonical name, mirroring the dual
+// choice/string acceptance of Terminal.color and Decimal.round.  A choice maps
+// its variant (Sha256 → "sha256"); a string passes through unchanged so an
+// unknown name still yields the existing "unknown algorithm" failure.  Any other
+// type is a programmer error and throws — the choice path is total.
+[[nodiscard]] std::string resolve_algorithm_name(const Value& arg, std::string_view fn,
+                                                 const SourceLocation& loc) {
+    if (arg.is_choice()) {
+        const auto& variant = arg.as_choice()->variant;
+
+        if (auto name = algorithm_name_from_variant(variant)) {
+            return std::string{*name};
+        }
+
+        throw RuntimeError{std::format("{}: unknown algorithm 'Hash.Algorithm.{}'", fn, variant),
+                           loc, "use a Hash.Algorithm variant, e.g. Hash.Algorithm.Sha256"};
+    }
+
+    if (arg.is_string()) {
+        return arg.as_string();
+    }
+
+    throw RuntimeError{
+        std::format("{}: algorithm must be a Hash.Algorithm or an algorithm-name string", fn), loc,
+        "pass a Hash.Algorithm variant (e.g. Hash.Algorithm.Sha256) or a string (e.g. \"sha256\")"};
+}
+
+// Computes the hex digest of input under the named algorithm, or std::nullopt for
+// an unknown name.  Handles both the mbedtls digests (md5/sha1/sha256/sha512) and
+// crc32, which is not an mbedtls MD — its 32-bit checksum is rendered as a fixed
+// 8-hex-digit string so Hash.digest and Hash.verify return a uniform string form.
+[[nodiscard]] std::optional<std::string>
+compute_named_digest(std::string_view algo, const std::string& input, const SourceLocation& loc) {
+    if (algo == "crc32") {
+        return std::format("{:08x}", crc32_hash(input));
+    }
+
+    const auto type = md_type_from_name(algo);
+
+    if (type == MBEDTLS_MD_NONE) {
+        return std::nullopt;
+    }
+
+    return compute_digest_hex(type, input, loc);
+}
+
+// Comma-separated list of the algorithms accepted by Hash.verify and Hash.digest,
+// built from k_digest_algorithms (+ crc32) so the hint cannot drift from
+// compute_named_digest.
 [[nodiscard]] std::string supported_digest_algorithms() {
     std::string list;
     for (const auto& algo : k_digest_algorithms) {
@@ -61,6 +135,7 @@ constexpr std::array<HashAlgorithmSpec, 2> k_hmac_algorithms{{
         }
         list += algo.name;
     }
+    list += ", crc32";
 
     return list;
 }
@@ -147,24 +222,39 @@ void register_hash_digest(const EnvPtr& env) {
         })
         .func("verify", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            expect_all_strings(args, "Hash.verify", loc,
-                               "pass the algorithm name, input, and expected hash");
+            // Accepts the algorithm as a Hash.Algorithm choice or a name string
+            // (dual-form); input and expected are always strings.
+            const auto algo = resolve_algorithm_name(args[0], "Hash.verify", loc);
+            const auto& input = expect_string(args[1], "Hash.verify", loc);
+            const auto& expected = expect_string(args[2], "Hash.verify", loc);
 
-            const auto& algo = args[0].as_string();
-            const auto& input = args[1].as_string();
-            const auto& expected = args[2].as_string();
+            const auto computed = compute_named_digest(algo, input, loc);
 
-            const auto type = md_type_from_name(algo);
-
-            if (type == MBEDTLS_MD_NONE) {
+            if (!computed) {
                 throw RuntimeError{
                     error_msg("Hash", "verify", std::format("unknown algorithm '{}'", algo)), loc,
                     std::format("supported algorithms are: {}", supported_digest_algorithms())};
             }
 
-            const auto computed = compute_digest_hex(type, input, loc);
+            return Value{constant_time_equal(*computed, expected)};
+        })
+        .func("digest", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Generic hex digest under a Hash.Algorithm choice or a name string,
+            // so a program can select the algorithm type-safely rather than
+            // calling md5/sha256/… by name.  crc32 renders as an 8-hex-digit string.
+            const auto algo = resolve_algorithm_name(args[0], "Hash.digest", loc);
+            const auto& input = expect_string(args[1], "Hash.digest", loc);
 
-            return Value{constant_time_equal(computed, expected)};
+            const auto computed = compute_named_digest(algo, input, loc);
+
+            if (!computed) {
+                throw RuntimeError{
+                    error_msg("Hash", "digest", std::format("unknown algorithm '{}'", algo)), loc,
+                    std::format("supported algorithms are: {}", supported_digest_algorithms())};
+            }
+
+            return Value{*computed};
         })
         .func("algorithms", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {

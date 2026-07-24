@@ -59,6 +59,7 @@ void register_math_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
                  {p.number, p.number}),
             m.fn("round", 1, "(value: number)", R::result_integer(), {p.number}),
             m.fn("sign", 1, "(value: integer | number)", R::integer_type(), {p.number}),
+            m.fn("sign_of", 1, "(value: integer | number)", named::sign(), {p.number}),
             m.fn("sine", 1, "(angle: number)", R::result_number(), {p.number}),
             m.fn("smooth_step", 3, "(edge0: number, edge1: number, x: number)", R::result_number(),
                  {p.number, p.number, p.number}),

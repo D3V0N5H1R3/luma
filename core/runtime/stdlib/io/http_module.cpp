@@ -83,6 +83,40 @@ constexpr int k_http_default_timeout_ms = 30000;
     return Value{std::move(dict)};
 }
 
+// Wraps an Http.StatusClass variant name in a ChoiceValue.  The runtime short
+// name "StatusClass" matches how the type checker registers the choice from
+// stdlib_type_arities.cpp; the five variant names must match that declaration.
+[[nodiscard]] Value make_status_class_choice(std::string_view variant) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "StatusClass";
+    cv->variant = std::string{variant};
+
+    return Value{std::move(cv)};
+}
+
+// Classifies a raw HTTP status code into its RFC 9110 family, or std::nullopt
+// when the code is outside the valid 100-599 range.  Shared by Http.status_class
+// and Http.is_success so the two never disagree on what "2xx" means.
+[[nodiscard]] std::optional<std::string_view> status_class_variant(std::int64_t status) {
+    if (status >= 100 && status < 200) {
+        return "Informational";
+    }
+    if (status >= 200 && status < 300) {
+        return "Success";
+    }
+    if (status >= 300 && status < 400) {
+        return "Redirection";
+    }
+    if (status >= 400 && status < 500) {
+        return "ClientError";
+    }
+    if (status >= 500 && status < 600) {
+        return "ServerError";
+    }
+
+    return std::nullopt;
+}
+
 // Assembles an Http.Request record { method, url, headers, body, timeout_ms }.
 // The record carries the Http.Method choice natively — no stringified verb — so a
 // request stays typed and discoverable, mirroring how Http.Response is a record.
@@ -284,6 +318,45 @@ void register_http_ns(const EnvPtr& env) {
             }
 
             return Value{http_verb_from_method(args[0].as_choice()->variant, loc)};
+        })
+        // Http.status_class(status) -> result<Http.StatusClass>
+        // Classifies a raw HTTP status code into its RFC 9110 family so a program can
+        // match Http.StatusClass.Success / ClientError / … instead of hand-writing the
+        // magic 200..300 boundaries.  Fails for a code outside the valid 100-599 range.
+        .func("status_class", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto status = expect_integer(args[0], "Http.status_class", loc);
+            const auto variant = status_class_variant(status);
+
+            if (!variant) {
+                return make_failure_value(
+                    error_msg("Http", "status_class",
+                              std::format("status {} is out of range (expected 100-599)", status)),
+                    std::string{"invalid_argument"}, "Http.status_class");
+            }
+
+            return make_success_value(make_status_class_choice(*variant));
+        })
+        // Http.is_success(response) -> boolean
+        // True when the response's status is a 2xx (Success) code — the type-safe,
+        // self-documenting counterpart to hand-writing `response.status >= 200 &&
+        // response.status < 300`.  Mirrors requests' .ok / Response.ok.
+        .func("is_success", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_record()) {
+                throw RuntimeError{std::string{"Http.is_success: expected an Http.Response record"},
+                                   loc, "pass the result of Http.get/post/send, e.g. via ??"};
+            }
+
+            const auto* status_val = args[0].as_record()->find_field("status");
+
+            if (!status_val || !status_val->is_integer()) {
+                return Value{false};
+            }
+
+            const auto status = status_val->as_integer();
+
+            return Value{status >= 200 && status < 300};
         })
         // Http.request_of(method, url) -> Http.Request
         // Builds a typed request with empty headers, an empty body, and the default

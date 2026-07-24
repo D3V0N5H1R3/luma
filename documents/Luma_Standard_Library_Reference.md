@@ -514,6 +514,7 @@ Transform the representation of a string without changing its type (e.g. Base64,
 | `FileSystem.is_relative(path)`            | `(string)`                | `boolean`               | Whether the path is relative                          |
 | `FileSystem.is_symlink(path)`             | `(string)`                | `result<boolean>`       | Whether the path is a symbolic link                   |
 | `FileSystem.join(a, b)`                   | `(string, string)`        | `string`                | Join two path components                              |
+| `FileSystem.kind(path)`                   | `(string)`                | `result<FileSystem.FileKind>` | Classify a path as `File`, `Directory`, `Symlink`, or `Other`; fail if the path does not exist |
 | `FileSystem.list_directories(path)`       | `(string)`                | `result<array<string>>` | List subdirectories                                   |
 | `FileSystem.list_files(path)`             | `(string)`                | `result<array<string>>` | List files in a directory                             |
 | `FileSystem.list_recursively(path)`       | `(string)`                | `result<array<string>>` | Recursively list all files beneath a directory        |
@@ -523,6 +524,7 @@ Transform the representation of a string without changing its type (e.g. Base64,
 | `FileSystem.parent(path)`                 | `(string)`                | `string`                | Parent directory                                      |
 | `FileSystem.read_file(path)`              | `(string)`                | `result<string>`        | Read entire file as string                            |
 | `FileSystem.read_file_limited(path, max)` | `(string, integer)`       | `result<string>`        | Read file; fail if it exceeds `max` bytes             |
+| `FileSystem.read_file_typed(path)`        | `(string)`                | `result<string, FileSystem.IoError>` | Read entire file; on failure the error is a typed `FileSystem.IoError` instead of a string |
 | `FileSystem.read_lines(path)`             | `(string)`                | `result<array<string>>` | Read file as array of lines                           |
 | `FileSystem.relative(path, base)`         | `(string, string)`        | `string`                | Relative path from `base`                             |
 | `FileSystem.rename(old, new)`             | `(string, string)`        | `result<boolean>`       | Rename a file                                         |
@@ -535,7 +537,29 @@ Transform the representation of a string without changing its type (e.g. Base64,
 
 `copy`, `delete`, `delete_directory`, `list_directories`, and `list_files` reject symbolic links and return `failure` to prevent symlink-following attacks.
 
-`FileSystem.FileInfo` record fields: `size` (`integer`, bytes; `0` for directories and other non-regular files), `modified_time` (`number`, fractional seconds since the Unix epoch, matching `get_modified_time`), `is_directory` (`boolean`), `is_file` (`boolean`), `is_symlink` (`boolean`). `metadata` answers in one call what `size`, `get_modified_time`, `is_directory`, `is_file`, and `is_symlink` answer individually; the `is_symlink` flag reflects the path itself (it is not followed) while the size, time, and directory/file flags follow symlinks.
+`FileSystem.FileInfo` record fields: `size` (`integer`, bytes; `0` for directories and other non-regular files), `modified_time` (`number`, fractional seconds since the Unix epoch, matching `get_modified_time`), `is_directory` (`boolean`), `is_file` (`boolean`), `is_symlink` (`boolean`), and `kind` (`FileSystem.FileKind`, the single mutually-exclusive answer described below). `metadata` answers in one call what `size`, `get_modified_time`, `is_directory`, `is_file`, `is_symlink`, and `kind` answer individually; the `is_symlink` flag reflects the path itself (it is not followed) while the size, time, and directory/file flags follow symlinks.
+
+`FileSystem.FileKind` is a choice type with four variants — `File`, `Directory`, `Symlink`, `Other` — the single, mutually-exclusive answer to "what kind of thing is this path?". `FileSystem.kind(path)` returns it (and it is also the `kind` field on `FileSystem.FileInfo`), so a `match` is exhaustive and autocompleted instead of a nested `if` chain over the `is_file` / `is_directory` / `is_symlink` booleans. It is classified symlink-first, like `lstat`: a symbolic link is reported as `Symlink` even when its target is a directory or a regular file (so the four variants never overlap), and anything that is none of these — a device, FIFO, or socket — is `Other`. `kind` fails only when the path does not exist.
+
+```luma
+match Result.unwrap(FileSystem.kind("README.md")) {
+case FileSystem.FileKind.File      { print("a file") }
+case FileSystem.FileKind.Directory { print("a directory") }
+case FileSystem.FileKind.Symlink   { print("a link") }
+case FileSystem.FileKind.Other     { print("something else") }
+}
+```
+
+`FileSystem.IoError` is a choice type with five variants — `NotFound`, `PermissionDenied`, `AlreadyExists`, `InvalidInput`, `Other` — that categorises _why_ a filesystem operation failed, so a program can branch on the cause instead of substring-matching an opaque message. It is surfaced by `FileSystem.read_file_typed(path)`, which returns `result<string, FileSystem.IoError>`: the value on success is the file contents, and the error on failure is the typed category. A missing path is `NotFound`; an OS permission refusal is `PermissionDenied`; reading a directory or a path rejected by sandbox validation is `InvalidInput`; anything else is `Other`. This is an opt-in, additive prototype — the plain `FileSystem.read_file` (and every other `FileSystem` function) keeps its string-error `result<T>` — offered on a single function so typed I/O errors can be evaluated before deciding whether to generalise the pattern across the standard library.
+
+```luma
+match FileSystem.read_file_typed("config.txt") {
+success(contents) { print(contents) }
+failure(FileSystem.IoError.NotFound) { print("no config yet, using defaults") }
+failure(FileSystem.IoError.PermissionDenied) { print("cannot read config: permission denied") }
+failure(_other) { print("could not read config") }
+}
+```
 
 `FileSystem.PathParts` record fields: `parent` (`string`), `name` (`string`), `stem` (`string`), `extension` (`string`). `split_path` answers in one typed call what `parent`, `name`, `stem`, and `extension` answer individually. It is pure string manipulation — no I/O — so it needs no filesystem access, works in sandbox mode, and never fails.
 
@@ -1247,6 +1271,7 @@ Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 | ------------------------------- | -------------------------- | ---------------- | ------------------------------ |
 | `Hash.algorithms()`             | `()`                       | `array<string>`  | List supported algorithm names |
 | `Hash.crc32(s)`                 | `(string)`                 | `integer`        | CRC-32 checksum                |
+| `Hash.digest(algo, s)`          | `(Hash.Algorithm \| string, string)` | `string` | Digest `s` with the named algorithm; accepts the `Hash.Algorithm` choice or its string name |
 | `Hash.hmac_sha256(key, msg)`    | `(string, string)`         | `string`         | HMAC-SHA-256                   |
 | `Hash.hmac_sha512(key, msg)`    | `(string, string)`         | `string`         | HMAC-SHA-512                   |
 | `Hash.md5(s)`                   | `(string)`                 | `string`         | MD5 digest (32-char hex)       |
@@ -1255,7 +1280,15 @@ Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 | `Hash.sha256(s)`                | `(string)`                 | `string`         | SHA-256 digest (64-char hex)   |
 | `Hash.sha512_file(path)`        | `(string)`                 | `result<string>` | SHA-512 of file contents       |
 | `Hash.sha512(s)`                | `(string)`                 | `string`         | SHA-512 digest (128-char hex)  |
-| `Hash.verify(algo, data, hash)` | `(string, string, string)` | `boolean`        | Verify hash matches data       |
+| `Hash.verify(algo, data, hash)` | `(Hash.Algorithm \| string, string, string)` | `boolean` | Verify `hash` matches `data`; accepts the `Hash.Algorithm` choice or its string name |
+
+`Hash.Algorithm` is a choice type with five variants — `Md5`, `Sha1`, `Sha256`, `Sha512`, `Crc32` — the discoverable, closed set of algorithms that `Hash.digest` and `Hash.verify` accept. Both functions take `Hash.Algorithm | string`: passing the choice variant is autocompleted and a typo becomes a compile error, while the string form (`"sha256"`, matching `Hash.algorithms()`) keeps every existing call working. This is the same "stringly-typed argument → choice, keep the string form for compatibility" dual-form as `Terminal.Color | string`.
+
+```luma
+string h = Hash.digest(Hash.Algorithm.Sha256, "hello")   # typed, autocompleted
+boolean ok = Hash.verify(Hash.Algorithm.Sha256, "hello", h)
+boolean also_ok = Hash.verify("sha256", "hello", h)       # string form still works
+```
 
 ## 17 — HashSet
 
@@ -1304,6 +1337,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.get(url)`                       | `(string)`                                 | `result<Http.Response>` | GET request                                                          |
 | `Http.get_with(url, headers)`         | `(string, dictionary<string>)`             | `result<Http.Response>` | GET with custom headers                                              |
 | `Http.head(url)`                      | `(string)`                                 | `result<Http.Response>` | HEAD request                                                         |
+| `Http.is_success(response)`           | `(Http.Response)`                          | `boolean`               | Whether the response status is in the 2xx (`Success`) class          |
 | `Http.method_to_string(method)`       | `(Http.Method)`                            | `string`                | Convert an `Http.Method` variant to its uppercase HTTP verb           |
 | `Http.parse_query(qs)`                | `(string)`                                 | `dictionary<string>`    | Parse query string into dictionary                                   |
 | `Http.parse_url(url)`                 | `(string)`                                 | `Http.UrlParts`         | Parse URL into record with `scheme`, `host`, `port`, `path`, `query` |
@@ -1317,6 +1351,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.request_of(method, url)`        | `(Http.Method, string)`                    | `Http.Request`          | Build a typed request (empty headers/body, default 30 s timeout)     |
 | `Http.request_with(method, url, headers, body, timeout_ms)` | `(Http.Method, string, dictionary<string>, string, integer)` | `Http.Request` | Build a fully-specified typed request                    |
 | `Http.send(request)`                  | `(Http.Request)`                           | `result<Http.Response>` | Perform a typed `Http.Request` and return the response               |
+| `Http.status_class(status)`           | `(integer)`                                | `result<Http.StatusClass>` | Classify a status code into its family; fail if outside 100–599    |
 
 `Http.Response` record fields: `status` (`integer`), `reason` (`string`), `body` (`string`), `headers` (`dictionary<string>`).
 
@@ -1333,6 +1368,23 @@ result<Http.Response> r = Http.send(req)
 result<Http.Response> r = Http.request(
     {"method": Http.method_to_string(Http.Method.Post), "url": u, "body": body},
     headers)
+```
+
+`Http.StatusClass` is a choice type with the five RFC 9110 status families as variants — `Informational` (1xx), `Success` (2xx), `Redirection` (3xx), `ClientError` (4xx), `ServerError` (5xx) — so a response can be branched on its family without hand-written magic ranges like `status >= 200 && status < 300`. `Http.status_class(status)` classifies a raw code and fails for a code outside 100–599; `Http.is_success(response)` is the common-case shortcut for "is this a 2xx?", equivalent to matching `Success`.
+
+```luma
+result<Http.Response> r = Http.get("http://example.com")
+match r {
+success(response) {
+    match Result.unwrap(Http.status_class(response.status)) {
+    case Http.StatusClass.Success     { print("ok") }
+    case Http.StatusClass.ClientError { print("we sent something wrong") }
+    case Http.StatusClass.ServerError { print("the server failed") }
+    case _other                       { print("informational or redirect") }
+    }
+}
+failure(_e) { print("request failed") }
+}
 ```
 
 > **Security note** — HTTP header names and values are validated to reject carriage-return (`\r`) and line-feed (`\n`) characters. Supplying headers that contain these characters returns a `failure` result to prevent CRLF header injection.
@@ -1602,6 +1654,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.remap(value, in_min, in_max, out_min, out_max)` | `(number, number, number, number, number)` | `result<number>` | Linearly re-map `value` from input range to output range; fail if `in_min == in_max` |
 | `Math.round(x)`                       | `(number)`                       | `result<integer>` | Round to nearest integer; fail on overflow                                       |
 | `Math.sign(x)`                        | `(number)`                       | `integer`         | −1, 0, or 1                                                                      |
+| `Math.sign_of(x)`                     | `(number)`                       | `Sign`            | Sign of `x` as a typed `Sign` choice (`Negative`, `Zero`, `Positive`)           |
 | `Math.sine(x)`                        | `(number)`                       | `result<number>`  | Sine; fail if result is NaN or infinite                                          |
 | `Math.smooth_step(edge0, edge1, x)`   | `(number, number, number)`       | `result<number>`  | Smoothstep interpolation between `edge0` and `edge1`; fail if `edge0 == edge1`   |
 | `Math.square_root(x)`                 | `(number)`                       | `result<number>`  | Square root; fail if `x` is negative                                             |
@@ -1613,6 +1666,16 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.variance(arr)`                  | `(array<number>)`                | `result<number>`  | Variance; fail if empty                                                          |
 
 `Math.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
+
+`Sign` is a **top-level** choice type (not namespaced, like `Ordering`) with three variants — `Sign.Negative`, `Sign.Zero`, `Sign.Positive` — the self-documenting answer to "which way does this number point?". `Math.sign_of(x)` returns it, so a `match` is exhaustive and autocompleted instead of comparing against the magic `-1` / `0` / `1` that `Math.sign` returns (where `-1` could be misread as an error sentinel). `Math.sign` is unchanged for callers that want the integer.
+
+```luma
+string direction = match Math.sign_of(-4.2) {
+case Sign.Negative { "falling" }
+case Sign.Zero     { "flat" }
+case Sign.Positive { "rising" }
+}                                    # "falling" — exhaustive, no else needed
+```
 
 **Constants:**
 
@@ -1741,6 +1804,7 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 | Function                                        | Parameter Types    | Return Type                     | Description                                                              |
 | ----------------------------------------------- | ------------------ | ------------------------------- | ------------------------------------------------------------------------ |
 | `Process.current_directory()`                   | `()`               | `result<string>`                | Current working directory                                                |
+| `Process.execute(cmd)`                          | `(string)`         | `result<Process.CommandOutput>` | Execute shell command, capturing stdout **and** stderr separately        |
 | `Process.exit(code)`                            | `(integer)`        | `none`                          | Terminate the program with exit code                                     |
 | `Process.get_all_environment_variables()`       | `()`               | `dictionary<string>`            | All environment variables as a dictionary                                |
 | `Process.get_arguments()`                       | `()`               | `array<string>`                 | Command-line arguments after the file name                               |
@@ -1753,6 +1817,21 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 > **Security warning:** `Process.run` passes its argument to the system shell (`cmd.exe` on Windows, `/bin/sh` on Unix). If any part of the string comes from user input, an attacker can inject shell commands using characters such as `;`, `&&`, `|`, or `$(...)`. **Never pass unsanitised user input to `Process.run`.** Validate and whitelist all inputs before use, or construct the command from a fixed set of known-safe values only.
 
 `Process.ProcessResult` record fields: `exit_code` (`integer`), `output` (`string`).
+
+`Process.CommandOutput` record fields: `exit_code` (`integer`), `standard_output` (`string`), `standard_error` (`string`), `success` (`boolean`, true when `exit_code` is `0`). It is returned by `Process.execute`, the richer sibling of `Process.run`: where `ProcessResult` captures only stdout, `CommandOutput` keeps stdout and stderr in separate fields — essential for diagnosing a failed command, whose error text `run` discards — and adds a derived `success` convenience so callers avoid re-checking `exit_code == 0`. `Process.run` and `ProcessResult` are unchanged for the common case. The same shell-injection **security warning** above applies verbatim to `Process.execute`.
+
+```luma
+match Process.execute("git status") {
+success(out) {
+    if out.success {
+        print(out.standard_output)
+    } else {
+        print("git failed (${out.exit_code}): ${out.standard_error}")
+    }
+}
+failure(_e) { print("could not launch command") }
+}
+```
 
 ## 29 — Queue
 

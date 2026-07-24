@@ -202,3 +202,30 @@ function void test_hash_sha512_file_success() {
 
     boolean _ = Result.unwrap_or(FileSystem.delete(path), false)
 }
+
+# ─── Hash.Algorithm (choice-or-string dual form) ───
+
+@test
+function void test_hash_algorithm_digest_matches_string() {
+    # digest under a Hash.Algorithm choice equals the same-named string form, so
+    # a typo like "sha-256" becomes a compile error instead of a runtime failure.
+    assert(Hash.digest(Hash.Algorithm.Sha256, "abc") == Hash.digest("sha256", "abc"))
+    assert(Hash.digest(Hash.Algorithm.Md5, "abc") == Hash.md5("abc"))
+    assert(Hash.digest(Hash.Algorithm.Sha1, "abc") == Hash.sha1("abc"))
+    assert(Hash.digest(Hash.Algorithm.Sha512, "abc") == Hash.sha512("abc"))
+}
+
+@test
+function void test_hash_algorithm_verify() {
+    # verify accepts a Hash.Algorithm choice exactly like the equivalent string.
+    assert(Hash.verify(Hash.Algorithm.Sha256, "hello", Hash.sha256("hello")))
+    assert(Hash.verify(Hash.Algorithm.Md5, "hello", Hash.md5("hello")))
+    assert(!Hash.verify(Hash.Algorithm.Sha256, "hello", "wrong"))
+}
+
+@test
+function void test_hash_algorithm_crc32() {
+    # crc32 renders as a fixed 8-hex-digit checksum ("abc" -> 0x352441c2).
+    assert(Hash.digest(Hash.Algorithm.Crc32, "abc") == "352441c2")
+    assert(Hash.verify(Hash.Algorithm.Crc32, "abc", "352441c2"))
+}

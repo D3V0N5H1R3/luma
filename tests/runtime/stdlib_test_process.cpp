@@ -263,6 +263,84 @@ static void test_process_run_nonexistent_command_fails() {
     ASSERT_EVAL_FAILURE("Process.run(\"_luma_nonexistent_command_xyz_123\")");
 }
 
+// ─── Process.execute — captures stdout + stderr separately (N06) ────────────
+// Unlike Process.run (which merges both streams into one `output` field),
+// Process.execute returns a Process.CommandOutput record with separate
+// standard_output / standard_error buffers plus a derived success flag.
+
+static void test_process_execute_returns_command_output() {
+#ifdef _WIN32
+    const auto v = eval("Process.execute(\"cmd /c echo hello\")");
+#else
+    const auto v = eval("Process.execute(\"echo hello\")");
+#endif
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+
+    ASSERT_TRUE(inner.is_record());
+    ASSERT_TRUE(inner.as_record()->type_name == "CommandOutput");
+    ASSERT_TRUE(inner.as_record()->find_field("exit_code") != nullptr);
+    ASSERT_TRUE(inner.as_record()->find_field("standard_output") != nullptr);
+    ASSERT_TRUE(inner.as_record()->find_field("standard_error") != nullptr);
+    ASSERT_TRUE(inner.as_record()->find_field("success") != nullptr);
+
+    ASSERT_TRUE(inner.as_record()->find_field("exit_code")->is_integer());
+    ASSERT_TRUE(inner.as_record()->find_field("exit_code")->as_integer() == 0);
+    ASSERT_TRUE(inner.as_record()->find_field("standard_output")->is_string());
+    ASSERT_TRUE(inner.as_record()->find_field("standard_output")->as_string().find("hello") !=
+                std::string::npos);
+    ASSERT_TRUE(inner.as_record()->find_field("success")->is_bool());
+    ASSERT_TRUE(inner.as_record()->find_field("success")->as_bool());
+}
+
+static void test_process_execute_captures_stderr() {
+    // A command that writes only to stderr must populate standard_error while
+    // leaving standard_output empty — the whole point of the separate capture.
+#ifdef _WIN32
+    const auto v = eval("Process.execute(\"cmd /c \\\"echo err_text 1>&2\\\"\")");
+#else
+    const auto v = eval("Process.execute(\"sh -c \\\"echo err_text 1>&2\\\"\")");
+#endif
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+
+    ASSERT_TRUE(inner.as_record()->find_field("standard_error")->as_string().find("err_text") !=
+                std::string::npos);
+    ASSERT_TRUE(inner.as_record()->find_field("standard_output")->as_string().find("err_text") ==
+                std::string::npos);
+}
+
+static void test_process_execute_nonzero_exit_sets_success_false() {
+#ifdef _WIN32
+    const auto v = eval("Process.execute(\"cmd /c exit 7\")");
+#else
+    const auto v = eval("Process.execute(\"sh -c \\\"exit 7\\\"\")");
+#endif
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+
+    ASSERT_TRUE(inner.as_record()->find_field("exit_code")->as_integer() == 7);
+    ASSERT_FALSE(inner.as_record()->find_field("success")->as_bool());
+}
+
+static void test_process_execute_nonexistent_command_fails() {
+    ASSERT_EVAL_FAILURE("Process.execute(\"_luma_nonexistent_command_xyz_123\")");
+}
+
+static void test_process_execute_empty_command_fails() {
+    ASSERT_EVAL_FAILURE("Process.execute(\"\")");
+}
+
+static void test_process_execute_unclosed_quote_fails() {
+    ASSERT_EVAL_FAILURE("Process.execute(\"echo \\\"unclosed\")");
+}
+
 int main() {
     RUN(test_process_get_args_empty);
     RUN(test_process_get_args_with_values);
@@ -296,6 +374,12 @@ int main() {
     RUN(test_process_exit_out_of_range_throws);
     RUN(test_process_run_nonzero_exit_code);
     RUN(test_process_run_nonexistent_command_fails);
+    RUN(test_process_execute_returns_command_output);
+    RUN(test_process_execute_captures_stderr);
+    RUN(test_process_execute_nonzero_exit_sets_success_false);
+    RUN(test_process_execute_nonexistent_command_fails);
+    RUN(test_process_execute_empty_command_fails);
+    RUN(test_process_execute_unclosed_quote_fails);
 
     return SUMMARY();
 }

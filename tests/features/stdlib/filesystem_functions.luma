@@ -587,3 +587,142 @@ function void test_filesystem_metadata_nonexistent() {
     assert(Result.is_failure(r), "metadata fails on a missing path")
 }
 
+# ─── FileSystem.FileKind ───
+
+# Exhaustive match over every FileKind variant.  Beyond labelling a kind, this
+# doubles as a check that FileSystem.FileKind is fully registered, exhaustively
+# matchable, and usable as a parameter type annotation.
+function string file_kind_label(FileSystem.FileKind k) {
+    return match k {
+    case FileSystem.FileKind.File      { "file" }
+    case FileSystem.FileKind.Directory { "directory" }
+    case FileSystem.FileKind.Symlink   { "symlink" }
+    case FileSystem.FileKind.Other     { "other" }
+    }
+}
+
+@test
+function void test_filesystem_kind_file() {
+    assert(Result.is_success(FileSystem.write_file("_test_kind.txt", "hello")))
+
+    result<FileSystem.FileKind> r = FileSystem.kind("_test_kind.txt")
+
+    assert(Result.is_success(r), "kind succeeds for a file")
+
+    FileSystem.FileKind k = Result.unwrap(r)
+
+    assert(k == FileSystem.FileKind.File, "a regular file is File")
+    assert(file_kind_label(k) == "file")
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_kind.txt"), false)
+}
+
+@test
+function void test_filesystem_kind_directory() {
+    result<FileSystem.FileKind> r = FileSystem.kind(".")
+
+    assert(Result.is_success(r), "kind succeeds for a directory")
+
+    FileSystem.FileKind k = Result.unwrap(r)
+
+    assert(k == FileSystem.FileKind.Directory, "a directory is Directory")
+    assert(file_kind_label(k) == "directory")
+}
+
+@test
+function void test_filesystem_kind_nonexistent() {
+    result<FileSystem.FileKind> r = FileSystem.kind("_nonexistent_kind_file.txt")
+
+    assert(Result.is_failure(r), "kind fails on a missing path")
+}
+
+@test
+function void test_filesystem_metadata_kind_field() {
+    assert(Result.is_success(FileSystem.write_file("_test_meta_kind.txt", "hi")))
+
+    result<FileSystem.FileInfo> r = FileSystem.metadata("_test_meta_kind.txt")
+
+    assert(Result.is_success(r), "metadata succeeds")
+
+    FileSystem.FileInfo info = Result.unwrap(r)
+
+    # The kind field agrees with the is_file / is_directory / is_symlink booleans,
+    # as a single, mutually-exclusive, match-able choice.
+    assert(info.kind == FileSystem.FileKind.File, "metadata kind is File")
+    assert(info.is_file, "is_file agrees with kind")
+    assert(file_kind_label(info.kind) == "file")
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_meta_kind.txt"), false)
+}
+
+# ─── FileSystem.IoError (opt-in typed I/O errors) ───
+
+# Exhaustive match over every IoError variant.  Beyond labelling a category, this
+# doubles as a check that FileSystem.IoError is fully registered, exhaustively
+# matchable, and usable as a parameter type annotation.
+function string io_error_label(FileSystem.IoError e) {
+    return match e {
+        case FileSystem.IoError.NotFound         { "not_found" }
+        case FileSystem.IoError.PermissionDenied { "permission_denied" }
+        case FileSystem.IoError.AlreadyExists    { "already_exists" }
+        case FileSystem.IoError.InvalidInput     { "invalid_input" }
+        case FileSystem.IoError.Other            { "other" }
+    }
+}
+
+@test
+function void test_filesystem_read_file_typed_success() {
+    assert(Result.is_success(FileSystem.write_file("_test_typed_ok.txt", "typed body")))
+
+    result<string, FileSystem.IoError> r = FileSystem.read_file_typed("_test_typed_ok.txt")
+
+    assert(Result.is_success(r), "reading a present file succeeds")
+    assert(Result.unwrap(r) == "typed body")
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_typed_ok.txt"), false)
+}
+
+@test
+function void test_filesystem_read_file_typed_not_found() {
+    result<string, FileSystem.IoError> r = FileSystem.read_file_typed("_nonexistent_typed_xyz.txt")
+
+    assert(Result.is_failure(r), "a missing file fails")
+
+    # The error is a match-able typed choice, not an opaque string.
+    string label = match r {
+        success(_c) { "unexpected_success" }
+        failure(e) { io_error_label(e) }
+    }
+
+    assert(label == "not_found", "a missing file classifies as NotFound")
+}
+
+@test
+function void test_filesystem_read_file_typed_directory_is_invalid_input() {
+    # Reading a directory as a file is a misuse of the API (EISDIR → InvalidInput).
+    result<string, FileSystem.IoError> r = FileSystem.read_file_typed(".")
+
+    string label = match r {
+        success(_c) { "unexpected_success" }
+        failure(e) { io_error_label(e) }
+    }
+
+    assert(label == "invalid_input", "a directory classifies as InvalidInput")
+}
+
+@test
+function void test_filesystem_read_file_typed_traversal_is_invalid_input() {
+    # A traversing path is rejected as a typed InvalidInput failure rather than
+    # throwing (unlike the string-error FileSystem functions).
+    result<string, FileSystem.IoError> r = FileSystem.read_file_typed("../escape.txt")
+
+    assert(Result.is_failure(r), "a traversing path fails")
+
+    string label = match r {
+        success(_c) { "unexpected_success" }
+        failure(e) { io_error_label(e) }
+    }
+
+    assert(label == "invalid_input", "a traversing path classifies as InvalidInput")
+}
+

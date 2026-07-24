@@ -49,6 +49,23 @@ void register_filesystem_content(const EnvPtr& env) {
                                            "file exceeds maximum readable size");
                                    });
         })
+        .func("read_file_typed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const std::string& path_str = expect_string(args[0], "FileSystem.read_file_typed", loc);
+
+            // Opt-in typed-error variant of read_file: failures are surfaced as a
+            // FileSystem.IoError choice (result<string, FileSystem.IoError>)
+            // instead of a string message.  Path validation is done here rather
+            // than via fs_safe_execute so a rejected path maps to a typed
+            // InvalidInput failure rather than the shared string-failure wrapper.
+            try {
+                const auto safe_path = validate_path(path_str, loc);
+
+                return read_file_typed_impl(safe_path);
+            } catch (const RuntimeError&) {
+                return make_io_error_failure(std::make_error_code(std::errc::invalid_argument));
+            }
+        })
         .func("read_file_limited", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const std::string& path_str =
@@ -257,8 +274,24 @@ void register_filesystem_content(const EnvPtr& env) {
                     rec->fields.emplace_back("is_directory", Value{directory});
                     rec->fields.emplace_back("is_file", Value{regular_file});
                     rec->fields.emplace_back("is_symlink", Value{symlink});
+                    const auto kind = file_kind_variant(symlink, directory, regular_file);
+                    rec->fields.emplace_back("kind", make_file_kind_choice(kind));
 
                     return make_success_value(Value{std::move(rec)});
+                });
+        })
+        .func("kind", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return fs_validated_string_op(
+                "FileSystem.kind", args[0], loc, false,
+                [](const std::filesystem::path& safe_path) -> Value {
+                    const auto variant = classify_file_kind(safe_path);
+                    if (!variant) {
+                        return make_failure_value(
+                            error_msg("FileSystem", "kind",
+                                      std::format("path does not exist '{}'", safe_path.string())));
+                    }
+                    return make_success_value(make_file_kind_choice(*variant));
                 });
         })
         .func("list_recursively", 1)

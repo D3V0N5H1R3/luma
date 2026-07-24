@@ -244,6 +244,27 @@ LUMA_TEST(math_sign) {
     ASSERT_EQ(eval("Math.sign(0)").as_integer(), 0);
 }
 
+LUMA_TEST(math_sign_of) {
+    // The exhaustive Sign choice counterpart to Math.sign's magic -1 / 0 / 1.
+    const auto neg = eval("Math.sign_of(-5)");
+    ASSERT_TRUE(neg.is_choice());
+    ASSERT_EQ(neg.as_choice()->type_name, "Sign");
+    ASSERT_EQ(neg.as_choice()->variant, "Negative");
+
+    const auto zero = eval("Math.sign_of(0)");
+    ASSERT_TRUE(zero.is_choice());
+    ASSERT_EQ(zero.as_choice()->variant, "Zero");
+
+    const auto pos = eval("Math.sign_of(7)");
+    ASSERT_TRUE(pos.is_choice());
+    ASSERT_EQ(pos.as_choice()->variant, "Positive");
+
+    // Works for number as well as integer inputs.
+    ASSERT_EQ(eval("Math.sign_of(-0.5)").as_choice()->variant, "Negative");
+    ASSERT_EQ(eval("Math.sign_of(3.14)").as_choice()->variant, "Positive");
+    ASSERT_EQ(eval("Math.sign_of(0.0)").as_choice()->variant, "Zero");
+}
+
 LUMA_TEST(math_square_root) {
     const auto v = eval("Math.square_root(16.0)");
 

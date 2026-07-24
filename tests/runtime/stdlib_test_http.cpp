@@ -151,6 +151,66 @@ static void test_http_method_to_string_rejects_non_choice() {
     ASSERT_TRUE(luma::test::eval_throws(R"(Http.method_to_string("GET"))"));
 }
 
+// ─── Http: status_class (raw status → Http.StatusClass family) ────────────────
+
+static void test_http_status_class_all_families() {
+    // Each family boundary classifies into the right RFC 9110 Http.StatusClass.
+    const auto info = eval("Http.status_class(100)");
+    ASSERT_RESULT_SUCCESS(info);
+    ASSERT_TRUE(info.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(info.as_result()->owned_inner->as_choice()->type_name, "StatusClass");
+    ASSERT_EQ(info.as_result()->owned_inner->as_choice()->variant, "Informational");
+
+    ASSERT_EQ(eval("Http.status_class(200)").as_result()->owned_inner->as_choice()->variant,
+              "Success");
+    ASSERT_EQ(eval("Http.status_class(301)").as_result()->owned_inner->as_choice()->variant,
+              "Redirection");
+    ASSERT_EQ(eval("Http.status_class(404)").as_result()->owned_inner->as_choice()->variant,
+              "ClientError");
+    ASSERT_EQ(eval("Http.status_class(503)").as_result()->owned_inner->as_choice()->variant,
+              "ServerError");
+}
+
+static void test_http_status_class_out_of_range_fails() {
+    // A code outside 100-599 has no family, so status_class returns a failure.
+    ASSERT_EVAL_FAILURE("Http.status_class(99)");
+    ASSERT_EVAL_FAILURE("Http.status_class(600)");
+    ASSERT_EVAL_FAILURE("Http.status_class(0)");
+}
+
+// ─── Http: is_success (2xx predicate over a response record) ──────────────────
+
+static void test_http_is_success_reads_status() {
+    // is_success is true only for a 2xx status.  A response record is built here
+    // with a literal (the field the predicate reads is `status`); eval() ignores
+    // the "record type not found at compile time" warning stdlib records emit.
+    ASSERT_EQ(
+        eval(
+            R"(Http.is_success(Http.Response { status = 204, reason = "x", body = "", headers = {} }))")
+            .as_bool(),
+        true);
+    ASSERT_EQ(
+        eval(
+            R"(Http.is_success(Http.Response { status = 200, reason = "x", body = "", headers = {} }))")
+            .as_bool(),
+        true);
+    ASSERT_EQ(
+        eval(
+            R"(Http.is_success(Http.Response { status = 404, reason = "x", body = "", headers = {} }))")
+            .as_bool(),
+        false);
+    ASSERT_EQ(
+        eval(
+            R"(Http.is_success(Http.Response { status = 500, reason = "x", body = "", headers = {} }))")
+            .as_bool(),
+        false);
+    ASSERT_EQ(
+        eval(
+            R"(Http.is_success(Http.Response { status = 100, reason = "x", body = "", headers = {} }))")
+            .as_bool(),
+        false);
+}
+
 static void test_http_new_functions_registered() {
     const auto env = luma::test::make_std_env();
 
@@ -159,6 +219,8 @@ static void test_http_new_functions_registered() {
     ASSERT_TRUE(env->has("Http.delete_with"));
     ASSERT_TRUE(env->has("Http.patch_with"));
     ASSERT_TRUE(env->has("Http.put_with"));
+    ASSERT_TRUE(env->has("Http.status_class"));
+    ASSERT_TRUE(env->has("Http.is_success"));
 }
 
 // ─── Http: URL parsing (positive) ────────────────────────────────────────────
@@ -545,6 +607,9 @@ int main() {
     RUN(test_http_bearer_auth_empty);
     RUN(test_http_method_to_string_all_verbs);
     RUN(test_http_method_to_string_rejects_non_choice);
+    RUN(test_http_status_class_all_families);
+    RUN(test_http_status_class_out_of_range_fails);
+    RUN(test_http_is_success_reads_status);
     RUN(test_http_new_functions_registered);
     RUN(test_http_parse_url_default_http_port);
     RUN(test_http_parse_url_https_default_port);
