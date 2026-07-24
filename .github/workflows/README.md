@@ -71,13 +71,14 @@ Heavier quality gates that run on a timer or on request rather than on every cha
 
 ## 6 — Releases
 
-Tag-triggered publishing; each responds to its own tag prefix. [`release.yml`](release.yml) builds the interpreter for every platform and cuts the main GitHub Release (bundling the VS Code extension archive alongside the binaries), while the two extension workflows handle their own stores.
+Tag-triggered publishing; each responds to its own tag prefix. [`release.yml`](release.yml) builds the interpreter for every platform and cuts the main GitHub Release (bundling the VS Code extension archive alongside the binaries), while the two extension workflows handle their own stores. [`tag-release.yml`](tag-release.yml) is the on-demand counterpart: dispatch it to create the `v*.*.*` tag from the [`VERSION`](../../VERSION) file (validated and guarded against duplicates), which then triggers [`release.yml`](release.yml). It pushes the tag with the `RELEASE_PAT` secret so that trigger fires — see [Releasing](../../CONTRIBUTING.md#releasing) for the one-time secret setup.
 
 For the step-by-step release procedure — how these tag-triggered Releases differ from the temporary CI build artifacts, and how to cut one — see [Releasing](../../CONTRIBUTING.md#releasing) in the contributing guide.
 
 | Workflow                                   | Trigger             | Purpose                                                         |
 | ------------------------------------------ | ------------------- | --------------------------------------------------------------- |
 | [`release.yml`](release.yml)               | Tag `v*.*.*`        | Build cross-platform binaries and publish a GitHub Release.     |
+| [`tag-release.yml`](tag-release.yml)       | Manual              | Validate the `VERSION` file and push the `v*.*.*` release tag.  |
 | [`release-vscode.yml`](release-vscode.yml) | Tag `vscode-v*.*.*` | Publish the VS Code extension to the Visual Studio Marketplace. |
 | [`release-zed.yml`](release-zed.yml)       | Tag `zed-v*.*.*`    | Build the Zed extension and attach it to a GitHub Release.      |
 
