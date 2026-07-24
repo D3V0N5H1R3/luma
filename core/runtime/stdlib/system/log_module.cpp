@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -340,31 +341,71 @@ void register_log_ns(const EnvPtr& env, bool sandbox) {
         });
 
     // Log.set_output opens files, so it is withheld from sandboxed
-    // environments; func_if registers it only when sandbox is false.
+    // environments; func_if registers it only when sandbox is false.  Accepts the
+    // typed Log.Output choice (Stderr / Stdout / File(path)) or the equivalent
+    // string form ("stderr" / "stdout" / a path), mirroring Log.set_level's
+    // dual-form — routing on the File variant (not on the payload text) so a path
+    // that happens to read "stdout" still opens a file.
     builder.func_if(
         !sandbox, "set_output", 1, [](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Log.set_output", loc);
-
-            const auto& target = args[0].as_string();
             auto& state = log_state();
             const std::scoped_lock lock{state.mutex};
 
-            if (target == "stderr" || target == "stdout") {
-                // Close any open file.
+            // Resolve the argument to either a standard stream or a file path.
+            std::optional<OutputTarget> stream_target; // set for Stderr / Stdout
+            std::string file_path;                     // set for File / path string
+
+            if (args[0].is_choice()) {
+                const auto& choice = *args[0].as_choice();
+
+                if (choice.variant == "Stderr") {
+                    stream_target = OutputTarget::Stderr;
+                } else if (choice.variant == "Stdout") {
+                    stream_target = OutputTarget::Stdout;
+                } else if (choice.variant == "File") {
+                    if (choice.fields.empty() || !choice.fields.front().is_string()) {
+                        throw RuntimeError{
+                            "Log.set_output: Log.Output.File is missing its path payload", loc,
+                            R"(build it as Log.Output.File("path.log"))"};
+                    }
+
+                    file_path = choice.fields.front().as_string();
+                } else {
+                    throw RuntimeError{
+                        "Log.set_output: unknown Log.Output variant", loc,
+                        "use Log.Output.Stderr, Log.Output.Stdout, or Log.Output.File(path)"};
+                }
+            } else if (args[0].is_string()) {
+                const auto& target = args[0].as_string();
+
+                if (target == "stderr") {
+                    stream_target = OutputTarget::Stderr;
+                } else if (target == "stdout") {
+                    stream_target = OutputTarget::Stdout;
+                } else {
+                    file_path = target;
+                }
+            } else {
+                throw RuntimeError{"Log.set_output: expected a Log.Output or string", loc,
+                                   "pass a Log.Output variant or a stream name / file path"};
+            }
+
+            // Stream target — close any open file and switch.
+            if (stream_target.has_value()) {
                 if (state.file_stream.is_open()) {
                     state.file_stream.close();
                 }
 
-                state.output = (target == "stderr") ? OutputTarget::Stderr : OutputTarget::Stdout;
+                state.output = *stream_target;
 
                 return make_success_value(Value{NullValue{}});
             }
 
-            // Validate path before closing the old stream.
+            // File target — validate path before closing the old stream.
             std::filesystem::path safe;
 
             try {
-                safe = validate_path(target, loc);
+                safe = validate_path(file_path, loc);
             } catch (const RuntimeError&) {
                 return make_failure_value("Log.set_output: path rejected by security policy");
             }
@@ -378,7 +419,7 @@ void register_log_ns(const EnvPtr& env, bool sandbox) {
 
             if (!state.file_stream.is_open()) {
                 return make_failure_value(
-                    error_msg("Log", "set_output", std::format("cannot open '{}'", target)));
+                    error_msg("Log", "set_output", std::format("cannot open '{}'", file_path)));
             }
 
             state.output = OutputTarget::File;

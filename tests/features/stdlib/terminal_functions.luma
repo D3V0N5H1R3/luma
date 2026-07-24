@@ -538,3 +538,191 @@ function void test_terminal_rgb_background_color_negative() {
 
     assert(!Result.is_success(r))
 }
+
+# ───────────────────────────────────────────────────────────
+# Terminal.MouseEvent / Terminal.MouseEventKind
+# ───────────────────────────────────────────────────────────
+
+# Exhaustive match over every MouseEventKind variant.  Beyond labelling a kind,
+# this doubles as a check that Terminal.MouseEventKind is fully registered,
+# exhaustively matchable, and usable as a parameter type annotation.
+function string mouse_event_kind_label(Terminal.MouseEventKind k) {
+    return match k {
+    case Terminal.MouseEventKind.LeftPress     { "left_press" }
+    case Terminal.MouseEventKind.LeftRelease   { "left_release" }
+    case Terminal.MouseEventKind.LeftDrag      { "left_drag" }
+    case Terminal.MouseEventKind.MiddlePress   { "middle_press" }
+    case Terminal.MouseEventKind.MiddleRelease { "middle_release" }
+    case Terminal.MouseEventKind.MiddleDrag    { "middle_drag" }
+    case Terminal.MouseEventKind.RightPress    { "right_press" }
+    case Terminal.MouseEventKind.RightRelease  { "right_release" }
+    case Terminal.MouseEventKind.RightDrag     { "right_drag" }
+    case Terminal.MouseEventKind.WheelUp       { "wheel_up" }
+    case Terminal.MouseEventKind.WheelDown     { "wheel_down" }
+    case Terminal.MouseEventKind.WheelLeft     { "wheel_left" }
+    case Terminal.MouseEventKind.WheelRight    { "wheel_right" }
+    }
+}
+
+@test
+function void test_terminal_parse_mouse_event_decodes_record() {
+    # A well-formed "mouse:<kind>:ROW:COL" string decodes into a typed
+    # Terminal.MouseEvent — replacing the old String.split(key, ":") boilerplate.
+    match Terminal.parse_mouse_event("mouse:left_press:10:5") {
+    case some(e) {
+        assert(e.kind == Terminal.MouseEventKind.LeftPress, "kind is LeftPress")
+        assert(mouse_event_kind_label(e.kind) == "left_press")
+        assert(e.row == 10, "row is 10")
+        assert(e.column == 5, "column is 5")
+    }
+    case none {
+        assert(false, "a well-formed mouse string should decode")
+    }
+    }
+}
+
+@test
+function void test_terminal_parse_mouse_event_kinds() {
+    # Release, drag, and wheel kinds each decode to their own variant, and the
+    # coordinates stay row-first.
+    match Terminal.parse_mouse_event("mouse:right_release:2:7") {
+    case some(e) {
+        assert(e.kind == Terminal.MouseEventKind.RightRelease, "kind is RightRelease")
+        assert(e.row == 2, "row is 2")
+        assert(e.column == 7, "column is 7")
+    }
+    case none {
+        assert(false, "right_release should decode")
+    }
+    }
+
+    match Terminal.parse_mouse_event("mouse:middle_drag:4:3") {
+    case some(e) {
+        assert(e.kind == Terminal.MouseEventKind.MiddleDrag, "kind is MiddleDrag")
+    }
+    case none {
+        assert(false, "middle_drag should decode")
+    }
+    }
+
+    match Terminal.parse_mouse_event("mouse:wheel_down:1:1") {
+    case some(e) {
+        assert(e.kind == Terminal.MouseEventKind.WheelDown, "kind is WheelDown")
+    }
+    case none {
+        assert(false, "wheel_down should decode")
+    }
+    }
+}
+
+@test
+function void test_terminal_parse_mouse_event_none_for_malformed() {
+    # A non-mouse string, a wrong field count, an unknown kind, or a non-integer
+    # coordinate all decode to none rather than a bogus event.
+    assert(Optional.is_none(Terminal.parse_mouse_event("enter")), "non-mouse string is none")
+    assert(Optional.is_none(Terminal.parse_mouse_event("mouse:left_press:10")), "missing column is none")
+    assert(Optional.is_none(Terminal.parse_mouse_event("mouse:left_press:10:5:0")), "extra field is none")
+    assert(Optional.is_none(Terminal.parse_mouse_event("mouse:zoom:1:2")), "unknown kind is none")
+    assert(Optional.is_none(Terminal.parse_mouse_event("mouse:left_press:x:5")), "non-integer row is none")
+    assert(Optional.is_none(Terminal.parse_mouse_event("")), "empty string is none")
+}
+
+# ───────────────────────────────────────────────────────────
+# Terminal.Key / Terminal.parse_key
+# ───────────────────────────────────────────────────────────
+
+# Exhaustive match over every Terminal.Key variant.  Beyond labelling a key,
+# this doubles as a compile-time check that Terminal.Key is fully registered,
+# exhaustively matchable, and usable as a parameter type annotation — and that
+# the two payload variants (Character, Function) bind their payloads.
+function string key_label(Terminal.Key k) {
+    return match k {
+    case Terminal.Key.Character(c) { "char:${c}" }
+    case Terminal.Key.Function(n)  { "f${n}" }
+    case Terminal.Key.Enter        { "enter" }
+    case Terminal.Key.Escape       { "escape" }
+    case Terminal.Key.Tab          { "tab" }
+    case Terminal.Key.Backspace    { "backspace" }
+    case Terminal.Key.Space        { "space" }
+    case Terminal.Key.Up           { "up" }
+    case Terminal.Key.Down         { "down" }
+    case Terminal.Key.Left         { "left" }
+    case Terminal.Key.Right        { "right" }
+    case Terminal.Key.Home         { "home" }
+    case Terminal.Key.End          { "end" }
+    case Terminal.Key.PageUp       { "page_up" }
+    case Terminal.Key.PageDown     { "page_down" }
+    case Terminal.Key.Insert       { "insert" }
+    case Terminal.Key.Delete       { "delete" }
+    case Terminal.Key.Unknown      { "unknown" }
+    }
+}
+
+@test
+function void test_terminal_parse_key_named() {
+    # Each named key string decodes to its own unit variant — no raw-string
+    # comparison, and a typo becomes a non-matching variant rather than a bug.
+    assert(Terminal.parse_key("enter") == Terminal.Key.Enter, "enter")
+    assert(Terminal.parse_key("escape") == Terminal.Key.Escape, "escape")
+    assert(Terminal.parse_key("tab") == Terminal.Key.Tab, "tab")
+    assert(Terminal.parse_key("backspace") == Terminal.Key.Backspace, "backspace")
+    assert(Terminal.parse_key("space") == Terminal.Key.Space, "space")
+    assert(Terminal.parse_key("up") == Terminal.Key.Up, "up")
+    assert(Terminal.parse_key("down") == Terminal.Key.Down, "down")
+    assert(Terminal.parse_key("left") == Terminal.Key.Left, "left")
+    assert(Terminal.parse_key("right") == Terminal.Key.Right, "right")
+    assert(Terminal.parse_key("home") == Terminal.Key.Home, "home")
+    assert(Terminal.parse_key("end") == Terminal.Key.End, "end")
+    assert(Terminal.parse_key("page_up") == Terminal.Key.PageUp, "page_up")
+    assert(Terminal.parse_key("page_down") == Terminal.Key.PageDown, "page_down")
+    assert(Terminal.parse_key("insert") == Terminal.Key.Insert, "insert")
+    assert(Terminal.parse_key("delete") == Terminal.Key.Delete, "delete")
+    assert(Terminal.parse_key("unknown") == Terminal.Key.Unknown, "unknown")
+
+    # The label helper proves the exhaustive match compiles and routes.
+    assert(key_label(Terminal.parse_key("page_up")) == "page_up")
+}
+
+@test
+function void test_terminal_parse_key_function() {
+    # Function keys "f1".."f12" decode to Function(n) carrying the number.
+    match Terminal.parse_key("f1") {
+    case Terminal.Key.Function(n) { assert(n == 1, "f1 -> Function(1)") }
+    else { assert(false, "f1 should be Function") }
+    }
+
+    match Terminal.parse_key("f5") {
+    case Terminal.Key.Function(n) { assert(n == 5, "f5 -> Function(5)") }
+    else { assert(false, "f5 should be Function") }
+    }
+
+    match Terminal.parse_key("f12") {
+    case Terminal.Key.Function(n) { assert(n == 12, "f12 -> Function(12)") }
+    else { assert(false, "f12 should be Function") }
+    }
+
+    assert(key_label(Terminal.parse_key("f5")) == "f5")
+}
+
+@test
+function void test_terminal_parse_key_character() {
+    # A single printable token, or anything unrecognised, decodes to
+    # Character(value) — keeping parse_key total (it never returns none).
+    match Terminal.parse_key("a") {
+    case Terminal.Key.Character(c) { assert(c == "a", "a -> Character(a)") }
+    else { assert(false, "a should be Character") }
+    }
+
+    match Terminal.parse_key("Z") {
+    case Terminal.Key.Character(c) { assert(c == "Z", "Z -> Character(Z)") }
+    else { assert(false, "Z should be Character") }
+    }
+
+    # "f" with no number, and "f0" (non-positive), are not function keys.
+    match Terminal.parse_key("f") {
+    case Terminal.Key.Character(c) { assert(c == "f", "f -> Character(f)") }
+    else { assert(false, "bare f should be Character") }
+    }
+
+    assert(key_label(Terminal.parse_key("a")) == "char:a")
+}

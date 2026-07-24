@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <format>
+#include <string>
 #include <vector>
 
 #include "analysis/errors/error.hpp"
@@ -236,6 +238,75 @@ static void register_graph_queries(const EnvPtr& env) {
             auto g = expect_graph(args[0], "Graph.edge_count", loc);
 
             return Value{static_cast<std::int64_t>(g->logical_edge_count())};
+        })
+        .func("edges", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto g = expect_graph(args[0], "Graph.edges", loc);
+
+            // Enumerate vertices in sorted order — the adjacency map is unordered,
+            // so a raw traversal would vary across runs and standard libraries.
+            std::vector<std::string> names;
+            names.reserve(g->adjacency.size());
+
+            for (const auto& [name, _] : g->adjacency) {
+                names.push_back(name);
+            }
+
+            std::ranges::sort(names);
+
+            auto arr = std::make_shared<ArrayValue>();
+
+            const auto emit = [&](const std::string& from, const std::string& to, double weight) {
+                validate_container_size(arr->elements->size(), ResourceLimits::max_array_size,
+                                        "Graph.edges", loc);
+
+                auto rec = std::make_shared<RecordValue>();
+                rec->type_name = "Edge";
+                rec->fields.emplace_back("from", Value{from});
+                rec->fields.emplace_back("to", Value{to});
+                rec->fields.emplace_back("weight", Value{weight});
+
+                arr->elements->emplace_back(Value{std::move(rec)});
+            };
+
+            for (const auto& from : names) {
+                // Copy and sort each vertex's edges by (to, weight) so the output
+                // order is fully determined by the graph's contents.
+                std::vector<GraphEdge> edges = g->adjacency.at(from);
+                std::ranges::sort(edges, [](const GraphEdge& a, const GraphEdge& b) {
+                    return a.to != b.to ? a.to < b.to : a.weight < b.weight;
+                });
+
+                if (g->directed) {
+                    for (const auto& e : edges) {
+                        emit(from, e.to, e.weight);
+                    }
+
+                    continue;
+                }
+
+                // Undirected: every logical edge is stored twice (once in each
+                // endpoint's list), so emit each exactly once — matching
+                // edge_count / logical_edge_count.  For an edge between distinct
+                // vertices the copy where from < to is the representative; a
+                // self-loop is stored twice in the same list, so emit every second.
+                std::size_t self_loops_seen = 0;
+
+                for (const auto& e : edges) {
+                    if (from < e.to) {
+                        emit(from, e.to, e.weight);
+                    } else if (from == e.to) {
+                        if (self_loops_seen % 2 == 0) {
+                            emit(from, e.to, e.weight);
+                        }
+
+                        ++self_loops_seen;
+                    }
+                    // from > e.to: the representative was emitted while processing e.to.
+                }
+            }
+
+            return Value{std::move(arr)};
         })
         .func("degree", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

@@ -49,6 +49,30 @@ constexpr std::string_view k_offset_range_error = "offset must be between -720 a
     return std::format("{}{:02}:{:02}", sign, hours, mins);
 }
 
+// The { start, end } timestamps of a DateTime.Interval record, as doubles.
+struct IntervalBounds {
+    double start;
+    double end;
+};
+
+// Read a DateTime.Interval record's start/end fields.  Throws if the argument is
+// not a record; missing fields default to 0.0 (the type checker guarantees the
+// shape for well-typed programs, so this only guards raw/hand-built values).
+[[nodiscard]] IntervalBounds read_interval_bounds(const Value& value, std::string_view func_name,
+                                                  SourceLocation loc) {
+    if (!value.is_record()) {
+        throw RuntimeError{std::format("{}: expected a DateTime.Interval record", func_name), loc};
+    }
+
+    const auto& rec = value.as_record();
+    const auto field = [&rec](std::string_view name) -> double {
+        const Value* v = rec->find_field(name);
+        return v != nullptr ? v->to_numeric() : 0.0;
+    };
+
+    return IntervalBounds{.start = field("start"), .end = field("end")};
+}
+
 // Validate a UTC offset (in minutes) is within the supported range.
 // Returns a failure Value when out of range, or std::nullopt on success.
 [[nodiscard]] std::optional<Value> check_offset(double offset_minutes, std::string_view func_name) {
@@ -741,6 +765,45 @@ static void register_datetime_parsing(const EnvPtr& env) {
             }
 
             return Value{std::move(out)};
+        })
+        .func("interval", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            const double start = args[0].to_numeric();
+            const double end = args[1].to_numeric();
+
+            if (end < start) {
+                return make_failure_value(std::string{"DateTime.interval: end must be >= start"});
+            }
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Interval";
+            rec->fields.emplace_back("start", Value{start});
+            rec->fields.emplace_back("end", Value{end});
+
+            return make_success_value(Value{std::move(rec)});
+        })
+        .func("interval_contains", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto iv = read_interval_bounds(args[0], "DateTime.interval_contains", loc);
+            const double timestamp = args[1].to_numeric();
+
+            // Intervals are closed: both endpoints count as inside.
+            return Value{timestamp >= iv.start && timestamp <= iv.end};
+        })
+        .func("interval_duration", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto iv = read_interval_bounds(args[0], "DateTime.interval_duration", loc);
+
+            return Value{iv.end - iv.start};
+        })
+        .func("intervals_overlap", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_interval_bounds(args[0], "DateTime.intervals_overlap", loc);
+            const auto b = read_interval_bounds(args[1], "DateTime.intervals_overlap", loc);
+
+            // Closed intervals, consistent with interval_contains: touching
+            // endpoints (a.end == b.start) count as overlapping at that instant.
+            return Value{a.start <= b.end && b.start <= a.end};
         });
 }
 

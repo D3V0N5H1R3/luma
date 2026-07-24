@@ -15,7 +15,8 @@ void register_log_functions(std::vector<FunctionSpec>& specs, const ModuleBuilde
                                  {p.string, p.string}),
                             m.fn("set_format", 1, "(format: string)", R::void_type(), {p.string}),
                             m.fn("set_level", 1, "(level: Level)", R::void_type(), {p.log_level}),
-                            m.fn("set_output", 1, "(path: string)", R::result_void(), {p.string}),
+                            m.fn("set_output", 1, "(target: Log.Output | string)", R::result_void(),
+                                 {p.any}),
                             m.fn("warn", 1, "(message: string)", R::void_type(), {p.string}),
                         });
 }
@@ -62,6 +63,9 @@ void register_terminal_functions(std::vector<FunctionSpec>& specs, const ModuleB
             m.fn("move_to_row", 1, "(row: integer)", R::result_void(), {p.integer}),
             m.fn("move_up", 1, "(n: integer)", R::void_type(), {p.integer}),
             m.fn("overwrite_line", 1, "(text: string)", R::void_type(), {p.string}),
+            m.fn("parse_mouse_event", 1, "(key: string)", R::optional(named::mouse_event()),
+                 {p.string}),
+            m.fn("parse_key", 1, "(key: string)", named::key(), {p.string}),
             m.fn("read_key", 0, "()", R::result_string()),
             m.fn("read_key_timeout", 1, "(ms: integer)", R::result_string(), {p.integer}),
             m.fn("reset_scroll_region", 0, "()", R::void_type()),

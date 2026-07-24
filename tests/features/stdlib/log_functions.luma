@@ -333,3 +333,66 @@ function void test_log_set_output_directory_fails() {
     result<void> _restore = Log.set_output("stderr")
 }
 
+# ───────────────────────────────────────────────────────────
+# Log.Output — typed output target (Stderr / Stdout / File)
+# ───────────────────────────────────────────────────────────
+
+# Exhaustive label over every Log.Output variant. The compiler enforces that
+# all three cases are handled, so a new variant cannot be forgotten — and the
+# File(path) payload variant is now runtime-constructible.
+function string output_label(Log.Output target) {
+    return match target {
+        case Log.Output.Stderr { "stderr" }
+        case Log.Output.Stdout { "stdout" }
+        case Log.Output.File(path) { "file:${path}" }
+    }
+}
+
+@test
+function void test_log_output_typed_match_is_exhaustive() {
+    assert(output_label(Log.Output.Stderr) == "stderr", "stderr variant")
+    assert(output_label(Log.Output.Stdout) == "stdout", "stdout variant")
+    assert(output_label(Log.Output.File("/tmp/app.log")) == "file:/tmp/app.log",
+           "file variant carries its path")
+}
+
+@test
+function void test_log_output_typed_streams_return_success() {
+    # The Stdout / Stderr variants are accepted alongside the string form and
+    # report success. Bracket with reset so no redirect leaks into later tests.
+    Log.reset()
+
+    boolean to_stdout = Log.set_output(Log.Output.Stdout) |> Result.is_success()
+    assert(to_stdout, "Stdout accepted")
+
+    boolean to_stderr = Log.set_output(Log.Output.Stderr) |> Result.is_success()
+    assert(to_stderr, "Stderr accepted")
+
+    Log.reset()
+}
+
+@test
+function void test_log_output_typed_file_writes() {
+    # Log.Output.File(path) routes output to a file exactly like the string-path
+    # form — the typed variant removes the "is this string a stream name or a
+    # path?" ambiguity.
+    Log.reset()
+
+    result<void> routed = Log.set_output(Log.Output.File("_test_log_output_typed.log"))
+    assert(Result.is_success(routed), "File target accepted")
+
+    Log.info("typed_output_marker_xyz")
+
+    # Restore the default sink, which closes the file so it can be read back.
+    Log.reset()
+
+    result<string> content = FileSystem.read_file("_test_log_output_typed.log")
+    assert(Result.is_success(content), "log file was created")
+    assert(String.contains(Result.unwrap(content), "typed_output_marker_xyz"),
+           "logged message reached the file")
+
+    # Clean up the temporary log file.
+    boolean _deleted = Result.unwrap_or(
+        FileSystem.delete("_test_log_output_typed.log"), false)
+}
+

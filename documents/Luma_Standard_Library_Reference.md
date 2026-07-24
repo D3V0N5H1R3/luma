@@ -320,6 +320,10 @@ character).
 | `DateTime.format(ts, pattern)`             | `(number, string)`                                       | `result<string>`             | Format timestamp; placeholders: YYYY, MM, DD, hh, mm, ss                 |
 | `DateTime.format_duration(d)`              | `(DateTime.Duration)`                                    | `string`                     | Render a `DateTime.Duration` as `"1d 2h 3m 4s 5ms"` (zero components omitted; `"0s"` when empty; `-` prefix when negative) |
 | `DateTime.hour(ts)`                        | `(number)`                                               | `result<integer>`            | Hour (0–23); fail if out of range                                        |
+| `DateTime.interval(start, end)`            | `(number, number)`                                       | `result<DateTime.Interval>`  | Build a time interval; fail if `end < start`                             |
+| `DateTime.interval_contains(iv, ts)`       | `(DateTime.Interval, number)`                            | `boolean`                    | Whether `ts` lies within the closed interval                             |
+| `DateTime.interval_duration(iv)`           | `(DateTime.Interval)`                                    | `number`                     | Length of the interval in seconds (`end - start`)                        |
+| `DateTime.intervals_overlap(a, b)`         | `(DateTime.Interval, DateTime.Interval)`                 | `boolean`                    | Whether two closed intervals overlap (touching counts)                   |
 | `DateTime.is_after(a, b)`                  | `(number, number)`                                       | `boolean`                    | Whether timestamp `a` is after `b`                                       |
 | `DateTime.is_before(a, b)`                 | `(number, number)`                                       | `boolean`                    | Whether timestamp `a` is before `b`                                      |
 | `DateTime.is_leap_year(year)`              | `(integer)`                                              | `boolean`                    | Whether `year` is a leap year                                            |
@@ -358,6 +362,8 @@ Valid offsets range from −720 (UTC−12:00) to +840 (UTC+14:00) minutes. Out-o
 `DateTime.TimeParts` record fields: `year`, `month`, `day`, `hour`, `minute`, `second` (all `integer`).
 
 `DateTime.Duration` record fields: `days`, `hours`, `minutes`, `seconds`, `milliseconds` (all `integer`), and `negative` (`boolean`). `break_duration` splits a `number` span in seconds into this human-readable breakdown — the `hours`/`minutes`/`seconds` components are normalised (0–23, 0–59, 0–59) and the sign is carried in `negative` — and `format_duration` renders it back into a compact string such as `"1h 2m 5s"`.
+
+`DateTime.Interval` record fields: `start` (`number`), `end` (`number`) — a pair of Unix timestamps modelling a time range rather than a point. `DateTime.interval(start, end)` is a validating constructor that returns `failure` when `end < start`, so an `Interval` value is always well-formed. Intervals are closed (both endpoints are included): `DateTime.interval_contains` treats a timestamp equal to `start` or `end` as contained, and `DateTime.intervals_overlap` counts two intervals that merely touch at an endpoint as overlapping. `DateTime.interval_duration` returns `end - start` in seconds. Timestamps stay plain `number` values, so the existing `DateTime` point helpers still apply.
 
 `DateTime.Weekday` is a choice type with seven variants — `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday` — in ISO-8601 order (Monday = 1 … Sunday = 7). `DateTime.weekday(ts)` returns it for a timestamp, so a `match` over the result is exhaustive and autocompleted, and a mistyped day is a compile error rather than a magic number. It complements the integer `DateTime.day_of_week` (kept for index-style use): `DateTime.weekday_number` and `DateTime.weekday_from_number` bridge between the choice and the 1–7 integer, and `DateTime.weekday_name` gives the English day name.
 
@@ -582,6 +588,7 @@ A weighted graph supporting directed and undirected edges. Vertices are identifi
 | `Graph.directed()`                       | `()`                              | `graph`                                  | Create an empty directed graph                              |
 | `Graph.edge_count(g)`                    | `(graph)`                         | `integer`                                | Number of edges                                             |
 | `Graph.edge_weight(g, from, to)`         | `(graph, string, string)`         | `result<number>`                         | Weight of edge; fail if not found                           |
+| `Graph.edges(g)`                         | `(graph)`                         | `array<Graph.Edge>`                      | Every edge as a typed `Graph.Edge` record, in deterministic order |
 | `Graph.has_cycle(g)`                     | `(graph)`                         | `boolean`                                | Whether the graph contains a cycle                          |
 | `Graph.has_edge(g, from, to)`            | `(graph, string, string)`         | `boolean`                                | Whether edge exists                                         |
 | `Graph.has_vertex(g, v)`                 | `(graph, string)`                 | `boolean`                                | Whether vertex exists                                       |
@@ -597,6 +604,14 @@ A weighted graph supporting directed and undirected edges. Vertices are identifi
 | `Graph.undirected()`                     | `()`                              | `graph`                                  | Create an empty undirected graph                            |
 | `Graph.vertex_count(g)`                  | `(graph)`                         | `integer`                                | Number of vertices                                          |
 | `Graph.vertices(g)`                      | `(graph)`                         | `array<string>`                          | All vertex labels                                           |
+
+`Graph.Edge` record fields: `from` (`string`), `to` (`string`), `weight` (`number`). `Graph.edges(g)` returns every edge as one of these records so you can enumerate a graph's structure directly instead of iterating vertices, calling `Graph.neighbors`, and re-querying `Graph.edge_weight` for each pair. The order is deterministic: vertices are visited in sorted order, then each vertex's out-edges in sorted order. An undirected edge is emitted once, oriented so `from <= to`, so `Array.length(Graph.edges(g)) == Graph.edge_count(g)`.
+
+```luma
+for edge in Graph.edges(g) {
+    print("${edge.from} -> ${edge.to} (${edge.weight})")
+}
+```
 
 ## 15 — Solaris and GraphicalUi
 
@@ -1601,12 +1616,14 @@ Structured logging with configurable levels. Messages are written to stderr by d
 | `Log.set_context(key, value)` | `(string, string)` | `none`         | Add key–value context to log messages                |
 | `Log.set_format(format)`      | `(string)`         | `none`         | Set custom format template                           |
 | `Log.set_level(level)`        | `(Log.Level)`      | `none`         | Set minimum log level                                |
-| `Log.set_output(target)`      | `(string)`         | `result<void>` | Redirect to file path, `"stderr"`, or `"stdout"`     |
+| `Log.set_output(target)`      | `(Log.Output \| string)` | `result<void>` | Redirect to a file, `Stderr`, or `Stdout`            |
 | `Log.warn(msg)`               | `(string)`         | `none`         | Log at warn level                                    |
 
 Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level` choice type provides variants: `Log.Level.Debug`, `Log.Level.Info`, `Log.Level.Warn`, `Log.Level.Error`, `Log.Level.Off`. For convenience, `Log.set_level` also accepts lowercase strings (`"debug"`, `"info"`, `"warn"`, `"error"`, `"off"`).
 
 `Log.set_output` accepts a file path or one of the special strings `"stderr"` (default) or `"stdout"`. When given a file path it appends to the file, creating it if it does not exist.
+
+`Log.set_output` also accepts a `Log.Output` choice in place of the string, mirroring how `Log.set_level` accepts `Log.Level`. The choice has three variants: `Log.Output.Stderr`, `Log.Output.Stdout`, and `Log.Output.File(path: string)`. The typed form removes the ambiguity of the string overload — where a mistyped stream name such as `"stdrr"` is silently treated as a file path — because a stream and a file path are now distinct variants: `Log.set_output(Log.Output.File("app.log"))` can only mean a file.
 
 ## 25 — Math
 
@@ -2269,6 +2286,8 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | `Terminal.move_to(row, col)`                   | `(integer, integer)`                  | `none`                            | Move cursor to row and column (1-based)                                 |
 | `Terminal.move_up(n)`                          | `(integer)`                           | `none`                            | Move cursor up `n` lines                                                |
 | `Terminal.overwrite_line(text)`                | `(string)`                            | `none`                            | Clear current line and write                                            |
+| `Terminal.parse_key(key)`                      | `(string)`                            | `Terminal.Key`                    | Decode a key name into a typed `Terminal.Key` choice                    |
+| `Terminal.parse_mouse_event(key)`              | `(string)`                            | `optional<Terminal.MouseEvent>`   | Decode a `"mouse:<kind>:ROW:COL"` string into a typed event; `none` if malformed |
 | `Terminal.read_key_timeout(ms)`                | `(integer)`                           | `result<string>`                  | Non-blocking key read with timeout in ms                                |
 | `Terminal.read_key()`                          | `()`                                  | `result<string>`                  | Blocking key read; requires raw mode                                    |
 | `Terminal.reset_scroll_region()`               | `()`                                  | `none`                            | Reset to full-screen scrolling                                          |
@@ -2306,7 +2325,40 @@ Key names returned by `read_key` / `read_key_timeout` / `get_input`: printable c
 
 `Terminal.InputEvent` record fields: `key` (`string`), `shift` (`boolean`), `ctrl` (`boolean`), `alt` (`boolean`). The `key` field contains the base key name without modifier prefixes. Use `get_input()` instead of `read_key()` when you need to inspect modifiers individually.
 
-Mouse events are returned as strings: `"mouse:left_press:ROW:COL"`, `"mouse:left_release:ROW:COL"`, `"mouse:middle_press:ROW:COL"`, `"mouse:right_press:ROW:COL"`, `"mouse:wheel_down:ROW:COL"`, `"mouse:wheel_up:ROW:COL"`. ROW and COL are 1-based integers. Parse with `String.split(key, ":")`.
+Mouse events arrive from `read_key` / `read_key_timeout` / `get_input` as strings of the form `"mouse:<kind>:ROW:COL"` (ROW and COL are 1-based integers). Decode one into a typed record with `Terminal.parse_mouse_event(key)`, which returns `optional<Terminal.MouseEvent>` — `none` for any string that is not a well-formed, recognised mouse event. This replaces hand-rolled `String.split(key, ":")` parsing, mirroring what `Terminal.InputEvent` does for keys.
+
+`Terminal.MouseEvent` record fields: `kind` (`Terminal.MouseEventKind`), `row` (`integer`), `column` (`integer`).
+
+`Terminal.MouseEventKind` is a closed choice with 13 variants, so a `match` over it is exhaustively checked by the type checker: `LeftPress`, `LeftRelease`, `LeftDrag`, `MiddlePress`, `MiddleRelease`, `MiddleDrag`, `RightPress`, `RightRelease`, `RightDrag`, `WheelUp`, `WheelDown`, `WheelLeft`, `WheelRight`.
+
+```luma
+match Terminal.parse_mouse_event(key) {
+case some(event) {
+    match event.kind {
+    case Terminal.MouseEventKind.LeftPress { draw_at(event.row, event.column) }
+    case Terminal.MouseEventKind.WheelUp   { scroll_up() }
+    else                                   { }
+    }
+}
+case none {
+    # Not a mouse event — handle it as a key instead.
+}
+}
+```
+
+`Terminal.parse_key(key)` decodes a raw key name (as returned by `read_key` / `read_key_timeout`, or the `key` field of a `Terminal.InputEvent`) into a typed `Terminal.Key` choice, so key handling can be an exhaustive, typo-proof `match` instead of a chain of string comparisons. It is total — every input maps to a variant, so it returns `Terminal.Key` directly rather than an `optional`.
+
+`Terminal.Key` has 18 variants: two carry a payload — `Character(value: string)` for a printable key and `Function(number: integer)` for `F1`–`F12` (`"f1"` decodes to `Function(1)`) — and the rest are unit variants `Enter`, `Escape`, `Tab`, `Backspace`, `Space`, `Up`, `Down`, `Left`, `Right`, `Home`, `End`, `PageUp`, `PageDown`, `Insert`, `Delete`, and `Unknown`. A name that is neither a recognised special key nor a valid `f<n>` (for example `"a"`, or a bare `"f"`) decodes to `Character(name)`. Modifier prefixes such as `"ctrl+"` are not stripped; use `get_input()` / `Terminal.InputEvent` when you need modifier flags.
+
+```luma
+match Terminal.parse_key(key) {
+case Terminal.Key.Up             { move_up() }
+case Terminal.Key.Down           { move_down() }
+case Terminal.Key.Function(n)    { run_macro(n) }
+case Terminal.Key.Character(c)   { insert(c) }
+else                             { }
+}
+```
 
 Available named colors: `black`, `blue`, `bright_black` .. `bright_white`, `cyan`, `default`, `green`, `magenta`, `red`, `white`, `yellow`.
 
@@ -2381,7 +2433,7 @@ The same machinery is reachable without Luma code via the `LUMA_TERMINAL_INPUT` 
 
 ## 41 — Xml
 
-Parse, build, query, and serialise XML documents. XML nodes are opaque values.
+Parse, build, query, and serialise XML documents. XML nodes are opaque `xml` values; decode one into a typed `Xml.Node` choice with `Xml.to_node` when you need to `match` over its structure.
 
 **Building:**
 
@@ -2417,6 +2469,7 @@ Parse, build, query, and serialise XML documents. XML nodes are opaque values.
 | `Xml.text(el)`                           | `(xml)`                 | `result<string>`     | Text content                    |
 | `Xml.text_at(el, path)`                  | `(xml, string)`         | `result<string>`     | Text content at path            |
 | `Xml.to_dictionary(el)`                  | `(xml)`                 | `dictionary<string>` | Child-tag → text map            |
+| `Xml.to_node(el)`                        | `(xml)`                 | `Xml.Node`           | Decode an `xml` value into a typed `Xml.Node` choice |
 
 **Parsing and serialising:**
 
@@ -2428,6 +2481,19 @@ Parse, build, query, and serialise XML documents. XML nodes are opaque values.
 | `Xml.serialize(el)`          | `(xml)`         | `string`         | Compact XML string       |
 | `Xml.serialize_pretty(el)`   | `(xml)`         | `string`         | Indented XML string      |
 | `Xml.write_file(path, doc)`  | `(string, xml)` | `result<none>`   | Write XML to file        |
+
+`Xml.to_node(el)` converts an opaque `xml` value into an `Xml.Node` choice, giving XML the same typed-ADT treatment `Json.Value` gives JSON. It is recursive and preserves every child node — unlike `Xml.children`, which returns only element children — so text, comments, and CDATA sections are visible in the tree. `Xml.Node` has four variants: `Element(tag: string, attributes: dictionary<string>, children: array<Xml.Node>)`, `Text(content: string)`, `Comment(content: string)`, and `CData(content: string)`. (Namespaces and processing instructions are out of scope for this first version.)
+
+```luma
+Xml.Node node = Xml.to_node(Result.unwrap(Xml.deserialize("<p>hi</p>")))
+
+match node {
+case Xml.Node.Element(tag, attrs, kids) { print(tag) }
+case Xml.Node.Text(content)             { print(content) }
+case Xml.Node.Comment(content)          { }
+case Xml.Node.CData(content)            { print(content) }
+}
+```
 
 ---
 

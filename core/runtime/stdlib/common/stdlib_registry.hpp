@@ -1,6 +1,7 @@
 #ifndef LUMA_STDLIB_STDLIB_REGISTRY_HPP
 #define LUMA_STDLIB_STDLIB_REGISTRY_HPP
 
+#include <span>
 #include <string_view>
 #include <unordered_map>
 
@@ -184,16 +185,44 @@ constexpr std::size_t kModuleCount = std::size(kModules);
 // Shared by both eager and lazy registration paths.
 inline void register_stdlib_postamble(const EnvPtr& env, bool sandbox) {
     // Register stdlib-provided choice variants so they are accessible
-    // at runtime (e.g. Log.Level.Info).
+    // at runtime.  Unit variants (e.g. Log.Level.Info) become ready-made
+    // field-less choice values; payload-bearing variants (e.g. Log.Output.File
+    // or Json.Value.JsonString) become native constructor functions, mirroring
+    // the MakeChoiceConstructor opcode emitted for user-defined choices, so
+    // `Log.Output.File("x")` is callable — the type checker already treats a
+    // payload variant as a constructor Func returning the choice type.
     for (const auto& [qualified, ch] : stdlib_choice_types()) {
         for (const auto& variant : ch->variants) {
             const auto full = qualified + "." + variant.name;
 
-            auto cv = std::make_shared<ChoiceValue>();
-            cv->type_name = ch->name;
-            cv->variant = variant.name;
+            if (variant.fields.empty()) {
+                auto cv = std::make_shared<ChoiceValue>();
+                cv->type_name = ch->name;
+                cv->variant = variant.name;
 
-            env->define(full, Value{std::move(cv)}, false);
+                env->define(full, Value{std::move(cv)}, false);
+            } else {
+                const auto field_count = variant.fields.size();
+                std::string type_name = ch->name;
+                std::string variant_name = variant.name;
+
+                auto ctor = std::make_shared<NativeFunctionValue>();
+                ctor->name = full;
+                ctor->function =
+                    [type_name = std::move(type_name), variant_name = std::move(variant_name),
+                     field_count](std::span<const Value> args, SourceLocation) -> Value {
+                    auto cv = std::make_shared<ChoiceValue>();
+                    cv->type_name = type_name;
+                    cv->variant = variant_name;
+                    cv->fields.reserve(field_count);
+                    for (std::size_t i{0}; i < field_count && i < args.size(); ++i) {
+                        cv->fields.push_back(args[i]);
+                    }
+                    return Value{std::move(cv)};
+                };
+
+                env->define(full, Value{std::move(ctor)}, false);
+            }
         }
     }
 

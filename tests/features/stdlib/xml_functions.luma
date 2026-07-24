@@ -548,3 +548,117 @@ function void test_xml_invalid_name_rejected() {
     assert(String.contains(caught, "invalid XML name"),
            "invalid XML tag name should be rejected")
 }
+
+# ───────────────────────────────────────────────────────────
+# Xml.Node / Xml.to_node
+# ───────────────────────────────────────────────────────────
+
+# Exhaustive match over every Xml.Node variant.  Beyond labelling a node, this
+# doubles as a compile-time check that the recursive Xml.Node choice is fully
+# registered, exhaustively matchable, and usable as a parameter type — and that
+# all four payload variants bind their payloads (Element binds three fields).
+function string node_label(Xml.Node n) {
+    return match n {
+    case Xml.Node.Element(tag, _attrs, kids) { "element:${tag}:${Array.length(kids)}" }
+    case Xml.Node.Text(content)             { "text:${content}" }
+    case Xml.Node.Comment(content)          { "comment:${content}" }
+    case Xml.Node.CData(content)            { "cdata:${content}" }
+    }
+}
+
+@test
+function void test_xml_to_node_element() {
+    # A parsed element becomes Node.Element(tag, attributes, children); to_node
+    # keeps every child node (element + comment here), unlike Xml.children which
+    # returns only element children.
+    Xml.Node node = Xml.to_node(Result.unwrap(
+        Xml.deserialize("<root id=\"1\"><a>hi</a><!-- c --></root>")))
+
+    match node {
+    case Xml.Node.Element(tag, attrs, kids) {
+        assert(tag == "root", "tag is root")
+        assert(Dictionary.length(attrs) == 1, "one attribute")
+        assert(Array.length(kids) == 2, "element keeps element + comment children")
+    }
+    else {
+        assert(false, "root should decode to an Element")
+    }
+    }
+
+    assert(node_label(node) == "element:root:2")
+}
+
+@test
+function void test_xml_to_node_child_variants() {
+    # Children carry their own variants: a nested <a> Element whose only child is
+    # the Text node "hi", followed by a Comment carrying its raw content.
+    Xml.Node node = Xml.to_node(Result.unwrap(
+        Xml.deserialize("<root><a>hi</a><!-- c --></root>")))
+
+    match node {
+    case Xml.Node.Element(_tag, _attrs, kids) {
+        assert(Array.length(kids) == 2, "two children")
+
+        match kids[0] {
+        case Xml.Node.Element(tag2, _attrs2, kids2) {
+            assert(tag2 == "a", "nested tag a")
+            assert(Array.length(kids2) == 1, "one text child")
+
+            match kids2[0] {
+            case Xml.Node.Text(content) { assert(content == "hi", "text hi") }
+            else { assert(false, "grandchild should be Text") }
+            }
+        }
+        else {
+            assert(false, "first child should be an Element")
+        }
+        }
+
+        match kids[1] {
+        case Xml.Node.Comment(content) { assert(content == " c ", "comment content") }
+        else { assert(false, "second child should be a Comment") }
+        }
+    }
+    else {
+        assert(false, "root should decode to an Element")
+    }
+    }
+}
+
+@test
+function void test_xml_to_node_cdata() {
+    # A CDATA section round-trips to Node.CData(content), preserving raw markup.
+    Xml.Node node = Xml.to_node(Result.unwrap(
+        Xml.deserialize("<root><![CDATA[a<b]]></root>")))
+
+    match node {
+    case Xml.Node.Element(_tag, _attrs, kids) {
+        match kids[0] {
+        case Xml.Node.CData(content) { assert(content == "a<b", "cdata content") }
+        else { assert(false, "child should be CData") }
+        }
+    }
+    else {
+        assert(false, "root should decode to an Element")
+    }
+    }
+}
+
+@test
+function void test_xml_to_node_leaf() {
+    # A leaf element has empty (not missing) attribute and children collections.
+    Xml.Node node = Xml.to_node(Result.unwrap(Xml.deserialize("<root/>")))
+
+    match node {
+    case Xml.Node.Element(tag, attrs, kids) {
+        assert(tag == "root", "tag is root")
+        assert(Dictionary.length(attrs) == 0, "no attributes")
+        assert(Array.length(kids) == 0, "no children")
+    }
+    else {
+        assert(false, "root should decode to an Element")
+    }
+    }
+
+    assert(node_label(node) == "element:root:0")
+}

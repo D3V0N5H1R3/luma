@@ -126,6 +126,12 @@ namespace named {
     return ReturnTypeDesc::named("Json.Value");
 }
 
+// Xml.to_node returns this recursive choice directly, so — like json_value() —
+// it uses the fully-qualified name (choices resolve qualified).
+[[nodiscard]] inline ReturnTypeDesc xml_node() {
+    return ReturnTypeDesc::named("Xml.Node");
+}
+
 // Choice type — uses the fully-qualified name so the type checker resolves it as
 // Http.StatusClass (a bare name would fall through to the record default).
 [[nodiscard]] inline ReturnTypeDesc status_class() {
@@ -153,12 +159,22 @@ namespace named {
     return ReturnTypeDesc::named("KeyValue");
 }
 
+// Graph.edges emits an array of these edge records (bare name, like key_value()).
+[[nodiscard]] inline ReturnTypeDesc edge() {
+    return ReturnTypeDesc::named("Edge");
+}
+
 [[nodiscard]] inline ReturnTypeDesc time_parts() {
     return ReturnTypeDesc::named("TimeParts");
 }
 
 [[nodiscard]] inline ReturnTypeDesc duration() {
     return ReturnTypeDesc::named("Duration");
+}
+
+// DateTime.interval() / interval_* take and return these range records (bare name).
+[[nodiscard]] inline ReturnTypeDesc interval() {
+    return ReturnTypeDesc::named("Interval");
 }
 
 [[nodiscard]] inline ReturnTypeDesc file_info() {
@@ -195,6 +211,17 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc input_event() {
     return ReturnTypeDesc::named("InputEvent");
+}
+
+[[nodiscard]] inline ReturnTypeDesc mouse_event() {
+    return ReturnTypeDesc::named("MouseEvent");
+}
+
+// Terminal.parse_key returns this choice directly, so — like json_value() and
+// file_kind() — it uses the fully-qualified name (choices resolve qualified;
+// records such as input_event()/mouse_event() resolve by bare name).
+[[nodiscard]] inline ReturnTypeDesc key() {
+    return ReturnTypeDesc::named("Terminal.Key");
 }
 
 [[nodiscard]] inline ReturnTypeDesc cursor_position() {

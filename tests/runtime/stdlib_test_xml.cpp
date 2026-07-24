@@ -429,6 +429,73 @@ static void test_xml_valid_punctuation_names_round_trip() {
     ASSERT_EQ(v.as_string(), "ns:item-1.0_x");
 }
 
+// ── Xml.to_node: typed recursive Xml.Node ADT ──
+
+static void test_xml_to_node_element() {
+    // An element becomes Node.Element(tag, attributes, children).  to_node keeps
+    // every child node (element, text, comment, CDATA), unlike Xml.children.
+    const auto v = eval("Xml.to_node(Result.unwrap(Xml.deserialize("
+                        "\"<root id=\\\"1\\\"><a>hi</a><!-- c --></root>\")))");
+
+    ASSERT_TRUE(v.is_choice());
+    ASSERT_EQ(v.as_choice()->type_name, "Node");
+    ASSERT_EQ(v.as_choice()->variant, "Element");
+    ASSERT_EQ(v.as_choice()->fields.size(), 3U);
+
+    // field 0: tag (string)
+    ASSERT_EQ(v.as_choice()->fields[0].as_string(), "root");
+
+    // field 1: attributes (dictionary<string>)
+    ASSERT_TRUE(v.as_choice()->fields[1].is_dictionary());
+    ASSERT_EQ(v.as_choice()->fields[1].as_dictionary()->entries.size(), std::size_t{1});
+
+    // field 2: children (array<Xml.Node>) — the <a> element plus the comment.
+    ASSERT_TRUE(v.as_choice()->fields[2].is_array());
+    ASSERT_EQ(v.as_choice()->fields[2].as_array()->elements->size(), std::size_t{2});
+}
+
+static void test_xml_to_node_child_variants() {
+    // The children of the element carry their own variants: the nested <a>
+    // element and the trailing comment.
+    const auto v = eval("Xml.to_node(Result.unwrap(Xml.deserialize("
+                        "\"<root><a>hi</a><!-- c --></root>\")))");
+
+    const auto& kids = *v.as_choice()->fields[2].as_array()->elements;
+    ASSERT_EQ(kids.size(), std::size_t{2});
+
+    // First child: an Element whose own child is the text node "hi".
+    ASSERT_EQ(kids.at(0).as_choice()->variant, "Element");
+    ASSERT_EQ(kids.at(0).as_choice()->fields[0].as_string(), "a");
+    const auto& grandkids = *kids.at(0).as_choice()->fields[2].as_array()->elements;
+    ASSERT_EQ(grandkids.size(), std::size_t{1});
+    ASSERT_EQ(grandkids.at(0).as_choice()->variant, "Text");
+    ASSERT_EQ(grandkids.at(0).as_choice()->fields[0].as_string(), "hi");
+
+    // Second child: a Comment carrying its raw content.
+    ASSERT_EQ(kids.at(1).as_choice()->variant, "Comment");
+    ASSERT_EQ(kids.at(1).as_choice()->fields[0].as_string(), " c ");
+}
+
+static void test_xml_to_node_cdata() {
+    // A CDATA section round-trips to Node.CData(content).
+    const auto v = eval("Xml.to_node(Result.unwrap(Xml.deserialize("
+                        "\"<root><![CDATA[a<b]]></root>\")))");
+
+    const auto& kids = *v.as_choice()->fields[2].as_array()->elements;
+    ASSERT_EQ(kids.size(), std::size_t{1});
+    ASSERT_EQ(kids.at(0).as_choice()->variant, "CData");
+    ASSERT_EQ(kids.at(0).as_choice()->fields[0].as_string(), "a<b");
+}
+
+static void test_xml_to_node_empty_element() {
+    // A leaf element has an empty children array, not a missing field.
+    const auto v = eval("Xml.to_node(Result.unwrap(Xml.deserialize(\"<root/>\")))");
+
+    ASSERT_EQ(v.as_choice()->variant, "Element");
+    ASSERT_TRUE(v.as_choice()->fields[1].as_dictionary()->entries.empty());
+    ASSERT_TRUE(v.as_choice()->fields[2].as_array()->elements->empty());
+}
+
 int main() {
     RUN(test_xml_add_child);
     RUN(test_xml_attribute);
@@ -487,5 +554,9 @@ int main() {
     RUN(test_xml_deserialize_file_rejects_oversized_file);
     RUN(test_xml_invalid_names_rejected);
     RUN(test_xml_valid_punctuation_names_round_trip);
+    RUN(test_xml_to_node_element);
+    RUN(test_xml_to_node_child_variants);
+    RUN(test_xml_to_node_cdata);
+    RUN(test_xml_to_node_empty_element);
     return SUMMARY();
 }

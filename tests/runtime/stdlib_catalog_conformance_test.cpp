@@ -39,6 +39,20 @@ static void test_all_registered_functions_are_in_catalog() {
 
     const auto& cat = stdlib::catalog();
 
+    // Stdlib choice variants are registered as globals but are not catalog
+    // function entries: unit variants (e.g. "Log.Level.Info") as field-less
+    // choice values, and payload-bearing variants (e.g. "Log.Output.File",
+    // "Json.Value.JsonString") as native constructor functions.  Collect every
+    // variant's fully-qualified name so both forms are skipped by name rather
+    // than relying on the value kind (which no longer distinguishes the
+    // constructor form from an ordinary stdlib function).
+    std::set<std::string> choice_variant_names;
+    for (const auto& [qualified, ch] : stdlib_choice_types()) {
+        for (const auto& variant : ch->variants) {
+            choice_variant_names.insert(qualified + "." + variant.name);
+        }
+    }
+
     int uncataloged_count = 0;
 
     // Collect all bindings that look like stdlib functions (contain a dot).
@@ -48,10 +62,9 @@ static void test_all_registered_functions_are_in_catalog() {
         }
 
         if (!cat.contains(name)) {
-            // Choice type variants (e.g. "Log.Level.Info" or the top-level
-            // "Ordering.Less") are registered as choice-valued globals, not
-            // function entries in the catalog — skip them by value kind.
-            if (value.is_choice()) {
+            // Skip choice variants (unit or payload constructor) by name, and
+            // still skip any other choice-valued global defensively.
+            if (value.is_choice() || choice_variant_names.contains(name)) {
                 return;
             }
 

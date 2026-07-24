@@ -1,10 +1,12 @@
 #include "runtime/stdlib/io/terminal_module.hpp"
 
 #include <atomic>
+#include <charconv>
 #include <cstdint>
 #include <format>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -14,6 +16,7 @@
 #include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/stdlib/io/platform_terminal.hpp"
 #include "runtime/stdlib/io/terminal_input.hpp"
+#include "runtime/stdlib/io/terminal_input_common.hpp"
 #include "runtime/stdlib/io/terminal_module_internal.hpp"
 
 namespace luma {
@@ -240,6 +243,132 @@ void leave_raw_mode() {
     return Value{std::move(rec)};
 }
 
+// Parse a non-negative base-10 integer that occupies the whole view, or nullopt.
+[[nodiscard]] std::optional<std::int64_t> parse_coordinate(std::string_view text) {
+    if (text.empty()) {
+        return std::nullopt;
+    }
+
+    // std::from_chars parses a leading '-' for a signed integer, which would let
+    // a negative slip through (a leading '+' is already rejected).  Coordinates
+    // and F-key numbers are non-negative, so reject the sign up front.
+    if (text.front() == '-') {
+        return std::nullopt;
+    }
+
+    std::int64_t value{0};
+    const char* const begin = text.data();
+    const char* const end = begin + text.size();
+    const auto [ptr, ec] = std::from_chars(begin, end, value);
+
+    if (ec != std::errc{} || ptr != end) {
+        return std::nullopt;
+    }
+
+    return value;
+}
+
+// Decode a "mouse:<kind>:<row>:<col>" event string (as produced by
+// Terminal.get_input / read_key in mouse mode) into an optional<Terminal.MouseEvent>.
+// Returns none (NullValue) for any string that is not a well-formed, recognised
+// mouse event — a non-"mouse:" prefix, a wrong field count, an unknown kind, or
+// non-integer coordinates.  The kind token never contains ':', so the body
+// splits cleanly on its two remaining colons.
+[[nodiscard]] Value parse_mouse_event_value(std::string_view key) {
+    constexpr std::string_view k_prefix{"mouse:"};
+
+    if (!key.starts_with(k_prefix)) {
+        return Value{NullValue{}};
+    }
+
+    const std::string_view body = key.substr(k_prefix.size());
+
+    const std::size_t first = body.find(':');
+    if (first == std::string_view::npos) {
+        return Value{NullValue{}};
+    }
+
+    const std::size_t second = body.find(':', first + 1);
+    if (second == std::string_view::npos) {
+        return Value{NullValue{}};
+    }
+
+    // A well-formed event has exactly three fields (kind, row, col); reject a
+    // stray trailing colon so malformed input decodes to none, not a partial event.
+    if (body.find(':', second + 1) != std::string_view::npos) {
+        return Value{NullValue{}};
+    }
+
+    const std::string_view kind = body.substr(0, first);
+    const std::optional<std::string_view> variant = terminal_detail::mouse_event_kind_variant(kind);
+    if (!variant) {
+        return Value{NullValue{}};
+    }
+
+    const std::optional<std::int64_t> row =
+        parse_coordinate(body.substr(first + 1, second - (first + 1)));
+    const std::optional<std::int64_t> column = parse_coordinate(body.substr(second + 1));
+    if (!row || !column) {
+        return Value{NullValue{}};
+    }
+
+    auto kind_choice = std::make_shared<ChoiceValue>();
+    kind_choice->type_name = "MouseEventKind";
+    kind_choice->variant = std::string{*variant};
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "MouseEvent";
+    rec->fields.emplace_back("kind", Value{std::move(kind_choice)});
+    rec->fields.emplace_back("row", Value{*row});
+    rec->fields.emplace_back("column", Value{*column});
+
+    return Value{std::move(rec)};
+}
+
+// Decode a Terminal.InputEvent.key string into a Terminal.Key choice.  Total:
+// every input maps to exactly one variant.  Recognised special-key names and
+// function keys ("f1".."f12", or any "f" + positive integer) take priority; the
+// decoder's "unknown" fallback maps to Unknown; every other string (a printable
+// character, a UTF-8 grapheme, or arbitrary text) becomes Character(<text>).
+// Modifier prefixes are already stripped by build_input_event, so they never
+// reach here.
+[[nodiscard]] Value parse_key_value(std::string_view key) {
+    static const std::unordered_map<std::string_view, std::string_view> named = {
+        {"enter", "Enter"},         {"escape", "Escape"}, {"tab", "Tab"},
+        {"backspace", "Backspace"}, {"space", "Space"},   {"up", "Up"},
+        {"down", "Down"},           {"left", "Left"},     {"right", "Right"},
+        {"home", "Home"},           {"end", "End"},       {"page_up", "PageUp"},
+        {"page_down", "PageDown"},  {"insert", "Insert"}, {"delete", "Delete"},
+        {"unknown", "Unknown"},
+    };
+
+    const auto make_key = [](std::string_view variant,
+                             std::optional<Value> payload = std::nullopt) {
+        auto cv = std::make_shared<ChoiceValue>();
+        cv->type_name = "Key";
+        cv->variant = std::string{variant};
+
+        if (payload) {
+            cv->fields.emplace_back(std::move(*payload));
+        }
+
+        return Value{std::move(cv)};
+    };
+
+    if (const auto it = named.find(key); it != named.end()) {
+        return make_key(it->second);
+    }
+
+    // Function keys: 'f' followed by a positive integer (F1 -> Function(1)).
+    if (key.size() >= 2 && key.front() == 'f') {
+        if (const std::optional<std::int64_t> n = parse_coordinate(key.substr(1)); n && *n >= 1) {
+            return make_key("Function", Value{*n});
+        }
+    }
+
+    return make_key("Character", Value{std::string{key}});
+}
+
 } // namespace
 
 // ============================================================================
@@ -427,6 +556,18 @@ void register_terminal_ns(const EnvPtr& env) {
         .func("is_mouse_enabled", 0)
         .raw_body([](std::span<const Value>, SourceLocation) -> Value {
             return Value{mouse_mode_active.load()};
+        })
+        .func("parse_mouse_event", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const std::string& key = expect_string(args[0], "Terminal.parse_mouse_event", loc);
+
+            return parse_mouse_event_value(key);
+        })
+        .func("parse_key", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const std::string& key = expect_string(args[0], "Terminal.parse_key", loc);
+
+            return parse_key_value(key);
         });
 
     // === Window title ===
