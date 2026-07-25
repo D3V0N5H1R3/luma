@@ -293,6 +293,11 @@ namespace named {
     return ReturnTypeDesc::named("Encoder.Encoding");
 }
 
+// Compression.compress / decompress take this algorithm-selector choice.
+[[nodiscard]] inline ReturnTypeDesc compression_format() {
+    return ReturnTypeDesc::named("Compression.Format");
+}
+
 [[nodiscard]] inline ReturnTypeDesc process_result() {
     return ReturnTypeDesc::named("ProcessResult");
 }

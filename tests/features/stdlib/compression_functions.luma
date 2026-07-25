@@ -257,3 +257,97 @@ function void test_compression_gzip_with_invalid_level() {
     assert(!Result.is_success(Compression.gzip_with("data", 0)))
     assert(!Result.is_success(Compression.gzip_with("data", 99)))
 }
+
+# ───────────────────────────────────────────────────────────
+# Compression.Format + generic Compression.compress/decompress.
+#
+# The per-algorithm functions above (deflate/inflate, gzip/gunzip,
+# encode_rle/decode_rle) remain the primary API.  Compression.compress and
+# Compression.decompress exist for callers that decide the algorithm at
+# runtime — e.g. from user input or config — and would otherwise need a
+# hand-written switch over algorithm names, mirroring Hash.Algorithm +
+# Hash.digest.
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_compression_compress_deflate_matches_direct() {
+    string original = "hello world"
+
+    assert(Compression.compress(original, Compression.Format.Deflate) == Compression.deflate(original))
+}
+
+@test
+function void test_compression_compress_gzip_matches_direct() {
+    string original = "hello world"
+
+    assert(Compression.compress(original, Compression.Format.Gzip) == Compression.gzip(original))
+}
+
+@test
+function void test_compression_compress_rle_matches_direct() {
+    string original = "aaabbbcc"
+
+    assert(Compression.compress(original, Compression.Format.Rle) == Compression.encode_rle(original))
+}
+
+@test
+function void test_compression_decompress_deflate_roundtrip() {
+    string original = "hello world"
+    string compressed = Compression.compress(original, Compression.Format.Deflate)
+    string roundtripped = Result.unwrap(Compression.decompress(compressed, Compression.Format.Deflate))
+
+    assert(roundtripped == original)
+}
+
+@test
+function void test_compression_decompress_gzip_roundtrip() {
+    string original = "hello world"
+    string compressed = Compression.compress(original, Compression.Format.Gzip)
+    string roundtripped = Result.unwrap(Compression.decompress(compressed, Compression.Format.Gzip))
+
+    assert(roundtripped == original)
+}
+
+@test
+function void test_compression_decompress_rle_roundtrip() {
+    string original = "aaabbbcc"
+    string compressed = Compression.compress(original, Compression.Format.Rle)
+    string roundtripped = Result.unwrap(Compression.decompress(compressed, Compression.Format.Rle))
+
+    assert(roundtripped == original)
+}
+
+@test
+function void test_compression_decompress_malformed_fails_per_format() {
+    assert(!Result.is_success(Compression.decompress("not valid deflate", Compression.Format.Deflate)))
+    assert(!Result.is_success(Compression.decompress("not a valid gzip stream!!", Compression.Format.Gzip)))
+    assert(!Result.is_success(Compression.decompress("0a", Compression.Format.Rle)))
+}
+
+# Exhaustive match over Compression.Format, exercised through the generic
+# compress/decompress entry points — the "algorithm decided at runtime" path.
+@test
+function void test_compression_format_runtime_dispatch() {
+    array<Compression.Format> formats = [
+        Compression.Format.Deflate,
+        Compression.Format.Gzip,
+        Compression.Format.Rle
+    ]
+
+    string original = "aaabbbcc round trip"
+
+    for format in formats {
+        string label = match format {
+            case Compression.Format.Deflate { "deflate" }
+            case Compression.Format.Gzip { "gzip" }
+            case Compression.Format.Rle { "rle" }
+        }
+
+        assert(String.length(label) > 0)
+
+        string compressed = Compression.compress(original, format)
+        string roundtripped = Result.unwrap(Compression.decompress(compressed, format))
+
+        assert(roundtripped == original)
+    }
+}

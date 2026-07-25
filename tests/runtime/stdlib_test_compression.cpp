@@ -209,6 +209,97 @@ static void test_compression_gzip_with_invalid_level_zero() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Compression.Format + generic compress/decompress dispatch.
+// ─────────────────────────────────────────────────────────────────────
+
+static void test_compression_module_has_generic_functions() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Compression.compress"));
+    ASSERT_TRUE(env->has("Compression.decompress"));
+}
+
+static void test_compression_compress_deflate_matches_direct() {
+    const auto v = eval(R"(
+        "hello world" |> Compression.compress(Compression.Format.Deflate)
+    )");
+    const auto direct = eval(R"("hello world" |> Compression.deflate())");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), direct.as_string());
+}
+
+static void test_compression_compress_gzip_matches_direct() {
+    const auto v = eval(R"(
+        "hello world" |> Compression.compress(Compression.Format.Gzip)
+    )");
+    const auto direct = eval(R"("hello world" |> Compression.gzip())");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), direct.as_string());
+}
+
+static void test_compression_compress_rle_matches_direct() {
+    const auto v = eval(R"(
+        "aaabbbcc" |> Compression.compress(Compression.Format.Rle)
+    )");
+    const auto direct = eval(R"("aaabbbcc" |> Compression.encode_rle())");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), direct.as_string());
+}
+
+static void test_compression_decompress_deflate_roundtrip() {
+    const auto v = eval(R"(
+        "hello world"
+        |> Compression.compress(Compression.Format.Deflate)
+        |> Compression.decompress(Compression.Format.Deflate)
+        |> Result.unwrap()
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "hello world");
+}
+
+static void test_compression_decompress_gzip_roundtrip() {
+    const auto v = eval(R"(
+        "hello world"
+        |> Compression.compress(Compression.Format.Gzip)
+        |> Compression.decompress(Compression.Format.Gzip)
+        |> Result.unwrap()
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "hello world");
+}
+
+static void test_compression_decompress_rle_roundtrip() {
+    const auto v = eval(R"(
+        "aaabbbcc"
+        |> Compression.compress(Compression.Format.Rle)
+        |> Compression.decompress(Compression.Format.Rle)
+        |> Result.unwrap()
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "aaabbbcc");
+}
+
+static void test_compression_decompress_malformed_deflate_fails() {
+    ASSERT_EVAL_FAILURE(
+        R"(Compression.decompress("not valid deflate", Compression.Format.Deflate))");
+}
+
+static void test_compression_decompress_malformed_gzip_fails() {
+    ASSERT_EVAL_FAILURE(
+        R"(Compression.decompress("not a valid gzip stream!!", Compression.Format.Gzip))");
+}
+
+static void test_compression_decompress_malformed_rle_fails() {
+    ASSERT_EVAL_FAILURE(R"(Compression.decompress("0a", Compression.Format.Rle))");
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Direct codec-layer coverage (luma::compression).  These bypass the VM
 // so they can exercise binary payloads — every byte value, long runs,
 // and deliberately corrupted streams — that are awkward to express in
@@ -390,6 +481,17 @@ int main() {
     RUN(test_compression_deflate_with_invalid_level_high);
     RUN(test_compression_gzip_with_invalid_level_zero);
     RUN(test_compression_gzip_file_with_non_string_path_is_catchable);
+
+    RUN(test_compression_module_has_generic_functions);
+    RUN(test_compression_compress_deflate_matches_direct);
+    RUN(test_compression_compress_gzip_matches_direct);
+    RUN(test_compression_compress_rle_matches_direct);
+    RUN(test_compression_decompress_deflate_roundtrip);
+    RUN(test_compression_decompress_gzip_roundtrip);
+    RUN(test_compression_decompress_rle_roundtrip);
+    RUN(test_compression_decompress_malformed_deflate_fails);
+    RUN(test_compression_decompress_malformed_gzip_fails);
+    RUN(test_compression_decompress_malformed_rle_fails);
 
     RUN(test_codec_deflate_inflate_all_bytes);
     RUN(test_codec_gzip_gunzip_all_bytes);

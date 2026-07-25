@@ -230,20 +230,30 @@ These are runtime errors catchable with `try`/`catch`. Use `Channel.is_closed(ch
 
 Compress and decompress data using Deflate (RFC 1951), Gzip (RFC 1952), and run-length encoding.
 
-| Function                                     | Parameter Types             | Return Type      | Description                                             |
-| -------------------------------------------- | --------------------------- | ---------------- | ------------------------------------------------------- |
-| `Compression.compressed_size(data)`          | `(string)`                  | `integer`        | Compressed size in bytes                                |
-| `Compression.decode_rle(s)`                  | `(string)`                  | `result<string>` | Run-length decode                                       |
-| `Compression.deflate(data)`                  | `(string)`                  | `string`         | Deflate-compress data                                   |
-| `Compression.deflate_with(data, level)`      | `(string, integer)`         | `result<string>` | Deflate-compress with explicit level (0–9)              |
-| `Compression.encode_rle(s)`                  | `(string)`                  | `string`         | Run-length encode (e.g. `"aaabbbcc"` → `"3a3b2c"`)      |
-| `Compression.gunzip(data)`                   | `(string)`                  | `result<string>` | Gunzip-decompress data                                  |
-| `Compression.gunzip_file(path)`              | `(string)`                  | `result<string>` | Gunzip-decompress file contents                         |
-| `Compression.gzip(data)`                     | `(string)`                  | `string`         | Gzip-compress data                                      |
-| `Compression.gzip_file(in, out)`             | `(string, string)`          | `result<string>` | Gzip-compress file to output path                       |
-| `Compression.gzip_file_with(in, out, level)` | `(string, string, integer)` | `result<string>` | Gzip-compress a file to `out` with explicit level (0–9) |
-| `Compression.gzip_with(data, level)`         | `(string, integer)`         | `result<string>` | Gzip-compress with explicit level (0–9)                 |
-| `Compression.inflate(data)`                  | `(string)`                  | `result<string>` | Inflate-decompress data                                 |
+| Function                                     | Parameter Types                | Return Type      | Description                                             |
+| --------------------------------------------- | ------------------------------- | ---------------- | -------------------------------------------------------- |
+| `Compression.compress(data, format)`         | `(string, Compression.Format)`  | `string`         | Compress `data` under the given format                  |
+| `Compression.compressed_size(data)`          | `(string)`                      | `integer`        | Compressed size in bytes                                |
+| `Compression.decode_rle(s)`                  | `(string)`                      | `result<string>` | Run-length decode                                       |
+| `Compression.decompress(data, format)`       | `(string, Compression.Format)`  | `result<string>` | Decompress `data` under the given format                |
+| `Compression.deflate(data)`                  | `(string)`                      | `string`         | Deflate-compress data                                   |
+| `Compression.deflate_with(data, level)`      | `(string, integer)`             | `result<string>` | Deflate-compress with explicit level (0–9)              |
+| `Compression.encode_rle(s)`                  | `(string)`                      | `string`         | Run-length encode (e.g. `"aaabbbcc"` → `"3a3b2c"`)      |
+| `Compression.gunzip(data)`                   | `(string)`                      | `result<string>` | Gunzip-decompress data                                  |
+| `Compression.gunzip_file(path)`              | `(string)`                      | `result<string>` | Gunzip-decompress file contents                         |
+| `Compression.gzip(data)`                     | `(string)`                      | `string`         | Gzip-compress data                                      |
+| `Compression.gzip_file(in, out)`             | `(string, string)`              | `result<string>` | Gzip-compress file to output path                       |
+| `Compression.gzip_file_with(in, out, level)` | `(string, string, integer)`     | `result<string>` | Gzip-compress a file to `out` with explicit level (0–9) |
+| `Compression.gzip_with(data, level)`         | `(string, integer)`             | `result<string>` | Gzip-compress with explicit level (0–9)                 |
+| `Compression.inflate(data)`                  | `(string)`                      | `result<string>` | Inflate-decompress data                                 |
+
+The per-algorithm functions above (`deflate`/`inflate`, `gzip`/`gunzip`, `encode_rle`/`decode_rle`) are the primary API — reach for them when the algorithm is known at the call site. `Compression.Format` is a choice type with three variants — `Deflate`, `Gzip`, `Rle` — for the "algorithm decided at runtime" path: `Compression.compress` and `Compression.decompress` dispatch on it to the matching per-algorithm function, so code that only learns the format from user input or configuration doesn't need a hand-written switch over algorithm names. Unlike `Hash.Algorithm`, `Compression.Format` has no string dual-form — it is the sole runtime-dispatch entry point.
+
+```luma
+Compression.Format format = Compression.Format.Gzip
+string compressed = Compression.compress("hello world", format)
+string restored = Result.unwrap(Compression.decompress(compressed, format))
+```
 
 ## 7 — Converter
 
