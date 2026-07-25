@@ -383,7 +383,8 @@ static void test_process_run_command_returns_command_output() {
 static void test_process_run_command_metacharacters_are_inert() {
     // No shell is involved, so ';', '|' and '$(...)' reach echo as a literal
     // argument instead of being interpreted.
-    const auto v = eval(R"LUMA(Process.run_command(Process.command("echo", ["a; b | c $(whoami)"])))LUMA");
+    const auto v =
+        eval(R"LUMA(Process.run_command(Process.command("echo", ["a; b | c $(whoami)"])))LUMA");
 
     ASSERT_RESULT_SUCCESS(v);
 
