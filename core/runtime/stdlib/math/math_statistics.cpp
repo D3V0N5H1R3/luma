@@ -17,6 +17,7 @@
 
 #include "analysis/source/source_location.hpp"
 #include "common/overflow.hpp"
+#include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/error_messages.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
@@ -285,13 +286,33 @@ void register_math_statistics(const EnvPtr& env) {
             }
             const auto bin_count = static_cast<std::size_t>(bins);
 
-            // One pass for the data range.
-            double minimum = elems.front().to_numeric();
-            double maximum = minimum;
+            // A histogram builds bin_edges/counts arrays, so an enormous bin
+            // count would allocate past the array-size contract every other
+            // stdlib path honours (and could exhaust memory).
+            if (bin_count > ResourceLimits::max_array_size) {
+                return make_failure_value(
+                    error_msg("Math", "histogram", "bins exceeds the maximum array size"));
+            }
+
+            // One pass for the data range over the finite samples only —
+            // folding a non-finite value (Math.infinity / NaN) into min/max
+            // would poison bin_width and the sample positions below.
+            double minimum = std::numeric_limits<double>::infinity();
+            double maximum = -std::numeric_limits<double>::infinity();
+            bool any_finite = false;
             for (const auto& elem : elems) {
                 const double v = elem.to_numeric();
+                if (!std::isfinite(v)) {
+                    continue;
+                }
                 minimum = std::min(minimum, v);
                 maximum = std::max(maximum, v);
+                any_finite = true;
+            }
+
+            if (!any_finite) {
+                return make_failure_value(
+                    error_msg("Math", "histogram", "no finite values to bin"));
             }
 
             // A zero-width range (every value equal) has no natural bin width;

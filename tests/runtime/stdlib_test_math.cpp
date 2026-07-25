@@ -931,6 +931,36 @@ LUMA_TEST(math_histogram_zero_bins_fails) {
     ASSERT_EVAL_FAILURE("Math.histogram([1.0, 2.0, 3.0], 0)");
 }
 
+LUMA_TEST(math_histogram_skips_non_finite) {
+    // Non-finite samples are excluded from the range and the tally rather than
+    // poisoning bin_width / bin positions.
+    const auto v = eval("Math.histogram([1.0, 2.0, 3.0, Math.infinity, Math.infinity * -1.0], 2)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    const auto& edges = *rec->find_field("bin_edges")->as_array()->elements;
+    const auto& counts = *rec->find_field("counts")->as_array()->elements;
+
+    // Range spans only the finite samples [1, 3].
+    ASSERT_NEAR(edges.front().as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(edges.back().as_number(), 3.0, 1e-9);
+
+    std::int64_t total{0};
+    for (const auto& c : counts) {
+        total += c.as_integer();
+    }
+    ASSERT_EQ(total, static_cast<std::int64_t>(3));
+}
+
+LUMA_TEST(math_histogram_all_non_finite_fails) {
+    ASSERT_EVAL_FAILURE("Math.histogram([Math.infinity, Math.infinity * -1.0], 3)");
+}
+
+LUMA_TEST(math_histogram_excessive_bins_fails) {
+    // A bin count past the array-size contract fails instead of allocating.
+    ASSERT_EVAL_FAILURE("Math.histogram([1.0, 2.0, 3.0], 2000000000)");
+}
+
 // --- Math.Interval (T02) ---
 
 LUMA_TEST(math_interval_construct_and_contains) {

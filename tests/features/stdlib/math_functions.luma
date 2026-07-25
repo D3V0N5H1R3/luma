@@ -910,6 +910,8 @@ function void test_math_histogram_equal_values() {
 function void test_math_histogram_invalid_fails() {
     assert(Result.is_failure(Math.histogram([], 5)), "an empty array has no histogram")
     assert(Result.is_failure(Math.histogram([1.0, 2.0, 3.0], 0)), "fewer than one bin should fail")
+    assert(Result.is_failure(Math.histogram([Math.infinity], 3)),
+        "an array with no finite values has no histogram")
 }
 
 # ─── Geometry vectors (Math.Vector2 / Math.Vector3) ───
