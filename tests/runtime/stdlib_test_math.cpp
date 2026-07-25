@@ -490,6 +490,18 @@ LUMA_TEST(math_complex_magnitude_conjugate_argument) {
                 3.14159265358979 / 2.0, 1e-9);
 }
 
+LUMA_TEST(math_complex_polar_bridges) {
+    const auto p = eval("Math.complex_to_polar(Math.complex(0.0, 5.0))");
+    ASSERT_EQ(p.as_record()->type_name, std::string{"Polar"});
+    ASSERT_NEAR(p.as_record()->find_field("radius")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(p.as_record()->find_field("angle")->as_number(), 3.14159265358979 / 2.0, 1e-9);
+
+    const auto c = eval("Math.complex_from_polar(Math.complex_to_polar(Math.complex(3.0, 4.0)))");
+    ASSERT_EQ(c.as_record()->type_name, std::string{"Complex"});
+    ASSERT_NEAR(c.as_record()->find_field("real")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(c.as_record()->find_field("imaginary")->as_number(), 4.0, 1e-9);
+}
+
 LUMA_TEST(math_linear_fit) {
     // Perfect line y = 2x.
     const auto v = eval("Math.linear_fit([1.0, 2.0, 3.0, 4.0], [2.0, 4.0, 6.0, 8.0])");
@@ -815,6 +827,25 @@ LUMA_TEST(math_vec3_cross_and_dot) {
     ASSERT_NEAR(eval("Math.vec3_length(Math.vector3(2.0, 3.0, 6.0))").as_number(), 7.0, 1e-9);
 }
 
+LUMA_TEST(math_to_polar_and_from_polar) {
+    // (3, 4) -> radius 5, angle atan2(4, 3).
+    const auto p = eval("Math.to_polar(Math.vector2(3.0, 4.0))");
+    ASSERT_EQ(p.as_record()->type_name, std::string{"Polar"});
+    ASSERT_NEAR(p.as_record()->find_field("radius")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(p.as_record()->find_field("angle")->as_number(), 0.9272952180016122, 1e-9);
+
+    // Round-trip: from_polar(to_polar(v)) == v.
+    const auto v = eval("Math.from_polar(Math.to_polar(Math.vector2(-1.0, 2.5)))");
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Vector2"});
+    ASSERT_NEAR(v.as_record()->find_field("x")->as_number(), -1.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("y")->as_number(), 2.5, 1e-9);
+
+    // The origin is a total conversion too: radius 0, angle 0.
+    const auto origin = eval("Math.to_polar(Math.vector2(0.0, 0.0))");
+    ASSERT_NEAR(origin.as_record()->find_field("radius")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(origin.as_record()->find_field("angle")->as_number(), 0.0, 1e-9);
+}
+
 // --- Math.FiveNumberSummary (N06) ---
 
 LUMA_TEST(math_five_number_summary) {
@@ -832,6 +863,102 @@ LUMA_TEST(math_five_number_summary) {
 
 LUMA_TEST(math_five_number_summary_empty_fails) {
     ASSERT_EVAL_FAILURE("Math.five_number_summary([])");
+}
+
+// --- Math.Histogram (N01) ---
+
+LUMA_TEST(math_histogram_basic) {
+    // Ten values in [0, 10) across five equal-width bins of width 2.
+    const auto v = eval("Math.histogram([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], 5)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->type_name, std::string{"Histogram"});
+    ASSERT_NEAR(rec->find_field("bin_width")->as_number(), 1.8, 1e-9);
+
+    const auto& edges = *rec->find_field("bin_edges")->as_array()->elements;
+    ASSERT_EQ(edges.size(), 6U);
+    ASSERT_NEAR(edges.front().as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(edges.back().as_number(), 9.0, 1e-9);
+
+    const auto& counts = *rec->find_field("counts")->as_array()->elements;
+    ASSERT_EQ(counts.size(), 5U);
+
+    // Every sample counted exactly once, including the maximum (closed last bin).
+    std::int64_t total{0};
+    for (const auto& c : counts) {
+        total += c.as_integer();
+    }
+    ASSERT_EQ(total, static_cast<std::int64_t>(10));
+    // The maximum (9.0) lands in the final bin.
+    ASSERT_TRUE(counts.back().as_integer() >= static_cast<std::int64_t>(1));
+}
+
+LUMA_TEST(math_histogram_equal_values) {
+    // A zero-width range widens so every equal value falls in one bin.
+    const auto v = eval("Math.histogram([5.0, 5.0, 5.0], 3)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    const auto& counts = *rec->find_field("counts")->as_array()->elements;
+    ASSERT_EQ(counts.size(), 3U);
+
+    std::int64_t total{0};
+    for (const auto& c : counts) {
+        total += c.as_integer();
+    }
+    ASSERT_EQ(total, static_cast<std::int64_t>(3));
+    ASSERT_TRUE(rec->find_field("bin_width")->as_number() > 0.0);
+}
+
+LUMA_TEST(math_histogram_single_bin) {
+    const auto v = eval("Math.histogram([1.0, 2.0, 3.0, 4.0], 1)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    const auto& edges = *rec->find_field("bin_edges")->as_array()->elements;
+    const auto& counts = *rec->find_field("counts")->as_array()->elements;
+    ASSERT_EQ(edges.size(), 2U);
+    ASSERT_EQ(counts.size(), 1U);
+    ASSERT_EQ(counts.front().as_integer(), static_cast<std::int64_t>(4));
+}
+
+LUMA_TEST(math_histogram_empty_fails) {
+    ASSERT_EVAL_FAILURE("Math.histogram([], 5)");
+}
+
+LUMA_TEST(math_histogram_zero_bins_fails) {
+    ASSERT_EVAL_FAILURE("Math.histogram([1.0, 2.0, 3.0], 0)");
+}
+
+LUMA_TEST(math_histogram_skips_non_finite) {
+    // Non-finite samples are excluded from the range and the tally rather than
+    // poisoning bin_width / bin positions.
+    const auto v = eval("Math.histogram([1.0, 2.0, 3.0, Math.infinity, Math.infinity * -1.0], 2)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    const auto& edges = *rec->find_field("bin_edges")->as_array()->elements;
+    const auto& counts = *rec->find_field("counts")->as_array()->elements;
+
+    // Range spans only the finite samples [1, 3].
+    ASSERT_NEAR(edges.front().as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(edges.back().as_number(), 3.0, 1e-9);
+
+    std::int64_t total{0};
+    for (const auto& c : counts) {
+        total += c.as_integer();
+    }
+    ASSERT_EQ(total, static_cast<std::int64_t>(3));
+}
+
+LUMA_TEST(math_histogram_all_non_finite_fails) {
+    ASSERT_EVAL_FAILURE("Math.histogram([Math.infinity, Math.infinity * -1.0], 3)");
+}
+
+LUMA_TEST(math_histogram_excessive_bins_fails) {
+    // A bin count past the array-size contract fails instead of allocating.
+    ASSERT_EVAL_FAILURE("Math.histogram([1.0, 2.0, 3.0], 2000000000)");
 }
 
 // --- Math.Interval (T02) ---

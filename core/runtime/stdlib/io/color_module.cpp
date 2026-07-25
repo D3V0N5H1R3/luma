@@ -389,6 +389,91 @@ struct Hsv {
                 std::clamp(alpha, 0.0, 1.0)};
 }
 
+// A colour in the subtractive cyan/magenta/yellow/key (black) model, each
+// channel a 0–1 ratio.
+struct Cmyk {
+    double cyan;
+    double magenta;
+    double yellow;
+    double key;
+};
+
+// Build a Color.Cmyk record value.  The short runtime type_name "Cmyk" matches
+// the "Color.Cmyk" record registered in stdlib_type_arities.cpp.  Every channel
+// is a 0–1 ratio, so every field is a `number`.
+[[nodiscard]] Value make_cmyk(const Cmyk& c) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Cmyk";
+    rec->fields.emplace_back("cyan", Value{c.cyan});
+    rec->fields.emplace_back("magenta", Value{c.magenta});
+    rec->fields.emplace_back("yellow", Value{c.yellow});
+    rec->fields.emplace_back("key", Value{c.key});
+
+    return Value{std::move(rec)};
+}
+
+// Read a Color.Cmyk record argument, clamping every channel to 0–1 so a
+// hand-built record can never carry out-of-range data into a conversion.
+// Throws when the value is not a CMYK-shaped record.
+[[nodiscard]] Cmyk read_cmyk(const Value& value, std::string_view func, const SourceLocation& loc) {
+    const auto invalid = [&] {
+        throw RuntimeError{std::string{func} + ": expected a Color.Cmyk record", loc,
+                           "build one with Color.to_cmyk(color)"};
+    };
+
+    if (!value.is_record()) {
+        invalid();
+    }
+
+    const auto& rec = value.as_record();
+    const Value* c = rec->find_field("cyan");
+    const Value* m = rec->find_field("magenta");
+    const Value* y = rec->find_field("yellow");
+    const Value* k = rec->find_field("key");
+
+    const auto numeric = [](const Value* val) {
+        return val != nullptr && (val->is_integer() || val->is_number());
+    };
+
+    if (!numeric(c) || !numeric(m) || !numeric(y) || !numeric(k)) {
+        invalid();
+    }
+
+    return Cmyk{std::clamp(c->to_numeric(), 0.0, 1.0), std::clamp(m->to_numeric(), 0.0, 1.0),
+                std::clamp(y->to_numeric(), 0.0, 1.0), std::clamp(k->to_numeric(), 0.0, 1.0)};
+}
+
+// Convert an RGBA colour to CMYK (alpha dropped — CMYK has no alpha channel).
+[[nodiscard]] Cmyk rgb_to_cmyk(const Rgba& c) {
+    const double r = static_cast<double>(c.red) / 255.0;
+    const double g = static_cast<double>(c.green) / 255.0;
+    const double b = static_cast<double>(c.blue) / 255.0;
+
+    const double key = 1.0 - std::max({r, g, b});
+
+    if (key >= 1.0) {
+        // Pure black: cyan/magenta/yellow are conventionally 0 (undefined
+        // otherwise, since the (1 - key) denominator would be 0).
+        return Cmyk{0.0, 0.0, 0.0, 1.0};
+    }
+
+    const double cyan = (1.0 - r - key) / (1.0 - key);
+    const double magenta = (1.0 - g - key) / (1.0 - key);
+    const double yellow = (1.0 - b - key) / (1.0 - key);
+
+    return Cmyk{std::clamp(cyan, 0.0, 1.0), std::clamp(magenta, 0.0, 1.0),
+                std::clamp(yellow, 0.0, 1.0), std::clamp(key, 0.0, 1.0)};
+}
+
+// Convert a CMYK colour back to RGBA, attaching the supplied alpha.
+[[nodiscard]] Rgba cmyk_to_rgb(const Cmyk& c, double alpha) {
+    const double r = (1.0 - c.cyan) * (1.0 - c.key);
+    const double g = (1.0 - c.magenta) * (1.0 - c.key);
+    const double b = (1.0 - c.yellow) * (1.0 - c.key);
+
+    return Rgba{to_channel(r), to_channel(g), to_channel(b), std::clamp(alpha, 0.0, 1.0)};
+}
+
 } // namespace
 
 void register_color_ns(const EnvPtr& env) {
@@ -576,6 +661,18 @@ void register_color_ns(const EnvPtr& env) {
             const auto h = read_hsv(args[0], "Color.from_hsv", loc);
 
             return make_color(hsv_to_rgb(h, 1.0));
+        })
+        .func("to_cmyk", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.to_cmyk", loc);
+
+            return make_cmyk(rgb_to_cmyk(c));
+        })
+        .func("from_cmyk", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_cmyk(args[0], "Color.from_cmyk", loc);
+
+            return make_color(cmyk_to_rgb(c, 1.0));
         })
         .func("rotate_hue", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

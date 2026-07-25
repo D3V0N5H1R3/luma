@@ -230,20 +230,30 @@ These are runtime errors catchable with `try`/`catch`. Use `Channel.is_closed(ch
 
 Compress and decompress data using Deflate (RFC 1951), Gzip (RFC 1952), and run-length encoding.
 
-| Function                                     | Parameter Types             | Return Type      | Description                                             |
-| -------------------------------------------- | --------------------------- | ---------------- | ------------------------------------------------------- |
-| `Compression.compressed_size(data)`          | `(string)`                  | `integer`        | Compressed size in bytes                                |
-| `Compression.decode_rle(s)`                  | `(string)`                  | `result<string>` | Run-length decode                                       |
-| `Compression.deflate(data)`                  | `(string)`                  | `string`         | Deflate-compress data                                   |
-| `Compression.deflate_with(data, level)`      | `(string, integer)`         | `result<string>` | Deflate-compress with explicit level (0–9)              |
-| `Compression.encode_rle(s)`                  | `(string)`                  | `string`         | Run-length encode (e.g. `"aaabbbcc"` → `"3a3b2c"`)      |
-| `Compression.gunzip(data)`                   | `(string)`                  | `result<string>` | Gunzip-decompress data                                  |
-| `Compression.gunzip_file(path)`              | `(string)`                  | `result<string>` | Gunzip-decompress file contents                         |
-| `Compression.gzip(data)`                     | `(string)`                  | `string`         | Gzip-compress data                                      |
-| `Compression.gzip_file(in, out)`             | `(string, string)`          | `result<string>` | Gzip-compress file to output path                       |
-| `Compression.gzip_file_with(in, out, level)` | `(string, string, integer)` | `result<string>` | Gzip-compress a file to `out` with explicit level (0–9) |
-| `Compression.gzip_with(data, level)`         | `(string, integer)`         | `result<string>` | Gzip-compress with explicit level (0–9)                 |
-| `Compression.inflate(data)`                  | `(string)`                  | `result<string>` | Inflate-decompress data                                 |
+| Function                                     | Parameter Types                | Return Type      | Description                                             |
+| --------------------------------------------- | ------------------------------- | ---------------- | -------------------------------------------------------- |
+| `Compression.compress(data, format)`         | `(string, Compression.Format)`  | `string`         | Compress `data` under the given format                  |
+| `Compression.compressed_size(data)`          | `(string)`                      | `integer`        | Compressed size in bytes                                |
+| `Compression.decode_rle(s)`                  | `(string)`                      | `result<string>` | Run-length decode                                       |
+| `Compression.decompress(data, format)`       | `(string, Compression.Format)`  | `result<string>` | Decompress `data` under the given format                |
+| `Compression.deflate(data)`                  | `(string)`                      | `string`         | Deflate-compress data                                   |
+| `Compression.deflate_with(data, level)`      | `(string, integer)`             | `result<string>` | Deflate-compress with explicit level (0–9)              |
+| `Compression.encode_rle(s)`                  | `(string)`                      | `string`         | Run-length encode (e.g. `"aaabbbcc"` → `"3a3b2c"`)      |
+| `Compression.gunzip(data)`                   | `(string)`                      | `result<string>` | Gunzip-decompress data                                  |
+| `Compression.gunzip_file(path)`              | `(string)`                      | `result<string>` | Gunzip-decompress file contents                         |
+| `Compression.gzip(data)`                     | `(string)`                      | `string`         | Gzip-compress data                                      |
+| `Compression.gzip_file(in, out)`             | `(string, string)`              | `result<string>` | Gzip-compress file to output path                       |
+| `Compression.gzip_file_with(in, out, level)` | `(string, string, integer)`     | `result<string>` | Gzip-compress a file to `out` with explicit level (0–9) |
+| `Compression.gzip_with(data, level)`         | `(string, integer)`             | `result<string>` | Gzip-compress with explicit level (0–9)                 |
+| `Compression.inflate(data)`                  | `(string)`                      | `result<string>` | Inflate-decompress data                                 |
+
+The per-algorithm functions above (`deflate`/`inflate`, `gzip`/`gunzip`, `encode_rle`/`decode_rle`) are the primary API — reach for them when the algorithm is known at the call site. `Compression.Format` is a choice type with three variants — `Deflate`, `Gzip`, `Rle` — for the "algorithm decided at runtime" path: `Compression.compress` and `Compression.decompress` dispatch on it to the matching per-algorithm function, so code that only learns the format from user input or configuration doesn't need a hand-written switch over algorithm names. Unlike `Hash.Algorithm`, `Compression.Format` has no string dual-form — it is the sole runtime-dispatch entry point.
+
+```luma
+Compression.Format format = Compression.Format.Gzip
+string compressed = Compression.compress("hello world", format)
+string restored = Result.unwrap(Compression.decompress(compressed, format))
+```
 
 ## 7 — Converter
 
@@ -1681,9 +1691,11 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.complex_argument(c)`            | `(Math.Complex)`                 | `number`          | Argument (phase angle) of `c` in radians                                          |
 | `Math.complex_conjugate(c)`           | `(Math.Complex)`                 | `Math.Complex`    | Complex conjugate of `c`                                                          |
 | `Math.complex_divide(a, b)`           | `(Math.Complex, Math.Complex)`   | `result<Math.Complex>` | Quotient `a / b`; fail if `b` is zero                                             |
+| `Math.complex_from_polar(p)`          | `(Math.Polar)`                   | `Math.Complex`    | Convert a `Math.Polar` to a `Math.Complex` (total conversion)                    |
 | `Math.complex_magnitude(c)`           | `(Math.Complex)`                 | `number`          | Magnitude (modulus) of `c`                                                        |
 | `Math.complex_multiply(a, b)`         | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Product `a * b`                                                                   |
 | `Math.complex_subtract(a, b)`         | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Difference `a - b`                                                                |
+| `Math.complex_to_polar(c)`            | `(Math.Complex)`                 | `Math.Polar`      | Convert a `Math.Complex` to a `Math.Polar` (total conversion)                    |
 | `Math.clamp(x, lo, hi)`               | `(number, number, number)`       | `result<number>`  | Clamp `x` to `[lo, hi]`; fail if `lo > hi`                                       |
 | `Math.correlation(xs, ys)`            | `(array<number>, array<number>)` | `result<number>`  | Pearson correlation coefficient; fail if arrays differ in length or < 2 elements |
 | `Math.cosine(x)`                      | `(number)`                       | `result<number>`  | Cosine; fail if result is NaN or infinite                                        |
@@ -1700,7 +1712,9 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.fraction_multiply(a, b)`        | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact product `a * b`; runtime error on int64 overflow                           |
 | `Math.fraction_subtract(a, b)`        | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact difference `a - b`; runtime error on int64 overflow                        |
 | `Math.fraction_to_number(f)`          | `(Math.Fraction)`                | `number`          | Approximate `f` as a floating-point `number`                                     |
+| `Math.from_polar(p)`                  | `(Math.Polar)`                   | `Math.Vector2`    | Convert a `Math.Polar` to a `Math.Vector2` (total conversion)                     |
 | `Math.greatest_common_divisor(a, b)`  | `(integer, integer)`             | `result<integer>` | GCD of `a` and `b`                                                               |
+| `Math.histogram(values, bins)`        | `(array<number>, integer)`       | `result<Math.Histogram>` | Bin `values` into `bins` equal-width half-open bins; fail if empty or `bins < 1` |
 | `Math.hyperbolic_cosine(x)`           | `(number)`                       | `result<number>`  | Hyperbolic cosine; fail if result is infinite                                    |
 | `Math.hyperbolic_sine(x)`             | `(number)`                       | `result<number>`  | Hyperbolic sine; fail if result is infinite                                      |
 | `Math.hyperbolic_tangent(x)`          | `(number)`                       | `number`          | Hyperbolic tangent (always bounded to [−1, 1])                                   |
@@ -1735,6 +1749,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.sum(arr)`                       | `(array<number>)`                | `result<integer \| number>` | Sum of all elements; fail on a non-numeric element                               |
 | `Math.summarize(arr)`                 | `(array<number>)`                | `result<Math.Summary>` | Descriptive statistics (count, min, max, mean, median, std. dev.) in one pass; fail if empty |
 | `Math.tangent(x)`                     | `(number)`                       | `result<number>`  | Tangent; fail if result is NaN or infinite                                       |
+| `Math.to_polar(v)`                    | `(Math.Vector2)`                 | `Math.Polar`      | Convert a `Math.Vector2` to a `Math.Polar` (total conversion)                     |
 | `Math.truncate(x)`                    | `(number)`                       | `result<integer>` | Truncate toward zero; fail on overflow                                           |
 | `Math.variance(arr)`                  | `(array<number>)`                | `result<number>`  | Variance; fail if empty                                                          |
 | `Math.vector2(x, y)`                  | `(number, number)`               | `Math.Vector2`    | Construct a 2D vector                                                            |
@@ -1772,7 +1787,15 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 
 `Math.FiveNumberSummary` is the box-plot sibling of `Math.Summary` — `minimum: number`, `q1: number`, `median: number`, `q3: number`, `maximum: number` — returned by `Math.five_number_summary(arr)` (fails on an empty array). The quartiles use the same linear-interpolation method as `Math.percentile`, so `Math.five_number_summary(v)` agrees with `Math.percentile(v, 25/50/75)` — a single typed answer for the five order statistics a box plot needs.
 
-`Math.Vector2 { x: number, y: number }` and `Math.Vector3 { x: number, y: number, z: number }` are typed geometry vectors for 2D/3D work — game positions, GraphicalUi layout, physics — where named `.x` / `.y` / `.z` components are far more teachable than the index arithmetic of `LinearAlgebra`'s general `array<number>` vectors. Like `Math.Complex`, they are pure data plus a pipe-first free-function family — `vec2_*` / `vec3_*` for `add`, `sub`, `scale`, `dot`, `length`, and `normalize`, with `vec3_cross` for the 3D cross product — and no operator overloading. `normalize` returns the zero vector unchanged rather than dividing by zero.
+`Math.Histogram { bin_edges: array<number>, counts: array<integer>, bin_width: number }` is the binned frequency distribution behind every bar chart. `Math.histogram(values, bins)` splits the data range `[min, max]` into `bins` equal-width half-open bins and tallies how many samples fall in each — `counts[i]` is the number of values in `[bin_edges[i], bin_edges[i+1])`, so `bin_edges` always has one more element than `counts`, and the final bin is closed on the right so the maximum is counted. It fails on an empty array or `bins < 1`. When every value is identical (a zero-width range) the range is widened by half a unit on each side so the bins stay positive-width. The `integer` counts and `number` edges respect the numeric convention, and the shape feeds the GraphicalUi bar chart directly. Mirrors `Math.summarize` / `Math.five_number_summary`: pure data returned by one pipe-first `result`-typed call.
+
+```luma
+Math.Histogram h = Result.unwrap(Math.histogram([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3))
+assert(Array.length(h.bin_edges) == 4)   # one more edge than counts
+assert(Array.length(h.counts) == 3)
+```
+
+`Math.Vector2 { x: number, y: number }` and `Math.Vector3 { x: number, y: number, z: number }` are typed geometry vectors for 2D/3D work — game positions, GraphicalUi layout, physics — where named `.x` / `.y` / `.z` components are far more teachable than the index arithmetic of `LinearAlgebra`'s general `array<number>` vectors. Like `Math.Complex`, they are pure data plus a pipe-first free-function family — `vec2_*` / `vec3_*` for `add`, `sub`, `scale`, `dot`, `length`, and `normalize`, with `vec3_cross` for the 3D cross product — and no operator overloading. `normalize` returns the zero vector unchanged rather than dividing by zero. `Math.to_polar` / `Math.from_polar` bridge `Math.Vector2` to the `Math.Polar` record below.
 
 `Math.Matrix2 { m00, m01, m10, m11 }` and `Math.Matrix3 { m00 … m22 }` (all `number`, row-major) are the typed transform-matrix companions to the vectors, for the 2×2/3×3 linear transforms that `LinearAlgebra`'s general `array<array<number>>` expresses only through index arithmetic. Build them with `Math.matrix2` / `Math.matrix3` or the ready-made `Math.mat2_identity` / `Math.mat3_identity`; `mat*_multiply` composes transforms, `mat*_determinant` reports the scale factor, and `mat2_transform` / `mat3_transform` apply a matrix to a `Math.Vector2` / `Math.Vector3`. Data plus free functions, no operator overloading — the same philosophy as the vectors. `LinearAlgebra` remains for general N-dimensional work.
 
@@ -1787,7 +1810,14 @@ Math.Fraction sum = Math.fraction_add(a, b)   # exactly 1/2
 assert(sum.numerator == 1 && sum.denominator == 2)
 ```
 
-`Math.Complex` is a record of complex numbers — `real: number` and `imaginary: number` — for the quadratic formula with a negative discriminant, signal work, and Argand-plane maths. Like `Decimal` and `Math.Fraction`, it avoids operator overloading: build values with `Math.complex(real, imaginary)` and combine them with the `Math.complex_*` free functions. `add`/`subtract`/`multiply`/`conjugate` return a `Math.Complex`; `divide` returns `result<Math.Complex>` and fails when the divisor is `0 + 0i`. `Math.complex_magnitude` and `Math.complex_argument` return the modulus and phase angle (radians).
+`Math.Complex` is a record of complex numbers — `real: number` and `imaginary: number` — for the quadratic formula with a negative discriminant, signal work, and Argand-plane maths. Like `Decimal` and `Math.Fraction`, it avoids operator overloading: build values with `Math.complex(real, imaginary)` and combine them with the `Math.complex_*` free functions. `add`/`subtract`/`multiply`/`conjugate` return a `Math.Complex`; `divide` returns `result<Math.Complex>` and fails when the divisor is `0 + 0i`. `Math.complex_magnitude` and `Math.complex_argument` return the modulus and phase angle (radians). `Math.complex_to_polar` / `Math.complex_from_polar` bridge to the `Math.Polar` record below.
+
+`Math.Polar { radius: number, angle: number }` (`angle` in radians) is the polar-coordinate counterpart of `Math.Vector2` and `Math.Complex` — the natural representation for rotations, orbits, and anything phrased as "how far, which way" rather than "how far right, how far up". `Math.to_polar(v)` / `Math.from_polar(p)` convert to and from `Math.Vector2`, and `Math.complex_to_polar(c)` / `Math.complex_from_polar(p)` do the same for `Math.Complex` — all four are **total conversions with no error case**: every Cartesian value has a polar form (the origin maps to `radius: 0.0, angle: 0.0`) and every polar value has a Cartesian one, so none of them return a `result`.
+
+```luma
+Math.Polar p = Math.to_polar(Math.vector2(3.0, 4.0))   # radius: 5.0, angle: atan2(4, 3)
+Math.Vector2 v = Math.from_polar(p)                    # back to (3.0, 4.0)
+```
 
 `Math.LineFit` is the ordinary least-squares regression result — `slope: number`, `intercept: number`, `r_squared: number` — returned by `Math.linear_fit(xs, ys)` for the trend line `y = slope · x + intercept`. It fails on mismatched array lengths, fewer than two points, or a zero x-variance (a vertical line). Mirrors `Math.Summary`: a plain returned record built by a single call.
 
@@ -1930,6 +1960,7 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 | `Process.current_directory()`                   | `()`               | `result<string>`                | Current working directory                                                |
 | `Process.execute(cmd)`                          | `(string)`         | `result<Process.CommandOutput>` | Execute shell command, capturing stdout **and** stderr separately        |
 | `Process.exit(code)`                            | `(integer)`        | `none`                          | Terminate the program with exit code                                     |
+| `Process.exit_status(output)`                   | `(Process.CommandOutput)` | `Process.ExitStatus`     | Classify a `CommandOutput`'s `exit_code` sign convention                 |
 | `Process.get_all_environment_variables()`       | `()`               | `dictionary<string>`            | All environment variables as a dictionary                                |
 | `Process.command(program, arguments)`           | `(string, array<string>)` | `Process.Command`        | Build a shell-free command (explicit program + argument vector)          |
 | `Process.run_command(cmd)`                      | `(Process.Command)` | `result<Process.CommandOutput>` | Run a `Process.Command` directly (no shell); metacharacters are inert    |
@@ -1970,6 +2001,21 @@ failure(_e) { print("could not launch command") }
 }
 ```
 
+`Process.ExitStatus` is a choice type — `Success`, `Failed(code: integer)`, `LaunchFailed` — that turns a `CommandOutput`'s `exit_code` sign convention into an exhaustive, match-able type, mirroring `Http.StatusClass` and `Sign` above: `0` classifies as `Success`, a positive code classifies as `Failed` (carrying the code), and a negative code classifies as `LaunchFailed` (the process never ran — see the launch-failure note under `Process.Command`). `Process.exit_status(output)` is a pure classifier over an already-captured `Process.CommandOutput` or `Process.ProcessResult`-shaped record; it does not launch or capture anything itself.
+
+```luma
+match Process.execute("git status") {
+success(out) {
+    match Process.exit_status(out) {
+    case Process.ExitStatus.Success        { print(out.standard_output) }
+    case Process.ExitStatus.Failed(code)   { print("git exited with ${code}: ${out.standard_error}") }
+    case Process.ExitStatus.LaunchFailed   { print("git could not be launched") }
+    }
+}
+failure(_e) { print("could not launch command") }
+}
+```
+
 ## 29 — Queue
 
 Immutable FIFO (first-in, first-out) queue. All mutating operations return a new queue, leaving the original unchanged.
@@ -2001,6 +2047,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Random.generate_number()`        | `()`                  | `number`           | Random number in `[0, 1)`                                                       |
 | `Random.generate_string(len)`     | `(integer)`           | `result<string>`   | Random alphanumeric string; fail if `len < 0`. **Not** cryptographically secure |
 | `Random.sample(arr, k)`           | `(array<T>, integer)` | `result<array<T>>` | `k` unique random elements; fail if `k > length`                                |
+| `Random.sample_from(distribution)` | `(Random.Distribution)` | `result<number>` | Draw a number from a `Random.Distribution`; see below for validation           |
 | `Random.shuffle(arr)`             | `(array<T>)`          | `array<T>`         | Shuffled copy                                                                   |
 | `Random.generate_uuid()`          | `()`                  | `string`           | UUID v4 (random). **Not** cryptographically secure                              |
 | `Random.secure_boolean()`         | `()`                  | `result<boolean>`  | Cryptographically secure random `true` or `false`                               |
@@ -2010,6 +2057,18 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Random.secure_uuid()`            | `()`                  | `result<string>`   | UUID v4 from cryptographically secure random bytes                              |
 
 **Cryptographically secure functions.** The `secure_*` variants use AES-CTR-DRBG (via Mbed TLS) seeded from platform entropy. They are suitable for generating tokens, secrets, and session identifiers. Requires TLS support (`LUMA_FEATURE_TLS=ON`, enabled by default).
+
+**`Random.Distribution`.** A closed choice of probability distributions consumed by `Random.sample_from`, so callers state intent ("draw from a `Normal(0, 1)`") instead of composing raw uniform draws by hand:
+
+- `Random.Distribution.Uniform(low: number, high: number)` — a uniform draw in `[low, high]`; fails if `high < low`.
+- `Random.Distribution.Normal(mean: number, standard_deviation: number)` — a normal (Gaussian) draw via the Box–Muller transform; fails if `standard_deviation <= 0`.
+- `Random.Distribution.Exponential(rate: number)` — an exponential draw with rate (λ) `rate`, via inverse-transform sampling; fails if `rate <= 0`.
+
+```luma
+result<number> uniform = Random.sample_from(Random.Distribution.Uniform(0.0, 10.0))
+result<number> normal = Random.sample_from(Random.Distribution.Normal(0.0, 1.0))
+result<number> exponential = Random.sample_from(Random.Distribution.Exponential(0.5))
+```
 
 ## 31 — Reference
 
@@ -2075,7 +2134,7 @@ string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 | `RegularExpression.replace_all(s, pattern, repl)` | `(string, string, string)` | `result<string>`                         | Replace all matches; fail if pattern is invalid               |
 | `RegularExpression.split(s, pattern)`             | `(string, string)`         | `result<array<string>>`                  | Split by regex; fail if pattern is invalid                    |
 
-`find` and `find_all` return `RegularExpression.Match` records with fields `text` (the matched substring), `position` (zero-based index), `length` (character count of the match), and `groups` (an `array<RegularExpression.Match>` of capture-group matches). Each element of `groups` is itself a `Match` record with the same `text`, `position`, and `length` fields. When the pattern contains no capture groups, `groups` is an empty array.
+`find` and `find_all` return `RegularExpression.Match` records with fields `text` (the matched substring), `position` (zero-based index), `length` (character count of the match), `groups` (an `array<RegularExpression.Match>` of capture-group matches), and `named_groups` (a `dictionary<RegularExpression.Capture>` of named capture-group matches, keyed by group name). Each element of `groups` is itself a `Match` record with the same `text`, `position`, and `length` fields. When the pattern contains no capture groups, `groups` is an empty array and `named_groups` is an empty dictionary.
 
 ```luma
 RegularExpression.Match m =
@@ -2087,6 +2146,24 @@ print(m.groups[0].text)  # "alice"
 print(m.groups[1].text)  # "example"
 print(m.groups[2].text)  # "com"
 ```
+
+### Named capture groups
+
+A capturing group can be given a name using either `(?<name>...)` (.NET/PCRE2 style) or `(?P<name>...)` (Python style). A named group's match is exposed two ways: positionally, as an ordinary entry in `groups` (exactly as an unnamed group would be), and by name, as a `RegularExpression.Capture` entry in `named_groups`. An unnamed group never appears in `named_groups`.
+
+`RegularExpression.Capture` is a record with fields `name` (the group's declared name), `text` (the matched substring), `position` (zero-based index), and `length` (character count of the match). A capture that is part of `groups` but was never named is not represented as a `Capture` at all — it simply has no corresponding `named_groups` key (the `name = ""` case described in the type only ever arises if a `Capture` value is constructed directly; every `Capture` reachable through `named_groups` has a non-empty `name`, since it is keyed by that name).
+
+```luma
+RegularExpression.Match m =
+    RegularExpression.find("2024-01-15", "(?<year>[0-9]+)-(?<month>[0-9]+)-(?<day>[0-9]+)")
+    |> Result.unwrap()
+
+RegularExpression.Capture year = Dictionary.get(m.named_groups, "year") |> Result.unwrap()
+
+print(year.text)  # "2024"
+```
+
+> **Engine limitation (medium risk)** — The C++ standard library's `std::regex` ECMAScript engine has **no native support** for named capture groups: neither `(?<name>...)` nor `(?P<name>...)` parses, and both throw a compile error from `std::regex` directly. Named-group support is therefore implemented entirely client-side: before compiling the pattern, Luma strips the `<name>`/`P<name>` annotation down to a plain `(` (preserving the group's ordinal position exactly, so nothing about the underlying match semantics changes) and separately records a group-index-to-name map, which is used after matching to populate `named_groups`. Once compiled, a named group behaves exactly like an ordinary capturing group — there is no way to distinguish "named" at the regex-engine level, only in Luma's bookkeeping around it. A malformed or unterminated named-group annotation (e.g. a missing `>`) is left untouched and surfaces as an ordinary invalid-pattern failure (`is_valid` returns `false`, and the fallible functions return `failure`) rather than a crash. `(?<=...)` and `(?<!...)` (lookbehind assertions) are recognized as _not_ named-group syntax and are left unchanged — though `std::regex`'s ECMAScript grammar does not support lookbehind at all (only lookahead, `(?=...)`/`(?!...)`), so a pattern using it will fail to compile regardless of named-group handling.
 
 > **Resource limits** — Regular expression patterns are capped at a maximum byte size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_REGEX_PATTERN_SIZE`). Patterns exceeding the limit return `failure` (or `false` from `is_valid`). The regex engine uses the ECMAScript dialect provided by the C++ standard library. There is no built-in protection against catastrophic backtracking — patterns with nested quantifiers such as `(a+)+b` can take exponential time on non-matching input. When processing untrusted patterns, keep them simple and avoid nested repetition operators (`*`, `+`, `{n,m}` inside groups that are themselves repeated).
 
@@ -2642,6 +2719,7 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | ------------------------------- | ------------------------------------------- | -------------------- | ------------------------------------------------------------------------ |
 | `Color.contrast_ratio(a, b)`    | `(Color.Color, Color.Color)`                | `number`             | WCAG contrast ratio (1:1 to 21:1)                                        |
 | `Color.darken(c, amount)`       | `(Color.Color, number)`                     | `Color.Color`        | Blend toward black by `amount` (clamped to [0, 1])                       |
+| `Color.from_cmyk(c)`            | `(Color.Cmyk)`                              | `Color.Color`        | Convert a CMYK colour to RGBA (alpha 1.0)                                |
 | `Color.from_hex(hex)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
 | `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
 | `Color.from_hsv(h)`             | `(Color.Hsv)`                               | `Color.Color`        | Convert an HSV (HSB) colour to RGBA (alpha 1.0)                          |
@@ -2650,6 +2728,7 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.rgb(r, g, b)`            | `(integer, integer, integer)`               | `result<Color.Color>` | Construct an opaque colour; fail if a channel is outside 0–255         |
 | `Color.rgba(r, g, b, a)`        | `(integer, integer, integer, number)`       | `result<Color.Color>` | Construct with alpha; fail if a channel is out of range or `a` ∉ [0, 1] |
 | `Color.rotate_hue(c, degrees)`  | `(Color.Color, number)`                     | `Color.Color`        | Rotate the hue by `degrees`, preserving saturation, lightness, and alpha |
+| `Color.to_cmyk(c)`              | `(Color.Color)`                             | `Color.Cmyk`         | Convert an RGBA colour to CMYK (alpha dropped)                           |
 | `Color.to_css(c)`               | `(Color.Color)`                             | `string`             | CSS string: `rgb(r, g, b)`, or `rgba(...)` when not fully opaque         |
 | `Color.to_hex(c)`               | `(Color.Color)`                             | `string`             | `#rrggbb`, or `#rrggbbaa` when the colour is not fully opaque            |
 | `Color.to_hsl(c)`               | `(Color.Color)`                             | `Color.Hsl`          | Convert an RGBA colour to HSL (alpha dropped)                            |
@@ -2660,6 +2739,8 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 **`Color.Hsl`** is the hue/saturation/lightness sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `lightness: number` (0–1 ratios). `Color.to_hsl` / `Color.from_hsl` convert between the two spaces, and `Color.rotate_hue(c, degrees)` shifts the hue (wrapping at 360°) while preserving saturation, lightness, and the original alpha — the natural way to build a rainbow, pastel, or complementary colour that is awkward in RGB. HSL drops alpha (so `to_hsl` discards it and `from_hsl` produces an opaque colour); everything still serialises through the same RGBA `to_css` path the webview consumes.
 
 **`Color.Hsv`** is the hue/saturation/**value** (HSB) sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `value: number` (0–1 ratios). It is the model most colour pickers and palette generators use, so `Color.to_hsv` / `Color.from_hsv` are the natural pair for building tints and shades by "value". Like HSL it drops alpha (`from_hsv` produces an opaque colour), and both spaces serialise through the same RGBA `to_css` path.
+
+**`Color.Cmyk`** is the cyan/magenta/yellow/**key** (black) sibling of `Color.Color` — `cyan: number`, `magenta: number`, `yellow: number`, and `key: number` (all 0–1 ratios). It is the subtractive model used by print production, so `Color.to_cmyk` / `Color.from_cmyk` are the natural pair for previewing how an on-screen colour will separate to ink. Like HSL/HSV it drops alpha (`from_cmyk` produces an opaque colour), and it serialises through the same RGBA `to_css` path.
 
 ```luma
 Color.Color base = Result.unwrap(Color.from_hex("#0172ad"))

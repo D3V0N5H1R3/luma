@@ -191,6 +191,122 @@ function void test_regularexpression_redos_rejected() {
 }
 
 @test
+function void test_regularexpression_find_named_groups_dotnet_style() {
+    # (?<name>...) -- .NET/PCRE2-style named group syntax.  std::regex has no
+    # native support for this; the pattern is stripped to a plain capturing
+    # group before compilation and the name<->index mapping is tracked
+    # client-side (see the engine-limitation note on parse_named_capture_groups
+    # in regularexpression_module.cpp).
+    RegularExpression.Match m =
+    RegularExpression.find("2024-01-15", "(?<year>[0-9]+)-(?<month>[0-9]+)-(?<day>[0-9]+)")
+    |> Result.unwrap()
+
+    # The positional groups array is unaffected by named-group tracking.
+    assert(Array.length(m.groups) == 3)
+    assert(m.groups[0].text == "2024")
+
+    RegularExpression.Capture year = Dictionary.get(m.named_groups, "year") |> Result.unwrap()
+
+    assert(year.name == "year")
+    assert(year.text == "2024")
+    assert(year.position == 0)
+    assert(year.length == 4)
+
+    RegularExpression.Capture month = Dictionary.get(m.named_groups, "month") |> Result.unwrap()
+    RegularExpression.Capture day = Dictionary.get(m.named_groups, "day") |> Result.unwrap()
+
+    assert(month.text == "01")
+    assert(day.text == "15")
+}
+
+@test
+function void test_regularexpression_find_named_groups_python_style() {
+    # (?P<name>...) -- Python-style named group syntax.
+    RegularExpression.Match m =
+    RegularExpression.find("alice@example.com", "(?P<user>[a-z]+)@(?P<domain>[a-z.]+)")
+    |> Result.unwrap()
+
+    RegularExpression.Capture user = Dictionary.get(m.named_groups, "user") |> Result.unwrap()
+    RegularExpression.Capture domain = Dictionary.get(m.named_groups, "domain") |> Result.unwrap()
+
+    assert(user.text == "alice")
+    assert(domain.text == "example.com")
+}
+
+@test
+function void test_regularexpression_named_and_unnamed_groups_mixed() {
+    # Unnamed groups still appear positionally in `groups`, but are absent from
+    # `named_groups` -- an unnamed group has name = "" only if it *were* placed
+    # in named_groups, which it never is (it simply has no key).
+    RegularExpression.Match m =
+    RegularExpression.find("width=100", "([a-z]+)=(?<value>[0-9]+)") |> Result.unwrap()
+
+    assert(Array.length(m.groups) == 2)
+    assert(m.groups[0].text == "width")
+    assert(m.groups[1].text == "100")
+
+    RegularExpression.Capture value = Dictionary.get(m.named_groups, "value") |> Result.unwrap()
+
+    assert(value.text == "100")
+    assert(Result.is_failure(Dictionary.get(m.named_groups, "width")))
+}
+
+@test
+function void test_regularexpression_no_named_groups_empty_dictionary() {
+    # A pattern with no named groups still produces a (valid, empty)
+    # named_groups dictionary -- never a missing field.
+    RegularExpression.Match m =
+    RegularExpression.find("abc123", "([a-z]+)([0-9]+)") |> Result.unwrap()
+
+    assert(Result.is_failure(Dictionary.get(m.named_groups, "anything")))
+}
+
+@test
+function void test_regularexpression_find_all_named_groups() {
+    array<RegularExpression.Match> matches =
+    RegularExpression.find_all("width=100 height=200", "(?<key>[a-z]+)=(?<val>[0-9]+)")
+    |> Result.unwrap()
+
+    assert(Array.length(matches) == 2)
+
+    RegularExpression.Capture key0 = Dictionary.get(matches[0].named_groups, "key") |> Result.unwrap()
+    RegularExpression.Capture val0 = Dictionary.get(matches[0].named_groups, "val") |> Result.unwrap()
+
+    assert(key0.text == "width")
+    assert(val0.text == "100")
+
+    RegularExpression.Capture key1 = Dictionary.get(matches[1].named_groups, "key") |> Result.unwrap()
+    RegularExpression.Capture val1 = Dictionary.get(matches[1].named_groups, "val") |> Result.unwrap()
+
+    assert(key1.text == "height")
+    assert(val1.text == "200")
+}
+
+@test
+function void test_regularexpression_named_group_lookbehind_not_confused() {
+    # (?<=...) / (?<!...) are lookbehind assertions, not named groups. std::regex's
+    # ECMAScript grammar has no lookbehind support at all (a pre-existing engine
+    # limitation, unrelated to named groups), so these patterns are rejected --
+    # but a genuine named group elsewhere is unaffected by the lookbehind check.
+    assert(!RegularExpression.is_valid("(?<=foo)bar"))
+    assert(!RegularExpression.is_valid("(?<!foo)bar"))
+
+    RegularExpression.Match m = RegularExpression.find("bar", "(?<value>bar)") |> Result.unwrap()
+    RegularExpression.Capture value = Dictionary.get(m.named_groups, "value") |> Result.unwrap()
+
+    assert(value.text == "bar")
+}
+
+@test
+function void test_regularexpression_unterminated_named_group_fails() {
+    # A malformed/unterminated named-group annotation falls through unchanged
+    # and relies on the regex engine to reject it -- a graceful failure, not a
+    # crash.
+    assert(!RegularExpression.is_valid("(?<name[a-z]+)"))
+    assert(Result.is_failure(RegularExpression.find("abc", "(?<name[a-z]+)")))
+}
+
+@test
 function void test_regularexpression_oversized_pattern() {
     # A pattern beyond the 10,000-byte limit is rejected by is_valid even though
     # it is otherwise benign.

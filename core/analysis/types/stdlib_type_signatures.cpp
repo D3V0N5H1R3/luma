@@ -113,8 +113,14 @@ namespace {
             if (desc.named_type == "Http.StatusClass") {
                 return TypeInfo::make_named(K::Choice, "Http.StatusClass");
             }
+            if (desc.named_type == "Process.ExitStatus") {
+                return TypeInfo::make_named(K::Choice, "Process.ExitStatus");
+            }
             if (desc.named_type == "Log.Output") {
                 return TypeInfo::make_named(K::Choice, "Log.Output");
+            }
+            if (desc.named_type == "Random.Distribution") {
+                return TypeInfo::make_named(K::Choice, "Random.Distribution");
             }
             if (desc.named_type == "Terminal.Key") {
                 return TypeInfo::make_named(K::Choice, "Terminal.Key");
@@ -127,6 +133,9 @@ namespace {
             }
             if (desc.named_type == "Socket.IpAddress") {
                 return TypeInfo::make_named(K::Choice, "Socket.IpAddress");
+            }
+            if (desc.named_type == "Compression.Format") {
+                return TypeInfo::make_named(K::Choice, "Compression.Format");
             }
             return TypeInfo::make_named(K::Record, desc.named_type);
 

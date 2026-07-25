@@ -322,6 +322,79 @@ static void test_random_shuffle() {
     ASSERT_EQ(v.as_array()->elements->size(), 3U);
 }
 
+// ── sample_from ────────────────────────────────────────────────────────
+
+static void test_random_sample_from_uniform() {
+    const auto v = eval("Random.sample_from(Random.Distribution.Uniform(2.0, 5.0))");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_number());
+
+    const auto n = v.as_result()->owned_inner->as_number();
+    ASSERT_GE(n, 2.0);
+    ASSERT_LE(n, 5.0);
+}
+
+static void test_random_sample_from_uniform_invalid_range() {
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Uniform(5.0, 1.0))");
+}
+
+static void test_random_sample_from_uniform_singleton() {
+    const auto v = eval("Random.sample_from(Random.Distribution.Uniform(3.0, 3.0))");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_NEAR(v.as_result()->owned_inner->as_number(), 3.0, 1e-9);
+}
+
+static void test_random_sample_from_normal() {
+    const auto v = eval("Random.sample_from(Random.Distribution.Normal(0.0, 1.0))");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_number());
+}
+
+static void test_random_sample_from_normal_distribution_shape() {
+    // Draw many samples from a standard normal and check the empirical mean
+    // and standard deviation land close to the theoretical (0, 1) — a loose
+    // statistical sanity check on the Box–Muller implementation.
+    double sum{0.0};
+    double sum_sq{0.0};
+    constexpr int n{20000};
+
+    for (int i{0}; i < n; ++i) {
+        const auto v = eval("Random.sample_from(Random.Distribution.Normal(0.0, 1.0))");
+        ASSERT_RESULT_SUCCESS(v);
+
+        const auto x = v.as_result()->owned_inner->as_number();
+        sum += x;
+        sum_sq += x * x;
+    }
+
+    const double mean = sum / n;
+    const double variance = sum_sq / n - mean * mean;
+
+    ASSERT_NEAR(mean, 0.0, 0.1);
+    ASSERT_NEAR(variance, 1.0, 0.2);
+}
+
+static void test_random_sample_from_normal_invalid_standard_deviation() {
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Normal(0.0, 0.0))");
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Normal(0.0, -1.0))");
+}
+
+static void test_random_sample_from_exponential() {
+    const auto v = eval("Random.sample_from(Random.Distribution.Exponential(2.0))");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_number());
+    ASSERT_GE(v.as_result()->owned_inner->as_number(), 0.0);
+}
+
+static void test_random_sample_from_exponential_invalid_rate() {
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Exponential(0.0))");
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Exponential(-3.0))");
+}
+
 // ── uuid ───────────────────────────────────────────────────────────────
 
 static void test_random_uuid() {
@@ -494,6 +567,7 @@ static void test_random_module() {
     ASSERT_TRUE(env->has("Random.choice"));
     ASSERT_TRUE(env->has("Random.shuffle"));
     ASSERT_TRUE(env->has("Random.sample"));
+    ASSERT_TRUE(env->has("Random.sample_from"));
     ASSERT_TRUE(env->has("Random.generate_uuid"));
     ASSERT_TRUE(env->has("Random.secure_boolean"));
     ASSERT_TRUE(env->has("Random.secure_integer"));
@@ -528,6 +602,14 @@ int main() {
     RUN(test_random_sample_too_large);
     RUN(test_random_sample_zero);
     RUN(test_random_sample_negative);
+    RUN(test_random_sample_from_uniform);
+    RUN(test_random_sample_from_uniform_invalid_range);
+    RUN(test_random_sample_from_uniform_singleton);
+    RUN(test_random_sample_from_normal);
+    RUN(test_random_sample_from_normal_distribution_shape);
+    RUN(test_random_sample_from_normal_invalid_standard_deviation);
+    RUN(test_random_sample_from_exponential);
+    RUN(test_random_sample_from_exponential_invalid_rate);
     RUN(test_random_shuffle);
     RUN(test_random_uuid);
     RUN(test_random_uuid_unique);

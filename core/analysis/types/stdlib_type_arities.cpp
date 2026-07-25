@@ -171,6 +171,14 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // Decimal and Math.Fraction.
         add_record(st, "Math.Complex", field("number", "real"), field("number", "imaginary"));
 
+        // Math.to_polar() constructs these polar-coordinate records (type_name
+        // "Polar"), the polar counterpart of Math.Vector2/Math.Complex.  radius is
+        // the distance from the origin (always >= 0 for a well-formed value) and
+        // angle is in radians — both measurements, so both are `number`.
+        // Math.to_polar()/Math.from_polar() are total conversions (no error case):
+        // every Math.Vector2 has a polar form and every Polar has a Cartesian one.
+        add_record(st, "Math.Polar", field("number", "radius"), field("number", "angle"));
+
         // Math.vector2() / vec2_* take and return these 2D geometry records
         // (type_name "Vector2").  Named .x/.y components — measurements, so both
         // number — make 2D work far more teachable than array<number> index
@@ -214,6 +222,15 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // goodness-of-fit.  A plain returned record, mirroring Math.Summary.
         add_record(st, "Math.LineFit", field("number", "slope"), field("number", "intercept"),
                    field("number", "r_squared"));
+
+        // Math.histogram() returns this binned frequency distribution (type_name
+        // "Histogram"): counts[i] samples fall in the half-open bin
+        // [bin_edges[i], bin_edges[i+1]), so bin_edges has one more element than
+        // counts.  Edges are measurements (number); counts are whole tallies
+        // (integer), respecting the numeric convention.  Mirrors Math.Summary — a
+        // plain returned record feeding the GraphicalUi bar chart.
+        add_record(st, "Math.Histogram", field_of(array_ann("number"), "bin_edges"),
+                   field_of(array_ann("integer"), "counts"), field("number", "bin_width"));
 
         add_record(st, "Socket.Address", field("string", "host"), field("integer", "port"));
 
@@ -260,6 +277,13 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // every field is a number.  Sibling of Color.Hsl.
         add_record(st, "Color.Hsv", field("number", "hue"), field("number", "saturation"),
                    field("number", "value"));
+
+        // Color.to_cmyk / from_cmyk pivot through this cyan/magenta/yellow/key
+        // (black) record (type_name "Cmyk") — the subtractive model used by print
+        // production. Every channel is a 0–1 ratio, so every field is a number.
+        // Sibling of Color.Hsl / Color.Hsv.
+        add_record(st, "Color.Cmyk", field("number", "cyan"), field("number", "magenta"),
+                   field("number", "yellow"), field("number", "key"));
 
         // Dictionary.to_array emits these key/value pairs at runtime (each a
         // record with type_name "KeyValue").  The `value` field carries the
@@ -310,9 +334,27 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Socket.UdpPacket", field("string", "data"), field("string", "host"),
                    field("integer", "port"));
 
+        // A single named capture group, e.g. the "year" in (?<year>\d{4}) or
+        // (?P<year>\d{4}); an unmatched-but-named group (an optional branch of
+        // an alternation that did not participate) still has name set, with
+        // text = "" -- name is only "" if a Capture were built for a positional
+        // group that has no name, which never happens in named_groups below.
+        // std::regex's ECMAScript engine has no native named-group support (see
+        // regularexpression_module.cpp), so `name` is extracted client-side from
+        // the pattern text and mapped to the group's ordinary positional index;
+        // `text`/`position`/`length` mirror that same positional group's fields.
+        add_record(st, "RegularExpression.Capture", field("string", "name"),
+                   field("string", "text"), field("integer", "position"),
+                   field("integer", "length"));
+
+        // groups keeps its original array<Match> shape for backward
+        // compatibility; named_groups is purely additive -- a name -> Capture
+        // lookup over the very same submatches (an unnamed group is simply
+        // absent from this dictionary, never present with name = "").
         add_record(st, "RegularExpression.Match", field("string", "text"),
                    field("integer", "position"), field("integer", "length"),
-                   field_of(array_ann("Match"), "groups"));
+                   field_of(array_ann("Match"), "groups"),
+                   field_of(dict_ann("Capture"), "named_groups"));
 
         add_record(st, "Process.ProcessResult", field("integer", "exit_code"),
                    field("string", "output"));
@@ -332,6 +374,34 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // string.  program is a string; arguments an array<string>.
         add_record(st, "Process.Command", field("string", "program"),
                    field_of(array_ann("string"), "arguments"));
+
+        // ── Process.ExitStatus ───────────────────────────
+        // Classifies the exit_code sign convention shared by every Process
+        // record (ProcessResult, CommandOutput): 0 = clean exit, a positive
+        // code = the process ran and exited non-zero, a negative code = the
+        // process never ran at all (spawn/launch failure — see
+        // platform_process::execute_command_captured).  Process.exit_status
+        // turns that magic-sign convention into an exhaustive, match-able
+        // type, mirroring Http.StatusClass and Sign above.  Variant names
+        // must match make_exit_status_choice() in
+        // core/runtime/stdlib/system/process_module.cpp exactly (PascalCase).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "ExitStatus");
+
+            // Failed carries the positive exit code payload, so it is a
+            // payload-bearing variant (like Log.Output.File) rather than a
+            // bare unit variant; Success / LaunchFailed are unit variants.
+            ChoiceVariant failed_variant;
+            failed_variant.name = "Failed";
+            failed_variant.fields.push_back(Parameter{.type = ann("integer"), .name = "code"});
+
+            ch->variants.push_back(ChoiceVariant{.name = "Success", .fields = {}});
+            ch->variants.push_back(std::move(failed_variant));
+            ch->variants.push_back(ChoiceVariant{.name = "LaunchFailed", .fields = {}});
+
+            st.choice_map["Process.ExitStatus"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
 
         add_record(st, "Terminal.CursorPosition", field("integer", "row"),
                    field("integer", "column"));
@@ -428,6 +498,41 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(std::move(file_variant));
 
             st.choice_map["Log.Output"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Random.Distribution ─────────────────────────
+        // Consumed by Random.sample_from(distribution) -> result<number> — a
+        // closed set of probability distributions to draw from, so the caller
+        // states intent ("draw from a Normal(0, 1)") instead of composing raw
+        // uniform draws by hand. Uniform carries its inclusive [low, high]
+        // bounds; Normal carries mean and standard_deviation for a Box–Muller
+        // draw; Exponential carries its rate (lambda) for an inverse-transform
+        // draw. Variant names/fields must match the match in
+        // core/runtime/stdlib/system/random_module.cpp exactly (PascalCase).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Distribution");
+
+            // Parameter is move-only, so payload variants are built by moving
+            // each Parameter into the fields vector (mirrors Xml.Node above).
+            ChoiceVariant uniform;
+            uniform.name = "Uniform";
+            uniform.fields.push_back(Parameter{.type = ann("number"), .name = "low"});
+            uniform.fields.push_back(Parameter{.type = ann("number"), .name = "high"});
+            ch->variants.push_back(std::move(uniform));
+
+            ChoiceVariant normal;
+            normal.name = "Normal";
+            normal.fields.push_back(Parameter{.type = ann("number"), .name = "mean"});
+            normal.fields.push_back(Parameter{.type = ann("number"), .name = "standard_deviation"});
+            ch->variants.push_back(std::move(normal));
+
+            ChoiceVariant exponential;
+            exponential.name = "Exponential";
+            exponential.fields.push_back(Parameter{.type = ann("number"), .name = "rate"});
+            ch->variants.push_back(std::move(exponential));
+
+            st.choice_map["Random.Distribution"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 
@@ -776,6 +881,26 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Crc32", .fields = {}});
 
             st.choice_map["Hash.Algorithm"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Compression.Format ──────────────────────────
+        // Selects the compression algorithm for the generic Compression.compress /
+        // Compression.decompress entry points, mirroring the Hash.Algorithm +
+        // Hash.digest dual of "several named algorithm functions plus one
+        // choice-dispatched generic function".  Unlike Hash.Algorithm, this has
+        // no string dual-form — Compression.Format is the sole runtime-dispatch
+        // path, while the per-algorithm functions (deflate/inflate, gzip/gunzip,
+        // encode_rle/decode_rle) stay primary.  Variant names must match
+        // require_format_variant() in core/runtime/stdlib/system/compression_module.cpp
+        // exactly (PascalCase).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Format");
+            ch->variants.push_back(ChoiceVariant{.name = "Deflate", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Gzip", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Rle", .fields = {}});
+
+            st.choice_map["Compression.Format"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

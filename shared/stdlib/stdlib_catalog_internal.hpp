@@ -105,6 +105,13 @@ namespace named {
     return ReturnTypeDesc::named("Log.Level");
 }
 
+// Choice type — uses the fully-qualified name so the type checker resolves it
+// as Random.Distribution (a bare name would fall through to the record
+// default). Consumed by Random.sample_from().
+[[nodiscard]] inline ReturnTypeDesc random_distribution() {
+    return ReturnTypeDesc::named("Random.Distribution");
+}
+
 [[nodiscard]] inline ReturnTypeDesc weekday() {
     return ReturnTypeDesc::named("DateTime.Weekday");
 }
@@ -223,6 +230,12 @@ namespace named {
     return ReturnTypeDesc::named("Complex");
 }
 
+// Math.to_polar() / Math.from_polar() convert between these polar-coordinate
+// records and Math.Vector2 (bare short name, like complex()).
+[[nodiscard]] inline ReturnTypeDesc polar() {
+    return ReturnTypeDesc::named("Polar");
+}
+
 // Math.vector2() / vec2_* and Math.vector3() / vec3_* take and return these
 // geometry records (bare short names, like complex()).
 [[nodiscard]] inline ReturnTypeDesc vector2() {
@@ -251,6 +264,11 @@ namespace named {
 // Math.linear_fit() returns this least-squares regression record.
 [[nodiscard]] inline ReturnTypeDesc line_fit() {
     return ReturnTypeDesc::named("LineFit");
+}
+
+// Math.histogram() returns this binned frequency-distribution record.
+[[nodiscard]] inline ReturnTypeDesc histogram() {
+    return ReturnTypeDesc::named("Histogram");
 }
 
 // Json.parse_detailed() surfaces this located parse-failure record as its
@@ -288,9 +306,20 @@ namespace named {
     return ReturnTypeDesc::named("Hsv");
 }
 
+// Color.to_cmyk / from_cmyk pivot through this cyan/magenta/yellow/key record
+// (bare short name "Cmyk", like hsl() / hsv()).
+[[nodiscard]] inline ReturnTypeDesc cmyk() {
+    return ReturnTypeDesc::named("Cmyk");
+}
+
 // Encoder.encode_text / decode_text take this text-encoding selector choice.
 [[nodiscard]] inline ReturnTypeDesc encoding() {
     return ReturnTypeDesc::named("Encoder.Encoding");
+}
+
+// Compression.compress / decompress take this algorithm-selector choice.
+[[nodiscard]] inline ReturnTypeDesc compression_format() {
+    return ReturnTypeDesc::named("Compression.Format");
 }
 
 [[nodiscard]] inline ReturnTypeDesc process_result() {
@@ -305,6 +334,13 @@ namespace named {
 // Process.run_command (bare short name "Command", like command_output()).
 [[nodiscard]] inline ReturnTypeDesc command() {
     return ReturnTypeDesc::named("Command");
+}
+
+// Choice type — uses the fully-qualified name so the type checker resolves it
+// as Process.ExitStatus (a bare name would fall through to the record
+// default), mirroring status_class() / file_kind() above.
+[[nodiscard]] inline ReturnTypeDesc exit_status() {
+    return ReturnTypeDesc::named("Process.ExitStatus");
 }
 
 [[nodiscard]] inline ReturnTypeDesc input_event() {

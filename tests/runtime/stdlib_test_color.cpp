@@ -121,6 +121,8 @@ LUMA_TEST(color_module) {
     ASSERT_TRUE(env->has("Color.to_hsl"));
     ASSERT_TRUE(env->has("Color.from_hsl"));
     ASSERT_TRUE(env->has("Color.rotate_hue"));
+    ASSERT_TRUE(env->has("Color.to_cmyk"));
+    ASSERT_TRUE(env->has("Color.from_cmyk"));
 }
 
 // ─── Color.Hsl: HSL conversions ──────────────────────────────────────────────
@@ -173,6 +175,41 @@ LUMA_TEST(color_to_hsv_red) {
 LUMA_TEST(color_from_hsv_roundtrip) {
     // Green: hue 120, full saturation, full value -> (0, 255, 0).
     const auto v = eval("Color.from_hsv(Color.to_hsv(Result.unwrap(Color.rgb(0, 255, 0))))");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Color"});
+    ASSERT_EQ(v.as_record()->find_field("red")->as_integer(), static_cast<std::int64_t>(0));
+    ASSERT_EQ(v.as_record()->find_field("green")->as_integer(), static_cast<std::int64_t>(255));
+    ASSERT_EQ(v.as_record()->find_field("blue")->as_integer(), static_cast<std::int64_t>(0));
+}
+
+// ─── Color.Cmyk: CMYK conversions ────────────────────────────────────────────
+
+LUMA_TEST(color_to_cmyk_black) {
+    // Pure black is 0 cyan/magenta/yellow, full key.
+    const auto v = eval("Color.to_cmyk(Result.unwrap(Color.rgb(0, 0, 0)))");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Cmyk"});
+    ASSERT_NEAR(v.as_record()->find_field("cyan")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("magenta")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("yellow")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("key")->as_number(), 1.0, 1e-9);
+}
+
+LUMA_TEST(color_to_cmyk_red) {
+    // Pure red has no cyan or key, and is fully magenta and yellow.
+    const auto v = eval("Color.to_cmyk(Result.unwrap(Color.rgb(255, 0, 0)))");
+
+    ASSERT_NEAR(v.as_record()->find_field("cyan")->as_number(), 0.0, 1e-6);
+    ASSERT_NEAR(v.as_record()->find_field("magenta")->as_number(), 1.0, 1e-6);
+    ASSERT_NEAR(v.as_record()->find_field("yellow")->as_number(), 1.0, 1e-6);
+    ASSERT_NEAR(v.as_record()->find_field("key")->as_number(), 0.0, 1e-6);
+}
+
+LUMA_TEST(color_from_cmyk_roundtrip) {
+    // Green round-trips through CMYK.
+    const auto v = eval("Color.from_cmyk(Color.to_cmyk(Result.unwrap(Color.rgb(0, 255, 0))))");
 
     ASSERT_TRUE(v.is_record());
     ASSERT_EQ(v.as_record()->type_name, std::string{"Color"});

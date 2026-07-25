@@ -115,6 +115,146 @@ static void test_regex_find_capture_groups() {
     ASSERT_EQ(groups[2].as_record()->find_field("length")->as_integer(), 3);
 }
 
+static void test_regex_find_named_groups_dotnet_style() {
+    // (?<name>...) -- .NET/PCRE2-style named group syntax.
+    const auto v = eval("RegularExpression.find(\"2024-01-15\", "
+                        "\"(?<year>[0-9]+)-(?<month>[0-9]+)-(?<day>[0-9]+)\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+
+    ASSERT_TRUE(inner.is_record());
+
+    // Positional groups array is unchanged.
+    const auto& groups = *inner.as_record()->find_field("groups")->as_array()->elements;
+
+    ASSERT_EQ(groups.size(), 3U);
+    ASSERT_EQ(groups[0].as_record()->find_field("text")->as_string(), "2024");
+    ASSERT_EQ(groups[1].as_record()->find_field("text")->as_string(), "01");
+    ASSERT_EQ(groups[2].as_record()->find_field("text")->as_string(), "15");
+
+    // named_groups additionally maps name -> Capture.
+    const auto* named_groups_field = inner.as_record()->find_field("named_groups");
+
+    ASSERT_TRUE(named_groups_field != nullptr);
+    ASSERT_TRUE(named_groups_field->is_dictionary());
+
+    const auto& named = *named_groups_field->as_dictionary();
+
+    ASSERT_TRUE(named.find("year") != nullptr);
+    ASSERT_EQ(named.find("year")->as_record()->type_name, "Capture");
+    ASSERT_EQ(named.find("year")->as_record()->find_field("name")->as_string(), "year");
+    ASSERT_EQ(named.find("year")->as_record()->find_field("text")->as_string(), "2024");
+    ASSERT_EQ(named.find("year")->as_record()->find_field("position")->as_integer(), 0);
+    ASSERT_EQ(named.find("year")->as_record()->find_field("length")->as_integer(), 4);
+
+    ASSERT_EQ(named.find("month")->as_record()->find_field("text")->as_string(), "01");
+    ASSERT_EQ(named.find("day")->as_record()->find_field("text")->as_string(), "15");
+}
+
+static void test_regex_find_named_groups_python_style() {
+    // (?P<name>...) -- Python-style named group syntax.
+    const auto v = eval("RegularExpression.find(\"alice@example.com\", "
+                        "\"(?P<user>[a-z]+)@(?P<domain>[a-z.]+)\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+    const auto& named = *inner.as_record()->find_field("named_groups")->as_dictionary();
+
+    ASSERT_EQ(named.find("user")->as_record()->find_field("text")->as_string(), "alice");
+    ASSERT_EQ(named.find("domain")->as_record()->find_field("text")->as_string(), "example.com");
+}
+
+static void test_regex_find_named_and_unnamed_groups_mixed() {
+    // Mixing named and unnamed groups: unnamed groups still appear positionally
+    // in `groups` but are absent from `named_groups`.
+    const auto v = eval("RegularExpression.find(\"width=100\", \"([a-z]+)=(?<value>[0-9]+)\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+    const auto& groups = *inner.as_record()->find_field("groups")->as_array()->elements;
+
+    ASSERT_EQ(groups.size(), 2U);
+    ASSERT_EQ(groups[0].as_record()->find_field("text")->as_string(), "width");
+    ASSERT_EQ(groups[1].as_record()->find_field("text")->as_string(), "100");
+
+    const auto& named = *inner.as_record()->find_field("named_groups")->as_dictionary();
+
+    ASSERT_TRUE(named.find("value") != nullptr);
+    ASSERT_EQ(named.find("value")->as_record()->find_field("text")->as_string(), "100");
+
+    // The unnamed group ("width") never appears as a named_groups key.
+    ASSERT_TRUE(named.find("width") == nullptr);
+}
+
+static void test_regex_find_no_named_groups_empty_dictionary() {
+    // A pattern with no named groups still produces an (empty) named_groups
+    // dictionary, never a missing field.
+    const auto v = eval("RegularExpression.find(\"abc123\", \"([a-z]+)([0-9]+)\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+    const auto* named_groups_field = inner.as_record()->find_field("named_groups");
+
+    ASSERT_TRUE(named_groups_field != nullptr);
+    ASSERT_TRUE(named_groups_field->is_dictionary());
+    ASSERT_EQ(named_groups_field->as_dictionary()->entries.size(), 0U);
+}
+
+static void test_regex_find_all_named_groups() {
+    // find_all builds named_groups independently for each match.
+    const auto v = eval(
+        "RegularExpression.find_all(\"width=100 height=200\", \"(?<key>[a-z]+)=(?<val>[0-9]+)\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& elems = *v.as_result()->owned_inner->as_array()->elements;
+
+    ASSERT_EQ(elems.size(), 2U);
+
+    const auto& m0_named = *elems[0].as_record()->find_field("named_groups")->as_dictionary();
+
+    ASSERT_EQ(m0_named.find("key")->as_record()->find_field("text")->as_string(), "width");
+    ASSERT_EQ(m0_named.find("val")->as_record()->find_field("text")->as_string(), "100");
+
+    const auto& m1_named = *elems[1].as_record()->find_field("named_groups")->as_dictionary();
+
+    ASSERT_EQ(m1_named.find("key")->as_record()->find_field("text")->as_string(), "height");
+    ASSERT_EQ(m1_named.find("val")->as_record()->find_field("text")->as_string(), "200");
+}
+
+static void test_regex_named_groups_do_not_break_lookbehind() {
+    // (?<=...) and (?<!...) are lookbehind assertions, not named groups -- the
+    // named-group detector must not mistake them for `(?<name>...)` and strip
+    // the '=' / '!'.  std::regex's ECMAScript grammar has no lookbehind support
+    // at all (only lookahead), so these patterns still fail to compile -- that
+    // is a pre-existing engine limitation, not something introduced here.
+    // What matters is that a genuine named group is unaffected by the
+    // lookbehind exclusion check.
+    ASSERT_EQ(eval("RegularExpression.is_valid(\"(?<=foo)bar\")").as_bool(), false);
+    ASSERT_EQ(eval("RegularExpression.is_valid(\"(?<!foo)bar\")").as_bool(), false);
+
+    const auto v = eval("RegularExpression.find(\"bar\", \"(?<value>bar)\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& named =
+        *v.as_result()->owned_inner->as_record()->find_field("named_groups")->as_dictionary();
+
+    ASSERT_EQ(named.find("value")->as_record()->find_field("text")->as_string(), "bar");
+}
+
+static void test_regex_unterminated_named_group_fails() {
+    // A malformed/unterminated named-group annotation falls through unchanged
+    // and relies on std::regex_error to surface the failure -- no crash.
+    ASSERT_EQ(eval("RegularExpression.is_valid(\"(?<name[a-z]+)\")").as_bool(), false);
+    ASSERT_EVAL_FAILURE("RegularExpression.find(\"abc\", \"(?<name[a-z]+)\")");
+}
+
 static void test_regex_is_valid() {
     ASSERT_EQ(eval("RegularExpression.is_valid(\"[a-z]+\")").as_bool(), true);
     ASSERT_EQ(eval("RegularExpression.is_valid(\"[\")").as_bool(), false);
@@ -326,6 +466,13 @@ int main() {
     RUN(test_regex_find_all_capture_groups);
     RUN(test_regex_find_capture_groups);
     RUN(test_regex_find_no_match);
+    RUN(test_regex_find_named_groups_dotnet_style);
+    RUN(test_regex_find_named_groups_python_style);
+    RUN(test_regex_find_named_and_unnamed_groups_mixed);
+    RUN(test_regex_find_no_named_groups_empty_dictionary);
+    RUN(test_regex_find_all_named_groups);
+    RUN(test_regex_named_groups_do_not_break_lookbehind);
+    RUN(test_regex_unterminated_named_group_fails);
     RUN(test_regex_compiled_cache_reuse);
     RUN(test_regex_invalid_pattern_not_cached);
     RUN(test_regex_find_all_match_limit_propagates);

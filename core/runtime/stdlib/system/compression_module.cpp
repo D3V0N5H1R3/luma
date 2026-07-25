@@ -6,6 +6,7 @@
 #include <fstream>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "analysis/source/source_location.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -21,10 +22,79 @@
 
 namespace luma {
 
+namespace {
+
+// Requires arg to be a Compression.Format choice and returns its variant name
+// (Deflate/Gzip/Rle).  Compression.compress/decompress dispatch on this to
+// select the underlying per-algorithm codec — mirroring how Hash.digest /
+// Hash.verify dispatch on a Hash.Algorithm choice (resolve_algorithm_name in
+// hash_digest.cpp), except Compression.Format has no string dual-form: it is
+// the sole runtime-dispatch entry point, while deflate/inflate, gzip/gunzip,
+// and encode_rle/decode_rle stay the primary, directly-named functions.
+// Variant names must match the Compression.Format choice in
+// core/analysis/types/stdlib_type_arities.cpp exactly (PascalCase).
+[[nodiscard]] const std::string& require_format_variant(const Value& arg, std::string_view fn,
+                                                        SourceLocation loc) {
+    if (!arg.is_choice()) {
+        throw RuntimeError{std::format("{}: format must be a Compression.Format", fn), loc,
+                           "pass a Compression.Format variant, e.g. Compression.Format.Gzip"};
+    }
+
+    return arg.as_choice()->variant;
+}
+
+} // namespace
+
 // === Registration ===
 
 void register_compression_ns(const EnvPtr& env, bool sandbox) {
     ModuleBuilder{"Compression", env}
+        .func("compress", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& data = expect_string(args[0], "Compression.compress", loc);
+            const auto& variant = require_format_variant(args[1], "Compression.compress", loc);
+
+            if (variant == "Deflate") {
+                return Value{compression::deflate_compress(data)};
+            }
+            if (variant == "Gzip") {
+                return Value{compression::gzip_compress(data)};
+            }
+            if (variant == "Rle") {
+                return Value{compression::rle_encode(data)};
+            }
+
+            throw RuntimeError{
+                std::format("Compression.compress: unknown Compression.Format '{}'", variant), loc};
+        })
+        .func("decompress", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& data = expect_string(args[0], "Compression.decompress", loc);
+            const auto& variant = require_format_variant(args[1], "Compression.decompress", loc);
+
+            std::optional<std::string> decompressed;
+            std::string_view malformed_msg;
+
+            if (variant == "Deflate") {
+                decompressed = compression::deflate_decompress(data);
+                malformed_msg = "Compression.decompress: malformed deflate data";
+            } else if (variant == "Gzip") {
+                decompressed = compression::gzip_decompress(data);
+                malformed_msg = "Compression.decompress: malformed gzip data";
+            } else if (variant == "Rle") {
+                decompressed = compression::rle_decode(data);
+                malformed_msg = "Compression.decompress: malformed RLE data";
+            } else {
+                throw RuntimeError{
+                    std::format("Compression.decompress: unknown Compression.Format '{}'", variant),
+                    loc};
+            }
+
+            if (!decompressed) {
+                return make_failure_value(std::string{malformed_msg});
+            }
+            return make_success_value(Value{*decompressed});
+        })
         .func("deflate", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             (void)expect_string(args[0], "Compression.deflate", loc);

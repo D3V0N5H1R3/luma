@@ -79,6 +79,8 @@ void register_process_functions(std::vector<FunctionSpec>& specs, const ModuleBu
                  {p.string, p.array_string}),
             m.fn("execute", 1, "(command: string)", R::result(named::command_output()), {p.string}),
             m.fn("exit", 1, "(code: integer)", R::void_type(), {p.integer}),
+            m.fn("exit_status", 1, "(output: Process.CommandOutput)", named::exit_status(),
+                 {named::command_output()}),
             m.fn("get_arguments", 0, "()", R::array_string(), {}),
             m.fn("get_all_environment_variables", 0, "()", R::dict_string(), {}),
             m.fn("get_environment_variable", 1, "(name: string)", R::result_string(), {p.string}),

@@ -47,8 +47,12 @@ void register_compression_functions(std::vector<FunctionSpec>& specs, const Modu
                                     const ParamShorthands& p) {
     append_specs(specs,
                  {
+                     m.fn("compress", 2, "(data: string, format: Compression.Format)",
+                          R::string_type(), {p.string, named::compression_format()}),
                      m.fn("compressed_size", 1, "(data: string)", R::integer_type(), {p.string}),
                      m.fn("decode_rle", 1, "(data: string)", R::result_string(), {p.string}),
+                     m.fn("decompress", 2, "(data: string, format: Compression.Format)",
+                          R::result_string(), {p.string, named::compression_format()}),
                      m.fn("deflate", 1, "(data: string)", R::string_type(), {p.string}),
                      m.fn("deflate_with", 2, "(data: string, level: integer)", R::result_string(),
                           {p.string, p.integer}),
