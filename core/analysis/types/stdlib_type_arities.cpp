@@ -171,6 +171,14 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // Decimal and Math.Fraction.
         add_record(st, "Math.Complex", field("number", "real"), field("number", "imaginary"));
 
+        // Math.to_polar() constructs these polar-coordinate records (type_name
+        // "Polar"), the polar counterpart of Math.Vector2/Math.Complex.  radius is
+        // the distance from the origin (always >= 0 for a well-formed value) and
+        // angle is in radians — both measurements, so both are `number`.
+        // Math.to_polar()/Math.from_polar() are total conversions (no error case):
+        // every Math.Vector2 has a polar form and every Polar has a Cartesian one.
+        add_record(st, "Math.Polar", field("number", "radius"), field("number", "angle"));
+
         // Math.vector2() / vec2_* take and return these 2D geometry records
         // (type_name "Vector2").  Named .x/.y components — measurements, so both
         // number — make 2D work far more teachable than array<number> index

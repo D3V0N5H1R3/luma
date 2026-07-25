@@ -846,6 +846,18 @@ function void test_math_complex_magnitude_conjugate_argument() {
     assert(Math.approximately_equal(Math.complex_argument(Math.complex(0.0, 1.0)), Math.pi / 2.0))
 }
 
+@test
+function void test_math_complex_polar_bridges() {
+    Math.Polar p = Math.complex_to_polar(Math.complex(0.0, 5.0))
+    assert(Math.approximately_equal(p.radius, 5.0), "|5i| = 5")
+    assert(Math.approximately_equal(p.angle, Math.pi / 2.0), "arg(5i) = π/2")
+
+    # Round-trip: complex_from_polar(complex_to_polar(c)) == c.
+    Math.Complex c = Math.complex_from_polar(Math.complex_to_polar(Math.complex(3.0, 4.0)))
+    assert(Math.approximately_equal(c.real, 3.0))
+    assert(Math.approximately_equal(c.imaginary, 4.0))
+}
+
 # ─── LineFit (Math.linear_fit) ───
 
 @test
@@ -883,6 +895,32 @@ function void test_math_vector2() {
 
     Math.Vector2 unit = Math.vec2_normalize(a)
     assert(Math.approximately_equal(Math.vec2_length(unit), 1.0, 0.001), "normalized length is 1")
+}
+
+# ─── Polar coordinates (Math.Polar) ───
+
+@test
+function void test_math_to_polar_and_from_polar() {
+    # (3, 4) -> radius 5, angle atan2(4, 3).
+    Math.Polar p = Math.to_polar(Math.vector2(3.0, 4.0))
+    assert(Math.approximately_equal(p.radius, 5.0, 0.001), "3-4-5 radius")
+    assert(Math.approximately_equal(p.angle, Result.unwrap(Math.arc_tangent(4.0 / 3.0)), 0.001),
+        "angle matches atan(4/3) in the first quadrant")
+
+    # Total conversions (no error case): every Vector2 has a polar form and every
+    # Polar has a Cartesian one, including the origin.
+    Math.Polar origin = Math.to_polar(Math.vector2(0.0, 0.0))
+    assert(Math.approximately_equal(origin.radius, 0.0, 0.001), "origin has radius 0")
+
+    # Round-trip: from_polar(to_polar(v)) == v.
+    Math.Vector2 v = Math.from_polar(Math.to_polar(Math.vector2(-1.0, 2.5)))
+    assert(Math.approximately_equal(v.x, -1.0, 0.001), "x round-trips")
+    assert(Math.approximately_equal(v.y, 2.5, 0.001), "y round-trips")
+
+    # Building directly from radius/angle: a unit vector along the y-axis.
+    Math.Vector2 up = Math.from_polar(Math.to_polar(Math.vector2(0.0, 1.0)))
+    assert(Math.approximately_equal(up.x, 0.0, 0.001), "cos(π/2) = 0")
+    assert(Math.approximately_equal(up.y, 1.0, 0.001), "sin(π/2) = 1")
 }
 
 @test

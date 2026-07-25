@@ -126,6 +126,45 @@ void register_math_complex(const EnvPtr& env) {
             const auto c = read_complex(args[0], "Math.complex_argument", loc);
 
             return Value{std::atan2(c.imaginary, c.real)};
+        })
+        // Total conversions (no error case), mirroring Math.to_polar/from_polar
+        // for Math.Vector2.  type_name "Polar" matches the "Math.Polar" record
+        // registered in stdlib_type_arities.cpp.
+        .func("complex_to_polar", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_complex(args[0], "Math.complex_to_polar", loc);
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Polar";
+            rec->fields.emplace_back("radius", Value{std::hypot(c.real, c.imaginary)});
+            rec->fields.emplace_back("angle", Value{std::atan2(c.imaginary, c.real)});
+
+            return Value{std::move(rec)};
+        })
+        .func("complex_from_polar", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_record()) {
+                throw RuntimeError{"Math.complex_from_polar: expected a Math.Polar record", loc,
+                                   "build one with Math.to_polar(v) or Math.complex_to_polar(c)"};
+            }
+
+            const auto& rec = args[0].as_record();
+            const Value* radius = rec->find_field("radius");
+            const Value* angle = rec->find_field("angle");
+
+            const auto numeric = [](const Value* v) {
+                return v != nullptr && (v->is_integer() || v->is_number());
+            };
+
+            if (!numeric(radius) || !numeric(angle)) {
+                throw RuntimeError{"Math.complex_from_polar: expected a Math.Polar record", loc,
+                                   "build one with Math.to_polar(v) or Math.complex_to_polar(c)"};
+            }
+
+            const double r = radius->to_numeric();
+            const double a = angle->to_numeric();
+
+            return make_complex(Complex{r * std::cos(a), r * std::sin(a)});
         });
 }
 

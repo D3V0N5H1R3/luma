@@ -86,6 +86,50 @@ struct Vec3 {
     return Vec2{x->to_numeric(), y->to_numeric()};
 }
 
+// Build a Math.Polar record value (type_name "Polar").  radius is the distance
+// from the origin and angle is in radians.
+[[nodiscard]] Value make_polar(double radius, double angle) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Polar";
+    rec->fields.emplace_back("radius", Value{radius});
+    rec->fields.emplace_back("angle", Value{angle});
+
+    return Value{std::move(rec)};
+}
+
+// Read a Math.Polar argument.  Throws when the value is not a polar-shaped
+// record.
+struct Polar {
+    double radius;
+    double angle;
+};
+
+[[nodiscard]] Polar read_polar(const Value& value, std::string_view func,
+                               const SourceLocation& loc) {
+    const auto invalid = [&] {
+        throw RuntimeError{std::string{func} + ": expected a Math.Polar record", loc,
+                           "build one with Math.to_polar(v)"};
+    };
+
+    if (!value.is_record()) {
+        invalid();
+    }
+
+    const auto& rec = value.as_record();
+    const Value* radius = rec->find_field("radius");
+    const Value* angle = rec->find_field("angle");
+
+    const auto numeric = [](const Value* v) {
+        return v != nullptr && (v->is_integer() || v->is_number());
+    };
+
+    if (!numeric(radius) || !numeric(angle)) {
+        invalid();
+    }
+
+    return Polar{radius->to_numeric(), angle->to_numeric()};
+}
+
 // Read a Math.Vector3 argument.  Throws when the value is not a 3D-vector-shaped
 // record.
 [[nodiscard]] Vec3 read_vec3(const Value& value, std::string_view func, const SourceLocation& loc) {
@@ -250,6 +294,21 @@ void register_math_vectors(const EnvPtr& env) {
             }
 
             return make_vec2(Vec2{a.x / len, a.y / len});
+        })
+        // ── Math.Polar ───────────────────────────────────────────────────────
+        // Total conversions (no error case): every Math.Vector2 has a polar
+        // form and every Math.Polar has a Cartesian one.
+        .func("to_polar", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto v = read_vec2(args[0], "Math.to_polar", loc);
+
+            return make_polar(std::hypot(v.x, v.y), std::atan2(v.y, v.x));
+        })
+        .func("from_polar", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto p = read_polar(args[0], "Math.from_polar", loc);
+
+            return make_vec2(Vec2{p.radius * std::cos(p.angle), p.radius * std::sin(p.angle)});
         })
         // ── Math.Vector3 ─────────────────────────────────────────────────────
         .func("vector3", 3)

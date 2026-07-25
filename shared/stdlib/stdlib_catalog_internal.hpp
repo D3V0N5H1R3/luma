@@ -223,6 +223,12 @@ namespace named {
     return ReturnTypeDesc::named("Complex");
 }
 
+// Math.to_polar() / Math.from_polar() convert between these polar-coordinate
+// records and Math.Vector2 (bare short name, like complex()).
+[[nodiscard]] inline ReturnTypeDesc polar() {
+    return ReturnTypeDesc::named("Polar");
+}
+
 // Math.vector2() / vec2_* and Math.vector3() / vec3_* take and return these
 // geometry records (bare short names, like complex()).
 [[nodiscard]] inline ReturnTypeDesc vector2() {
