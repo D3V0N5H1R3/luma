@@ -134,6 +134,9 @@ namespace {
             if (desc.named_type == "Socket.IpAddress") {
                 return TypeInfo::make_named(K::Choice, "Socket.IpAddress");
             }
+            if (desc.named_type == "Compression.Format") {
+                return TypeInfo::make_named(K::Choice, "Compression.Format");
+            }
             return TypeInfo::make_named(K::Record, desc.named_type);
 
         case RK::Unspecified:

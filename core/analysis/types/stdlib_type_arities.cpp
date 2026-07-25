@@ -860,6 +860,26 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choices.push_back(std::move(ch));
         }
 
+        // ── Compression.Format ──────────────────────────
+        // Selects the compression algorithm for the generic Compression.compress /
+        // Compression.decompress entry points, mirroring the Hash.Algorithm +
+        // Hash.digest dual of "several named algorithm functions plus one
+        // choice-dispatched generic function".  Unlike Hash.Algorithm, this has
+        // no string dual-form — Compression.Format is the sole runtime-dispatch
+        // path, while the per-algorithm functions (deflate/inflate, gzip/gunzip,
+        // encode_rle/decode_rle) stay primary.  Variant names must match
+        // require_format_variant() in core/runtime/stdlib/system/compression_module.cpp
+        // exactly (PascalCase).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Format");
+            ch->variants.push_back(ChoiceVariant{.name = "Deflate", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Gzip", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Rle", .fields = {}});
+
+            st.choice_map["Compression.Format"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
         // ── Socket.IpAddress ────────────────────────────
         // A parsed, validated IP literal, split into its two families so the
         // V4/V6 distinction is match-exhaustive and autocompleted (Socket.Address
