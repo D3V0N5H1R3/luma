@@ -127,6 +127,19 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("integer", "day"), field("integer", "hour"), field("integer", "minute"),
                    field("integer", "second"));
 
+        // Calendar-only date (no time-of-day) and wall-clock-only time (no date),
+        // the partial counterparts to the full DateTime.TimeParts breakdown.  A
+        // Date models a value that is genuinely only a calendar date (a birthday,
+        // a due date) and a Time only a wall-clock time (an alarm, opening hours),
+        // so neither carries the fields it should not.  Built by the validating
+        // constructors DateTime.date / DateTime.time (which guarantee a
+        // well-formed value), extracted from an instant by DateTime.date_of /
+        // DateTime.time_of, and recombined into a timestamp by DateTime.combine.
+        add_record(st, "DateTime.Date", field("integer", "year"), field("integer", "month"),
+                   field("integer", "day"));
+        add_record(st, "DateTime.Time", field("integer", "hour"), field("integer", "minute"),
+                   field("integer", "second"));
+
         add_record(st, "DateTime.Duration", field("integer", "days"), field("integer", "hours"),
                    field("integer", "minutes"), field("integer", "seconds"),
                    field("integer", "milliseconds"), field("boolean", "negative"));
@@ -403,6 +416,28 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choices.push_back(std::move(ch));
         }
 
+        // ── Process.Error ────────────────────────────────
+        // Opt-in typed launch error surfaced via result<Process.CommandOutput,
+        // Process.Error> on the run_command_typed slice of Process (leaving the
+        // string-error run_command untouched).  Where Process.ExitStatus
+        // classifies a command that *ran* (its exit code), Process.Error
+        // classifies why a launch *failed* — the two axes are otherwise conflated
+        // in the exit_code sign convention.  Variant names must match
+        // process_error_variant() in
+        // core/runtime/stdlib/system/process_module.cpp exactly (PascalCase).
+        // Distinguishes "git isn't installed" (NotFound) from "git ran and exited
+        // 1" (ExitStatus.Failed).  Mirrors FileSystem.IoError.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Error");
+            ch->variants.push_back(ChoiceVariant{.name = "NotFound", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "PermissionDenied", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "InvalidCommand", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "LaunchFailed", .fields = {}});
+
+            st.choice_map["Process.Error"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
         add_record(st, "Terminal.CursorPosition", field("integer", "row"),
                    field("integer", "column"));
 
@@ -535,6 +570,14 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choice_map["Random.Distribution"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
+
+        // Random.uuid_typed() / Random.parse_uuid() produce this typed wrapper over
+        // a validated canonical UUID string (8-4-4-4-12 hex), so a UUID is
+        // distinguishable from any other string and can be validated on the way in.
+        // The single `value` field holds the canonical text; Random.uuid_to_string
+        // reads it back out.  Mirrors Socket.IpAddress (a typed wrapper over an
+        // address that is otherwise a string).
+        add_record(st, "Random.Uuid", field("string", "value"));
 
         // ── Decimal.RoundingMode ────────────────────────
         // Variant names must match rounding_mode_from_variant() in
@@ -865,6 +908,31 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choices.push_back(std::move(ch));
         }
 
+        // ── Http.Error ──────────────────────────────────
+        // Opt-in typed transport error surfaced via result<Http.Response,
+        // Http.Error> on the get_typed slice of Http (leaving the string-error
+        // get/post/… untouched).  Variant names must match http_error_variant()
+        // in core/runtime/stdlib/io/http_module_request.cpp exactly (PascalCase).
+        // A closed, match-able set of transport-level failure categories, so a
+        // program can retry only on Timeout, fall back only on ConnectionFailed,
+        // or distinguish an SSRF-Blocked URL from a Malformed one — instead of
+        // brittle substring matching on an opaque error string.  Mirrors the
+        // FileSystem.IoError prototype, generalising the typed-error pattern to
+        // the highest-traffic stdlib failure surface.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Error");
+            ch->variants.push_back(ChoiceVariant{.name = "InvalidUrl", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "ConnectionFailed", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Timeout", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "TlsError", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "TooManyRedirects", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Blocked", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Malformed", .fields = {}});
+
+            st.choice_map["Http.Error"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
         // ── Hash.Algorithm ──────────────────────────────
         // Variant names must match algorithm_name_from_variant() in
         // core/runtime/stdlib/system/hash_digest.cpp exactly (PascalCase →
@@ -883,6 +951,13 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choice_map["Hash.Algorithm"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
+
+        // Hash.<algo>_typed produces this algorithm-tagged digest record, pairing
+        // the hex output with the Hash.Algorithm that produced it so a SHA-256 and
+        // an MD5 digest are no longer the same (bare-string) type and cannot be
+        // compared across algorithms by accident.  The `algorithm` field is the
+        // existing Hash.Algorithm choice; `hex` is the lowercase hex digest.
+        add_record(st, "Hash.Digest", field("Hash.Algorithm", "algorithm"), field("string", "hex"));
 
         // ── Compression.Format ──────────────────────────
         // Selects the compression algorithm for the generic Compression.compress /

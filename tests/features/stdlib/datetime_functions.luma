@@ -771,3 +771,38 @@ function void test_datetime_zoned() {
     assert(Result.is_failure(DateTime.zoned(0.0, 900)), "offset above +840 fails")
     assert(Result.is_failure(DateTime.zoned(0.0, -800)), "offset below -720 fails")
 }
+
+# ═══════════════════════════════════════════════════════════
+# DateTime.Date / DateTime.Time (partial calendar / wall-clock)
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_datetime_date_validates() {
+    assert(Result.is_success(DateTime.date(2024, 2, 29)), "a leap-year Feb 29 is valid")
+    assert(Result.is_failure(DateTime.date(2023, 2, 29)), "a non-leap Feb 29 is rejected")
+
+    DateTime.Date d = Result.unwrap(DateTime.date(2024, 6, 15))
+    assert(d.year == 2024 && d.month == 6 && d.day == 15, "the fields round-trip")
+}
+
+@test
+function void test_datetime_time_validates() {
+    assert(Result.is_success(DateTime.time(13, 30, 45)), "a valid wall-clock time is accepted")
+    assert(Result.is_failure(DateTime.time(24, 0, 0)), "hour 24 is rejected")
+    assert(Result.is_failure(DateTime.time(0, 60, 0)), "minute 60 is rejected")
+}
+
+@test
+function void test_datetime_combine_and_extract_roundtrip() {
+    DateTime.Date d = Result.unwrap(DateTime.date(2024, 6, 15))
+    DateTime.Time t = Result.unwrap(DateTime.time(9, 30, 0))
+
+    result<number> ts = DateTime.combine(d, t)
+    assert(Result.is_success(ts), "a valid date+time combines into an instant")
+
+    DateTime.Date back_date = Result.unwrap(DateTime.date_of(Result.unwrap(ts)))
+    DateTime.Time back_time = Result.unwrap(DateTime.time_of(Result.unwrap(ts)))
+
+    assert(back_date.month == 6 && back_date.day == 15, "date_of recovers the calendar date")
+    assert(back_time.hour == 9 && back_time.minute == 30, "time_of recovers the wall-clock time")
+}

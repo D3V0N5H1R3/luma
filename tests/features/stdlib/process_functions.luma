@@ -350,3 +350,61 @@ function void test_process_exit_status_failed_carries_code() {
 
     assert(exit_status_label(Process.exit_status(out)) == "failed:7", "labels with the code")
 }
+
+# ═══════════════════════════════════════════════════════════
+# Process.Error (opt-in typed launch errors via run_command_typed)
+# ═══════════════════════════════════════════════════════════
+
+# Exhaustive match over every Process.Error variant, doubling as a check that the
+# choice is fully registered, exhaustively matchable, and usable as a parameter
+# type annotation.
+function string process_error_label(Process.Error e) {
+    return match e {
+        case Process.Error.NotFound         { "not_found" }
+        case Process.Error.PermissionDenied { "permission_denied" }
+        case Process.Error.InvalidCommand   { "invalid_command" }
+        case Process.Error.LaunchFailed     { "launch_failed" }
+    }
+}
+
+@test
+function void test_process_run_command_typed_success() {
+    mutable Process.Command cmd = Process.command("sh", ["-c", "echo hi"])
+
+    if (Process.has_environment_variable("OS")) {
+        cmd = Process.command("cmd", ["/c", "echo", "hi"])
+    }
+
+    result<Process.CommandOutput, Process.Error> r = Process.run_command_typed(cmd)
+
+    assert(Result.is_success(r), "a runnable command succeeds")
+    assert(Result.unwrap(r).exit_code == 0, "echo exits cleanly")
+}
+
+@test
+function void test_process_run_command_typed_not_found() {
+    Process.Command cmd = Process.command("_luma_nonexistent_xyz_123", [])
+    result<Process.CommandOutput, Process.Error> r = Process.run_command_typed(cmd)
+
+    assert(Result.is_failure(r), "a missing program fails")
+
+    string label = match r {
+        success(_o) { "unexpected_success" }
+        failure(e)  { process_error_label(e) }
+    }
+
+    assert(label == "not_found", "a missing program classifies as NotFound")
+}
+
+@test
+function void test_process_run_command_typed_empty_program_is_invalid() {
+    Process.Command cmd = Process.command("", ["x"])
+    result<Process.CommandOutput, Process.Error> r = Process.run_command_typed(cmd)
+
+    string label = match r {
+        success(_o) { "unexpected_success" }
+        failure(e)  { process_error_label(e) }
+    }
+
+    assert(label == "invalid_command", "an empty program classifies as InvalidCommand")
+}

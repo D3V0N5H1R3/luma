@@ -214,12 +214,16 @@ void register_random_functions(std::vector<FunctionSpec>& specs, const ModuleBui
                         {named::random_distribution()}),
                    m.fn("shuffle", 1, "(arr: array<T>)", R::array_any(), {p.any}),
                    m.fn("generate_uuid", 0, "()", R::string_type(), {}),
+                   m.fn("parse_uuid", 1, "(uuid: string)", R::result(named::uuid()), {p.string}),
                    m.fn("secure_boolean", 0, "()", R::result_boolean(), {}),
                    m.fn("secure_integer", 2, "(min: integer, max: integer)", R::result_integer(),
                         {p.integer, p.integer}),
                    m.fn("secure_number", 0, "()", R::result_number(), {}),
                    m.fn("secure_string", 1, "(length: integer)", R::result_string(), {p.integer}),
                    m.fn("secure_uuid", 0, "()", R::result_string(), {}),
+                   m.fn("uuid_typed", 0, "()", named::uuid(), {}),
+                   m.fn("uuid_to_string", 1, "(uuid: Random.Uuid)", R::string_type(),
+                        {named::uuid()}),
                });
 }
 

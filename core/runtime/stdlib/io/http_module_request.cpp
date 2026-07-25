@@ -33,6 +33,28 @@ namespace luma {
 
 namespace {
 
+// Transport-level failure categories, mapped 1:1 to the Http.Error choice
+// variants declared in core/analysis/types/stdlib_type_arities.cpp.  Threaded
+// through the failure sites below so the typed API classifies a failure at its
+// source rather than by brittle substring matching on the message string.
+// (TooManyRedirects is part of the choice for completeness; the module does not
+// follow redirects today, so it is not currently produced.)
+enum class HttpErrorKind {
+    InvalidUrl,
+    ConnectionFailed,
+    Timeout,
+    TlsError,
+    Blocked,
+    Malformed,
+};
+
+// A classified transport failure: the typed category plus the human-readable
+// message the string-error APIs surface.
+struct HttpFailure {
+    HttpErrorKind kind{HttpErrorKind::ConnectionFailed};
+    std::string message{};
+};
+
 // RAII owner for a getaddrinfo() result list.
 using AddrInfoPtr = std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)>;
 
@@ -97,27 +119,29 @@ extract_headers(const DictionaryValue& dict, const SourceLocation& loc) {
 namespace {
 
 // Validate scheme, host, request-line, and header fields before any network
-// activity. Returns an error message, or an empty string when the request is
+// activity. Returns a classified failure, or std::nullopt when the request is
 // safe to send.
-[[nodiscard]] std::string
+[[nodiscard]] std::optional<HttpFailure>
 validate_http_request(const std::string& method, const ParsedUrl& parsed, bool is_https,
                       const std::vector<std::pair<std::string, std::string>>& extra_headers) {
     if (is_https) {
 #if !defined(LUMA_HAS_TLS) || !LUMA_HAS_TLS
-        return "Http: HTTPS requires TLS support (build with LUMA_FEATURE_TLS=ON)";
+        return HttpFailure{HttpErrorKind::TlsError,
+                           "Http: HTTPS requires TLS support (build with LUMA_FEATURE_TLS=ON)"};
 #endif
     } else if (parsed.scheme != "http") {
-        return std::format("Http: unsupported scheme '{}'", parsed.scheme);
+        return HttpFailure{HttpErrorKind::InvalidUrl,
+                           std::format("Http: unsupported scheme '{}'", parsed.scheme)};
     }
 
     if (parsed.host.empty()) {
-        return "Http: empty host";
+        return HttpFailure{HttpErrorKind::InvalidUrl, "Http: empty host"};
     }
 
     const auto hostname_err = validate_hostname_length(parsed.host);
 
     if (!hostname_err.empty()) {
-        return hostname_err;
+        return HttpFailure{HttpErrorKind::InvalidUrl, hostname_err};
     }
 
     // Reject method, host, path, and query containing CR or LF to prevent
@@ -126,11 +150,17 @@ validate_http_request(const std::string& method, const ParsedUrl& parsed, bool i
         validate_request_line_security(method, parsed.host, parsed.path, parsed.query);
 
     if (!crlf_err.empty()) {
-        return crlf_err;
+        return HttpFailure{HttpErrorKind::Blocked, crlf_err};
     }
 
     // Validate headers for CRLF injection before writing them.
-    return validate_headers_security(extra_headers);
+    const auto header_err = validate_headers_security(extra_headers);
+
+    if (!header_err.empty()) {
+        return HttpFailure{HttpErrorKind::Blocked, header_err};
+    }
+
+    return std::nullopt;
 }
 
 // Build the raw HTTP/1.1 request string (status line, Host, standard headers,
@@ -209,7 +239,10 @@ build_http_request_string(const std::string& method, const ParsedUrl& parsed,
 // proxy, which is commonly an internal host the user has explicitly trusted via
 // the environment.
 [[nodiscard]] SocketHandle connect_tcp_socket(const std::string& host, int port, int timeout_ms,
-                                              bool ssrf_check, std::string& error_out) {
+                                              bool ssrf_check, std::string& error_out,
+                                              HttpErrorKind& kind_out) {
+    kind_out = HttpErrorKind::ConnectionFailed;
+
     const auto info = resolve_host(host, port);
 
     if (!info) {
@@ -223,6 +256,7 @@ build_http_request_string(const std::string& method, const ParsedUrl& parsed,
 
         if (!ssrf_err.empty()) {
             error_out = ssrf_err;
+            kind_out = HttpErrorKind::Blocked;
             return invalid_socket_handle;
         }
     }
@@ -238,9 +272,13 @@ build_http_request_string(const std::string& method, const ParsedUrl& parsed,
 
     SocketGuard guard{sock};
 
+    bool timed_out = false;
+
     if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
-                                  timeout_ms)) {
-        error_out = std::format("Http: connection to {}:{} failed", host, port);
+                                  timeout_ms, &timed_out)) {
+        error_out = std::format("Http: connection to {}:{} {}", host, port,
+                                timed_out ? "timed out" : "failed");
+        kind_out = timed_out ? HttpErrorKind::Timeout : HttpErrorKind::ConnectionFailed;
         return invalid_socket_handle;
     }
 
@@ -253,8 +291,9 @@ build_http_request_string(const std::string& method, const ParsedUrl& parsed,
 
 // Connect directly to the request target, with SSRF validation.
 [[nodiscard]] SocketHandle connect_http_socket(const ParsedUrl& parsed, int timeout_ms,
-                                               std::string& error_out) {
-    return connect_tcp_socket(parsed.host, parsed.port, timeout_ms, /*ssrf_check=*/true, error_out);
+                                               std::string& error_out, HttpErrorKind& kind_out) {
+    return connect_tcp_socket(parsed.host, parsed.port, timeout_ms, /*ssrf_check=*/true, error_out,
+                              kind_out);
 }
 
 // Best-effort SSRF check on the request target when the request will be sent
@@ -386,13 +425,14 @@ struct RawHttpOutcome {
     bool ok{false};
     HttpResponse resp{};
     std::string error{};
+    HttpErrorKind kind{HttpErrorKind::ConnectionFailed};
 
-    [[nodiscard]] static RawHttpOutcome fail(std::string message) {
-        return {.ok = false, .resp = {}, .error = std::move(message)};
+    [[nodiscard]] static RawHttpOutcome fail(HttpErrorKind kind, std::string message) {
+        return {.ok = false, .resp = {}, .error = std::move(message), .kind = kind};
     }
 
     [[nodiscard]] static RawHttpOutcome success(HttpResponse response) {
-        return {.ok = true, .resp = std::move(response), .error = {}};
+        return {.ok = true, .resp = std::move(response), .error = {}, .kind = {}};
     }
 };
 
@@ -404,10 +444,9 @@ perform_http(const std::string& method, const std::string& url, const std::strin
 
     const bool is_https = (parsed.scheme == "https");
 
-    const auto validation_err = validate_http_request(method, parsed, is_https, extra_headers);
-
-    if (!validation_err.empty()) {
-        return RawHttpOutcome::fail(validation_err);
+    if (const auto validation_err =
+            validate_http_request(method, parsed, is_https, extra_headers)) {
+        return RawHttpOutcome::fail(validation_err->kind, validation_err->message);
     }
 
     const auto proxy = select_proxy(parsed.scheme, parsed.host);
@@ -415,6 +454,7 @@ perform_http(const std::string& method, const std::string& url, const std::strin
     // Establish connection and send/receive.
     std::unique_ptr<Connection> conn;
     std::string conn_err;
+    HttpErrorKind conn_kind{HttpErrorKind::ConnectionFailed};
     std::string request;
 
     if (proxy.has_value()) {
@@ -424,17 +464,17 @@ perform_http(const std::string& method, const std::string& url, const std::strin
         const auto target_ssrf_err = proxy_target_ssrf_error(parsed.host, parsed.port);
 
         if (!target_ssrf_err.empty()) {
-            return RawHttpOutcome::fail(target_ssrf_err);
+            return RawHttpOutcome::fail(HttpErrorKind::Blocked, target_ssrf_err);
         }
 
         // Connect to the proxy. The private-address SSRF guard is intentionally
         // not applied here: proxies are frequently internal hosts the user has
         // explicitly opted into via the environment.
         const auto sock = connect_tcp_socket(proxy->host, proxy->port, timeout_ms,
-                                             /*ssrf_check=*/false, conn_err);
+                                             /*ssrf_check=*/false, conn_err, conn_kind);
 
         if (sock == invalid_socket_handle) {
-            return RawHttpOutcome::fail(conn_err);
+            return RawHttpOutcome::fail(conn_kind, conn_err);
         }
 
 #if defined(LUMA_HAS_TLS) && LUMA_HAS_TLS
@@ -446,7 +486,8 @@ perform_http(const std::string& method, const std::string& url, const std::strin
                 proxy_connect_tunnel(sock, parsed.host, parsed.port, proxy->auth);
 
             if (!tunnel_err.empty()) {
-                return RawHttpOutcome::fail(std::format("Http: {}", tunnel_err));
+                return RawHttpOutcome::fail(HttpErrorKind::ConnectionFailed,
+                                            std::format("Http: {}", tunnel_err));
             }
 
             auto tls = std::make_unique<TlsConnection>();
@@ -456,7 +497,7 @@ perform_http(const std::string& method, const std::string& url, const std::strin
             const auto err = tls->handshake(sock, parsed.host);
 
             if (!err.empty()) {
-                return RawHttpOutcome::fail(std::format("Http: {}", err));
+                return RawHttpOutcome::fail(HttpErrorKind::TlsError, std::format("Http: {}", err));
             }
 
             conn = std::move(tls);
@@ -482,10 +523,10 @@ perform_http(const std::string& method, const std::string& url, const std::strin
 
 #if defined(LUMA_HAS_TLS) && LUMA_HAS_TLS
         if (is_https) {
-            const auto sock = connect_http_socket(parsed, timeout_ms, conn_err);
+            const auto sock = connect_http_socket(parsed, timeout_ms, conn_err, conn_kind);
 
             if (sock == invalid_socket_handle) {
-                return RawHttpOutcome::fail(conn_err);
+                return RawHttpOutcome::fail(conn_kind, conn_err);
             }
 
             // Guard the connected socket until ownership transfers to the TLS
@@ -501,17 +542,17 @@ perform_http(const std::string& method, const std::string& url, const std::strin
             const auto err = tls->handshake(sock, parsed.host);
 
             if (!err.empty()) {
-                return RawHttpOutcome::fail(std::format("Http: {}", err));
+                return RawHttpOutcome::fail(HttpErrorKind::TlsError, std::format("Http: {}", err));
             }
 
             conn = std::move(tls);
         } else
 #endif // LUMA_HAS_TLS
         {
-            const auto sock = connect_http_socket(parsed, timeout_ms, conn_err);
+            const auto sock = connect_http_socket(parsed, timeout_ms, conn_err, conn_kind);
 
             if (sock == invalid_socket_handle) {
-                return RawHttpOutcome::fail(conn_err);
+                return RawHttpOutcome::fail(conn_kind, conn_err);
             }
 
             conn = std::make_unique<PlainConnection>(sock);
@@ -520,14 +561,15 @@ perform_http(const std::string& method, const std::string& url, const std::strin
 
     // Send request.
     if (!conn->send_data(request)) {
-        return RawHttpOutcome::fail("Http: failed to send request");
+        return RawHttpOutcome::fail(HttpErrorKind::ConnectionFailed,
+                                    "Http: failed to send request");
     }
 
     // Read response.
     const auto raw_response = read_http_response(*conn);
 
     if (raw_response.empty()) {
-        return RawHttpOutcome::fail("Http: empty response");
+        return RawHttpOutcome::fail(HttpErrorKind::Malformed, "Http: empty response");
     }
 
     return RawHttpOutcome::success(parse_response(raw_response));
@@ -546,6 +588,58 @@ Value do_http_request(const std::string& method, const std::string& url, const s
 
     if (!outcome.ok) {
         return make_failure_value(outcome.error);
+    }
+
+    return build_http_response_record(outcome.resp);
+}
+
+namespace {
+
+// Maps a classified transport failure to its Http.Error choice variant name.
+// The names must match the Http.Error ChoiceDeclaration in
+// core/analysis/types/stdlib_type_arities.cpp exactly (PascalCase).
+[[nodiscard]] std::string_view http_error_variant(HttpErrorKind kind) {
+    switch (kind) {
+        case HttpErrorKind::InvalidUrl:
+            return "InvalidUrl";
+        case HttpErrorKind::ConnectionFailed:
+            return "ConnectionFailed";
+        case HttpErrorKind::Timeout:
+            return "Timeout";
+        case HttpErrorKind::TlsError:
+            return "TlsError";
+        case HttpErrorKind::Blocked:
+            return "Blocked";
+        case HttpErrorKind::Malformed:
+            return "Malformed";
+    }
+
+    return "ConnectionFailed";
+}
+
+// Wraps an Http.Error variant name in a ChoiceValue.  The runtime short name
+// "Error" matches how the type checker registers the choice from
+// stdlib_type_arities.cpp (mirroring make_status_class_choice); the qualified
+// "Http.Error" is resolved separately by the type checker.
+[[nodiscard]] Value make_http_error_choice(std::string_view variant) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Error";
+    cv->variant = std::string{variant};
+
+    return Value{std::move(cv)};
+}
+
+} // anonymous namespace
+
+Value do_http_request_typed(const std::string& method, const std::string& url,
+                            const std::string& body,
+                            const std::vector<std::pair<std::string, std::string>>& extra_headers,
+                            int timeout_ms, [[maybe_unused]] const SourceLocation& loc) {
+    auto outcome = perform_http(method, url, body, extra_headers, timeout_ms);
+
+    if (!outcome.ok) {
+        return Value{
+            ResultValue::failure(make_http_error_choice(http_error_variant(outcome.kind)))};
     }
 
     return build_http_response_record(outcome.resp);

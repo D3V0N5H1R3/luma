@@ -230,6 +230,41 @@ validate_datetime_fields(std::int64_t raw_year, std::int64_t raw_month, std::int
     return std::nullopt;
 }
 
+// ─── DateTime.Date / DateTime.Time record support ────────────────────────────
+// Partial calendar-only and wall-clock-only records, the counterparts to the
+// full TimeParts breakdown.  Type names "Date"/"Time" match how the type checker
+// registers the records from stdlib_type_arities.cpp; field names must match too.
+
+[[nodiscard]] Value make_date_record(int year, int month, int day) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Date";
+    rec->fields.emplace_back("year", Value{static_cast<std::int64_t>(year)});
+    rec->fields.emplace_back("month", Value{static_cast<std::int64_t>(month)});
+    rec->fields.emplace_back("day", Value{static_cast<std::int64_t>(day)});
+
+    return Value{std::move(rec)};
+}
+
+[[nodiscard]] Value make_time_record(int hour, int minute, int second) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Time";
+    rec->fields.emplace_back("hour", Value{static_cast<std::int64_t>(hour)});
+    rec->fields.emplace_back("minute", Value{static_cast<std::int64_t>(minute)});
+    rec->fields.emplace_back("second", Value{static_cast<std::int64_t>(second)});
+
+    return Value{std::move(rec)};
+}
+
+// Reads an integer field from a Date/Time record; missing/non-integer fields
+// default to a sentinel that fails the subsequent range validation.  The type
+// checker guarantees the shape for well-typed programs, so this only guards
+// raw/hand-built values.
+[[nodiscard]] std::int64_t read_record_int(const RecordValue& rec, std::string_view name) {
+    const Value* v = rec.find_field(name);
+    return (v != nullptr && v->is_integer()) ? v->as_integer()
+                                             : std::numeric_limits<std::int64_t>::min();
+}
+
 // ─── DateTime.Weekday choice support ─────────────────────────────────────────
 // Variant names in ISO-8601 order: index 0 = Monday (1) … index 6 = Sunday (7).
 // Must match the DateTime.Weekday choice declared in stdlib_type_arities.cpp.
@@ -450,6 +485,111 @@ void register_datetime_ns(const EnvPtr& env) {
             rec->fields.emplace_back("second", Value{static_cast<std::int64_t>(tm->tm_sec)});
 
             return make_success_value(Value{std::move(rec)});
+        })
+        // ── DateTime.Date / DateTime.Time (partial calendar/wall-clock) ──────
+        // Validating constructors and extractors for the calendar-only Date and
+        // wall-clock-only Time records, plus combine() to fuse them back into an
+        // instant.  Date/Time are genuinely partial — a Date has no time-of-day
+        // and a Time has no date — so they complement, rather than re-slice, the
+        // full DateTime.TimeParts breakdown (which carries all six components).
+        .func("date", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto year = expect_integer(args[0], "DateTime.date", loc);
+            const auto month = expect_integer(args[1], "DateTime.date", loc);
+            const auto day = expect_integer(args[2], "DateTime.date", loc);
+
+            // Reuse the shared calendar validator with a zero time-of-day so a
+            // Date is always a real calendar day (leap years, month lengths).
+            DatetimeFields fields{};
+
+            if (auto err =
+                    validate_datetime_fields(year, month, day, 0, 0, 0, "DateTime.date", fields)) {
+                return *std::move(err);
+            }
+
+            return make_success_value(make_date_record(fields.year, fields.month, fields.day));
+        })
+        .func("time", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto hour = expect_integer(args[0], "DateTime.time", loc);
+            const auto minute = expect_integer(args[1], "DateTime.time", loc);
+            const auto second = expect_integer(args[2], "DateTime.time", loc);
+
+            if (hour < 0 || hour > 23) {
+                return make_failure_value(
+                    error_msg("DateTime", "time", "hour out of range (0-23)"));
+            }
+            if (minute < 0 || minute > 59) {
+                return make_failure_value(
+                    error_msg("DateTime", "time", "minute out of range (0-59)"));
+            }
+            if (second < 0 || second > 59) {
+                return make_failure_value(
+                    error_msg("DateTime", "time", "second out of range (0-59)"));
+            }
+
+            return make_success_value(make_time_record(
+                static_cast<int>(hour), static_cast<int>(minute), static_cast<int>(second)));
+        })
+        .func("date_of", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            const auto tm = to_tm(args[0].to_numeric());
+
+            if (!tm) {
+                return make_failure_value(
+                    error_msg("DateTime", "date_of", k_timestamp_range_error));
+            }
+
+            return make_success_value(
+                make_date_record(tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday));
+        })
+        .func("time_of", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            const auto tm = to_tm(args[0].to_numeric());
+
+            if (!tm) {
+                return make_failure_value(
+                    error_msg("DateTime", "time_of", k_timestamp_range_error));
+            }
+
+            return make_success_value(make_time_record(tm->tm_hour, tm->tm_min, tm->tm_sec));
+        })
+        .func("combine", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_record() || args[0].as_record()->type_name != "Date") {
+                throw RuntimeError{
+                    "DateTime.combine: expected a DateTime.Date as the first argument", loc,
+                    "build one with DateTime.date(year, month, day)"};
+            }
+            if (!args[1].is_record() || args[1].as_record()->type_name != "Time") {
+                throw RuntimeError{
+                    "DateTime.combine: expected a DateTime.Time as the second argument", loc,
+                    "build one with DateTime.time(hour, minute, second)"};
+            }
+
+            const auto& date_rec = *args[0].as_record();
+            const auto& time_rec = *args[1].as_record();
+
+            // Re-validate the six components (the records may have been built by
+            // hand) and fold them into a UTC instant.
+            DatetimeFields fields{};
+
+            if (auto err = validate_datetime_fields(
+                    read_record_int(date_rec, "year"), read_record_int(date_rec, "month"),
+                    read_record_int(date_rec, "day"), read_record_int(time_rec, "hour"),
+                    read_record_int(time_rec, "minute"), read_record_int(time_rec, "second"),
+                    "DateTime.combine", fields)) {
+                return *std::move(err);
+            }
+
+            auto tm = fields_to_tm(fields);
+            const auto unix_time = tm_to_unix(tm);
+
+            if (!unix_time) {
+                return make_failure_value(error_msg("DateTime", "combine", "invalid date/time"));
+            }
+
+            return make_success_value(Value{*unix_time});
         })
         .func("to_iso_string", 1)
         .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {

@@ -1,6 +1,7 @@
 ﻿#include "runtime/stdlib/system/process_module.hpp"
 
 #include <cctype>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -41,6 +42,39 @@ std::vector<std::string> program_args;
     }
 
     return Value{std::move(cv)};
+}
+
+// Wraps a Process.Error variant name in a ChoiceValue.  The runtime short name
+// "Error" matches how the type checker registers the choice from
+// stdlib_type_arities.cpp; the four variant names must match that declaration.
+[[nodiscard]] Value make_process_error_choice(std::string_view variant) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Error";
+    cv->variant = std::string{variant};
+
+    return Value{std::move(cv)};
+}
+
+// Maps a POSIX-style launch errno (see CapturedOutput::launch_errno) to its
+// Process.Error variant name.  ENOENT → NotFound (program not found), EACCES /
+// EPERM → PermissionDenied, ENOEXEC → InvalidCommand (a file that is not a valid
+// executable); anything else — including a generic spawn failure — is a
+// LaunchFailed.  EINVAL is deliberately NOT mapped to InvalidCommand: it is the
+// generic sentinel the Windows layer (launch_errno_from_win32) returns for an
+// unclassified CreateProcess failure, so it must reach the LaunchFailed default
+// rather than falsely claim the target is not an executable.
+[[nodiscard]] std::string_view process_error_variant(int launch_errno) {
+    switch (launch_errno) {
+        case ENOENT:
+            return "NotFound";
+        case EACCES:
+        case EPERM:
+            return "PermissionDenied";
+        case ENOEXEC:
+            return "InvalidCommand";
+        default:
+            return "LaunchFailed";
+    }
 }
 
 } // namespace
@@ -339,6 +373,77 @@ void register_process_ns(const EnvPtr& env) {
                 return make_success_value(Value{std::move(output)});
             } catch (const RuntimeError& e) {
                 return failure_from_exception(e);
+            }
+        })
+        // Process.run_command_typed(command) -> result<Process.CommandOutput, Process.Error>
+        // Opt-in typed-error variant of run_command: a *launch* failure is surfaced
+        // as a Process.Error choice (NotFound / PermissionDenied / InvalidCommand /
+        // LaunchFailed) rather than an opaque string, so a program can distinguish
+        // "the program isn't installed" from "it ran and exited non-zero" (the latter
+        // is still reported as a successful result carrying the CommandOutput, whose
+        // exit_code Process.exit_status classifies).  Mirrors FileSystem.read_file_typed;
+        // the string-error run_command is left untouched.
+        .func("run_command_typed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_record()) {
+                throw RuntimeError{"Process.run_command_typed: expected a Process.Command record",
+                                   loc, "build one with Process.command(program, arguments)"};
+            }
+
+            const auto& rec = args[0].as_record();
+            const Value* program = rec->find_field("program");
+            const Value* arguments = rec->find_field("arguments");
+
+            if (program == nullptr || !program->is_string() || arguments == nullptr ||
+                !arguments->is_array()) {
+                throw RuntimeError{"Process.run_command_typed: expected a Process.Command record",
+                                   loc, "build one with Process.command(program, arguments)"};
+            }
+
+            // An empty program name or a non-string argument is a malformed
+            // command — a typed InvalidCommand rather than an attempted launch.
+            if (program->as_string().empty()) {
+                return Value{ResultValue::failure(make_process_error_choice("InvalidCommand"))};
+            }
+
+            std::vector<std::string> argv;
+            argv.reserve(arguments->as_array()->elements->size() + 1);
+            argv.push_back(program->as_string());
+
+            for (const auto& element : *arguments->as_array()->elements) {
+                if (!element.is_string()) {
+                    return Value{ResultValue::failure(make_process_error_choice("InvalidCommand"))};
+                }
+
+                argv.push_back(element.as_string());
+            }
+
+            try {
+                auto captured = platform_process::execute_argv_captured(std::move(argv));
+
+                if (captured.exit_code < 0) {
+                    // A negative exit code means the process never ran; classify
+                    // the launch failure from the captured errno.
+                    return Value{ResultValue::failure(
+                        make_process_error_choice(process_error_variant(captured.launch_errno)))};
+                }
+
+                auto output = std::make_shared<RecordValue>();
+                output->type_name = "CommandOutput";
+                output->fields.emplace_back("exit_code",
+                                            Value{static_cast<std::int64_t>(captured.exit_code)});
+                output->fields.emplace_back("standard_output",
+                                            Value{std::move(captured.standard_output)});
+                output->fields.emplace_back("standard_error",
+                                            Value{std::move(captured.standard_error)});
+                output->fields.emplace_back("success", Value{captured.exit_code == 0});
+
+                return make_success_value(Value{std::move(output)});
+            } catch (const RuntimeError&) {
+                // A thrown RuntimeError here is a launch-level failure (e.g. a
+                // mismatched-quote tokenization error never happens on the argv
+                // path); report it as a generic typed LaunchFailed.
+                return Value{ResultValue::failure(make_process_error_choice("LaunchFailed"))};
             }
         })
         .func("get_process_id", 0)

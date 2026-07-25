@@ -889,8 +889,81 @@ static void test_datetime_zoned_to_parts() {
     ASSERT_EQ(rec->find_field("minute")->as_integer(), static_cast<std::int64_t>(0));
 }
 
+// ─── DateTime.Date / DateTime.Time (partial calendar/wall-clock records) ──────
+
+static void test_datetime_date_validates_and_builds() {
+    const auto v = eval("DateTime.date(2024, 2, 29)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->type_name, "Date");
+    ASSERT_EQ(rec->find_field("year")->as_integer(), static_cast<std::int64_t>(2024));
+    ASSERT_EQ(rec->find_field("month")->as_integer(), static_cast<std::int64_t>(2));
+    ASSERT_EQ(rec->find_field("day")->as_integer(), static_cast<std::int64_t>(29));
+}
+
+static void test_datetime_date_rejects_invalid() {
+    // Feb 29 in a non-leap year, month 0, and day 0 are all rejected.
+    ASSERT_EVAL_FAILURE("DateTime.date(2023, 2, 29)");
+    ASSERT_EVAL_FAILURE("DateTime.date(2024, 0, 1)");
+    ASSERT_EVAL_FAILURE("DateTime.date(2024, 1, 0)");
+}
+
+static void test_datetime_time_validates_and_builds() {
+    const auto v = eval("DateTime.time(13, 30, 45)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->type_name, "Time");
+    ASSERT_EQ(rec->find_field("hour")->as_integer(), static_cast<std::int64_t>(13));
+    ASSERT_EQ(rec->find_field("minute")->as_integer(), static_cast<std::int64_t>(30));
+    ASSERT_EQ(rec->find_field("second")->as_integer(), static_cast<std::int64_t>(45));
+}
+
+static void test_datetime_time_rejects_invalid() {
+    ASSERT_EVAL_FAILURE("DateTime.time(24, 0, 0)");
+    ASSERT_EVAL_FAILURE("DateTime.time(0, 60, 0)");
+    ASSERT_EVAL_FAILURE("DateTime.time(0, 0, 60)");
+}
+
+static void test_datetime_date_of_time_of_extract() {
+    // 1970-01-01T00:01:05 UTC = 65 seconds after the epoch.
+    const auto date = eval("DateTime.date_of(65.0)");
+    ASSERT_RESULT_SUCCESS(date);
+    ASSERT_EQ(date.as_result()->owned_inner->as_record()->find_field("year")->as_integer(),
+              static_cast<std::int64_t>(1970));
+    ASSERT_EQ(date.as_result()->owned_inner->as_record()->find_field("day")->as_integer(),
+              static_cast<std::int64_t>(1));
+
+    const auto time = eval("DateTime.time_of(65.0)");
+    ASSERT_RESULT_SUCCESS(time);
+    ASSERT_EQ(time.as_result()->owned_inner->as_record()->find_field("minute")->as_integer(),
+              static_cast<std::int64_t>(1));
+    ASSERT_EQ(time.as_result()->owned_inner->as_record()->find_field("second")->as_integer(),
+              static_cast<std::int64_t>(5));
+}
+
+static void test_datetime_combine_roundtrips_with_date_of() {
+    // combine(date_of(t), time_of(t)) == t for an in-range instant.
+    const auto v = eval("DateTime.combine(Result.unwrap(DateTime.date(2024, 6, 15)), "
+                        "Result.unwrap(DateTime.time(9, 30, 0)))");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto ts = v.as_result()->owned_inner->to_numeric();
+    const auto day = eval("DateTime.date_of(" + std::to_string(ts) + ")");
+    ASSERT_EQ(day.as_result()->owned_inner->as_record()->find_field("month")->as_integer(),
+              static_cast<std::int64_t>(6));
+    ASSERT_EQ(day.as_result()->owned_inner->as_record()->find_field("day")->as_integer(),
+              static_cast<std::int64_t>(15));
+}
+
+static void test_datetime_combine_rejects_foreign_records() {
+    // combine requires a Date then a Time, in that order.
+    ASSERT_TRUE(luma::test::eval_throws("DateTime.combine(Result.unwrap(DateTime.time(1, 2, 3)), "
+                                        "Result.unwrap(DateTime.date(2024, 1, 1)))"));
+}
+
 int main() {
-    RUN(test_datetime_add_days);
     RUN(test_datetime_add_hours);
     RUN(test_datetime_add_months);
     RUN(test_datetime_add_seconds);
@@ -985,5 +1058,12 @@ int main() {
     RUN(test_datetime_zoned_valid_and_iso);
     RUN(test_datetime_zoned_invalid_offset_fails);
     RUN(test_datetime_zoned_to_parts);
+    RUN(test_datetime_date_validates_and_builds);
+    RUN(test_datetime_date_rejects_invalid);
+    RUN(test_datetime_time_validates_and_builds);
+    RUN(test_datetime_time_rejects_invalid);
+    RUN(test_datetime_date_of_time_of_extract);
+    RUN(test_datetime_combine_roundtrips_with_date_of);
+    RUN(test_datetime_combine_rejects_foreign_records);
     return SUMMARY();
 }

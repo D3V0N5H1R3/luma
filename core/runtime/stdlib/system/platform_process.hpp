@@ -38,6 +38,14 @@ struct CapturedOutput {
     int exit_code{-1};
     std::string standard_output{};
     std::string standard_error{};
+
+    // POSIX-style errno describing a *launch* failure (the program never ran),
+    // or 0 when the process launched (regardless of its exit code).  On Windows
+    // the platform layer maps GetLastError() onto the equivalent errno values
+    // (ENOENT, EACCES, …).  Lets Process.run_command_typed classify a launch
+    // failure (NotFound / PermissionDenied / …) rather than only reporting the
+    // negative exit_code.  Only execute_argv_captured populates this today.
+    int launch_errno{0};
 };
 
 // Execute a command, capturing stdout and stderr separately.  Like

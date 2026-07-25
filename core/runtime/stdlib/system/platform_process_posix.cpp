@@ -266,7 +266,12 @@ CapturedOutput execute_argv_captured(std::vector<std::string> argv_strings) {
         close(err_fd[0]);
         waitpid(pid, nullptr, 0);
 
-        return {};
+        // The child's execvp failed; surface the captured errno so the caller
+        // can classify the launch failure (ENOENT → NotFound, EACCES → …).
+        CapturedOutput launch_failure{};
+        launch_failure.launch_errno = child_exec_errno;
+
+        return launch_failure;
     }
 
     CapturedOutput captured{};
