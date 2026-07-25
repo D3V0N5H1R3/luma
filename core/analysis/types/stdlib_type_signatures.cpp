@@ -113,6 +113,9 @@ namespace {
             if (desc.named_type == "Http.StatusClass") {
                 return TypeInfo::make_named(K::Choice, "Http.StatusClass");
             }
+            if (desc.named_type == "Process.ExitStatus") {
+                return TypeInfo::make_named(K::Choice, "Process.ExitStatus");
+            }
             if (desc.named_type == "Log.Output") {
                 return TypeInfo::make_named(K::Choice, "Log.Output");
             }

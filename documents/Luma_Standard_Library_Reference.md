@@ -1950,6 +1950,7 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 | `Process.current_directory()`                   | `()`               | `result<string>`                | Current working directory                                                |
 | `Process.execute(cmd)`                          | `(string)`         | `result<Process.CommandOutput>` | Execute shell command, capturing stdout **and** stderr separately        |
 | `Process.exit(code)`                            | `(integer)`        | `none`                          | Terminate the program with exit code                                     |
+| `Process.exit_status(output)`                   | `(Process.CommandOutput)` | `Process.ExitStatus`     | Classify a `CommandOutput`'s `exit_code` sign convention                 |
 | `Process.get_all_environment_variables()`       | `()`               | `dictionary<string>`            | All environment variables as a dictionary                                |
 | `Process.command(program, arguments)`           | `(string, array<string>)` | `Process.Command`        | Build a shell-free command (explicit program + argument vector)          |
 | `Process.run_command(cmd)`                      | `(Process.Command)` | `result<Process.CommandOutput>` | Run a `Process.Command` directly (no shell); metacharacters are inert    |
@@ -1984,6 +1985,21 @@ success(out) {
         print(out.standard_output)
     } else {
         print("git failed (${out.exit_code}): ${out.standard_error}")
+    }
+}
+failure(_e) { print("could not launch command") }
+}
+```
+
+`Process.ExitStatus` is a choice type — `Success`, `Failed(code: integer)`, `LaunchFailed` — that turns a `CommandOutput`'s `exit_code` sign convention into an exhaustive, match-able type, mirroring `Http.StatusClass` and `Sign` above: `0` classifies as `Success`, a positive code classifies as `Failed` (carrying the code), and a negative code classifies as `LaunchFailed` (the process never ran — see the launch-failure note under `Process.Command`). `Process.exit_status(output)` is a pure classifier over an already-captured `Process.CommandOutput` or `Process.ProcessResult`-shaped record; it does not launch or capture anything itself.
+
+```luma
+match Process.execute("git status") {
+success(out) {
+    match Process.exit_status(out) {
+    case Process.ExitStatus.Success        { print(out.standard_output) }
+    case Process.ExitStatus.Failed(code)   { print("git exited with ${code}: ${out.standard_error}") }
+    case Process.ExitStatus.LaunchFailed   { print("git could not be launched") }
     }
 }
 failure(_e) { print("could not launch command") }
