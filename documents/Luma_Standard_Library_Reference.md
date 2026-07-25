@@ -2075,7 +2075,7 @@ string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 | `RegularExpression.replace_all(s, pattern, repl)` | `(string, string, string)` | `result<string>`                         | Replace all matches; fail if pattern is invalid               |
 | `RegularExpression.split(s, pattern)`             | `(string, string)`         | `result<array<string>>`                  | Split by regex; fail if pattern is invalid                    |
 
-`find` and `find_all` return `RegularExpression.Match` records with fields `text` (the matched substring), `position` (zero-based index), `length` (character count of the match), and `groups` (an `array<RegularExpression.Match>` of capture-group matches). Each element of `groups` is itself a `Match` record with the same `text`, `position`, and `length` fields. When the pattern contains no capture groups, `groups` is an empty array.
+`find` and `find_all` return `RegularExpression.Match` records with fields `text` (the matched substring), `position` (zero-based index), `length` (character count of the match), `groups` (an `array<RegularExpression.Match>` of capture-group matches), and `named_groups` (a `dictionary<RegularExpression.Capture>` of named capture-group matches, keyed by group name). Each element of `groups` is itself a `Match` record with the same `text`, `position`, and `length` fields. When the pattern contains no capture groups, `groups` is an empty array and `named_groups` is an empty dictionary.
 
 ```luma
 RegularExpression.Match m =
@@ -2087,6 +2087,24 @@ print(m.groups[0].text)  # "alice"
 print(m.groups[1].text)  # "example"
 print(m.groups[2].text)  # "com"
 ```
+
+### Named capture groups
+
+A capturing group can be given a name using either `(?<name>...)` (.NET/PCRE2 style) or `(?P<name>...)` (Python style). A named group's match is exposed two ways: positionally, as an ordinary entry in `groups` (exactly as an unnamed group would be), and by name, as a `RegularExpression.Capture` entry in `named_groups`. An unnamed group never appears in `named_groups`.
+
+`RegularExpression.Capture` is a record with fields `name` (the group's declared name), `text` (the matched substring), `position` (zero-based index), and `length` (character count of the match). A capture that is part of `groups` but was never named is not represented as a `Capture` at all — it simply has no corresponding `named_groups` key (the `name = ""` case described in the type only ever arises if a `Capture` value is constructed directly; every `Capture` reachable through `named_groups` has a non-empty `name`, since it is keyed by that name).
+
+```luma
+RegularExpression.Match m =
+    RegularExpression.find("2024-01-15", "(?<year>[0-9]+)-(?<month>[0-9]+)-(?<day>[0-9]+)")
+    |> Result.unwrap()
+
+RegularExpression.Capture year = Dictionary.get(m.named_groups, "year") |> Result.unwrap()
+
+print(year.text)  # "2024"
+```
+
+> **Engine limitation (medium risk)** — The C++ standard library's `std::regex` ECMAScript engine has **no native support** for named capture groups: neither `(?<name>...)` nor `(?P<name>...)` parses, and both throw a compile error from `std::regex` directly. Named-group support is therefore implemented entirely client-side: before compiling the pattern, Luma strips the `<name>`/`P<name>` annotation down to a plain `(` (preserving the group's ordinal position exactly, so nothing about the underlying match semantics changes) and separately records a group-index-to-name map, which is used after matching to populate `named_groups`. Once compiled, a named group behaves exactly like an ordinary capturing group — there is no way to distinguish "named" at the regex-engine level, only in Luma's bookkeeping around it. A malformed or unterminated named-group annotation (e.g. a missing `>`) is left untouched and surfaces as an ordinary invalid-pattern failure (`is_valid` returns `false`, and the fallible functions return `failure`) rather than a crash. `(?<=...)` and `(?<!...)` (lookbehind assertions) are recognized as *not* named-group syntax and are left unchanged — though `std::regex`'s ECMAScript grammar does not support lookbehind at all (only lookahead, `(?=...)`/`(?!...)`), so a pattern using it will fail to compile regardless of named-group handling.
 
 > **Resource limits** — Regular expression patterns are capped at a maximum byte size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_REGEX_PATTERN_SIZE`). Patterns exceeding the limit return `failure` (or `false` from `is_valid`). The regex engine uses the ECMAScript dialect provided by the C++ standard library. There is no built-in protection against catastrophic backtracking — patterns with nested quantifiers such as `(a+)+b` can take exponential time on non-matching input. When processing untrusted patterns, keep them simple and avoid nested repetition operators (`*`, `+`, `{n,m}` inside groups that are themselves repeated).
 

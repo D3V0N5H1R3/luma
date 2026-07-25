@@ -310,9 +310,27 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Socket.UdpPacket", field("string", "data"), field("string", "host"),
                    field("integer", "port"));
 
+        // A single named capture group, e.g. the "year" in (?<year>\d{4}) or
+        // (?P<year>\d{4}); an unmatched-but-named group (an optional branch of
+        // an alternation that did not participate) still has name set, with
+        // text = "" -- name is only "" if a Capture were built for a positional
+        // group that has no name, which never happens in named_groups below.
+        // std::regex's ECMAScript engine has no native named-group support (see
+        // regularexpression_module.cpp), so `name` is extracted client-side from
+        // the pattern text and mapped to the group's ordinary positional index;
+        // `text`/`position`/`length` mirror that same positional group's fields.
+        add_record(st, "RegularExpression.Capture", field("string", "name"),
+                   field("string", "text"), field("integer", "position"),
+                   field("integer", "length"));
+
+        // groups keeps its original array<Match> shape for backward
+        // compatibility; named_groups is purely additive -- a name -> Capture
+        // lookup over the very same submatches (an unnamed group is simply
+        // absent from this dictionary, never present with name = "").
         add_record(st, "RegularExpression.Match", field("string", "text"),
                    field("integer", "position"), field("integer", "length"),
-                   field_of(array_ann("Match"), "groups"));
+                   field_of(array_ann("Match"), "groups"),
+                   field_of(dict_ann("Capture"), "named_groups"));
 
         add_record(st, "Process.ProcessResult", field("integer", "exit_code"),
                    field("string", "output"));

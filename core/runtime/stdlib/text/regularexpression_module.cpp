@@ -258,12 +258,14 @@ std::mutex validated_pattern_mutex;
     return true;
 }
 
-// Cache of compiled std::regex objects, keyed by pattern string.  Constructing
-// a std::regex parses the pattern into an automaton, which is far more expensive
-// than the ReDoS walk above; reusing the compiled object turns a pattern used in
-// a loop into a one-time cost.  Capped lower than the validation cache because a
-// compiled automaton is heavier than the pattern string it came from.  Like the
-// validation cache it never evicts -- once full it simply stops inserting.
+// Cache of compiled std::regex objects, keyed by the cleaned pattern string
+// (named-group syntax already stripped by parse_named_capture_groups -- see
+// below).  Constructing a std::regex parses the pattern into an automaton,
+// which is far more expensive than the ReDoS walk above; reusing the compiled
+// object turns a pattern used in a loop into a one-time cost.  Capped lower
+// than the validation cache because a compiled automaton is heavier than the
+// pattern string it came from.  Like the validation cache it never evicts --
+// once full it simply stops inserting.
 //
 // The map stores shared_ptr<const std::regex>: a handle returned to a caller
 // stays valid and immutable after the lock is released, so concurrent const
@@ -307,6 +309,98 @@ compiled_regexes() {
     }
 
     return compiled;
+}
+
+// Pattern with named-capture-group syntax stripped for the regex engine, plus
+// a map from each capturing group's 1-based positional index (the std::smatch
+// submatch index) to the name it was declared with.
+//
+// MEDIUM-RISK ENGINE LIMITATION: std::regex's ECMAScript grammar has no native
+// named-group support -- neither PCRE-style `(?P<name>...)` nor
+// .NET/PCRE2-style `(?<name>...)` parses; both throw std::regex_error from
+// std::regex's constructor. Named groups are therefore a purely client-side
+// convenience layered on top of an engine that does not know they exist: the
+// name annotation is stripped down to an ordinary capturing `(` before
+// compilation (`cleaned`), and RegularExpression.find/find_all separately
+// build Match.named_groups from this index-to-name map. Once compiled, a named
+// group behaves exactly like a plain `(...)` capturing group -- there is no
+// engine-level notion of "named" beyond this bookkeeping.
+struct ParsedPattern {
+    std::string cleaned;
+    std::unordered_map<std::size_t, std::string> group_names;
+};
+
+[[nodiscard]] ParsedPattern parse_named_capture_groups(std::string_view pattern) {
+    ParsedPattern parsed;
+    parsed.cleaned.reserve(pattern.size());
+
+    std::size_t group_index{0};
+
+    for (std::size_t i{0}; i < pattern.size(); ++i) {
+        const char c = pattern[i];
+
+        // Escaped character: copy through untouched -- never a group opener.
+        if (c == '\\' && i + 1 < pattern.size()) {
+            parsed.cleaned += c;
+            parsed.cleaned += pattern[i + 1];
+            ++i;
+            continue;
+        }
+
+        // Character class: copy through untouched -- a literal '(' inside
+        // [...] is not a group opener either.
+        if (c == '[') {
+            const std::size_t start = i;
+            skip_character_class(pattern, i); // i now at the closing ']' (or end)
+            parsed.cleaned.append(pattern.substr(start, i - start + 1));
+            continue;
+        }
+
+        if (c != '(') {
+            parsed.cleaned += c;
+            continue;
+        }
+
+        // (?P<name>...): Python-style named group.
+        if (i + 3 < pattern.size() && pattern[i + 1] == '?' && pattern[i + 2] == 'P' &&
+            pattern[i + 3] == '<') {
+            if (const auto name_end = pattern.find('>', i + 4); name_end != std::string_view::npos) {
+                ++group_index;
+                parsed.group_names[group_index] =
+                    std::string(pattern.substr(i + 4, name_end - (i + 4)));
+                parsed.cleaned += '(';
+                i = name_end;
+                continue;
+            }
+        }
+
+        // (?<name>...): .NET/PCRE2-style named group -- but not a lookbehind
+        // (?<=...) / (?<!...), which is not a capturing group at all.
+        if (i + 2 < pattern.size() && pattern[i + 1] == '?' && pattern[i + 2] == '<' &&
+            !(i + 3 < pattern.size() && (pattern[i + 3] == '=' || pattern[i + 3] == '!'))) {
+            if (const auto name_end = pattern.find('>', i + 3); name_end != std::string_view::npos) {
+                ++group_index;
+                parsed.group_names[group_index] =
+                    std::string(pattern.substr(i + 3, name_end - (i + 3)));
+                parsed.cleaned += '(';
+                i = name_end;
+                continue;
+            }
+        }
+
+        // Non-capturing / lookaround modifier: (?: (?= (?! (?<= (?<! -- copy
+        // through unchanged; these do not consume a group index.
+        if (i + 1 < pattern.size() && pattern[i + 1] == '?') {
+            parsed.cleaned += c;
+            continue;
+        }
+
+        // Plain capturing group.
+        ++group_index;
+        parsed.cleaned += c;
+    }
+
+    return parsed;
 }
 
 // Validate text (args[0]) and pattern (args[1]) are strings, and pattern is within size limit.
@@ -358,17 +452,44 @@ compiled_regexes() {
     return rec;
 }
 
+// Build a "Capture" record ({name, text, position, length}) for one named
+// submatch, mirroring make_submatch_record's fields plus the extracted name.
+[[nodiscard]] std::shared_ptr<RecordValue> make_capture_record(const std::smatch& match,
+                                                                std::size_t index,
+                                                                const std::string& name) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Capture";
+    rec->fields.emplace_back("name", Value{name});
+    rec->fields.emplace_back("text", Value{match[index].str()});
+    rec->fields.emplace_back("position", Value{static_cast<std::int64_t>(match.position(index))});
+    rec->fields.emplace_back("length", Value{static_cast<std::int64_t>(match.length(index))});
+    return rec;
+}
+
 // Build a Match record from a regex match result, including capture groups.
-[[nodiscard]] Value make_match_record(const std::smatch& match) {
+// `group_names` maps a 1-based submatch index to the name it was declared
+// under in the (already-cleaned) pattern -- see parse_named_capture_groups.
+// The positional `groups` array is unchanged; `named_groups` is an additive
+// name -> Capture lookup built over the very same submatches.
+[[nodiscard]] Value
+make_match_record(const std::smatch& match,
+                   const std::unordered_map<std::size_t, std::string>& group_names) {
     auto rec = make_submatch_record(match, 0);
 
     auto groups = std::make_shared<ArrayValue>();
+    auto named_groups = std::make_shared<DictionaryValue>();
+    named_groups->rebuild_index();
 
     for (std::size_t i{1}; i < match.size(); ++i) {
         groups->elements->emplace_back(make_submatch_record(match, i));
+
+        if (const auto name_it = group_names.find(i); name_it != group_names.end()) {
+            named_groups->set(name_it->second, Value{make_capture_record(match, i, name_it->second)});
+        }
     }
 
     rec->fields.emplace_back("groups", Value{std::move(groups)});
+    rec->fields.emplace_back("named_groups", Value{std::move(named_groups)});
 
     return Value{std::move(rec)};
 }
@@ -402,7 +523,7 @@ void register_regularexpression_ns(const EnvPtr& env) {
             }
 
             return wrap_result_operation("RegularExpression", "matches", [&]() -> Value {
-                const auto re = get_compiled_regex(args[1].as_string());
+                const auto re = get_compiled_regex(parse_named_capture_groups(args[1].as_string()).cleaned);
                 const bool matched = std::regex_search(args[0].as_string(), *re);
 
                 return make_success_value(Value{matched});
@@ -415,11 +536,12 @@ void register_regularexpression_ns(const EnvPtr& env) {
             }
 
             return run_regex_collection("find", [&]() -> Value {
-                const auto re = get_compiled_regex(args[1].as_string());
+                const auto parsed = parse_named_capture_groups(args[1].as_string());
+                const auto re = get_compiled_regex(parsed.cleaned);
                 std::smatch match;
 
                 if (std::regex_search(args[0].as_string(), match, *re)) {
-                    return make_success_value(make_match_record(match));
+                    return make_success_value(make_match_record(match, parsed.group_names));
                 }
 
                 return make_failure_value("RegularExpression.find: no match found");
@@ -432,7 +554,8 @@ void register_regularexpression_ns(const EnvPtr& env) {
             }
 
             return run_regex_collection("find_all", [&]() -> Value {
-                const auto re = get_compiled_regex(args[1].as_string());
+                const auto parsed = parse_named_capture_groups(args[1].as_string());
+                const auto re = get_compiled_regex(parsed.cleaned);
                 const auto& s = args[0].as_string();
                 const auto begin = std::sregex_iterator{s.begin(), s.end(), *re};
                 const auto end = std::sregex_iterator{};
@@ -445,7 +568,7 @@ void register_regularexpression_ns(const EnvPtr& env) {
                                            "use a more specific pattern to reduce match count"};
                     }
 
-                    arr->elements->push_back(make_match_record(*i));
+                    arr->elements->push_back(make_match_record(*i, parsed.group_names));
                 }
 
                 return make_success_value(Value{std::move(arr)});
@@ -460,7 +583,7 @@ void register_regularexpression_ns(const EnvPtr& env) {
             (void)expect_string(args[2], "RegularExpression.replace", loc);
 
             return wrap_result_operation("RegularExpression", "replace", [&]() -> Value {
-                const auto re = get_compiled_regex(args[1].as_string());
+                const auto re = get_compiled_regex(parse_named_capture_groups(args[1].as_string()).cleaned);
 
                 return make_success_value(
                     Value{std::regex_replace(args[0].as_string(), *re, args[2].as_string(),
@@ -476,7 +599,7 @@ void register_regularexpression_ns(const EnvPtr& env) {
             (void)expect_string(args[2], "RegularExpression.replace_all", loc);
 
             return wrap_result_operation("RegularExpression", "replace_all", [&]() -> Value {
-                const auto re = get_compiled_regex(args[1].as_string());
+                const auto re = get_compiled_regex(parse_named_capture_groups(args[1].as_string()).cleaned);
 
                 return make_success_value(
                     Value{std::regex_replace(args[0].as_string(), *re, args[2].as_string())});
@@ -489,7 +612,7 @@ void register_regularexpression_ns(const EnvPtr& env) {
             }
 
             return run_regex_collection("split", [&]() -> Value {
-                const auto re = get_compiled_regex(args[1].as_string());
+                const auto re = get_compiled_regex(parse_named_capture_groups(args[1].as_string()).cleaned);
                 const auto& s = args[0].as_string();
                 const std::sregex_token_iterator begin{s.begin(), s.end(), *re, -1};
                 const std::sregex_token_iterator end{};
@@ -521,7 +644,7 @@ void register_regularexpression_ns(const EnvPtr& env) {
             }
 
             try {
-                (void)get_compiled_regex(args[0].as_string());
+                (void)get_compiled_regex(parse_named_capture_groups(args[0].as_string()).cleaned);
 
                 return Value{true};
             } catch (const std::exception&) {
