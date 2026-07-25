@@ -859,12 +859,12 @@ LUMA_TEST(math_interval_invalid_fails) {
 }
 
 LUMA_TEST(math_interval_clamp_length_overlap) {
-    ASSERT_NEAR(eval("Math.interval_clamp(Result.unwrap(Math.interval(0.0, 10.0)), 15.0)")
-                    .as_number(),
-                10.0, 1e-9);
-    ASSERT_NEAR(eval("Math.interval_clamp(Result.unwrap(Math.interval(0.0, 10.0)), -3.0)")
-                    .as_number(),
-                0.0, 1e-9);
+    ASSERT_NEAR(
+        eval("Math.interval_clamp(Result.unwrap(Math.interval(0.0, 10.0)), 15.0)").as_number(),
+        10.0, 1e-9);
+    ASSERT_NEAR(
+        eval("Math.interval_clamp(Result.unwrap(Math.interval(0.0, 10.0)), -3.0)").as_number(), 0.0,
+        1e-9);
     ASSERT_NEAR(eval("Math.interval_length(Result.unwrap(Math.interval(2.0, 7.5)))").as_number(),
                 5.5, 1e-9);
 

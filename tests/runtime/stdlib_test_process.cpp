@@ -387,8 +387,8 @@ static void test_process_run_command_metacharacters_are_inert() {
 
     ASSERT_RESULT_SUCCESS(v);
 
-    const auto& out = v.as_result()->owned_inner->as_record()->find_field("standard_output")
-                          ->as_string();
+    const auto& out =
+        v.as_result()->owned_inner->as_record()->find_field("standard_output")->as_string();
     ASSERT_TRUE(out.find("a; b | c $(whoami)") != std::string::npos);
 }
 #endif

@@ -892,8 +892,7 @@ void register_socket_ns(const EnvPtr& env) {
 
             const auto& cv = args[0].as_choice();
 
-            if (cv->type_name != "IpAddress" || cv->fields.empty() ||
-                !cv->fields[0].is_string()) {
+            if (cv->type_name != "IpAddress" || cv->fields.empty() || !cv->fields[0].is_string()) {
                 throw RuntimeError{"Socket.ip_to_string: expected a Socket.IpAddress", loc,
                                    "build one with Socket.parse_ip(text)"};
             }

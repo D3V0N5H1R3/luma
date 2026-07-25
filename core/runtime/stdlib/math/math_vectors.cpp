@@ -330,10 +330,9 @@ void register_math_vectors(const EnvPtr& env) {
             const auto a = read_mat2(args[0], "Math.mat2_multiply", loc);
             const auto b = read_mat2(args[1], "Math.mat2_multiply", loc);
 
-            return make_mat2(Mat2{(a.m00 * b.m00) + (a.m01 * b.m10),
-                                  (a.m00 * b.m01) + (a.m01 * b.m11),
-                                  (a.m10 * b.m00) + (a.m11 * b.m10),
-                                  (a.m10 * b.m01) + (a.m11 * b.m11)});
+            return make_mat2(
+                Mat2{(a.m00 * b.m00) + (a.m01 * b.m10), (a.m00 * b.m01) + (a.m01 * b.m11),
+                     (a.m10 * b.m00) + (a.m11 * b.m10), (a.m10 * b.m01) + (a.m11 * b.m11)});
         })
         .func("mat2_determinant", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -346,8 +345,7 @@ void register_math_vectors(const EnvPtr& env) {
             const auto m = read_mat2(args[0], "Math.mat2_transform", loc);
             const auto v = read_vec2(args[1], "Math.mat2_transform", loc);
 
-            return make_vec2(
-                Vec2{(m.m00 * v.x) + (m.m01 * v.y), (m.m10 * v.x) + (m.m11 * v.y)});
+            return make_vec2(Vec2{(m.m00 * v.x) + (m.m01 * v.y), (m.m10 * v.x) + (m.m11 * v.y)});
         })
         // ── Math.Matrix3 ─────────────────────────────────────────────────────
         .func("matrix3", 9)
@@ -371,16 +369,15 @@ void register_math_vectors(const EnvPtr& env) {
             const auto a = read_mat3(args[0], "Math.mat3_multiply", loc);
             const auto b = read_mat3(args[1], "Math.mat3_multiply", loc);
 
-            return make_mat3(Mat3{
-                (a.m00 * b.m00) + (a.m01 * b.m10) + (a.m02 * b.m20),
-                (a.m00 * b.m01) + (a.m01 * b.m11) + (a.m02 * b.m21),
-                (a.m00 * b.m02) + (a.m01 * b.m12) + (a.m02 * b.m22),
-                (a.m10 * b.m00) + (a.m11 * b.m10) + (a.m12 * b.m20),
-                (a.m10 * b.m01) + (a.m11 * b.m11) + (a.m12 * b.m21),
-                (a.m10 * b.m02) + (a.m11 * b.m12) + (a.m12 * b.m22),
-                (a.m20 * b.m00) + (a.m21 * b.m10) + (a.m22 * b.m20),
-                (a.m20 * b.m01) + (a.m21 * b.m11) + (a.m22 * b.m21),
-                (a.m20 * b.m02) + (a.m21 * b.m12) + (a.m22 * b.m22)});
+            return make_mat3(Mat3{(a.m00 * b.m00) + (a.m01 * b.m10) + (a.m02 * b.m20),
+                                  (a.m00 * b.m01) + (a.m01 * b.m11) + (a.m02 * b.m21),
+                                  (a.m00 * b.m02) + (a.m01 * b.m12) + (a.m02 * b.m22),
+                                  (a.m10 * b.m00) + (a.m11 * b.m10) + (a.m12 * b.m20),
+                                  (a.m10 * b.m01) + (a.m11 * b.m11) + (a.m12 * b.m21),
+                                  (a.m10 * b.m02) + (a.m11 * b.m12) + (a.m12 * b.m22),
+                                  (a.m20 * b.m00) + (a.m21 * b.m10) + (a.m22 * b.m20),
+                                  (a.m20 * b.m01) + (a.m21 * b.m11) + (a.m22 * b.m21),
+                                  (a.m20 * b.m02) + (a.m21 * b.m12) + (a.m22 * b.m22)});
         })
         .func("mat3_determinant", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

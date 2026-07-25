@@ -85,8 +85,8 @@ void register_process_functions(std::vector<FunctionSpec>& specs, const ModuleBu
             m.fn("get_process_id", 0, "()", R::integer_type(), {}),
             m.fn("has_environment_variable", 1, "(name: string)", R::boolean_type(), {p.string}),
             m.fn("run", 1, "(command: string)", R::result(named::process_result()), {p.string}),
-            m.fn("run_command", 1, "(command: Process.Command)",
-                 R::result(named::command_output()), {named::command()}),
+            m.fn("run_command", 1, "(command: Process.Command)", R::result(named::command_output()),
+                 {named::command()}),
             m.fn("set_environment_variable", 2, "(name: string, value: string)", R::result_void(),
                  {p.string, p.string}),
         });
