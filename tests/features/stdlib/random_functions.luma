@@ -129,6 +129,61 @@ function void test_random_sample_negative() {
     assert(Result.is_failure(bad))
 }
 
+# ─── Random.sample_from / Random.Distribution ─────────────
+
+@test
+function void test_random_sample_from_uniform() {
+    number sample = Random.sample_from(Random.Distribution.Uniform(2.0, 5.0)) |> Result.unwrap()
+
+    assert(sample >= 2.0 && sample <= 5.0)
+}
+
+@test
+function void test_random_sample_from_uniform_singleton() {
+    number sample = Random.sample_from(Random.Distribution.Uniform(3.0, 3.0)) |> Result.unwrap()
+
+    assert(Math.approximately_equal(sample, 3.0, 0.000001))
+}
+
+@test
+function void test_random_sample_from_uniform_invalid_range() {
+    result<number> bad = Random.sample_from(Random.Distribution.Uniform(5.0, 1.0))
+
+    assert(Result.is_failure(bad))
+}
+
+@test
+function void test_random_sample_from_normal() {
+    result<number> sample = Random.sample_from(Random.Distribution.Normal(0.0, 1.0))
+
+    assert(Result.is_success(sample))
+}
+
+@test
+function void test_random_sample_from_normal_invalid_standard_deviation() {
+    result<number> zero_sd = Random.sample_from(Random.Distribution.Normal(0.0, 0.0))
+    result<number> negative_sd = Random.sample_from(Random.Distribution.Normal(0.0, -1.0))
+
+    assert(Result.is_failure(zero_sd))
+    assert(Result.is_failure(negative_sd))
+}
+
+@test
+function void test_random_sample_from_exponential() {
+    number sample = Random.sample_from(Random.Distribution.Exponential(2.0)) |> Result.unwrap()
+
+    assert(sample >= 0.0)
+}
+
+@test
+function void test_random_sample_from_exponential_invalid_rate() {
+    result<number> zero_rate = Random.sample_from(Random.Distribution.Exponential(0.0))
+    result<number> negative_rate = Random.sample_from(Random.Distribution.Exponential(-2.0))
+
+    assert(Result.is_failure(zero_rate))
+    assert(Result.is_failure(negative_rate))
+}
+
 @test
 function void test_random_generate_string_invalid() {
     result<string> bad = Random.generate_string(-1)

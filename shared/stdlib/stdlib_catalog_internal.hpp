@@ -105,6 +105,13 @@ namespace named {
     return ReturnTypeDesc::named("Log.Level");
 }
 
+// Choice type — uses the fully-qualified name so the type checker resolves it
+// as Random.Distribution (a bare name would fall through to the record
+// default). Consumed by Random.sample_from().
+[[nodiscard]] inline ReturnTypeDesc random_distribution() {
+    return ReturnTypeDesc::named("Random.Distribution");
+}
+
 [[nodiscard]] inline ReturnTypeDesc weekday() {
     return ReturnTypeDesc::named("DateTime.Weekday");
 }

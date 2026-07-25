@@ -431,6 +431,42 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choices.push_back(std::move(ch));
         }
 
+        // ── Random.Distribution ─────────────────────────
+        // Consumed by Random.sample_from(distribution) -> result<number> — a
+        // closed set of probability distributions to draw from, so the caller
+        // states intent ("draw from a Normal(0, 1)") instead of composing raw
+        // uniform draws by hand. Uniform carries its inclusive [low, high]
+        // bounds; Normal carries mean and standard_deviation for a Box–Muller
+        // draw; Exponential carries its rate (lambda) for an inverse-transform
+        // draw. Variant names/fields must match the match in
+        // core/runtime/stdlib/system/random_module.cpp exactly (PascalCase).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Distribution");
+
+            // Parameter is move-only, so payload variants are built by moving
+            // each Parameter into the fields vector (mirrors Xml.Node above).
+            ChoiceVariant uniform;
+            uniform.name = "Uniform";
+            uniform.fields.push_back(Parameter{.type = ann("number"), .name = "low"});
+            uniform.fields.push_back(Parameter{.type = ann("number"), .name = "high"});
+            ch->variants.push_back(std::move(uniform));
+
+            ChoiceVariant normal;
+            normal.name = "Normal";
+            normal.fields.push_back(Parameter{.type = ann("number"), .name = "mean"});
+            normal.fields.push_back(
+                Parameter{.type = ann("number"), .name = "standard_deviation"});
+            ch->variants.push_back(std::move(normal));
+
+            ChoiceVariant exponential;
+            exponential.name = "Exponential";
+            exponential.fields.push_back(Parameter{.type = ann("number"), .name = "rate"});
+            ch->variants.push_back(std::move(exponential));
+
+            st.choice_map["Random.Distribution"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
         // ── Decimal.RoundingMode ────────────────────────
         // Variant names must match rounding_mode_from_variant() in
         // core/common/decimal.cpp exactly (PascalCase, one per RoundingMode).

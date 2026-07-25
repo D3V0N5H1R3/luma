@@ -204,6 +204,8 @@ void register_random_functions(std::vector<FunctionSpec>& specs, const ModuleBui
                    m.fn("generate_string", 1, "(length: integer)", R::result_string(), {p.integer}),
                    m.fn("sample", 2, "(arr: array<T>, count: integer)", R::result_array_any(),
                         {p.any, p.integer}),
+                   m.fn("sample_from", 1, "(distribution: Random.Distribution)",
+                        R::result_number(), {named::random_distribution()}),
                    m.fn("shuffle", 1, "(arr: array<T>)", R::array_any(), {p.any}),
                    m.fn("generate_uuid", 0, "()", R::string_type(), {}),
                    m.fn("secure_boolean", 0, "()", R::result_boolean(), {}),

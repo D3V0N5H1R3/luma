@@ -2,16 +2,19 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <format>
 #include <iterator>
+#include <numbers>
 #include <optional>
 #include <random>
 #include <span>
 #include <string_view>
 #include <vector>
 
+#include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -103,6 +106,17 @@ void fill_bytes_prng(std::span<unsigned char> bytes) {
     std::uniform_int_distribution<std::size_t> dist{0, n - 1};
 
     return dist(thread_local_generator());
+}
+
+// Draw a uniform value in the half-open (0, 1] interval, i.e. excluding 0.
+// Box–Muller and the exponential inverse-transform both take a log() of a
+// draw, so the draw must never be exactly 0; std::uniform_real_distribution's
+// [0, 1) range is flipped via `1.0 - dist(gen)` to move the excluded endpoint
+// from 0 to 1 instead.
+[[nodiscard]] double draw_open_unit_interval() {
+    std::uniform_real_distribution<double> dist{0.0, 1.0};
+
+    return 1.0 - dist(thread_local_generator());
 }
 
 #if defined(LUMA_HAS_TLS) && LUMA_HAS_TLS
@@ -320,6 +334,67 @@ void register_random_ns(const EnvPtr& env) {
             }
 
             return make_success_value(Value{std::move(arr)});
+        })
+        .func("sample_from", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_choice()) {
+                throw RuntimeError{"Random.sample_from: expected a Random.Distribution", loc,
+                                   "pass Random.Distribution.Uniform/Normal/Exponential"};
+            }
+
+            const auto& choice = *args[0].as_choice();
+
+            if (choice.variant == "Uniform") {
+                const auto low = expect_numeric(choice.fields[0], "Random.sample_from", loc);
+                const auto high = expect_numeric(choice.fields[1], "Random.sample_from", loc);
+
+                if (high < low) {
+                    return make_failure_value(
+                        error_msg("Random", "sample_from", "Uniform requires high >= low"));
+                }
+
+                std::uniform_real_distribution<double> dist{low, high};
+
+                return make_success_value(Value{dist(thread_local_generator())});
+            }
+
+            if (choice.variant == "Normal") {
+                const auto mean = expect_numeric(choice.fields[0], "Random.sample_from", loc);
+                const auto standard_deviation =
+                    expect_numeric(choice.fields[1], "Random.sample_from", loc);
+
+                if (standard_deviation <= 0.0) {
+                    return make_failure_value(error_msg(
+                        "Random", "sample_from", "Normal requires standard_deviation > 0"));
+                }
+
+                // Box–Muller transform: two independent uniform draws on (0, 1]
+                // produce a standard-normal deviate, which is then scaled and
+                // shifted to the requested mean / standard deviation.
+                const auto u1 = draw_open_unit_interval();
+                const auto u2 = draw_open_unit_interval();
+                const auto z0 =
+                    std::sqrt(-2.0 * std::log(u1)) * std::cos(2.0 * std::numbers::pi * u2);
+
+                return make_success_value(Value{mean + z0 * standard_deviation});
+            }
+
+            if (choice.variant == "Exponential") {
+                const auto rate = expect_numeric(choice.fields[0], "Random.sample_from", loc);
+
+                if (rate <= 0.0) {
+                    return make_failure_value(
+                        error_msg("Random", "sample_from", "Exponential requires rate > 0"));
+                }
+
+                // Inverse-transform sampling: -ln(U) / rate, U uniform on (0, 1].
+                const auto u = draw_open_unit_interval();
+
+                return make_success_value(Value{-std::log(u) / rate});
+            }
+
+            throw RuntimeError{"Random.sample_from: unknown Random.Distribution variant", loc,
+                               "use Random.Distribution.Uniform/Normal/Exponential"};
         })
         .func("generate_uuid", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
