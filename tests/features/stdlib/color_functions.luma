@@ -141,3 +141,26 @@ function void test_color_hsv_roundtrip() {
     assert(back.red == 0, "red stays 0")
     assert(back.green == 0, "green stays 0")
 }
+
+# ─── CMYK conversions (Color.Cmyk / to_cmyk / from_cmyk) ───
+
+@test
+function void test_color_to_cmyk_black() {
+    Color.Color black = Result.unwrap(Color.rgb(0, 0, 0))
+    Color.Cmyk cmyk = Color.to_cmyk(black)
+
+    assert(Math.approximately_equal(cmyk.cyan, 0.0, 0.001), "black has no cyan")
+    assert(Math.approximately_equal(cmyk.magenta, 0.0, 0.001), "black has no magenta")
+    assert(Math.approximately_equal(cmyk.yellow, 0.0, 0.001), "black has no yellow")
+    assert(Math.approximately_equal(cmyk.key, 1.0, 0.001), "black has full key")
+}
+
+@test
+function void test_color_from_cmyk_roundtrip() {
+    Color.Color blue = Result.unwrap(Color.rgb(0, 0, 255))
+    Color.Color back = Color.from_cmyk(Color.to_cmyk(blue))
+
+    assert(back.red == 0, "blue round-trips red 0")
+    assert(back.green == 0, "blue round-trips green 0")
+    assert(back.blue == 255, "blue round-trips blue 255")
+}
