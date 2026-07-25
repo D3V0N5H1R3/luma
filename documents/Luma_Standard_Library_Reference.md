@@ -2548,7 +2548,7 @@ case Xml.Node.CData(content)            { print(content) }
 
 ## 42 — Color
 
-A typed RGBA colour value with validating constructors and derivations. Every value serialises to a CSS string the GraphicalUi web-view already accepts, so `Solaris` themes can be *computed* rather than hand-written. Like `Decimal` and `Math.Fraction`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
+A typed RGBA colour value with validating constructors and derivations. Every value serialises to a CSS string the GraphicalUi web-view already accepts, so `Solaris` themes can be _computed_ rather than hand-written. Like `Decimal` and `Math.Fraction`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
 
 > **Color vs Terminal.Color** — `Color` is a general RGBA value for GUI/CSS work. `Terminal.Color` is a fixed choice of 16 named ANSI terminal colours, used only by the `Terminal` module.
 
