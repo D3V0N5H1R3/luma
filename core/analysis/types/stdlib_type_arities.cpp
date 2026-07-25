@@ -261,6 +261,13 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Color.Hsv", field("number", "hue"), field("number", "saturation"),
                    field("number", "value"));
 
+        // Color.to_cmyk / from_cmyk pivot through this cyan/magenta/yellow/key
+        // (black) record (type_name "Cmyk") — the subtractive model used by print
+        // production. Every channel is a 0–1 ratio, so every field is a number.
+        // Sibling of Color.Hsl / Color.Hsv.
+        add_record(st, "Color.Cmyk", field("number", "cyan"), field("number", "magenta"),
+                   field("number", "yellow"), field("number", "key"));
+
         // Dictionary.to_array emits these key/value pairs at runtime (each a
         // record with type_name "KeyValue").  The `value` field carries the
         // dictionary's value type V, so it has no single concrete type here — a

@@ -2642,6 +2642,7 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | ------------------------------- | ------------------------------------------- | -------------------- | ------------------------------------------------------------------------ |
 | `Color.contrast_ratio(a, b)`    | `(Color.Color, Color.Color)`                | `number`             | WCAG contrast ratio (1:1 to 21:1)                                        |
 | `Color.darken(c, amount)`       | `(Color.Color, number)`                     | `Color.Color`        | Blend toward black by `amount` (clamped to [0, 1])                       |
+| `Color.from_cmyk(c)`            | `(Color.Cmyk)`                              | `Color.Color`        | Convert a CMYK colour to RGBA (alpha 1.0)                                |
 | `Color.from_hex(hex)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
 | `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
 | `Color.from_hsv(h)`             | `(Color.Hsv)`                               | `Color.Color`        | Convert an HSV (HSB) colour to RGBA (alpha 1.0)                          |
@@ -2650,6 +2651,7 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.rgb(r, g, b)`            | `(integer, integer, integer)`               | `result<Color.Color>` | Construct an opaque colour; fail if a channel is outside 0–255         |
 | `Color.rgba(r, g, b, a)`        | `(integer, integer, integer, number)`       | `result<Color.Color>` | Construct with alpha; fail if a channel is out of range or `a` ∉ [0, 1] |
 | `Color.rotate_hue(c, degrees)`  | `(Color.Color, number)`                     | `Color.Color`        | Rotate the hue by `degrees`, preserving saturation, lightness, and alpha |
+| `Color.to_cmyk(c)`              | `(Color.Color)`                             | `Color.Cmyk`         | Convert an RGBA colour to CMYK (alpha dropped)                           |
 | `Color.to_css(c)`               | `(Color.Color)`                             | `string`             | CSS string: `rgb(r, g, b)`, or `rgba(...)` when not fully opaque         |
 | `Color.to_hex(c)`               | `(Color.Color)`                             | `string`             | `#rrggbb`, or `#rrggbbaa` when the colour is not fully opaque            |
 | `Color.to_hsl(c)`               | `(Color.Color)`                             | `Color.Hsl`          | Convert an RGBA colour to HSL (alpha dropped)                            |
@@ -2660,6 +2662,8 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 **`Color.Hsl`** is the hue/saturation/lightness sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `lightness: number` (0–1 ratios). `Color.to_hsl` / `Color.from_hsl` convert between the two spaces, and `Color.rotate_hue(c, degrees)` shifts the hue (wrapping at 360°) while preserving saturation, lightness, and the original alpha — the natural way to build a rainbow, pastel, or complementary colour that is awkward in RGB. HSL drops alpha (so `to_hsl` discards it and `from_hsl` produces an opaque colour); everything still serialises through the same RGBA `to_css` path the webview consumes.
 
 **`Color.Hsv`** is the hue/saturation/**value** (HSB) sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `value: number` (0–1 ratios). It is the model most colour pickers and palette generators use, so `Color.to_hsv` / `Color.from_hsv` are the natural pair for building tints and shades by "value". Like HSL it drops alpha (`from_hsv` produces an opaque colour), and both spaces serialise through the same RGBA `to_css` path.
+
+**`Color.Cmyk`** is the cyan/magenta/yellow/**key** (black) sibling of `Color.Color` — `cyan: number`, `magenta: number`, `yellow: number`, and `key: number` (all 0–1 ratios). It is the subtractive model used by print production, so `Color.to_cmyk` / `Color.from_cmyk` are the natural pair for previewing how an on-screen colour will separate to ink. Like HSL/HSV it drops alpha (`from_cmyk` produces an opaque colour), and it serialises through the same RGBA `to_css` path.
 
 ```luma
 Color.Color base = Result.unwrap(Color.from_hex("#0172ad"))

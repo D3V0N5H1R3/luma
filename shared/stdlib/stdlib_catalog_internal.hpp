@@ -288,6 +288,12 @@ namespace named {
     return ReturnTypeDesc::named("Hsv");
 }
 
+// Color.to_cmyk / from_cmyk pivot through this cyan/magenta/yellow/key record
+// (bare short name "Cmyk", like hsl() / hsv()).
+[[nodiscard]] inline ReturnTypeDesc cmyk() {
+    return ReturnTypeDesc::named("Cmyk");
+}
+
 // Encoder.encode_text / decode_text take this text-encoding selector choice.
 [[nodiscard]] inline ReturnTypeDesc encoding() {
     return ReturnTypeDesc::named("Encoder.Encoding");
