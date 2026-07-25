@@ -1,5 +1,6 @@
-﻿#include "runtime/stdlib/text/csv_module.hpp"
+#include "runtime/stdlib/text/csv_module.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <format>
 #include <fstream>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
+#include "common/utf8.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/file_helpers.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
@@ -229,7 +231,7 @@ array_to_rows(std::span<const Value> data, std::string_view func_name, SourceLoc
 // Handles the common parse + error-check + rows_to_value pattern.
 [[nodiscard]] Value parse_csv_to_rows_result(const std::string& input, const CsvOptions& opts,
                                              std::string_view func_name) {
-    auto [rows, success, error] = parse_csv(input, opts);
+    [[maybe_unused]] auto [rows, success, error, error_offset] = parse_csv(input, opts);
 
     if (!success) {
         return failure_msg("Csv", func_name, error, error_codes::parse_error);
@@ -242,13 +244,71 @@ array_to_rows(std::span<const Value> data, std::string_view func_name, SourceLoc
 // Handles the common parse + error-check + rows_to_records pattern.
 [[nodiscard]] Value parse_csv_to_records_result(const std::string& input, const CsvOptions& opts,
                                                 std::string_view func_name) {
-    auto [rows, success, error] = parse_csv(input, opts);
+    [[maybe_unused]] auto [rows, success, error, error_offset] = parse_csv(input, opts);
 
     if (!success) {
         return failure_msg("Csv", func_name, error, error_codes::parse_error);
     }
 
     return make_success_value(rows_to_records(rows));
+}
+
+// Build a Csv.ParseError record (type_name "ParseError") carrying the failure
+// message and its 1-based line/column.  Matches the "Csv.ParseError" record
+// registered in stdlib_type_arities.cpp and mirrors Json.parse_detailed's
+// located-failure record.
+[[nodiscard]] Value make_parse_error_record(std::string message, std::int64_t line,
+                                            std::int64_t column) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "ParseError";
+    rec->fields.emplace_back("message", Value{std::move(message)});
+    rec->fields.emplace_back("line", Value{line});
+    rec->fields.emplace_back("column", Value{column});
+
+    return Value{std::move(rec)};
+}
+
+// Convert a byte offset into the source into a 1-based (line, column) pair.  The
+// column counts codepoints from the start of the line so it lines up with how an
+// editor reports positions (identical to Json.parse_detailed's mapping).
+struct LineColumn {
+    std::int64_t line;
+    std::int64_t column;
+};
+
+[[nodiscard]] LineColumn offset_to_line_column(std::string_view text, std::size_t offset) {
+    offset = std::min(offset, text.size());
+
+    std::int64_t line = 1;
+    std::size_t line_start = 0;
+
+    for (std::size_t i = 0; i < offset; ++i) {
+        if (text[i] == '\n') {
+            ++line;
+            line_start = i + 1;
+        }
+    }
+
+    const std::int64_t column = static_cast<std::int64_t>(luma::utf8_codepoint_count(
+                                    text.substr(line_start, offset - line_start))) +
+                                1;
+
+    return LineColumn{line, column};
+}
+
+// Parse CSV and return result<array<array<string>>, Csv.ParseError>: on failure
+// the error carries the located reason instead of a bare string, so a caller can
+// point at the row/column that broke.  Mirrors Json.parse_detailed.
+[[nodiscard]] Value parse_csv_to_detailed_result(const std::string& input, const CsvOptions& opts) {
+    auto [rows, success, error, error_offset] = parse_csv(input, opts);
+
+    if (!success) {
+        const auto pos = offset_to_line_column(input, error_offset);
+
+        return Value{ResultValue::failure(make_parse_error_record(error, pos.line, pos.column))};
+    }
+
+    return make_success_value(rows_to_value(rows));
 }
 
 } // namespace
@@ -262,6 +322,12 @@ void register_csv_ns(const EnvPtr& env) {
             (void)expect_string(args[0], "Csv.deserialize", loc);
 
             return parse_csv_to_rows_result(args[0].as_string(), CsvOptions{}, "deserialize");
+        })
+        .func("deserialize_detailed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Csv.deserialize_detailed", loc);
+
+            return parse_csv_to_detailed_result(args[0].as_string(), CsvOptions{});
         })
         .func("deserialize_records", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -329,7 +395,7 @@ void register_csv_ns(const EnvPtr& env) {
             }
 
             const CsvOptions opts;
-            auto [rows, success, error] = parse_csv(*content, opts);
+            [[maybe_unused]] auto [rows, success, error, error_offset] = parse_csv(*content, opts);
 
             if (!success) {
                 return failure_msg("Csv", "read_file", error, error_codes::parse_error);
@@ -362,7 +428,8 @@ void register_csv_ns(const EnvPtr& env) {
             (void)expect_string(args[0], "Csv.header", loc);
 
             const CsvOptions opts;
-            auto [rows, success, error] = parse_csv(args[0].as_string(), opts);
+            [[maybe_unused]] auto [rows, success, error, error_offset] =
+                parse_csv(args[0].as_string(), opts);
 
             if (!success) {
                 return failure_msg("Csv", "header", error, error_codes::parse_error);
@@ -385,7 +452,8 @@ void register_csv_ns(const EnvPtr& env) {
             (void)expect_string(args[0], "Csv.count_rows", loc);
 
             const CsvOptions opts;
-            auto [rows, success, error] = parse_csv(args[0].as_string(), opts);
+            [[maybe_unused]] auto [rows, success, error, error_offset] =
+                parse_csv(args[0].as_string(), opts);
 
             if (!success) {
                 return failure_msg("Csv", "count_rows", error, error_codes::parse_error);

@@ -232,6 +232,42 @@ void register_math_statistics(const EnvPtr& env) {
 
             return make_success_value(Value{std::move(rec)});
         })
+        .func("five_number_summary", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& elems = *expect_array(args[0], "Math.five_number_summary", loc)->elements;
+
+            if (auto fail = check_not_empty(elems, "Math.five_number_summary")) {
+                return *std::move(fail);
+            }
+
+            const auto vals = sorted_doubles(elems);
+
+            // Linear-interpolation quantile — the same method Math.percentile uses,
+            // so five_number_summary(v) agrees with percentile(v, 25/50/75).
+            const auto quantile = [&vals](double p) -> double {
+                const double rank = (p / 100.0) * static_cast<double>(vals.size() - 1);
+                const auto lower = static_cast<std::size_t>(std::floor(rank));
+                const auto upper = static_cast<std::size_t>(std::ceil(rank));
+
+                if (lower == upper) {
+                    return vals[lower];
+                }
+
+                const double frac = rank - static_cast<double>(lower);
+
+                return vals[lower] + (frac * (vals[upper] - vals[lower]));
+            };
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "FiveNumberSummary";
+            rec->fields.emplace_back("minimum", Value{vals.front()});
+            rec->fields.emplace_back("q1", Value{quantile(25.0)});
+            rec->fields.emplace_back("median", Value{quantile(50.0)});
+            rec->fields.emplace_back("q3", Value{quantile(75.0)});
+            rec->fields.emplace_back("maximum", Value{vals.back()});
+
+            return make_success_value(Value{std::move(rec)});
+        })
         .func("percentile", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto& elems = *expect_array(args[0], "Math.percentile", loc)->elements;

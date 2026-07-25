@@ -112,6 +112,7 @@ luma_add_stdlib_library(math
         stdlib/math/math_transcendental.cpp
         stdlib/math/math_fraction.cpp
         stdlib/math/math_complex.cpp
+        stdlib/math/math_vectors.cpp
         stdlib/math/decimal_module.cpp
         stdlib/system/random_module.cpp
         stdlib/math/linearalgebra_module.cpp

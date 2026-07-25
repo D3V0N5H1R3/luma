@@ -74,6 +74,7 @@ static void test_xml_module() {
     const auto env = luma::test::make_std_env();
 
     ASSERT_TRUE(env->has("Xml.deserialize"));
+    ASSERT_TRUE(env->has("Xml.deserialize_detailed"));
     ASSERT_TRUE(env->has("Xml.element"));
     ASSERT_TRUE(env->has("Xml.serialize"));
     ASSERT_TRUE(env->has("Xml.tag"));
@@ -496,6 +497,42 @@ static void test_xml_to_node_empty_element() {
     ASSERT_TRUE(v.as_choice()->fields[2].as_array()->elements->empty());
 }
 
+// ── Xml.deserialize_detailed: typed Xml.Node + located Xml.ParseError ──
+
+static void test_xml_deserialize_detailed_success() {
+    // On success the typed Xml.Node tree is returned directly (no separate
+    // to_node step), mirroring Json.parse_detailed.
+    const auto v = eval("Xml.deserialize_detailed(\"<root><a/></root>\") |> Result.unwrap()");
+
+    ASSERT_TRUE(v.is_choice());
+    ASSERT_EQ(v.as_choice()->type_name, "Node");
+    ASSERT_EQ(v.as_choice()->variant, "Element");
+    ASSERT_EQ(v.as_choice()->fields[0].as_string(), "root");
+}
+
+static void test_xml_deserialize_detailed_failure_message() {
+    const auto v = eval(R"(Xml.deserialize_detailed("<root>"))");
+    ASSERT_TRUE(v.is_result());
+    ASSERT_FALSE(v.as_result()->is_success);
+
+    const auto& err = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(err->type_name, std::string{"ParseError"});
+    ASSERT_FALSE(err->find_field("message")->as_string().empty());
+}
+
+static void test_xml_deserialize_detailed_failure_location() {
+    // The unclosed <a> on the second line leaves the parser reaching end of input;
+    // the located error reports a 1-based line/column.
+    const auto v = eval(R"(Xml.deserialize_detailed("<root>\n  <a>\n  bad"))");
+    ASSERT_TRUE(v.is_result());
+    ASSERT_FALSE(v.as_result()->is_success);
+
+    const auto& err = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(err->type_name, std::string{"ParseError"});
+    ASSERT_TRUE(err->find_field("line")->as_integer() >= 1);
+    ASSERT_TRUE(err->find_field("column")->as_integer() >= 1);
+}
+
 int main() {
     RUN(test_xml_add_child);
     RUN(test_xml_attribute);
@@ -558,5 +595,8 @@ int main() {
     RUN(test_xml_to_node_child_variants);
     RUN(test_xml_to_node_cdata);
     RUN(test_xml_to_node_empty_element);
+    RUN(test_xml_deserialize_detailed_success);
+    RUN(test_xml_deserialize_detailed_failure_message);
+    RUN(test_xml_deserialize_detailed_failure_location);
     return SUMMARY();
 }

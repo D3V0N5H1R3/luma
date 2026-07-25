@@ -12,6 +12,7 @@
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
 #include "common/resource_limits.hpp"
+#include "common/utf8.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
@@ -99,6 +100,49 @@ void validate_xml_name(std::string_view name, std::string_view function,
 
     return make_node("Element", {Value{node.tag_or_content}, Value{std::move(attributes)},
                                  Value{std::move(children)}});
+}
+
+// Build an Xml.ParseError record (type_name "ParseError") carrying the failure
+// message and its 1-based line/column.  Matches the "Xml.ParseError" record
+// registered in stdlib_type_arities.cpp and mirrors Json/Csv parse_detailed.
+[[nodiscard]] Value make_xml_parse_error_record(std::string message, std::int64_t line,
+                                                std::int64_t column) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "ParseError";
+    rec->fields.emplace_back("message", Value{std::move(message)});
+    rec->fields.emplace_back("line", Value{line});
+    rec->fields.emplace_back("column", Value{column});
+
+    return Value{std::move(rec)};
+}
+
+// Convert a byte offset into the source into a 1-based (line, column) pair.  The
+// column counts codepoints from the start of the line so it lines up with how an
+// editor reports positions (identical to Json/Csv parse_detailed's mapping).  An
+// offset of std::string::npos (an unpinpointable failure) clamps to the end.
+struct LineColumn {
+    std::int64_t line;
+    std::int64_t column;
+};
+
+[[nodiscard]] LineColumn offset_to_line_column(std::string_view text, std::size_t offset) {
+    offset = std::min(offset, text.size());
+
+    std::int64_t line = 1;
+    std::size_t line_start = 0;
+
+    for (std::size_t i = 0; i < offset; ++i) {
+        if (text[i] == '\n') {
+            ++line;
+            line_start = i + 1;
+        }
+    }
+
+    const std::int64_t column = static_cast<std::int64_t>(luma::utf8_codepoint_count(
+                                    text.substr(line_start, offset - line_start))) +
+                                1;
+
+    return LineColumn{line, column};
 }
 
 } // namespace
@@ -321,6 +365,30 @@ void register_xml_ns(const EnvPtr& env) {
             auto node = expect_xml(args[0], "Xml.to_node", loc);
 
             return xml_to_node(*node, 0, loc);
+        })
+        .func("deserialize_detailed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& text = expect_string(args[0], "Xml.deserialize_detailed", loc);
+
+            // Unlike Xml.deserialize (a string-error result over the opaque xml
+            // handle), deserialize_detailed returns the typed Xml.Node tree on
+            // success and a structured Xml.ParseError { message, line, column } on
+            // failure, so a caller can point at the offending byte.  Mirrors
+            // Json.parse_detailed.
+            try {
+                auto tree = xml_parse_string(text);
+
+                return make_success_value(xml_to_node(*tree, 0, loc));
+            } catch (const XmlParseError& e) {
+                const auto pos = offset_to_line_column(text, e.position());
+
+                return Value{ResultValue::failure(
+                    make_xml_parse_error_record(e.what(), pos.line, pos.column))};
+            } catch (const std::exception& e) {
+                // Non-positional failure (e.g. Xml.to_node depth guard): report
+                // line 1, column 1 rather than guessing an offset.
+                return Value{ResultValue::failure(make_xml_parse_error_record(e.what(), 1, 1))};
+            }
         })
         .func("from_dictionary", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

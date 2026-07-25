@@ -11,6 +11,7 @@ void register_color_functions(std::vector<FunctionSpec>& specs, const ModuleBuil
                      m.fn("darken", 2, "(color: Color.Color, amount: number)", named::color(),
                           {named::color(), p.number}),
                      m.fn("from_hex", 1, "(hex: string)", R::result(named::color()), {p.string}),
+                     m.fn("from_hsl", 1, "(hsl: Color.Hsl)", named::color(), {named::hsl()}),
                      m.fn("lighten", 2, "(color: Color.Color, amount: number)", named::color(),
                           {named::color(), p.number}),
                      m.fn("mix", 3, "(a: Color.Color, b: Color.Color, t: number)", named::color(),
@@ -19,8 +20,11 @@ void register_color_functions(std::vector<FunctionSpec>& specs, const ModuleBuil
                           R::result(named::color()), {p.integer, p.integer, p.integer}),
                      m.fn("rgba", 4, "(red: integer, green: integer, blue: integer, alpha: number)",
                           R::result(named::color()), {p.integer, p.integer, p.integer, p.number}),
+                     m.fn("rotate_hue", 2, "(color: Color.Color, degrees: number)", named::color(),
+                          {named::color(), p.number}),
                      m.fn("to_css", 1, "(color: Color.Color)", R::string_type(), {named::color()}),
                      m.fn("to_hex", 1, "(color: Color.Color)", R::string_type(), {named::color()}),
+                     m.fn("to_hsl", 1, "(color: Color.Color)", named::hsl(), {named::color()}),
                  });
 }
 

@@ -95,3 +95,34 @@ function void test_color_contrast_ratio() {
                                        Result.unwrap(Color.rgb(120, 120, 120)))
     assert(Math.approximately_equal(same, 1.0))
 }
+
+# ─── HSL conversions (Color.Hsl / to_hsl / from_hsl / rotate_hue) ───
+
+@test
+function void test_color_to_hsl_red() {
+    Color.Color red = Result.unwrap(Color.rgb(255, 0, 0))
+    Color.Hsl h = Color.to_hsl(red)
+
+    assert(Math.approximately_equal(h.hue, 0.0, 0.5), "red hue is 0")
+    assert(Math.approximately_equal(h.saturation, 1.0, 0.01), "red is fully saturated")
+    assert(Math.approximately_equal(h.lightness, 0.5, 0.01), "red lightness is 0.5")
+}
+
+@test
+function void test_color_from_hsl_roundtrip() {
+    Color.Color green = Result.unwrap(Color.rgb(0, 255, 0))
+    Color.Color back = Color.from_hsl(Color.to_hsl(green))
+
+    assert(back.red == 0, "green round-trips red 0")
+    assert(back.green == 255, "green round-trips green 255")
+    assert(back.blue == 0, "green round-trips blue 0")
+}
+
+@test
+function void test_color_rotate_hue() {
+    Color.Color red = Result.unwrap(Color.rgba(255, 0, 0, 0.5))
+    Color.Color rotated = Color.rotate_hue(red, 120.0)
+
+    assert(rotated.green == 255, "rotating red by 120 gives green")
+    assert(Math.approximately_equal(rotated.alpha, 0.5, 0.001), "alpha is preserved")
+}

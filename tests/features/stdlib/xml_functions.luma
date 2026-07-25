@@ -662,3 +662,37 @@ function void test_xml_to_node_leaf() {
 
     assert(node_label(node) == "element:root:0")
 }
+
+# ─── Located parse errors (Xml.deserialize_detailed / Xml.ParseError) ───
+
+@test
+function void test_xml_deserialize_detailed_success() {
+    result<Xml.Node, Xml.ParseError> r = Xml.deserialize_detailed("<root><a/></root>")
+
+    assert(Result.is_success(r), "well-formed XML should parse")
+
+    Xml.Node node = Result.unwrap(r)
+    match node {
+    case Xml.Node.Element(tag, _attrs, kids) {
+        assert(tag == "root", "the root tag is decoded")
+        assert(Array.length(kids) == 1, "the single child element is kept")
+    }
+    else {
+        assert(false, "the root should decode to an Element")
+    }
+    }
+}
+
+@test
+function void test_xml_deserialize_detailed_failure_location() {
+    result<Xml.Node, Xml.ParseError> r = Xml.deserialize_detailed("<root>")
+
+    match r {
+        success(_n) { assert(false, "an unclosed root should not parse") }
+        failure(e) {
+            assert(e.line >= 1, "the line is 1-based")
+            assert(e.column >= 1, "the column is 1-based")
+            assert(String.length(e.message) > 0, "the message is populated")
+        }
+    }
+}
