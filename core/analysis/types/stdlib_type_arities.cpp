@@ -215,6 +215,15 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Math.LineFit", field("number", "slope"), field("number", "intercept"),
                    field("number", "r_squared"));
 
+        // Math.histogram() returns this binned frequency distribution (type_name
+        // "Histogram"): counts[i] samples fall in the half-open bin
+        // [bin_edges[i], bin_edges[i+1]), so bin_edges has one more element than
+        // counts.  Edges are measurements (number); counts are whole tallies
+        // (integer), respecting the numeric convention.  Mirrors Math.Summary — a
+        // plain returned record feeding the GraphicalUi bar chart.
+        add_record(st, "Math.Histogram", field_of(array_ann("number"), "bin_edges"),
+                   field_of(array_ann("integer"), "counts"), field("number", "bin_width"));
+
         add_record(st, "Socket.Address", field("string", "host"), field("integer", "port"));
 
         add_record(st, "Csv.Dialect", field("string", "delimiter"), field("string", "quote"));

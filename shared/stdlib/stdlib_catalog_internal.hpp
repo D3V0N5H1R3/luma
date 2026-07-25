@@ -253,6 +253,11 @@ namespace named {
     return ReturnTypeDesc::named("LineFit");
 }
 
+// Math.histogram() returns this binned frequency-distribution record.
+[[nodiscard]] inline ReturnTypeDesc histogram() {
+    return ReturnTypeDesc::named("Histogram");
+}
+
 // Json.parse_detailed() surfaces this located parse-failure record as its
 // result error type.
 [[nodiscard]] inline ReturnTypeDesc json_parse_error() {

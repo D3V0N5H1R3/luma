@@ -13,6 +13,7 @@
 #include <numeric>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "analysis/source/source_location.hpp"
 #include "common/overflow.hpp"
@@ -268,10 +269,91 @@ void register_math_statistics(const EnvPtr& env) {
 
             return make_success_value(Value{std::move(rec)});
         })
+        .func("histogram", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& elems = *expect_array(args[0], "Math.histogram", loc)->elements;
+
+            if (auto fail = check_not_empty(elems, "Math.histogram")) {
+                return *std::move(fail);
+            }
+
+            const auto bins = expect_integer(args[1], "Math.histogram", loc);
+
+            if (bins < 1) {
+                return make_failure_value(
+                    error_msg("Math", "histogram", "bins must be at least 1"));
+            }
+            const auto bin_count = static_cast<std::size_t>(bins);
+
+            // One pass for the data range.
+            double minimum = elems.front().to_numeric();
+            double maximum = minimum;
+            for (const auto& elem : elems) {
+                const double v = elem.to_numeric();
+                minimum = std::min(minimum, v);
+                maximum = std::max(maximum, v);
+            }
+
+            // A zero-width range (every value equal) has no natural bin width;
+            // widen it to [min - 0.5, max + 0.5] so bins stay positive-width and
+            // every sample lands in the middle bin — matching numpy.histogram.
+            if (minimum == maximum) {
+                minimum -= 0.5;
+                maximum += 0.5;
+            }
+
+            const double bin_width = (maximum - minimum) / static_cast<double>(bin_count);
+
+            std::vector<std::int64_t> counts(bin_count, 0);
+            for (const auto& elem : elems) {
+                const double v = elem.to_numeric();
+
+                // Skip non-finite samples rather than risk UB casting NaN/inf.
+                if (!std::isfinite(v)) {
+                    continue;
+                }
+
+                double position = (v - minimum) / bin_width;
+                if (position < 0.0) {
+                    position = 0.0;
+                }
+
+                auto index = static_cast<std::size_t>(std::floor(position));
+
+                // The final bin is closed on the right so the maximum sample (and
+                // any floating-point overshoot) is counted in the last bin.
+                if (index >= bin_count) {
+                    index = bin_count - 1;
+                }
+
+                ++counts[index];
+            }
+
+            auto edges = std::make_shared<ArrayValue>();
+            edges->elements->reserve(bin_count + 1);
+            for (std::size_t i = 0; i < bin_count; ++i) {
+                edges->elements->emplace_back(minimum + (static_cast<double>(i) * bin_width));
+            }
+            // Anchor the last edge exactly at the maximum to avoid float drift.
+            edges->elements->emplace_back(maximum);
+
+            auto count_arr = std::make_shared<ArrayValue>();
+            count_arr->elements->reserve(bin_count);
+            for (const std::int64_t c : counts) {
+                count_arr->elements->emplace_back(c);
+            }
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Histogram";
+            rec->fields.emplace_back("bin_edges", Value{std::move(edges)});
+            rec->fields.emplace_back("counts", Value{std::move(count_arr)});
+            rec->fields.emplace_back("bin_width", Value{bin_width});
+
+            return make_success_value(Value{std::move(rec)});
+        })
         .func("percentile", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto& elems = *expect_array(args[0], "Math.percentile", loc)->elements;
-
             if (auto fail = check_not_empty(elems, "Math.percentile")) {
                 return *std::move(fail);
             }

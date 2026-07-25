@@ -58,6 +58,8 @@ void register_math_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
                  {named::fraction()}),
             m.fn("greatest_common_divisor", 2, "(a: integer, b: integer)", R::result_integer(),
                  {p.integer, p.integer}),
+            m.fn("histogram", 2, "(values: array<number>, bins: integer)",
+                 R::result(named::histogram()), {p.array_any, p.integer}),
             m.constant("infinity", R::number_type()),
             m.fn("is_infinite", 1, "(value: number)", R::boolean_type(), {p.number}),
             m.fn("is_not_a_number", 1, "(value: number)", R::boolean_type(), {p.number}),

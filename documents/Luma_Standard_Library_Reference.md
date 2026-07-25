@@ -1701,6 +1701,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.fraction_subtract(a, b)`        | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact difference `a - b`; runtime error on int64 overflow                        |
 | `Math.fraction_to_number(f)`          | `(Math.Fraction)`                | `number`          | Approximate `f` as a floating-point `number`                                     |
 | `Math.greatest_common_divisor(a, b)`  | `(integer, integer)`             | `result<integer>` | GCD of `a` and `b`                                                               |
+| `Math.histogram(values, bins)`        | `(array<number>, integer)`       | `result<Math.Histogram>` | Bin `values` into `bins` equal-width half-open bins; fail if empty or `bins < 1` |
 | `Math.hyperbolic_cosine(x)`           | `(number)`                       | `result<number>`  | Hyperbolic cosine; fail if result is infinite                                    |
 | `Math.hyperbolic_sine(x)`             | `(number)`                       | `result<number>`  | Hyperbolic sine; fail if result is infinite                                      |
 | `Math.hyperbolic_tangent(x)`          | `(number)`                       | `number`          | Hyperbolic tangent (always bounded to [−1, 1])                                   |
@@ -1771,6 +1772,14 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 `Math.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
 
 `Math.FiveNumberSummary` is the box-plot sibling of `Math.Summary` — `minimum: number`, `q1: number`, `median: number`, `q3: number`, `maximum: number` — returned by `Math.five_number_summary(arr)` (fails on an empty array). The quartiles use the same linear-interpolation method as `Math.percentile`, so `Math.five_number_summary(v)` agrees with `Math.percentile(v, 25/50/75)` — a single typed answer for the five order statistics a box plot needs.
+
+`Math.Histogram { bin_edges: array<number>, counts: array<integer>, bin_width: number }` is the binned frequency distribution behind every bar chart. `Math.histogram(values, bins)` splits the data range `[min, max]` into `bins` equal-width half-open bins and tallies how many samples fall in each — `counts[i]` is the number of values in `[bin_edges[i], bin_edges[i+1])`, so `bin_edges` always has one more element than `counts`, and the final bin is closed on the right so the maximum is counted. It fails on an empty array or `bins < 1`. When every value is identical (a zero-width range) the range is widened by half a unit on each side so the bins stay positive-width. The `integer` counts and `number` edges respect the numeric convention, and the shape feeds the GraphicalUi bar chart directly. Mirrors `Math.summarize` / `Math.five_number_summary`: pure data returned by one pipe-first `result`-typed call.
+
+```luma
+Math.Histogram h = Result.unwrap(Math.histogram([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3))
+assert(Array.length(h.bin_edges) == 4)   # one more edge than counts
+assert(Array.length(h.counts) == 3)
+```
 
 `Math.Vector2 { x: number, y: number }` and `Math.Vector3 { x: number, y: number, z: number }` are typed geometry vectors for 2D/3D work — game positions, GraphicalUi layout, physics — where named `.x` / `.y` / `.z` components are far more teachable than the index arithmetic of `LinearAlgebra`'s general `array<number>` vectors. Like `Math.Complex`, they are pure data plus a pipe-first free-function family — `vec2_*` / `vec3_*` for `add`, `sub`, `scale`, `dot`, `length`, and `normalize`, with `vec3_cross` for the 3D cross product — and no operator overloading. `normalize` returns the zero vector unchanged rather than dividing by zero.
 
