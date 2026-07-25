@@ -462,6 +462,58 @@ static void test_process_exit_status_rejects_non_record() {
     ASSERT_THROWS(eval("Process.exit_status(42)"));
 }
 
+// ─── Process.run_command_typed (typed launch errors via Process.Error) ────────
+
+// Reads the Process.Error variant name from a run_command_typed failure result.
+[[nodiscard]] static std::string process_error_variant_of(const luma::Value& v) {
+    const auto& inner = v.as_result()->owned_inner;
+    if (!inner->is_choice()) {
+        return "<not-a-choice>";
+    }
+    return inner->as_choice()->type_name + "." + inner->as_choice()->variant;
+}
+
+static void test_process_run_command_typed_success_returns_output() {
+#ifdef _WIN32
+    const auto v =
+        eval(R"(Process.run_command_typed(Process.command("cmd", ["/c", "echo", "hi"])))");
+#else
+    const auto v = eval(R"(Process.run_command_typed(Process.command("echo", ["hi"])))");
+#endif
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+    ASSERT_TRUE(inner.is_record());
+    ASSERT_EQ(inner.as_record()->type_name, std::string{"CommandOutput"});
+    ASSERT_EQ(inner.as_record()->find_field("exit_code")->as_integer(),
+              static_cast<std::int64_t>(0));
+}
+
+static void test_process_run_command_typed_nonexistent_is_not_found() {
+    const auto v =
+        eval(R"(Process.run_command_typed(Process.command("_luma_nonexistent_xyz_123", [])))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(process_error_variant_of(v), "Error.NotFound");
+}
+
+static void test_process_run_command_typed_empty_program_is_invalid() {
+    const auto v = eval(R"(Process.run_command_typed(Process.command("", ["x"])))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(process_error_variant_of(v), "Error.InvalidCommand");
+}
+
+static void test_process_run_command_typed_rejects_non_record() {
+    ASSERT_THROWS(eval("Process.run_command_typed(42)"));
+}
+
+static void test_process_run_command_typed_registered() {
+    const auto env = luma::test::make_std_env();
+    ASSERT_TRUE(env->has("Process.run_command_typed"));
+}
+
 int main() {
     RUN(test_process_get_args_empty);
     RUN(test_process_get_args_with_values);
@@ -514,6 +566,11 @@ int main() {
     RUN(test_process_exit_status_positive_is_failed_with_code);
     RUN(test_process_exit_status_negative_is_launch_failed);
     RUN(test_process_exit_status_rejects_non_record);
+    RUN(test_process_run_command_typed_success_returns_output);
+    RUN(test_process_run_command_typed_nonexistent_is_not_found);
+    RUN(test_process_run_command_typed_empty_program_is_invalid);
+    RUN(test_process_run_command_typed_rejects_non_record);
+    RUN(test_process_run_command_typed_registered);
 
     return SUMMARY();
 }

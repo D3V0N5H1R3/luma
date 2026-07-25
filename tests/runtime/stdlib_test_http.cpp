@@ -178,8 +178,77 @@ static void test_http_status_class_out_of_range_fails() {
     ASSERT_EVAL_FAILURE("Http.status_class(0)");
 }
 
-// ─── Http: is_success (2xx predicate over a response record) ──────────────────
+// ─── Http: get_typed (typed transport error via the Http.Error choice) ────────
+// These paths all fail deterministically before any network I/O (validation and
+// the SSRF guard run up front), so the classification is testable offline.
 
+// Reads the Http.Error variant name from a get_typed failure result, asserting
+// the failure carries a typed Http.Error choice rather than a string message.
+[[nodiscard]] static std::string http_error_variant_of(const luma::Value& v) {
+    const auto& inner = v.as_result()->owned_inner;
+    if (!inner->is_choice()) {
+        return "<not-a-choice>";
+    }
+    return inner->as_choice()->type_name + "." + inner->as_choice()->variant;
+}
+
+static void test_http_get_typed_unsupported_scheme_is_invalid_url() {
+    const auto v = eval(R"(Http.get_typed("ftp://example.com/file"))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(http_error_variant_of(v), "Error.InvalidUrl");
+}
+
+static void test_http_get_typed_empty_host_is_invalid_url() {
+    const auto v = eval(R"(Http.get_typed("http://"))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(http_error_variant_of(v), "Error.InvalidUrl");
+}
+
+static void test_http_get_typed_crlf_injection_is_blocked() {
+    const auto v = eval(R"(Http.get_typed("http://example.com/a\r\nX-Injected: 1"))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(http_error_variant_of(v), "Error.Blocked");
+}
+
+static void test_http_get_typed_ssrf_loopback_is_blocked() {
+    const auto v = eval(R"(Http.get_typed("http://127.0.0.1/admin"))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(http_error_variant_of(v), "Error.Blocked");
+}
+
+static void test_http_get_typed_ssrf_private_range_is_blocked() {
+    ASSERT_EQ(http_error_variant_of(eval(R"(Http.get_typed("http://10.0.0.1/"))")),
+              "Error.Blocked");
+    ASSERT_EQ(http_error_variant_of(eval(R"(Http.get_typed("http://192.168.1.1/"))")),
+              "Error.Blocked");
+}
+
+static void test_http_get_typed_https_loopback_classification() {
+    const auto v = eval(R"(Http.get_typed("https://127.0.0.1/admin"))");
+
+    ASSERT_RESULT_FAILURE(v);
+
+#if defined(LUMA_HAS_TLS) && LUMA_HAS_TLS
+    // With TLS compiled in, an https request reaches the SSRF guard, which blocks
+    // the loopback target before the handshake.
+    ASSERT_EQ(http_error_variant_of(v), "Error.Blocked");
+#else
+    // Without TLS support, https is rejected up front as a TLS error.
+    ASSERT_EQ(http_error_variant_of(v), "Error.TlsError");
+#endif
+}
+
+static void test_http_get_typed_registered() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Http.get_typed"));
+}
+
+// ─── Http: is_success (2xx predicate over a response record) ──────────────────
 static void test_http_is_success_reads_status() {
     // is_success is true only for a 2xx status.  A response record is built here
     // with a literal (the field the predicate reads is `status`); eval() ignores
@@ -661,6 +730,13 @@ int main() {
     RUN(test_http_method_to_string_rejects_non_choice);
     RUN(test_http_status_class_all_families);
     RUN(test_http_status_class_out_of_range_fails);
+    RUN(test_http_get_typed_unsupported_scheme_is_invalid_url);
+    RUN(test_http_get_typed_empty_host_is_invalid_url);
+    RUN(test_http_get_typed_crlf_injection_is_blocked);
+    RUN(test_http_get_typed_ssrf_loopback_is_blocked);
+    RUN(test_http_get_typed_ssrf_private_range_is_blocked);
+    RUN(test_http_get_typed_https_loopback_classification);
+    RUN(test_http_get_typed_registered);
     RUN(test_http_is_success_reads_status);
     RUN(test_http_new_functions_registered);
     RUN(test_http_parse_url_default_http_port);

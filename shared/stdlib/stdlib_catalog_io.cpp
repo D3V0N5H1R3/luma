@@ -89,6 +89,8 @@ void register_process_functions(std::vector<FunctionSpec>& specs, const ModuleBu
             m.fn("run", 1, "(command: string)", R::result(named::process_result()), {p.string}),
             m.fn("run_command", 1, "(command: Process.Command)", R::result(named::command_output()),
                  {named::command()}),
+            m.fn("run_command_typed", 1, "(command: Process.Command)",
+                 R::result(named::command_output(), named::process_error()), {named::command()}),
             m.fn("set_environment_variable", 2, "(name: string, value: string)", R::result_void(),
                  {p.string, p.string}),
         });
@@ -144,6 +146,8 @@ void register_http_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
             m.fn("download", 2, "(url: string, path: string)", R::result_string(),
                  {p.string, p.string}),
             m.fn("get", 1, "(url: string)", R::result(named::response()), {p.string}),
+            m.fn("get_typed", 1, "(url: string)", R::result(named::response(), named::http_error()),
+                 {p.string}),
             m.fn("get_with", 2, "(url: string, headers: dictionary<string>)",
                  R::result(named::response()), {p.string, p.dict_any}),
             m.fn("head", 1, "(url: string)", R::result(named::response()), {p.string}),

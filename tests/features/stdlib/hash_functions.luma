@@ -229,3 +229,36 @@ function void test_hash_algorithm_crc32() {
     assert(Hash.digest(Hash.Algorithm.Crc32, "abc") == "352441c2")
     assert(Hash.verify(Hash.Algorithm.Crc32, "abc", "352441c2"))
 }
+
+# ═══════════════════════════════════════════════════════════
+# Hash.Digest (algorithm-tagged typed digests)
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_hash_sha256_typed_tags_algorithm() {
+    Hash.Digest d = Hash.sha256_typed("abc")
+
+    string algo = match d.algorithm {
+        case Hash.Algorithm.Sha256 { "sha256" }
+        else { "other" }
+    }
+
+    assert(algo == "sha256", "sha256_typed tags the Sha256 algorithm")
+    assert(d.hex == Hash.sha256("abc"), "the hex matches the plain digest")
+    assert(String.length(d.hex) == 64, "a SHA-256 hex digest is 64 characters")
+}
+
+@test
+function void test_hash_typed_variants_tag_each_algorithm() {
+    string md5 = match Hash.md5_typed("x").algorithm {
+        case Hash.Algorithm.Md5 { "md5" }
+        else { "other" }
+    }
+    string sha512 = match Hash.sha512_typed("x").algorithm {
+        case Hash.Algorithm.Sha512 { "sha512" }
+        else { "other" }
+    }
+
+    assert(md5 == "md5", "md5_typed tags Md5")
+    assert(sha512 == "sha512", "sha512_typed tags Sha512")
+}

@@ -350,6 +350,50 @@ static void test_hash_verify_unknown_algorithm_message() {
                                "unknown algorithm");
 }
 
+// ─── Hash.Digest (algorithm-tagged typed digests) ─────────────────────────────
+
+static void test_hash_sha256_typed_tags_algorithm_and_hex() {
+    // sha256_typed returns a Hash.Digest record whose algorithm is tagged Sha256
+    // and whose hex matches the plain sha256 digest.
+    const auto v = eval(R"(Hash.sha256_typed("abc"))");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, "Digest");
+
+    const auto* algorithm = v.as_record()->find_field("algorithm");
+    ASSERT_TRUE(algorithm != nullptr && algorithm->is_choice());
+    ASSERT_EQ(algorithm->as_choice()->type_name, "Algorithm");
+    ASSERT_EQ(algorithm->as_choice()->variant, "Sha256");
+
+    const auto* hex = v.as_record()->find_field("hex");
+    ASSERT_TRUE(hex != nullptr && hex->is_string());
+    ASSERT_EQ(hex->as_string(), eval(R"(Hash.sha256("abc"))").as_string());
+}
+
+static void test_hash_typed_variants_tag_each_algorithm() {
+    ASSERT_EQ(
+        eval(R"(Hash.md5_typed("x"))").as_record()->find_field("algorithm")->as_choice()->variant,
+        "Md5");
+    ASSERT_EQ(
+        eval(R"(Hash.sha1_typed("x"))").as_record()->find_field("algorithm")->as_choice()->variant,
+        "Sha1");
+    ASSERT_EQ(eval(R"(Hash.sha512_typed("x"))")
+                  .as_record()
+                  ->find_field("algorithm")
+                  ->as_choice()
+                  ->variant,
+              "Sha512");
+}
+
+static void test_hash_typed_registered() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Hash.md5_typed"));
+    ASSERT_TRUE(env->has("Hash.sha1_typed"));
+    ASSERT_TRUE(env->has("Hash.sha256_typed"));
+    ASSERT_TRUE(env->has("Hash.sha512_typed"));
+}
+
 int main() {
     RUN(test_hash_algorithms);
     RUN(test_hash_crc32);
@@ -389,5 +433,8 @@ int main() {
     RUN(test_hash_verify_rejects_non_string);
     RUN(test_hash_verify_unknown_algorithm_throws);
     RUN(test_hash_verify_unknown_algorithm_message);
+    RUN(test_hash_sha256_typed_tags_algorithm_and_hex);
+    RUN(test_hash_typed_variants_tag_each_algorithm);
+    RUN(test_hash_typed_registered);
     return SUMMARY();
 }

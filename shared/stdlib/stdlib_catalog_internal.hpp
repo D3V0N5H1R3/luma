@@ -112,6 +112,12 @@ namespace named {
     return ReturnTypeDesc::named("Random.Distribution");
 }
 
+// Random.uuid_typed / parse_uuid produce this typed UUID wrapper (bare short
+// name "Uuid", a record).
+[[nodiscard]] inline ReturnTypeDesc uuid() {
+    return ReturnTypeDesc::named("Uuid");
+}
+
 [[nodiscard]] inline ReturnTypeDesc weekday() {
     return ReturnTypeDesc::named("DateTime.Weekday");
 }
@@ -143,6 +149,13 @@ namespace named {
 // Http.StatusClass (a bare name would fall through to the record default).
 [[nodiscard]] inline ReturnTypeDesc status_class() {
     return ReturnTypeDesc::named("Http.StatusClass");
+}
+
+// Typed transport-error choice (fully-qualified, like status_class).  Used as
+// the error parameter of result<Http.Response, Http.Error> on the get_typed
+// slice of Http, mirroring FileSystem.IoError.
+[[nodiscard]] inline ReturnTypeDesc http_error() {
+    return ReturnTypeDesc::named("Http.Error");
 }
 
 // Record / result types (identified by a PascalCase name).
@@ -178,6 +191,17 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc time_parts() {
     return ReturnTypeDesc::named("TimeParts");
+}
+
+// DateTime.date / date_of build this calendar-only record (bare short name
+// "Date", like time_parts()); DateTime.time / time_of build the wall-clock-only
+// "Time" record.  Both are partial counterparts to the full TimeParts breakdown.
+[[nodiscard]] inline ReturnTypeDesc date() {
+    return ReturnTypeDesc::named("Date");
+}
+
+[[nodiscard]] inline ReturnTypeDesc time() {
+    return ReturnTypeDesc::named("Time");
 }
 
 [[nodiscard]] inline ReturnTypeDesc duration() {
@@ -343,6 +367,13 @@ namespace named {
     return ReturnTypeDesc::named("Process.ExitStatus");
 }
 
+// Typed launch-error choice (fully-qualified, like exit_status).  Used as the
+// error parameter of result<Process.CommandOutput, Process.Error> on the
+// run_command_typed slice, mirroring FileSystem.IoError.
+[[nodiscard]] inline ReturnTypeDesc process_error() {
+    return ReturnTypeDesc::named("Process.Error");
+}
+
 [[nodiscard]] inline ReturnTypeDesc input_event() {
     return ReturnTypeDesc::named("InputEvent");
 }
@@ -389,6 +420,12 @@ namespace named {
 // (bare short name "Cookie", like url_parts()).
 [[nodiscard]] inline ReturnTypeDesc cookie() {
     return ReturnTypeDesc::named("Cookie");
+}
+
+// Hash.<algo>_typed returns this algorithm-tagged digest record (bare short name
+// "Digest", a record); its `algorithm` field is the Hash.Algorithm choice.
+[[nodiscard]] inline ReturnTypeDesc digest() {
+    return ReturnTypeDesc::named("Digest");
 }
 
 } // namespace named

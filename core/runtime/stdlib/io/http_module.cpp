@@ -149,6 +149,22 @@ void register_http_ns(const EnvPtr& env) {
             return do_http_request("GET", args[0].as_string(), {}, {}, k_http_default_timeout_ms,
                                    loc);
         })
+        // Http.get_typed(url) -> result<Http.Response, Http.Error>
+        // Opt-in typed-error variant of Http.get: a transport failure is surfaced as
+        // an Http.Error choice (InvalidUrl / ConnectionFailed / Timeout / TlsError /
+        // Blocked / Malformed) rather than an opaque string message, so a program can
+        // match the category — retry only on Timeout, fall back only on
+        // ConnectionFailed, distinguish a Blocked SSRF URL from a Malformed one —
+        // instead of substring-matching the message.  Mirrors
+        // FileSystem.read_file_typed / FileSystem.IoError; the string-error Http.get
+        // is left untouched.
+        .func("get_typed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Http.get_typed", loc);
+
+            return do_http_request_typed("GET", args[0].as_string(), {}, {},
+                                         k_http_default_timeout_ms, loc);
+        })
         // Http.post(url, body) -> result<dictionary<string>>
         .func("post", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

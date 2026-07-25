@@ -3,6 +3,7 @@
 
 #include <array>
 #include <atomic>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -197,6 +198,35 @@ void drain_pipe(HANDLE read_handle, std::string& out, std::atomic<bool>& overflo
 
 } // namespace
 
+// Maps a Win32 CreateProcess failure code (from GetLastError) onto the
+// POSIX-style errno that CapturedOutput::launch_errno carries, so
+// Process.run_command_typed classifies a Windows launch failure with the same
+// logic as POSIX.  Unmapped codes collapse to a generic launch failure (errno 0
+// would be misread as "launched", so a non-zero sentinel is used).
+namespace {
+
+[[nodiscard]] int launch_errno_from_win32(DWORD code) {
+    switch (code) {
+        case ERROR_FILE_NOT_FOUND:
+        case ERROR_PATH_NOT_FOUND:
+        case ERROR_INVALID_NAME:
+            return ENOENT;
+        case ERROR_ACCESS_DENIED:
+            return EACCES;
+        case ERROR_BAD_EXE_FORMAT:
+        case ERROR_BAD_FORMAT:
+            return ENOEXEC;
+        default:
+            // Generic, unclassified launch failure.  EINVAL is the agreed generic
+            // sentinel that process_error_variant() (process_module.cpp) routes to
+            // Process.Error.LaunchFailed — it must NOT be a code that maps to a more
+            // specific variant there.
+            return EINVAL;
+    }
+}
+
+} // namespace
+
 // Windows implementation: spawn via CreateProcessA with two pipes so stdout and
 // stderr are captured separately.  stderr is drained on a helper thread while
 // stdout is drained on the calling thread, so neither pipe filling can deadlock
@@ -254,6 +284,10 @@ CapturedOutput execute_argv_captured(std::vector<std::string> argv) {
     const BOOL ok = CreateProcessA(nullptr, safe_cmd.data(), nullptr, nullptr, TRUE,
                                    CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
 
+    // Capture the failure code immediately, before the CloseHandle calls below
+    // can overwrite the thread's last error.
+    const DWORD create_error = (ok == FALSE) ? GetLastError() : 0;
+
     // The child owns its copies of the write ends.
     CloseHandle(out_write);
     CloseHandle(err_write);
@@ -262,7 +296,10 @@ CapturedOutput execute_argv_captured(std::vector<std::string> argv) {
         CloseHandle(out_read);
         CloseHandle(err_read);
 
-        return {};
+        CapturedOutput launch_failure{};
+        launch_failure.launch_errno = launch_errno_from_win32(create_error);
+
+        return launch_failure;
     }
 
     std::string out_output{};

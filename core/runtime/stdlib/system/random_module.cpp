@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -84,6 +85,52 @@ constexpr std::string_view alphanumeric_chars{
     }
 
     return uuid;
+}
+
+// Validates a canonical 8-4-4-4-12 UUID string (36 chars, hyphens at positions
+// 8/13/18/23, lowercase-or-uppercase hex elsewhere) and, on success, returns the
+// lower-cased canonical form.  std::nullopt marks any deviation.  Backs
+// Random.parse_uuid, giving a UUID the same parse-on-the-way-in guarantee a
+// plain string cannot offer.
+[[nodiscard]] std::optional<std::string> canonicalize_uuid(std::string_view text) {
+    if (text.size() != 36) {
+        return std::nullopt;
+    }
+
+    std::string canonical;
+    canonical.reserve(36);
+
+    for (std::size_t i{0}; i < text.size(); ++i) {
+        const bool is_dash_position = (i == 8 || i == 13 || i == 18 || i == 23);
+        const char c = text[i];
+
+        if (is_dash_position) {
+            if (c != '-') {
+                return std::nullopt;
+            }
+            canonical += '-';
+            continue;
+        }
+
+        if (std::isxdigit(static_cast<unsigned char>(c)) == 0) {
+            return std::nullopt;
+        }
+
+        canonical += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    return canonical;
+}
+
+// Wraps a canonical UUID string in a Random.Uuid record.  The runtime short name
+// "Uuid" matches how the type checker registers the record from
+// stdlib_type_arities.cpp; the single field name must match that declaration.
+[[nodiscard]] Value make_uuid_record(std::string value) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Uuid";
+    rec->fields.emplace_back("value", Value{std::move(value)});
+
+    return Value{std::move(rec)};
 }
 
 [[nodiscard]] std::mt19937& thread_local_generator() {
@@ -407,6 +454,59 @@ void register_random_ns(const EnvPtr& env) {
             }
 
             return Value{format_uuid_bytes(bytes)};
+        })
+        // Random.uuid_typed() -> Random.Uuid
+        // Typed counterpart of generate_uuid: returns the canonical UUID string
+        // wrapped in a Random.Uuid record so a UUID is a distinct, validated type
+        // rather than a bare string.  Like generate_uuid it never fails (it falls
+        // back to the PRNG when the CSPRNG is unavailable), so it returns the
+        // record directly rather than a result.
+        .func("uuid_typed", 0)
+        .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
+            std::array<unsigned char, 16> bytes{};
+
+            if (!secure_generate(bytes.data(), bytes.size())) {
+                fill_bytes_prng(bytes);
+            }
+
+            return make_uuid_record(format_uuid_bytes(bytes));
+        })
+        // Random.parse_uuid(uuid) -> result<Random.Uuid>
+        // Validates a canonical 8-4-4-4-12 UUID string and wraps it in a
+        // Random.Uuid record, failing for any non-canonical input.  The stored
+        // value is lower-cased so equal UUIDs compare equal regardless of the
+        // input's letter case.
+        .func("parse_uuid", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& text = expect_string(args[0], "Random.parse_uuid", loc);
+
+            auto canonical = canonicalize_uuid(text);
+
+            if (!canonical) {
+                return make_failure_value(
+                    error_msg("Random", "parse_uuid", "not a canonical 8-4-4-4-12 UUID string"),
+                    std::string{"parse_error"}, "Random.parse_uuid");
+            }
+
+            return make_success_value(make_uuid_record(std::move(*canonical)));
+        })
+        // Random.uuid_to_string(uuid) -> string
+        // Reads the canonical string back out of a Random.Uuid record.
+        .func("uuid_to_string", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_record() || args[0].as_record()->type_name != "Uuid") {
+                throw RuntimeError{"Random.uuid_to_string: expected a Random.Uuid record", loc,
+                                   "build one with Random.uuid_typed() or Random.parse_uuid(s)"};
+            }
+
+            const Value* value = args[0].as_record()->find_field("value");
+
+            if (value == nullptr || !value->is_string()) {
+                throw RuntimeError{"Random.uuid_to_string: expected a Random.Uuid record", loc,
+                                   "build one with Random.uuid_typed() or Random.parse_uuid(s)"};
+            }
+
+            return Value{value->as_string()};
         })
         // ── Cryptographically secure variants ──────────────
         .func("secure_boolean", 0)

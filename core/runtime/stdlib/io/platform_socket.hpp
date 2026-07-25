@@ -226,7 +226,12 @@ namespace luma {
 // The socket is left in blocking mode on return.
 
 [[nodiscard]] inline bool tcp_connect_with_timeout(SocketHandle sock, const struct sockaddr* addr,
-                                                   int addrlen, int timeout_ms) {
+                                                   int addrlen, int timeout_ms,
+                                                   bool* timed_out = nullptr) {
+    if (timed_out != nullptr) {
+        *timed_out = false;
+    }
+
     const int saved_flags = platform_socket::set_non_blocking(sock);
 
     if (saved_flags < 0) {
@@ -263,6 +268,12 @@ namespace luma {
     platform_socket::set_blocking(sock, saved_flags);
 
     if (sel <= 0) {
+        // sel == 0 means the connect did not complete within the timeout window;
+        // sel < 0 is a select() error.  Report the timeout distinctly so callers
+        // can classify it separately from a refused/failed connection.
+        if (timed_out != nullptr && sel == 0) {
+            *timed_out = true;
+        }
         return false;
     }
 

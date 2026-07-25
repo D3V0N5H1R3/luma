@@ -574,6 +574,51 @@ static void test_random_module() {
     ASSERT_TRUE(env->has("Random.secure_number"));
     ASSERT_TRUE(env->has("Random.secure_string"));
     ASSERT_TRUE(env->has("Random.secure_uuid"));
+    ASSERT_TRUE(env->has("Random.uuid_typed"));
+    ASSERT_TRUE(env->has("Random.parse_uuid"));
+    ASSERT_TRUE(env->has("Random.uuid_to_string"));
+}
+
+// ─── Random.Uuid (typed UUID value) ──────────────────────────────────────────
+
+static void test_random_uuid_typed_wraps_canonical_string() {
+    const auto v = eval("Random.uuid_typed()");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, "Uuid");
+
+    const auto* value = v.as_record()->find_field("value");
+    ASSERT_TRUE(value != nullptr && value->is_string());
+    ASSERT_EQ(value->as_string().size(), 36U);
+}
+
+static void test_random_parse_uuid_accepts_canonical_and_lowercases() {
+    const auto v = eval(R"(Random.parse_uuid("550E8400-E29B-41D4-A716-446655440000"))");
+
+    ASSERT_RESULT_SUCCESS(v);
+    // The stored value is canonicalised to lower case.
+    ASSERT_EQ(v.as_result()->owned_inner->as_record()->find_field("value")->as_string(),
+              "550e8400-e29b-41d4-a716-446655440000");
+}
+
+static void test_random_parse_uuid_rejects_malformed() {
+    ASSERT_EVAL_FAILURE(R"(Random.parse_uuid("not-a-uuid"))");
+    // Right length but a non-hex character where hex is required.
+    ASSERT_EVAL_FAILURE(R"(Random.parse_uuid("g50e8400-e29b-41d4-a716-446655440000"))");
+    // Right length but a hyphen in the wrong place.
+    ASSERT_EVAL_FAILURE(R"(Random.parse_uuid("550e8400e-29b-41d4-a716-446655440000"))");
+}
+
+static void test_random_uuid_to_string_roundtrips() {
+    const auto s = eval(
+        R"(Random.uuid_to_string(Result.unwrap(Random.parse_uuid("550e8400-e29b-41d4-a716-446655440000"))))");
+
+    ASSERT_TRUE(s.is_string());
+    ASSERT_EQ(s.as_string(), "550e8400-e29b-41d4-a716-446655440000");
+}
+
+static void test_random_uuid_to_string_rejects_non_uuid() {
+    ASSERT_TRUE(luma::test::eval_throws("Random.uuid_to_string(42)"));
 }
 
 int main() {
@@ -626,5 +671,10 @@ int main() {
     RUN(test_random_secure_uuid);
 
     RUN(test_random_module);
+    RUN(test_random_uuid_typed_wraps_canonical_string);
+    RUN(test_random_parse_uuid_accepts_canonical_and_lowercases);
+    RUN(test_random_parse_uuid_rejects_malformed);
+    RUN(test_random_uuid_to_string_roundtrips);
+    RUN(test_random_uuid_to_string_rejects_non_uuid);
     return SUMMARY();
 }

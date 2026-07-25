@@ -507,3 +507,73 @@ function void test_http_cookie_header_roundtrip() {
     assert(String.contains(header, "Domain=example.com"), "domain round-trips")
     assert(String.contains(header, "Secure"), "Secure flag round-trips")
 }
+
+# ═══════════════════════════════════════════════════════════
+# Http.Error (opt-in typed transport errors via get_typed)
+# ═══════════════════════════════════════════════════════════
+
+# Exhaustive match over every Http.Error variant. Beyond labelling a category,
+# this doubles as a check that Http.Error is fully registered, exhaustively
+# matchable, and usable as a parameter type annotation.
+function string http_error_label(Http.Error e) {
+    return match e {
+        case Http.Error.InvalidUrl       { "invalid_url" }
+        case Http.Error.ConnectionFailed { "connection_failed" }
+        case Http.Error.Timeout          { "timeout" }
+        case Http.Error.TlsError         { "tls_error" }
+        case Http.Error.TooManyRedirects { "too_many_redirects" }
+        case Http.Error.Blocked          { "blocked" }
+        case Http.Error.Malformed        { "malformed" }
+    }
+}
+
+# Classify a get_typed result into a label, so the tests can assert the exact
+# transport-error category without touching the network (every case below fails
+# during validation or the SSRF guard, before any socket I/O).
+function string get_typed_label(result<Http.Response, Http.Error> r) {
+    return match r {
+        success(_resp) { "unexpected_success" }
+        failure(e)     { http_error_label(e) }
+    }
+}
+
+@test
+function void test_http_get_typed_unsupported_scheme_is_invalid_url() {
+    result<Http.Response, Http.Error> r = Http.get_typed("ftp://example.com/file")
+
+    assert(Result.is_failure(r), "an unsupported scheme fails")
+    assert(get_typed_label(r) == "invalid_url", "ftp:// classifies as InvalidUrl")
+}
+
+@test
+function void test_http_get_typed_empty_host_is_invalid_url() {
+    result<Http.Response, Http.Error> r = Http.get_typed("http://")
+
+    assert(Result.is_failure(r), "an empty host fails")
+    assert(get_typed_label(r) == "invalid_url", "an empty host classifies as InvalidUrl")
+}
+
+@test
+function void test_http_get_typed_crlf_injection_is_blocked() {
+    result<Http.Response, Http.Error> r = Http.get_typed("http://example.com/a\r\nX-Injected: 1")
+
+    assert(Result.is_failure(r), "a CRLF-injected target fails")
+    assert(get_typed_label(r) == "blocked", "CRLF injection classifies as Blocked")
+}
+
+@test
+function void test_http_get_typed_ssrf_loopback_is_blocked() {
+    result<Http.Response, Http.Error> r = Http.get_typed("http://127.0.0.1/admin")
+
+    assert(Result.is_failure(r), "an SSRF loopback target fails")
+    assert(get_typed_label(r) == "blocked", "a loopback address classifies as Blocked")
+}
+
+@test
+function void test_http_get_typed_ssrf_private_range_is_blocked() {
+    result<Http.Response, Http.Error> r1 = Http.get_typed("http://10.0.0.1/")
+    result<Http.Response, Http.Error> r2 = Http.get_typed("http://192.168.1.1/")
+
+    assert(get_typed_label(r1) == "blocked", "a 10.0.0.0/8 address classifies as Blocked")
+    assert(get_typed_label(r2) == "blocked", "a 192.168.0.0/16 address classifies as Blocked")
+}

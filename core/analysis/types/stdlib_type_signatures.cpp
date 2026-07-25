@@ -113,8 +113,14 @@ namespace {
             if (desc.named_type == "Http.StatusClass") {
                 return TypeInfo::make_named(K::Choice, "Http.StatusClass");
             }
+            if (desc.named_type == "Http.Error") {
+                return TypeInfo::make_named(K::Choice, "Http.Error");
+            }
             if (desc.named_type == "Process.ExitStatus") {
                 return TypeInfo::make_named(K::Choice, "Process.ExitStatus");
+            }
+            if (desc.named_type == "Process.Error") {
+                return TypeInfo::make_named(K::Choice, "Process.Error");
             }
             if (desc.named_type == "Log.Output") {
                 return TypeInfo::make_named(K::Choice, "Log.Output");

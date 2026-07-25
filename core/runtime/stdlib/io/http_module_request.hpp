@@ -36,6 +36,15 @@ do_http_request(const std::string& method, const std::string& url, const std::st
                 const std::vector<std::pair<std::string, std::string>>& extra_headers,
                 int timeout_ms, const SourceLocation& loc);
 
+// Opt-in typed-error counterpart of do_http_request: on transport failure the
+// result carries a typed Http.Error choice (result<Http.Response, Http.Error>)
+// classifying the failure category, rather than an opaque string message.  A
+// successful exchange returns the same Http.Response record as do_http_request.
+[[nodiscard]] Value
+do_http_request_typed(const std::string& method, const std::string& url, const std::string& body,
+                      const std::vector<std::pair<std::string, std::string>>& extra_headers,
+                      int timeout_ms, const SourceLocation& loc);
+
 // ─── Plain-text request execution ───────────────────────────────────────────
 
 // Plain-data result of an HTTP request: the response body on transport success,

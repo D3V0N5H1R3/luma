@@ -77,7 +77,45 @@ algorithm_name_from_variant(std::string_view variant) {
     return std::nullopt;
 }
 
-// Resolves an algorithm argument that may be either a Hash.Algorithm choice or a
+// Maps a canonical lowercase algorithm name back to its Hash.Algorithm choice
+// variant (the inverse of algorithm_name_from_variant): "sha256" → "Sha256".
+// Used to tag a Hash.Digest record with the algorithm that produced it.  Every
+// name in k_digest_algorithms has a variant, so the digest constructors below
+// always find one.
+[[nodiscard]] std::string_view algorithm_variant_from_name(std::string_view name) {
+    if (name == "md5") {
+        return "Md5";
+    }
+    if (name == "sha1") {
+        return "Sha1";
+    }
+    if (name == "sha256") {
+        return "Sha256";
+    }
+    if (name == "sha512") {
+        return "Sha512";
+    }
+
+    return "Crc32";
+}
+
+// Builds a Hash.Digest record { algorithm: Hash.Algorithm, hex: string } tagging
+// a hex digest with the algorithm that produced it.  The runtime short names
+// "Digest" and "Algorithm" match how the type checker registers the record and
+// choice from stdlib_type_arities.cpp.
+[[nodiscard]] Value make_digest_record(std::string_view algorithm_name, std::string hex) {
+    auto algorithm = std::make_shared<ChoiceValue>();
+    algorithm->type_name = "Algorithm";
+    algorithm->variant = std::string{algorithm_variant_from_name(algorithm_name)};
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Digest";
+    rec->fields.emplace_back("algorithm", Value{std::move(algorithm)});
+    rec->fields.emplace_back("hex", Value{std::move(hex)});
+
+    return Value{std::move(rec)};
+}
+
 // lowercase algorithm-name string to the canonical name, mirroring the dual
 // choice/string acceptance of Terminal.color and Decimal.round.  A choice maps
 // its variant (Sha256 → "sha256"); a string passes through unchanged so an
@@ -200,6 +238,18 @@ void register_hash_digest(const EnvPtr& env) {
                 const auto& input = expect_string(args[0], qualified, loc);
 
                 return Value{compute_digest_hex(type, input, loc)};
+            });
+
+        // Typed companion (Hash.md5_typed, …): tags the hex output with the
+        // algorithm that produced it, so a SHA-256 and an MD5 digest are distinct
+        // types that cannot be compared across algorithms by accident.
+        builder.func(std::string{algo.name} + "_typed", 1)
+            .raw_body([type = algo.type, name = std::string{algo.name},
+                       qualified = "Hash." + std::string{algo.name} + "_typed"](
+                          std::span<const Value> args, SourceLocation loc) -> Value {
+                const auto& input = expect_string(args[0], qualified, loc);
+
+                return make_digest_record(name, compute_digest_hex(type, input, loc));
             });
     }
 

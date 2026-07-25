@@ -334,6 +334,11 @@ surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 | `DateTime.difference_seconds(t1, t2)`      | `(number, number)`                                       | `number`                     | Absolute difference in seconds                                           |
 | `DateTime.difference_years(t1, t2)`        | `(number, number)`                                       | `result<integer>`            | Absolute difference in calendar years; fail if out of range              |
 | `DateTime.from_iso_string(s)`              | `(string)`                                               | `result<number>`             | Parse ISO 8601 string to Unix timestamp                                  |
+| `DateTime.combine(date, time)`             | `(DateTime.Date, DateTime.Time)`                         | `result<number>`             | Fuse a calendar date and a wall-clock time into a UTC timestamp          |
+| `DateTime.date(y, m, d)`                   | `(integer, integer, integer)`                            | `result<DateTime.Date>`      | Build a validated calendar-only date; fail if out of range              |
+| `DateTime.date_of(ts)`                     | `(number)`                                               | `result<DateTime.Date>`      | Extract the calendar date from a timestamp                              |
+| `DateTime.time(h, min, s)`                 | `(integer, integer, integer)`                            | `result<DateTime.Time>`      | Build a validated wall-clock-only time; fail if out of range           |
+| `DateTime.time_of(ts)`                     | `(number)`                                               | `result<DateTime.Time>`      | Extract the wall-clock time from a timestamp                           |
 | `DateTime.from_parts(y, m, d, h, min, s)`  | `(integer, integer, integer, integer, integer, integer)` | `result<number>`             | Build timestamp from components; fail if out of range                    |
 | `DateTime.format(ts, pattern)`             | `(number, string)`                                       | `result<string>`             | Format timestamp; placeholders: YYYY, MM, DD, hh, mm, ss                 |
 | `DateTime.format_duration(d)`              | `(DateTime.Duration)`                                    | `string`                     | Render a `DateTime.Duration` as `"1d 2h 3m 4s 5ms"` (zero components omitted; `"0s"` when empty; `-` prefix when negative) |
@@ -383,6 +388,14 @@ Valid offsets range from −720 (UTC−12:00) to +840 (UTC+14:00) minutes. Out-o
 `DateTime.Zoned` record fields: `timestamp` (`number`, Unix seconds) and `offset_minutes` (`integer`). It keeps an instant and the UTC offset it should be rendered in together, so a timestamp can no longer drift apart from its offset the way the loose-argument `to_offset` / `to_iso_string_offset` family allows. `DateTime.zoned(timestamp, offset_minutes)` validates the offset (same −720…+840 range) so a `Zoned` is always well-formed; `DateTime.zoned_to_iso_string` formats it with the correct offset suffix (or `"Z"` at offset 0), and `DateTime.zoned_to_parts` returns the local broken-down `DateTime.TimeParts`. The timestamp stays a plain `number`, so every existing point helper still applies.
 
 `DateTime.TimeParts` record fields: `year`, `month`, `day`, `hour`, `minute`, `second` (all `integer`).
+
+`DateTime.Date` (fields `year`, `month`, `day`) and `DateTime.Time` (fields `hour`, `minute`, `second`) — all `integer` — are the calendar-only and wall-clock-only counterparts to the full `TimeParts` breakdown. A `Date` models a value that is genuinely only a calendar date (a birthday, a due date, with no time-of-day) and a `Time` only a wall-clock time (an alarm, opening hours, with no date), so neither carries the fields it should not — they complement, rather than re-slice, `TimeParts`. `DateTime.date(y, m, d)` and `DateTime.time(h, min, s)` are validating constructors (a `Date` is always a real calendar day, respecting leap years and month lengths; a `Time` is always a legal `00:00:00`–`23:59:59`), `DateTime.date_of(ts)` / `DateTime.time_of(ts)` extract each partial view from an instant, and `DateTime.combine(date, time)` fuses them back into a UTC timestamp. Timestamps stay plain `number` values, so this does not reintroduce a newtype over the instant.
+
+```luma
+DateTime.Date d = Result.unwrap(DateTime.date(2024, 6, 15))
+DateTime.Time t = Result.unwrap(DateTime.time(9, 30, 0))
+result<number> ts = DateTime.combine(d, t)
+```
 
 `DateTime.Duration` record fields: `days`, `hours`, `minutes`, `seconds`, `milliseconds` (all `integer`), and `negative` (`boolean`). `break_duration` splits a `number` span in seconds into this human-readable breakdown — the `hours`/`minutes`/`seconds` components are normalised (0–23, 0–59, 0–59) and the sign is carried in `negative` — and `format_duration` renders it back into a compact string such as `"1h 2m 5s"`.
 
@@ -1325,11 +1338,15 @@ Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 | `Hash.hmac_sha256(key, msg)`    | `(string, string)`         | `string`         | HMAC-SHA-256                   |
 | `Hash.hmac_sha512(key, msg)`    | `(string, string)`         | `string`         | HMAC-SHA-512                   |
 | `Hash.md5(s)`                   | `(string)`                 | `string`         | MD5 digest (32-char hex)       |
+| `Hash.md5_typed(s)`             | `(string)`                 | `Hash.Digest`    | MD5 digest tagged with its algorithm |
 | `Hash.sha1(s)`                  | `(string)`                 | `string`         | SHA-1 digest (40-char hex)     |
+| `Hash.sha1_typed(s)`            | `(string)`                 | `Hash.Digest`    | SHA-1 digest tagged with its algorithm |
 | `Hash.sha256_file(path)`        | `(string)`                 | `result<string>` | SHA-256 of file contents       |
 | `Hash.sha256(s)`                | `(string)`                 | `string`         | SHA-256 digest (64-char hex)   |
+| `Hash.sha256_typed(s)`          | `(string)`                 | `Hash.Digest`    | SHA-256 digest tagged with its algorithm |
 | `Hash.sha512_file(path)`        | `(string)`                 | `result<string>` | SHA-512 of file contents       |
 | `Hash.sha512(s)`                | `(string)`                 | `string`         | SHA-512 digest (128-char hex)  |
+| `Hash.sha512_typed(s)`          | `(string)`                 | `Hash.Digest`    | SHA-512 digest tagged with its algorithm |
 | `Hash.verify(algo, data, hash)` | `(Hash.Algorithm \| string, string, string)` | `boolean` | Verify `hash` matches `data`; accepts the `Hash.Algorithm` choice or its string name |
 
 `Hash.Algorithm` is a choice type with five variants — `Md5`, `Sha1`, `Sha256`, `Sha512`, `Crc32` — the discoverable, closed set of algorithms that `Hash.digest` and `Hash.verify` accept. Both functions take `Hash.Algorithm | string`: passing the choice variant is autocompleted and a typo becomes a compile error, while the string form (`"sha256"`, matching `Hash.algorithms()`) keeps every existing call working. This is the same "stringly-typed argument → choice, keep the string form for compatibility" dual-form as `Terminal.Color | string`.
@@ -1338,6 +1355,14 @@ Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 string h = Hash.digest(Hash.Algorithm.Sha256, "hello")   # typed, autocompleted
 boolean ok = Hash.verify(Hash.Algorithm.Sha256, "hello", h)
 boolean also_ok = Hash.verify("sha256", "hello", h)       # string form still works
+```
+
+`Hash.Digest` is a record — `algorithm` (`Hash.Algorithm`), `hex` (`string`) — that pairs a hex digest with the algorithm that produced it, so a SHA-256 and an MD5 digest are no longer the same (bare-string) type and cannot be compared across algorithms by accident. The per-algorithm `*_typed` companions (`Hash.md5_typed`, `Hash.sha1_typed`, `Hash.sha256_typed`, `Hash.sha512_typed`) return it; the plain digest functions (`Hash.sha256`, …) still return a bare hex string.
+
+```luma
+Hash.Digest d = Hash.sha256_typed("hello")
+print(d.hex)                                              # the 64-char hex string
+match d.algorithm { case Hash.Algorithm.Sha256 { print("sha-256") } else { print("other") } }
 ```
 
 ## 17 — HashSet
@@ -1386,6 +1411,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.delete_with(url, headers)`      | `(string, dictionary<string>)`             | `result<Http.Response>` | DELETE with custom headers                                           |
 | `Http.download(url, path)`            | `(string, string)`                         | `result<string>`        | Download file to local path                                          |
 | `Http.get(url)`                       | `(string)`                                 | `result<Http.Response>` | GET request                                                          |
+| `Http.get_typed(url)`                 | `(string)`                                 | `result<Http.Response, Http.Error>` | GET request; on failure the error is a typed `Http.Error` instead of a string |
 | `Http.get_with(url, headers)`         | `(string, dictionary<string>)`             | `result<Http.Response>` | GET with custom headers                                              |
 | `Http.head(url)`                      | `(string)`                                 | `result<Http.Response>` | HEAD request                                                         |
 | `Http.is_success(response)`           | `(Http.Response)`                          | `boolean`               | Whether the response status is in the 2xx (`Success`) class          |
@@ -1438,6 +1464,18 @@ success(response) {
     }
 }
 failure(_e) { print("request failed") }
+}
+```
+
+`Http.Error` is a choice type classifying _why_ a request failed at the transport level — `InvalidUrl` (unsupported scheme, empty or malformed host), `ConnectionFailed` (DNS resolution, socket, or send failure), `Timeout` (the connection did not complete within the timeout), `TlsError` (a TLS handshake failure, or an `https://` request in a build without TLS support), `TooManyRedirects` (reserved for future redirect following — not currently produced), `Blocked` (an SSRF-guarded private/reserved/loopback target, or a CRLF-injected request), and `Malformed` (an empty or unparseable response). It is surfaced by `Http.get_typed(url)`, which returns `result<Http.Response, Http.Error>`: the value on success is the same `Http.Response` record `Http.get` returns, and the error on failure is the typed category, so a program can retry only on `Timeout`, fall back only on `ConnectionFailed`, or distinguish a `Blocked` URL from a `Malformed` response — instead of substring-matching an opaque message. This is an opt-in, additive companion (mirroring `FileSystem.read_file_typed` / `FileSystem.IoError`): the plain `Http.get` and every other `Http` request function keep their string-error `result<Http.Response>`.
+
+```luma
+match Http.get_typed("http://example.com/api") {
+success(response) { print("got ${response.status}") }
+failure(Http.Error.Timeout) { print("timed out — will retry") }
+failure(Http.Error.ConnectionFailed) { print("connection failed — using cache") }
+failure(Http.Error.Blocked) { print("refusing to fetch a blocked URL") }
+failure(_other) { print("request failed") }
 }
 ```
 
@@ -1964,6 +2002,7 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 | `Process.get_all_environment_variables()`       | `()`               | `dictionary<string>`            | All environment variables as a dictionary                                |
 | `Process.command(program, arguments)`           | `(string, array<string>)` | `Process.Command`        | Build a shell-free command (explicit program + argument vector)          |
 | `Process.run_command(cmd)`                      | `(Process.Command)` | `result<Process.CommandOutput>` | Run a `Process.Command` directly (no shell); metacharacters are inert    |
+| `Process.run_command_typed(cmd)`                | `(Process.Command)` | `result<Process.CommandOutput, Process.Error>` | Like `run_command`; on a launch failure the error is a typed `Process.Error` |
 | `Process.get_arguments()`                       | `()`               | `array<string>`                 | Command-line arguments after the file name                               |
 | `Process.get_environment_variable(name)`        | `(string)`         | `result<string>`                | Environment variable value; fail if not set                              |
 | `Process.get_process_id()`                      | `()`               | `integer`                       | Current process ID                                                       |
@@ -2016,6 +2055,18 @@ failure(_e) { print("could not launch command") }
 }
 ```
 
+`Process.Error` is a choice type classifying _why_ a command failed to launch — `NotFound` (the program is not installed / not on `PATH`), `PermissionDenied` (the file exists but is not executable), `InvalidCommand` (an empty program name, or a file that is not a valid executable), and `LaunchFailed` (any other spawn failure). Where `Process.ExitStatus` classifies a command that _ran_ (its exit code), `Process.Error` classifies why a launch _failed_ — the two axes are otherwise conflated in the negative-exit-code convention. It is surfaced by `Process.run_command_typed(cmd)`, which returns `result<Process.CommandOutput, Process.Error>`: a command that runs (even one that exits non-zero) is a `success` carrying the `CommandOutput` (classify its `exit_code` with `Process.exit_status`), while a launch failure is a typed `Process.Error`. This distinguishes "`git` isn't installed" (`NotFound`) from "`git` ran and exited 1" (`ExitStatus.Failed`). This is an opt-in, additive companion (mirroring `FileSystem.read_file_typed` / `FileSystem.IoError`): the string-error `Process.run_command` is left untouched.
+
+```luma
+Process.Command cmd = Process.command("git", ["status"])
+match Process.run_command_typed(cmd) {
+success(out) { print(out.standard_output) }
+failure(Process.Error.NotFound) { print("git is not installed") }
+failure(Process.Error.PermissionDenied) { print("git is not executable") }
+failure(_other) { print("git could not be launched") }
+}
+```
+
 ## 29 — Queue
 
 Immutable FIFO (first-in, first-out) queue. All mutating operations return a new queue, leaving the original unchanged.
@@ -2050,6 +2101,9 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Random.sample_from(distribution)` | `(Random.Distribution)` | `result<number>` | Draw a number from a `Random.Distribution`; see below for validation           |
 | `Random.shuffle(arr)`             | `(array<T>)`          | `array<T>`         | Shuffled copy                                                                   |
 | `Random.generate_uuid()`          | `()`                  | `string`           | UUID v4 (random). **Not** cryptographically secure                              |
+| `Random.parse_uuid(s)`            | `(string)`            | `result<Random.Uuid>` | Validate a canonical UUID string into a typed `Random.Uuid`; fail if malformed |
+| `Random.uuid_typed()`             | `()`                  | `Random.Uuid`      | UUID v4 (random) as a typed `Random.Uuid`. **Not** cryptographically secure     |
+| `Random.uuid_to_string(u)`        | `(Random.Uuid)`       | `string`           | The canonical string held by a `Random.Uuid`                                    |
 | `Random.secure_boolean()`         | `()`                  | `result<boolean>`  | Cryptographically secure random `true` or `false`                               |
 | `Random.secure_integer(lo, hi)`   | `(integer, integer)`  | `result<integer>`  | Cryptographically secure uniform integer in `[lo, hi]`; fail if `lo > hi`       |
 | `Random.secure_number()`          | `()`                  | `result<number>`   | Cryptographically secure random number in `[0, 1)`                              |
@@ -2068,6 +2122,13 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 result<number> uniform = Random.sample_from(Random.Distribution.Uniform(0.0, 10.0))
 result<number> normal = Random.sample_from(Random.Distribution.Normal(0.0, 1.0))
 result<number> exponential = Random.sample_from(Random.Distribution.Exponential(0.5))
+```
+
+**`Random.Uuid`.** A record — `value` (`string`) — wrapping a validated canonical UUID (the `8-4-4-4-12` hex form), so a UUID is a distinct, validated type rather than an anonymous string. `Random.uuid_typed()` generates one (like `generate_uuid`, but typed), `Random.parse_uuid(s)` validates an incoming string and fails for any non-canonical input (the stored value is lower-cased so equal UUIDs compare equal regardless of input case), and `Random.uuid_to_string(u)` reads the canonical string back out. The bare-string `Random.generate_uuid` / `secure_uuid` are unchanged. Mirrors `Socket.IpAddress`, a typed wrapper over an otherwise-stringly address.
+
+```luma
+Random.Uuid id = Random.uuid_typed()
+result<Random.Uuid> parsed = Random.parse_uuid("550e8400-e29b-41d4-a716-446655440000")
 ```
 
 ## 31 — Reference
