@@ -341,6 +341,70 @@ static void test_process_execute_unclosed_quote_fails() {
     ASSERT_EVAL_FAILURE("Process.execute(\"echo \\\"unclosed\")");
 }
 
+// ─── Process.Command / Process.run_command (T01) ─────────────────────────────
+
+static void test_process_command_builds_record() {
+    const auto v = eval(R"(Process.command("echo", ["a", "b"]))");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Command"});
+    ASSERT_EQ(v.as_record()->find_field("program")->as_string(), "echo");
+
+    const auto* args = v.as_record()->find_field("arguments");
+    ASSERT_TRUE(args->is_array());
+    ASSERT_EQ(args->as_array()->elements->size(), std::size_t{2});
+    ASSERT_EQ((*args->as_array()->elements)[0].as_string(), "a");
+}
+
+static void test_process_command_rejects_non_string_argument() {
+    ASSERT_THROWS(eval(R"(Process.command("echo", [1, 2]))"));
+}
+
+static void test_process_run_command_returns_command_output() {
+#ifdef _WIN32
+    const auto v = eval(R"(Process.run_command(Process.command("cmd", ["/c", "echo", "hello"])))");
+#else
+    const auto v = eval(R"(Process.run_command(Process.command("echo", ["hello"])))");
+#endif
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+    ASSERT_TRUE(inner.is_record());
+    ASSERT_EQ(inner.as_record()->type_name, std::string{"CommandOutput"});
+    ASSERT_EQ(inner.as_record()->find_field("exit_code")->as_integer(),
+              static_cast<std::int64_t>(0));
+    ASSERT_TRUE(inner.as_record()->find_field("success")->as_bool());
+    ASSERT_TRUE(inner.as_record()->find_field("standard_output")->as_string().find("hello") !=
+                std::string::npos);
+}
+
+#ifndef _WIN32
+static void test_process_run_command_metacharacters_are_inert() {
+    // No shell is involved, so ';', '|' and '$(...)' reach echo as a literal
+    // argument instead of being interpreted.
+    const auto v = eval(R"(Process.run_command(Process.command("echo", ["a; b | c $(whoami)"])))");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& out = v.as_result()->owned_inner->as_record()->find_field("standard_output")
+                          ->as_string();
+    ASSERT_TRUE(out.find("a; b | c $(whoami)") != std::string::npos);
+}
+#endif
+
+static void test_process_run_command_nonexistent_program_fails() {
+    ASSERT_EVAL_FAILURE(R"(Process.run_command(Process.command("_luma_nonexistent_xyz_123", [])))");
+}
+
+static void test_process_run_command_empty_program_fails() {
+    ASSERT_EVAL_FAILURE(R"(Process.run_command(Process.command("", ["x"])))");
+}
+
+static void test_process_run_command_rejects_non_record() {
+    ASSERT_THROWS(eval("Process.run_command(42)"));
+}
+
 int main() {
     RUN(test_process_get_args_empty);
     RUN(test_process_get_args_with_values);
@@ -380,6 +444,15 @@ int main() {
     RUN(test_process_execute_nonexistent_command_fails);
     RUN(test_process_execute_empty_command_fails);
     RUN(test_process_execute_unclosed_quote_fails);
+    RUN(test_process_command_builds_record);
+    RUN(test_process_command_rejects_non_string_argument);
+    RUN(test_process_run_command_returns_command_output);
+#ifndef _WIN32
+    RUN(test_process_run_command_metacharacters_are_inert);
+#endif
+    RUN(test_process_run_command_nonexistent_program_fails);
+    RUN(test_process_run_command_empty_program_fails);
+    RUN(test_process_run_command_rejects_non_record);
 
     return SUMMARY();
 }

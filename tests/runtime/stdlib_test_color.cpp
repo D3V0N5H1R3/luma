@@ -157,6 +157,30 @@ LUMA_TEST(color_rotate_hue_preserves_alpha) {
     ASSERT_NEAR(v.as_record()->find_field("alpha")->as_number(), 0.5, 1e-9);
 }
 
+// ─── Color.Hsv: HSV (HSB) conversions ────────────────────────────────────────
+
+LUMA_TEST(color_to_hsv_red) {
+    // Pure red is hue 0, full saturation, full value.
+    const auto v = eval("Color.to_hsv(Result.unwrap(Color.rgb(255, 0, 0)))");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Hsv"});
+    ASSERT_NEAR(v.as_record()->find_field("hue")->as_number(), 0.0, 0.5);
+    ASSERT_NEAR(v.as_record()->find_field("saturation")->as_number(), 1.0, 1e-6);
+    ASSERT_NEAR(v.as_record()->find_field("value")->as_number(), 1.0, 1e-6);
+}
+
+LUMA_TEST(color_from_hsv_roundtrip) {
+    // Green: hue 120, full saturation, full value -> (0, 255, 0).
+    const auto v = eval("Color.from_hsv(Color.to_hsv(Result.unwrap(Color.rgb(0, 255, 0))))");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Color"});
+    ASSERT_EQ(v.as_record()->find_field("red")->as_integer(), static_cast<std::int64_t>(0));
+    ASSERT_EQ(v.as_record()->find_field("green")->as_integer(), static_cast<std::int64_t>(255));
+    ASSERT_EQ(v.as_record()->find_field("blue")->as_integer(), static_cast<std::int64_t>(0));
+}
+
 int main() {
     LUMA_RUN_ALL();
 }

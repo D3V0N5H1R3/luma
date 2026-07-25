@@ -751,3 +751,23 @@ function void test_datetime_intervals_overlap() {
     assert(!DateTime.intervals_overlap(base,
         Result.unwrap(DateTime.interval(201.0, 300.0))), "disjoint")
 }
+
+@test
+function void test_datetime_zoned() {
+    DateTime.Zoned z = Result.unwrap(DateTime.zoned(0.0, 60))
+
+    assert(z.offset_minutes == 60, "offset stored")
+    assert(Result.unwrap(DateTime.zoned_to_iso_string(z)) == "1970-01-01T01:00:00+01:00",
+        "renders with the offset")
+
+    DateTime.Zoned utc = Result.unwrap(DateTime.zoned(0.0, 0))
+    assert(Result.unwrap(DateTime.zoned_to_iso_string(utc)) == "1970-01-01T00:00:00Z",
+        "zero offset renders Z")
+
+    DateTime.TimeParts parts = Result.unwrap(DateTime.zoned_to_parts(z))
+    assert(parts.year == 1970, "year")
+    assert(parts.hour == 1, "hour reflects the offset")
+
+    assert(Result.is_failure(DateTime.zoned(0.0, 900)), "offset above +840 fails")
+    assert(Result.is_failure(DateTime.zoned(0.0, -800)), "offset below -720 fails")
+}

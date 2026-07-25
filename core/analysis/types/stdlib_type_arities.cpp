@@ -137,6 +137,14 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // numbers.  The validating constructor guarantees end >= start.
         add_record(st, "DateTime.Interval", field("number", "start"), field("number", "end"));
 
+        // DateTime.zoned() constructs these offset-aware timestamp records (type_name
+        // "Zoned").  It bundles an instant (plain `number` Unix seconds, so every
+        // point helper still applies) with the UTC offset it should be rendered in
+        // (integer minutes in [-720, +840]).  The validating constructor guarantees a
+        // legal offset, so a Zoned never formats with an impossible zone.
+        add_record(st, "DateTime.Zoned", field("number", "timestamp"),
+                   field("integer", "offset_minutes"));
+
         add_record(st, "FileSystem.FileInfo", field("integer", "size"),
                    field("number", "modified_time"), field("boolean", "is_directory"),
                    field("boolean", "is_file"), field("boolean", "is_symlink"),
@@ -173,6 +181,27 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // (type_name "Vector3").
         add_record(st, "Math.Vector3", field("number", "x"), field("number", "y"),
                    field("number", "z"));
+
+        // Math.matrix2() / mat2_* take and return these 2×2 transform matrices
+        // (type_name "Matrix2").  Named .m00/.m01/.m10/.m11 components make small
+        // linear transforms teachable, mirroring Math.Vector2 over LinearAlgebra's
+        // array<array<number>>.  Every entry is a measurement, so `number`.
+        add_record(st, "Math.Matrix2", field("number", "m00"), field("number", "m01"),
+                   field("number", "m10"), field("number", "m11"));
+
+        // Math.matrix3() / mat3_* take and return these 3×3 transform matrices
+        // (type_name "Matrix3").  Row-major named components m00..m22.
+        add_record(st, "Math.Matrix3", field("number", "m00"), field("number", "m01"),
+                   field("number", "m02"), field("number", "m10"), field("number", "m11"),
+                   field("number", "m12"), field("number", "m20"), field("number", "m21"),
+                   field("number", "m22"));
+
+        // Math.interval() constructs these closed numeric-range records (type_name
+        // "Interval").  min/max are plain measurements (`number`); the validating
+        // constructor guarantees max >= min so contains/clamp/length/overlap take one
+        // well-formed range.  Mirrors DateTime.Interval (which shares the short
+        // "Interval" type_name — harmless, like the shared "ParseError" records).
+        add_record(st, "Math.Interval", field("number", "min"), field("number", "max"));
 
         // Math.five_number_summary() returns this box-plot record (type_name
         // "FiveNumberSummary"): the five order statistics needed to draw a box
@@ -225,6 +254,13 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Color.Hsl", field("number", "hue"), field("number", "saturation"),
                    field("number", "lightness"));
 
+        // Color.to_hsv / from_hsv pivot through this hue/saturation/value record
+        // (type_name "Hsv") — the HSB model colour pickers use.  Hue is an angle in
+        // degrees [0, 360) and saturation/value are 0–1 ratios — measurements, so
+        // every field is a number.  Sibling of Color.Hsl.
+        add_record(st, "Color.Hsv", field("number", "hue"), field("number", "saturation"),
+                   field("number", "value"));
+
         // Dictionary.to_array emits these key/value pairs at runtime (each a
         // record with type_name "KeyValue").  The `value` field carries the
         // dictionary's value type V, so it has no single concrete type here — a
@@ -239,6 +275,13 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // Dictionary.KeyValue + Dictionary.to_array enumeration pattern.
         add_record(st, "Graph.Edge", field("string", "from"), field("string", "to"),
                    field("number", "weight"));
+
+        // Graph.shortest_path_detailed() returns this route record (type_name
+        // "Path"): the ordered vertices plus the path's total weight, so a caller
+        // gets both answers from one call instead of re-walking edge_weight.
+        // Additive sibling of Graph.Edge; vertices is array<string>, cost a number.
+        add_record(st, "Graph.Path", field_of(array_ann("string"), "vertices"),
+                   field("number", "cost"));
 
         add_record(st, "Http.Response", field("integer", "status"), field("string", "reason"),
                    field("string", "body"), field_of(dict_ann("string"), "headers"));
@@ -281,6 +324,14 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Process.CommandOutput", field("integer", "exit_code"),
                    field("string", "standard_output"), field("string", "standard_error"),
                    field("boolean", "success"));
+
+        // Process.command() builds this shell-free command record (type_name
+        // "Command"): an explicit program plus an argument vector.  Process.run_command
+        // executes it directly (execvp / CreateProcess, no shell), so metacharacters
+        // (; && | $(...)) are inert — the safe alternative to Process.run's shell
+        // string.  program is a string; arguments an array<string>.
+        add_record(st, "Process.Command", field("string", "program"),
+                   field_of(array_ann("string"), "arguments"));
 
         add_record(st, "Terminal.CursorPosition", field("integer", "row"),
                    field("integer", "column"));
@@ -725,6 +776,34 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Crc32", .fields = {}});
 
             st.choice_map["Hash.Algorithm"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Socket.IpAddress ────────────────────────────
+        // A parsed, validated IP literal, split into its two families so the
+        // V4/V6 distinction is match-exhaustive and autocompleted (Socket.Address
+        // only carries an unvalidated host string).  Both variants carry the
+        // canonical address text as a payload.  Built by Socket.parse_ip (which
+        // returns result<Socket.IpAddress>) and rendered by Socket.ip_to_string.
+        // The payload field name "address" must match make_ip_address() in
+        // core/runtime/stdlib/io/socket_module.cpp.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "IpAddress");
+
+            // Parameter is move-only (holds a default_value unique_ptr), so build
+            // each payload variant by moving the Parameter into the fields vector.
+            auto v4 = ChoiceVariant{};
+            v4.name = "V4";
+            v4.fields.push_back(Parameter{.type = ann("string"), .name = "address"});
+
+            auto v6 = ChoiceVariant{};
+            v6.name = "V6";
+            v6.fields.push_back(Parameter{.type = ann("string"), .name = "address"});
+
+            ch->variants.push_back(std::move(v4));
+            ch->variants.push_back(std::move(v6));
+
+            st.choice_map["Socket.IpAddress"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

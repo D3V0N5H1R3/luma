@@ -834,6 +834,100 @@ LUMA_TEST(math_five_number_summary_empty_fails) {
     ASSERT_EVAL_FAILURE("Math.five_number_summary([])");
 }
 
+// --- Math.Interval (T02) ---
+
+LUMA_TEST(math_interval_construct_and_contains) {
+    const auto v = eval("Math.interval(1.0, 5.0)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->type_name, std::string{"Interval"});
+    ASSERT_NEAR(rec->find_field("min")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("max")->as_number(), 5.0, 1e-9);
+
+    ASSERT_EQ(eval("Math.interval_contains(Result.unwrap(Math.interval(1.0, 5.0)), 3.0)").as_bool(),
+              true);
+    // Closed interval: endpoints are inside.
+    ASSERT_EQ(eval("Math.interval_contains(Result.unwrap(Math.interval(1.0, 5.0)), 1.0)").as_bool(),
+              true);
+    ASSERT_EQ(eval("Math.interval_contains(Result.unwrap(Math.interval(1.0, 5.0)), 6.0)").as_bool(),
+              false);
+}
+
+LUMA_TEST(math_interval_invalid_fails) {
+    ASSERT_EVAL_FAILURE("Math.interval(5.0, 1.0)");
+}
+
+LUMA_TEST(math_interval_clamp_length_overlap) {
+    ASSERT_NEAR(eval("Math.interval_clamp(Result.unwrap(Math.interval(0.0, 10.0)), 15.0)")
+                    .as_number(),
+                10.0, 1e-9);
+    ASSERT_NEAR(eval("Math.interval_clamp(Result.unwrap(Math.interval(0.0, 10.0)), -3.0)")
+                    .as_number(),
+                0.0, 1e-9);
+    ASSERT_NEAR(eval("Math.interval_length(Result.unwrap(Math.interval(2.0, 7.5)))").as_number(),
+                5.5, 1e-9);
+
+    ASSERT_EQ(eval("Math.intervals_overlap(Result.unwrap(Math.interval(0.0, 5.0)), "
+                   "Result.unwrap(Math.interval(4.0, 9.0)))")
+                  .as_bool(),
+              true);
+    ASSERT_EQ(eval("Math.intervals_overlap(Result.unwrap(Math.interval(0.0, 5.0)), "
+                   "Result.unwrap(Math.interval(6.0, 9.0)))")
+                  .as_bool(),
+              false);
+}
+
+// --- Math.Matrix2 / Math.Matrix3 (T07) ---
+
+LUMA_TEST(math_matrix2_identity_and_transform) {
+    const auto id = eval("Math.mat2_identity()");
+    ASSERT_TRUE(id.is_record());
+    ASSERT_EQ(id.as_record()->type_name, std::string{"Matrix2"});
+    ASSERT_NEAR(id.as_record()->find_field("m00")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(id.as_record()->find_field("m11")->as_number(), 1.0, 1e-9);
+
+    // Identity leaves a vector unchanged.
+    const auto v = eval("Math.mat2_transform(Math.mat2_identity(), Math.vector2(3.0, 4.0))");
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Vector2"});
+    ASSERT_NEAR(v.as_record()->find_field("x")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("y")->as_number(), 4.0, 1e-9);
+
+    // 90° rotation matrix maps (1, 0) -> (0, 1).
+    const auto rot =
+        eval("Math.mat2_transform(Math.matrix2(0.0, -1.0, 1.0, 0.0), Math.vector2(1.0, 0.0))");
+    ASSERT_NEAR(rot.as_record()->find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(rot.as_record()->find_field("y")->as_number(), 1.0, 1e-9);
+}
+
+LUMA_TEST(math_matrix2_multiply_and_determinant) {
+    // A * identity == A.
+    const auto m =
+        eval("Math.mat2_multiply(Math.matrix2(1.0, 2.0, 3.0, 4.0), Math.mat2_identity())");
+    ASSERT_NEAR(m.as_record()->find_field("m00")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(m.as_record()->find_field("m11")->as_number(), 4.0, 1e-9);
+
+    ASSERT_NEAR(eval("Math.mat2_determinant(Math.matrix2(1.0, 2.0, 3.0, 4.0))").as_number(), -2.0,
+                1e-9);
+}
+
+LUMA_TEST(math_matrix3_identity_multiply_transform) {
+    const auto id = eval("Math.mat3_identity()");
+    ASSERT_EQ(id.as_record()->type_name, std::string{"Matrix3"});
+    ASSERT_NEAR(id.as_record()->find_field("m22")->as_number(), 1.0, 1e-9);
+
+    ASSERT_NEAR(eval("Math.mat3_determinant(Math.mat3_identity())").as_number(), 1.0, 1e-9);
+
+    const auto v = eval("Math.mat3_transform(Math.mat3_identity(), Math.vector3(1.0, 2.0, 3.0))");
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Vector3"});
+    ASSERT_NEAR(v.as_record()->find_field("z")->as_number(), 3.0, 1e-9);
+
+    const auto prod =
+        eval("Math.mat3_multiply(Math.mat3_identity(), Math.matrix3(1.0, 0.0, 0.0, 0.0, 2.0, 0.0, "
+             "0.0, 0.0, 3.0))");
+    ASSERT_NEAR(prod.as_record()->find_field("m11")->as_number(), 2.0, 1e-9);
+}
+
 int main() {
     LUMA_RUN_ALL();
 }

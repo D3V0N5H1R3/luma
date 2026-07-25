@@ -126,3 +126,18 @@ function void test_color_rotate_hue() {
     assert(rotated.green == 255, "rotating red by 120 gives green")
     assert(Math.approximately_equal(rotated.alpha, 0.5, 0.001), "alpha is preserved")
 }
+
+@test
+function void test_color_hsv_roundtrip() {
+    Color.Color blue = Result.unwrap(Color.rgb(0, 0, 255))
+    Color.Hsv hsv = Color.to_hsv(blue)
+
+    assert(Math.approximately_equal(hsv.value, 1.0, 0.001), "blue has full value")
+    assert(Math.approximately_equal(hsv.saturation, 1.0, 0.001), "blue is fully saturated")
+
+    Color.Color back = Color.from_hsv(hsv)
+
+    assert(back.blue == 255, "blue round-trips")
+    assert(back.red == 0, "red stays 0")
+    assert(back.green == 0, "green stays 0")
+}

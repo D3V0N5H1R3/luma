@@ -166,10 +166,15 @@ std::pair<int, std::string> execute_command(std::string_view cmd) {
 CapturedOutput execute_command_captured(std::string_view cmd) {
     // Tokenize before acquiring any pipes so an unclosed-quote error (which
     // tokenize_command throws) surfaces cleanly in the parent without leaking
-    // pipe descriptors.  (See execute_command for the rationale on the
-    // async-signal-safety constraints in the child below.)
-    auto argv_strings = tokenize_command(cmd);
+    // pipe descriptors, then hand the argv vector to the shared implementation.
+    return execute_argv_captured(tokenize_command(cmd));
+}
 
+// POSIX implementation shared by execute_command_captured (which tokenizes a
+// command string first) and Process.run_command (which supplies an explicit,
+// un-tokenized argv).  See execute_command for the rationale on the
+// async-signal-safety constraints in the child below.
+CapturedOutput execute_argv_captured(std::vector<std::string> argv_strings) {
     if (argv_strings.empty()) {
         return {};
     }

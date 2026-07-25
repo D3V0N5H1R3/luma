@@ -88,6 +88,12 @@ void register_date_time_functions(std::vector<FunctionSpec>& specs, const Module
             m.fn("weekday_from_number", 1, "(n: integer)", R::result(named::weekday()),
                  {p.integer}),
             m.fn("weekday_name", 1, "(w: DateTime.Weekday)", R::string_type(), {p.any}),
+            m.fn("zoned", 2, "(timestamp: number, offset_minutes: integer)",
+                 R::result(named::zoned()), {p.number, p.integer}),
+            m.fn("zoned_to_iso_string", 1, "(z: DateTime.Zoned)", R::result_string(),
+                 {named::zoned()}),
+            m.fn("zoned_to_parts", 1, "(z: DateTime.Zoned)", R::result(named::time_parts()),
+                 {named::zoned()}),
             m.fn("weekday_number", 1, "(w: DateTime.Weekday)", R::integer_type(), {p.any}),
             m.fn("year", 1, "(timestamp: number)", R::result_integer(), {p.number}),
         });

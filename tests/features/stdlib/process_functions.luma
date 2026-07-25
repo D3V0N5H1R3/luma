@@ -233,3 +233,66 @@ function void test_process_execute_empty_command() {
     assert(Result.is_failure(r), "empty command should fail")
 }
 
+@test
+function void test_process_command_record() {
+    Process.Command cmd = Process.command("echo", ["hello", "world"])
+
+    assert(cmd.program == "echo", "program stored")
+    assert(Array.length(cmd.arguments) == 2, "two arguments")
+    assert(cmd.arguments[0] == "hello", "first argument stored")
+    assert(cmd.arguments[1] == "world", "second argument stored")
+}
+
+@test
+function void test_process_run_command() {
+    # `echo` is a standalone binary on POSIX but a cmd.exe built-in on Windows,
+    # so build the shell-free argv for the host platform.
+    mutable Process.Command cmd = Process.command("echo", ["hello"])
+
+    if (Process.has_environment_variable("OS")) {
+        cmd = Process.command("cmd", ["/c", "echo", "hello"])
+    }
+
+    result<Process.CommandOutput> r = Process.run_command(cmd)
+
+    assert(Result.is_success(r), "run_command succeeds")
+
+    Process.CommandOutput out = Result.unwrap(r)
+
+    assert(out.exit_code == 0, "zero exit code")
+    assert(out.success, "success flag is set")
+    assert(String.contains(out.standard_output, "hello"), "captures stdout")
+}
+
+@test
+function void test_process_run_command_shell_free() {
+    # No shell is involved, so metacharacters reach echo as a literal argument.
+    # On Windows echo needs cmd (which would re-parse), so assert only on POSIX.
+    if (!Process.has_environment_variable("OS")) {
+        Process.Command cmd = Process.command("echo", ["a; b | c $(whoami)"])
+        Process.CommandOutput out = Result.unwrap(Process.run_command(cmd))
+
+        assert(String.contains(out.standard_output, "a; b | c $(whoami)"),
+            "shell metacharacters are inert")
+    }
+}
+
+@test
+function void test_process_run_command_nonexistent_fails() {
+    array<string> no_args = []
+    Process.Command cmd = Process.command("_luma_nonexistent_command_xyz_123", no_args)
+
+    result<Process.CommandOutput> r = Process.run_command(cmd)
+
+    assert(Result.is_failure(r), "a non-existent program fails to launch")
+}
+
+@test
+function void test_process_run_command_empty_program_fails() {
+    Process.Command cmd = Process.command("", ["x"])
+
+    result<Process.CommandOutput> r = Process.run_command(cmd)
+
+    assert(Result.is_failure(r), "an empty program name fails")
+}
+

@@ -48,6 +48,15 @@ struct CapturedOutput {
 // by filling its pipe while the other is read.
 [[nodiscard]] CapturedOutput execute_command_captured(std::string_view cmd);
 
+// Execute an explicit argument vector (argv[0] is the program), capturing stdout
+// and stderr separately.  Unlike execute_command_captured, the arguments are NOT
+// tokenized or passed through a shell — they are handed verbatim to execvp
+// (POSIX) / CreateProcess (Windows), so shell metacharacters in any argument are
+// inert.  Backs Process.run_command / Process.Command.  Returns a negative
+// exit_code on spawn failure or output-size overflow; an empty argv returns a
+// negative exit_code too.
+[[nodiscard]] CapturedOutput execute_argv_captured(std::vector<std::string> argv_strings);
+
 // Return the current process identifier.
 [[nodiscard]] std::int64_t current_process_id();
 

@@ -101,6 +101,43 @@ std::optional<std::vector<std::string>> dijkstra_path(const GraphValue& g, const
     return path;
 }
 
+// Sum the weight of a reconstructed path by taking, for each consecutive vertex
+// pair, the minimum-weight edge between them (the one Dijkstra would have used).
+// Returns nullopt if any pair is not actually connected (should not happen for a
+// path Dijkstra produced, but keeps the helper total).  A single-vertex path
+// (from == to) costs 0.
+[[nodiscard]] std::optional<double> path_total_cost(const GraphValue& g,
+                                                    const std::vector<std::string>& path) {
+    double total = 0.0;
+
+    for (std::size_t i = 1; i < path.size(); ++i) {
+        const auto& u = path[i - 1];
+        const auto& v = path[i];
+
+        const auto it = g.adjacency.find(u);
+
+        if (it == g.adjacency.end()) {
+            return std::nullopt;
+        }
+
+        double best = k_graph_unreachable;
+
+        for (const auto& e : it->second) {
+            if (e.to == v) {
+                best = std::min(best, e.weight);
+            }
+        }
+
+        if (std::isinf(best)) {
+            return std::nullopt;
+        }
+
+        total += best;
+    }
+
+    return total;
+}
+
 // Kruskal minimum spanning tree over `g`, assumed undirected (validated by the
 // caller).  Returns a new undirected graph containing the MST edges; isolated
 // vertices are preserved.
@@ -298,6 +335,55 @@ void register_graph_paths(const EnvPtr& env) {
             }
 
             return make_success_value(Value{std::move(arr)});
+        })
+        // Like shortest_path, but returns a Graph.Path { vertices, cost } record so
+        // the caller gets the route AND its total weight from one call.  Additive:
+        // shortest_path itself is unchanged.
+        .func("shortest_path_detailed", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto g = expect_graph(args[0], "Graph.shortest_path_detailed", loc);
+
+            const auto& from = expect_string(args[1], "Graph.shortest_path_detailed", loc);
+            const auto& to = expect_string(args[2], "Graph.shortest_path_detailed", loc);
+
+            if (!g->adjacency.contains(from) || !g->adjacency.contains(to)) {
+                return make_failure_value(std::string{"vertex not found"});
+            }
+
+            for (const auto& [v, edges] : g->adjacency) {
+                for (const auto& e : edges) {
+                    if (e.weight < 0) {
+                        return make_failure_value(
+                            std::string{"Graph.shortest_path_detailed: negative edge weights "
+                                        "are not supported"});
+                    }
+                }
+            }
+
+            auto path = dijkstra_path(*g, from, to);
+
+            if (!path) {
+                return make_failure_value(std::string{"no path found"});
+            }
+
+            const auto cost = path_total_cost(*g, *path);
+
+            if (!cost) {
+                return make_failure_value(std::string{"no path found"});
+            }
+
+            auto vertices = std::make_shared<ArrayValue>();
+
+            for (const auto& v : *path) {
+                vertices->elements->emplace_back(v);
+            }
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Path";
+            rec->fields.emplace_back("vertices", Value{std::move(vertices)});
+            rec->fields.emplace_back("cost", Value{*cost});
+
+            return make_success_value(Value{std::move(rec)});
         })
         // Kruskal's MST — for undirected graphs only.
         .func("minimum_spanning_tree", 1)

@@ -169,6 +169,37 @@ static void test_graph_shortest_path() {
     ASSERT_EQ((*result.as_array()->elements)[2].as_string(), "C");
 }
 
+static void test_graph_shortest_path_detailed() {
+    // Same graph as shortest_path: A→B→C (cost 3) beats A→C (cost 10).
+    const auto result = eval(R"(
+        Graph.undirected()
+        |> Graph.add_edge("A", "B", 1)
+        |> Graph.add_edge("B", "C", 2)
+        |> Graph.add_edge("A", "C", 10)
+        |> Graph.shortest_path_detailed("A", "C")
+        |> Result.unwrap()
+    )");
+
+    ASSERT_TRUE(result.is_record());
+    ASSERT_EQ(result.as_record()->type_name, std::string{"Path"});
+
+    const auto* vertices = result.as_record()->find_field("vertices");
+    ASSERT_TRUE(vertices->is_array());
+    ASSERT_EQ(vertices->as_array()->elements->size(), std::size_t{3});
+    ASSERT_EQ((*vertices->as_array()->elements)[0].as_string(), "A");
+    ASSERT_EQ((*vertices->as_array()->elements)[2].as_string(), "C");
+
+    ASSERT_NEAR(result.as_record()->find_field("cost")->as_number(), 3.0, 1e-9);
+}
+
+static void test_graph_shortest_path_detailed_missing_vertex_fails() {
+    ASSERT_EVAL_FAILURE(R"(
+        Graph.undirected()
+        |> Graph.add_edge("A", "B", 1)
+        |> Graph.shortest_path_detailed("A", "Z")
+    )");
+}
+
 static void test_graph_topological_sort() {
     // A → B, A → C, B → D, C → D  — valid DAG
     const auto v = eval(R"(
@@ -665,6 +696,8 @@ int main() {
     RUN(test_graph_remove_vertex);
     RUN(test_graph_remove_vertex_clears_incoming_edges);
     RUN(test_graph_shortest_path);
+    RUN(test_graph_shortest_path_detailed);
+    RUN(test_graph_shortest_path_detailed_missing_vertex_fails);
     RUN(test_graph_shortest_path_missing_vertex_fails);
     RUN(test_graph_shortest_path_negative_weight_fails);
     RUN(test_graph_shortest_path_no_path_fails);

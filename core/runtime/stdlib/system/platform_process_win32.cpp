@@ -203,9 +203,16 @@ void drain_pipe(HANDLE read_handle, std::string& out, std::atomic<bool>& overflo
 // the other.
 CapturedOutput execute_command_captured(std::string_view cmd) {
     // Tokenize before acquiring any pipe handles so an unclosed-quote error
-    // (which tokenize_command throws) surfaces cleanly without leaking handles.
-    auto argv = tokenize_command(cmd);
+    // (which tokenize_command throws) surfaces cleanly without leaking handles,
+    // then hand the argv vector to the shared implementation.
+    return execute_argv_captured(tokenize_command(cmd));
+}
 
+// Windows implementation shared by execute_command_captured (which tokenizes a
+// command string first) and Process.run_command (which supplies an explicit,
+// un-tokenized argv).  Each argument is individually quoted by
+// build_windows_cmdline, so shell metacharacters never reach a shell.
+CapturedOutput execute_argv_captured(std::vector<std::string> argv) {
     if (argv.empty()) {
         return {};
     }

@@ -268,6 +268,127 @@ struct Hsl {
                 std::clamp(alpha, 0.0, 1.0)};
 }
 
+// A colour in the hue/saturation/value cylinder (HSB): hue in degrees [0, 360),
+// saturation and value as 0–1 ratios.
+struct Hsv {
+    double hue;
+    double saturation;
+    double value;
+};
+
+// Build a Color.Hsv record value.  The short runtime type_name "Hsv" matches the
+// "Color.Hsv" record registered in stdlib_type_arities.cpp.
+[[nodiscard]] Value make_hsv(const Hsv& c) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Hsv";
+    rec->fields.emplace_back("hue", Value{c.hue});
+    rec->fields.emplace_back("saturation", Value{c.saturation});
+    rec->fields.emplace_back("value", Value{c.value});
+
+    return Value{std::move(rec)};
+}
+
+// Read a Color.Hsv record argument, wrapping the hue into [0, 360) and clamping
+// saturation/value to 0–1 so a hand-built record can never carry out-of-range
+// data into a conversion.  Throws when the value is not an HSV-shaped record.
+[[nodiscard]] Hsv read_hsv(const Value& value, std::string_view func, const SourceLocation& loc) {
+    const auto invalid = [&] {
+        throw RuntimeError{std::string{func} + ": expected a Color.Hsv record", loc,
+                           "build one with Color.to_hsv(color)"};
+    };
+
+    if (!value.is_record()) {
+        invalid();
+    }
+
+    const auto& rec = value.as_record();
+    const Value* h = rec->find_field("hue");
+    const Value* s = rec->find_field("saturation");
+    const Value* v = rec->find_field("value");
+
+    const auto numeric = [](const Value* val) {
+        return val != nullptr && (val->is_integer() || val->is_number());
+    };
+
+    if (!numeric(h) || !numeric(s) || !numeric(v)) {
+        invalid();
+    }
+
+    double hue = std::fmod(h->to_numeric(), 360.0);
+    if (hue < 0.0) {
+        hue += 360.0;
+    }
+
+    return Hsv{hue, std::clamp(s->to_numeric(), 0.0, 1.0), std::clamp(v->to_numeric(), 0.0, 1.0)};
+}
+
+// Convert an RGBA colour to HSV (alpha dropped — HSV has no alpha channel).
+[[nodiscard]] Hsv rgb_to_hsv(const Rgba& c) {
+    const double r = static_cast<double>(c.red) / 255.0;
+    const double g = static_cast<double>(c.green) / 255.0;
+    const double b = static_cast<double>(c.blue) / 255.0;
+
+    const double max = std::max({r, g, b});
+    const double min = std::min({r, g, b});
+    const double delta = max - min;
+
+    double hue = 0.0;
+
+    if (delta > 0.0) {
+        if (max == r) {
+            hue = 60.0 * std::fmod((g - b) / delta, 6.0);
+        } else if (max == g) {
+            hue = 60.0 * (((b - r) / delta) + 2.0);
+        } else {
+            hue = 60.0 * (((r - g) / delta) + 4.0);
+        }
+
+        if (hue < 0.0) {
+            hue += 360.0;
+        }
+    }
+
+    // Value is the max channel; saturation is delta relative to that max.
+    const double saturation = (max > 0.0) ? (delta / max) : 0.0;
+
+    return Hsv{hue, std::clamp(saturation, 0.0, 1.0), std::clamp(max, 0.0, 1.0)};
+}
+
+// Convert an HSV colour back to RGBA, attaching the supplied alpha.
+[[nodiscard]] Rgba hsv_to_rgb(const Hsv& h, double alpha) {
+    const double chroma = h.value * h.saturation;
+    const double hp = h.hue / 60.0;
+    const double x = chroma * (1.0 - std::fabs(std::fmod(hp, 2.0) - 1.0));
+    const double m = h.value - chroma;
+
+    double r1 = 0.0;
+    double g1 = 0.0;
+    double b1 = 0.0;
+
+    if (hp < 1.0) {
+        r1 = chroma;
+        g1 = x;
+    } else if (hp < 2.0) {
+        r1 = x;
+        g1 = chroma;
+    } else if (hp < 3.0) {
+        g1 = chroma;
+        b1 = x;
+    } else if (hp < 4.0) {
+        g1 = x;
+        b1 = chroma;
+    } else if (hp < 5.0) {
+        r1 = x;
+        b1 = chroma;
+    } else {
+        r1 = chroma;
+        b1 = x;
+    }
+
+    return Rgba{to_channel(r1 + m), to_channel(g1 + m), to_channel(b1 + m),
+                std::clamp(alpha, 0.0, 1.0)};
+}
+
 } // namespace
 
 void register_color_ns(const EnvPtr& env) {
@@ -443,6 +564,18 @@ void register_color_ns(const EnvPtr& env) {
             const auto h = read_hsl(args[0], "Color.from_hsl", loc);
 
             return make_color(hsl_to_rgb(h, 1.0));
+        })
+        .func("to_hsv", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.to_hsv", loc);
+
+            return make_hsv(rgb_to_hsv(c));
+        })
+        .func("from_hsv", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto h = read_hsv(args[0], "Color.from_hsv", loc);
+
+            return make_color(hsv_to_rgb(h, 1.0));
         })
         .func("rotate_hue", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

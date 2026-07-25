@@ -7,11 +7,15 @@
 #include <format>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <numbers>
 #include <numeric>
 #include <optional>
+#include <span>
+#include <string>
 #include <string_view>
 
+#include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
 #include "common/overflow.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -71,6 +75,32 @@ constexpr std::int64_t k_max_factorial_input = 20;
     }
 
     return std::nullopt;
+}
+
+// The { min, max } bounds of a Math.Interval record, as doubles.
+struct IntervalBounds {
+    double min;
+    double max;
+};
+
+// Read a Math.Interval record's min/max fields.  Throws when the argument is not
+// a record; missing fields default to 0.0 (the type checker guarantees the shape
+// for well-typed programs, so this only guards raw/hand-built values).  Mirrors
+// DateTime's read_interval_bounds.
+[[nodiscard]] IntervalBounds read_interval(const Value& value, std::string_view func,
+                                           const SourceLocation& loc) {
+    if (!value.is_record()) {
+        throw RuntimeError{std::string{func} + ": expected a Math.Interval record", loc,
+                           "build one with Math.interval(min, max)"};
+    }
+
+    const auto& rec = value.as_record();
+    const auto field = [&rec](std::string_view name) -> double {
+        const Value* v = rec->find_field(name);
+        return v != nullptr ? v->to_numeric() : 0.0;
+    };
+
+    return IntervalBounds{.min = field("min"), .max = field("max")};
 }
 
 } // namespace
@@ -278,6 +308,57 @@ void register_math_ns(const EnvPtr& env) {
         .func("radians", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return Value{expect_numeric(args[0], "Math.radians", loc) * pi / 180.0};
+        })
+        // ── Math.Interval ────────────────────────────────────────────────────
+        // A closed numeric range [min, max].  Mirrors DateTime.Interval: a
+        // validating constructor (fails when min > max) plus contains/clamp/
+        // length/overlap, so beginners get a named, reusable range instead of
+        // hand-rolled `x >= lo && x <= hi`.
+        .func("interval", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const double min = expect_numeric(args[0], "Math.interval", loc);
+            const double max = expect_numeric(args[1], "Math.interval", loc);
+
+            if (max < min) {
+                return make_failure_value(error_msg("Math", "interval", "max must be >= min"));
+            }
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Interval";
+            rec->fields.emplace_back("min", Value{min});
+            rec->fields.emplace_back("max", Value{max});
+
+            return make_success_value(Value{std::move(rec)});
+        })
+        .func("interval_contains", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto iv = read_interval(args[0], "Math.interval_contains", loc);
+            const double x = expect_numeric(args[1], "Math.interval_contains", loc);
+
+            // Closed interval: both endpoints count as inside.
+            return Value{x >= iv.min && x <= iv.max};
+        })
+        .func("interval_clamp", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto iv = read_interval(args[0], "Math.interval_clamp", loc);
+            const double x = expect_numeric(args[1], "Math.interval_clamp", loc);
+
+            return Value{std::clamp(x, iv.min, iv.max)};
+        })
+        .func("interval_length", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto iv = read_interval(args[0], "Math.interval_length", loc);
+
+            return Value{iv.max - iv.min};
+        })
+        .func("intervals_overlap", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_interval(args[0], "Math.intervals_overlap", loc);
+            const auto b = read_interval(args[1], "Math.intervals_overlap", loc);
+
+            // Closed intervals, consistent with interval_contains: touching
+            // endpoints (a.max == b.min) count as overlapping at that point.
+            return Value{a.min <= b.max && b.min <= a.max};
         });
 
     register_math_analysis(env);

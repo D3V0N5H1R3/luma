@@ -477,3 +477,25 @@ function void test_graph_edges_empty() {
 
     assert(Array.length(es) == 0, "no edges")
 }
+
+@test
+function void test_graph_shortest_path_detailed() {
+    # A -> B -> C (cost 3) beats the direct A -> C (cost 10).
+    Graph.Path p = Graph.undirected()
+        |> Graph.add_edge("A", "B", 1)
+        |> Graph.add_edge("B", "C", 2)
+        |> Graph.add_edge("A", "C", 10)
+        |> Graph.shortest_path_detailed("A", "C")
+        |> Result.unwrap()
+
+    assert(Array.length(p.vertices) == 3, "three vertices on the route")
+    assert(p.vertices[0] == "A", "starts at A")
+    assert(p.vertices[2] == "C", "ends at C")
+    assert(Math.approximately_equal(p.cost, 3.0, 0.001), "total cost is 3")
+
+    result<Graph.Path> missing = Graph.undirected()
+        |> Graph.add_edge("A", "B", 1)
+        |> Graph.shortest_path_detailed("A", "Z")
+
+    assert(Result.is_failure(missing), "a missing vertex fails")
+}

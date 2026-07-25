@@ -364,8 +364,13 @@ All `DateTime` timestamps are in UTC. The following functions convert between UT
 | `DateTime.offset_hours(h)`                               | `(number)`                                                       | `number`         | Convert hours to offset minutes (e.g. `5.5` → `330.0`) |
 | `DateTime.to_iso_string_offset(ts, offset)`              | `(number, number)`                                               | `result<string>` | Format with UTC offset suffix                          |
 | `DateTime.to_offset(ts, offset)`                         | `(number, number)`                                               | `result<number>` | UTC → local timestamp                                  |
+| `DateTime.zoned(ts, offset_minutes)`                     | `(number, integer)`                                              | `result<DateTime.Zoned>` | Bundle an instant with its UTC offset; fail if the offset is out of range |
+| `DateTime.zoned_to_iso_string(z)`                        | `(DateTime.Zoned)`                                               | `result<string>` | ISO 8601 string rendered in the Zoned's own offset     |
+| `DateTime.zoned_to_parts(z)`                             | `(DateTime.Zoned)`                                               | `result<DateTime.TimeParts>` | Broken-down local components in the Zoned's offset |
 
 Valid offsets range from −720 (UTC−12:00) to +840 (UTC+14:00) minutes. Out-of-range offsets return `failure`. A zero offset produces the `"Z"` suffix in ISO strings.
+
+`DateTime.Zoned` record fields: `timestamp` (`number`, Unix seconds) and `offset_minutes` (`integer`). It keeps an instant and the UTC offset it should be rendered in together, so a timestamp can no longer drift apart from its offset the way the loose-argument `to_offset` / `to_iso_string_offset` family allows. `DateTime.zoned(timestamp, offset_minutes)` validates the offset (same −720…+840 range) so a `Zoned` is always well-formed; `DateTime.zoned_to_iso_string` formats it with the correct offset suffix (or `"Z"` at offset 0), and `DateTime.zoned_to_parts` returns the local broken-down `DateTime.TimeParts`. The timestamp stays a plain `number`, so every existing point helper still applies.
 
 `DateTime.TimeParts` record fields: `year`, `month`, `day`, `hour`, `minute`, `second` (all `integer`).
 
@@ -615,6 +620,7 @@ A weighted graph supporting directed and undirected edges. Vertices are identifi
 | `Graph.remove_edge(g, from, to)`         | `(graph, string, string)`         | `graph`                                  | Remove edge                                                 |
 | `Graph.remove_vertex(g, v)`              | `(graph, string)`                 | `graph`                                  | Remove vertex and its edges                                 |
 | `Graph.shortest_path(g, from, to)`       | `(graph, string, string)`         | `result<array<string>>`                  | Shortest path between vertices                              |
+| `Graph.shortest_path_detailed(g, from, to)` | `(graph, string, string)`      | `result<Graph.Path>`                     | Shortest path as a `{ vertices, cost }` record             |
 | `Graph.strongly_connected_components(g)` | `(graph)`                         | `result<array<array<string>>>`           | Groups of mutually reachable vertices; directed graphs only |
 | `Graph.to_adjacency_list(g)`             | `(graph)`                         | `dictionary<array<string>>`              | Convert to adjacency list                                   |
 | `Graph.topological_sort(g)`              | `(graph)`                         | `result<array<string>>`                  | Topological ordering; directed only; fail if cycle          |
@@ -629,6 +635,8 @@ for edge in Graph.edges(g) {
     print("${edge.from} -> ${edge.to} (${edge.weight})")
 }
 ```
+
+`Graph.Path` record fields: `vertices` (`array<string>`), `cost` (`number`). `Graph.shortest_path_detailed(g, from, to)` returns both the route and its total weight in one call, so you no longer have to re-walk a `Graph.shortest_path` result calling `Graph.edge_weight` for each consecutive pair. It is additive — `Graph.shortest_path` is unchanged — and fails (like `shortest_path`) on a missing vertex, a negative edge weight, or when no path exists.
 
 ## 15 — Solaris and GraphicalUi
 
@@ -1744,12 +1752,31 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.vec3_cross(a, b)`               | `(Math.Vector3, Math.Vector3)`   | `Math.Vector3`    | Cross product `a × b`                                                            |
 | `Math.vec3_length(v)`                 | `(Math.Vector3)`                 | `number`          | Euclidean length                                                                 |
 | `Math.vec3_normalize(v)`              | `(Math.Vector3)`                 | `Math.Vector3`    | Unit vector (the zero vector is returned unchanged)                             |
+| `Math.matrix2(m00, m01, m10, m11)`    | `(number, number, number, number)` | `Math.Matrix2`  | Construct a 2×2 matrix (row-major)                                              |
+| `Math.mat2_identity()`                | `()`                             | `Math.Matrix2`    | The 2×2 identity matrix                                                          |
+| `Math.mat2_multiply(a, b)`            | `(Math.Matrix2, Math.Matrix2)`   | `Math.Matrix2`    | Matrix product `a · b`                                                           |
+| `Math.mat2_determinant(m)`            | `(Math.Matrix2)`                 | `number`          | Determinant of a 2×2 matrix                                                      |
+| `Math.mat2_transform(m, v)`           | `(Math.Matrix2, Math.Vector2)`   | `Math.Vector2`    | Apply the transform `m · v`                                                      |
+| `Math.matrix3(m00, …, m22)`           | `(number × 9)`                   | `Math.Matrix3`    | Construct a 3×3 matrix (row-major)                                              |
+| `Math.mat3_identity()`                | `()`                             | `Math.Matrix3`    | The 3×3 identity matrix                                                          |
+| `Math.mat3_multiply(a, b)`            | `(Math.Matrix3, Math.Matrix3)`   | `Math.Matrix3`    | Matrix product `a · b`                                                           |
+| `Math.mat3_determinant(m)`            | `(Math.Matrix3)`                 | `number`          | Determinant of a 3×3 matrix                                                      |
+| `Math.mat3_transform(m, v)`           | `(Math.Matrix3, Math.Vector3)`   | `Math.Vector3`    | Apply the transform `m · v`                                                      |
+| `Math.interval(min, max)`             | `(number, number)`               | `result<Math.Interval>` | Build a closed numeric interval; fail if `max < min`                      |
+| `Math.interval_contains(iv, x)`       | `(Math.Interval, number)`        | `boolean`         | Whether `x` lies within the closed interval                                     |
+| `Math.interval_clamp(iv, x)`          | `(Math.Interval, number)`        | `number`          | Clamp `x` into `[min, max]`                                                      |
+| `Math.interval_length(iv)`            | `(Math.Interval)`                | `number`          | Interval width (`max - min`)                                                     |
+| `Math.intervals_overlap(a, b)`        | `(Math.Interval, Math.Interval)` | `boolean`         | Whether two closed intervals overlap (touching counts)                          |
 
 `Math.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
 
 `Math.FiveNumberSummary` is the box-plot sibling of `Math.Summary` — `minimum: number`, `q1: number`, `median: number`, `q3: number`, `maximum: number` — returned by `Math.five_number_summary(arr)` (fails on an empty array). The quartiles use the same linear-interpolation method as `Math.percentile`, so `Math.five_number_summary(v)` agrees with `Math.percentile(v, 25/50/75)` — a single typed answer for the five order statistics a box plot needs.
 
 `Math.Vector2 { x: number, y: number }` and `Math.Vector3 { x: number, y: number, z: number }` are typed geometry vectors for 2D/3D work — game positions, GraphicalUi layout, physics — where named `.x` / `.y` / `.z` components are far more teachable than the index arithmetic of `LinearAlgebra`'s general `array<number>` vectors. Like `Math.Complex`, they are pure data plus a pipe-first free-function family — `vec2_*` / `vec3_*` for `add`, `sub`, `scale`, `dot`, `length`, and `normalize`, with `vec3_cross` for the 3D cross product — and no operator overloading. `normalize` returns the zero vector unchanged rather than dividing by zero.
+
+`Math.Matrix2 { m00, m01, m10, m11 }` and `Math.Matrix3 { m00 … m22 }` (all `number`, row-major) are the typed transform-matrix companions to the vectors, for the 2×2/3×3 linear transforms that `LinearAlgebra`'s general `array<array<number>>` expresses only through index arithmetic. Build them with `Math.matrix2` / `Math.matrix3` or the ready-made `Math.mat2_identity` / `Math.mat3_identity`; `mat*_multiply` composes transforms, `mat*_determinant` reports the scale factor, and `mat2_transform` / `mat3_transform` apply a matrix to a `Math.Vector2` / `Math.Vector3`. Data plus free functions, no operator overloading — the same philosophy as the vectors. `LinearAlgebra` remains for general N-dimensional work.
+
+`Math.Interval { min: number, max: number }` is a closed numeric range — the general-purpose sibling of `DateTime.Interval`. `Math.interval(min, max)` is a validating constructor that fails when `max < min`, so an `Interval` is always well-formed. It replaces hand-rolled `x >= lo && x <= hi` with the teachable `Math.interval_contains` (closed, so both endpoints count), and adds `Math.interval_clamp` (bound `x` into the range), `Math.interval_length` (`max - min`), and `Math.intervals_overlap` (closed, so touching endpoints count).
 
 `Math.Fraction` is a record of exact rational numbers — `numerator: integer` and `denominator: integer` — always stored in lowest terms with a strictly positive denominator (the sign lives in the numerator, and zero is stored as `0/1`). Unlike `number`, a fraction never loses precision, so `1/3 + 1/6` is exactly `1/2`; unlike `Decimal` (base-10), it represents thirds exactly. Like `Decimal`, the type avoids operator overloading: build values with `Math.fraction(numerator, denominator)` (a validating constructor that fails on a zero denominator) and combine them with the `Math.fraction_*` free functions. `add`/`subtract`/`multiply` return a `Math.Fraction` directly and raise a catchable runtime error on int64 overflow (mirroring native integer `+`), while `divide` returns `result<Math.Fraction>` and fails on division by a zero fraction. `Math.fraction_compare` returns the top-level `Ordering` choice for an exhaustive `match`.
 
@@ -1904,6 +1931,8 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 | `Process.execute(cmd)`                          | `(string)`         | `result<Process.CommandOutput>` | Execute shell command, capturing stdout **and** stderr separately        |
 | `Process.exit(code)`                            | `(integer)`        | `none`                          | Terminate the program with exit code                                     |
 | `Process.get_all_environment_variables()`       | `()`               | `dictionary<string>`            | All environment variables as a dictionary                                |
+| `Process.command(program, arguments)`           | `(string, array<string>)` | `Process.Command`        | Build a shell-free command (explicit program + argument vector)          |
+| `Process.run_command(cmd)`                      | `(Process.Command)` | `result<Process.CommandOutput>` | Run a `Process.Command` directly (no shell); metacharacters are inert    |
 | `Process.get_arguments()`                       | `()`               | `array<string>`                 | Command-line arguments after the file name                               |
 | `Process.get_environment_variable(name)`        | `(string)`         | `result<string>`                | Environment variable value; fail if not set                              |
 | `Process.get_process_id()`                      | `()`               | `integer`                       | Current process ID                                                       |
@@ -1911,7 +1940,18 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 | `Process.run(cmd)`                              | `(string)`         | `result<Process.ProcessResult>` | Execute shell command and capture stdout                                 |
 | `Process.set_environment_variable(name, value)` | `(string, string)` | `result<none>`                  | Set environment variable; fail if name/value exceeds 32 KB or OS rejects |
 
-> **Security warning:** `Process.run` passes its argument to the system shell (`cmd.exe` on Windows, `/bin/sh` on Unix). If any part of the string comes from user input, an attacker can inject shell commands using characters such as `;`, `&&`, `|`, or `$(...)`. **Never pass unsanitised user input to `Process.run`.** Validate and whitelist all inputs before use, or construct the command from a fixed set of known-safe values only.
+> **Security warning:** `Process.run` passes its argument to the system shell (`cmd.exe` on Windows, `/bin/sh` on Unix). If any part of the string comes from user input, an attacker can inject shell commands using characters such as `;`, `&&`, `|`, or `$(...)`. **Never pass unsanitised user input to `Process.run`.** Validate and whitelist all inputs before use, or construct the command from a fixed set of known-safe values only. **When any part of a command comes from untrusted input, prefer `Process.run_command` (below), which bypasses the shell entirely.**
+
+`Process.Command` record fields: `program` (`string`), `arguments` (`array<string>`). Built by `Process.command(program, arguments)` and executed by `Process.run_command`, which launches the program **directly** — `execvp` on POSIX, `CreateProcess` on Windows — with **no shell involved**, so shell metacharacters (`;`, `&&`, `|`, `$(...)`) in any argument are passed through literally rather than interpreted. This is the safe alternative to building a `Process.run` string from untrusted input: `Process.run_command(Process.command("git", ["log", user_branch]))` cannot be turned into a command-injection hole the way `Process.run("git log " + user_branch)` can. It returns the same `result<Process.CommandOutput>` as `Process.execute` (a negative exit code — surfaced as `failure` — signals a launch failure such as an unknown program or an empty `program` name).
+
+```luma
+# Safe: `user_branch` is a single argument, never re-parsed by a shell.
+Process.Command cmd = Process.command("git", ["log", "--oneline", user_branch])
+match Process.run_command(cmd) {
+    success(out) { print(out.standard_output) }
+    failure(err) { print("could not run git: ${err}") }
+}
+```
 
 `Process.ProcessResult` record fields: `exit_code` (`integer`), `output` (`string`).
 
@@ -2147,9 +2187,11 @@ Cross-platform TCP and UDP networking.
 | `Socket.close(s)`                      | `(socket)`                          | `none`                     | Close the socket                                             |
 | `Socket.connect(host, port)`           | `(string, integer)`                 | `result<socket>`           | TCP connect (30 s timeout)                                   |
 | `Socket.is_connected(s)`               | `(socket)`                          | `boolean`                  | Whether the socket handle is valid                           |
+| `Socket.ip_to_string(ip)`              | `(Socket.IpAddress)`                | `string`                   | Canonical text of a parsed IP address                        |
 | `Socket.listen(host, port)`            | `(string, integer)`                 | `result<socket>`           | Bind and listen for TCP connections                          |
 | `Socket.local_address(s)`              | `(socket)`                          | `result<string>`           | Local `"host:port"`                                          |
 | `Socket.local_address_parts(s)`        | `(socket)`                          | `result<Socket.Address>`   | Local address as a `{ host, port }` record (IPv6-safe; no string parsing) |
+| `Socket.parse_ip(text)`                | `(string)`                          | `result<Socket.IpAddress>` | Validate and classify an IPv4/IPv6 literal (no OS call)      |
 | `Socket.receive(s, max)`               | `(socket, integer)`                 | `result<string>`           | Receive up to `max` bytes                                    |
 | `Socket.remote_address(s)`             | `(socket)`                          | `result<string>`           | Remote `"host:port"`                                         |
 | `Socket.remote_address_parts(s)`       | `(socket)`                          | `result<Socket.Address>`   | Remote address as a `{ host, port }` record (IPv6-safe; no string parsing) |
@@ -2163,6 +2205,16 @@ Cross-platform TCP and UDP networking.
 > **Resource limit** — A program may hold only a bounded number of open sockets at the same time (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_OPEN_SOCKETS`). Attempting to create more returns `failure("socket limit reached — too many open sockets")`. Close sockets that are no longer needed to stay within the limit.
 
 `Socket.Address` record fields: `host: string`, `port: integer`. Returned by `Socket.local_address_parts` and `Socket.remote_address_parts` so the caller reads the host and port directly instead of splitting a `"host:port"` string (which is fragile for IPv6). Mirrors the `host`/`port` fields of `Socket.UdpPacket`.
+
+`Socket.IpAddress` is a choice type with two payload-carrying variants — `Socket.IpAddress.V4(address: string)` and `Socket.IpAddress.V6(address: string)` — so the IPv4/IPv6 distinction is `match`-exhaustive and autocompleted, unlike the unvalidated `host` string in `Socket.Address`. `Socket.parse_ip(text)` validates a literal purely in memory (no DNS, no OS call) and returns `failure` on malformed input; IPv4 is canonicalised (leading zeros stripped) and IPv6 lowercased. `Socket.ip_to_string(ip)` renders either variant back to its canonical text.
+
+```luma
+Socket.IpAddress ip = Result.unwrap(Socket.parse_ip("2001:DB8::1"))
+string family = match ip {
+    case Socket.IpAddress.V4(_a) { "IPv4" }
+    case Socket.IpAddress.V6(_a) { "IPv6" }
+}
+```
 
 ---
 
@@ -2592,6 +2644,7 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.darken(c, amount)`       | `(Color.Color, number)`                     | `Color.Color`        | Blend toward black by `amount` (clamped to [0, 1])                       |
 | `Color.from_hex(hex)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
 | `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
+| `Color.from_hsv(h)`             | `(Color.Hsv)`                               | `Color.Color`        | Convert an HSV (HSB) colour to RGBA (alpha 1.0)                          |
 | `Color.lighten(c, amount)`      | `(Color.Color, number)`                     | `Color.Color`        | Blend toward white by `amount` (clamped to [0, 1])                       |
 | `Color.mix(a, b, t)`            | `(Color.Color, Color.Color, number)`        | `Color.Color`        | Linear blend of `a` and `b` at `t` (clamped to [0, 1])                   |
 | `Color.rgb(r, g, b)`            | `(integer, integer, integer)`               | `result<Color.Color>` | Construct an opaque colour; fail if a channel is outside 0–255         |
@@ -2600,10 +2653,13 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.to_css(c)`               | `(Color.Color)`                             | `string`             | CSS string: `rgb(r, g, b)`, or `rgba(...)` when not fully opaque         |
 | `Color.to_hex(c)`               | `(Color.Color)`                             | `string`             | `#rrggbb`, or `#rrggbbaa` when the colour is not fully opaque            |
 | `Color.to_hsl(c)`               | `(Color.Color)`                             | `Color.Hsl`          | Convert an RGBA colour to HSL (alpha dropped)                            |
+| `Color.to_hsv(c)`               | `(Color.Color)`                             | `Color.Hsv`          | Convert an RGBA colour to HSV/HSB (alpha dropped)                        |
 
 `rgb` / `rgba` / `from_hex` are validating constructors returning `result<Color.Color>`; the derivations (`lighten` / `darken` / `mix`) take already-validated colours and clamp their `amount` / `t` argument, so they return a `Color.Color` directly. `contrast_ratio` computes the WCAG 2.x relative-luminance ratio (alpha ignored) — black on white is 21:1, a colour against itself is 1:1 — feeding accessibility checks. The `to_css` output drops straight into the theme and per-widget style dictionaries the webview already consumes.
 
 **`Color.Hsl`** is the hue/saturation/lightness sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `lightness: number` (0–1 ratios). `Color.to_hsl` / `Color.from_hsl` convert between the two spaces, and `Color.rotate_hue(c, degrees)` shifts the hue (wrapping at 360°) while preserving saturation, lightness, and the original alpha — the natural way to build a rainbow, pastel, or complementary colour that is awkward in RGB. HSL drops alpha (so `to_hsl` discards it and `from_hsl` produces an opaque colour); everything still serialises through the same RGBA `to_css` path the webview consumes.
+
+**`Color.Hsv`** is the hue/saturation/**value** (HSB) sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `value: number` (0–1 ratios). It is the model most colour pickers and palette generators use, so `Color.to_hsv` / `Color.from_hsv` are the natural pair for building tints and shades by "value". Like HSL it drops alpha (`from_hsv` produces an opaque colour), and both spaces serialise through the same RGBA `to_css` path.
 
 ```luma
 Color.Color base = Result.unwrap(Color.from_hex("#0172ad"))
