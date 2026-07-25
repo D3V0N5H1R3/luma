@@ -2021,6 +2021,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Random.generate_number()`        | `()`                  | `number`           | Random number in `[0, 1)`                                                       |
 | `Random.generate_string(len)`     | `(integer)`           | `result<string>`   | Random alphanumeric string; fail if `len < 0`. **Not** cryptographically secure |
 | `Random.sample(arr, k)`           | `(array<T>, integer)` | `result<array<T>>` | `k` unique random elements; fail if `k > length`                                |
+| `Random.sample_from(distribution)` | `(Random.Distribution)` | `result<number>` | Draw a number from a `Random.Distribution`; see below for validation           |
 | `Random.shuffle(arr)`             | `(array<T>)`          | `array<T>`         | Shuffled copy                                                                   |
 | `Random.generate_uuid()`          | `()`                  | `string`           | UUID v4 (random). **Not** cryptographically secure                              |
 | `Random.secure_boolean()`         | `()`                  | `result<boolean>`  | Cryptographically secure random `true` or `false`                               |
@@ -2030,6 +2031,18 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Random.secure_uuid()`            | `()`                  | `result<string>`   | UUID v4 from cryptographically secure random bytes                              |
 
 **Cryptographically secure functions.** The `secure_*` variants use AES-CTR-DRBG (via Mbed TLS) seeded from platform entropy. They are suitable for generating tokens, secrets, and session identifiers. Requires TLS support (`LUMA_FEATURE_TLS=ON`, enabled by default).
+
+**`Random.Distribution`.** A closed choice of probability distributions consumed by `Random.sample_from`, so callers state intent ("draw from a `Normal(0, 1)`") instead of composing raw uniform draws by hand:
+
+- `Random.Distribution.Uniform(low: number, high: number)` — a uniform draw in `[low, high]`; fails if `high < low`.
+- `Random.Distribution.Normal(mean: number, standard_deviation: number)` — a normal (Gaussian) draw via the Box–Muller transform; fails if `standard_deviation <= 0`.
+- `Random.Distribution.Exponential(rate: number)` — an exponential draw with rate (λ) `rate`, via inverse-transform sampling; fails if `rate <= 0`.
+
+```luma
+result<number> uniform = Random.sample_from(Random.Distribution.Uniform(0.0, 10.0))
+result<number> normal = Random.sample_from(Random.Distribution.Normal(0.0, 1.0))
+result<number> exponential = Random.sample_from(Random.Distribution.Exponential(0.5))
+```
 
 ## 31 — Reference
 

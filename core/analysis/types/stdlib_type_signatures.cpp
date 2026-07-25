@@ -116,6 +116,9 @@ namespace {
             if (desc.named_type == "Log.Output") {
                 return TypeInfo::make_named(K::Choice, "Log.Output");
             }
+            if (desc.named_type == "Random.Distribution") {
+                return TypeInfo::make_named(K::Choice, "Random.Distribution");
+            }
             if (desc.named_type == "Terminal.Key") {
                 return TypeInfo::make_named(K::Choice, "Terminal.Key");
             }
