@@ -27,6 +27,22 @@ namespace {
 
 std::vector<std::string> program_args;
 
+// Wraps a Process.ExitStatus variant name in a ChoiceValue.  The runtime short
+// name "ExitStatus" matches how the type checker registers the choice from
+// stdlib_type_arities.cpp; the variant names must match that declaration.
+[[nodiscard]] Value make_exit_status_choice(std::string_view variant,
+                                            std::optional<std::int64_t> code = std::nullopt) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "ExitStatus";
+    cv->variant = std::string{variant};
+
+    if (code) {
+        cv->fields.emplace_back(*code);
+    }
+
+    return Value{std::move(cv)};
+}
+
 } // namespace
 
 void set_program_args(std::vector<std::string> args) {
@@ -94,6 +110,40 @@ void register_process_ns(const EnvPtr& env) {
             }
 
             throw ExitSignal{static_cast<int>(code)};
+        })
+        // Process.exit_status(output) -> Process.ExitStatus
+        // Classifies a Process.CommandOutput's exit_code sign convention into an
+        // exhaustive, match-able type: 0 = Success, a positive code = Failed(code)
+        // (the process ran and exited non-zero), a negative code = LaunchFailed
+        // (the process never ran — see platform_process::CapturedOutput). Pure
+        // classifier: it never re-runs or re-captures anything, it only inspects
+        // the exit_code field already present on the record.
+        .func("exit_status", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_record()) {
+                throw RuntimeError{"Process.exit_status: expected a Process.CommandOutput record",
+                                   loc, "pass the record returned by Process.execute / run_command"};
+            }
+
+            const auto& rec = args[0].as_record();
+            const Value* exit_code_field = rec->find_field("exit_code");
+
+            if (exit_code_field == nullptr || !exit_code_field->is_integer()) {
+                throw RuntimeError{"Process.exit_status: expected a Process.CommandOutput record",
+                                   loc, "pass the record returned by Process.execute / run_command"};
+            }
+
+            const auto exit_code = exit_code_field->as_integer();
+
+            if (exit_code == 0) {
+                return make_exit_status_choice("Success");
+            }
+
+            if (exit_code < 0) {
+                return make_exit_status_choice("LaunchFailed");
+            }
+
+            return make_exit_status_choice("Failed", exit_code);
         })
         .func("get_environment_variable", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

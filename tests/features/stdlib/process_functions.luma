@@ -296,3 +296,57 @@ function void test_process_run_command_empty_program_fails() {
     assert(Result.is_failure(r), "an empty program name fails")
 }
 
+# ─── Process.exit_status (Process.ExitStatus) ───
+# Classifies a Process.CommandOutput's exit_code sign convention: 0 = Success,
+# a positive code = Failed(code), a negative code = LaunchFailed (the process
+# never ran). Exhaustive match over every variant, doubling as a registration
+# smoke test — see Http.StatusClass's status_class_label for the precedent.
+#
+# Every CommandOutput here comes from a real Process.execute call — a launch
+# failure (negative exit_code) is never observable through the public API
+# (execute/run_command surface it as a Result failure before a CommandOutput
+# is ever built, per platform_process::execute_command_captured), so the
+# LaunchFailed branch is exercised directly against the classifier in the C++
+# unit tests (stdlib_test_process.cpp) instead of here.
+
+function string exit_status_label(Process.ExitStatus status) {
+    return match status {
+    case Process.ExitStatus.Success        { "success" }
+    case Process.ExitStatus.Failed(code)    { "failed:${code}" }
+    case Process.ExitStatus.LaunchFailed    { "launch_failed" }
+    }
+}
+
+@test
+function void test_process_exit_status_success() {
+    mutable string command = "echo hi"
+
+    if (Process.has_environment_variable("OS")) {
+        command = "cmd /c echo hi"
+    }
+
+    result<Process.CommandOutput> r = Process.execute(command)
+    Process.CommandOutput out = Result.unwrap(r)
+
+    assert(Process.exit_status(out) == Process.ExitStatus.Success, "zero exit code is Success")
+    assert(exit_status_label(Process.exit_status(out)) == "success", "labels as success")
+}
+
+@test
+function void test_process_exit_status_failed_carries_code() {
+    mutable string command = "sh -c \"exit 7\""
+
+    if (Process.has_environment_variable("OS")) {
+        command = "cmd /c exit 7"
+    }
+
+    result<Process.CommandOutput> r = Process.execute(command)
+    Process.CommandOutput out = Result.unwrap(r)
+
+    match Process.exit_status(out) {
+    case Process.ExitStatus.Failed(code) { assert(code == 7, "carries the positive exit code") }
+    else { assert(false, "positive exit code must classify as Failed") }
+    }
+
+    assert(exit_status_label(Process.exit_status(out)) == "failed:7", "labels with the code")
+}

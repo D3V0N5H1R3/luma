@@ -333,6 +333,34 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Process.Command", field("string", "program"),
                    field_of(array_ann("string"), "arguments"));
 
+        // ── Process.ExitStatus ───────────────────────────
+        // Classifies the exit_code sign convention shared by every Process
+        // record (ProcessResult, CommandOutput): 0 = clean exit, a positive
+        // code = the process ran and exited non-zero, a negative code = the
+        // process never ran at all (spawn/launch failure — see
+        // platform_process::execute_command_captured).  Process.exit_status
+        // turns that magic-sign convention into an exhaustive, match-able
+        // type, mirroring Http.StatusClass and Sign above.  Variant names
+        // must match make_exit_status_choice() in
+        // core/runtime/stdlib/system/process_module.cpp exactly (PascalCase).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "ExitStatus");
+
+            // Failed carries the positive exit code payload, so it is a
+            // payload-bearing variant (like Log.Output.File) rather than a
+            // bare unit variant; Success / LaunchFailed are unit variants.
+            ChoiceVariant failed_variant;
+            failed_variant.name = "Failed";
+            failed_variant.fields.push_back(Parameter{.type = ann("integer"), .name = "code"});
+
+            ch->variants.push_back(ChoiceVariant{.name = "Success", .fields = {}});
+            ch->variants.push_back(std::move(failed_variant));
+            ch->variants.push_back(ChoiceVariant{.name = "LaunchFailed", .fields = {}});
+
+            st.choice_map["Process.ExitStatus"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
         add_record(st, "Terminal.CursorPosition", field("integer", "row"),
                    field("integer", "column"));
 

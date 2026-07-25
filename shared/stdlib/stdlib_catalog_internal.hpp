@@ -307,6 +307,13 @@ namespace named {
     return ReturnTypeDesc::named("Command");
 }
 
+// Choice type — uses the fully-qualified name so the type checker resolves it
+// as Process.ExitStatus (a bare name would fall through to the record
+// default), mirroring status_class() / file_kind() above.
+[[nodiscard]] inline ReturnTypeDesc exit_status() {
+    return ReturnTypeDesc::named("Process.ExitStatus");
+}
+
 [[nodiscard]] inline ReturnTypeDesc input_event() {
     return ReturnTypeDesc::named("InputEvent");
 }

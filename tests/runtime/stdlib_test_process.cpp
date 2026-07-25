@@ -406,6 +406,62 @@ static void test_process_run_command_rejects_non_record() {
     ASSERT_THROWS(eval("Process.run_command(42)"));
 }
 
+// ─── Process.exit_status — classifies the exit_code sign convention ────────
+// 0 = Success, a positive code = Failed(code), a negative code = LaunchFailed
+// (the process never ran).  Derives every CommandOutput from a real
+// Process.execute call and uses `with { exit_code = ... }` to explore the
+// other branches — a record literal can't set `success` directly because it
+// lexes as the `success` pattern-match keyword, not an Identifier, in field
+// position (a pre-existing parser quirk unrelated to this classifier).
+
+static void test_process_exit_status_zero_is_success() {
+#ifdef _WIN32
+    const auto v = eval(R"(Process.exit_status(Result.unwrap(Process.execute("cmd /c echo hi"))))");
+#else
+    const auto v = eval(R"(Process.exit_status(Result.unwrap(Process.execute("echo hi"))))");
+#endif
+
+    ASSERT_TRUE(v.is_choice());
+    ASSERT_EQ(v.as_choice()->type_name, std::string{"ExitStatus"});
+    ASSERT_EQ(v.as_choice()->variant, std::string{"Success"});
+    ASSERT_TRUE(v.as_choice()->fields.empty());
+}
+
+static void test_process_exit_status_positive_is_failed_with_code() {
+#ifdef _WIN32
+    const auto v = eval(R"(Process.exit_status(
+        Result.unwrap(Process.execute("cmd /c echo hi")) with { exit_code = 7 }))");
+#else
+    const auto v = eval(R"(Process.exit_status(
+        Result.unwrap(Process.execute("echo hi")) with { exit_code = 7 }))");
+#endif
+
+    ASSERT_TRUE(v.is_choice());
+    ASSERT_EQ(v.as_choice()->type_name, std::string{"ExitStatus"});
+    ASSERT_EQ(v.as_choice()->variant, std::string{"Failed"});
+    ASSERT_EQ(v.as_choice()->fields.size(), std::size_t{1});
+    ASSERT_EQ(v.as_choice()->fields[0].as_integer(), static_cast<std::int64_t>(7));
+}
+
+static void test_process_exit_status_negative_is_launch_failed() {
+#ifdef _WIN32
+    const auto v = eval(R"(Process.exit_status(
+        Result.unwrap(Process.execute("cmd /c echo hi")) with { exit_code = -1 }))");
+#else
+    const auto v = eval(R"(Process.exit_status(
+        Result.unwrap(Process.execute("echo hi")) with { exit_code = -1 }))");
+#endif
+
+    ASSERT_TRUE(v.is_choice());
+    ASSERT_EQ(v.as_choice()->type_name, std::string{"ExitStatus"});
+    ASSERT_EQ(v.as_choice()->variant, std::string{"LaunchFailed"});
+    ASSERT_TRUE(v.as_choice()->fields.empty());
+}
+
+static void test_process_exit_status_rejects_non_record() {
+    ASSERT_THROWS(eval("Process.exit_status(42)"));
+}
+
 int main() {
     RUN(test_process_get_args_empty);
     RUN(test_process_get_args_with_values);
@@ -454,6 +510,10 @@ int main() {
     RUN(test_process_run_command_nonexistent_program_fails);
     RUN(test_process_run_command_empty_program_fails);
     RUN(test_process_run_command_rejects_non_record);
+    RUN(test_process_exit_status_zero_is_success);
+    RUN(test_process_exit_status_positive_is_failed_with_code);
+    RUN(test_process_exit_status_negative_is_launch_failed);
+    RUN(test_process_exit_status_rejects_non_record);
 
     return SUMMARY();
 }
