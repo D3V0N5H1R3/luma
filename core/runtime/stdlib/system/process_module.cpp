@@ -122,7 +122,8 @@ void register_process_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             if (!args[0].is_record()) {
                 throw RuntimeError{"Process.exit_status: expected a Process.CommandOutput record",
-                                   loc, "pass the record returned by Process.execute / run_command"};
+                                   loc,
+                                   "pass the record returned by Process.execute / run_command"};
             }
 
             const auto& rec = args[0].as_record();
@@ -130,7 +131,8 @@ void register_process_ns(const EnvPtr& env) {
 
             if (exit_code_field == nullptr || !exit_code_field->is_integer()) {
                 throw RuntimeError{"Process.exit_status: expected a Process.CommandOutput record",
-                                   loc, "pass the record returned by Process.execute / run_command"};
+                                   loc,
+                                   "pass the record returned by Process.execute / run_command"};
             }
 
             const auto exit_code = exit_code_field->as_integer();

@@ -415,8 +415,7 @@ struct Cmyk {
 // Read a Color.Cmyk record argument, clamping every channel to 0–1 so a
 // hand-built record can never carry out-of-range data into a conversion.
 // Throws when the value is not a CMYK-shaped record.
-[[nodiscard]] Cmyk read_cmyk(const Value& value, std::string_view func,
-                             const SourceLocation& loc) {
+[[nodiscard]] Cmyk read_cmyk(const Value& value, std::string_view func, const SourceLocation& loc) {
     const auto invalid = [&] {
         throw RuntimeError{std::string{func} + ": expected a Color.Cmyk record", loc,
                            "build one with Color.to_cmyk(color)"};

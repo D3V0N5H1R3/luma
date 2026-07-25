@@ -65,8 +65,7 @@ void register_compression_ns(const EnvPtr& env, bool sandbox) {
             }
 
             throw RuntimeError{
-                std::format("Compression.compress: unknown Compression.Format '{}'", variant),
-                loc};
+                std::format("Compression.compress: unknown Compression.Format '{}'", variant), loc};
         })
         .func("decompress", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -87,8 +86,7 @@ void register_compression_ns(const EnvPtr& env, bool sandbox) {
                 malformed_msg = "Compression.decompress: malformed RLE data";
             } else {
                 throw RuntimeError{
-                    std::format("Compression.decompress: unknown Compression.Format '{}'",
-                                variant),
+                    std::format("Compression.decompress: unknown Compression.Format '{}'", variant),
                     loc};
             }
 

@@ -524,8 +524,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ChoiceVariant normal;
             normal.name = "Normal";
             normal.fields.push_back(Parameter{.type = ann("number"), .name = "mean"});
-            normal.fields.push_back(
-                Parameter{.type = ann("number"), .name = "standard_deviation"});
+            normal.fields.push_back(Parameter{.type = ann("number"), .name = "standard_deviation"});
             ch->variants.push_back(std::move(normal));
 
             ChoiceVariant exponential;

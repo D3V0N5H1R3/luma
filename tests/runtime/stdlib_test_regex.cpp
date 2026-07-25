@@ -117,8 +117,8 @@ static void test_regex_find_capture_groups() {
 
 static void test_regex_find_named_groups_dotnet_style() {
     // (?<name>...) -- .NET/PCRE2-style named group syntax.
-    const auto v = eval(
-        "RegularExpression.find(\"2024-01-15\", \"(?<year>[0-9]+)-(?<month>[0-9]+)-(?<day>[0-9]+)\")");
+    const auto v = eval("RegularExpression.find(\"2024-01-15\", "
+                        "\"(?<year>[0-9]+)-(?<month>[0-9]+)-(?<day>[0-9]+)\")");
 
     ASSERT_RESULT_SUCCESS(v);
 
@@ -170,8 +170,7 @@ static void test_regex_find_named_groups_python_style() {
 static void test_regex_find_named_and_unnamed_groups_mixed() {
     // Mixing named and unnamed groups: unnamed groups still appear positionally
     // in `groups` but are absent from `named_groups`.
-    const auto v =
-        eval("RegularExpression.find(\"width=100\", \"([a-z]+)=(?<value>[0-9]+)\")");
+    const auto v = eval("RegularExpression.find(\"width=100\", \"([a-z]+)=(?<value>[0-9]+)\")");
 
     ASSERT_RESULT_SUCCESS(v);
 

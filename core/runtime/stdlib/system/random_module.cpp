@@ -364,8 +364,8 @@ void register_random_ns(const EnvPtr& env) {
                     expect_numeric(choice.fields[1], "Random.sample_from", loc);
 
                 if (standard_deviation <= 0.0) {
-                    return make_failure_value(error_msg(
-                        "Random", "sample_from", "Normal requires standard_deviation > 0"));
+                    return make_failure_value(error_msg("Random", "sample_from",
+                                                        "Normal requires standard_deviation > 0"));
                 }
 
                 // Box–Muller transform: two independent uniform draws on (0, 1]
