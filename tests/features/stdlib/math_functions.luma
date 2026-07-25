@@ -867,3 +867,52 @@ function void test_math_linear_fit_failures() {
     assert(Result.is_failure(Math.linear_fit([5.0, 5.0, 5.0], [1.0, 2.0, 3.0])),
         "zero x-variance should fail")
 }
+
+# ─── Geometry vectors (Math.Vector2 / Math.Vector3) ───
+
+@test
+function void test_math_vector2() {
+    Math.Vector2 a = Math.vector2(3.0, 4.0)
+
+    assert(Math.approximately_equal(Math.vec2_length(a), 5.0, 0.001), "3-4-5 length")
+    assert(Math.approximately_equal(Math.vec2_dot(a, Math.vector2(1.0, 0.0)), 3.0, 0.001), "dot with x-axis")
+
+    Math.Vector2 sum = Math.vec2_add(a, Math.vector2(1.0, 1.0))
+    assert(Math.approximately_equal(sum.x, 4.0, 0.001), "x adds")
+    assert(Math.approximately_equal(sum.y, 5.0, 0.001), "y adds")
+
+    Math.Vector2 unit = Math.vec2_normalize(a)
+    assert(Math.approximately_equal(Math.vec2_length(unit), 1.0, 0.001), "normalized length is 1")
+}
+
+@test
+function void test_math_vector3() {
+    Math.Vector3 x = Math.vector3(1.0, 0.0, 0.0)
+    Math.Vector3 y = Math.vector3(0.0, 1.0, 0.0)
+    Math.Vector3 z = Math.vec3_cross(x, y)
+
+    assert(Math.approximately_equal(z.z, 1.0, 0.001), "x cross y = z")
+    assert(Math.approximately_equal(Math.vec3_dot(x, y), 0.0, 0.001), "orthogonal dot is 0")
+    assert(Math.approximately_equal(Math.vec3_length(Math.vector3(2.0, 3.0, 6.0)), 7.0, 0.001), "3D length")
+}
+
+# ─── Five-number summary (Math.FiveNumberSummary) ───
+
+@test
+function void test_math_five_number_summary() {
+    array<number> data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+    Math.FiveNumberSummary s = Result.unwrap(Math.five_number_summary(data))
+
+    assert(Math.approximately_equal(s.minimum, 1.0, 0.001), "minimum")
+    assert(Math.approximately_equal(s.q1, 3.0, 0.001), "first quartile")
+    assert(Math.approximately_equal(s.median, 5.0, 0.001), "median")
+    assert(Math.approximately_equal(s.q3, 7.0, 0.001), "third quartile")
+    assert(Math.approximately_equal(s.maximum, 9.0, 0.001), "maximum")
+}
+
+@test
+function void test_math_five_number_summary_empty_fails() {
+    result<Math.FiveNumberSummary> r = Math.five_number_summary([])
+
+    assert(Result.is_failure(r), "an empty array has no five-number summary")
+}

@@ -595,6 +595,58 @@ static void test_http_request_functions_registered() {
     ASSERT_TRUE(env->has("Http.send"));
 }
 
+// ─── Http.Cookie: parse_cookie / cookie_header ───────────────────────────────
+
+static void test_http_parse_cookie_basic() {
+    const auto v = eval(R"(Http.parse_cookie("session=abc123"))");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->type_name, std::string{"Cookie"});
+    ASSERT_EQ(rec->find_field("name")->as_string(), "session");
+    ASSERT_EQ(rec->find_field("value")->as_string(), "abc123");
+    ASSERT_FALSE(rec->find_field("secure")->as_bool());
+    ASSERT_FALSE(rec->find_field("http_only")->as_bool());
+}
+
+static void test_http_parse_cookie_flags() {
+    const auto v = eval(
+        R"(Http.parse_cookie("id=42; Domain=example.com; Path=/app; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Secure; HttpOnly"))");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->find_field("domain")->as_string(), "example.com");
+    ASSERT_EQ(rec->find_field("path")->as_string(), "/app");
+    ASSERT_EQ(rec->find_field("expires")->as_string(), "Wed, 21 Oct 2015 07:28:00 GMT");
+    ASSERT_TRUE(rec->find_field("secure")->as_bool());
+    ASSERT_TRUE(rec->find_field("http_only")->as_bool());
+}
+
+static void test_http_parse_cookie_empty_name_fails() {
+    ASSERT_EVAL_FAILURE(R"(Http.parse_cookie("=novalue"))");
+    ASSERT_EVAL_FAILURE(R"(Http.parse_cookie("noequals"))");
+}
+
+static void test_http_cookie_header_roundtrip() {
+    // parse_cookie then cookie_header preserves the name/value and attributes.
+    const auto v = eval(
+        R"(Http.cookie_header(Result.unwrap(Http.parse_cookie("id=42; Domain=example.com; Path=/; Secure; HttpOnly"))))");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_TRUE(v.as_string().find("id=42") != std::string::npos);
+    ASSERT_TRUE(v.as_string().find("Domain=example.com") != std::string::npos);
+    ASSERT_TRUE(v.as_string().find("Path=/") != std::string::npos);
+    ASSERT_TRUE(v.as_string().find("Secure") != std::string::npos);
+    ASSERT_TRUE(v.as_string().find("HttpOnly") != std::string::npos);
+}
+
+static void test_http_cookie_functions_registered() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Http.parse_cookie"));
+    ASSERT_TRUE(env->has("Http.cookie_header"));
+}
+
 int main() {
     RUN(test_http_build_query);
     RUN(test_http_https_reaches_request_pipeline);
@@ -651,6 +703,12 @@ int main() {
     RUN(test_http_send_reaches_request_pipeline);
     RUN(test_http_send_empty_url_fails);
     RUN(test_http_request_functions_registered);
+
+    RUN(test_http_parse_cookie_basic);
+    RUN(test_http_parse_cookie_flags);
+    RUN(test_http_parse_cookie_empty_name_fails);
+    RUN(test_http_cookie_header_roundtrip);
+    RUN(test_http_cookie_functions_registered);
 
     return SUMMARY();
 }

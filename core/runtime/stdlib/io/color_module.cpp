@@ -143,6 +143,131 @@ struct Rgba {
                       ((static_cast<double>(to) / 255.0) * t));
 }
 
+// A colour in the hue/saturation/lightness cylinder: hue in degrees [0, 360),
+// saturation and lightness as 0–1 ratios.
+struct Hsl {
+    double hue;
+    double saturation;
+    double lightness;
+};
+
+// Build a Color.Hsl record value.  The short runtime type_name "Hsl" matches the
+// "Color.Hsl" record registered in stdlib_type_arities.cpp.  Hue is an angle and
+// saturation/lightness are ratios, so every field is a `number`.
+[[nodiscard]] Value make_hsl(const Hsl& c) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Hsl";
+    rec->fields.emplace_back("hue", Value{c.hue});
+    rec->fields.emplace_back("saturation", Value{c.saturation});
+    rec->fields.emplace_back("lightness", Value{c.lightness});
+
+    return Value{std::move(rec)};
+}
+
+// Read a Color.Hsl record argument, wrapping the hue into [0, 360) and clamping
+// saturation/lightness to 0–1 so a hand-built record can never carry out-of-range
+// data into a conversion.  Throws when the value is not an HSL-shaped record.
+[[nodiscard]] Hsl read_hsl(const Value& value, std::string_view func, const SourceLocation& loc) {
+    const auto invalid = [&] {
+        throw RuntimeError{std::string{func} + ": expected a Color.Hsl record", loc,
+                           "build one with Color.to_hsl(color)"};
+    };
+
+    if (!value.is_record()) {
+        invalid();
+    }
+
+    const auto& rec = value.as_record();
+    const Value* h = rec->find_field("hue");
+    const Value* s = rec->find_field("saturation");
+    const Value* l = rec->find_field("lightness");
+
+    const auto numeric = [](const Value* v) {
+        return v != nullptr && (v->is_integer() || v->is_number());
+    };
+
+    if (!numeric(h) || !numeric(s) || !numeric(l)) {
+        invalid();
+    }
+
+    double hue = std::fmod(h->to_numeric(), 360.0);
+    if (hue < 0.0) {
+        hue += 360.0;
+    }
+
+    return Hsl{hue, std::clamp(s->to_numeric(), 0.0, 1.0), std::clamp(l->to_numeric(), 0.0, 1.0)};
+}
+
+// Convert an RGBA colour to HSL (alpha dropped — HSL has no alpha channel).
+[[nodiscard]] Hsl rgb_to_hsl(const Rgba& c) {
+    const double r = static_cast<double>(c.red) / 255.0;
+    const double g = static_cast<double>(c.green) / 255.0;
+    const double b = static_cast<double>(c.blue) / 255.0;
+
+    const double max = std::max({r, g, b});
+    const double min = std::min({r, g, b});
+    const double delta = max - min;
+    const double lightness = (max + min) / 2.0;
+
+    double hue = 0.0;
+    double saturation = 0.0;
+
+    if (delta > 0.0) {
+        // delta > 0 implies the colour is neither pure black nor white, so the
+        // denominator (1 - |2L - 1|) is strictly positive.
+        saturation = delta / (1.0 - std::fabs((2.0 * lightness) - 1.0));
+
+        if (max == r) {
+            hue = 60.0 * std::fmod((g - b) / delta, 6.0);
+        } else if (max == g) {
+            hue = 60.0 * (((b - r) / delta) + 2.0);
+        } else {
+            hue = 60.0 * (((r - g) / delta) + 4.0);
+        }
+
+        if (hue < 0.0) {
+            hue += 360.0;
+        }
+    }
+
+    return Hsl{hue, std::clamp(saturation, 0.0, 1.0), std::clamp(lightness, 0.0, 1.0)};
+}
+
+// Convert an HSL colour back to RGBA, attaching the supplied alpha.
+[[nodiscard]] Rgba hsl_to_rgb(const Hsl& h, double alpha) {
+    const double chroma = (1.0 - std::fabs((2.0 * h.lightness) - 1.0)) * h.saturation;
+    const double hp = h.hue / 60.0;
+    const double x = chroma * (1.0 - std::fabs(std::fmod(hp, 2.0) - 1.0));
+    const double m = h.lightness - (chroma / 2.0);
+
+    double r1 = 0.0;
+    double g1 = 0.0;
+    double b1 = 0.0;
+
+    if (hp < 1.0) {
+        r1 = chroma;
+        g1 = x;
+    } else if (hp < 2.0) {
+        r1 = x;
+        g1 = chroma;
+    } else if (hp < 3.0) {
+        g1 = chroma;
+        b1 = x;
+    } else if (hp < 4.0) {
+        g1 = x;
+        b1 = chroma;
+    } else if (hp < 5.0) {
+        r1 = x;
+        b1 = chroma;
+    } else {
+        r1 = chroma;
+        b1 = x;
+    }
+
+    return Rgba{to_channel(r1 + m), to_channel(g1 + m), to_channel(b1 + m),
+                std::clamp(alpha, 0.0, 1.0)};
+}
+
 } // namespace
 
 void register_color_ns(const EnvPtr& env) {
@@ -306,6 +431,32 @@ void register_color_ns(const EnvPtr& env) {
 
             // WCAG 2.x contrast ratio, from 1:1 (identical) to 21:1 (black/white).
             return Value{(lighter + 0.05) / (darker + 0.05)};
+        })
+        .func("to_hsl", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.to_hsl", loc);
+
+            return make_hsl(rgb_to_hsl(c));
+        })
+        .func("from_hsl", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto h = read_hsl(args[0], "Color.from_hsl", loc);
+
+            return make_color(hsl_to_rgb(h, 1.0));
+        })
+        .func("rotate_hue", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.rotate_hue", loc);
+            const double degrees = expect_numeric(args[1], "Color.rotate_hue", loc);
+
+            auto hsl = rgb_to_hsl(c);
+            hsl.hue = std::fmod(hsl.hue + degrees, 360.0);
+            if (hsl.hue < 0.0) {
+                hsl.hue += 360.0;
+            }
+
+            // Preserve the original alpha through the round-trip (HSL drops it).
+            return make_color(hsl_to_rgb(hsl, c.alpha));
         });
 }
 

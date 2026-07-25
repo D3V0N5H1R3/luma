@@ -88,6 +88,10 @@ ParseResult parse_csv(const std::string& input, const CsvOptions& opts) {
         return true;
     };
 
+    // Byte offset where an unterminated quoted field opened, so a failure at end
+    // of input points at the offending quote rather than the (past-the-end) cursor.
+    std::size_t quote_start{0};
+
     for (std::size_t i{0}; i < input.size(); ++i) {
         const char c = input[i];
 
@@ -107,6 +111,7 @@ ParseResult parse_csv(const std::string& input, const CsvOptions& opts) {
         } else {
             if (c == opts.quote) {
                 in_quotes = true;
+                quote_start = i;
             } else if (c == opts.delimiter) {
                 current_row.push_back(std::move(field));
 
@@ -118,13 +123,15 @@ ParseResult parse_csv(const std::string& input, const CsvOptions& opts) {
                 if (current_row.size() >= ResourceLimits::max_array_size) {
                     return {.rows = std::move(rows),
                             .success = false,
-                            .error = "CSV has too many fields"};
+                            .error = "CSV has too many fields",
+                            .error_offset = i};
                 }
             } else if (c == '\r') {
                 if (!finalize_row()) {
                     return {.rows = std::move(rows),
                             .success = false,
-                            .error = "CSV has too many rows"};
+                            .error = "CSV has too many rows",
+                            .error_offset = i};
                 }
 
                 // Skip \n if it follows (CRLF pair).
@@ -137,7 +144,8 @@ ParseResult parse_csv(const std::string& input, const CsvOptions& opts) {
                 if (!finalize_row()) {
                     return {.rows = std::move(rows),
                             .success = false,
-                            .error = "CSV has too many rows"};
+                            .error = "CSV has too many rows",
+                            .error_offset = i};
                 }
             } else {
                 field += c;
@@ -153,10 +161,13 @@ ParseResult parse_csv(const std::string& input, const CsvOptions& opts) {
     }
 
     if (in_quotes) {
-        return {.rows = std::move(rows), .success = false, .error = "unterminated quoted field"};
+        return {.rows = std::move(rows),
+                .success = false,
+                .error = "unterminated quoted field",
+                .error_offset = quote_start};
     }
 
-    return {.rows = std::move(rows), .success = true, .error = {}};
+    return {.rows = std::move(rows), .success = true, .error = {}, .error_offset = 0};
 }
 
 std::string serialize_rows(const std::vector<std::vector<std::string>>& rows,

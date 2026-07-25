@@ -1,15 +1,37 @@
 #ifndef LUMA_STDLIB_XML_MODULE_HPP
 #define LUMA_STDLIB_XML_MODULE_HPP
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <string_view>
 
+#include "analysis/errors/error.hpp"
 #include "runtime/stdlib/common/stdlib_fwd.hpp"
 
 namespace luma {
 
 struct XmlValue;
+
+// Thrown by the XML parser on malformed input, carrying the byte offset of the
+// failure so Xml.deserialize_detailed can report a 1-based line/column.  Derives
+// from RuntimeError so every existing catch site (Xml.deserialize / Xml.is_valid,
+// wrap_result_operation) treats it exactly like any other parse RuntimeError; the
+// message is unchanged.  A position of std::string::npos means "at/after the end
+// of input" (or an offset that could not be pinpointed) and is clamped to the end
+// when mapped to a line/column.
+class XmlParseError : public RuntimeError {
+public:
+    XmlParseError(std::string_view message, std::size_t position)
+        : RuntimeError{message}, position_{position} {}
+
+    [[nodiscard]] std::size_t position() const noexcept {
+        return position_;
+    }
+
+private:
+    std::size_t position_;
+};
 
 void register_xml_ns(const EnvPtr& env);
 

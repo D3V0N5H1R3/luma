@@ -163,6 +163,23 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // Decimal and Math.Fraction.
         add_record(st, "Math.Complex", field("number", "real"), field("number", "imaginary"));
 
+        // Math.vector2() / vec2_* take and return these 2D geometry records
+        // (type_name "Vector2").  Named .x/.y components — measurements, so both
+        // number — make 2D work far more teachable than array<number> index
+        // arithmetic.  Data + free functions, mirroring Math.Complex.
+        add_record(st, "Math.Vector2", field("number", "x"), field("number", "y"));
+
+        // Math.vector3() / vec3_* take and return these 3D geometry records
+        // (type_name "Vector3").
+        add_record(st, "Math.Vector3", field("number", "x"), field("number", "y"),
+                   field("number", "z"));
+
+        // Math.five_number_summary() returns this box-plot record (type_name
+        // "FiveNumberSummary"): the five order statistics needed to draw a box
+        // plot.  Mirrors Math.Summary; every field is a number.
+        add_record(st, "Math.FiveNumberSummary", field("number", "minimum"), field("number", "q1"),
+                   field("number", "median"), field("number", "q3"), field("number", "maximum"));
+
         // Math.linear_fit() returns this least-squares regression record (type_name
         // "LineFit") — the trend line y = slope*x + intercept plus its r_squared
         // goodness-of-fit.  A plain returned record, mirroring Math.Summary.
@@ -172,6 +189,20 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Socket.Address", field("string", "host"), field("integer", "port"));
 
         add_record(st, "Csv.Dialect", field("string", "delimiter"), field("string", "quote"));
+
+        // Csv.deserialize_detailed() surfaces this located parse failure (type_name
+        // "ParseError") as the error type of its
+        // result<array<array<string>>, Csv.ParseError>.  line and column are
+        // 1-based indices into the source text, so both are integer; message is
+        // the human-readable reason.  Mirrors Json.ParseError exactly.
+        add_record(st, "Csv.ParseError", field("string", "message"), field("integer", "line"),
+                   field("integer", "column"));
+
+        // Xml.deserialize_detailed() surfaces this located parse failure (type_name
+        // "ParseError") as the error type of its result<Xml.Node, Xml.ParseError>.
+        // Same shape and rationale as Json.ParseError / Csv.ParseError.
+        add_record(st, "Xml.ParseError", field("string", "message"), field("integer", "line"),
+                   field("integer", "column"));
 
         // Json.parse_detailed() surfaces this located parse failure (type_name
         // "ParseError") as the error type of its result<Json.Value, Json.ParseError>.
@@ -186,6 +217,13 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // GraphicalUi web-view already consumes.
         add_record(st, "Color.Color", field("integer", "red"), field("integer", "green"),
                    field("integer", "blue"), field("number", "alpha"));
+
+        // Color.to_hsl / from_hsl / rotate_hue pivot through this hue/saturation/
+        // lightness record (type_name "Hsl").  Hue is an angle in degrees [0, 360)
+        // and saturation/lightness are 0–1 ratios — measurements, so every field is
+        // a number.  Mirrors Color.Color: pure data plus free-function converters.
+        add_record(st, "Color.Hsl", field("number", "hue"), field("number", "saturation"),
+                   field("number", "lightness"));
 
         // Dictionary.to_array emits these key/value pairs at runtime (each a
         // record with type_name "KeyValue").  The `value` field carries the
@@ -215,6 +253,14 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
 
         add_record(st, "Http.UrlParts", field("string", "scheme"), field("string", "host"),
                    field("string", "port"), field("string", "path"), field("string", "query"));
+
+        // Http.parse_cookie decodes a Set-Cookie header into this flat cookie
+        // record (type_name "Cookie"); Http.cookie_header formats it back.  Keeping
+        // the record flat (no nested attribute map) and the parser lenient matches
+        // Http.UrlParts — a structured decode of a header-ish string.
+        add_record(st, "Http.Cookie", field("string", "name"), field("string", "value"),
+                   field("string", "domain"), field("string", "path"), field("string", "expires"),
+                   field("boolean", "secure"), field("boolean", "http_only"));
 
         add_record(st, "Terminal.Size", field("integer", "columns"), field("integer", "rows"));
 

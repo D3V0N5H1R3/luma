@@ -1,6 +1,7 @@
 // Standard library tests: Csv.
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 #include "common/resource_limits.hpp"
@@ -19,6 +20,7 @@ static void test_csv_module() {
 
     ASSERT_TRUE(env->has("Csv.deserialize"));
     ASSERT_TRUE(env->has("Csv.deserialize_records"));
+    ASSERT_TRUE(env->has("Csv.deserialize_detailed"));
     ASSERT_TRUE(env->has("Csv.serialize"));
     ASSERT_TRUE(env->has("Csv.serialize_records"));
     ASSERT_TRUE(env->has("Csv.header"));
@@ -337,6 +339,47 @@ static void test_csv_parse_rejects_too_many_fields() {
     ASSERT_TRUE(result.error.find("too many fields") != std::string::npos);
 }
 
+// ─── Csv.deserialize_detailed / Csv.ParseError ───────────────────────────────
+
+static void test_csv_deserialize_detailed_success() {
+    const auto v =
+        eval(R"(Csv.deserialize_detailed("a,b\n1,2") |> Result.unwrap() |> Array.length())");
+
+    ASSERT_EQ(v.as_integer(), 2);
+}
+
+static void test_csv_deserialize_detailed_failure_message() {
+    const auto v = eval(R"(Csv.deserialize_detailed("\"oops"))");
+    ASSERT_TRUE(v.is_result());
+    ASSERT_FALSE(v.as_result()->is_success);
+
+    const auto& err = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(err->type_name, std::string{"ParseError"});
+    ASSERT_TRUE(err->find_field("message")->as_string().find("unterminated") != std::string::npos);
+}
+
+static void test_csv_deserialize_detailed_failure_location() {
+    // The unterminated quote opens on the second line, so the located error must
+    // point at line 2, column 1.
+    const auto v = eval(R"(Csv.deserialize_detailed("a,b\n\"oops"))");
+    ASSERT_TRUE(v.is_result());
+    ASSERT_FALSE(v.as_result()->is_success);
+
+    const auto& err = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(err->type_name, std::string{"ParseError"});
+    ASSERT_EQ(err->find_field("line")->as_integer(), static_cast<std::int64_t>(2));
+    ASSERT_TRUE(err->find_field("column")->as_integer() >= 1);
+}
+
+static void test_csv_codec_reports_error_offset() {
+    // The pure codec records the byte offset of the failure so the located error
+    // can be derived.  The unterminated quote sits at index 4.
+    const auto result = luma::csv::parse_csv("a,b\n\"oops", luma::csv::CsvOptions{});
+
+    ASSERT_FALSE(result.success);
+    ASSERT_EQ(result.error_offset, static_cast<std::size_t>(4));
+}
+
 int main() {
     RUN(test_csv_count_rows);
     RUN(test_csv_count_rows_empty);
@@ -344,6 +387,10 @@ int main() {
     RUN(test_csv_count_rows_unterminated_fails);
     RUN(test_csv_default_dialect);
     RUN(test_csv_deserialize_crlf);
+    RUN(test_csv_deserialize_detailed_success);
+    RUN(test_csv_deserialize_detailed_failure_message);
+    RUN(test_csv_deserialize_detailed_failure_location);
+    RUN(test_csv_codec_reports_error_offset);
     RUN(test_csv_deserialize_escaped_quote);
     RUN(test_csv_deserialize_multiline_field);
     RUN(test_csv_deserialize_non_string_throws);

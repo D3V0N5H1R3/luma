@@ -28,20 +28,21 @@ namespace luma {
 
 namespace {
 
-// Error-reporting policy for the XML cursor: every scanner error surfaces as a
-// RuntimeError (with an empty source location), matching the rest of the XML
-// parser.
+// Error-reporting policy for the XML cursor: every scanner error surfaces as an
+// XmlParseError (a RuntimeError carrying the failure's byte offset), matching the
+// rest of the XML parser.  unexpected_end / too_deep cannot pinpoint an offset,
+// so they report std::string::npos ("at end of input").
 struct XmlErrorPolicy {
     [[noreturn]] static void unexpected_end() {
-        throw RuntimeError{"unexpected end of XML", {}};
+        throw XmlParseError{"unexpected end of XML", std::string::npos};
     }
 
     [[noreturn]] static void expected(char c, std::size_t position) {
-        throw RuntimeError{std::format("expected '{}' at position {}", c, position), {}};
+        throw XmlParseError{std::format("expected '{}' at position {}", c, position), position};
     }
 
     [[noreturn]] static void too_deep() {
-        throw RuntimeError{"XML nesting too deep", {}};
+        throw XmlParseError{"XML nesting too deep", std::string::npos};
     }
 };
 
@@ -62,9 +63,9 @@ public:
 
         // Reject DOCTYPE declarations — external entity injection risk.
         if (starts_with("<!DOCTYPE") || starts_with("<!doctype")) {
-            throw RuntimeError{"XML DOCTYPE declarations are not supported (security: external "
-                               "entity injection risk)",
-                               {}};
+            throw XmlParseError{"XML DOCTYPE declarations are not supported (security: external "
+                                "entity injection risk)",
+                                pos_};
         }
 
         auto result = parse_element();
@@ -73,8 +74,8 @@ public:
         skip_whitespace();
 
         if (!at_end()) {
-            throw RuntimeError{
-                std::format("unexpected content after root element at position {}", pos_), {}};
+            throw XmlParseError{
+                std::format("unexpected content after root element at position {}", pos_), pos_};
         }
 
         return result;
@@ -105,7 +106,7 @@ private:
         auto found = input_.find(end, pos_);
 
         if (found == std::string_view::npos) {
-            throw RuntimeError{std::format("expected '{}' not found", end), {}};
+            throw XmlParseError{std::format("expected '{}' not found", end), pos_};
         }
 
         pos_ = found + end.size();
@@ -119,7 +120,7 @@ private:
         }
 
         if (pos_ == start) {
-            throw RuntimeError{std::format("expected name at position {}", pos_), {}};
+            throw XmlParseError{std::format("expected name at position {}", pos_), pos_};
         }
 
         return std::string{input_.substr(start, pos_ - start)};
@@ -129,7 +130,7 @@ private:
         auto quote_char = advance(); // ' or "
 
         if (quote_char != '"' && quote_char != '\'') {
-            throw RuntimeError{"expected quote for attribute value", {}};
+            throw XmlParseError{"expected quote for attribute value", pos_ - 1};
         }
 
         std::string result;
@@ -152,7 +153,7 @@ private:
 
         while (!at_end() && input_[pos_] != '<') {
             if (result.size() >= ResourceLimits::max_string_size) {
-                throw RuntimeError{"XML text content exceeds maximum string size", {}};
+                throw XmlParseError{"XML text content exceeds maximum string size", pos_};
             }
 
             if (input_[pos_] == '&') {
@@ -241,7 +242,7 @@ private:
             auto end = input_.find("-->", pos_);
 
             if (end == std::string_view::npos) {
-                throw RuntimeError{"unterminated comment", {}};
+                throw XmlParseError{"unterminated comment", pos_};
             }
 
             comment->tag_or_content = std::string{input_.substr(pos_, end - pos_)};
@@ -261,7 +262,7 @@ private:
             auto end = input_.find("]]>", pos_);
 
             if (end == std::string_view::npos) {
-                throw RuntimeError{"unterminated CDATA", {}};
+                throw XmlParseError{"unterminated CDATA", pos_};
             }
 
             cdata->tag_or_content = std::string{input_.substr(pos_, end - pos_)};
@@ -327,7 +328,7 @@ private:
             }
 
             if (node->children.size() >= ResourceLimits::max_array_size) {
-                throw RuntimeError{"XML element has too many children", {}};
+                throw XmlParseError{"XML element has too many children", pos_};
             }
 
             parse_child_node(*node);
@@ -340,9 +341,9 @@ private:
         auto close_name = parse_name();
 
         if (close_name != name) {
-            throw RuntimeError{
+            throw XmlParseError{
                 std::format("mismatched closing tag: expected </{}>, got </{}>", name, close_name),
-                {}};
+                pos_};
         }
 
         skip_whitespace();

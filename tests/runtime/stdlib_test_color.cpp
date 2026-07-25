@@ -118,6 +118,43 @@ LUMA_TEST(color_module) {
     ASSERT_TRUE(env->has("Color.darken"));
     ASSERT_TRUE(env->has("Color.mix"));
     ASSERT_TRUE(env->has("Color.contrast_ratio"));
+    ASSERT_TRUE(env->has("Color.to_hsl"));
+    ASSERT_TRUE(env->has("Color.from_hsl"));
+    ASSERT_TRUE(env->has("Color.rotate_hue"));
+}
+
+// ─── Color.Hsl: HSL conversions ──────────────────────────────────────────────
+
+LUMA_TEST(color_to_hsl_red) {
+    // Pure red is hue 0, full saturation, half lightness.
+    const auto v = eval("Color.to_hsl(Result.unwrap(Color.rgb(255, 0, 0)))");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Hsl"});
+    ASSERT_NEAR(v.as_record()->find_field("hue")->as_number(), 0.0, 0.5);
+    ASSERT_NEAR(v.as_record()->find_field("saturation")->as_number(), 1.0, 1e-6);
+    ASSERT_NEAR(v.as_record()->find_field("lightness")->as_number(), 0.5, 1e-6);
+}
+
+LUMA_TEST(color_from_hsl_roundtrip) {
+    // Green: hue 120, full saturation, half lightness -> (0, 255, 0).
+    const auto v = eval("Color.from_hsl(Color.to_hsl(Result.unwrap(Color.rgb(0, 255, 0))))");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Color"});
+    ASSERT_EQ(v.as_record()->find_field("red")->as_integer(), static_cast<std::int64_t>(0));
+    ASSERT_EQ(v.as_record()->find_field("green")->as_integer(), static_cast<std::int64_t>(255));
+    ASSERT_EQ(v.as_record()->find_field("blue")->as_integer(), static_cast<std::int64_t>(0));
+}
+
+LUMA_TEST(color_rotate_hue_preserves_alpha) {
+    // Rotating red by 120 degrees yields green; the original alpha is kept.
+    const auto v = eval("Color.rotate_hue(Result.unwrap(Color.rgba(255, 0, 0, 0.5)), 120.0)");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->find_field("green")->as_integer(), static_cast<std::int64_t>(255));
+    ASSERT_EQ(v.as_record()->find_field("red")->as_integer(), static_cast<std::int64_t>(0));
+    ASSERT_NEAR(v.as_record()->find_field("alpha")->as_number(), 0.5, 1e-9);
 }
 
 int main() {

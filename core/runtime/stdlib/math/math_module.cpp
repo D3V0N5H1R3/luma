@@ -285,6 +285,7 @@ void register_math_ns(const EnvPtr& env) {
     register_math_transcendental(env);
     register_math_fraction(env);
     register_math_complex(env);
+    register_math_vectors(env);
 }
 
 } // namespace luma

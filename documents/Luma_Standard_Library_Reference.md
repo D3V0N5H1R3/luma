@@ -279,6 +279,7 @@ Parse and serialise comma-separated values.
 | `Csv.dialect(delimiter, quote)`  | `(string, string)`                           | `Csv.Dialect`                       | Build a typed dialect from a delimiter and quote character        |
 | `Csv.deserialize_records(s)`     | `(string)`                                   | `result<array<dictionary<string>>>` | Parse CSV with header row into records                            |
 | `Csv.deserialize(s)`             | `(string)`                                   | `result<array<array<string>>>`      | Parse CSV string into rows of fields                              |
+| `Csv.deserialize_detailed(s)`    | `(string)`                                   | `result<array<array<string>>, Csv.ParseError>` | Like `Csv.deserialize`, but a failure carries the located `Csv.ParseError` |
 | `Csv.header(s)`                  | `(string)`                                   | `result<array<string>>`             | Extract header row                                                |
 | `Csv.deserialize_with(s, opts)`  | `(string, Csv.Dialect \| dictionary<string>)` | `result<array<array<string>>>`     | Parse with custom delimiter/quoting                               |
 | `Csv.read_file(path)`            | `(string)`                                   | `result<array<dictionary<string>>>` | Read and parse CSV file                                           |
@@ -295,6 +296,12 @@ discoverable, so a mistyped field is a compile error rather than a silently igno
 
 **`Csv.Dialect`** record fields: `delimiter: string` (single character), `quote: string` (single
 character).
+
+`Csv.deserialize_detailed(s)` is an additive companion to `Csv.deserialize` — it leaves
+`Csv.deserialize` unchanged and returns `result<array<array<string>>, Csv.ParseError>`, where
+**`Csv.ParseError`** is a record — `message: string`, `line: integer`, `column: integer` (both
+1-based) — so a program parsing a malformed CSV can point at the row/column that broke rather than
+surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 
 ## 9 — DateTime
 
@@ -1356,6 +1363,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.basic_auth(user, pass)`         | `(string, string)`                         | `string`                | Build a Basic `Authorization` header value                           |
 | `Http.bearer_auth(token)`             | `(string)`                                 | `string`                | Build a Bearer `Authorization` header value                          |
 | `Http.build_query(params)`            | `(dictionary<string>)`                     | `string`                | Build query string (e.g. `"a=1&b=2"`)                                |
+| `Http.cookie_header(cookie)`          | `(Http.Cookie)`                            | `string`                | Format an `Http.Cookie` back into a `Set-Cookie`-style header string  |
 | `Http.delete(url)`                    | `(string)`                                 | `result<Http.Response>` | DELETE request                                                       |
 | `Http.delete_with(url, headers)`      | `(string, dictionary<string>)`             | `result<Http.Response>` | DELETE with custom headers                                           |
 | `Http.download(url, path)`            | `(string, string)`                         | `result<string>`        | Download file to local path                                          |
@@ -1365,6 +1373,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.is_success(response)`           | `(Http.Response)`                          | `boolean`               | Whether the response status is in the 2xx (`Success`) class          |
 | `Http.method_to_string(method)`       | `(Http.Method)`                            | `string`                | Convert an `Http.Method` variant to its uppercase HTTP verb           |
 | `Http.parse_query(qs)`                | `(string)`                                 | `dictionary<string>`    | Parse query string into dictionary                                   |
+| `Http.parse_cookie(header)`           | `(string)`                                 | `result<Http.Cookie>`   | Parse a `Set-Cookie` header into a typed `Http.Cookie`               |
 | `Http.parse_url(url)`                 | `(string)`                                 | `Http.UrlParts`         | Parse URL into record with `scheme`, `host`, `port`, `path`, `query` |
 | `Http.patch(url, body)`               | `(string, string)`                         | `result<Http.Response>` | PATCH request                                                        |
 | `Http.patch_with(url, body, headers)` | `(string, string, dictionary<string>)`     | `result<Http.Response>` | PATCH with body and custom headers                                   |
@@ -1379,6 +1388,8 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.status_class(status)`           | `(integer)`                                | `result<Http.StatusClass>` | Classify a status code into its family; fail if outside 100–599    |
 
 `Http.Response` record fields: `status` (`integer`), `reason` (`string`), `body` (`string`), `headers` (`dictionary<string>`).
+
+**`Http.Cookie`** is a flat record decoding a `Set-Cookie` header — `name: string`, `value: string`, `domain: string`, `path: string`, `expires: string`, `secure: boolean`, `http_only: boolean`. `Http.parse_cookie(header)` returns `result<Http.Cookie>` (the parse is lenient — unknown attributes are ignored — and fails only when the mandatory `name=value` pair is missing or its name is empty), and `Http.cookie_header(cookie)` formats a cookie back into a header string. A `Set-Cookie` value from `Http.Response.headers` is otherwise an opaque string a program must hand-split on `;` and `=`; this pair gives it the same structured treatment `Http.parse_url` gives a URL.
 
 `Http.Request` record fields: `method` (`Http.Method`), `url` (`string`), `headers` (`dictionary<string>`), `body` (`string`), `timeout_ms` (`integer`). Unlike the `Http.request` options dictionary — which is homogeneous and so forces the verb to be stringified — an `Http.Request` carries the `Http.Method` choice natively, so the request is type-checked and discoverable and its method can be matched exhaustively. Build one with `Http.request_of` (common case) or `Http.request_with` (full control), then run it with `Http.send`:
 
@@ -1672,6 +1683,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.degrees(rad)`                   | `(number)`                       | `number`          | Convert radians to degrees                                                       |
 | `Math.exponential(x)`                 | `(number)`                       | `result<number>`  | e^x                                                                              |
 | `Math.factorial(n)`                   | `(integer)`                      | `result<integer>` | n!; fail if `n < 0` or `n > 20`                                                  |
+| `Math.five_number_summary(arr)`       | `(array<number>)`                | `result<Math.FiveNumberSummary>` | Box-plot quartiles (min, Q1, median, Q3, max) in one pass; fail if empty |
 | `Math.floor(x)`                       | `(number)`                       | `result<integer>` | Round down to nearest integer; fail on overflow                                  |
 | `Math.fraction(numerator, denominator)` | `(integer, integer)`           | `result<Math.Fraction>` | Exact rational in lowest terms with a positive denominator; fail if `denominator` is 0 |
 | `Math.fraction_add(a, b)`             | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact sum `a + b`; runtime error on int64 overflow                               |
@@ -1717,8 +1729,27 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.tangent(x)`                     | `(number)`                       | `result<number>`  | Tangent; fail if result is NaN or infinite                                       |
 | `Math.truncate(x)`                    | `(number)`                       | `result<integer>` | Truncate toward zero; fail on overflow                                           |
 | `Math.variance(arr)`                  | `(array<number>)`                | `result<number>`  | Variance; fail if empty                                                          |
+| `Math.vector2(x, y)`                  | `(number, number)`               | `Math.Vector2`    | Construct a 2D vector                                                            |
+| `Math.vec2_add(a, b)`                 | `(Math.Vector2, Math.Vector2)`   | `Math.Vector2`    | Component-wise sum `a + b`                                                        |
+| `Math.vec2_sub(a, b)`                 | `(Math.Vector2, Math.Vector2)`   | `Math.Vector2`    | Component-wise difference `a - b`                                                |
+| `Math.vec2_scale(v, s)`               | `(Math.Vector2, number)`         | `Math.Vector2`    | Scale `v` by scalar `s`                                                          |
+| `Math.vec2_dot(a, b)`                 | `(Math.Vector2, Math.Vector2)`   | `number`          | Dot product                                                                      |
+| `Math.vec2_length(v)`                 | `(Math.Vector2)`                 | `number`          | Euclidean length                                                                 |
+| `Math.vec2_normalize(v)`              | `(Math.Vector2)`                 | `Math.Vector2`    | Unit vector (the zero vector is returned unchanged)                             |
+| `Math.vector3(x, y, z)`               | `(number, number, number)`       | `Math.Vector3`    | Construct a 3D vector                                                            |
+| `Math.vec3_add(a, b)`                 | `(Math.Vector3, Math.Vector3)`   | `Math.Vector3`    | Component-wise sum `a + b`                                                        |
+| `Math.vec3_sub(a, b)`                 | `(Math.Vector3, Math.Vector3)`   | `Math.Vector3`    | Component-wise difference `a - b`                                                |
+| `Math.vec3_scale(v, s)`               | `(Math.Vector3, number)`         | `Math.Vector3`    | Scale `v` by scalar `s`                                                          |
+| `Math.vec3_dot(a, b)`                 | `(Math.Vector3, Math.Vector3)`   | `number`          | Dot product                                                                      |
+| `Math.vec3_cross(a, b)`               | `(Math.Vector3, Math.Vector3)`   | `Math.Vector3`    | Cross product `a × b`                                                            |
+| `Math.vec3_length(v)`                 | `(Math.Vector3)`                 | `number`          | Euclidean length                                                                 |
+| `Math.vec3_normalize(v)`              | `(Math.Vector3)`                 | `Math.Vector3`    | Unit vector (the zero vector is returned unchanged)                             |
 
 `Math.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
+
+`Math.FiveNumberSummary` is the box-plot sibling of `Math.Summary` — `minimum: number`, `q1: number`, `median: number`, `q3: number`, `maximum: number` — returned by `Math.five_number_summary(arr)` (fails on an empty array). The quartiles use the same linear-interpolation method as `Math.percentile`, so `Math.five_number_summary(v)` agrees with `Math.percentile(v, 25/50/75)` — a single typed answer for the five order statistics a box plot needs.
+
+`Math.Vector2 { x: number, y: number }` and `Math.Vector3 { x: number, y: number, z: number }` are typed geometry vectors for 2D/3D work — game positions, GraphicalUi layout, physics — where named `.x` / `.y` / `.z` components are far more teachable than the index arithmetic of `LinearAlgebra`'s general `array<number>` vectors. Like `Math.Complex`, they are pure data plus a pipe-first free-function family — `vec2_*` / `vec3_*` for `add`, `sub`, `scale`, `dot`, `length`, and `normalize`, with `vec3_cross` for the 3D cross product — and no operator overloading. `normalize` returns the zero vector unchanged rather than dividing by zero.
 
 `Math.Fraction` is a record of exact rational numbers — `numerator: integer` and `denominator: integer` — always stored in lowest terms with a strictly positive denominator (the sign lives in the numerator, and zero is stored as `0/1`). Unlike `number`, a fraction never loses precision, so `1/3 + 1/6` is exactly `1/2`; unlike `Decimal` (base-10), it represents thirds exactly. Like `Decimal`, the type avoids operator overloading: build values with `Math.fraction(numerator, denominator)` (a validating constructor that fails on a zero denominator) and combine them with the `Math.fraction_*` free functions. `add`/`subtract`/`multiply` return a `Math.Fraction` directly and raise a catchable runtime error on int64 overflow (mirroring native integer `+`), while `divide` returns `result<Math.Fraction>` and fails on division by a zero fraction. `Math.fraction_compare` returns the top-level `Ordering` choice for an exhaustive `match`.
 
@@ -2526,6 +2557,7 @@ Parse, build, query, and serialise XML documents. XML nodes are opaque `xml` val
 | ---------------------------- | --------------- | ---------------- | ------------------------ |
 | `Xml.is_valid(s)`            | `(string)`      | `boolean`        | Whether `s` is valid XML |
 | `Xml.deserialize(s)`         | `(string)`      | `result<xml>`    | Parse XML string         |
+| `Xml.deserialize_detailed(s)` | `(string)`     | `result<Xml.Node, Xml.ParseError>` | Parse into a typed `Xml.Node`; a failure carries the located `Xml.ParseError` |
 | `Xml.deserialize_file(path)` | `(string)`      | `result<xml>`    | Parse XML file           |
 | `Xml.serialize(el)`          | `(xml)`         | `string`         | Compact XML string       |
 | `Xml.serialize_pretty(el)`   | `(xml)`         | `string`         | Indented XML string      |
@@ -2544,6 +2576,8 @@ case Xml.Node.CData(content)            { print(content) }
 }
 ```
 
+`Xml.deserialize_detailed(s)` is an additive companion to `Xml.deserialize`: on success it returns the typed `Xml.Node` tree directly (no separate `Xml.to_node` step), and on failure it returns an **`Xml.ParseError`** record — `message: string`, `line: integer`, `column: integer` (both 1-based) — so malformed markup can be diagnosed at the offending byte rather than with a bare string. It returns `result<Xml.Node, Xml.ParseError>` and mirrors `Json.parse_detailed` / `Csv.deserialize_detailed`.
+
 ---
 
 ## 42 — Color
@@ -2557,14 +2591,19 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.contrast_ratio(a, b)`    | `(Color.Color, Color.Color)`                | `number`             | WCAG contrast ratio (1:1 to 21:1)                                        |
 | `Color.darken(c, amount)`       | `(Color.Color, number)`                     | `Color.Color`        | Blend toward black by `amount` (clamped to [0, 1])                       |
 | `Color.from_hex(hex)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
+| `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
 | `Color.lighten(c, amount)`      | `(Color.Color, number)`                     | `Color.Color`        | Blend toward white by `amount` (clamped to [0, 1])                       |
 | `Color.mix(a, b, t)`            | `(Color.Color, Color.Color, number)`        | `Color.Color`        | Linear blend of `a` and `b` at `t` (clamped to [0, 1])                   |
 | `Color.rgb(r, g, b)`            | `(integer, integer, integer)`               | `result<Color.Color>` | Construct an opaque colour; fail if a channel is outside 0–255         |
 | `Color.rgba(r, g, b, a)`        | `(integer, integer, integer, number)`       | `result<Color.Color>` | Construct with alpha; fail if a channel is out of range or `a` ∉ [0, 1] |
+| `Color.rotate_hue(c, degrees)`  | `(Color.Color, number)`                     | `Color.Color`        | Rotate the hue by `degrees`, preserving saturation, lightness, and alpha |
 | `Color.to_css(c)`               | `(Color.Color)`                             | `string`             | CSS string: `rgb(r, g, b)`, or `rgba(...)` when not fully opaque         |
 | `Color.to_hex(c)`               | `(Color.Color)`                             | `string`             | `#rrggbb`, or `#rrggbbaa` when the colour is not fully opaque            |
+| `Color.to_hsl(c)`               | `(Color.Color)`                             | `Color.Hsl`          | Convert an RGBA colour to HSL (alpha dropped)                            |
 
 `rgb` / `rgba` / `from_hex` are validating constructors returning `result<Color.Color>`; the derivations (`lighten` / `darken` / `mix`) take already-validated colours and clamp their `amount` / `t` argument, so they return a `Color.Color` directly. `contrast_ratio` computes the WCAG 2.x relative-luminance ratio (alpha ignored) — black on white is 21:1, a colour against itself is 1:1 — feeding accessibility checks. The `to_css` output drops straight into the theme and per-widget style dictionaries the webview already consumes.
+
+**`Color.Hsl`** is the hue/saturation/lightness sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `lightness: number` (0–1 ratios). `Color.to_hsl` / `Color.from_hsl` convert between the two spaces, and `Color.rotate_hue(c, degrees)` shifts the hue (wrapping at 360°) while preserving saturation, lightness, and the original alpha — the natural way to build a rainbow, pastel, or complementary colour that is awkward in RGB. HSL drops alpha (so `to_hsl` discards it and `from_hsl` produces an opaque colour); everything still serialises through the same RGBA `to_css` path the webview consumes.
 
 ```luma
 Color.Color base = Result.unwrap(Color.from_hex("#0172ad"))

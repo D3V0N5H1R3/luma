@@ -775,6 +775,65 @@ LUMA_TEST(math_approximately_equal_negative_epsilon) {
     ASSERT_THROWS(eval("Math.approximately_equal(1.0, 1.0, -0.1)"));
 }
 
+// --- Math.Vector2 / Math.Vector3 (N05) ---
+
+LUMA_TEST(math_vector2_and_length) {
+    const auto v = eval("Math.vector2(3.0, 4.0)");
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Vector2"});
+    ASSERT_NEAR(v.as_record()->find_field("x")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("y")->as_number(), 4.0, 1e-9);
+
+    ASSERT_NEAR(eval("Math.vec2_length(Math.vector2(3.0, 4.0))").as_number(), 5.0, 1e-9);
+}
+
+LUMA_TEST(math_vec2_arithmetic) {
+    ASSERT_NEAR(eval("Math.vec2_dot(Math.vector2(1.0, 2.0), Math.vector2(3.0, 4.0))").as_number(),
+                11.0, 1e-9);
+
+    const auto sum = eval("Math.vec2_add(Math.vector2(1.0, 2.0), Math.vector2(3.0, 4.0))");
+    ASSERT_NEAR(sum.as_record()->find_field("x")->as_number(), 4.0, 1e-9);
+    ASSERT_NEAR(sum.as_record()->find_field("y")->as_number(), 6.0, 1e-9);
+
+    const auto scaled = eval("Math.vec2_scale(Math.vector2(1.5, 2.0), 2.0)");
+    ASSERT_NEAR(scaled.as_record()->find_field("x")->as_number(), 3.0, 1e-9);
+
+    const auto norm = eval("Math.vec2_normalize(Math.vector2(3.0, 4.0))");
+    ASSERT_NEAR(norm.as_record()->find_field("x")->as_number(), 0.6, 1e-9);
+    ASSERT_NEAR(norm.as_record()->find_field("y")->as_number(), 0.8, 1e-9);
+}
+
+LUMA_TEST(math_vec3_cross_and_dot) {
+    const auto cross =
+        eval("Math.vec3_cross(Math.vector3(1.0, 0.0, 0.0), Math.vector3(0.0, 1.0, 0.0))");
+    ASSERT_EQ(cross.as_record()->type_name, std::string{"Vector3"});
+    ASSERT_NEAR(cross.as_record()->find_field("z")->as_number(), 1.0, 1e-9);
+
+    ASSERT_NEAR(
+        eval("Math.vec3_dot(Math.vector3(1.0, 0.0, 0.0), Math.vector3(0.0, 1.0, 0.0))").as_number(),
+        0.0, 1e-9);
+    ASSERT_NEAR(eval("Math.vec3_length(Math.vector3(2.0, 3.0, 6.0))").as_number(), 7.0, 1e-9);
+}
+
+// --- Math.FiveNumberSummary (N06) ---
+
+LUMA_TEST(math_five_number_summary) {
+    const auto v = eval("Math.five_number_summary([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->type_name, std::string{"FiveNumberSummary"});
+    ASSERT_NEAR(rec->find_field("minimum")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("median")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("maximum")->as_number(), 9.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("q1")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("q3")->as_number(), 7.0, 1e-9);
+}
+
+LUMA_TEST(math_five_number_summary_empty_fails) {
+    ASSERT_EVAL_FAILURE("Math.five_number_summary([])");
+}
+
 int main() {
     LUMA_RUN_ALL();
 }

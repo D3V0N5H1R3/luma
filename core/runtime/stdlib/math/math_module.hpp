@@ -13,6 +13,7 @@ void register_math_statistics(const EnvPtr& env);
 void register_math_transcendental(const EnvPtr& env);
 void register_math_fraction(const EnvPtr& env);
 void register_math_complex(const EnvPtr& env);
+void register_math_vectors(const EnvPtr& env);
 
 } // namespace luma
 

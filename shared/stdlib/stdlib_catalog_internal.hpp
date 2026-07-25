@@ -212,6 +212,21 @@ namespace named {
     return ReturnTypeDesc::named("Complex");
 }
 
+// Math.vector2() / vec2_* and Math.vector3() / vec3_* take and return these
+// geometry records (bare short names, like complex()).
+[[nodiscard]] inline ReturnTypeDesc vector2() {
+    return ReturnTypeDesc::named("Vector2");
+}
+
+[[nodiscard]] inline ReturnTypeDesc vector3() {
+    return ReturnTypeDesc::named("Vector3");
+}
+
+// Math.five_number_summary() returns this box-plot record (bare short name).
+[[nodiscard]] inline ReturnTypeDesc five_number_summary() {
+    return ReturnTypeDesc::named("FiveNumberSummary");
+}
+
 // Math.linear_fit() returns this least-squares regression record.
 [[nodiscard]] inline ReturnTypeDesc line_fit() {
     return ReturnTypeDesc::named("LineFit");
@@ -223,10 +238,27 @@ namespace named {
     return ReturnTypeDesc::named("ParseError");
 }
 
+// Csv.deserialize_detailed() / Xml.deserialize_detailed() surface the same
+// located parse-failure record shape (message, line, column) as their result
+// error type — bare "ParseError", mirroring json_parse_error().
+[[nodiscard]] inline ReturnTypeDesc csv_parse_error() {
+    return ReturnTypeDesc::named("ParseError");
+}
+
+[[nodiscard]] inline ReturnTypeDesc xml_parse_error() {
+    return ReturnTypeDesc::named("ParseError");
+}
+
 // Color.* construct and consume these RGBA colour records.  The module is named
 // Color, so the record's qualified name is Color.Color (bare short name "Color").
 [[nodiscard]] inline ReturnTypeDesc color() {
     return ReturnTypeDesc::named("Color");
+}
+
+// Color.to_hsl / from_hsl / rotate_hue pivot through this hue/saturation/lightness
+// record (bare short name "Hsl", like color()).
+[[nodiscard]] inline ReturnTypeDesc hsl() {
+    return ReturnTypeDesc::named("Hsl");
 }
 
 // Encoder.encode_text / decode_text take this text-encoding selector choice.
@@ -275,6 +307,12 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc url_parts() {
     return ReturnTypeDesc::named("UrlParts");
+}
+
+// Http.parse_cookie / cookie_header parse and format this flat cookie record
+// (bare short name "Cookie", like url_parts()).
+[[nodiscard]] inline ReturnTypeDesc cookie() {
+    return ReturnTypeDesc::named("Cookie");
 }
 
 } // namespace named

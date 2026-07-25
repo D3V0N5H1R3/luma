@@ -475,3 +475,35 @@ function void test_http_is_success() {
     assert(!Http.is_success(MockResponse { status = 500 }))
     assert(!Http.is_success(MockResponse { status = 100 }))
 }
+
+# ─── Cookies (Http.Cookie / parse_cookie / cookie_header) ───
+
+@test
+function void test_http_parse_cookie() {
+    result<Http.Cookie> r = Http.parse_cookie("session=abc123; Domain=example.com; Path=/; Secure; HttpOnly")
+    Http.Cookie c = Result.unwrap(r)
+
+    assert(c.name == "session", "cookie name is parsed")
+    assert(c.value == "abc123", "cookie value is parsed")
+    assert(c.domain == "example.com", "domain attribute is parsed")
+    assert(c.path == "/", "path attribute is parsed")
+    assert(c.secure, "Secure flag is set")
+    assert(c.http_only, "HttpOnly flag is set")
+}
+
+@test
+function void test_http_parse_cookie_empty_name_fails() {
+    result<Http.Cookie> r = Http.parse_cookie("=value")
+
+    assert(Result.is_failure(r), "an empty cookie name is rejected")
+}
+
+@test
+function void test_http_cookie_header_roundtrip() {
+    Http.Cookie c = Result.unwrap(Http.parse_cookie("id=42; Domain=example.com; Secure"))
+    string header = Http.cookie_header(c)
+
+    assert(String.contains(header, "id=42"), "name/value round-trips")
+    assert(String.contains(header, "Domain=example.com"), "domain round-trips")
+    assert(String.contains(header, "Secure"), "Secure flag round-trips")
+}

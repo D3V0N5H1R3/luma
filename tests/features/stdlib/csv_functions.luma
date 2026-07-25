@@ -347,3 +347,31 @@ function void test_csv_serialize_with_dialect() {
     assert(String.contains(csv, "1;2"))
 }
 
+
+# ─── Located parse errors (Csv.deserialize_detailed / Csv.ParseError) ───
+
+@test
+function void test_csv_deserialize_detailed_success() {
+    result<array<array<string>>, Csv.ParseError> r = Csv.deserialize_detailed("a,b\n1,2")
+
+    assert(Result.is_success(r), "well-formed CSV should parse")
+
+    array<array<string>> rows = Result.unwrap(r)
+    assert(Array.length(rows) == 2, "two rows are decoded")
+    assert(rows[1][0] == "1", "the first data field is preserved")
+}
+
+@test
+function void test_csv_deserialize_detailed_failure_location() {
+    # The unterminated quoted field opens on the second line.
+    result<array<array<string>>, Csv.ParseError> r = Csv.deserialize_detailed("a,b\n\"oops")
+
+    match r {
+        success(_rows) { assert(false, "an unterminated quote should not parse") }
+        failure(e) {
+            assert(e.line == 2, "the error is reported on line 2")
+            assert(e.column >= 1, "the column is 1-based")
+            assert(String.length(e.message) > 0, "the message is populated")
+        }
+    }
+}

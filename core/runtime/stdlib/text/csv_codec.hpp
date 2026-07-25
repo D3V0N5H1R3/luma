@@ -1,6 +1,7 @@
 #ifndef LUMA_STDLIB_CSV_CODEC_HPP
 #define LUMA_STDLIB_CSV_CODEC_HPP
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -28,11 +29,14 @@ struct CsvOptions {
 
 // Outcome of parse_csv.  On success, rows holds one vector of fields per record.
 // On failure, success is false, error explains why, and rows holds whatever was
-// decoded before the failure.
+// decoded before the failure.  error_offset is the byte offset into the input at
+// which the failure was detected (valid only when success is false), so callers
+// such as Csv.deserialize_detailed can report a 1-based line/column.
 struct ParseResult {
     std::vector<std::vector<std::string>> rows;
     bool success{true};
     std::string error;
+    std::size_t error_offset{0};
 };
 
 // Parse CSV text into rows of fields following RFC 4180 quoting rules.  Never
