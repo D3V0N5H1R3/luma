@@ -217,6 +217,7 @@ set(LUMA_RUNTIME_TESTS
     stdlib_test_datetime
     stdlib_test_order
     stdlib_test_encoder
+    stdlib_test_color
     stdlib_test_hash
     stdlib_test_json
     stdlib_test_log
@@ -463,6 +464,7 @@ set(LUMA_FEATURE_TESTS_STDLIB
     binarytree_functions.luma
     calculus_functions.luma
     channel_functions.luma
+    color_functions.luma
     compression_functions.luma
     console_functions.luma
     converter_functions.luma

@@ -149,9 +149,43 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("number", "maximum"), field("number", "mean"), field("number", "median"),
                    field("number", "standard_deviation"));
 
+        // Math.fraction() constructs these exact-rational records (type_name
+        // "Fraction").  Always stored in lowest terms with a positive denominator,
+        // so 1/3 + 1/6 is exactly 1/2 — no floating-point loss.  The numerator and
+        // denominator are integers (exact whole values), matching Decimal's exact
+        // arithmetic sibling.
+        add_record(st, "Math.Fraction", field("integer", "numerator"),
+                   field("integer", "denominator"));
+
+        // Math.complex() constructs these complex-number records (type_name
+        // "Complex").  Real and imaginary parts are measurements, so both are
+        // `number`.  Data + free functions with no operator overloading, mirroring
+        // Decimal and Math.Fraction.
+        add_record(st, "Math.Complex", field("number", "real"), field("number", "imaginary"));
+
+        // Math.linear_fit() returns this least-squares regression record (type_name
+        // "LineFit") — the trend line y = slope*x + intercept plus its r_squared
+        // goodness-of-fit.  A plain returned record, mirroring Math.Summary.
+        add_record(st, "Math.LineFit", field("number", "slope"), field("number", "intercept"),
+                   field("number", "r_squared"));
+
         add_record(st, "Socket.Address", field("string", "host"), field("integer", "port"));
 
         add_record(st, "Csv.Dialect", field("string", "delimiter"), field("string", "quote"));
+
+        // Json.parse_detailed() surfaces this located parse failure (type_name
+        // "ParseError") as the error type of its result<Json.Value, Json.ParseError>.
+        // line and column are 1-based indices into the source text, so both are
+        // integer; message is the human-readable reason.
+        add_record(st, "Json.ParseError", field("string", "message"), field("integer", "line"),
+                   field("integer", "column"));
+
+        // Color.rgb / rgba / from_hex / mix / lighten / darken construct these RGBA
+        // colour records (type_name "Color").  Channels are 0–255 integers; alpha is
+        // a 0–1 number.  A typed colour that serialises to the CSS strings the
+        // GraphicalUi web-view already consumes.
+        add_record(st, "Color.Color", field("integer", "red"), field("integer", "green"),
+                   field("integer", "blue"), field("number", "alpha"));
 
         // Dictionary.to_array emits these key/value pairs at runtime (each a
         // record with type_name "KeyValue").  The `value` field carries the
@@ -314,6 +348,20 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Floor", .fields = {}});
 
             st.choice_map["Decimal.RoundingMode"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Encoder.Encoding ────────────────────────────
+        // Text encoding selector consumed by Encoder.encode_text / decode_text.
+        // Variant names must match encoding_from_variant() in
+        // core/runtime/stdlib/system/encoder_module.cpp exactly (PascalCase).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Encoding");
+            ch->variants.push_back(ChoiceVariant{.name = "Utf8", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Ascii", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Latin1", .fields = {}});
+
+            st.choice_map["Encoder.Encoding"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

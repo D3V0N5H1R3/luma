@@ -419,6 +419,37 @@ static void test_json_value_parse_invalid_fails() {
     ASSERT_EVAL_FAILURE(R"(Json.parse("{bad}"))");
 }
 
+static void test_json_parse_detailed_success() {
+    const auto v = eval(R"(Json.parse_detailed("{\"a\": 1}"))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "Value");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "JsonObject");
+}
+
+static void test_json_parse_detailed_failure_has_location() {
+    // A malformed object: the parser reports a structured ParseError record with
+    // the failing line and column, not a bare string.
+    const auto v = eval(R"(Json.parse_detailed("{ bad"))");
+    ASSERT_TRUE(v.is_result());
+    ASSERT_FALSE(v.as_result()->is_success);
+
+    const auto& err = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(err->type_name, std::string{"ParseError"});
+    ASSERT_EQ(err->find_field("line")->as_integer(), static_cast<std::int64_t>(1));
+    ASSERT_TRUE(err->find_field("column")->as_integer() >= 1);
+    ASSERT_FALSE(err->find_field("message")->as_string().empty());
+}
+
+static void test_json_parse_detailed_reports_line_on_multiline() {
+    // The error is on the third line; the record must report line 3.
+    const auto v = eval(R"(Json.parse_detailed("[\n  1,\n  bad\n]"))");
+    ASSERT_FALSE(v.as_result()->is_success);
+
+    const auto& err = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(err->find_field("line")->as_integer(), static_cast<std::int64_t>(3));
+}
+
 static void test_json_value_as_string_success() {
     const auto v =
         eval(R"(Json.parse("\"hi\"") |> Result.unwrap() |> Json.as_string() |> Result.unwrap())");
@@ -606,6 +637,9 @@ int main() {
     RUN(test_json_value_parse_boolean);
     RUN(test_json_value_parse_null);
     RUN(test_json_value_parse_invalid_fails);
+    RUN(test_json_parse_detailed_success);
+    RUN(test_json_parse_detailed_failure_has_location);
+    RUN(test_json_parse_detailed_reports_line_on_multiline);
     RUN(test_json_value_as_string_success);
     RUN(test_json_value_as_string_wrong_type_fails);
     RUN(test_json_value_as_number_success);

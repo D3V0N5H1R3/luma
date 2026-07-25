@@ -110,6 +110,8 @@ luma_add_stdlib_library(math
         stdlib/math/math_analysis.cpp
         stdlib/math/math_statistics.cpp
         stdlib/math/math_transcendental.cpp
+        stdlib/math/math_fraction.cpp
+        stdlib/math/math_complex.cpp
         stdlib/math/decimal_module.cpp
         stdlib/system/random_module.cpp
         stdlib/math/linearalgebra_module.cpp
@@ -142,6 +144,7 @@ luma_add_stdlib_library(utility
         stdlib/system/resource_module.cpp
         stdlib/system/log_module.cpp
         stdlib/collections/keyvaluestore_module.cpp
+        stdlib/io/color_module.cpp
         stdlib/io/graphicalui_helpers.cpp
         stdlib/io/graphicalui_module.cpp
         stdlib/io/graphicalui_css_properties.cpp

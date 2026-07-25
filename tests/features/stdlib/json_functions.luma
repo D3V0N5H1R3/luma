@@ -614,3 +614,50 @@ function void test_json_value_to_string_fraction() {
 
     assert(serialized == "2.5", "to_string should preserve a fractional number")
 }
+
+# ─── Located parse errors (Json.parse_detailed / Json.ParseError) ───
+
+@test
+function void test_json_parse_detailed_success() {
+    result<Json.Value, Json.ParseError> r = Json.parse_detailed("{\"a\": 1}")
+
+    assert(Result.is_success(r), "valid JSON should parse")
+
+    Json.Value v = Result.unwrap(r)
+    string tag = match v {
+        case Json.Value.JsonObject(_o) { "object" }
+        case Json.Value.JsonArray(_a) { "array" }
+        case Json.Value.JsonString(_s) { "string" }
+        case Json.Value.JsonNumber(_n) { "number" }
+        case Json.Value.JsonBool(_b) { "bool" }
+        case Json.Value.JsonNull { "null" }
+    }
+    assert(tag == "object", "the parsed value is a JSON object")
+}
+
+@test
+function void test_json_parse_detailed_failure_location() {
+    result<Json.Value, Json.ParseError> r = Json.parse_detailed("{ bad")
+
+    match r {
+        success(_v) { assert(false, "malformed JSON should not parse") }
+        failure(e) {
+            assert(e.line == 1, "the error is on line 1")
+            assert(e.column >= 1, "the column is 1-based")
+            assert(String.length(e.message) > 0, "the message is populated")
+        }
+    }
+}
+
+@test
+function void test_json_parse_detailed_reports_line() {
+    # The bad token sits on the third line.
+    result<Json.Value, Json.ParseError> r = Json.parse_detailed("[\n  1,\n  bad\n]")
+
+    match r {
+        success(_v) { assert(false, "malformed JSON should not parse") }
+        failure(e) { assert(e.line == 3, "the error is reported on line 3") }
+    }
+}
+
+

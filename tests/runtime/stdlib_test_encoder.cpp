@@ -137,6 +137,60 @@ static void test_encoder_module() {
     ASSERT_TRUE(env->has("Encoder.decode_base64url"));
     ASSERT_TRUE(env->has("Encoder.encode_url"));
     ASSERT_TRUE(env->has("Encoder.decode_url"));
+    ASSERT_TRUE(env->has("Encoder.encode_text"));
+    ASSERT_TRUE(env->has("Encoder.decode_text"));
+}
+
+static void test_encoder_text_utf8_roundtrip() {
+    // A UTF-8 string encodes to its own bytes and decodes back unchanged,
+    // including a multi-byte codepoint.
+    ASSERT_EVAL_STR("Encoder.decode_text(Result.unwrap("
+                    "Encoder.encode_text(\"Héllo 🎉\", Encoder.Encoding.Utf8)), "
+                    "Encoder.Encoding.Utf8)",
+                    "Héllo 🎉");
+}
+
+static void test_encoder_text_ascii() {
+    // "AB" → two bytes.
+    ASSERT_EQ(eval("Array.length(Result.unwrap("
+                   "Encoder.encode_text(\"AB\", Encoder.Encoding.Ascii)))")
+                  .as_integer(),
+              static_cast<std::int64_t>(2));
+
+    ASSERT_EVAL_STR("Encoder.decode_text(Result.unwrap("
+                    "Encoder.encode_text(\"AB\", Encoder.Encoding.Ascii)), "
+                    "Encoder.Encoding.Ascii)",
+                    "AB");
+
+    // A non-ASCII codepoint cannot be represented in ASCII.
+    ASSERT_EVAL_FAILURE("Encoder.encode_text(\"é\", Encoder.Encoding.Ascii)");
+}
+
+static void test_encoder_text_latin1() {
+    // U+00E9 (é) is a single Latin-1 byte and round-trips back to UTF-8.
+    ASSERT_EQ(eval("Array.length(Result.unwrap("
+                   "Encoder.encode_text(\"é\", Encoder.Encoding.Latin1)))")
+                  .as_integer(),
+              static_cast<std::int64_t>(1));
+
+    ASSERT_EVAL_STR("Encoder.decode_text(Result.unwrap("
+                    "Encoder.encode_text(\"café\", Encoder.Encoding.Latin1)), "
+                    "Encoder.Encoding.Latin1)",
+                    "café");
+
+    // A codepoint above U+00FF cannot be represented in Latin-1.
+    ASSERT_EVAL_FAILURE("Encoder.encode_text(\"😀\", Encoder.Encoding.Latin1)");
+}
+
+static void test_encoder_decode_text_failures() {
+    // A byte outside 0–255 is rejected.
+    ASSERT_EVAL_FAILURE("Encoder.decode_text([300], Encoder.Encoding.Ascii)");
+
+    // A byte above 127 is not valid ASCII.
+    ASSERT_EVAL_FAILURE("Encoder.decode_text([200], Encoder.Encoding.Ascii)");
+
+    // A lone continuation byte is not valid UTF-8.
+    ASSERT_EVAL_FAILURE("Encoder.decode_text([255], Encoder.Encoding.Utf8)");
 }
 
 int main() {
@@ -161,5 +215,9 @@ int main() {
     RUN(test_encoder_url_decode_invalid);
     RUN(test_encoder_rejects_non_string);
     RUN(test_encoder_module);
+    RUN(test_encoder_text_utf8_roundtrip);
+    RUN(test_encoder_text_ascii);
+    RUN(test_encoder_text_latin1);
+    RUN(test_encoder_decode_text_failures);
     return SUMMARY();
 }

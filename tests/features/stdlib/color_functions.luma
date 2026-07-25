@@ -1,0 +1,97 @@
+# ═══════════════════════════════════════════════════════════
+# Luma — Feature Tests — Color Functions
+#
+# A typed RGBA colour with validating constructors and CSS output.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_color_rgb() {
+    Color.Color c = Result.unwrap(Color.rgb(1, 114, 173))
+
+    assert(c.red == 1)
+    assert(c.green == 114)
+    assert(c.blue == 173)
+    assert(Math.approximately_equal(c.alpha, 1.0))
+}
+
+@test
+function void test_color_rgb_out_of_range() {
+    assert(Result.is_failure(Color.rgb(256, 0, 0)))
+    assert(Result.is_failure(Color.rgb(-1, 0, 0)))
+}
+
+@test
+function void test_color_rgba() {
+    Color.Color c = Result.unwrap(Color.rgba(10, 20, 30, 0.5))
+
+    assert(Math.approximately_equal(c.alpha, 0.5))
+    assert(Result.is_failure(Color.rgba(0, 0, 0, 1.5)))
+    assert(Result.is_failure(Color.rgba(0, 0, 0, -0.1)))
+}
+
+@test
+function void test_color_from_hex() {
+    Color.Color c = Result.unwrap(Color.from_hex("#0172ad"))
+    assert(c.red == 1)
+    assert(c.green == 114)
+    assert(c.blue == 173)
+
+    # #rgb shorthand doubles each nibble.
+    Color.Color s = Result.unwrap(Color.from_hex("f0a"))
+    assert(s.red == 255)
+    assert(s.green == 0)
+    assert(s.blue == 170)
+}
+
+@test
+function void test_color_from_hex_invalid() {
+    assert(Result.is_failure(Color.from_hex("#0172a")))
+    assert(Result.is_failure(Color.from_hex("#zzzzzz")))
+    assert(Result.is_failure(Color.from_hex("")))
+}
+
+@test
+function void test_color_to_hex_and_css() {
+    Color.Color c = Result.unwrap(Color.rgb(1, 114, 173))
+
+    assert(Color.to_hex(c) == "#0172ad")
+    assert(Color.to_css(c) == "rgb(1, 114, 173)")
+
+    Color.Color t = Result.unwrap(Color.rgba(1, 2, 3, 0.5))
+    assert(Color.to_hex(t) == "#01020380")
+    assert(Color.to_css(t) == "rgba(1, 2, 3, 0.5)")
+}
+
+@test
+function void test_color_lighten_darken() {
+    # Lightening black fully yields white; darkening white fully yields black.
+    Color.Color white = Color.lighten(Result.unwrap(Color.rgb(0, 0, 0)), 1.0)
+    assert(Color.to_hex(white) == "#ffffff")
+
+    Color.Color black = Color.darken(Result.unwrap(Color.rgb(255, 255, 255)), 1.0)
+    assert(Color.to_hex(black) == "#000000")
+}
+
+@test
+function void test_color_mix() {
+    # Mixing black and white halfway gives mid-grey.
+    Color.Color grey = Color.mix(Result.unwrap(Color.rgb(0, 0, 0)),
+                                 Result.unwrap(Color.rgb(255, 255, 255)), 0.5)
+    assert(grey.red == 128)
+    assert(grey.green == 128)
+    assert(grey.blue == 128)
+}
+
+@test
+function void test_color_contrast_ratio() {
+    # Black on white is the maximum 21:1 contrast.
+    number ratio = Color.contrast_ratio(Result.unwrap(Color.rgb(0, 0, 0)),
+                                        Result.unwrap(Color.rgb(255, 255, 255)))
+    assert(ratio > 20.99)
+    assert(ratio < 21.01)
+
+    # A colour against itself is 1:1.
+    number same = Color.contrast_ratio(Result.unwrap(Color.rgb(120, 120, 120)),
+                                       Result.unwrap(Color.rgb(120, 120, 120)))
+    assert(Math.approximately_equal(same, 1.0))
+}

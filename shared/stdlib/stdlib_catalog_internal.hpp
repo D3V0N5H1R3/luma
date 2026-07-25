@@ -201,6 +201,39 @@ namespace named {
     return ReturnTypeDesc::named("Summary");
 }
 
+// Math.fraction() / fraction_* take and return these exact-rational records
+// (bare name, resolved as a record — mirrors summary() / interval()).
+[[nodiscard]] inline ReturnTypeDesc fraction() {
+    return ReturnTypeDesc::named("Fraction");
+}
+
+// Math.complex() / complex_* take and return these complex-number records.
+[[nodiscard]] inline ReturnTypeDesc complex() {
+    return ReturnTypeDesc::named("Complex");
+}
+
+// Math.linear_fit() returns this least-squares regression record.
+[[nodiscard]] inline ReturnTypeDesc line_fit() {
+    return ReturnTypeDesc::named("LineFit");
+}
+
+// Json.parse_detailed() surfaces this located parse-failure record as its
+// result error type.
+[[nodiscard]] inline ReturnTypeDesc json_parse_error() {
+    return ReturnTypeDesc::named("ParseError");
+}
+
+// Color.* construct and consume these RGBA colour records.  The module is named
+// Color, so the record's qualified name is Color.Color (bare short name "Color").
+[[nodiscard]] inline ReturnTypeDesc color() {
+    return ReturnTypeDesc::named("Color");
+}
+
+// Encoder.encode_text / decode_text take this text-encoding selector choice.
+[[nodiscard]] inline ReturnTypeDesc encoding() {
+    return ReturnTypeDesc::named("Encoder.Encoding");
+}
+
 [[nodiscard]] inline ReturnTypeDesc process_result() {
     return ReturnTypeDesc::named("ProcessResult");
 }
@@ -441,6 +474,9 @@ void register_resource_functions(std::vector<FunctionSpec>& specs, const ModuleB
                                  const ParamShorthands& p);
 
 void register_order_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                              const ParamShorthands& p);
+
+void register_color_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                               const ParamShorthands& p);
 
 } // namespace luma::stdlib::detail

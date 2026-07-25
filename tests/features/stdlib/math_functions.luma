@@ -661,3 +661,209 @@ function void test_math_sign_of() {
     assert(sign_label(Math.sign_of(0.0)) == "zero")
     assert(sign_label(Math.sign_of(3.14)) == "positive")
 }
+
+# ─── Fraction (Math.Fraction) — exact rational arithmetic ───
+
+@test
+function void test_math_fraction_construct() {
+    result<Math.Fraction> r = Math.fraction(2, 4)
+
+    assert(Result.is_success(r), "constructing a fraction should succeed")
+
+    Math.Fraction f = Result.unwrap(r)
+
+    assert(f.numerator == 1, "2/4 reduces to numerator 1")
+    assert(f.denominator == 2, "2/4 reduces to denominator 2")
+}
+
+@test
+function void test_math_fraction_normalizes_sign() {
+    Math.Fraction f = Result.unwrap(Math.fraction(1, -3))
+
+    assert(f.numerator == -1, "the sign moves to the numerator")
+    assert(f.denominator == 3, "the denominator stays positive")
+
+    Math.Fraction z = Result.unwrap(Math.fraction(0, 5))
+
+    assert(z.numerator == 0, "zero has numerator 0")
+    assert(z.denominator == 1, "zero is stored as 0/1")
+}
+
+@test
+function void test_math_fraction_zero_denominator() {
+    result<Math.Fraction> r = Math.fraction(5, 0)
+
+    assert(Result.is_failure(r), "a zero denominator should fail")
+}
+
+@test
+function void test_math_fraction_add() {
+    # The headline: 1/3 + 1/6 = 1/2 exactly, with no floating-point loss.
+    Math.Fraction a = Result.unwrap(Math.fraction(1, 3))
+    Math.Fraction b = Result.unwrap(Math.fraction(1, 6))
+    Math.Fraction sum = Math.fraction_add(a, b)
+
+    assert(sum.numerator == 1, "1/3 + 1/6 has numerator 1")
+    assert(sum.denominator == 2, "1/3 + 1/6 has denominator 2")
+}
+
+@test
+function void test_math_fraction_subtract() {
+    Math.Fraction diff = Math.fraction_subtract(
+        Result.unwrap(Math.fraction(1, 2)),
+        Result.unwrap(Math.fraction(1, 3))
+    )
+
+    assert(diff.numerator == 1, "1/2 - 1/3 has numerator 1")
+    assert(diff.denominator == 6, "1/2 - 1/3 has denominator 6")
+}
+
+@test
+function void test_math_fraction_multiply() {
+    Math.Fraction product = Math.fraction_multiply(
+        Result.unwrap(Math.fraction(2, 3)),
+        Result.unwrap(Math.fraction(3, 4))
+    )
+
+    assert(product.numerator == 1, "2/3 * 3/4 reduces to 1/2")
+    assert(product.denominator == 2, "2/3 * 3/4 reduces to 1/2")
+}
+
+@test
+function void test_math_fraction_divide() {
+    result<Math.Fraction> r = Math.fraction_divide(
+        Result.unwrap(Math.fraction(1, 2)),
+        Result.unwrap(Math.fraction(3, 4))
+    )
+
+    assert(Result.is_success(r), "dividing by a non-zero fraction should succeed")
+
+    Math.Fraction q = Result.unwrap(r)
+
+    assert(q.numerator == 2, "(1/2) / (3/4) = 2/3")
+    assert(q.denominator == 3, "(1/2) / (3/4) = 2/3")
+}
+
+@test
+function void test_math_fraction_divide_by_zero() {
+    result<Math.Fraction> r = Math.fraction_divide(
+        Result.unwrap(Math.fraction(1, 2)),
+        Result.unwrap(Math.fraction(0, 5))
+    )
+
+    assert(Result.is_failure(r), "dividing by a zero fraction should fail")
+}
+
+@test
+function void test_math_fraction_to_number() {
+    assert(Math.approximately_equal(
+        Math.fraction_to_number(Result.unwrap(Math.fraction(1, 4))), 0.25))
+    assert(Math.approximately_equal(
+        Math.fraction_to_number(Result.unwrap(Math.fraction(-2, 3))), -2.0 / 3.0))
+}
+
+# Exhaustive match over the Ordering choice returned by Math.fraction_compare.
+function string ordering_label(Ordering o) {
+    return match o {
+    case Ordering.Less    { "less" }
+    case Ordering.Equal   { "equal" }
+    case Ordering.Greater { "greater" }
+    }
+}
+
+@test
+function void test_math_fraction_compare() {
+    assert(ordering_label(Math.fraction_compare(
+        Result.unwrap(Math.fraction(1, 3)),
+        Result.unwrap(Math.fraction(1, 2)))) == "less")
+
+    # Reduced forms are canonical, so 1/2 and 2/4 compare Equal.
+    assert(ordering_label(Math.fraction_compare(
+        Result.unwrap(Math.fraction(1, 2)),
+        Result.unwrap(Math.fraction(2, 4)))) == "equal")
+
+    assert(ordering_label(Math.fraction_compare(
+        Result.unwrap(Math.fraction(3, 4)),
+        Result.unwrap(Math.fraction(2, 3)))) == "greater")
+
+    # More-negative fractions are smaller.
+    assert(ordering_label(Math.fraction_compare(
+        Result.unwrap(Math.fraction(-1, 2)),
+        Result.unwrap(Math.fraction(-1, 3)))) == "less")
+}
+
+# ─── Complex (Math.Complex) ───
+
+@test
+function void test_math_complex_construct() {
+    Math.Complex c = Math.complex(3.0, -4.0)
+
+    assert(Math.approximately_equal(c.real, 3.0))
+    assert(Math.approximately_equal(c.imaginary, -4.0))
+}
+
+@test
+function void test_math_complex_arithmetic() {
+    Math.Complex a = Math.complex(1.0, 2.0)
+    Math.Complex b = Math.complex(3.0, 4.0)
+
+    Math.Complex sum = Math.complex_add(a, b)
+    assert(Math.approximately_equal(sum.real, 4.0))
+    assert(Math.approximately_equal(sum.imaginary, 6.0))
+
+    Math.Complex diff = Math.complex_subtract(a, b)
+    assert(Math.approximately_equal(diff.real, -2.0))
+    assert(Math.approximately_equal(diff.imaginary, -2.0))
+
+    # (1 + 2i)(3 + 4i) = -5 + 10i
+    Math.Complex product = Math.complex_multiply(a, b)
+    assert(Math.approximately_equal(product.real, -5.0))
+    assert(Math.approximately_equal(product.imaginary, 10.0))
+}
+
+@test
+function void test_math_complex_divide() {
+    Math.Complex a = Math.complex(1.0, 2.0)
+    Math.Complex b = Math.complex(3.0, 4.0)
+
+    Math.Complex q = Result.unwrap(Math.complex_divide(a, b))
+    assert(Math.approximately_equal(q.real, 0.44))
+    assert(Math.approximately_equal(q.imaginary, 0.08))
+
+    # Division by 0 + 0i fails.
+    assert(Result.is_failure(Math.complex_divide(a, Math.complex(0.0, 0.0))))
+}
+
+@test
+function void test_math_complex_magnitude_conjugate_argument() {
+    assert(Math.approximately_equal(Math.complex_magnitude(Math.complex(3.0, 4.0)), 5.0))
+
+    Math.Complex conj = Math.complex_conjugate(Math.complex(3.0, 4.0))
+    assert(Math.approximately_equal(conj.real, 3.0))
+    assert(Math.approximately_equal(conj.imaginary, -4.0))
+
+    # arg(0 + 1i) = π/2
+    assert(Math.approximately_equal(Math.complex_argument(Math.complex(0.0, 1.0)), Math.pi / 2.0))
+}
+
+# ─── LineFit (Math.linear_fit) ───
+
+@test
+function void test_math_linear_fit() {
+    result<Math.LineFit> fit = Math.linear_fit([1.0, 2.0, 3.0, 4.0], [2.0, 4.0, 6.0, 8.0])
+
+    assert(Result.is_success(fit), "fitting a perfect line should succeed")
+
+    Math.LineFit line = Result.unwrap(fit)
+    assert(Math.approximately_equal(line.slope, 2.0), "slope of y = 2x is 2")
+    assert(Math.approximately_equal(line.intercept, 0.0), "intercept of y = 2x is 0")
+    assert(Math.approximately_equal(line.r_squared, 1.0), "a perfect line has R² = 1")
+}
+
+@test
+function void test_math_linear_fit_failures() {
+    assert(Result.is_failure(Math.linear_fit([1.0, 2.0], [1.0])), "unequal lengths should fail")
+    assert(Result.is_failure(Math.linear_fit([1.0], [1.0])), "fewer than 2 points should fail")
+    assert(Result.is_failure(Math.linear_fit([5.0, 5.0, 5.0], [1.0, 2.0, 3.0])),
+        "zero x-variance should fail")
+}

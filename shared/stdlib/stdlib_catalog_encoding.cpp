@@ -8,9 +8,13 @@ void register_encoder_functions(std::vector<FunctionSpec>& specs, const ModuleBu
                  {
                      m.fn("decode_base64", 1, "(value: string)", R::result_string(), {p.string}),
                      m.fn("decode_base64url", 1, "(value: string)", R::result_string(), {p.string}),
+                     m.fn("decode_text", 2, "(bytes: array<integer>, encoding: Encoder.Encoding)",
+                          R::result_string(), {p.array_any, named::encoding()}),
                      m.fn("decode_url", 1, "(value: string)", R::result_string(), {p.string}),
                      m.fn("encode_base64", 1, "(value: string)", R::result_string(), {p.string}),
                      m.fn("encode_base64url", 1, "(value: string)", R::result_string(), {p.string}),
+                     m.fn("encode_text", 2, "(text: string, encoding: Encoder.Encoding)",
+                          R::result(R::array_integer()), {p.string, named::encoding()}),
                      m.fn("encode_url", 1, "(value: string)", R::result_string(), {p.string}),
                  });
 }

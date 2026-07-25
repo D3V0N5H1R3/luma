@@ -309,6 +309,68 @@ void register_math_statistics(const EnvPtr& env) {
             }
 
             return make_success_value(Value{cov / denom});
+        })
+        .func("linear_fit", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& xs = *expect_array(args[0], "Math.linear_fit", loc)->elements;
+            const auto& ys = *expect_array(args[1], "Math.linear_fit", loc)->elements;
+
+            if (xs.size() != ys.size()) {
+                return make_failure_value(
+                    error_msg("Math", "linear_fit", "arrays must have equal length"));
+            }
+
+            if (xs.size() < 2) {
+                return make_failure_value(
+                    error_msg("Math", "linear_fit", "need at least 2 data points"));
+            }
+
+            const auto n = static_cast<double>(xs.size());
+
+            double sum_x{0};
+            double sum_y{0};
+            for (std::size_t i{0}; i < xs.size(); ++i) {
+                sum_x += xs[i].to_numeric();
+                sum_y += ys[i].to_numeric();
+            }
+
+            const double mean_x = sum_x / n;
+            const double mean_y = sum_y / n;
+
+            double cov{0};
+            double var_x{0};
+            double var_y{0};
+            for (std::size_t i{0}; i < xs.size(); ++i) {
+                const double dx = xs[i].to_numeric() - mean_x;
+                const double dy = ys[i].to_numeric() - mean_y;
+
+                cov += dx * dy;
+                var_x += dx * dx;
+                var_y += dy * dy;
+            }
+
+            // A zero x-variance means every x is identical — the points form a
+            // vertical line with no ordinary least-squares slope.
+            if (var_x == 0.0) {
+                return make_failure_value(error_msg(
+                    "Math", "linear_fit", "x values have zero variance (a vertical line)"));
+            }
+
+            const double slope = cov / var_x;
+            const double intercept = mean_y - (slope * mean_x);
+
+            // R² = cov² / (var_x · var_y).  When the y values are all equal
+            // (var_y == 0) the fitted horizontal line matches every point, so
+            // the fit is perfect: R² = 1.
+            const double r_squared = (var_y == 0.0) ? 1.0 : (cov * cov) / (var_x * var_y);
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "LineFit";
+            rec->fields.emplace_back("slope", Value{slope});
+            rec->fields.emplace_back("intercept", Value{intercept});
+            rec->fields.emplace_back("r_squared", Value{r_squared});
+
+            return make_success_value(Value{std::move(rec)});
         });
 }
 

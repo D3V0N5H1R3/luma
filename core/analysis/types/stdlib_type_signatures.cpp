@@ -119,6 +119,9 @@ namespace {
             if (desc.named_type == "Terminal.Key") {
                 return TypeInfo::make_named(K::Choice, "Terminal.Key");
             }
+            if (desc.named_type == "Encoder.Encoding") {
+                return TypeInfo::make_named(K::Choice, "Encoder.Encoding");
+            }
             if (desc.named_type == "Xml.Node") {
                 return TypeInfo::make_named(K::Choice, "Xml.Node");
             }

@@ -171,3 +171,48 @@ function void test_encoder_url_trailing_percent_invalid() {
     assert(Result.is_failure(Encoder.decode_url("%")))
     assert(Result.is_failure(Encoder.decode_url("abc%2")))
 }
+
+# ─── Text encoding (Encoder.Encoding) ───
+
+@test
+function void test_encoder_text_utf8_roundtrip() {
+    array<integer> bytes = Result.unwrap(Encoder.encode_text("Héllo", Encoder.Encoding.Utf8))
+    string back = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Utf8))
+
+    assert(back == "Héllo")
+}
+
+@test
+function void test_encoder_text_ascii() {
+    array<integer> bytes = Result.unwrap(Encoder.encode_text("AB", Encoder.Encoding.Ascii))
+
+    assert(Array.length(bytes) == 2)
+    assert(bytes[0] == 65)
+    assert(bytes[1] == 66)
+    assert(Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Ascii)) == "AB")
+
+    # Non-ASCII input cannot be encoded as ASCII.
+    assert(Result.is_failure(Encoder.encode_text("é", Encoder.Encoding.Ascii)))
+}
+
+@test
+function void test_encoder_text_latin1() {
+    # U+00E9 (é) is a single Latin-1 byte.
+    array<integer> bytes = Result.unwrap(Encoder.encode_text("café", Encoder.Encoding.Latin1))
+
+    assert(Array.length(bytes) == 4)
+    assert(Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1)) == "café")
+
+    # A codepoint above U+00FF cannot be represented in Latin-1.
+    assert(Result.is_failure(Encoder.encode_text("😀", Encoder.Encoding.Latin1)))
+}
+
+@test
+function void test_encoder_decode_text_failures() {
+    # A byte outside 0-255 is rejected.
+    assert(Result.is_failure(Encoder.decode_text([300], Encoder.Encoding.Ascii)))
+    # A byte above 127 is not valid ASCII.
+    assert(Result.is_failure(Encoder.decode_text([200], Encoder.Encoding.Ascii)))
+    # A lone continuation byte is not valid UTF-8.
+    assert(Result.is_failure(Encoder.decode_text([255], Encoder.Encoding.Utf8)))
+}

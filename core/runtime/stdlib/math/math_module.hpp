@@ -11,6 +11,8 @@ void register_math_ns(const EnvPtr& env);
 void register_math_analysis(const EnvPtr& env);
 void register_math_statistics(const EnvPtr& env);
 void register_math_transcendental(const EnvPtr& env);
+void register_math_fraction(const EnvPtr& env);
+void register_math_complex(const EnvPtr& env);
 
 } // namespace luma
 

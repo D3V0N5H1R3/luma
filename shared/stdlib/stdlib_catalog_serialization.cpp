@@ -25,6 +25,8 @@ void register_json_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
             m.fn("is_valid", 1, "(json: string)", R::boolean_type(), {p.string}),
             m.fn("merge", 2, "(a: string, b: string)", R::result_string(), {p.string, p.string}),
             m.fn("parse", 1, "(text: string)", R::result(named::json_value()), {p.string}),
+            m.fn("parse_detailed", 1, "(text: string)",
+                 R::result(named::json_value(), named::json_parse_error()), {p.string}),
             m.fn("serialize", 1, "(value: T)", R::string_type(), {p.any}),
             m.fn("serialize_pretty", 1, "(value: T)", R::string_type(), {p.any}),
             m.fn("set", 3, "(json: string, key: string, value: T)", R::result_string(),

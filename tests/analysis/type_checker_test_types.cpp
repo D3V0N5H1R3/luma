@@ -462,8 +462,8 @@ static void test_choice_variant_field_unknown_type() {
 
 // Calling a unit variant like a data-variant constructor is an error.
 static void test_choice_unit_variant_called_as_function() {
-    ASSERT_TRUE(fails("choice Color { Red  Green  Blue }\n"
-                      "Color c = Color.Red(5)\n"));
+    ASSERT_TRUE(fails("choice Hue { Red  Green  Blue }\n"
+                      "Hue c = Hue.Red(5)\n"));
 }
 
 // A data variant must be constructed with the exact declared arity.
