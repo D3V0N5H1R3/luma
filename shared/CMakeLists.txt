@@ -41,4 +41,5 @@ luma_add_library(luma_stdlib_catalog OBJECT
     stdlib/stdlib_catalog_channel.cpp
     stdlib/stdlib_catalog_datetime.cpp
     stdlib/stdlib_catalog_order.cpp
+    stdlib/stdlib_catalog_color.cpp
 )

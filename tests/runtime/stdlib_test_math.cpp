@@ -317,6 +317,198 @@ LUMA_TEST(math_summarize_empty) {
     ASSERT_EVAL_FAILURE("Math.summarize([])");
 }
 
+LUMA_TEST(math_fraction_construct_reduces) {
+    // 2/4 reduces to 1/2.
+    const auto v = eval("Math.fraction(2, 4)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->type_name, std::string{"Fraction"});
+    ASSERT_EQ(rec->find_field("numerator")->as_integer(), static_cast<std::int64_t>(1));
+    ASSERT_EQ(rec->find_field("denominator")->as_integer(), static_cast<std::int64_t>(2));
+}
+
+LUMA_TEST(math_fraction_negative_denominator_normalizes) {
+    // The sign always lives in the numerator; the denominator stays positive.
+    const auto v = eval("Math.fraction(1, -3)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->find_field("numerator")->as_integer(), static_cast<std::int64_t>(-1));
+    ASSERT_EQ(rec->find_field("denominator")->as_integer(), static_cast<std::int64_t>(3));
+}
+
+LUMA_TEST(math_fraction_zero_is_canonical) {
+    const auto v = eval("Math.fraction(0, 5)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->find_field("numerator")->as_integer(), static_cast<std::int64_t>(0));
+    ASSERT_EQ(rec->find_field("denominator")->as_integer(), static_cast<std::int64_t>(1));
+}
+
+LUMA_TEST(math_fraction_zero_denominator_fails) {
+    ASSERT_EVAL_FAILURE("Math.fraction(5, 0)");
+}
+
+LUMA_TEST(math_fraction_add_exact) {
+    // The headline example: 1/3 + 1/6 = 1/2 exactly.
+    const auto v = eval("Math.fraction_add(Result.unwrap(Math.fraction(1, 3)), "
+                        "Result.unwrap(Math.fraction(1, 6)))");
+    const auto& rec = v.as_record();
+    ASSERT_EQ(rec->type_name, std::string{"Fraction"});
+    ASSERT_EQ(rec->find_field("numerator")->as_integer(), static_cast<std::int64_t>(1));
+    ASSERT_EQ(rec->find_field("denominator")->as_integer(), static_cast<std::int64_t>(2));
+}
+
+LUMA_TEST(math_fraction_subtract_exact) {
+    // 1/2 - 1/3 = 1/6.
+    const auto v = eval("Math.fraction_subtract(Result.unwrap(Math.fraction(1, 2)), "
+                        "Result.unwrap(Math.fraction(1, 3)))");
+    const auto& rec = v.as_record();
+    ASSERT_EQ(rec->find_field("numerator")->as_integer(), static_cast<std::int64_t>(1));
+    ASSERT_EQ(rec->find_field("denominator")->as_integer(), static_cast<std::int64_t>(6));
+}
+
+LUMA_TEST(math_fraction_multiply_reduces) {
+    // 2/3 * 3/4 = 1/2.
+    const auto v = eval("Math.fraction_multiply(Result.unwrap(Math.fraction(2, 3)), "
+                        "Result.unwrap(Math.fraction(3, 4)))");
+    const auto& rec = v.as_record();
+    ASSERT_EQ(rec->find_field("numerator")->as_integer(), static_cast<std::int64_t>(1));
+    ASSERT_EQ(rec->find_field("denominator")->as_integer(), static_cast<std::int64_t>(2));
+}
+
+LUMA_TEST(math_fraction_divide_exact) {
+    // (1/2) / (3/4) = 2/3.
+    const auto v = eval("Math.fraction_divide(Result.unwrap(Math.fraction(1, 2)), "
+                        "Result.unwrap(Math.fraction(3, 4)))");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->find_field("numerator")->as_integer(), static_cast<std::int64_t>(2));
+    ASSERT_EQ(rec->find_field("denominator")->as_integer(), static_cast<std::int64_t>(3));
+}
+
+LUMA_TEST(math_fraction_divide_by_zero_fails) {
+    ASSERT_EVAL_FAILURE("Math.fraction_divide(Result.unwrap(Math.fraction(1, 2)), "
+                        "Result.unwrap(Math.fraction(0, 5)))");
+}
+
+LUMA_TEST(math_fraction_to_number) {
+    ASSERT_NEAR(eval("Math.fraction_to_number(Result.unwrap(Math.fraction(1, 4)))").as_number(),
+                0.25, 1e-9);
+    ASSERT_NEAR(eval("Math.fraction_to_number(Result.unwrap(Math.fraction(-2, 3)))").as_number(),
+                -2.0 / 3.0, 1e-9);
+}
+
+LUMA_TEST(math_fraction_compare) {
+    // 1/3 < 1/2 → Less.
+    const auto less = eval("Math.fraction_compare(Result.unwrap(Math.fraction(1, 3)), "
+                           "Result.unwrap(Math.fraction(1, 2)))");
+    ASSERT_TRUE(less.is_choice());
+    ASSERT_EQ(less.as_choice()->type_name, "Ordering");
+    ASSERT_EQ(less.as_choice()->variant, "Less");
+
+    // 1/2 == 2/4 → Equal (reduced forms are identical).
+    const auto eq = eval("Math.fraction_compare(Result.unwrap(Math.fraction(1, 2)), "
+                         "Result.unwrap(Math.fraction(2, 4)))");
+    ASSERT_EQ(eq.as_choice()->variant, "Equal");
+
+    // -1/2 < -1/3 → Less (more negative is smaller).
+    const auto neg = eval("Math.fraction_compare(Result.unwrap(Math.fraction(-1, 2)), "
+                          "Result.unwrap(Math.fraction(-1, 3)))");
+    ASSERT_EQ(neg.as_choice()->variant, "Less");
+
+    // 3/4 > 2/3 → Greater.
+    const auto greater = eval("Math.fraction_compare(Result.unwrap(Math.fraction(3, 4)), "
+                              "Result.unwrap(Math.fraction(2, 3)))");
+    ASSERT_EQ(greater.as_choice()->variant, "Greater");
+}
+
+LUMA_TEST(math_fraction_arithmetic_int64_min_overflow) {
+    // A computed numerator or denominator of exactly INT64_MIN cannot be reduced
+    // (normalize's abs would be signed-overflow UB), so it must be rejected as
+    // overflow rather than silently invoking UB.  INT64_MIN/2 is -4611686018427387904.
+    ASSERT_TRUE(
+        throws_runtime("Math.fraction_add(Result.unwrap(Math.fraction(-4611686018427387904, 1)), "
+                       "Result.unwrap(Math.fraction(-4611686018427387904, 1)))"));
+
+    ASSERT_TRUE(throws_runtime("Math.fraction_multiply(Result.unwrap(Math.fraction(2, 1)), "
+                               "Result.unwrap(Math.fraction(-4611686018427387904, 1)))"));
+}
+
+LUMA_TEST(math_complex_construct) {
+    const auto v = eval("Math.complex(3.0, -4.0)");
+    ASSERT_TRUE(v.is_record());
+
+    const auto& rec = v.as_record();
+    ASSERT_EQ(rec->type_name, std::string{"Complex"});
+    ASSERT_NEAR(rec->find_field("real")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("imaginary")->as_number(), -4.0, 1e-9);
+}
+
+LUMA_TEST(math_complex_add_subtract) {
+    const auto sum = eval("Math.complex_add(Math.complex(1.0, 2.0), Math.complex(3.0, -1.0))");
+    ASSERT_NEAR(sum.as_record()->find_field("real")->as_number(), 4.0, 1e-9);
+    ASSERT_NEAR(sum.as_record()->find_field("imaginary")->as_number(), 1.0, 1e-9);
+
+    const auto diff =
+        eval("Math.complex_subtract(Math.complex(1.0, 2.0), Math.complex(3.0, -1.0))");
+    ASSERT_NEAR(diff.as_record()->find_field("real")->as_number(), -2.0, 1e-9);
+    ASSERT_NEAR(diff.as_record()->find_field("imaginary")->as_number(), 3.0, 1e-9);
+}
+
+LUMA_TEST(math_complex_multiply) {
+    // (1 + 2i)(3 + 4i) = -5 + 10i
+    const auto v = eval("Math.complex_multiply(Math.complex(1.0, 2.0), Math.complex(3.0, 4.0))");
+    ASSERT_NEAR(v.as_record()->find_field("real")->as_number(), -5.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("imaginary")->as_number(), 10.0, 1e-9);
+}
+
+LUMA_TEST(math_complex_divide) {
+    // (1 + 2i) / (3 + 4i) = 0.44 + 0.08i
+    const auto v = eval("Math.complex_divide(Math.complex(1.0, 2.0), Math.complex(3.0, 4.0))");
+    ASSERT_RESULT_SUCCESS(v);
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_NEAR(rec->find_field("real")->as_number(), 0.44, 1e-9);
+    ASSERT_NEAR(rec->find_field("imaginary")->as_number(), 0.08, 1e-9);
+
+    // Division by 0 + 0i fails.
+    ASSERT_EVAL_FAILURE("Math.complex_divide(Math.complex(1.0, 1.0), Math.complex(0.0, 0.0))");
+}
+
+LUMA_TEST(math_complex_magnitude_conjugate_argument) {
+    ASSERT_NEAR(eval("Math.complex_magnitude(Math.complex(3.0, 4.0))").as_number(), 5.0, 1e-9);
+
+    const auto conj = eval("Math.complex_conjugate(Math.complex(3.0, 4.0))");
+    ASSERT_NEAR(conj.as_record()->find_field("real")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(conj.as_record()->find_field("imaginary")->as_number(), -4.0, 1e-9);
+
+    // arg(0 + 1i) = π/2
+    ASSERT_NEAR(eval("Math.complex_argument(Math.complex(0.0, 1.0))").as_number(),
+                3.14159265358979 / 2.0, 1e-9);
+}
+
+LUMA_TEST(math_linear_fit) {
+    // Perfect line y = 2x.
+    const auto v = eval("Math.linear_fit([1.0, 2.0, 3.0, 4.0], [2.0, 4.0, 6.0, 8.0])");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->type_name, std::string{"LineFit"});
+    ASSERT_NEAR(rec->find_field("slope")->as_number(), 2.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("intercept")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("r_squared")->as_number(), 1.0, 1e-9);
+}
+
+LUMA_TEST(math_linear_fit_failures) {
+    // Length mismatch, too few points, and zero x-variance all fail.
+    ASSERT_EVAL_FAILURE("Math.linear_fit([1.0, 2.0], [1.0])");
+    ASSERT_EVAL_FAILURE("Math.linear_fit([1.0], [1.0])");
+    ASSERT_EVAL_FAILURE("Math.linear_fit([5.0, 5.0, 5.0], [1.0, 2.0, 3.0])");
+}
+
 LUMA_TEST(math_sum) {
     ASSERT_EVAL_NUM("Math.sum([1.0, 2.0, 3.0])", 6.0);
 

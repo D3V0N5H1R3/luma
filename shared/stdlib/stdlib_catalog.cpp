@@ -189,6 +189,9 @@ using detail::ParamShorthands;
         {.module_name = "Order",
          .cap = Capability::None,
          .register_fn = detail::register_order_functions},
+        {.module_name = "Color",
+         .cap = Capability::None,
+         .register_fn = detail::register_color_functions},
     };
 
     // Approximate total number of stdlib function and constant specs across all

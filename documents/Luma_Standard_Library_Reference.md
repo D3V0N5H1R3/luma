@@ -49,6 +49,7 @@ This reference was previously part of the [User Manual](Luma_User_Manual.md). Fo
 39. [Task](#39--task)
 40. [Terminal](#40--terminal)
 41. [Xml](#41--xml)
+42. [Color](#42--color)
 
 - [See Also](#see-also)
 
@@ -495,10 +496,19 @@ Transform the representation of a string without changing its type (e.g. Base64,
 | ----------------------------- | --------------- | ---------------- | -------------------------------------- |
 | `Encoder.decode_base64(s)`    | `(string)`      | `result<string>` | Decode Base64 string                   |
 | `Encoder.decode_base64url(s)` | `(string)`      | `result<string>` | Decode URL-safe Base64 string          |
+| `Encoder.decode_text(bytes, encoding)` | `(array<integer>, Encoder.Encoding)` | `result<string>` | Decode raw bytes to a string; fail on out-of-range bytes or an invalid sequence |
 | `Encoder.decode_url(s)`       | `(string)`      | `result<string>` | Decode percent-encoded string          |
 | `Encoder.encode_base64(s)`    | `(string)`      | `result<string>` | Encode to Base64                       |
 | `Encoder.encode_base64url(s)` | `(string)`      | `result<string>` | Encode to URL-safe Base64 (no padding) |
+| `Encoder.encode_text(text, encoding)` | `(string, Encoder.Encoding)` | `result<array<integer>>` | Encode a string to raw bytes; fail if a codepoint is unrepresentable |
 | `Encoder.encode_url(s)`       | `(string)`      | `result<string>` | RFC 3986 percent-encoding              |
+
+`Encoder.Encoding` is a choice type selecting a text encoding for `encode_text` / `decode_text` — `Encoder.Encoding.Utf8`, `Encoder.Encoding.Ascii`, `Encoder.Encoding.Latin1`. Typing the encoding as a closed choice (rather than a bare string) makes a `match` exhaustive and turns a typo into a compile error instead of a runtime "unknown encoding". Bytes are `array<integer>` with each element in 0–255. `encode_text` fails when a codepoint cannot be represented in the target encoding (any non-ASCII codepoint for `Ascii`, any codepoint above U+00FF for `Latin1`); `decode_text` fails on a byte outside 0–255, a non-ASCII byte under `Ascii`, or a malformed UTF-8 sequence under `Utf8`.
+
+```luma
+array<integer> bytes = Result.unwrap(Encoder.encode_text("café", Encoder.Encoding.Latin1))
+string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))   # "café"
+```
 
 ## 13 — FileSystem
 
@@ -1438,6 +1448,7 @@ Serialise and deserialise Luma values as JSON.
 | `Json.is_valid(s)`             | `(string)`            | `boolean`                      | Whether `s` is valid JSON                                                        |
 | `Json.merge(a, b)`             | `(string, string)`    | `result<string>`               | Merge two JSON objects; `b` wins on conflicts                                    |
 | `Json.parse(s)`                | `(string)`            | `result<Json.Value>`           | Parse a JSON string into the typed `Json.Value` ADT                              |
+| `Json.parse_detailed(s)`       | `(string)`            | `result<Json.Value, Json.ParseError>` | Like `Json.parse`, but a failure carries the located `Json.ParseError`  |
 | `Json.serialize(v)`            | `(T)`                 | `string`                       | Serialise value to compact JSON                                                  |
 | `Json.serialize_pretty(v)`     | `(T)`                 | `string`                       | Serialise value to formatted JSON                                                |
 | `Json.set(json, path, v)`      | `(string, string, T)` | `result<string>`               | Replace key at path; return new JSON string                                      |
@@ -1490,6 +1501,15 @@ case some(user) {
     }
 }
 case none { print("no user") }
+}
+```
+
+`Json.parse_detailed(s)` is an additive companion to `Json.parse` for when malformed input must be diagnosed precisely. It leaves `Json.parse` unchanged and returns `result<Json.Value, Json.ParseError>`, where `Json.ParseError` is a record — `message: string`, `line: integer`, `column: integer` (both 1-based) — so a program can point at the exact byte in a large document rather than surface a bare string. The success payload is the same `Json.Value` tree that `Json.parse` produces.
+
+```luma
+match Json.parse_detailed(user_input) {
+    success(value) { use(value) }
+    failure(e)     { print("parse error at line ${e.line}, column ${e.column}: ${e.message}") }
 }
 ```
 
@@ -1637,6 +1657,14 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.arc_tangent(x)`                 | `(number)`                       | `result<number>`  | Inverse tangent                                                                  |
 | `Math.atan2(y, x)`                    | `(number, number)`               | `result<number>`  | Arctangent of y/x considering signs; fail if result is NaN                       |
 | `Math.ceil(x)`                        | `(number)`                       | `result<integer>` | Round up to nearest integer; fail on overflow                                    |
+| `Math.complex(real, imaginary)`       | `(number, number)`               | `Math.Complex`    | Construct a complex number                                                        |
+| `Math.complex_add(a, b)`              | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Sum `a + b`                                                                       |
+| `Math.complex_argument(c)`            | `(Math.Complex)`                 | `number`          | Argument (phase angle) of `c` in radians                                          |
+| `Math.complex_conjugate(c)`           | `(Math.Complex)`                 | `Math.Complex`    | Complex conjugate of `c`                                                          |
+| `Math.complex_divide(a, b)`           | `(Math.Complex, Math.Complex)`   | `result<Math.Complex>` | Quotient `a / b`; fail if `b` is zero                                             |
+| `Math.complex_magnitude(c)`           | `(Math.Complex)`                 | `number`          | Magnitude (modulus) of `c`                                                        |
+| `Math.complex_multiply(a, b)`         | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Product `a * b`                                                                   |
+| `Math.complex_subtract(a, b)`         | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Difference `a - b`                                                                |
 | `Math.clamp(x, lo, hi)`               | `(number, number, number)`       | `result<number>`  | Clamp `x` to `[lo, hi]`; fail if `lo > hi`                                       |
 | `Math.correlation(xs, ys)`            | `(array<number>, array<number>)` | `result<number>`  | Pearson correlation coefficient; fail if arrays differ in length or < 2 elements |
 | `Math.cosine(x)`                      | `(number)`                       | `result<number>`  | Cosine; fail if result is NaN or infinite                                        |
@@ -1645,6 +1673,13 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.exponential(x)`                 | `(number)`                       | `result<number>`  | e^x                                                                              |
 | `Math.factorial(n)`                   | `(integer)`                      | `result<integer>` | n!; fail if `n < 0` or `n > 20`                                                  |
 | `Math.floor(x)`                       | `(number)`                       | `result<integer>` | Round down to nearest integer; fail on overflow                                  |
+| `Math.fraction(numerator, denominator)` | `(integer, integer)`           | `result<Math.Fraction>` | Exact rational in lowest terms with a positive denominator; fail if `denominator` is 0 |
+| `Math.fraction_add(a, b)`             | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact sum `a + b`; runtime error on int64 overflow                               |
+| `Math.fraction_compare(a, b)`         | `(Math.Fraction, Math.Fraction)` | `Ordering`        | Order `a` against `b` exactly (`Less`, `Equal`, `Greater`)                        |
+| `Math.fraction_divide(a, b)`          | `(Math.Fraction, Math.Fraction)` | `result<Math.Fraction>` | Exact quotient `a / b`; fail if `b` is zero                                       |
+| `Math.fraction_multiply(a, b)`        | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact product `a * b`; runtime error on int64 overflow                           |
+| `Math.fraction_subtract(a, b)`        | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact difference `a - b`; runtime error on int64 overflow                        |
+| `Math.fraction_to_number(f)`          | `(Math.Fraction)`                | `number`          | Approximate `f` as a floating-point `number`                                     |
 | `Math.greatest_common_divisor(a, b)`  | `(integer, integer)`             | `result<integer>` | GCD of `a` and `b`                                                               |
 | `Math.hyperbolic_cosine(x)`           | `(number)`                       | `result<number>`  | Hyperbolic cosine; fail if result is infinite                                    |
 | `Math.hyperbolic_sine(x)`             | `(number)`                       | `result<number>`  | Hyperbolic sine; fail if result is infinite                                      |
@@ -1655,6 +1690,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.is_prime(n)`                    | `(integer)`                      | `boolean`         | Whether `n` is prime                                                             |
 | `Math.least_common_multiple(a, b)`    | `(integer, integer)`             | `result<integer>` | LCM of `a` and `b`; fail on overflow                                             |
 | `Math.lerp(a, b, t)`                  | `(number, number, number)`       | `result<number>`  | Linear interpolation; fail if `t` outside [0, 1]                                 |
+| `Math.linear_fit(xs, ys)`             | `(array<number>, array<number>)` | `result<Math.LineFit>` | Ordinary least-squares line fit; fail on unequal lengths, < 2 points, or zero x-variance |
 | `Math.log(base, value)`               | `(number, number)`               | `result<number>`  | Logarithm of `value` with `base`; fail if base ≤ 0, base = 1, or value ≤ 0       |
 | `Math.log_10(x)`                      | `(number)`                       | `result<number>`  | Base-10 logarithm                                                                |
 | `Math.log_2(x)`                       | `(number)`                       | `result<number>`  | Base-2 logarithm                                                                 |
@@ -1683,6 +1719,19 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.variance(arr)`                  | `(array<number>)`                | `result<number>`  | Variance; fail if empty                                                          |
 
 `Math.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
+
+`Math.Fraction` is a record of exact rational numbers — `numerator: integer` and `denominator: integer` — always stored in lowest terms with a strictly positive denominator (the sign lives in the numerator, and zero is stored as `0/1`). Unlike `number`, a fraction never loses precision, so `1/3 + 1/6` is exactly `1/2`; unlike `Decimal` (base-10), it represents thirds exactly. Like `Decimal`, the type avoids operator overloading: build values with `Math.fraction(numerator, denominator)` (a validating constructor that fails on a zero denominator) and combine them with the `Math.fraction_*` free functions. `add`/`subtract`/`multiply` return a `Math.Fraction` directly and raise a catchable runtime error on int64 overflow (mirroring native integer `+`), while `divide` returns `result<Math.Fraction>` and fails on division by a zero fraction. `Math.fraction_compare` returns the top-level `Ordering` choice for an exhaustive `match`.
+
+```luma
+Math.Fraction a = Result.unwrap(Math.fraction(1, 3))
+Math.Fraction b = Result.unwrap(Math.fraction(1, 6))
+Math.Fraction sum = Math.fraction_add(a, b)   # exactly 1/2
+assert(sum.numerator == 1 && sum.denominator == 2)
+```
+
+`Math.Complex` is a record of complex numbers — `real: number` and `imaginary: number` — for the quadratic formula with a negative discriminant, signal work, and Argand-plane maths. Like `Decimal` and `Math.Fraction`, it avoids operator overloading: build values with `Math.complex(real, imaginary)` and combine them with the `Math.complex_*` free functions. `add`/`subtract`/`multiply`/`conjugate` return a `Math.Complex`; `divide` returns `result<Math.Complex>` and fails when the divisor is `0 + 0i`. `Math.complex_magnitude` and `Math.complex_argument` return the modulus and phase angle (radians).
+
+`Math.LineFit` is the ordinary least-squares regression result — `slope: number`, `intercept: number`, `r_squared: number` — returned by `Math.linear_fit(xs, ys)` for the trend line `y = slope · x + intercept`. It fails on mismatched array lengths, fewer than two points, or a zero x-variance (a vertical line). Mirrors `Math.Summary`: a plain returned record built by a single call.
 
 `Sign` is a **top-level** choice type (not namespaced, like `Ordering`) with three variants — `Sign.Negative`, `Sign.Zero`, `Sign.Positive` — the self-documenting answer to "which way does this number point?". `Math.sign_of(x)` returns it, so a `match` is exhaustive and autocompleted instead of comparing against the magic `-1` / `0` / `1` that `Math.sign` returns (where `-1` could be misread as an error sentinel). `Math.sign` is unchanged for callers that want the integer.
 
@@ -2493,6 +2542,36 @@ case Xml.Node.Text(content)             { print(content) }
 case Xml.Node.Comment(content)          { }
 case Xml.Node.CData(content)            { print(content) }
 }
+```
+
+---
+
+## 42 — Color
+
+A typed RGBA colour value with validating constructors and derivations. Every value serialises to a CSS string the GraphicalUi web-view already accepts, so `Solaris` themes can be _computed_ rather than hand-written. Like `Decimal` and `Math.Fraction`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
+
+> **Color vs Terminal.Color** — `Color` is a general RGBA value for GUI/CSS work. `Terminal.Color` is a fixed choice of 16 named ANSI terminal colours, used only by the `Terminal` module.
+
+| Function                        | Parameter Types                             | Return Type          | Description                                                              |
+| ------------------------------- | ------------------------------------------- | -------------------- | ------------------------------------------------------------------------ |
+| `Color.contrast_ratio(a, b)`    | `(Color.Color, Color.Color)`                | `number`             | WCAG contrast ratio (1:1 to 21:1)                                        |
+| `Color.darken(c, amount)`       | `(Color.Color, number)`                     | `Color.Color`        | Blend toward black by `amount` (clamped to [0, 1])                       |
+| `Color.from_hex(hex)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
+| `Color.lighten(c, amount)`      | `(Color.Color, number)`                     | `Color.Color`        | Blend toward white by `amount` (clamped to [0, 1])                       |
+| `Color.mix(a, b, t)`            | `(Color.Color, Color.Color, number)`        | `Color.Color`        | Linear blend of `a` and `b` at `t` (clamped to [0, 1])                   |
+| `Color.rgb(r, g, b)`            | `(integer, integer, integer)`               | `result<Color.Color>` | Construct an opaque colour; fail if a channel is outside 0–255         |
+| `Color.rgba(r, g, b, a)`        | `(integer, integer, integer, number)`       | `result<Color.Color>` | Construct with alpha; fail if a channel is out of range or `a` ∉ [0, 1] |
+| `Color.to_css(c)`               | `(Color.Color)`                             | `string`             | CSS string: `rgb(r, g, b)`, or `rgba(...)` when not fully opaque         |
+| `Color.to_hex(c)`               | `(Color.Color)`                             | `string`             | `#rrggbb`, or `#rrggbbaa` when the colour is not fully opaque            |
+
+`rgb` / `rgba` / `from_hex` are validating constructors returning `result<Color.Color>`; the derivations (`lighten` / `darken` / `mix`) take already-validated colours and clamp their `amount` / `t` argument, so they return a `Color.Color` directly. `contrast_ratio` computes the WCAG 2.x relative-luminance ratio (alpha ignored) — black on white is 21:1, a colour against itself is 1:1 — feeding accessibility checks. The `to_css` output drops straight into the theme and per-widget style dictionaries the webview already consumes.
+
+```luma
+Color.Color base = Result.unwrap(Color.from_hex("#0172ad"))
+string css = base |> Color.darken(0.1) |> Color.to_css()   # "rgb(1, 102, 155)"
+
+# Pick a readable text colour against a background.
+number ratio = Color.contrast_ratio(base, Result.unwrap(Color.rgb(255, 255, 255)))
 ```
 
 ---

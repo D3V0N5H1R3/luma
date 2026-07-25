@@ -1,0 +1,27 @@
+#include "stdlib/stdlib_catalog_internal.hpp"
+
+namespace luma::stdlib::detail {
+
+void register_color_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                              const ParamShorthands& p) {
+    append_specs(specs,
+                 {
+                     m.fn("contrast_ratio", 2, "(a: Color.Color, b: Color.Color)", R::number_type(),
+                          {named::color(), named::color()}),
+                     m.fn("darken", 2, "(color: Color.Color, amount: number)", named::color(),
+                          {named::color(), p.number}),
+                     m.fn("from_hex", 1, "(hex: string)", R::result(named::color()), {p.string}),
+                     m.fn("lighten", 2, "(color: Color.Color, amount: number)", named::color(),
+                          {named::color(), p.number}),
+                     m.fn("mix", 3, "(a: Color.Color, b: Color.Color, t: number)", named::color(),
+                          {named::color(), named::color(), p.number}),
+                     m.fn("rgb", 3, "(red: integer, green: integer, blue: integer)",
+                          R::result(named::color()), {p.integer, p.integer, p.integer}),
+                     m.fn("rgba", 4, "(red: integer, green: integer, blue: integer, alpha: number)",
+                          R::result(named::color()), {p.integer, p.integer, p.integer, p.number}),
+                     m.fn("to_css", 1, "(color: Color.Color)", R::string_type(), {named::color()}),
+                     m.fn("to_hex", 1, "(color: Color.Color)", R::string_type(), {named::color()}),
+                 });
+}
+
+} // namespace luma::stdlib::detail
