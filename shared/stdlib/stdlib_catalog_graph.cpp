@@ -82,6 +82,8 @@ void register_graph_functions(std::vector<FunctionSpec>& specs, const ModuleBuil
                  {p.graph, p.string}),
             m.fn("shortest_path", 3, "(g: graph, from: string, to: string)",
                  R::result(R::array(R::string_type())), {p.graph, p.string, p.string}),
+            m.fn("shortest_path_detailed", 3, "(g: graph, from: string, to: string)",
+                 R::result(named::path()), {p.graph, p.string, p.string}),
             m.fn("strongly_connected_components", 1, "(g: graph)",
                  R::result(R::array(R::array(R::string_type()))), {p.graph}),
             m.fn("to_adjacency_list", 1, "(g: graph)", R::dict(R::array(R::string_type())),

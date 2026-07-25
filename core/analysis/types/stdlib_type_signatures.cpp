@@ -125,6 +125,9 @@ namespace {
             if (desc.named_type == "Xml.Node") {
                 return TypeInfo::make_named(K::Choice, "Xml.Node");
             }
+            if (desc.named_type == "Socket.IpAddress") {
+                return TypeInfo::make_named(K::Choice, "Socket.IpAddress");
+            }
             return TypeInfo::make_named(K::Record, desc.named_type);
 
         case RK::Unspecified:

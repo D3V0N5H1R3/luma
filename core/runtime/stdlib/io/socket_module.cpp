@@ -213,6 +213,169 @@ constexpr std::int64_t k_max_port = 65535;
     return make_success_value(Value{std::move(rec)});
 }
 
+// ─── IP-literal parsing (pure, no OS calls) ──────────────────────────────────
+
+// True for an ASCII hexadecimal digit.
+[[nodiscard]] bool is_hex_digit(char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+// Validate a dotted-decimal IPv4 literal.  Returns the canonical "a.b.c.d" form
+// (leading zeros stripped) or nullopt when the text is not a valid IPv4 address.
+[[nodiscard]] std::optional<std::string> parse_ipv4(std::string_view s) {
+    std::array<int, 4> octets{};
+    std::size_t i = 0;
+
+    for (int idx = 0; idx < 4; ++idx) {
+        int value = 0;
+        int digits = 0;
+
+        while (i < s.size() && s[i] >= '0' && s[i] <= '9') {
+            value = (value * 10) + (s[i] - '0');
+            ++digits;
+            ++i;
+
+            if (digits > 3) {
+                return std::nullopt;
+            }
+        }
+
+        if (digits == 0 || value > 255) {
+            return std::nullopt;
+        }
+
+        octets[static_cast<std::size_t>(idx)] = value;
+
+        if (idx < 3) {
+            if (i >= s.size() || s[i] != '.') {
+                return std::nullopt;
+            }
+            ++i;
+        }
+    }
+
+    if (i != s.size()) {
+        return std::nullopt;
+    }
+
+    return std::format("{}.{}.{}.{}", octets[0], octets[1], octets[2], octets[3]);
+}
+
+// Count the number of 16-bit chunks in a colon-separated IPv6 group list.  A
+// trailing embedded IPv4 (e.g. "::ffff:1.2.3.4") counts as two chunks and sets
+// `embedded_ipv4` so the caller can enforce that it only appears in the address
+// tail.  Returns -1 on any malformed token, or 0 for an empty part.
+[[nodiscard]] int count_ipv6_chunks(std::string_view part, bool& embedded_ipv4) {
+    embedded_ipv4 = false;
+
+    if (part.empty()) {
+        return 0;
+    }
+
+    int chunks = 0;
+    std::size_t i = 0;
+
+    while (true) {
+        const std::size_t colon = part.find(':', i);
+        const std::string_view tok =
+            (colon == std::string_view::npos) ? part.substr(i) : part.substr(i, colon - i);
+
+        if (tok.find('.') != std::string_view::npos) {
+            // An embedded IPv4 is only legal as the final token of the segment.
+            if (colon != std::string_view::npos || !parse_ipv4(tok)) {
+                return -1;
+            }
+
+            embedded_ipv4 = true;
+            chunks += 2;
+            break;
+        }
+
+        if (tok.empty() || tok.size() > 4) {
+            return -1;
+        }
+
+        for (const char c : tok) {
+            if (!is_hex_digit(c)) {
+                return -1;
+            }
+        }
+
+        ++chunks;
+
+        if (colon == std::string_view::npos) {
+            break;
+        }
+
+        i = colon + 1;
+
+        if (i == part.size()) {
+            return -1; // Trailing single colon (e.g. "1:2:").
+        }
+    }
+
+    return chunks;
+}
+
+// Validate an IPv6 literal (with optional "::" zero-compression and an optional
+// embedded IPv4 tail).  Returns the lowercased address on success, else nullopt.
+[[nodiscard]] std::optional<std::string> parse_ipv6(std::string_view s) {
+    if (s.empty()) {
+        return std::nullopt;
+    }
+
+    const std::size_t compress = s.find("::");
+
+    if (compress != std::string_view::npos) {
+        // At most one "::" is permitted.
+        if (s.find("::", compress + 1) != std::string_view::npos) {
+            return std::nullopt;
+        }
+
+        bool head_ipv4 = false;
+        bool tail_ipv4 = false;
+        const int head = count_ipv6_chunks(s.substr(0, compress), head_ipv4);
+        const int tail = count_ipv6_chunks(s.substr(compress + 2), tail_ipv4);
+
+        // "::" must stand in for at least one zero group, so the explicit chunks
+        // total at most 7.  An embedded IPv4 is only legal as the address tail,
+        // so it must not appear in the head segment (before the "::").
+        if (head < 0 || tail < 0 || head_ipv4 || head + tail > 7) {
+            return std::nullopt;
+        }
+    } else {
+        // No compression: exactly eight 16-bit chunks required.  An embedded
+        // IPv4 tail is allowed (count_ipv6_chunks accepts it only as the final
+        // token), so its flag needs no extra check here.
+        bool embedded_ipv4 = false;
+        if (count_ipv6_chunks(s, embedded_ipv4) != 8) {
+            return std::nullopt;
+        }
+    }
+
+    std::string lowered{s};
+
+    for (char& c : lowered) {
+        if (c >= 'A' && c <= 'F') {
+            c = static_cast<char>(c - 'A' + 'a');
+        }
+    }
+
+    return lowered;
+}
+
+// Build a Socket.IpAddress choice value carrying the canonical address text.  The
+// short runtime type_name "IpAddress" and the single "address" payload field must
+// match the choice registered in stdlib_type_arities.cpp.
+[[nodiscard]] Value make_ip_address(std::string variant, std::string address) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "IpAddress";
+    cv->variant = std::move(variant);
+    cv->fields.emplace_back(Value{std::move(address)});
+
+    return Value{std::move(cv)};
+}
+
 } // namespace
 
 // ─── Module registration ─────────────────────────────────────────────────────
@@ -700,6 +863,41 @@ void register_socket_ns(const EnvPtr& env) {
             rec->fields.emplace_back("port", Value{static_cast<std::int64_t>(sender_port)});
 
             return make_success_value(Value{std::move(rec)});
+        })
+        // Socket.parse_ip(string) -> result<Socket.IpAddress>
+        // Validate and classify an IP literal without any OS call.  IPv4 is
+        // returned canonicalised (leading zeros stripped); IPv6 lowercased.
+        .func("parse_ip", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& text = expect_string(args[0], "Socket.parse_ip", loc);
+
+            if (auto v4 = parse_ipv4(text)) {
+                return make_success_value(make_ip_address("V4", *std::move(v4)));
+            }
+
+            if (auto v6 = parse_ipv6(text)) {
+                return make_success_value(make_ip_address("V6", *std::move(v6)));
+            }
+
+            return make_failure_value(std::format("not a valid IP address: '{}'", text));
+        })
+        // Socket.ip_to_string(Socket.IpAddress) -> string
+        // Render a parsed address back to its canonical text.
+        .func("ip_to_string", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_choice()) {
+                throw RuntimeError{"Socket.ip_to_string: expected a Socket.IpAddress", loc,
+                                   "build one with Socket.parse_ip(text)"};
+            }
+
+            const auto& cv = args[0].as_choice();
+
+            if (cv->type_name != "IpAddress" || cv->fields.empty() || !cv->fields[0].is_string()) {
+                throw RuntimeError{"Socket.ip_to_string: expected a Socket.IpAddress", loc,
+                                   "build one with Socket.parse_ip(text)"};
+            }
+
+            return Value{cv->fields[0].as_string()};
         });
 }
 

@@ -916,3 +916,60 @@ function void test_math_five_number_summary_empty_fails() {
 
     assert(Result.is_failure(r), "an empty array has no five-number summary")
 }
+
+@test
+function void test_math_interval() {
+    Math.Interval iv = Result.unwrap(Math.interval(0.0, 10.0))
+
+    assert(Math.approximately_equal(iv.min, 0.0, 0.001), "min stored")
+    assert(Math.approximately_equal(iv.max, 10.0, 0.001), "max stored")
+    assert(Math.interval_contains(iv, 5.0), "contains a midpoint")
+    assert(Math.interval_contains(iv, 0.0), "closed: contains the low endpoint")
+    assert(!Math.interval_contains(iv, 11.0), "excludes points outside")
+    assert(Math.approximately_equal(Math.interval_clamp(iv, 15.0), 10.0, 0.001), "clamps above")
+    assert(Math.approximately_equal(Math.interval_clamp(iv, -3.0), 0.0, 0.001), "clamps below")
+    assert(Math.approximately_equal(Math.interval_length(iv), 10.0, 0.001), "length is max - min")
+    assert(Result.is_failure(Math.interval(5.0, 1.0)), "min > max is rejected")
+}
+
+@test
+function void test_math_intervals_overlap() {
+    Math.Interval a = Result.unwrap(Math.interval(0.0, 5.0))
+
+    assert(Math.intervals_overlap(a, Result.unwrap(Math.interval(4.0, 9.0))), "partial overlap")
+    assert(Math.intervals_overlap(a, Result.unwrap(Math.interval(5.0, 9.0))), "touching counts")
+    assert(!Math.intervals_overlap(a, Result.unwrap(Math.interval(6.0, 9.0))), "disjoint")
+}
+
+@test
+function void test_math_matrix2() {
+    Math.Matrix2 id = Math.mat2_identity()
+    Math.Vector2 v = Math.mat2_transform(id, Math.vector2(3.0, 4.0))
+
+    assert(Math.approximately_equal(v.x, 3.0, 0.001), "identity keeps x")
+    assert(Math.approximately_equal(v.y, 4.0, 0.001), "identity keeps y")
+
+    # 90° rotation maps (1, 0) -> (0, 1).
+    Math.Vector2 rotated = Math.mat2_transform(Math.matrix2(0.0, -1.0, 1.0, 0.0),
+        Math.vector2(1.0, 0.0))
+
+    assert(Math.approximately_equal(rotated.x, 0.0, 0.001), "rotation x")
+    assert(Math.approximately_equal(rotated.y, 1.0, 0.001), "rotation y")
+    assert(Math.approximately_equal(Math.mat2_determinant(Math.matrix2(1.0, 2.0, 3.0, 4.0)),
+        -2.0, 0.001), "determinant")
+}
+
+@test
+function void test_math_matrix3() {
+    Math.Matrix3 id = Math.mat3_identity()
+    Math.Vector3 v = Math.mat3_transform(id, Math.vector3(1.0, 2.0, 3.0))
+
+    assert(Math.approximately_equal(v.z, 3.0, 0.001), "identity keeps z")
+    assert(Math.approximately_equal(Math.mat3_determinant(id), 1.0, 0.001),
+        "identity determinant is 1")
+
+    Math.Matrix3 scale = Math.matrix3(2.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 2.0)
+    Math.Matrix3 product = Math.mat3_multiply(id, scale)
+
+    assert(Math.approximately_equal(product.m11, 2.0, 0.001), "identity * scale keeps scale")
+}

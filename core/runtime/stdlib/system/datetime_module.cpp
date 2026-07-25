@@ -73,6 +73,30 @@ struct IntervalBounds {
     return IntervalBounds{.start = field("start"), .end = field("end")};
 }
 
+// The { timestamp, offset_minutes } of a DateTime.Zoned record.
+struct ZonedParts {
+    double timestamp;
+    double offset_minutes;
+};
+
+// Read a DateTime.Zoned record's timestamp/offset_minutes fields.  Throws if the
+// argument is not a record; missing fields default to 0.0.  Mirrors
+// read_interval_bounds.
+[[nodiscard]] ZonedParts read_zoned(const Value& value, std::string_view func_name,
+                                    SourceLocation loc) {
+    if (!value.is_record()) {
+        throw RuntimeError{std::format("{}: expected a DateTime.Zoned record", func_name), loc};
+    }
+
+    const auto& rec = value.as_record();
+    const auto field = [&rec](std::string_view name) -> double {
+        const Value* v = rec->find_field(name);
+        return v != nullptr ? v->to_numeric() : 0.0;
+    };
+
+    return ZonedParts{.timestamp = field("timestamp"), .offset_minutes = field("offset_minutes")};
+}
+
 // Validate a UTC offset (in minutes) is within the supported range.
 // Returns a failure Value when out of range, or std::nullopt on success.
 [[nodiscard]] std::optional<Value> check_offset(double offset_minutes, std::string_view func_name) {
@@ -804,6 +828,73 @@ static void register_datetime_parsing(const EnvPtr& env) {
             // Closed intervals, consistent with interval_contains: touching
             // endpoints (a.end == b.start) count as overlapping at that instant.
             return Value{a.start <= b.end && b.start <= a.end};
+        })
+        // ── DateTime.Zoned ───────────────────────────────────────────────────
+        // Bundle an instant with the UTC offset (minutes) it renders in.  The
+        // validating constructor guarantees a legal offset; the two helpers reuse
+        // the existing fixed-offset conversions.
+        .func("zoned", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const double timestamp = args[0].to_numeric();
+            const auto offset_minutes = expect_integer(args[1], "DateTime.zoned", loc);
+
+            if (auto err = check_offset(static_cast<double>(offset_minutes), "zoned")) {
+                return *std::move(err);
+            }
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Zoned";
+            rec->fields.emplace_back("timestamp", Value{timestamp});
+            rec->fields.emplace_back("offset_minutes", Value{offset_minutes});
+
+            return make_success_value(Value{std::move(rec)});
+        })
+        .func("zoned_to_iso_string", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto z = read_zoned(args[0], "DateTime.zoned_to_iso_string", loc);
+
+            if (auto err = check_offset(z.offset_minutes, "zoned_to_iso_string")) {
+                return *std::move(err);
+            }
+
+            const auto adjusted = z.timestamp + (z.offset_minutes * 60.0);
+            const auto tm = to_tm(adjusted);
+
+            if (!tm) {
+                return make_failure_value(
+                    error_msg("DateTime", "zoned_to_iso_string", k_timestamp_range_error));
+            }
+
+            const auto suffix =
+                (z.offset_minutes == 0.0) ? std::string{"Z"} : format_offset(z.offset_minutes);
+
+            return make_success_value(Value{datetime::format_iso8601_with_suffix(*tm, suffix)});
+        })
+        .func("zoned_to_parts", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto z = read_zoned(args[0], "DateTime.zoned_to_parts", loc);
+
+            if (auto err = check_offset(z.offset_minutes, "zoned_to_parts")) {
+                return *std::move(err);
+            }
+
+            const auto tm = to_tm(z.timestamp + (z.offset_minutes * 60.0));
+
+            if (!tm) {
+                return make_failure_value(
+                    error_msg("DateTime", "zoned_to_parts", k_timestamp_range_error));
+            }
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "TimeParts";
+            rec->fields.emplace_back("year", Value{static_cast<std::int64_t>(tm->tm_year + 1900)});
+            rec->fields.emplace_back("month", Value{static_cast<std::int64_t>(tm->tm_mon + 1)});
+            rec->fields.emplace_back("day", Value{static_cast<std::int64_t>(tm->tm_mday)});
+            rec->fields.emplace_back("hour", Value{static_cast<std::int64_t>(tm->tm_hour)});
+            rec->fields.emplace_back("minute", Value{static_cast<std::int64_t>(tm->tm_min)});
+            rec->fields.emplace_back("second", Value{static_cast<std::int64_t>(tm->tm_sec)});
+
+            return make_success_value(Value{std::move(rec)});
         });
 }
 

@@ -851,6 +851,44 @@ static void test_datetime_intervals_overlap() {
     ASSERT_EQ(overlap("100.0, 200.0", "201.0, 300.0"), false); // disjoint
 }
 
+static void test_datetime_zoned_valid_and_iso() {
+    // A well-formed Zoned carries the instant and its offset in minutes.
+    const auto v = eval("DateTime.zoned(0.0, 60)");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+    ASSERT_TRUE(inner.is_record());
+    ASSERT_EQ(inner.as_record()->type_name, "Zoned");
+    ASSERT_EQ(inner.as_record()->find_field("timestamp")->as_number(), 0.0);
+    ASSERT_EQ(inner.as_record()->find_field("offset_minutes")->as_integer(),
+              static_cast<std::int64_t>(60));
+
+    // Epoch 0 at +60 renders 1970-01-01T01:00:00+01:00.
+    const auto iso = eval("DateTime.zoned_to_iso_string(Result.unwrap(DateTime.zoned(0.0, 60)))");
+    ASSERT_RESULT_SUCCESS(iso);
+    ASSERT_EQ(iso.as_result()->owned_inner->as_string(), "1970-01-01T01:00:00+01:00");
+
+    // Zero offset renders a trailing Z.
+    const auto utc = eval("DateTime.zoned_to_iso_string(Result.unwrap(DateTime.zoned(0.0, 0)))");
+    ASSERT_EQ(utc.as_result()->owned_inner->as_string(), "1970-01-01T00:00:00Z");
+}
+
+static void test_datetime_zoned_invalid_offset_fails() {
+    ASSERT_EVAL_FAILURE("DateTime.zoned(0.0, 900)");
+    ASSERT_EVAL_FAILURE("DateTime.zoned(0.0, -800)");
+}
+
+static void test_datetime_zoned_to_parts() {
+    const auto v = eval("DateTime.zoned_to_parts(Result.unwrap(DateTime.zoned(0.0, 60)))");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->type_name, "TimeParts");
+    ASSERT_EQ(rec->find_field("year")->as_integer(), static_cast<std::int64_t>(1970));
+    ASSERT_EQ(rec->find_field("hour")->as_integer(), static_cast<std::int64_t>(1));
+    ASSERT_EQ(rec->find_field("minute")->as_integer(), static_cast<std::int64_t>(0));
+}
+
 int main() {
     RUN(test_datetime_add_days);
     RUN(test_datetime_add_hours);
@@ -944,5 +982,8 @@ int main() {
     RUN(test_datetime_interval_duration);
     RUN(test_datetime_interval_contains_closed);
     RUN(test_datetime_intervals_overlap);
+    RUN(test_datetime_zoned_valid_and_iso);
+    RUN(test_datetime_zoned_invalid_offset_fails);
+    RUN(test_datetime_zoned_to_parts);
     return SUMMARY();
 }

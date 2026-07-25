@@ -7,7 +7,9 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
@@ -197,6 +199,92 @@ void register_process_ns(const EnvPtr& env) {
                 rec->fields.emplace_back("success", Value{captured.exit_code == 0});
 
                 return make_success_value(Value{std::move(rec)});
+            } catch (const RuntimeError& e) {
+                return failure_from_exception(e);
+            }
+        })
+        .func("command", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& program = expect_string(args[0], "Process.command", loc);
+
+            if (!args[1].is_array()) {
+                throw RuntimeError{"Process.command: arguments must be an array of strings", loc,
+                                   "pass an array<string> of arguments"};
+            }
+
+            auto arguments = std::make_shared<ArrayValue>();
+
+            // Copy and validate each argument so the record only ever holds
+            // strings — Process.run_command relies on that when building argv.
+            for (const auto& element : *args[1].as_array()->elements) {
+                if (!element.is_string()) {
+                    throw RuntimeError{"Process.command: every argument must be a string", loc,
+                                       "pass an array<string> of arguments"};
+                }
+
+                arguments->elements->emplace_back(element);
+            }
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Command";
+            rec->fields.emplace_back("program", Value{program});
+            rec->fields.emplace_back("arguments", Value{std::move(arguments)});
+
+            return Value{std::move(rec)};
+        })
+        .func("run_command", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_record()) {
+                throw RuntimeError{"Process.run_command: expected a Process.Command record", loc,
+                                   "build one with Process.command(program, arguments)"};
+            }
+
+            const auto& rec = args[0].as_record();
+            const Value* program = rec->find_field("program");
+            const Value* arguments = rec->find_field("arguments");
+
+            if (program == nullptr || !program->is_string() || arguments == nullptr ||
+                !arguments->is_array()) {
+                throw RuntimeError{"Process.run_command: expected a Process.Command record", loc,
+                                   "build one with Process.command(program, arguments)"};
+            }
+
+            if (program->as_string().empty()) {
+                return make_failure_value("program must not be empty");
+            }
+
+            // Build the argv vector verbatim (argv[0] is the program): no shell,
+            // no tokenization, so metacharacters in any argument are inert.
+            std::vector<std::string> argv;
+            argv.reserve(arguments->as_array()->elements->size() + 1);
+            argv.push_back(program->as_string());
+
+            for (const auto& element : *arguments->as_array()->elements) {
+                if (!element.is_string()) {
+                    return make_failure_value("every argument must be a string");
+                }
+
+                argv.push_back(element.as_string());
+            }
+
+            try {
+                auto captured = platform_process::execute_argv_captured(std::move(argv));
+
+                if (captured.exit_code < 0) {
+                    return make_failure_value("failed to execute command");
+                }
+
+                auto output = std::make_shared<RecordValue>();
+                output->type_name = "CommandOutput";
+                output->fields.emplace_back("exit_code",
+                                            Value{static_cast<std::int64_t>(captured.exit_code)});
+                output->fields.emplace_back("standard_output",
+                                            Value{std::move(captured.standard_output)});
+                output->fields.emplace_back("standard_error",
+                                            Value{std::move(captured.standard_error)});
+                output->fields.emplace_back("success", Value{captured.exit_code == 0});
+
+                return make_success_value(Value{std::move(output)});
             } catch (const RuntimeError& e) {
                 return failure_from_exception(e);
             }

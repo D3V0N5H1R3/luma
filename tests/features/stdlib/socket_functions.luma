@@ -407,3 +407,28 @@ function void test_connect_reports_host_resolution_failure() {
         }
     }
 }
+
+@test
+function void test_socket_parse_ip() {
+    Socket.IpAddress ip = Result.unwrap(Socket.parse_ip("192.168.0.1"))
+
+    string label = match ip {
+        case Socket.IpAddress.V4(addr) { addr }
+        case Socket.IpAddress.V6(_addr) { "v6" }
+    }
+
+    assert(label == "192.168.0.1", "classified as V4 with the address text")
+    assert(Socket.ip_to_string(ip) == "192.168.0.1", "renders back to text")
+
+    Socket.IpAddress ip6 = Result.unwrap(Socket.parse_ip("2001:DB8::1"))
+
+    string label6 = match ip6 {
+        case Socket.IpAddress.V4(_addr) { "v4" }
+        case Socket.IpAddress.V6(addr) { addr }
+    }
+
+    assert(label6 == "2001:db8::1", "classified as V6, lowercased")
+
+    assert(Result.is_failure(Socket.parse_ip("999.0.0.1")), "invalid IPv4 fails")
+    assert(Result.is_failure(Socket.parse_ip("not an ip")), "garbage fails")
+}

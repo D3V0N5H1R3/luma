@@ -164,6 +164,11 @@ namespace named {
     return ReturnTypeDesc::named("Edge");
 }
 
+// Graph.shortest_path_detailed() returns this route+cost record (bare name).
+[[nodiscard]] inline ReturnTypeDesc path() {
+    return ReturnTypeDesc::named("Path");
+}
+
 [[nodiscard]] inline ReturnTypeDesc time_parts() {
     return ReturnTypeDesc::named("TimeParts");
 }
@@ -175,6 +180,12 @@ namespace named {
 // DateTime.interval() / interval_* take and return these range records (bare name).
 [[nodiscard]] inline ReturnTypeDesc interval() {
     return ReturnTypeDesc::named("Interval");
+}
+
+// DateTime.zoned() / zoned_* take and return these offset-aware timestamp records
+// (bare short name "Zoned", like interval()).
+[[nodiscard]] inline ReturnTypeDesc zoned() {
+    return ReturnTypeDesc::named("Zoned");
 }
 
 [[nodiscard]] inline ReturnTypeDesc file_info() {
@@ -222,6 +233,16 @@ namespace named {
     return ReturnTypeDesc::named("Vector3");
 }
 
+// Math.matrix2() / mat2_* and Math.matrix3() / mat3_* take and return these
+// typed transform-matrix records (bare short names, like vector2()).
+[[nodiscard]] inline ReturnTypeDesc matrix2() {
+    return ReturnTypeDesc::named("Matrix2");
+}
+
+[[nodiscard]] inline ReturnTypeDesc matrix3() {
+    return ReturnTypeDesc::named("Matrix3");
+}
+
 // Math.five_number_summary() returns this box-plot record (bare short name).
 [[nodiscard]] inline ReturnTypeDesc five_number_summary() {
     return ReturnTypeDesc::named("FiveNumberSummary");
@@ -261,6 +282,12 @@ namespace named {
     return ReturnTypeDesc::named("Hsl");
 }
 
+// Color.to_hsv / from_hsv pivot through this hue/saturation/value record (bare
+// short name "Hsv", like hsl()).
+[[nodiscard]] inline ReturnTypeDesc hsv() {
+    return ReturnTypeDesc::named("Hsv");
+}
+
 // Encoder.encode_text / decode_text take this text-encoding selector choice.
 [[nodiscard]] inline ReturnTypeDesc encoding() {
     return ReturnTypeDesc::named("Encoder.Encoding");
@@ -272,6 +299,12 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc command_output() {
     return ReturnTypeDesc::named("CommandOutput");
+}
+
+// Process.command() builds this shell-free command record consumed by
+// Process.run_command (bare short name "Command", like command_output()).
+[[nodiscard]] inline ReturnTypeDesc command() {
+    return ReturnTypeDesc::named("Command");
 }
 
 [[nodiscard]] inline ReturnTypeDesc input_event() {
@@ -303,6 +336,13 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc address() {
     return ReturnTypeDesc::named("Address");
+}
+
+// Socket.parse_ip returns this parsed IP-literal choice directly, so — like
+// json_value() / file_kind() — it uses the fully-qualified name (choices resolve
+// qualified), and needs a matching branch in stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc ip_address() {
+    return ReturnTypeDesc::named("Socket.IpAddress");
 }
 
 [[nodiscard]] inline ReturnTypeDesc url_parts() {

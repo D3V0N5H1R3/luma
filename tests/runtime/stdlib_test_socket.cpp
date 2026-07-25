@@ -54,6 +54,55 @@ static void test_socket_type_of() {
     ASSERT_EQ(v.as_result()->owned_inner->display_type_name(), "socket");
 }
 
+// ─── Socket.IpAddress: pure IP-literal parsing ───────────────────────────────
+
+static void test_socket_parse_ipv4() {
+    const auto v = eval(R"(Socket.parse_ip("192.168.0.1"))");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+    ASSERT_TRUE(inner.is_choice());
+    ASSERT_EQ(inner.as_choice()->type_name, std::string{"IpAddress"});
+    ASSERT_EQ(inner.as_choice()->variant, std::string{"V4"});
+    ASSERT_EQ(inner.as_choice()->fields.at(0).as_string(), "192.168.0.1");
+
+    // Leading zeros are canonicalised away.
+    const auto c = eval(R"(Socket.ip_to_string(Result.unwrap(Socket.parse_ip("010.0.0.005"))))");
+    ASSERT_EQ(c.as_string(), "10.0.0.5");
+}
+
+static void test_socket_parse_ipv6() {
+    const auto v = eval(R"(Socket.parse_ip("2001:DB8::1"))");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+    ASSERT_TRUE(inner.is_choice());
+    ASSERT_EQ(inner.as_choice()->variant, std::string{"V6"});
+    // Rendered lowercased.
+    ASSERT_EQ(inner.as_choice()->fields.at(0).as_string(), "2001:db8::1");
+
+    // "::" alone (all zeros) is valid.
+    ASSERT_RESULT_SUCCESS(eval(R"(Socket.parse_ip("::"))"));
+    // Embedded IPv4 tail.
+    ASSERT_RESULT_SUCCESS(eval(R"(Socket.parse_ip("::ffff:192.168.0.1"))"));
+}
+
+static void test_socket_parse_ip_invalid_fails() {
+    ASSERT_EVAL_FAILURE(R"(Socket.parse_ip("256.0.0.1"))");
+    ASSERT_EVAL_FAILURE(R"(Socket.parse_ip("1.2.3"))");
+    ASSERT_EVAL_FAILURE(R"(Socket.parse_ip("1.2.3.4.5"))");
+    ASSERT_EVAL_FAILURE(R"(Socket.parse_ip("gggg::1"))");
+    ASSERT_EVAL_FAILURE(R"(Socket.parse_ip("1::2::3"))");
+    ASSERT_EVAL_FAILURE(R"(Socket.parse_ip("hello"))");
+    // An embedded IPv4 is only legal as the address tail, never before "::".
+    ASSERT_EVAL_FAILURE(R"(Socket.parse_ip("1.2.3.4::"))");
+    ASSERT_EVAL_FAILURE(R"(Socket.parse_ip("1.2.3.4::1"))");
+}
+
+static void test_socket_ip_to_string_rejects_non_choice() {
+    ASSERT_THROWS(eval("Socket.ip_to_string(42)"));
+}
+
 static void test_socket_udp_create() {
     const auto v = eval("result<socket> r = Socket.udp_create()\n"
                         "Result.is_success(r)\n");
@@ -331,6 +380,10 @@ int main() {
     RUN(test_socket_tcp_remote_address_matches_server);
     RUN(test_socket_tcp_send_receive_roundtrip);
     RUN(test_socket_type_of);
+    RUN(test_socket_parse_ipv4);
+    RUN(test_socket_parse_ipv6);
+    RUN(test_socket_parse_ip_invalid_fails);
+    RUN(test_socket_ip_to_string_rejects_non_choice);
     RUN(test_socket_udp_bind);
     RUN(test_socket_udp_bind_rejects_invalid_port);
     RUN(test_socket_udp_create);
