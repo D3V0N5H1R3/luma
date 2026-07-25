@@ -490,6 +490,18 @@ LUMA_TEST(math_complex_magnitude_conjugate_argument) {
                 3.14159265358979 / 2.0, 1e-9);
 }
 
+LUMA_TEST(math_complex_polar_bridges) {
+    const auto p = eval("Math.complex_to_polar(Math.complex(0.0, 5.0))");
+    ASSERT_EQ(p.as_record()->type_name, std::string{"Polar"});
+    ASSERT_NEAR(p.as_record()->find_field("radius")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(p.as_record()->find_field("angle")->as_number(), 3.14159265358979 / 2.0, 1e-9);
+
+    const auto c = eval("Math.complex_from_polar(Math.complex_to_polar(Math.complex(3.0, 4.0)))");
+    ASSERT_EQ(c.as_record()->type_name, std::string{"Complex"});
+    ASSERT_NEAR(c.as_record()->find_field("real")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(c.as_record()->find_field("imaginary")->as_number(), 4.0, 1e-9);
+}
+
 LUMA_TEST(math_linear_fit) {
     // Perfect line y = 2x.
     const auto v = eval("Math.linear_fit([1.0, 2.0, 3.0, 4.0], [2.0, 4.0, 6.0, 8.0])");
@@ -813,6 +825,25 @@ LUMA_TEST(math_vec3_cross_and_dot) {
         eval("Math.vec3_dot(Math.vector3(1.0, 0.0, 0.0), Math.vector3(0.0, 1.0, 0.0))").as_number(),
         0.0, 1e-9);
     ASSERT_NEAR(eval("Math.vec3_length(Math.vector3(2.0, 3.0, 6.0))").as_number(), 7.0, 1e-9);
+}
+
+LUMA_TEST(math_to_polar_and_from_polar) {
+    // (3, 4) -> radius 5, angle atan2(4, 3).
+    const auto p = eval("Math.to_polar(Math.vector2(3.0, 4.0))");
+    ASSERT_EQ(p.as_record()->type_name, std::string{"Polar"});
+    ASSERT_NEAR(p.as_record()->find_field("radius")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(p.as_record()->find_field("angle")->as_number(), 0.9272952180016122, 1e-9);
+
+    // Round-trip: from_polar(to_polar(v)) == v.
+    const auto v = eval("Math.from_polar(Math.to_polar(Math.vector2(-1.0, 2.5)))");
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Vector2"});
+    ASSERT_NEAR(v.as_record()->find_field("x")->as_number(), -1.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("y")->as_number(), 2.5, 1e-9);
+
+    // The origin is a total conversion too: radius 0, angle 0.
+    const auto origin = eval("Math.to_polar(Math.vector2(0.0, 0.0))");
+    ASSERT_NEAR(origin.as_record()->find_field("radius")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(origin.as_record()->find_field("angle")->as_number(), 0.0, 1e-9);
 }
 
 // --- Math.FiveNumberSummary (N06) ---

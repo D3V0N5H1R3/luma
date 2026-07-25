@@ -1681,9 +1681,11 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.complex_argument(c)`            | `(Math.Complex)`                 | `number`          | Argument (phase angle) of `c` in radians                                          |
 | `Math.complex_conjugate(c)`           | `(Math.Complex)`                 | `Math.Complex`    | Complex conjugate of `c`                                                          |
 | `Math.complex_divide(a, b)`           | `(Math.Complex, Math.Complex)`   | `result<Math.Complex>` | Quotient `a / b`; fail if `b` is zero                                             |
+| `Math.complex_from_polar(p)`          | `(Math.Polar)`                   | `Math.Complex`    | Convert a `Math.Polar` to a `Math.Complex` (total conversion)                    |
 | `Math.complex_magnitude(c)`           | `(Math.Complex)`                 | `number`          | Magnitude (modulus) of `c`                                                        |
 | `Math.complex_multiply(a, b)`         | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Product `a * b`                                                                   |
 | `Math.complex_subtract(a, b)`         | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Difference `a - b`                                                                |
+| `Math.complex_to_polar(c)`            | `(Math.Complex)`                 | `Math.Polar`      | Convert a `Math.Complex` to a `Math.Polar` (total conversion)                    |
 | `Math.clamp(x, lo, hi)`               | `(number, number, number)`       | `result<number>`  | Clamp `x` to `[lo, hi]`; fail if `lo > hi`                                       |
 | `Math.correlation(xs, ys)`            | `(array<number>, array<number>)` | `result<number>`  | Pearson correlation coefficient; fail if arrays differ in length or < 2 elements |
 | `Math.cosine(x)`                      | `(number)`                       | `result<number>`  | Cosine; fail if result is NaN or infinite                                        |
@@ -1700,6 +1702,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.fraction_multiply(a, b)`        | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact product `a * b`; runtime error on int64 overflow                           |
 | `Math.fraction_subtract(a, b)`        | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact difference `a - b`; runtime error on int64 overflow                        |
 | `Math.fraction_to_number(f)`          | `(Math.Fraction)`                | `number`          | Approximate `f` as a floating-point `number`                                     |
+| `Math.from_polar(p)`                  | `(Math.Polar)`                   | `Math.Vector2`    | Convert a `Math.Polar` to a `Math.Vector2` (total conversion)                     |
 | `Math.greatest_common_divisor(a, b)`  | `(integer, integer)`             | `result<integer>` | GCD of `a` and `b`                                                               |
 | `Math.histogram(values, bins)`        | `(array<number>, integer)`       | `result<Math.Histogram>` | Bin `values` into `bins` equal-width half-open bins; fail if empty or `bins < 1` |
 | `Math.hyperbolic_cosine(x)`           | `(number)`                       | `result<number>`  | Hyperbolic cosine; fail if result is infinite                                    |
@@ -1736,6 +1739,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.sum(arr)`                       | `(array<number>)`                | `result<integer \| number>` | Sum of all elements; fail on a non-numeric element                               |
 | `Math.summarize(arr)`                 | `(array<number>)`                | `result<Math.Summary>` | Descriptive statistics (count, min, max, mean, median, std. dev.) in one pass; fail if empty |
 | `Math.tangent(x)`                     | `(number)`                       | `result<number>`  | Tangent; fail if result is NaN or infinite                                       |
+| `Math.to_polar(v)`                    | `(Math.Vector2)`                 | `Math.Polar`      | Convert a `Math.Vector2` to a `Math.Polar` (total conversion)                     |
 | `Math.truncate(x)`                    | `(number)`                       | `result<integer>` | Truncate toward zero; fail on overflow                                           |
 | `Math.variance(arr)`                  | `(array<number>)`                | `result<number>`  | Variance; fail if empty                                                          |
 | `Math.vector2(x, y)`                  | `(number, number)`               | `Math.Vector2`    | Construct a 2D vector                                                            |
@@ -1781,7 +1785,7 @@ assert(Array.length(h.bin_edges) == 4)   # one more edge than counts
 assert(Array.length(h.counts) == 3)
 ```
 
-`Math.Vector2 { x: number, y: number }` and `Math.Vector3 { x: number, y: number, z: number }` are typed geometry vectors for 2D/3D work — game positions, GraphicalUi layout, physics — where named `.x` / `.y` / `.z` components are far more teachable than the index arithmetic of `LinearAlgebra`'s general `array<number>` vectors. Like `Math.Complex`, they are pure data plus a pipe-first free-function family — `vec2_*` / `vec3_*` for `add`, `sub`, `scale`, `dot`, `length`, and `normalize`, with `vec3_cross` for the 3D cross product — and no operator overloading. `normalize` returns the zero vector unchanged rather than dividing by zero.
+`Math.Vector2 { x: number, y: number }` and `Math.Vector3 { x: number, y: number, z: number }` are typed geometry vectors for 2D/3D work — game positions, GraphicalUi layout, physics — where named `.x` / `.y` / `.z` components are far more teachable than the index arithmetic of `LinearAlgebra`'s general `array<number>` vectors. Like `Math.Complex`, they are pure data plus a pipe-first free-function family — `vec2_*` / `vec3_*` for `add`, `sub`, `scale`, `dot`, `length`, and `normalize`, with `vec3_cross` for the 3D cross product — and no operator overloading. `normalize` returns the zero vector unchanged rather than dividing by zero. `Math.to_polar` / `Math.from_polar` bridge `Math.Vector2` to the `Math.Polar` record below.
 
 `Math.Matrix2 { m00, m01, m10, m11 }` and `Math.Matrix3 { m00 … m22 }` (all `number`, row-major) are the typed transform-matrix companions to the vectors, for the 2×2/3×3 linear transforms that `LinearAlgebra`'s general `array<array<number>>` expresses only through index arithmetic. Build them with `Math.matrix2` / `Math.matrix3` or the ready-made `Math.mat2_identity` / `Math.mat3_identity`; `mat*_multiply` composes transforms, `mat*_determinant` reports the scale factor, and `mat2_transform` / `mat3_transform` apply a matrix to a `Math.Vector2` / `Math.Vector3`. Data plus free functions, no operator overloading — the same philosophy as the vectors. `LinearAlgebra` remains for general N-dimensional work.
 
@@ -1796,7 +1800,14 @@ Math.Fraction sum = Math.fraction_add(a, b)   # exactly 1/2
 assert(sum.numerator == 1 && sum.denominator == 2)
 ```
 
-`Math.Complex` is a record of complex numbers — `real: number` and `imaginary: number` — for the quadratic formula with a negative discriminant, signal work, and Argand-plane maths. Like `Decimal` and `Math.Fraction`, it avoids operator overloading: build values with `Math.complex(real, imaginary)` and combine them with the `Math.complex_*` free functions. `add`/`subtract`/`multiply`/`conjugate` return a `Math.Complex`; `divide` returns `result<Math.Complex>` and fails when the divisor is `0 + 0i`. `Math.complex_magnitude` and `Math.complex_argument` return the modulus and phase angle (radians).
+`Math.Complex` is a record of complex numbers — `real: number` and `imaginary: number` — for the quadratic formula with a negative discriminant, signal work, and Argand-plane maths. Like `Decimal` and `Math.Fraction`, it avoids operator overloading: build values with `Math.complex(real, imaginary)` and combine them with the `Math.complex_*` free functions. `add`/`subtract`/`multiply`/`conjugate` return a `Math.Complex`; `divide` returns `result<Math.Complex>` and fails when the divisor is `0 + 0i`. `Math.complex_magnitude` and `Math.complex_argument` return the modulus and phase angle (radians). `Math.complex_to_polar` / `Math.complex_from_polar` bridge to the `Math.Polar` record below.
+
+`Math.Polar { radius: number, angle: number }` (`angle` in radians) is the polar-coordinate counterpart of `Math.Vector2` and `Math.Complex` — the natural representation for rotations, orbits, and anything phrased as "how far, which way" rather than "how far right, how far up". `Math.to_polar(v)` / `Math.from_polar(p)` convert to and from `Math.Vector2`, and `Math.complex_to_polar(c)` / `Math.complex_from_polar(p)` do the same for `Math.Complex` — all four are **total conversions with no error case**: every Cartesian value has a polar form (the origin maps to `radius: 0.0, angle: 0.0`) and every polar value has a Cartesian one, so none of them return a `result`.
+
+```luma
+Math.Polar p = Math.to_polar(Math.vector2(3.0, 4.0))   # radius: 5.0, angle: atan2(4, 3)
+Math.Vector2 v = Math.from_polar(p)                    # back to (3.0, 4.0)
+```
 
 `Math.LineFit` is the ordinary least-squares regression result — `slope: number`, `intercept: number`, `r_squared: number` — returned by `Math.linear_fit(xs, ys)` for the trend line `y = slope · x + intercept`. It fails on mismatched array lengths, fewer than two points, or a zero x-variance (a vertical line). Mirrors `Math.Summary`: a plain returned record built by a single call.
 
