@@ -368,6 +368,36 @@ constexpr std::string_view k_month_range_error =
     return month;
 }
 
+// ─── DateTime.ParseError choice support ──────────────────────────────────────
+// Maps an IsoParseErrorKind to the matching DateTime.ParseError variant name.
+// Must match the DateTime.ParseError choice declared in stdlib_type_arities.cpp.
+[[nodiscard]] std::string_view parse_error_variant(datetime::IsoParseErrorKind kind) {
+    switch (kind) {
+        case datetime::IsoParseErrorKind::Empty:
+            return "Empty";
+        case datetime::IsoParseErrorKind::OutOfRange:
+            return "OutOfRange";
+        case datetime::IsoParseErrorKind::UnsupportedPrecision:
+            return "UnsupportedPrecision";
+        case datetime::IsoParseErrorKind::None:
+        case datetime::IsoParseErrorKind::InvalidFormat:
+            break;
+    }
+
+    // None never reaches a failure path; default the rest to InvalidFormat.
+    return "InvalidFormat";
+}
+
+// Build a result<number, DateTime.ParseError> failure carrying the classified
+// choice as its typed error value (rather than the default string message).
+[[nodiscard]] Value make_parse_error_failure(datetime::IsoParseErrorKind kind) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "ParseError";
+    cv->variant = std::string{parse_error_variant(kind)};
+
+    return Value{ResultValue::failure(Value{std::move(cv)})};
+}
+
 } // namespace
 
 static void register_datetime_parsing(const EnvPtr& env);
@@ -729,6 +759,23 @@ static void register_datetime_parsing(const EnvPtr& env) {
             if (!parsed.success) {
                 return make_failure_value(error_msg("DateTime", "from_iso_string",
                                                     std::format("{}: {}", parsed.error, s)));
+            }
+
+            return make_success_value(Value{parsed.unix_seconds});
+        })
+        .func("from_iso_string_typed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "DateTime.from_iso_string_typed", loc);
+
+            // Opt-in typed-error variant of from_iso_string: a failure surfaces a
+            // DateTime.ParseError choice (result<number, DateTime.ParseError>)
+            // instead of a string, so a caller can branch on Empty vs
+            // InvalidFormat vs OutOfRange vs UnsupportedPrecision.
+            const auto& s = args[0].as_string();
+            const auto parsed = datetime::parse_iso8601(s);
+
+            if (!parsed.success) {
+                return make_parse_error_failure(parsed.error_kind);
             }
 
             return make_success_value(Value{parsed.unix_seconds});

@@ -242,6 +242,33 @@ classify_file_kind(const std::filesystem::path& safe_path) {
     return file_kind_variant(symlink, directory, regular_file);
 }
 
+/// Builds a FileSystem.Permissions record from a std::filesystem::perms value.
+/// The runtime short name "Permissions" matches how FileSystem.FileInfo is built
+/// (the type checker resolves the qualified "FileSystem.Permissions" separately),
+/// and the four field names must match the RecordDeclaration in
+/// core/analysis/types/stdlib_type_arities.cpp exactly.  The three booleans read
+/// the owner permission bits — the beginner-facing "what may I do with this
+/// file?" answer — and mode carries the standard 12 POSIX mode bits (owner /
+/// group / others plus set-uid / set-gid / sticky) as an integer.  On Windows,
+/// std::filesystem synthesises perms from the read-only attribute, so the record
+/// is cross-platform and never null.
+[[nodiscard]] inline Value make_permissions_record(std::filesystem::perms perms) {
+    namespace fs = std::filesystem;
+
+    const bool readable = (perms & fs::perms::owner_read) != fs::perms::none;
+    const bool writable = (perms & fs::perms::owner_write) != fs::perms::none;
+    const bool executable = (perms & fs::perms::owner_exec) != fs::perms::none;
+    const auto mode = static_cast<std::int64_t>(perms & fs::perms::mask);
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Permissions";
+    rec->fields.emplace_back("readable", Value{readable});
+    rec->fields.emplace_back("writable", Value{writable});
+    rec->fields.emplace_back("executable", Value{executable});
+    rec->fields.emplace_back("mode", Value{mode});
+    return Value{std::move(rec)};
+}
+
 /// Wraps a FileSystem.IoError variant name in a ChoiceValue.  Runtime short name
 /// "IoError" mirrors make_file_kind_choice (the type checker resolves the
 /// qualified "FileSystem.IoError" separately).  The five variant names must match

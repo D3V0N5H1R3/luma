@@ -569,6 +569,40 @@ static void test_datetime_from_iso_string_year_out_of_range() {
     ASSERT_EVAL_FAILURE(R"(DateTime.from_iso_string("0000-01-01"))");
 }
 
+// ─── DateTime.from_iso_string_typed — result<number, DateTime.ParseError> ────
+
+static void test_datetime_from_iso_string_typed_success() {
+    const auto v = eval(R"(DateTime.from_iso_string_typed("2024-03-15T14:30:00Z"))");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_NEAR(v.as_result()->owned_inner->as_number(), 1710513000.0, 0.001);
+}
+
+static void assert_parse_error_variant(const char* expr, const char* variant) {
+    const auto v = eval(expr);
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "ParseError");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, variant);
+}
+
+static void test_datetime_from_iso_string_typed_classifies_failures() {
+    // Empty / whitespace-only input.
+    assert_parse_error_variant(R"(DateTime.from_iso_string_typed(""))", "Empty");
+    assert_parse_error_variant(R"(DateTime.from_iso_string_typed("   "))", "Empty");
+    // Present but malformed.
+    assert_parse_error_variant(R"(DateTime.from_iso_string_typed("not-a-date"))", "InvalidFormat");
+    assert_parse_error_variant(R"(DateTime.from_iso_string_typed("2024/03/15"))", "InvalidFormat");
+    // Well-formed shape but an impossible field.
+    assert_parse_error_variant(R"(DateTime.from_iso_string_typed("2024-13-01"))", "OutOfRange");
+    assert_parse_error_variant(R"(DateTime.from_iso_string_typed("2024-02-30"))", "OutOfRange");
+    assert_parse_error_variant(R"(DateTime.from_iso_string_typed("99999-01-01"))", "OutOfRange");
+    // Valid shape but sub-second precision this parser does not accept.
+    assert_parse_error_variant(R"(DateTime.from_iso_string_typed("2024-03-15T14:30:00.5Z"))",
+                               "UnsupportedPrecision");
+}
+
 static void test_datetime_from_parts_offset_invalid() {
     ASSERT_EVAL_FAILURE("DateTime.from_parts_offset(2024, 3, 15, 12, 0, 0, 900.0)"); // bad offset
     ASSERT_EVAL_FAILURE("DateTime.from_parts_offset(2024, 13, 15, 12, 0, 0, 60.0)"); // bad month
@@ -1036,6 +1070,8 @@ int main() {
     RUN(test_datetime_from_iso_string_date_time_components);
     RUN(test_datetime_from_iso_string_invalid);
     RUN(test_datetime_from_iso_string_year_out_of_range);
+    RUN(test_datetime_from_iso_string_typed_success);
+    RUN(test_datetime_from_iso_string_typed_classifies_failures);
     RUN(test_datetime_from_parts_offset_invalid);
     RUN(test_datetime_from_offset_invalid);
     RUN(test_datetime_to_iso_string_offset_invalid);

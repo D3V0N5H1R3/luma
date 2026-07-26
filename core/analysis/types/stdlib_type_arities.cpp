@@ -163,6 +163,16 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("boolean", "is_file"), field("boolean", "is_symlink"),
                    field("FileSystem.FileKind", "kind"));
 
+        // FileSystem.permissions() constructs these access-right records (type_name
+        // "Permissions").  The three booleans are the beginner-facing answer to
+        // "what may I do with this file?" (readable / writable / executable), while
+        // mode is the POSIX mode bits escape hatch for advanced users.  Built
+        // cross-platform from std::filesystem::perms — on Windows the bits are
+        // synthesised from the read-only attribute — so the record is never null.
+        add_record(st, "FileSystem.Permissions", field("boolean", "readable"),
+                   field("boolean", "writable"), field("boolean", "executable"),
+                   field("integer", "mode"));
+
         add_record(st, "FileSystem.PathParts", field("string", "parent"), field("string", "name"),
                    field("string", "stem"), field("string", "extension"));
 
@@ -438,6 +448,24 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choices.push_back(std::move(ch));
         }
 
+        // ── Process.Signal ───────────────────────────────
+        // Portable termination request consumed by Process.signal(pid, signal).
+        // On POSIX the four variants map to SIGTERM / SIGKILL / SIGINT / SIGHUP;
+        // on Windows the mapping is lossy (no POSIX signals): Terminate/Kill call
+        // TerminateProcess, Interrupt sends a CTRL_C_EVENT, and Hangup degrades to
+        // TerminateProcess.  Variant names must match signal_kind_from_variant()
+        // in core/runtime/stdlib/system/process_module.cpp exactly (PascalCase).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Signal");
+            ch->variants.push_back(ChoiceVariant{.name = "Terminate", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Kill", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Interrupt", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Hangup", .fields = {}});
+
+            st.choice_map["Process.Signal"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
         add_record(st, "Terminal.CursorPosition", field("integer", "row"),
                    field("integer", "column"));
 
@@ -452,6 +480,19 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // are 1-based, mirroring Terminal.CursorPosition.
         add_record(st, "Terminal.MouseEvent", field("Terminal.MouseEventKind", "kind"),
                    field("integer", "row"), field("integer", "column"));
+
+        // Terminal.plain_style() constructs these declarative text-style records
+        // (type_name "Style"), which Terminal.styled(text, style) renders into one
+        // combined ANSI sequence with a single reset.  foreground / background reuse
+        // the Terminal.Color choice (its Default variant means "leave unchanged");
+        // the six booleans are the standard SGR attributes.  A style is declared
+        // once and reused, replacing a nest of bold(color(...)) wrapper calls — the
+        // per-attribute Terminal.bold / italic / color functions stay for one-offs.
+        add_record(st, "Terminal.Style", field("Terminal.Color", "foreground"),
+                   field("Terminal.Color", "background"), field("boolean", "bold"),
+                   field("boolean", "dim"), field("boolean", "italic"),
+                   field("boolean", "underline"), field("boolean", "inverse"),
+                   field("boolean", "strikethrough"));
 
         // ── DateTime.Weekday ────────────────────────────
         // Variant names must match k_weekday_names in
@@ -493,6 +534,25 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "December", .fields = {}});
 
             st.choice_map["DateTime.Month"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── DateTime.ParseError ─────────────────────────
+        // Opt-in typed parse error surfaced via result<number, DateTime.ParseError>
+        // on the from_iso_string_typed slice of DateTime (leaving the string-error
+        // from_iso_string untouched).  Lets a program distinguish empty input from
+        // a malformed shape from an impossible date (month 13) without substring-
+        // matching the message.  Variant names must match parse_error_variant() in
+        // core/runtime/stdlib/system/datetime_module.cpp exactly (PascalCase, one
+        // per IsoParseErrorKind).  Mirrors FileSystem.IoError / Http.Error.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "ParseError");
+            ch->variants.push_back(ChoiceVariant{.name = "Empty", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "InvalidFormat", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "OutOfRange", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "UnsupportedPrecision", .fields = {}});
+
+            st.choice_map["DateTime.ParseError"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 
@@ -593,6 +653,26 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Floor", .fields = {}});
 
             st.choice_map["Decimal.RoundingMode"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Decimal.Error ───────────────────────────────
+        // Opt-in typed error surfaced via result<decimal, Decimal.Error> on the
+        // from_string_typed / divide_typed slices of Decimal (leaving the
+        // string-error from_string / divide untouched).  Lets a program branch on
+        // "user typed nonsense" vs "divided by zero" vs "exceeds precision" without
+        // substring-matching the message.  Variant names must match
+        // decimal_error_variant() in
+        // core/runtime/stdlib/math/decimal_module.cpp exactly (PascalCase).
+        // Mirrors FileSystem.IoError / Http.Error / DateTime.ParseError.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Error");
+            ch->variants.push_back(ChoiceVariant{.name = "InvalidFormat", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "DivisionByZero", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Overflow", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "PrecisionExceeded", .fields = {}});
+
+            st.choice_map["Decimal.Error"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

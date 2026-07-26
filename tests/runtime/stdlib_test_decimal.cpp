@@ -71,6 +71,46 @@ LUMA_TEST(decimal_from_string_invalid) {
     ASSERT_RESULT_FAILURE(eval("Decimal.from_string(\".\")"));
 }
 
+// ─── Decimal.Error — typed from_string / divide failures ───
+
+LUMA_TEST(decimal_from_string_typed_success) {
+    const auto v = eval("Decimal.from_string_typed(\"3.14\")");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_decimal());
+}
+
+LUMA_TEST(decimal_from_string_typed_invalid_format) {
+    const auto v = eval("Decimal.from_string_typed(\"abc\")");
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, std::string("Error"));
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, std::string("InvalidFormat"));
+}
+
+LUMA_TEST(decimal_divide_typed_success) {
+    const auto expr = "Decimal.divide_typed(" + dec("1") + ", " + dec("4") + ", 2)";
+    const auto v = eval(expr);
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_decimal());
+    // 1 / 4 at scale 2 == 0.25.
+    ASSERT_EQ(to_str("Result.unwrap(" + expr + ")"), std::string("0.25"));
+}
+
+LUMA_TEST(decimal_divide_typed_division_by_zero) {
+    const auto v = eval("Decimal.divide_typed(" + dec("1") + ", " + dec("0") + ", 2)");
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, std::string("Error"));
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, std::string("DivisionByZero"));
+}
+
+LUMA_TEST(decimal_divide_typed_precision_exceeded) {
+    // A negative scale cannot be represented, so it classifies as PrecisionExceeded.
+    const auto v = eval("Decimal.divide_typed(" + dec("1") + ", " + dec("4") + ", -1)");
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, std::string("PrecisionExceeded"));
+}
+
 LUMA_TEST(decimal_from_number_exact_roundtrip) {
     // 0.1 has no exact binary form, but shortest round-trip recovers "0.1".
     ASSERT_EQ(to_str("Decimal.from_number(0.1)"), std::string("0.1"));

@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -77,6 +78,26 @@ std::vector<std::string> program_args;
     }
 }
 
+// Maps a Process.Signal choice variant name to the platform SignalKind consumed
+// by platform_process::send_signal.  The four variant names must match the
+// Process.Signal choice declared in stdlib_type_arities.cpp exactly.
+[[nodiscard]] std::optional<platform_process::SignalKind>
+signal_kind_from_variant(std::string_view variant) {
+    if (variant == "Terminate") {
+        return platform_process::SignalKind::Terminate;
+    }
+    if (variant == "Kill") {
+        return platform_process::SignalKind::Kill;
+    }
+    if (variant == "Interrupt") {
+        return platform_process::SignalKind::Interrupt;
+    }
+    if (variant == "Hangup") {
+        return platform_process::SignalKind::Hangup;
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 void set_program_args(std::vector<std::string> args) {
@@ -144,6 +165,42 @@ void register_process_ns(const EnvPtr& env) {
             }
 
             throw ExitSignal{static_cast<int>(code)};
+        })
+        // Process.signal(pid, signal) -> result<boolean>
+        // Sends a portable termination request to another process.  On POSIX the
+        // Process.Signal variant maps to SIGTERM / SIGKILL / SIGINT / SIGHUP; on
+        // Windows the mapping is lossy (see platform_process::SignalKind).  Returns
+        // success(true) when the OS accepted the request, or a failure result when
+        // it did not (e.g. no such process, or insufficient permission).
+        .func("signal", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto pid = expect_integer(args[0], "Process.signal", loc);
+
+            if (!args[1].is_choice()) {
+                throw RuntimeError{"Process.signal: expected a Process.Signal choice", loc,
+                                   "pass a Process.Signal variant, e.g. Process.Signal.Terminate"};
+            }
+
+            const auto& variant = args[1].as_choice()->variant;
+            const auto kind = signal_kind_from_variant(variant);
+
+            if (!kind) {
+                throw RuntimeError{
+                    std::format("Process.signal: unknown signal 'Process.Signal.{}'", variant), loc,
+                    "use a Process.Signal variant: Terminate, Kill, Interrupt, Hangup"};
+            }
+
+            if (pid <= 0) {
+                return make_failure_value(
+                    error_msg("Process", "signal", "pid must be a positive process id"));
+            }
+
+            if (!platform_process::send_signal(pid, *kind)) {
+                return make_failure_value(error_msg(
+                    "Process", "signal", std::format("could not signal process {}", pid)));
+            }
+
+            return make_success_value(Value{true});
         })
         // Process.exit_status(output) -> Process.ExitStatus
         // Classifies a Process.CommandOutput's exit_code sign convention into an

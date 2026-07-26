@@ -72,10 +72,19 @@ IsoParseResult parse_iso8601(std::string_view text) {
     std::size_t pos{0};
     skip_whitespace(text, pos);
 
+    // Empty or whitespace-only input is distinct from a malformed-but-present
+    // string, so classify it up front (pos now sits past any leading spaces).
+    if (pos == text.size()) {
+        out.error = "empty ISO string";
+        out.error_kind = IsoParseErrorKind::Empty;
+        return out;
+    }
+
     if (!parse_int_field(text, pos, year) || !consume(text, pos, '-') ||
         !parse_int_field(text, pos, month) || !consume(text, pos, '-') ||
         !parse_int_field(text, pos, day)) {
         out.error = "cannot parse ISO string";
+        out.error_kind = IsoParseErrorKind::InvalidFormat;
         return out;
     }
 
@@ -87,6 +96,16 @@ IsoParseResult parse_iso8601(std::string_view text) {
             !parse_int_field(text, pos, min) || !consume(text, pos, ':') ||
             !parse_int_field(text, pos, sec)) {
             out.error = "cannot parse time in ISO string";
+            out.error_kind = IsoParseErrorKind::InvalidFormat;
+            return out;
+        }
+
+        // A fractional-second component (e.g. "...:00.5") is a well-formed shape
+        // this parser deliberately does not support, so report it as an explicit
+        // precision failure rather than lumping it in with generic format errors.
+        if (pos < text.size() && text[pos] == '.') {
+            out.error = "sub-second precision is not supported";
+            out.error_kind = IsoParseErrorKind::UnsupportedPrecision;
             return out;
         }
     }
@@ -108,6 +127,7 @@ IsoParseResult parse_iso8601(std::string_view text) {
             if (!parse_int_field(text, pos, off_h) || !consume(text, pos, ':') ||
                 !parse_int_field(text, pos, off_m)) {
                 out.error = "cannot parse timezone offset in ISO string";
+                out.error_kind = IsoParseErrorKind::InvalidFormat;
                 return out;
             }
 
@@ -126,6 +146,7 @@ IsoParseResult parse_iso8601(std::string_view text) {
 
     if (pos != text.size()) {
         out.error = "unexpected trailing characters in ISO string";
+        out.error_kind = IsoParseErrorKind::InvalidFormat;
         return out;
     }
 
@@ -137,21 +158,25 @@ IsoParseResult parse_iso8601(std::string_view text) {
     // conversion from signed-overflowing on adversarial input.
     if (year < 1 || year > 9999) {
         out.error = "date out of supported range (year 0001-9999)";
+        out.error_kind = IsoParseErrorKind::OutOfRange;
         return out;
     }
 
     if (month < 1 || month > 12) {
         out.error = "month out of range (1-12)";
+        out.error_kind = IsoParseErrorKind::OutOfRange;
         return out;
     }
 
     if (day < 1 || day > days_in_month_for(month, year)) {
         out.error = "day out of range for month";
+        out.error_kind = IsoParseErrorKind::OutOfRange;
         return out;
     }
 
     if (hour < 0 || hour > 23 || min < 0 || min > 59 || sec < 0 || sec > 59) {
         out.error = "time field out of range";
+        out.error_kind = IsoParseErrorKind::OutOfRange;
         return out;
     }
 
@@ -167,6 +192,7 @@ IsoParseResult parse_iso8601(std::string_view text) {
 
     if (!unix_time) {
         out.error = "cannot parse ISO string";
+        out.error_kind = IsoParseErrorKind::OutOfRange;
         return out;
     }
 

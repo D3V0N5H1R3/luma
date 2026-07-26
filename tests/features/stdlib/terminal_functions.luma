@@ -181,6 +181,31 @@ function void test_terminal_background_color_choice() {
 }
 
 @test
+function void test_terminal_plain_style_is_identity() {
+    # A fully-default style adds no codes, so the text is returned verbatim.
+    string out = Terminal.styled("hi", Terminal.plain_style())
+
+    assert(out == "hi", "a plain style leaves text unchanged")
+}
+
+@test
+function void test_terminal_styled_applies_and_reuses_style() {
+    # Declare "bold red" once, then reuse it for different text — the nest-free
+    # replacement for Terminal.bold(Result.unwrap(Terminal.color(...))).
+    Terminal.Style bold_red = Terminal.plain_style() with {
+        bold = true,
+        foreground = Terminal.Color.Red
+    }
+
+    string first = Terminal.styled("error", bold_red)
+    string second = Terminal.styled("again", bold_red)
+
+    assert("error" in first, "styled text still contains the original text")
+    assert("again" in second, "the same style renders different text")
+    assert(String.length(first) > String.length("error"), "styling adds ANSI codes")
+}
+
+@test
 function void test_terminal_is_raw_mode() {
     # Raw mode should be off by default
     assert(!Terminal.is_in_raw_mode())

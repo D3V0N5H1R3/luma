@@ -93,6 +93,74 @@ auto movement_body(char code) {
     return in_range(r) && in_range(g) && in_range(b);
 }
 
+// ─── Terminal.Style support ────────────────────────────────────────────────
+
+// Builds a Terminal.Color choice value (runtime short name "Color", matching the
+// postamble registration in stdlib_registry.hpp) for the given variant.
+[[nodiscard]] Value make_color_choice(std::string_view variant) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Color";
+    cv->variant = std::string{variant};
+    return Value{std::move(cv)};
+}
+
+// Builds the default Terminal.Style record: both colours Default (leave
+// unchanged) and every attribute off.  Callers override individual fields with a
+// record-update (`with`).  The eight field names must match the RecordDeclaration
+// in core/analysis/types/stdlib_type_arities.cpp exactly.
+[[nodiscard]] Value make_plain_style_record() {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Style";
+    rec->fields.emplace_back("foreground", make_color_choice("Default"));
+    rec->fields.emplace_back("background", make_color_choice("Default"));
+    rec->fields.emplace_back("bold", Value{false});
+    rec->fields.emplace_back("dim", Value{false});
+    rec->fields.emplace_back("italic", Value{false});
+    rec->fields.emplace_back("underline", Value{false});
+    rec->fields.emplace_back("inverse", Value{false});
+    rec->fields.emplace_back("strikethrough", Value{false});
+    return Value{std::move(rec)};
+}
+
+// Reads a boolean attribute field from a Terminal.Style record, defaulting to
+// false when the field is absent or not a boolean (defensive — the type checker
+// guarantees the shape).
+[[nodiscard]] bool style_flag(const RecordValue& rec, std::string_view field) {
+    const auto* value = rec.find_field(field);
+    return value != nullptr && value->is_bool() && value->as_bool();
+}
+
+// Resolves a Terminal.Style colour field to its full ANSI set-code, or an empty
+// string when the colour is Default (leave unchanged) or unrecognised.  A choice
+// maps its variant (BrightBlack → "bright_black"); a string passes through.
+[[nodiscard]] std::string style_color_code(const RecordValue& rec, std::string_view field,
+                                           bool background) {
+    const auto* value = rec.find_field(field);
+    if (value == nullptr) {
+        return {};
+    }
+
+    std::string name;
+    if (value->is_choice()) {
+        const auto& variant = value->as_choice()->variant;
+        if (variant == "Default") {
+            return {};
+        }
+        if (auto mapped = color_name_from_variant(variant)) {
+            name = std::string{*mapped};
+        } else {
+            return {};
+        }
+    } else if (value->is_string()) {
+        name = value->as_string();
+    } else {
+        return {};
+    }
+
+    const auto code = background ? bg_code_for(name) : fg_code_for(name);
+    return std::string{code};
+}
+
 } // namespace
 
 void register_terminal_ansi(const EnvPtr& env) {
@@ -317,6 +385,56 @@ void register_terminal_ansi(const EnvPtr& env) {
             prepare();
 
             return Value{std::format("\033[7m{}\033[27m", args[0].to_string())};
+        })
+        .func("plain_style", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return make_plain_style_record();
+        })
+        .func("styled", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation) -> Value {
+            prepare();
+
+            const auto& style = *args[1].as_record();
+
+            // Compose one combined ANSI sequence — attributes first, then the
+            // foreground and background set-codes — followed by the text and a
+            // single reset, replacing the order-sensitive nesting of
+            // bold(color(...)).  Like the per-attribute helpers above, this emits
+            // ANSI unconditionally; a caller that wants to suppress codes when
+            // output is not a terminal can guard on Terminal.supports_color().
+            std::string sequence;
+
+            if (style_flag(style, "bold")) {
+                sequence += "\033[1m";
+            }
+            if (style_flag(style, "dim")) {
+                sequence += "\033[2m";
+            }
+            if (style_flag(style, "italic")) {
+                sequence += "\033[3m";
+            }
+            if (style_flag(style, "underline")) {
+                sequence += "\033[4m";
+            }
+            if (style_flag(style, "inverse")) {
+                sequence += "\033[7m";
+            }
+            if (style_flag(style, "strikethrough")) {
+                sequence += "\033[9m";
+            }
+
+            sequence += style_color_code(style, "foreground", false);
+            sequence += style_color_code(style, "background", true);
+
+            const auto text = args[0].to_string();
+
+            // A fully-default style adds nothing, so return the text unchanged
+            // rather than emitting a bare reset.
+            if (sequence.empty()) {
+                return Value{text};
+            }
+
+            return Value{std::format("{}{}\033[0m", sequence, text)};
         });
 
     // === Foreground / background color ===

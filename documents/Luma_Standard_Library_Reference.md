@@ -334,6 +334,7 @@ surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 | `DateTime.difference_seconds(t1, t2)`      | `(number, number)`                                       | `number`                     | Absolute difference in seconds                                           |
 | `DateTime.difference_years(t1, t2)`        | `(number, number)`                                       | `result<integer>`            | Absolute difference in calendar years; fail if out of range              |
 | `DateTime.from_iso_string(s)`              | `(string)`                                               | `result<number>`             | Parse ISO 8601 string to Unix timestamp                                  |
+| `DateTime.from_iso_string_typed(s)`        | `(string)`                                               | `result<number, DateTime.ParseError>` | Parse ISO 8601; on failure the error is a typed `DateTime.ParseError` instead of a string |
 | `DateTime.combine(date, time)`             | `(DateTime.Date, DateTime.Time)`                         | `result<number>`             | Fuse a calendar date and a wall-clock time into a UTC timestamp          |
 | `DateTime.date(y, m, d)`                   | `(integer, integer, integer)`                            | `result<DateTime.Date>`      | Build a validated calendar-only date; fail if out of range              |
 | `DateTime.date_of(ts)`                     | `(number)`                                               | `result<DateTime.Date>`      | Extract the calendar date from a timestamp                              |
@@ -420,6 +421,17 @@ else                         { print(DateTime.month_name(Result.unwrap(DateTime.
 }
 ```
 
+`DateTime.ParseError` is a choice type with four variants — `Empty`, `InvalidFormat`, `OutOfRange`, `UnsupportedPrecision` — that categorises _why_ an ISO-8601 string failed to parse, so a program can branch on the cause instead of substring-matching an opaque message. It is surfaced by `DateTime.from_iso_string_typed(s)`, which returns `result<number, DateTime.ParseError>`: the value on success is the UTC Unix timestamp, and the error on failure is the typed category. An empty or whitespace-only string is `Empty`; a present but malformed string (`"not-a-date"`, `"2024/03/15"`, a truncated time) is `InvalidFormat`; a well-formed shape with an impossible field (month 13, day 30 of February, a year outside 0001–9999) is `OutOfRange`; and a valid shape carrying sub-second precision this parser does not accept (`"...:00.5Z"`) is `UnsupportedPrecision`. This is an opt-in, additive companion (mirroring `FileSystem.read_file_typed` / `FileSystem.IoError`): the plain `DateTime.from_iso_string` keeps its string-error `result<number>`.
+
+```luma
+match DateTime.from_iso_string_typed(user_input) {
+success(ts) { print("parsed: ${ts}") }
+failure(DateTime.ParseError.Empty)          { print("please enter a date") }
+failure(DateTime.ParseError.OutOfRange)     { print("that date can't exist") }
+failure(_other)                             { print("that isn't a valid ISO-8601 date") }
+}
+```
+
 ## 10 — Decimal
 
 Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where `0.1 + 0.2` is not exactly `0.3`), a `decimal` stores its value in base 10, so money and other decimal maths behave the way people expect. `decimal` is a distinct opaque type built on an arbitrary-precision coefficient, so it never silently loses precision the way `number` does.
@@ -432,11 +444,13 @@ Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where
 | `Decimal.add(a, b)`             | `(decimal, decimal)`         | `decimal`         | Exact sum                                                           |
 | `Decimal.compare(a, b)`         | `(decimal, decimal)`         | `integer`         | `-1`, `0`, or `1` (scale-insensitive: `1.5` compares equal to `1.50`) |
 | `Decimal.divide(a, b, scale)`   | `(decimal, decimal, integer)` | `result<decimal>` | Quotient rounded (half-up) to `scale` fractional digits; fail on divide-by-zero or negative scale. Use `Decimal.divide_with` to choose the rounding mode |
+| `Decimal.divide_typed(a, b, scale)` | `(decimal, decimal, integer)` | `result<decimal, Decimal.Error>` | Like `divide`, but on failure the error is a typed `Decimal.Error` (`DivisionByZero`, `PrecisionExceeded`, or `Overflow`) instead of a string |
 | `Decimal.divide_with(a, b, scale, mode)` | `(decimal, decimal, integer, RoundingMode \| string)` | `result<decimal>` | Quotient rounded using `mode` to `scale` fractional digits; fail on divide-by-zero or negative scale |
 | `Decimal.equals(a, b)`          | `(decimal, decimal)`         | `boolean`         | Value equality, ignoring trailing-zero scale (`1.5` equals `1.50`)  |
 | `Decimal.from_integer(i)`       | `(integer)`                  | `decimal`         | Exact decimal from an integer                                       |
 | `Decimal.from_number(n)`        | `(number)`                   | `decimal`         | Shortest exact decimal for a `number`; throws on NaN or infinity    |
 | `Decimal.from_string(s)`        | `(string)`                   | `result<decimal>` | Parse decimal text (optional sign, digits, `.`, optional `eNN` exponent); fail on malformed input |
+| `Decimal.from_string_typed(s)`  | `(string)`                   | `result<decimal, Decimal.Error>` | Like `from_string`, but on failure the error is a typed `Decimal.Error` (`InvalidFormat`) instead of a string |
 | `Decimal.is_negative(d)`        | `(decimal)`                  | `boolean`         | Whether `d` is less than zero                                       |
 | `Decimal.is_zero(d)`            | `(decimal)`                  | `boolean`         | Whether `d` is zero                                                 |
 | `Decimal.multiply(a, b)`        | `(decimal, decimal)`         | `decimal`         | Exact product; throws if the result would exceed the maximum decimal size |
@@ -462,6 +476,16 @@ Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where
 Access a variant as `Decimal.RoundingMode.HalfEven`. Because it is a choice type, a `match` over a `Decimal.RoundingMode` is exhaustive and editors autocomplete the variants — a mistyped variant is a compile error, whereas a mistyped mode _string_ is only caught at runtime.
 
 Equality and comparison are **scale-insensitive** — the value `1.5` equals `1.50` — but `Decimal.to_string` and `Decimal.scale` preserve the scale a value was created or computed with, so arithmetic that widens the scale (for example adding `1.50` and `2.25`) keeps the extra digits until you `Decimal.round` it. `Decimal` is always available and needs no imports.
+
+`Decimal.Error` is a choice type with four variants — `InvalidFormat`, `DivisionByZero`, `Overflow`, `PrecisionExceeded` — that categorises _why_ a decimal operation failed, so a program can branch on the cause instead of substring-matching an opaque message. It is surfaced by two opt-in, additive companions: `Decimal.from_string_typed(s)` returns `result<decimal, Decimal.Error>` (an unparseable string is `InvalidFormat`), and `Decimal.divide_typed(a, b, scale)` returns `result<decimal, Decimal.Error>` (a zero divisor is `DivisionByZero`, a negative or too-large `scale` is `PrecisionExceeded`, and an unrepresentable quotient is `Overflow`). This mirrors `FileSystem.read_file_typed` / `FileSystem.IoError`: the plain `Decimal.from_string` and `Decimal.divide` keep their string-error `result<decimal>`.
+
+```luma
+match Decimal.from_string_typed(user_input) {
+success(d)                            { print("parsed: ${Decimal.to_string(d)}") }
+failure(Decimal.Error.InvalidFormat) { print("that isn't a number") }
+failure(_other)                       { print("could not read that amount") }
+}
+```
 
 ```luma
 @main
@@ -573,6 +597,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.name(path)`                   | `(string)`                | `string`                | File name (e.g. `"file.txt"`)                         |
 | `FileSystem.normalize(path)`              | `(string)`                | `string`                | Normalise path (e.g. `"a/b/../c"` → `"a/c"`)          |
 | `FileSystem.parent(path)`                 | `(string)`                | `string`                | Parent directory                                      |
+| `FileSystem.permissions(path)`            | `(string)`                | `result<FileSystem.Permissions>` | Report readable/writable/executable flags and POSIX mode bits; fail if the path does not exist |
 | `FileSystem.read_file(path)`              | `(string)`                | `result<string>`        | Read entire file as string                            |
 | `FileSystem.read_file_limited(path, max)` | `(string, integer)`       | `result<string>`        | Read file; fail if it exceeds `max` bytes             |
 | `FileSystem.read_file_typed(path)`        | `(string)`                | `result<string, FileSystem.IoError>` | Read entire file; on failure the error is a typed `FileSystem.IoError` instead of a string |
@@ -589,6 +614,18 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 `copy`, `delete`, `delete_directory`, `list_directories`, and `list_files` reject symbolic links and return `failure` to prevent symlink-following attacks.
 
 `FileSystem.FileInfo` record fields: `size` (`integer`, bytes; `0` for directories and other non-regular files), `modified_time` (`number`, fractional seconds since the Unix epoch, matching `get_modified_time`), `is_directory` (`boolean`), `is_file` (`boolean`), `is_symlink` (`boolean`), and `kind` (`FileSystem.FileKind`, the single mutually-exclusive answer described below). `metadata` answers in one call what `size`, `get_modified_time`, `is_directory`, `is_file`, `is_symlink`, and `kind` answer individually; the `is_symlink` flag reflects the path itself (it is not followed) while the size, time, and directory/file flags follow symlinks.
+
+`FileSystem.Permissions` record fields: `readable` (`boolean`), `writable` (`boolean`), `executable` (`boolean`), and `mode` (`integer`, the POSIX mode bits — owner/group/others read/write/execute plus set-uid, set-gid, and sticky). It answers "what may I do with this file?" in one call, returned by `FileSystem.permissions(path)` as a `result<FileSystem.Permissions>`. The three booleans are the beginner-facing answer (read from the owner permission bits), while `mode` is the escape hatch for advanced users who want the raw bits — no numeric magic is forced on beginners. It is cross-platform and never null: on POSIX the flags and `mode` reflect the file's actual permission bits (so a `chmod +x` script reports `executable`), while on Windows the bits are synthesised from the read-only attribute (a read-only file is not `writable`; `readable` and `executable` are reported for every file). `permissions` follows symlinks (it describes the target) and fails only when the path does not exist.
+
+```luma
+match FileSystem.permissions("build.sh") {
+success(perms) {
+    if perms.executable { print("runnable") }
+    else { print("not executable") }
+}
+failure(_e) { print("no such file") }
+}
+```
 
 `FileSystem.FileKind` is a choice type with four variants — `File`, `Directory`, `Symlink`, `Other` — the single, mutually-exclusive answer to "what kind of thing is this path?". `FileSystem.kind(path)` returns it (and it is also the `kind` field on `FileSystem.FileInfo`), so a `match` is exhaustive and autocompleted instead of a nested `if` chain over the `is_file` / `is_directory` / `is_symlink` booleans. It is classified symlink-first, like `lstat`: a symbolic link is reported as `Symlink` even when its target is a directory or a regular file (so the four variants never overlap), and anything that is none of these — a device, FIFO, or socket — is `Other`. `kind` fails only when the path does not exist.
 
@@ -2009,6 +2046,7 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 | `Process.has_environment_variable(name)`        | `(string)`         | `boolean`                       | Whether the environment variable is set                                  |
 | `Process.run(cmd)`                              | `(string)`         | `result<Process.ProcessResult>` | Execute shell command and capture stdout                                 |
 | `Process.set_environment_variable(name, value)` | `(string, string)` | `result<none>`                  | Set environment variable; fail if name/value exceeds 32 KB or OS rejects |
+| `Process.signal(pid, signal)`                   | `(integer, Process.Signal)` | `result<boolean>`      | Send a `Process.Signal` to another process by pid; fail if the OS rejects the request |
 
 > **Security warning:** `Process.run` passes its argument to the system shell (`cmd.exe` on Windows, `/bin/sh` on Unix). If any part of the string comes from user input, an attacker can inject shell commands using characters such as `;`, `&&`, `|`, or `$(...)`. **Never pass unsanitised user input to `Process.run`.** Validate and whitelist all inputs before use, or construct the command from a fixed set of known-safe values only. **When any part of a command comes from untrusted input, prefer `Process.run_command` (below), which bypasses the shell entirely.**
 
@@ -2064,6 +2102,15 @@ success(out) { print(out.standard_output) }
 failure(Process.Error.NotFound) { print("git is not installed") }
 failure(Process.Error.PermissionDenied) { print("git is not executable") }
 failure(_other) { print("git could not be launched") }
+}
+```
+
+`Process.Signal` is a choice type with four variants — `Terminate`, `Kill`, `Interrupt`, `Hangup` — a portable, match-able request to end another process, consumed by `Process.signal(pid, signal)` (which returns `result<boolean>`: `success(true)` when the OS accepted the request, and a `failure` when it did not — for example no such process, or insufficient permission). On POSIX the four variants map directly to `SIGTERM`, `SIGKILL`, `SIGINT`, and `SIGHUP`. On Windows there are no POSIX signals, so the mapping is deliberately lossy: `Terminate` and `Kill` both call `TerminateProcess`, `Interrupt` sends a `CTRL_C_EVENT` to the target's console group where possible, and `Hangup` degrades to `TerminateProcess`. Because it uses no magic signal numbers and a `match` over it is exhaustive, calling code stays portable and readable. Like the rest of `Process`, `signal` is OS-only (unavailable in `--box` sandbox mode).
+
+```luma
+match Process.signal(child_pid, Process.Signal.Terminate) {
+success(_ok) { print("asked the process to stop") }
+failure(_e)  { print("could not signal that process") }
 }
 ```
 
@@ -2558,6 +2605,7 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | `Terminal.overwrite_line(text)`                | `(string)`                            | `none`                            | Clear current line and write                                            |
 | `Terminal.parse_key(key)`                      | `(string)`                            | `Terminal.Key`                    | Decode a key name into a typed `Terminal.Key` choice                    |
 | `Terminal.parse_mouse_event(key)`              | `(string)`                            | `optional<Terminal.MouseEvent>`   | Decode a `"mouse:<kind>:ROW:COL"` string into a typed event; `none` if malformed |
+| `Terminal.plain_style()`                       | `()`                                  | `Terminal.Style`                  | A default `Terminal.Style` (no colours, no attributes) to override with `with` |
 | `Terminal.read_key_timeout(ms)`                | `(integer)`                           | `result<string>`                  | Non-blocking key read with timeout in ms                                |
 | `Terminal.read_key()`                          | `()`                                  | `result<string>`                  | Blocking key read; requires raw mode                                    |
 | `Terminal.reset_scroll_region()`               | `()`                                  | `none`                            | Reset to full-screen scrolling                                          |
@@ -2575,6 +2623,7 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | `Terminal.show_cursor()`                       | `()`                                  | `none`                            | Show the cursor                                                         |
 | `Terminal.size()`                              | `()`                                  | `Terminal.Size`                   | Record with `columns` and `rows` fields                                 |
 | `Terminal.strikethrough(text)`                 | `(string)`                            | `string`                          | Strikethrough styled text                                               |
+| `Terminal.styled(text, style)`                 | `(string, Terminal.Style)`            | `string`                          | Render `text` with a `Terminal.Style` as one combined ANSI sequence with a single reset |
 | `Terminal.supports_color()`                    | `()`                                  | `boolean`                         | Whether the terminal supports ANSI colour                               |
 | `Terminal.supports_true_color()`               | `()`                                  | `boolean`                         | Whether the terminal supports 24-bit true colour                        |
 | `Terminal.test_feed(keys)`                     | `(array<string>)`                     | `none`                            | Append scripted keys to the active headless test session                |
@@ -2641,6 +2690,20 @@ string a = Result.unwrap(Terminal.color("red", "error"))
 # Choice form — type-checked and autocompleted:
 string b = Result.unwrap(Terminal.color(Terminal.Color.Red, "error"))
 string c = Result.unwrap(Terminal.background_color(Terminal.Color.Yellow, "warning"))
+```
+
+`Terminal.Style` is a record that declares a reusable text style once instead of nesting per-attribute wrappers. Fields: `foreground` (`Terminal.Color`), `background` (`Terminal.Color`), `bold`, `dim`, `italic`, `underline`, `inverse`, `strikethrough` (all `boolean`). Build a default with `Terminal.plain_style()` (both colours `Terminal.Color.Default` — meaning "leave unchanged" — and every attribute off), then override the fields you want with a record-update (`with`). `Terminal.styled(text, style)` renders the text as one combined ANSI sequence closed by a single reset (`\033[0m`), replacing the order-sensitive, deeply nested `Terminal.bold(Result.unwrap(Terminal.color("red", ...)))`. A fully-default style returns the text unchanged. Like the per-attribute `Terminal.bold` / `italic` / `color` helpers (which stay for one-off styling), `styled` emits ANSI directly; guard on `Terminal.supports_color()` if you want to skip codes when output is not a terminal.
+
+```luma
+# Declare "bold red on white" once, reuse it for any text:
+Terminal.Style alert = Terminal.plain_style() with {
+    bold = true,
+    foreground = Terminal.Color.Red,
+    background = Terminal.Color.White
+}
+
+print(Terminal.styled("disk almost full", alert))
+print("done" |> Terminal.styled(alert))
 ```
 
 `Terminal.is_terminal()` returns `true` when stdout is connected to an interactive terminal device (a TTY) — for example, when a program is run directly in a console or terminal emulator. It returns `false` when stdout is **piped** to another program (`luma app.luma | grep foo`), **redirected** to a file (`luma app.luma > out.txt`), or when the process is spawned without an attached terminal (for example by a CI runner or background job). Use this to conditionally enable ANSI escape codes, colors, or interactive UI only when output goes to a real terminal.

@@ -345,6 +345,32 @@ std::int64_t current_process_id() {
     return static_cast<std::int64_t>(GetCurrentProcessId());
 }
 
+bool send_signal(std::int64_t pid, SignalKind signal) {
+    if (pid < 0 || pid > static_cast<std::int64_t>(std::numeric_limits<DWORD>::max())) {
+        return false;
+    }
+
+    const auto process_id = static_cast<DWORD>(pid);
+
+    // Windows has no POSIX signals.  Interrupt maps to a console CTRL_C_EVENT for
+    // the target's process group (best-effort: it only reaches a process that
+    // shares this console); everything else — Terminate, Kill, and a degraded
+    // Hangup — forcibly ends the process with TerminateProcess.
+    if (signal == SignalKind::Interrupt) {
+        return GenerateConsoleCtrlEvent(CTRL_C_EVENT, process_id) != 0;
+    }
+
+    const HANDLE handle = OpenProcess(PROCESS_TERMINATE, FALSE, process_id);
+    if (handle == nullptr) {
+        return false;
+    }
+
+    const BOOL ok = TerminateProcess(handle, 1);
+    CloseHandle(handle);
+
+    return ok != 0;
+}
+
 int set_environment_variable(const std::string& name, const std::string& value) {
     return _putenv_s(name.c_str(), value.c_str());
 }

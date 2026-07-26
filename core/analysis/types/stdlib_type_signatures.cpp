@@ -95,6 +95,9 @@ namespace {
             if (desc.named_type == "DateTime.Month") {
                 return TypeInfo::make_named(K::Choice, "DateTime.Month");
             }
+            if (desc.named_type == "DateTime.ParseError") {
+                return TypeInfo::make_named(K::Choice, "DateTime.ParseError");
+            }
             if (desc.named_type == "Ordering") {
                 return TypeInfo::make_named(K::Choice, "Ordering");
             }
@@ -122,6 +125,9 @@ namespace {
             if (desc.named_type == "Process.Error") {
                 return TypeInfo::make_named(K::Choice, "Process.Error");
             }
+            if (desc.named_type == "Process.Signal") {
+                return TypeInfo::make_named(K::Choice, "Process.Signal");
+            }
             if (desc.named_type == "Log.Output") {
                 return TypeInfo::make_named(K::Choice, "Log.Output");
             }
@@ -142,6 +148,9 @@ namespace {
             }
             if (desc.named_type == "Compression.Format") {
                 return TypeInfo::make_named(K::Choice, "Compression.Format");
+            }
+            if (desc.named_type == "Decimal.Error") {
+                return TypeInfo::make_named(K::Choice, "Decimal.Error");
             }
             return TypeInfo::make_named(K::Record, desc.named_type);
 

@@ -655,6 +655,46 @@ function void test_filesystem_metadata_kind_field() {
     boolean _ = Result.unwrap_or(FileSystem.delete("_test_meta_kind.txt"), false)
 }
 
+# ─── FileSystem.permissions (structured file-access flags) ───
+
+@test
+function void test_filesystem_permissions_file() {
+    assert(Result.is_success(FileSystem.write_file("_test_perms.txt", "hello")))
+
+    result<FileSystem.Permissions> r = FileSystem.permissions("_test_perms.txt")
+
+    assert(Result.is_success(r), "permissions succeeds for a present file")
+
+    FileSystem.Permissions perms = Result.unwrap(r)
+
+    # A freshly written file is readable and writable on every platform.
+    assert(perms.readable, "a new file is readable")
+    assert(perms.writable, "a new file is writable")
+    # mode carries the POSIX mode bits; a regular file always has some read bit.
+    assert(perms.mode != 0, "mode carries permission bits")
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_perms.txt"), false)
+}
+
+@test
+function void test_filesystem_permissions_directory() {
+    result<FileSystem.Permissions> r = FileSystem.permissions(".")
+
+    assert(Result.is_success(r), "permissions succeeds for a directory")
+
+    FileSystem.Permissions perms = Result.unwrap(r)
+
+    assert(perms.readable, "the current directory is readable")
+    assert(perms.mode != 0, "directory mode carries bits")
+}
+
+@test
+function void test_filesystem_permissions_nonexistent() {
+    result<FileSystem.Permissions> r = FileSystem.permissions("_nonexistent_perms_file.txt")
+
+    assert(Result.is_failure(r), "permissions fails on a missing path")
+}
+
 # ─── FileSystem.IoError (opt-in typed I/O errors) ───
 
 # Exhaustive match over every IoError variant.  Beyond labelling a category, this

@@ -93,6 +93,12 @@ namespace named {
     return ReturnTypeDesc::named("decimal");
 }
 
+// Choice type — fully-qualified so the type checker resolves it as Decimal.Error
+// (a bare name would fall through to the record default).
+[[nodiscard]] inline ReturnTypeDesc decimal_error() {
+    return ReturnTypeDesc::named("Decimal.Error");
+}
+
 [[nodiscard]] inline ReturnTypeDesc xml() {
     return ReturnTypeDesc::named("xml");
 }
@@ -124,6 +130,12 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc month() {
     return ReturnTypeDesc::named("DateTime.Month");
+}
+
+// Choice type — fully-qualified so the type checker resolves it as
+// DateTime.ParseError (a bare name would fall through to the record default).
+[[nodiscard]] inline ReturnTypeDesc datetime_parse_error() {
+    return ReturnTypeDesc::named("DateTime.ParseError");
 }
 
 [[nodiscard]] inline ReturnTypeDesc ordering() {
@@ -221,6 +233,11 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc file_info() {
     return ReturnTypeDesc::named("FileInfo");
+}
+
+// Record type — resolves by bare name to FileSystem.Permissions, like file_info().
+[[nodiscard]] inline ReturnTypeDesc permissions() {
+    return ReturnTypeDesc::named("Permissions");
 }
 
 // Choice type — uses the fully-qualified name so the type checker resolves it as
@@ -374,6 +391,12 @@ namespace named {
     return ReturnTypeDesc::named("Process.Error");
 }
 
+// Choice type — fully-qualified so the type checker resolves it as Process.Signal
+// (a bare name would fall through to the record default).
+[[nodiscard]] inline ReturnTypeDesc process_signal() {
+    return ReturnTypeDesc::named("Process.Signal");
+}
+
 [[nodiscard]] inline ReturnTypeDesc input_event() {
     return ReturnTypeDesc::named("InputEvent");
 }
@@ -391,6 +414,10 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc cursor_position() {
     return ReturnTypeDesc::named("CursorPosition");
+}
+
+[[nodiscard]] inline ReturnTypeDesc terminal_style() {
+    return ReturnTypeDesc::named("Style");
 }
 
 [[nodiscard]] inline ReturnTypeDesc size() {

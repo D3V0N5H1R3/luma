@@ -280,6 +280,31 @@ void register_filesystem_content(const EnvPtr& env) {
                     return make_success_value(Value{std::move(rec)});
                 });
         })
+        .func("permissions", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return fs_validated_string_op(
+                "FileSystem.permissions", args[0], loc, false,
+                [](const std::filesystem::path& safe_path) -> Value {
+                    std::error_code ec;
+
+                    // Query the link status first (does not follow symlinks) so a
+                    // dangling or symlinked entry is still reported rather than
+                    // treated as absent — mirroring FileSystem.metadata.
+                    const auto sym_status = std::filesystem::symlink_status(safe_path, ec);
+                    if (ec || !std::filesystem::exists(sym_status)) {
+                        return make_failure_value(
+                            error_msg("FileSystem", "permissions",
+                                      std::format("path does not exist '{}'", safe_path.string())));
+                    }
+
+                    // Follow symlinks for the permission bits so they describe the
+                    // target, agreeing with the size / type queries in metadata.
+                    std::error_code status_ec;
+                    const auto status = std::filesystem::status(safe_path, status_ec);
+
+                    return make_success_value(make_permissions_record(status.permissions()));
+                });
+        })
         .func("kind", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return fs_validated_string_op(
