@@ -357,6 +357,26 @@ std::int64_t current_process_id() {
     return static_cast<std::int64_t>(getpid());
 }
 
+bool send_signal(std::int64_t pid, SignalKind signal) {
+    int sig = SIGTERM;
+    switch (signal) {
+        case SignalKind::Terminate:
+            sig = SIGTERM;
+            break;
+        case SignalKind::Kill:
+            sig = SIGKILL;
+            break;
+        case SignalKind::Interrupt:
+            sig = SIGINT;
+            break;
+        case SignalKind::Hangup:
+            sig = SIGHUP;
+            break;
+    }
+
+    return ::kill(static_cast<pid_t>(pid), sig) == 0;
+}
+
 int set_environment_variable(const std::string& name, const std::string& value) {
     // NOLINTNEXTLINE(concurrency-mt-unsafe): no thread-safe std alternative for setenv.
     return setenv(name.c_str(), value.c_str(), 1);

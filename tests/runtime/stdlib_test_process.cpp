@@ -60,6 +60,27 @@ static void test_process_run_unclosed_quote() {
     ASSERT_EVAL_FAILURE("Process.run(\"echo \\\"unclosed\")");
 }
 
+// ─── Process.signal — result<boolean> with a Process.Signal choice ──────────
+
+static void test_process_signal_rejects_nonpositive_pid() {
+    // A pid <= 0 is rejected as a domain failure rather than crashing.
+    ASSERT_EVAL_FAILURE("Process.signal(0, Process.Signal.Terminate)");
+    ASSERT_EVAL_FAILURE("Process.signal(-1, Process.Signal.Kill)");
+}
+
+static void test_process_signal_missing_process_fails() {
+    // Signalling a pid that (almost certainly) does not exist returns a failure
+    // result — never a crash — for every Process.Signal variant.
+    ASSERT_EVAL_FAILURE("Process.signal(2147483646, Process.Signal.Terminate)");
+    ASSERT_EVAL_FAILURE("Process.signal(2147483646, Process.Signal.Hangup)");
+    ASSERT_EVAL_FAILURE("Process.signal(2147483646, Process.Signal.Interrupt)");
+}
+
+static void test_process_signal_rejects_non_choice_argument() {
+    // The signal argument must be a Process.Signal choice, not an arbitrary value.
+    ASSERT_TRUE(luma::test::eval_throws("Process.signal(1, 9)"));
+}
+
 // ─── tokenize_command — the untrusted command-string parser behind ──────────
 // Process.run.  These exercise the parser directly (it is declared in
 // process_module.hpp and feeds CreateProcessA / execvp without a shell), so the
@@ -519,6 +540,9 @@ int main() {
     RUN(test_process_get_args_with_values);
     RUN(test_process_run_returns_record);
     RUN(test_process_run_unclosed_quote);
+    RUN(test_process_signal_rejects_nonpositive_pid);
+    RUN(test_process_signal_missing_process_fails);
+    RUN(test_process_signal_rejects_non_choice_argument);
     RUN(test_tokenize_command_simple);
     RUN(test_tokenize_command_collapses_repeated_whitespace);
     RUN(test_tokenize_command_double_quotes_preserve_spaces);

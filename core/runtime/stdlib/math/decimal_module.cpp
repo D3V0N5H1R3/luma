@@ -89,6 +89,19 @@ namespace {
         "(e.g. \"half_up\")"};
 }
 
+// ─── Decimal.Error choice support ────────────────────────────────────────────
+// Builds a result<decimal, Decimal.Error> failure whose error value is the
+// Decimal.Error choice for `variant` (runtime short name "Error", matching the
+// postamble registration).  The variant names must match the Decimal.Error
+// choice declared in stdlib_type_arities.cpp exactly.
+[[nodiscard]] Value make_decimal_error_failure(std::string_view variant) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Error";
+    cv->variant = std::string{variant};
+
+    return Value{ResultValue::failure(Value{std::move(cv)})};
+}
+
 } // namespace
 
 void register_decimal_ns(const EnvPtr& env) {
@@ -101,6 +114,19 @@ void register_decimal_ns(const EnvPtr& env) {
                 return failure_msg("Decimal", "from_string",
                                    std::format("'{}' is not a valid decimal", text),
                                    error_codes::parse_error);
+            }
+            return make_success_value(make_decimal(std::move(*parsed)));
+        })
+        .func("from_string_typed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Opt-in typed-error variant of from_string: an unparseable string
+            // fails with a Decimal.Error choice (result<decimal, Decimal.Error>)
+            // instead of a string message.  Parsing has exactly one failure mode,
+            // so it always classifies as InvalidFormat.
+            const auto& text = expect_string(args[0], "Decimal.from_string_typed", loc);
+            auto parsed = Decimal::parse(text);
+            if (!parsed) {
+                return make_decimal_error_failure("InvalidFormat");
             }
             return make_success_value(make_decimal(std::move(*parsed)));
         })
@@ -168,6 +194,27 @@ void register_decimal_ns(const EnvPtr& env) {
             if (!quotient) {
                 return failure_msg("Decimal", "divide", "result is too large to represent",
                                    error_codes::size_limit_exceeded);
+            }
+            return make_success_value(make_decimal(std::move(*quotient)));
+        })
+        .func("divide_typed", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            // Opt-in typed-error variant of divide: failures surface a
+            // Decimal.Error choice (result<decimal, Decimal.Error>) so a caller
+            // can distinguish DivisionByZero from an unrepresentable scale
+            // (PrecisionExceeded) or an oversized result (Overflow).
+            const auto& dividend = arg_decimal(args[0], "Decimal.divide_typed", loc);
+            const auto& divisor = arg_decimal(args[1], "Decimal.divide_typed", loc);
+            const auto scale = expect_integer(args[2], "Decimal.divide_typed", loc);
+            if (scale < 0 || scale > static_cast<std::int64_t>(Decimal::k_max_digits)) {
+                return make_decimal_error_failure("PrecisionExceeded");
+            }
+            if (divisor.is_zero()) {
+                return make_decimal_error_failure("DivisionByZero");
+            }
+            auto quotient = dividend.divide(divisor, static_cast<int>(scale), RoundingMode::HalfUp);
+            if (!quotient) {
+                return make_decimal_error_failure("Overflow");
             }
             return make_success_value(make_decimal(std::move(*quotient)));
         })

@@ -21,12 +21,25 @@
 
 namespace luma::datetime {
 
+// Machine-readable category for a parse_iso8601 failure, so callers (notably
+// DateTime.from_iso_string_typed) can branch on the cause instead of matching
+// the human-readable `error` string.  None means success.
+enum class IsoParseErrorKind {
+    None,
+    Empty,               // input was empty or only whitespace
+    InvalidFormat,       // present but not a well-formed ISO-8601 string
+    OutOfRange,          // well-formed shape but an impossible field (month 13, …)
+    UnsupportedPrecision // valid shape but a precision this parser does not accept
+};
+
 // Outcome of parse_iso8601.  On success, unix_seconds holds the UTC Unix
-// timestamp.  On failure, success is false and error explains why.
+// timestamp.  On failure, success is false, error explains why, and error_kind
+// categorises it.
 struct IsoParseResult {
     double unix_seconds{0.0};
     bool success{false};
     std::string error;
+    IsoParseErrorKind error_kind{IsoParseErrorKind::None};
 };
 
 // Parse an ISO-8601 timestamp into a UTC Unix timestamp (seconds since epoch).

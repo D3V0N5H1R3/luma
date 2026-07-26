@@ -425,7 +425,35 @@ TypeInfo ExpressionTypeChecker::visit_record_with(const RecordWithExpression& ex
         return TypeInfo::make(TypeInfo::Kind::Unknown);
     }
 
-    const auto rec_it = tc_.records().find(base_type.name);
+    auto rec_it = tc_.records().find(base_type.name);
+
+    // Stdlib records are registered in the record map only under their
+    // fully-qualified name (e.g. "Terminal.Style"), yet a record TypeInfo carries
+    // just the short declaration name ("Style") — see resolve_user_named.  When
+    // the direct lookup misses, fall back to a short-name match so `with` works on
+    // stdlib records (Terminal.Style, DateTime.Zoned, …), not only on user records
+    // (which are also keyed by their bare name).  The match must be UNIQUE: some
+    // stdlib records share a short name across namespaces (e.g. DateTime.Interval
+    // vs Math.Interval, or the several *.ParseError records), and the record map
+    // is unordered, so binding the first hit could silently resolve to the wrong
+    // record.  On an ambiguous (or absent) match, leave rec_it at end() so the
+    // "unknown record type" error below fires — the pre-existing behaviour for
+    // every stdlib record before this fallback existed.
+    if (rec_it == tc_.records().end()) {
+        for (auto it = tc_.records().begin(); it != tc_.records().end(); ++it) {
+            if (it->second->name != base_type.name) {
+                continue;
+            }
+
+            if (rec_it != tc_.records().end()) {
+                // A second match makes the short name ambiguous — refuse to guess.
+                rec_it = tc_.records().end();
+                break;
+            }
+
+            rec_it = it;
+        }
+    }
 
     if (rec_it == tc_.records().end()) {
         tc_.error(std::format("unknown record type '{}'", base_type.name), expr.location,

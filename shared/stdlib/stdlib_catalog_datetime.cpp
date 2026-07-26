@@ -42,6 +42,8 @@ void register_date_time_functions(std::vector<FunctionSpec>& specs, const Module
             m.fn("difference_years", 2, "(start: number, end: number)", R::result_integer(),
                  {p.number, p.number}),
             m.fn("from_iso_string", 1, "(iso: string)", R::result_number(), {p.string}),
+            m.fn("from_iso_string_typed", 1, "(iso: string)",
+                 R::result(R::number_type(), named::datetime_parse_error()), {p.string}),
             m.fn("from_offset", 2, "(timestamp: number, offset: number)", R::result_number(),
                  {p.number, p.number}),
             m.fn("from_parts", 6,

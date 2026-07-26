@@ -408,3 +408,45 @@ function void test_process_run_command_typed_empty_program_is_invalid() {
 
     assert(label == "invalid_command", "an empty program classifies as InvalidCommand")
 }
+
+# ─── Process.signal (Process.Signal) ───
+
+# Exhaustive match over every Process.Signal variant.  Beyond labelling a signal,
+# this doubles as a check that Process.Signal is fully registered, exhaustively
+# matchable, and usable as a parameter type annotation.
+function string signal_label(Process.Signal s) {
+    return match s {
+        case Process.Signal.Terminate { "terminate" }
+        case Process.Signal.Kill      { "kill" }
+        case Process.Signal.Interrupt { "interrupt" }
+        case Process.Signal.Hangup    { "hangup" }
+    }
+}
+
+@test
+function void test_process_signal_variants_are_exhaustive() {
+    assert(signal_label(Process.Signal.Terminate) == "terminate")
+    assert(signal_label(Process.Signal.Kill) == "kill")
+    assert(signal_label(Process.Signal.Interrupt) == "interrupt")
+    assert(signal_label(Process.Signal.Hangup) == "hangup")
+
+    # Choice equality works like every other stdlib choice.
+    Process.Signal s = Process.Signal.Kill
+    assert(s == Process.Signal.Kill)
+    assert(s != Process.Signal.Terminate)
+}
+
+@test
+function void test_process_signal_invalid_pid_fails() {
+    # A non-positive pid is a domain failure, not a crash.
+    result<boolean> r = Process.signal(0, Process.Signal.Terminate)
+    assert(Result.is_failure(r), "pid 0 fails")
+}
+
+@test
+function void test_process_signal_missing_process_fails() {
+    # Signalling a pid that (almost certainly) does not exist returns a failure
+    # result rather than crashing.
+    result<boolean> r = Process.signal(2147483646, Process.Signal.Terminate)
+    assert(Result.is_failure(r), "an absent process fails")
+}

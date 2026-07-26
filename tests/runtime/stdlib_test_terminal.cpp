@@ -58,6 +58,61 @@ static void test_terminal_color_choice_matches_string() {
               by_string.as_result()->owned_inner->as_string());
 }
 
+// ─── Terminal.Style record + Terminal.styled ─────────────────────────────────
+
+static void test_terminal_plain_style_defaults() {
+    const auto v = eval("Terminal.plain_style()");
+
+    ASSERT_TRUE(v.is_record());
+
+    const auto& rec = *v.as_record();
+
+    // Both colours default and every attribute off.
+    ASSERT_EQ(rec.find_field("foreground")->as_choice()->variant, "Default");
+    ASSERT_EQ(rec.find_field("background")->as_choice()->variant, "Default");
+    ASSERT_FALSE(rec.find_field("bold")->as_bool());
+    ASSERT_FALSE(rec.find_field("strikethrough")->as_bool());
+}
+
+static void test_terminal_styled_plain_is_unchanged() {
+    // A fully-default style adds no codes, so the text is returned verbatim.
+    const auto v = eval("Terminal.styled(\"hi\", Terminal.plain_style())");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "hi");
+}
+
+static void test_terminal_styled_bold() {
+    const auto v = eval("Terminal.styled(\"hi\", Terminal.plain_style() with { bold = true })");
+
+    ASSERT_TRUE(v.is_string());
+
+    const auto& out = v.as_string();
+
+    ASSERT_TRUE(out.find("\033[1m") != std::string::npos);
+    ASSERT_TRUE(out.find("hi") != std::string::npos);
+    // A single trailing reset closes the whole sequence.
+    ASSERT_TRUE(out.rfind("\033[0m") == out.size() - 4);
+}
+
+static void test_terminal_styled_composes_color_and_attributes() {
+    // "bold red on white" in one call — the nest-free replacement for
+    // Terminal.bold(color(background_color(...))).
+    const auto v =
+        eval("Terminal.styled(\"x\", Terminal.plain_style() with { bold = true, foreground = "
+             "Terminal.Color.Red, background = Terminal.Color.White })");
+
+    ASSERT_TRUE(v.is_string());
+
+    const auto& out = v.as_string();
+
+    ASSERT_TRUE(out.find("\033[1m") != std::string::npos);  // bold
+    ASSERT_TRUE(out.find("\033[31m") != std::string::npos); // red foreground
+    ASSERT_TRUE(out.find("\033[47m") != std::string::npos); // white background
+    ASSERT_TRUE(out.find("x") != std::string::npos);
+    ASSERT_TRUE(out.rfind("\033[0m") == out.size() - 4);
+}
+
 static void test_terminal_color_rejects_non_color_arg() {
     // A non-string, non-choice colour argument is a programmer error and throws.
     ASSERT_TRUE(luma::test::eval_throws("Terminal.color(123, \"text\")"));
@@ -768,6 +823,10 @@ int main() {
     RUN(test_terminal_color_choice);
     RUN(test_terminal_color_choice_bright);
     RUN(test_terminal_color_choice_matches_string);
+    RUN(test_terminal_plain_style_defaults);
+    RUN(test_terminal_styled_plain_is_unchanged);
+    RUN(test_terminal_styled_bold);
+    RUN(test_terminal_styled_composes_color_and_attributes);
     RUN(test_terminal_color_rejects_non_color_arg);
     RUN(test_terminal_columns_rows);
     RUN(test_terminal_is_mouse);

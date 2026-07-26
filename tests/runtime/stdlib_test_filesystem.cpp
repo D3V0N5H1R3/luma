@@ -166,6 +166,54 @@ static void test_filesystem_kind_rejects_traversal() {
     ASSERT_THROWS(eval("FileSystem.kind(\"../escape.txt\")"));
 }
 
+// ─── FileSystem.permissions — result<FileSystem.Permissions> ───
+// Structured file-access flags: readable / writable / executable booleans plus
+// the POSIX mode bits.  Fails only if the path does not exist, mirroring
+// FileSystem.metadata / FileSystem.kind.
+
+static void test_filesystem_permissions_file() {
+    const LumaTempFile file{"_test_perms.txt", "hello"};
+
+    const auto v = eval("FileSystem.permissions(\"_test_perms.txt\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = *v.as_result()->owned_inner->as_record();
+
+    // A freshly written file is readable and writable on every platform.
+    ASSERT_TRUE(rec.find_field("readable")->as_bool());
+    ASSERT_TRUE(rec.find_field("writable")->as_bool());
+    // executable is platform-dependent (0644 on POSIX, synthesised on Windows),
+    // so only assert it is a boolean field, not its value.
+    ASSERT_TRUE(rec.find_field("executable")->is_bool());
+    // mode carries the POSIX mode bits; a regular file always has some read bit.
+    ASSERT_TRUE(rec.find_field("mode")->is_integer());
+    ASSERT_TRUE(rec.find_field("mode")->as_integer() != 0);
+}
+
+static void test_filesystem_permissions_directory() {
+    const auto v = eval("FileSystem.permissions(\".\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = *v.as_result()->owned_inner->as_record();
+
+    // The current directory is readable, and its mode carries bits.
+    ASSERT_TRUE(rec.find_field("readable")->as_bool());
+    ASSERT_TRUE(rec.find_field("mode")->as_integer() != 0);
+}
+
+static void test_filesystem_permissions_nonexistent() {
+    // A path that does not exist fails, mirroring FileSystem.metadata / kind.
+    ASSERT_EVAL_FAILURE("FileSystem.permissions(\"_nonexistent_perms_file.txt\")");
+}
+
+static void test_filesystem_permissions_rejects_traversal() {
+    // Path traversal is a security violation, so permissions throws (like every
+    // other FileSystem function) rather than returning a failure result.
+    ASSERT_THROWS(eval("FileSystem.permissions(\"../escape.txt\")"));
+}
+
 // ─── FileSystem.read_file_typed — result<string, FileSystem.IoError> (N08) ──
 // The opt-in typed-error read: failures surface a FileSystem.IoError choice as
 // the result's error value rather than the default string message.  read_file
@@ -604,6 +652,10 @@ int main() {
     RUN(test_filesystem_kind_directory);
     RUN(test_filesystem_kind_nonexistent);
     RUN(test_filesystem_kind_rejects_traversal);
+    RUN(test_filesystem_permissions_file);
+    RUN(test_filesystem_permissions_directory);
+    RUN(test_filesystem_permissions_nonexistent);
+    RUN(test_filesystem_permissions_rejects_traversal);
     RUN(test_filesystem_read_file_typed_success);
     RUN(test_filesystem_read_file_typed_not_found);
     RUN(test_filesystem_read_file_typed_directory_is_invalid_input);

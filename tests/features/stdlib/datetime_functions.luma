@@ -435,6 +435,48 @@ function void test_datetime_from_iso_string_out_of_range() {
     assert(Result.is_failure(DateTime.from_iso_string("2024-13-15")), "month 13 should fail")
 }
 
+# ─── DateTime.ParseError (opt-in typed parse errors) ───
+
+# Exhaustive match over every ParseError variant.  Beyond labelling a category,
+# this doubles as a check that DateTime.ParseError is fully registered,
+# exhaustively matchable, and usable as a parameter type annotation.
+function string parse_error_label(DateTime.ParseError e) {
+    return match e {
+        case DateTime.ParseError.Empty                { "empty" }
+        case DateTime.ParseError.InvalidFormat        { "invalid_format" }
+        case DateTime.ParseError.OutOfRange           { "out_of_range" }
+        case DateTime.ParseError.UnsupportedPrecision { "unsupported_precision" }
+    }
+}
+
+@test
+function void test_datetime_from_iso_string_typed_success() {
+    result<number, DateTime.ParseError> r =
+        DateTime.from_iso_string_typed("2024-03-15T14:30:00Z")
+
+    assert(Result.is_success(r), "a valid ISO string parses")
+    assert(Math.approximately_equal(Result.unwrap(r), 1710513000.0, 0.001))
+}
+
+@test
+function void test_datetime_from_iso_string_typed_classifies() {
+    # Each failure is a match-able typed choice, not an opaque string.
+    assert(parse_error_label(classify_iso("")) == "empty")
+    assert(parse_error_label(classify_iso("not-a-date")) == "invalid_format")
+    assert(parse_error_label(classify_iso("2024-13-01")) == "out_of_range")
+    assert(parse_error_label(classify_iso("2024-03-15T14:30:00.5Z")) == "unsupported_precision")
+}
+
+# Helper: run the typed parser and return its ParseError, asserting it failed.
+function DateTime.ParseError classify_iso(string text) {
+    result<number, DateTime.ParseError> r = DateTime.from_iso_string_typed(text)
+
+    return match r {
+        success(_ts) { DateTime.ParseError.InvalidFormat }
+        failure(e) { e }
+    }
+}
+
 # ─── component accessors / format / to_parts on out-of-range instant ───
 
 @test

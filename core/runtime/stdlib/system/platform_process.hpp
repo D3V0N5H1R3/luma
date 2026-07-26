@@ -68,6 +68,22 @@ struct CapturedOutput {
 // Return the current process identifier.
 [[nodiscard]] std::int64_t current_process_id();
 
+// Portable process-termination request delivered by Process.signal.  The Windows
+// mapping is necessarily lossy (Win32 has no POSIX signals): Terminate and Kill
+// both call TerminateProcess, Interrupt sends a CTRL_C_EVENT to the target's
+// console group where possible, and Hangup degrades to TerminateProcess.
+enum class SignalKind {
+    Terminate,
+    Kill,
+    Interrupt,
+    Hangup
+};
+
+// Send `signal` to the process identified by `pid`.  Returns true when the OS
+// accepted the request.  On POSIX this maps to kill(2) (SIGTERM / SIGKILL /
+// SIGINT / SIGHUP); on Windows to the mapping documented on SignalKind above.
+[[nodiscard]] bool send_signal(std::int64_t pid, SignalKind signal);
+
 // Set an environment variable.  Returns 0 on success (matching setenv/_putenv_s).
 [[nodiscard]] int set_environment_variable(const std::string& name, const std::string& value);
 

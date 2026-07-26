@@ -241,3 +241,57 @@ function void test_decimal_divide_with() {
         Decimal.divide_with(dec("10"), dec("3"), -1, Decimal.RoundingMode.HalfUp)
     assert(!Result.is_success(neg_scale))
 }
+
+# ─── Decimal.Error (opt-in typed errors) ───
+
+# Exhaustive match over every Decimal.Error variant.  Beyond labelling a category,
+# this doubles as a check that Decimal.Error is fully registered, exhaustively
+# matchable, and usable as a parameter type annotation.
+function string decimal_error_label(Decimal.Error e) {
+    return match e {
+        case Decimal.Error.InvalidFormat     { "invalid_format" }
+        case Decimal.Error.DivisionByZero    { "division_by_zero" }
+        case Decimal.Error.Overflow          { "overflow" }
+        case Decimal.Error.PrecisionExceeded { "precision_exceeded" }
+    }
+}
+
+@test
+function void test_decimal_from_string_typed() {
+    result<decimal, Decimal.Error> ok = Decimal.from_string_typed("3.14")
+    assert(Result.is_success(ok), "a valid decimal parses")
+
+    result<decimal, Decimal.Error> bad = Decimal.from_string_typed("not a number")
+    assert(Result.is_failure(bad), "nonsense fails")
+
+    string label = match bad {
+        success(_d) { "unexpected_success" }
+        failure(e) { decimal_error_label(e) }
+    }
+    assert(label == "invalid_format", "unparseable input classifies as InvalidFormat")
+}
+
+@test
+function void test_decimal_divide_typed() {
+    # A normal division succeeds.
+    result<decimal, Decimal.Error> quarter = Decimal.divide_typed(dec("1"), dec("4"), 2)
+    assert(Result.is_success(quarter))
+    assert(Decimal.to_string(Result.unwrap(quarter)) == "0.25")
+
+    # Division by zero is a match-able DivisionByZero, not an opaque string.
+    result<decimal, Decimal.Error> by_zero = Decimal.divide_typed(dec("1"), dec("0"), 2)
+    assert(decimal_error_label(unwrap_error(by_zero)) == "division_by_zero")
+
+    # A negative scale cannot be represented → PrecisionExceeded.
+    result<decimal, Decimal.Error> bad_scale = Decimal.divide_typed(dec("1"), dec("4"), -1)
+    assert(decimal_error_label(unwrap_error(bad_scale)) == "precision_exceeded")
+}
+
+# Helper: extract the typed error from a failed decimal result, failing the test
+# if it unexpectedly succeeded.
+function Decimal.Error unwrap_error(result<decimal, Decimal.Error> r) {
+    return match r {
+        success(_d) { Decimal.Error.Overflow }
+        failure(e) { e }
+    }
+}
