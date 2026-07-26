@@ -351,3 +351,84 @@ function void test_compression_format_runtime_dispatch() {
         assert(roundtripped == original)
     }
 }
+
+# ─── Compression.Error (opt-in typed decompression errors) ───
+
+# Exhaustive match over every Compression.Error variant.  Beyond labelling a
+# category, this doubles as a check that Compression.Error is fully registered,
+# exhaustively matchable, and usable as a parameter type annotation.
+function string compression_error_label(Compression.Error e) {
+    return match e {
+        case Compression.Error.Corrupt           { "corrupt" }
+        case Compression.Error.Truncated         { "truncated" }
+        case Compression.Error.UnsupportedFormat { "unsupported_format" }
+        case Compression.Error.TooLarge          { "too_large" }
+    }
+}
+
+@test
+function void test_compression_gunzip_typed_success() {
+    string gz = Compression.gzip("typed hello")
+    result<string, Compression.Error> r = Compression.gunzip_typed(gz)
+
+    assert(Result.is_success(r), "gunzip_typed decodes a valid gzip stream")
+    assert(Result.unwrap(r) == "typed hello")
+}
+
+@test
+function void test_compression_gunzip_typed_unsupported_format() {
+    # A 20-byte blob with the wrong magic is classified as UnsupportedFormat.
+    result<string, Compression.Error> r = Compression.gunzip_typed("not a gzip stream!!!")
+
+    string label = match r {
+        success(_s) { "unexpected_success" }
+        failure(e) { compression_error_label(e) }
+    }
+
+    assert(label == "unsupported_format", "wrong magic classifies as UnsupportedFormat")
+}
+
+@test
+function void test_compression_inflate_typed_corrupt() {
+    result<string, Compression.Error> r = Compression.inflate_typed("not valid deflate data")
+
+    string label = match r {
+        success(_s) { "unexpected_success" }
+        failure(e) { compression_error_label(e) }
+    }
+
+    assert(label == "corrupt", "malformed deflate classifies as Corrupt")
+}
+
+@test
+function void test_compression_decompress_typed_rle_corrupt() {
+    # A zero run-count is a malformed RLE stream.
+    result<string, Compression.Error> r =
+        Compression.decompress_typed("0a", Compression.Format.Rle)
+
+    string label = match r {
+        success(_s) { "unexpected_success" }
+        failure(e) { compression_error_label(e) }
+    }
+
+    assert(label == "corrupt", "a zero RLE count classifies as Corrupt")
+}
+
+@test
+function void test_compression_decompress_typed_roundtrip_all_formats() {
+    array<Compression.Format> formats = [
+        Compression.Format.Deflate,
+        Compression.Format.Gzip,
+        Compression.Format.Rle
+    ]
+
+    string original = "aaabbbcc typed round trip"
+
+    for format in formats {
+        string compressed = Compression.compress(original, format)
+        result<string, Compression.Error> r = Compression.decompress_typed(compressed, format)
+
+        assert(Result.is_success(r), "decompress_typed round-trips every format")
+        assert(Result.unwrap(r) == original)
+    }
+}

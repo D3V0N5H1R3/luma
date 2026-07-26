@@ -236,16 +236,19 @@ Compress and decompress data using Deflate (RFC 1951), Gzip (RFC 1952), and run-
 | `Compression.compressed_size(data)`          | `(string)`                      | `integer`        | Compressed size in bytes                                |
 | `Compression.decode_rle(s)`                  | `(string)`                      | `result<string>` | Run-length decode                                       |
 | `Compression.decompress(data, format)`       | `(string, Compression.Format)`  | `result<string>` | Decompress `data` under the given format                |
+| `Compression.decompress_typed(data, format)` | `(string, Compression.Format)`  | `result<string, Compression.Error>` | Decompress `data`; on failure the error is a typed `Compression.Error` |
 | `Compression.deflate(data)`                  | `(string)`                      | `string`         | Deflate-compress data                                   |
 | `Compression.deflate_with(data, level)`      | `(string, integer)`             | `result<string>` | Deflate-compress with explicit level (0–9)              |
 | `Compression.encode_rle(s)`                  | `(string)`                      | `string`         | Run-length encode (e.g. `"aaabbbcc"` → `"3a3b2c"`)      |
 | `Compression.gunzip(data)`                   | `(string)`                      | `result<string>` | Gunzip-decompress data                                  |
 | `Compression.gunzip_file(path)`              | `(string)`                      | `result<string>` | Gunzip-decompress file contents                         |
+| `Compression.gunzip_typed(data)`             | `(string)`                      | `result<string, Compression.Error>` | Gunzip-decompress data; on failure the error is a typed `Compression.Error` |
 | `Compression.gzip(data)`                     | `(string)`                      | `string`         | Gzip-compress data                                      |
 | `Compression.gzip_file(in, out)`             | `(string, string)`              | `result<string>` | Gzip-compress file to output path                       |
 | `Compression.gzip_file_with(in, out, level)` | `(string, string, integer)`     | `result<string>` | Gzip-compress a file to `out` with explicit level (0–9) |
 | `Compression.gzip_with(data, level)`         | `(string, integer)`             | `result<string>` | Gzip-compress with explicit level (0–9)                 |
 | `Compression.inflate(data)`                  | `(string)`                      | `result<string>` | Inflate-decompress data                                 |
+| `Compression.inflate_typed(data)`            | `(string)`                      | `result<string, Compression.Error>` | Inflate-decompress data; on failure the error is a typed `Compression.Error` |
 
 The per-algorithm functions above (`deflate`/`inflate`, `gzip`/`gunzip`, `encode_rle`/`decode_rle`) are the primary API — reach for them when the algorithm is known at the call site. `Compression.Format` is a choice type with three variants — `Deflate`, `Gzip`, `Rle` — for the "algorithm decided at runtime" path: `Compression.compress` and `Compression.decompress` dispatch on it to the matching per-algorithm function, so code that only learns the format from user input or configuration doesn't need a hand-written switch over algorithm names. Unlike `Hash.Algorithm`, `Compression.Format` has no string dual-form — it is the sole runtime-dispatch entry point.
 
@@ -253,6 +256,18 @@ The per-algorithm functions above (`deflate`/`inflate`, `gzip`/`gunzip`, `encode
 Compression.Format format = Compression.Format.Gzip
 string compressed = Compression.compress("hello world", format)
 string restored = Result.unwrap(Compression.decompress(compressed, format))
+```
+
+`Compression.Error` is a choice type with four variants — `Corrupt`, `Truncated`, `UnsupportedFormat`, `TooLarge` — that categorises _why_ a decompression failed, so a program decoding an untrusted or truncated blob can branch on the cause instead of substring-matching an opaque message. It is surfaced by the opt-in `*_typed` companions — `Compression.decompress_typed`, `Compression.inflate_typed`, and `Compression.gunzip_typed` — which return `result<string, Compression.Error>`: the value on success is the decompressed data, and the error on failure is the typed category. Well-framed but internally inconsistent data (bad deflate codes, a gzip CRC/size trailer mismatch, an invalid RLE count digit) is `Corrupt`; a stream that ends before a complete unit was decoded is `Truncated`; a container that is not the expected format (bad gzip magic, or a compression method other than deflate) is `UnsupportedFormat`; and output that would exceed the interpreter's maximum string size is `TooLarge`. This is additive (mirroring `FileSystem.read_file_typed` / `FileSystem.IoError`): the plain `decompress`, `inflate`, and `gunzip` keep their string-error `result<string>`.
+
+```luma
+result<string, Compression.Error> decoded = Compression.gunzip_typed(untrusted_bytes)
+match decoded {
+    success(data) { use(data) }
+    failure(Compression.Error.Truncated) { print("incomplete download, retrying") }
+    failure(Compression.Error.UnsupportedFormat) { print("not a gzip file") }
+    failure(_other) { print("could not decompress") }
+}
 ```
 
 ## 7 — Converter
@@ -554,9 +569,12 @@ Transform the representation of a string without changing its type (e.g. Base64,
 | Function                      | Parameter Types | Return Type      | Description                            |
 | ----------------------------- | --------------- | ---------------- | -------------------------------------- |
 | `Encoder.decode_base64(s)`    | `(string)`      | `result<string>` | Decode Base64 string                   |
+| `Encoder.decode_base64_typed(s)` | `(string)`   | `result<string, Encoder.Error>` | Decode Base64; on failure the error is a typed `Encoder.Error` |
 | `Encoder.decode_base64url(s)` | `(string)`      | `result<string>` | Decode URL-safe Base64 string          |
 | `Encoder.decode_text(bytes, encoding)` | `(array<integer>, Encoder.Encoding)` | `result<string>` | Decode raw bytes to a string; fail on out-of-range bytes or an invalid sequence |
+| `Encoder.decode_text_typed(bytes, encoding)` | `(array<integer>, Encoder.Encoding)` | `result<string, Encoder.Error>` | Decode raw bytes; on failure the error is a typed `Encoder.Error` |
 | `Encoder.decode_url(s)`       | `(string)`      | `result<string>` | Decode percent-encoded string          |
+| `Encoder.decode_url_typed(s)` | `(string)`      | `result<string, Encoder.Error>` | Decode percent-encoded string; on failure the error is a typed `Encoder.Error` |
 | `Encoder.encode_base64(s)`    | `(string)`      | `result<string>` | Encode to Base64                       |
 | `Encoder.encode_base64url(s)` | `(string)`      | `result<string>` | Encode to URL-safe Base64 (no padding) |
 | `Encoder.encode_text(text, encoding)` | `(string, Encoder.Encoding)` | `result<array<integer>>` | Encode a string to raw bytes; fail if a codepoint is unrepresentable |
@@ -568,6 +586,8 @@ Transform the representation of a string without changing its type (e.g. Base64,
 array<integer> bytes = Result.unwrap(Encoder.encode_text("café", Encoder.Encoding.Latin1))
 string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))   # "café"
 ```
+
+`Encoder.Error` is a choice type with four variants — `InvalidBase64`, `InvalidPercentEncoding`, `InvalidUtf8`, `InvalidAscii` — that categorises _why_ a decode failed, so a program validating user-supplied encoded input can branch on the cause instead of substring-matching an opaque message. It is surfaced by the opt-in `*_typed` companions — `Encoder.decode_base64_typed`, `Encoder.decode_url_typed`, and `Encoder.decode_text_typed` — which return `result<string, Encoder.Error>`: a bad Base64 alphabet or padding is `InvalidBase64`; a malformed percent-escape is `InvalidPercentEncoding`; bytes that are not valid UTF-8 (or outside the byte domain) under `Utf8`/`Latin1` are `InvalidUtf8`; and bytes outside the ASCII range under `Ascii` are `InvalidAscii`. This is additive (mirroring `DateTime.from_iso_string_typed` / `DateTime.ParseError`): the plain `decode_base64`, `decode_url`, and `decode_text` keep their string-error `result<string>`.
 
 ## 13 — FileSystem
 
@@ -1871,6 +1891,13 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.interval_clamp(iv, x)`          | `(Math.Interval, number)`        | `number`          | Clamp `x` into `[min, max]`                                                      |
 | `Math.interval_length(iv)`            | `(Math.Interval)`                | `number`          | Interval width (`max - min`)                                                     |
 | `Math.intervals_overlap(a, b)`        | `(Math.Interval, Math.Interval)` | `boolean`         | Whether two closed intervals overlap (touching counts)                          |
+| `Math.rect(x, y, width, height)`      | `(number, number, number, number)` | `Math.Rect`     | Build an axis-aligned rectangle (negative extents clamp to 0)                   |
+| `Math.rect_contains(r, x, y)`         | `(Math.Rect, number, number)`    | `boolean`         | Whether point `(x, y)` lies in `r` (half-open: min edges in, max edges out)      |
+| `Math.rect_intersects(a, b)`          | `(Math.Rect, Math.Rect)`         | `boolean`         | Whether two rectangles overlap (touching edges do not count)                    |
+| `Math.rect_intersection(a, b)`        | `(Math.Rect, Math.Rect)`         | `optional<Math.Rect>` | The overlapping rectangle, or `none` when they are disjoint                  |
+| `Math.rect_union(a, b)`               | `(Math.Rect, Math.Rect)`         | `Math.Rect`       | The smallest rectangle containing both                                          |
+| `Math.rect_center(r)`                 | `(Math.Rect)`                    | `Math.Vector2`    | The centre point of the rectangle                                               |
+| `Math.rect_area(r)`                   | `(Math.Rect)`                    | `number`          | Area (`width × height`)                                                          |
 
 `Math.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
 
@@ -1898,6 +1925,17 @@ assert(Math.approximately_equal(rotated.y, 1.0, 0.001))
 ```
 
 `Math.Interval { min: number, max: number }` is a closed numeric range — the general-purpose sibling of `DateTime.Interval`. `Math.interval(min, max)` is a validating constructor that fails when `max < min`, so an `Interval` is always well-formed. It replaces hand-rolled `x >= lo && x <= hi` with the teachable `Math.interval_contains` (closed, so both endpoints count), and adds `Math.interval_clamp` (bound `x` into the range), `Math.interval_length` (`max - min`), and `Math.intervals_overlap` (closed, so touching endpoints count).
+
+`Math.Rect { x: number, y: number, width: number, height: number }` is an axis-aligned rectangle — the 2D analogue of `Math.Interval` for layout, hit-testing, collision, and cropping, where named `.x` / `.y` / `.width` / `.height` are far more teachable than four loose numbers and hand-written overlap arithmetic. `Math.rect(x, y, width, height)` is a total constructor that clamps negative extents to 0 (so a degenerate rectangle is empty rather than inside-out). Edges are half-open (`[x, x+width)`), consistent with DOM hit-testing: `Math.rect_contains(r, x, y)` counts the min edges as inside and the max edges as outside, and `Math.rect_intersects(a, b)` treats merely-touching edges as non-overlapping. The one fallible operation, `Math.rect_intersection(a, b)`, returns `optional<Math.Rect>` — `none` when the rectangles are disjoint. `Math.rect_union` returns the bounding rectangle of both, `Math.rect_center` returns the centre as a `Math.Vector2`, and `Math.rect_area` returns `width × height`. Pure data plus free functions, mirroring `Math.Vector2`.
+
+```luma
+Math.Rect a = Math.rect(0.0, 0.0, 10.0, 10.0)
+Math.Rect b = Math.rect(5.0, 5.0, 10.0, 10.0)
+match Math.rect_intersection(a, b) {
+    case some(overlap) { print("overlap area is ${Math.rect_area(overlap)}") }   # 25.0
+    case none { print("disjoint") }
+}
+```
 
 `Math.Fraction` is a record of exact rational numbers — `numerator: integer` and `denominator: integer` — always stored in lowest terms with a strictly positive denominator (the sign lives in the numerator, and zero is stored as `0/1`). Unlike `number`, a fraction never loses precision, so `1/3 + 1/6` is exactly `1/2`; unlike `Decimal` (base-10), it represents thirds exactly. Like `Decimal`, the type avoids operator overloading: build values with `Math.fraction(numerator, denominator)` (a validating constructor that fails on a zero denominator) and combine them with the `Math.fraction_*` free functions. `add`/`subtract`/`multiply` return a `Math.Fraction` directly and raise a catchable runtime error on int64 overflow (mirroring native integer `+`), while `divide` returns `result<Math.Fraction>` and fails on division by a zero fraction. `Math.fraction_compare` returns the top-level `Ordering` choice for an exhaustive `match`.
 
@@ -2906,11 +2944,15 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.from_hex(hex)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
 | `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
 | `Color.from_hsv(h)`             | `(Color.Hsv)`                               | `Color.Color`        | Convert an HSV (HSB) colour to RGBA (alpha 1.0)                          |
+| `Color.gradient(angle, stops)`  | `(number, array<Color.Stop>)`               | `Color.Gradient`     | Build a multi-stop linear gradient at `angle` degrees                   |
+| `Color.gradient_at(g, position)` | `(Color.Gradient, number)`                 | `Color.Color`        | Sample the interpolated colour at `position` (0–1, clamped)             |
+| `Color.gradient_to_css(g)`      | `(Color.Gradient)`                          | `string`             | Serialise to a CSS `linear-gradient(...)` string                        |
 | `Color.lighten(c, amount)`      | `(Color.Color, number)`                     | `Color.Color`        | Blend toward white by `amount` (clamped to [0, 1])                       |
 | `Color.mix(a, b, t)`            | `(Color.Color, Color.Color, number)`        | `Color.Color`        | Linear blend of `a` and `b` at `t` (clamped to [0, 1])                   |
 | `Color.rgb(r, g, b)`            | `(integer, integer, integer)`               | `result<Color.Color>` | Construct an opaque colour; fail if a channel is outside 0–255         |
 | `Color.rgba(r, g, b, a)`        | `(integer, integer, integer, number)`       | `result<Color.Color>` | Construct with alpha; fail if a channel is out of range or `a` ∉ [0, 1] |
 | `Color.rotate_hue(c, degrees)`  | `(Color.Color, number)`                     | `Color.Color`        | Rotate the hue by `degrees`, preserving saturation, lightness, and alpha |
+| `Color.stop(color, position)`   | `(Color.Color, number)`                     | `Color.Stop`         | Build a gradient colour stop at `position` (0–1, clamped)               |
 | `Color.to_cmyk(c)`              | `(Color.Color)`                             | `Color.Cmyk`         | Convert an RGBA colour to CMYK (alpha dropped)                           |
 | `Color.to_css(c)`               | `(Color.Color)`                             | `string`             | CSS string: `rgb(r, g, b)`, or `rgba(...)` when not fully opaque         |
 | `Color.to_hex(c)`               | `(Color.Color)`                             | `string`             | `#rrggbb`, or `#rrggbbaa` when the colour is not fully opaque            |
@@ -2924,6 +2966,16 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 **`Color.Hsv`** is the hue/saturation/**value** (HSB) sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `value: number` (0–1 ratios). It is the model most colour pickers and palette generators use, so `Color.to_hsv` / `Color.from_hsv` are the natural pair for building tints and shades by "value". Like HSL it drops alpha (`from_hsv` produces an opaque colour), and both spaces serialise through the same RGBA `to_css` path.
 
 **`Color.Cmyk`** is the cyan/magenta/yellow/**key** (black) sibling of `Color.Color` — `cyan: number`, `magenta: number`, `yellow: number`, and `key: number` (all 0–1 ratios). It is the subtractive model used by print production, so `Color.to_cmyk` / `Color.from_cmyk` are the natural pair for previewing how an on-screen colour will separate to ink. Like HSL/HSV it drops alpha (`from_cmyk` produces an opaque colour), and it serialises through the same RGBA `to_css` path.
+
+**`Color.Stop`** (`color: Color.Color`, `position: number`) and **`Color.Gradient`** (`angle: number`, `stops: array<Color.Stop>`) add a multi-stop linear gradient built from the existing `Color.Color` record. `Color.stop(color, position)` pairs a colour with its 0–1 position along the gradient axis (position clamped to [0, 1]), and `Color.gradient(angle, stops)` assembles them at an `angle` in degrees. `Color.gradient_to_css(g)` serialises to a CSS `linear-gradient(...)` string the GraphicalUi web-view already draws — so a gradient background, chart fill, or header can be _computed_ instead of hand-written — and `Color.gradient_at(g, position)` samples the interpolated colour at any 0–1 position (clamping to the first/last stop outside their range, and linearly interpolating each channel and alpha between the two surrounding stops). Pure data plus free functions, reusing `Color.Color` and its CSS-serialisation convention.
+
+```luma
+Color.Color red = Result.unwrap(Color.rgb(255, 0, 0))
+Color.Color blue = Result.unwrap(Color.rgb(0, 0, 255))
+Color.Gradient g = Color.gradient(90.0, [Color.stop(red, 0.0), Color.stop(blue, 1.0)])
+string css = Color.gradient_to_css(g)   # "linear-gradient(90.0deg, rgb(255, 0, 0) 0.0%, rgb(0, 0, 255) 100.0%)"
+Color.Color mid = Color.gradient_at(g, 0.5)   # rgb(128, 0, 128)
+```
 
 ```luma
 Color.Color base = Result.unwrap(Color.from_hex("#0172ad"))

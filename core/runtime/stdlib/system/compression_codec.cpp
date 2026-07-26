@@ -114,6 +114,16 @@ std::string rle_encode(const std::string& input) {
 }
 
 std::optional<std::string> rle_decode(const std::string& input) {
+    auto result = rle_decode_checked(input);
+
+    if (result.is_ok()) {
+        return std::move(result).value();
+    }
+
+    return std::nullopt;
+}
+
+DecodeResult rle_decode_checked(const std::string& input) {
     const auto max_size = ResourceLimits::max_string_size;
     std::string out{};
     std::size_t i{0};
@@ -121,18 +131,18 @@ std::optional<std::string> rle_decode(const std::string& input) {
     while (i < input.size()) {
         // Each entry is exactly one digit (1-9) followed by one character.
         if (input[i] < '1' || input[i] > '9') {
-            return std::nullopt; // malformed: invalid count digit
+            return DecodeResult::err(DecodeError::Corrupt); // invalid count digit
         }
 
         const auto count = static_cast<std::size_t>(input[i] - '0');
         ++i;
 
         if (i >= input.size()) {
-            return std::nullopt; // malformed: missing character after count
+            return DecodeResult::err(DecodeError::Truncated); // missing character after count
         }
 
         if (out.size() + count > max_size) {
-            return std::nullopt; // too large
+            return DecodeResult::err(DecodeError::TooLarge);
         }
 
         out.append(count, input[i]);
@@ -140,7 +150,7 @@ std::optional<std::string> rle_decode(const std::string& input) {
         ++i;
     }
 
-    return out;
+    return DecodeResult::ok(std::move(out));
 }
 
 // === Deflate / Inflate via miniz ===
@@ -182,8 +192,18 @@ std::string deflate_compress(const std::string& input, std::optional<int> level)
 }
 
 std::optional<std::string> deflate_decompress(const std::string& input) {
+    auto result = deflate_decompress_checked(input);
+
+    if (result.is_ok()) {
+        return std::move(result).value();
+    }
+
+    return std::nullopt;
+}
+
+DecodeResult deflate_decompress_checked(const std::string& input) {
     if (input.empty()) {
-        return std::string{};
+        return DecodeResult::ok(std::string{});
     }
 
     const auto max_size = ResourceLimits::max_string_size;
@@ -194,7 +214,7 @@ std::optional<std::string> deflate_decompress(const std::string& input) {
 
     // Negative window bits = raw deflate (no zlib header).
     if (mz_inflateInit2(&stream, -MZ_DEFAULT_WINDOW_BITS) != MZ_OK) {
-        return std::nullopt;
+        return DecodeResult::err(DecodeError::Corrupt);
     }
 
     // Stream the output in fixed chunks, appending as we go.  MZ_NO_FLUSH is
@@ -218,7 +238,7 @@ std::optional<std::string> deflate_decompress(const std::string& input) {
         if (produced > 0) {
             if (out.size() + produced > max_size) {
                 mz_inflateEnd(&stream);
-                return std::nullopt; // exceeds resource limit
+                return DecodeResult::err(DecodeError::TooLarge);
             }
 
             out.append(reinterpret_cast<const char*>(scratch.data()), produced);
@@ -230,17 +250,25 @@ std::optional<std::string> deflate_decompress(const std::string& input) {
 
         if (status != MZ_OK) {
             mz_inflateEnd(&stream);
-            return std::nullopt; // corrupt or truncated input
+
+            // MZ_BUF_ERROR means miniz ran out of input mid-stream (a premature
+            // end), which is a truncation; any other non-OK status is a genuine
+            // data error in the compressed bytes.
+            const DecodeError kind =
+                (status == MZ_BUF_ERROR) ? DecodeError::Truncated : DecodeError::Corrupt;
+
+            return DecodeResult::err(kind);
         }
 
         // Guard against a stalled stream (no input consumed and no output
-        // produced) so malformed data can never spin forever.
+        // produced) so malformed data can never spin forever.  A stall means
+        // the stream needs more input it does not have — a truncated stream.
         const mz_uint64 total_io =
             static_cast<mz_uint64>(stream.total_in) + static_cast<mz_uint64>(stream.total_out);
 
         if (total_io == last_total_io) {
             mz_inflateEnd(&stream);
-            return std::nullopt;
+            return DecodeResult::err(DecodeError::Truncated);
         }
 
         last_total_io = total_io;
@@ -248,7 +276,7 @@ std::optional<std::string> deflate_decompress(const std::string& input) {
 
     mz_inflateEnd(&stream);
 
-    return out;
+    return DecodeResult::ok(std::move(out));
 }
 
 // === Gzip wrapper (RFC 1952) ===
@@ -271,14 +299,29 @@ std::string gzip_compress(const std::string& input, std::optional<int> level) {
 }
 
 std::optional<std::string> gzip_decompress(const std::string& input) {
+    auto result = gzip_decompress_checked(input);
+
+    if (result.is_ok()) {
+        return std::move(result).value();
+    }
+
+    return std::nullopt;
+}
+
+DecodeResult gzip_decompress_checked(const std::string& input) {
     if (input.size() < k_min_gzip_size) {
-        return std::nullopt;
+        return DecodeResult::err(DecodeError::Truncated);
     }
 
     // Verify gzip magic.
     if (static_cast<std::uint8_t>(input[0]) != k_gzip_id1 ||
         static_cast<std::uint8_t>(input[1]) != k_gzip_id2) {
-        return std::nullopt;
+        return DecodeResult::err(DecodeError::UnsupportedFormat);
+    }
+
+    // Only the deflate compression method (CM = 8) is defined by RFC 1952.
+    if (static_cast<std::uint8_t>(input[2]) != k_gzip_cm_deflate) {
+        return DecodeResult::err(DecodeError::UnsupportedFormat);
     }
 
     // Skip header (minimum k_gzip_header_size bytes).
@@ -289,7 +332,7 @@ std::optional<std::string> gzip_decompress(const std::string& input) {
     // FEXTRA.
     if ((flags & k_gzip_flag_fextra) != 0) {
         if (offset + 2 > input.size()) {
-            return std::nullopt;
+            return DecodeResult::err(DecodeError::Truncated);
         }
 
         const auto xlen = static_cast<uint16_t>(static_cast<uint8_t>(input[offset])) |
@@ -322,17 +365,19 @@ std::optional<std::string> gzip_decompress(const std::string& input) {
     }
 
     if (offset + k_gzip_trailer_size > input.size()) {
-        return std::nullopt;
+        return DecodeResult::err(DecodeError::Truncated);
     }
 
     // Compressed data is between offset and input.size() - k_gzip_trailer_size.
     const auto compressed = input.substr(offset, input.size() - offset - k_gzip_trailer_size);
 
-    auto result = deflate_decompress(compressed);
+    auto result = deflate_decompress_checked(compressed);
 
-    if (!result) {
-        return std::nullopt;
+    if (result.is_err()) {
+        return result; // propagate the classified deflate failure
     }
+
+    const std::string& decompressed = result.value();
 
     // Verify CRC32 and ISIZE from the gzip trailer (last k_gzip_trailer_size
     // bytes): CRC32 first, then the original input size, both little-endian.
@@ -341,12 +386,12 @@ std::optional<std::string> gzip_decompress(const std::string& input) {
     const std::uint32_t expected_crc = read_u32_le(trailer + trailer_start);
     const std::uint32_t expected_isize = read_u32_le(trailer + trailer_start + 4);
 
-    if (crc32_hash(*result) != expected_crc) {
-        return std::nullopt; // CRC32 mismatch
+    if (crc32_hash(decompressed) != expected_crc) {
+        return DecodeResult::err(DecodeError::Corrupt); // CRC32 mismatch
     }
 
-    if (static_cast<std::uint32_t>(result->size()) != expected_isize) {
-        return std::nullopt; // size mismatch
+    if (static_cast<std::uint32_t>(decompressed.size()) != expected_isize) {
+        return DecodeResult::err(DecodeError::Corrupt); // size mismatch
     }
 
     return result;

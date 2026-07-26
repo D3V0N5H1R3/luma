@@ -193,6 +193,65 @@ static void test_encoder_decode_text_failures() {
     ASSERT_EVAL_FAILURE("Encoder.decode_text([255], Encoder.Encoding.Utf8)");
 }
 
+// ─── Encoder.Error typed-error slice (decode_*_typed) ───
+
+static void test_encoder_decode_base64_typed_success() {
+    const auto v = eval("Encoder.decode_base64_typed(\"aGVsbG8=\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_string());
+    ASSERT_EQ(v.as_result()->owned_inner->as_string(), "hello");
+}
+
+static void test_encoder_decode_base64_typed_invalid() {
+    const auto v = eval("Encoder.decode_base64_typed(\"@@@not base64@@@\")");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "Error");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "InvalidBase64");
+}
+
+static void test_encoder_decode_url_typed_invalid() {
+    const auto v = eval("Encoder.decode_url_typed(\"%zz\")");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "InvalidPercentEncoding");
+}
+
+static void test_encoder_decode_text_typed_invalid_utf8() {
+    const auto v = eval("Encoder.decode_text_typed([255], Encoder.Encoding.Utf8)");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "InvalidUtf8");
+}
+
+static void test_encoder_decode_text_typed_invalid_ascii() {
+    const auto v = eval("Encoder.decode_text_typed([200], Encoder.Encoding.Ascii)");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "InvalidAscii");
+}
+
+static void test_encoder_decode_text_typed_latin1_success() {
+    const auto v = eval("Encoder.decode_text_typed([104, 105], Encoder.Encoding.Latin1)");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_string());
+    ASSERT_EQ(v.as_result()->owned_inner->as_string(), "hi");
+}
+
+static void test_encoder_typed_module_registration() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Encoder.decode_base64_typed"));
+    ASSERT_TRUE(env->has("Encoder.decode_url_typed"));
+    ASSERT_TRUE(env->has("Encoder.decode_text_typed"));
+}
+
 int main() {
     RUN(test_encoder_base64_decode);
     RUN(test_encoder_base64_encode);
@@ -219,5 +278,12 @@ int main() {
     RUN(test_encoder_text_ascii);
     RUN(test_encoder_text_latin1);
     RUN(test_encoder_decode_text_failures);
+    RUN(test_encoder_decode_base64_typed_success);
+    RUN(test_encoder_decode_base64_typed_invalid);
+    RUN(test_encoder_decode_url_typed_invalid);
+    RUN(test_encoder_decode_text_typed_invalid_utf8);
+    RUN(test_encoder_decode_text_typed_invalid_ascii);
+    RUN(test_encoder_decode_text_typed_latin1_success);
+    RUN(test_encoder_typed_module_registration);
     return SUMMARY();
 }

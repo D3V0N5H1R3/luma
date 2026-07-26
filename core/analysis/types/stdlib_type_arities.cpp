@@ -243,6 +243,16 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // "Interval" type_name — harmless, like the shared "ParseError" records).
         add_record(st, "Math.Interval", field("number", "min"), field("number", "max"));
 
+        // Math.rect() constructs these axis-aligned 2D rectangle records (type_name
+        // "Rect").  x/y are the top-left corner and width/height the extent — all
+        // measurements, so `number`.  Named .x/.y/.width/.height make layout,
+        // hit-testing, collision, and cropping far more teachable than four loose
+        // numbers and hand-written overlap arithmetic (the 2D analogue of
+        // Math.Interval).  Data + free functions, mirroring Math.Vector2; the one
+        // fallible operation (rect_intersection) returns optional<Math.Rect>.
+        add_record(st, "Math.Rect", field("number", "x"), field("number", "y"),
+                   field("number", "width"), field("number", "height"));
+
         // Math.five_number_summary() returns this box-plot record (type_name
         // "FiveNumberSummary"): the five order statistics needed to draw a box
         // plot.  Mirrors Math.Summary; every field is a number.
@@ -316,6 +326,21 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // Sibling of Color.Hsl / Color.Hsv.
         add_record(st, "Color.Cmyk", field("number", "cyan"), field("number", "magenta"),
                    field("number", "yellow"), field("number", "key"));
+
+        // Color.stop() builds these gradient colour-stop records (type_name
+        // "Stop"): a Color.Color paired with its 0–1 position along the gradient
+        // axis.  color is the existing Color.Color record; position is a 0–1 ratio
+        // (a measurement, so number).
+        add_record(st, "Color.Stop", field("Color.Color", "color"), field("number", "position"));
+
+        // Color.gradient() builds these multi-stop linear-gradient records
+        // (type_name "Gradient"): an angle in degrees plus an ordered array of
+        // Color.Stop.  Serialises to a CSS linear-gradient the GraphicalUi
+        // web-view already draws (Color.gradient_to_css), and Color.gradient_at
+        // samples the interpolated colour at any position.  Pure data + free
+        // functions, reusing Color.Color and its CSS-serialisation convention.
+        add_record(st, "Color.Gradient", field("number", "angle"),
+                   field_of(array_ann("Color.Stop"), "stops"));
 
         // Dictionary.to_array emits these key/value pairs at runtime (each a
         // record with type_name "KeyValue").  The `value` field carries the
@@ -708,6 +733,29 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choices.push_back(std::move(ch));
         }
 
+        // ── Encoder.Error ───────────────────────────────
+        // Opt-in typed error surfaced via result<string, Encoder.Error> on the
+        // decode_base64_typed / decode_url_typed / decode_text_typed slice of
+        // Encoder (leaving the string-error decoders untouched).  Lets a learner
+        // validating user-supplied encoded input branch on *why* a decode failed:
+        // a bad base64 alphabet/padding (InvalidBase64), a malformed percent-
+        // escape (InvalidPercentEncoding), bytes that are not valid UTF-8
+        // (InvalidUtf8), or bytes outside the ASCII range (InvalidAscii) — instead
+        // of substring-matching an opaque message.  Variant names must match
+        // make_encoder_error_choice() in
+        // core/runtime/stdlib/system/encoder_module.cpp exactly (PascalCase).
+        // Mirrors the DateTime.ParseError / FileSystem.IoError prototypes.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Error");
+            ch->variants.push_back(ChoiceVariant{.name = "InvalidBase64", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "InvalidPercentEncoding", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "InvalidUtf8", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "InvalidAscii", .fields = {}});
+
+            st.choice_map["Encoder.Error"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
         // ── Http.Method ─────────────────────────────────
         // Variant names must match http_verb_from_method() in
         // core/runtime/stdlib/io/http_module.cpp exactly (PascalCase, one per
@@ -1074,6 +1122,30 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Rle", .fields = {}});
 
             st.choice_map["Compression.Format"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Compression.Error ───────────────────────────
+        // Opt-in typed error surfaced via result<string, Compression.Error> on
+        // the decompress_typed / inflate_typed / gunzip_typed slice of
+        // Compression (leaving the string-error decompress / inflate / gunzip
+        // untouched).  Lets a beginner decompressing an untrusted or truncated
+        // blob tell "corrupt data" (Corrupt) from "wrong container" (Gzip magic
+        // or non-deflate method → UnsupportedFormat) from "stream ended early"
+        // (Truncated) from "output too large" (TooLarge) — instead of substring-
+        // matching an opaque message.  Variant names must match
+        // make_compression_error_choice() in
+        // core/runtime/stdlib/system/compression_module.cpp exactly (PascalCase),
+        // and map 1:1 onto compression::DecodeError.  Mirrors the
+        // FileSystem.IoError / RegularExpression.Error prototypes.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Error");
+            ch->variants.push_back(ChoiceVariant{.name = "Corrupt", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Truncated", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "UnsupportedFormat", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "TooLarge", .fields = {}});
+
+            st.choice_map["Compression.Error"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

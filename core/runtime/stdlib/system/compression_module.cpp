@@ -43,6 +43,43 @@ namespace {
     return arg.as_choice()->variant;
 }
 
+// Wraps a Compression.Error variant name in a ChoiceValue.  Runtime short name
+// "Error" mirrors make_io_error_choice (the type checker resolves the qualified
+// "Compression.Error" separately).  The four variant names must match the
+// ChoiceDeclaration in core/analysis/types/stdlib_type_arities.cpp exactly.
+[[nodiscard]] Value make_compression_error_choice(compression::DecodeError kind) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Error";
+
+    switch (kind) {
+        case compression::DecodeError::Corrupt:
+            cv->variant = "Corrupt";
+            break;
+        case compression::DecodeError::Truncated:
+            cv->variant = "Truncated";
+            break;
+        case compression::DecodeError::UnsupportedFormat:
+            cv->variant = "UnsupportedFormat";
+            break;
+        case compression::DecodeError::TooLarge:
+            cv->variant = "TooLarge";
+            break;
+    }
+
+    return Value{std::move(cv)};
+}
+
+// Turns a codec DecodeResult into a Luma result<string, Compression.Error>:
+// success carries the decoded string, failure carries the typed error choice
+// (rather than the default string message the non-typed decoders produce).
+[[nodiscard]] Value to_typed_result(compression::DecodeResult result) {
+    if (result.is_ok()) {
+        return make_success_value(Value{std::move(result).value()});
+    }
+
+    return Value{ResultValue::failure(make_compression_error_choice(result.error()))};
+}
+
 } // namespace
 
 // === Registration ===
@@ -168,6 +205,43 @@ void register_compression_ns(const EnvPtr& env, bool sandbox) {
             (void)expect_string(args[0], "Compression.compressed_size", loc);
             const auto compressed = compression::deflate_compress(args[0].as_string());
             return Value{static_cast<std::int64_t>(compressed.size())};
+        })
+        // ── Opt-in typed-error decompression slice ───────────────────────────
+        // decompress_typed / inflate_typed / gunzip_typed mirror decompress /
+        // inflate / gunzip but surface a Compression.Error choice (result<string,
+        // Compression.Error>) instead of an opaque string message, so a caller
+        // can match Corrupt vs Truncated vs UnsupportedFormat vs TooLarge without
+        // substring-matching.  The string-error functions are left untouched.
+        .func("decompress_typed", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& data = expect_string(args[0], "Compression.decompress_typed", loc);
+            const auto& variant =
+                require_format_variant(args[1], "Compression.decompress_typed", loc);
+
+            if (variant == "Deflate") {
+                return to_typed_result(compression::deflate_decompress_checked(data));
+            }
+            if (variant == "Gzip") {
+                return to_typed_result(compression::gzip_decompress_checked(data));
+            }
+            if (variant == "Rle") {
+                return to_typed_result(compression::rle_decode_checked(data));
+            }
+
+            throw RuntimeError{
+                std::format("Compression.decompress_typed: unknown Compression.Format '{}'",
+                            variant),
+                loc};
+        })
+        .func("inflate_typed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Compression.inflate_typed", loc);
+            return to_typed_result(compression::deflate_decompress_checked(args[0].as_string()));
+        })
+        .func("gunzip_typed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Compression.gunzip_typed", loc);
+            return to_typed_result(compression::gzip_decompress_checked(args[0].as_string()));
         });
 
     if (!sandbox) {

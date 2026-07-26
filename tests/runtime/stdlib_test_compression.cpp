@@ -435,6 +435,153 @@ static void test_codec_rle_decode_trailing_count() {
     ASSERT_FALSE(luma::compression::rle_decode("3a2").has_value());
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Compression.Error typed-error slice (decompress_typed / inflate_typed /
+// gunzip_typed → result<string, Compression.Error>).  Codec-level *_checked
+// classification plus VM-level choice inspection.
+// ─────────────────────────────────────────────────────────────────────
+
+static void test_codec_deflate_checked_success() {
+    const auto r = luma::compression::deflate_decompress_checked(
+        luma::compression::deflate_compress("hello world"));
+
+    ASSERT_TRUE(r.is_ok());
+    ASSERT_EQ(r.value(), "hello world");
+}
+
+static void test_codec_deflate_checked_corrupt() {
+    // BTYPE == 11 is a reserved deflate block type — a genuine data error.
+    const auto r = luma::compression::deflate_decompress_checked(std::string("\xff\xff\xff", 3));
+
+    ASSERT_TRUE(r.is_err());
+    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Corrupt);
+}
+
+static void test_codec_gzip_checked_truncated_short() {
+    const auto r = luma::compression::gzip_decompress_checked(std::string("\x1f\x8b\x08", 3));
+
+    ASSERT_TRUE(r.is_err());
+    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Truncated);
+}
+
+static void test_codec_gzip_checked_unsupported_magic() {
+    std::string bad(20, '\0');
+    bad[0] = 'P';
+    bad[1] = 'K';
+
+    const auto r = luma::compression::gzip_decompress_checked(bad);
+
+    ASSERT_TRUE(r.is_err());
+    ASSERT_TRUE(r.error() == luma::compression::DecodeError::UnsupportedFormat);
+}
+
+static void test_codec_gzip_checked_unsupported_method() {
+    // Valid gzip magic but a compression method other than deflate (CM != 8).
+    auto gz = luma::compression::gzip_compress("payload data here");
+    gz[2] = static_cast<char>(0x07);
+
+    const auto r = luma::compression::gzip_decompress_checked(gz);
+
+    ASSERT_TRUE(r.is_err());
+    ASSERT_TRUE(r.error() == luma::compression::DecodeError::UnsupportedFormat);
+}
+
+static void test_codec_gzip_checked_corrupt_crc() {
+    auto gz = luma::compression::gzip_compress("payload data here");
+    gz[gz.size() - 8] = static_cast<char>(gz[gz.size() - 8] ^ 0xFF); // corrupt CRC32
+
+    const auto r = luma::compression::gzip_decompress_checked(gz);
+
+    ASSERT_TRUE(r.is_err());
+    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Corrupt);
+}
+
+static void test_codec_rle_checked_corrupt() {
+    const auto r = luma::compression::rle_decode_checked("0a");
+
+    ASSERT_TRUE(r.is_err());
+    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Corrupt);
+}
+
+static void test_codec_rle_checked_truncated() {
+    const auto r = luma::compression::rle_decode_checked("3");
+
+    ASSERT_TRUE(r.is_err());
+    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Truncated);
+}
+
+static void test_compression_gunzip_typed_success() {
+    const auto v = eval(R"(
+        "hello world"
+        |> Compression.gzip()
+        |> Compression.gunzip_typed()
+        |> Result.unwrap()
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "hello world");
+}
+
+static void test_compression_gunzip_typed_unsupported_format() {
+    // 20 bytes with the wrong magic → a typed UnsupportedFormat choice.
+    const auto v = eval(R"(Compression.gunzip_typed("not a gzip stream!!!"))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "Error");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "UnsupportedFormat");
+}
+
+static void test_compression_inflate_typed_success() {
+    const auto v = eval(R"(
+        "typed inflate"
+        |> Compression.deflate()
+        |> Compression.inflate_typed()
+        |> Result.unwrap()
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "typed inflate");
+}
+
+static void test_compression_inflate_typed_corrupt() {
+    const auto v = eval(R"(Compression.inflate_typed("not valid deflate at all"))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "Error");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "Corrupt");
+}
+
+static void test_compression_decompress_typed_rle_corrupt() {
+    const auto v = eval(R"(Compression.decompress_typed("0a", Compression.Format.Rle))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_choice());
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->type_name, "Error");
+    ASSERT_EQ(v.as_result()->owned_inner->as_choice()->variant, "Corrupt");
+}
+
+static void test_compression_decompress_typed_gzip_roundtrip() {
+    const auto v = eval(R"(
+        "roundtrip"
+        |> Compression.compress(Compression.Format.Gzip)
+        |> Compression.decompress_typed(Compression.Format.Gzip)
+        |> Result.unwrap()
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "roundtrip");
+}
+
+static void test_compression_module_has_typed_functions() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Compression.decompress_typed"));
+    ASSERT_TRUE(env->has("Compression.inflate_typed"));
+    ASSERT_TRUE(env->has("Compression.gunzip_typed"));
+}
+
 static void test_compression_gzip_file_with_non_string_path_is_catchable() {
     // Regression: Compression.gzip_file_with called as_string() on its path
     // arguments with no type guard.  When an `any`-typed non-string flows in
@@ -508,5 +655,21 @@ int main() {
     RUN(test_codec_rle_decode_zero_count);
     RUN(test_codec_rle_decode_missing_char);
     RUN(test_codec_rle_decode_trailing_count);
+
+    RUN(test_codec_deflate_checked_success);
+    RUN(test_codec_deflate_checked_corrupt);
+    RUN(test_codec_gzip_checked_truncated_short);
+    RUN(test_codec_gzip_checked_unsupported_magic);
+    RUN(test_codec_gzip_checked_unsupported_method);
+    RUN(test_codec_gzip_checked_corrupt_crc);
+    RUN(test_codec_rle_checked_corrupt);
+    RUN(test_codec_rle_checked_truncated);
+    RUN(test_compression_gunzip_typed_success);
+    RUN(test_compression_gunzip_typed_unsupported_format);
+    RUN(test_compression_inflate_typed_success);
+    RUN(test_compression_inflate_typed_corrupt);
+    RUN(test_compression_decompress_typed_rle_corrupt);
+    RUN(test_compression_decompress_typed_gzip_roundtrip);
+    RUN(test_compression_module_has_typed_functions);
     return SUMMARY();
 }

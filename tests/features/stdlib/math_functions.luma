@@ -1108,3 +1108,66 @@ function void test_math_quat_rotate_vector_on_axis_is_fixed() {
 
     assert(Math.approximately_equal(v.z, 5.0, 0.001), "the axis component is fixed")
 }
+
+# ─── Math.Rect (N03) — axis-aligned 2D rectangle ───
+
+@test
+function void test_math_rect_construct() {
+    Math.Rect r = Math.rect(1.0, 2.0, 30.0, 40.0)
+
+    assert(Math.approximately_equal(r.x, 1.0, 0.001))
+    assert(Math.approximately_equal(r.y, 2.0, 0.001))
+    assert(Math.approximately_equal(r.width, 30.0, 0.001))
+    assert(Math.approximately_equal(r.height, 40.0, 0.001))
+}
+
+@test
+function void test_math_rect_contains_half_open() {
+    Math.Rect r = Math.rect(0.0, 0.0, 10.0, 10.0)
+
+    assert(Math.rect_contains(r, 5.0, 5.0), "an interior point is contained")
+    assert(Math.rect_contains(r, 0.0, 0.0), "the min corner is contained")
+    assert(!Math.rect_contains(r, 10.0, 5.0), "the max edge is excluded (half-open)")
+}
+
+@test
+function void test_math_rect_intersects_and_intersection() {
+    Math.Rect a = Math.rect(0.0, 0.0, 10.0, 10.0)
+    Math.Rect b = Math.rect(5.0, 5.0, 10.0, 10.0)
+
+    assert(Math.rect_intersects(a, b), "overlapping rectangles intersect")
+
+    optional<Math.Rect> overlap = Math.rect_intersection(a, b)
+    match overlap {
+        case some(o) {
+            assert(Math.approximately_equal(o.width, 5.0, 0.001))
+            assert(Math.approximately_equal(o.height, 5.0, 0.001))
+        }
+        case none { assert(false, "expected an overlap") }
+    }
+}
+
+@test
+function void test_math_rect_intersection_disjoint_is_none() {
+    Math.Rect a = Math.rect(0.0, 0.0, 5.0, 5.0)
+    Math.Rect b = Math.rect(10.0, 10.0, 5.0, 5.0)
+
+    assert(!Math.rect_intersects(a, b), "disjoint rectangles do not intersect")
+    assert(Optional.is_none(Math.rect_intersection(a, b)), "disjoint intersection is none")
+}
+
+@test
+function void test_math_rect_union_center_area() {
+    Math.Rect a = Math.rect(0.0, 0.0, 5.0, 5.0)
+    Math.Rect b = Math.rect(10.0, 10.0, 5.0, 5.0)
+
+    Math.Rect u = Math.rect_union(a, b)
+    assert(Math.approximately_equal(u.width, 15.0, 0.001))
+    assert(Math.approximately_equal(u.height, 15.0, 0.001))
+
+    Math.Vector2 c = Math.rect_center(Math.rect(0.0, 0.0, 10.0, 20.0))
+    assert(Math.approximately_equal(c.x, 5.0, 0.001))
+    assert(Math.approximately_equal(c.y, 10.0, 0.001))
+
+    assert(Math.approximately_equal(Math.rect_area(Math.rect(0.0, 0.0, 10.0, 20.0)), 200.0, 0.001))
+}

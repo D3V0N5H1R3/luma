@@ -4,19 +4,27 @@ namespace luma::stdlib::detail {
 
 void register_encoder_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                 const ParamShorthands& p) {
-    append_specs(specs,
-                 {
-                     m.fn("decode_base64", 1, "(value: string)", R::result_string(), {p.string}),
-                     m.fn("decode_base64url", 1, "(value: string)", R::result_string(), {p.string}),
-                     m.fn("decode_text", 2, "(bytes: array<integer>, encoding: Encoder.Encoding)",
-                          R::result_string(), {p.array_any, named::encoding()}),
-                     m.fn("decode_url", 1, "(value: string)", R::result_string(), {p.string}),
-                     m.fn("encode_base64", 1, "(value: string)", R::result_string(), {p.string}),
-                     m.fn("encode_base64url", 1, "(value: string)", R::result_string(), {p.string}),
-                     m.fn("encode_text", 2, "(text: string, encoding: Encoder.Encoding)",
-                          R::result(R::array_integer()), {p.string, named::encoding()}),
-                     m.fn("encode_url", 1, "(value: string)", R::result_string(), {p.string}),
-                 });
+    append_specs(
+        specs,
+        {
+            m.fn("decode_base64", 1, "(value: string)", R::result_string(), {p.string}),
+            m.fn("decode_base64_typed", 1, "(value: string)",
+                 R::result(R::string_type(), named::encoder_error()), {p.string}),
+            m.fn("decode_base64url", 1, "(value: string)", R::result_string(), {p.string}),
+            m.fn("decode_text", 2, "(bytes: array<integer>, encoding: Encoder.Encoding)",
+                 R::result_string(), {p.array_any, named::encoding()}),
+            m.fn("decode_text_typed", 2, "(bytes: array<integer>, encoding: Encoder.Encoding)",
+                 R::result(R::string_type(), named::encoder_error()),
+                 {p.array_any, named::encoding()}),
+            m.fn("decode_url", 1, "(value: string)", R::result_string(), {p.string}),
+            m.fn("decode_url_typed", 1, "(value: string)",
+                 R::result(R::string_type(), named::encoder_error()), {p.string}),
+            m.fn("encode_base64", 1, "(value: string)", R::result_string(), {p.string}),
+            m.fn("encode_base64url", 1, "(value: string)", R::result_string(), {p.string}),
+            m.fn("encode_text", 2, "(text: string, encoding: Encoder.Encoding)",
+                 R::result(R::array_integer()), {p.string, named::encoding()}),
+            m.fn("encode_url", 1, "(value: string)", R::result_string(), {p.string}),
+        });
 }
 
 void register_hash_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
@@ -57,12 +65,17 @@ void register_compression_functions(std::vector<FunctionSpec>& specs, const Modu
                      m.fn("decode_rle", 1, "(data: string)", R::result_string(), {p.string}),
                      m.fn("decompress", 2, "(data: string, format: Compression.Format)",
                           R::result_string(), {p.string, named::compression_format()}),
+                     m.fn("decompress_typed", 2, "(data: string, format: Compression.Format)",
+                          R::result(R::string_type(), named::compression_error()),
+                          {p.string, named::compression_format()}),
                      m.fn("deflate", 1, "(data: string)", R::string_type(), {p.string}),
                      m.fn("deflate_with", 2, "(data: string, level: integer)", R::result_string(),
                           {p.string, p.integer}),
                      m.fn("encode_rle", 1, "(data: string)", R::string_type(), {p.string}),
                      m.fn("gunzip", 1, "(data: string)", R::result_string(), {p.string}),
                      m.fn("gunzip_file", 1, "(path: string)", R::result_string(), {p.string}),
+                     m.fn("gunzip_typed", 1, "(data: string)",
+                          R::result(R::string_type(), named::compression_error()), {p.string}),
                      m.fn("gzip", 1, "(data: string)", R::string_type(), {p.string}),
                      m.fn("gzip_file", 2, "(path: string, output: string)", R::result_string(),
                           {p.string, p.string}),
@@ -71,6 +84,8 @@ void register_compression_functions(std::vector<FunctionSpec>& specs, const Modu
                      m.fn("gzip_with", 2, "(data: string, level: integer)", R::result_string(),
                           {p.string, p.integer}),
                      m.fn("inflate", 1, "(data: string)", R::result_string(), {p.string}),
+                     m.fn("inflate_typed", 1, "(data: string)",
+                          R::result(R::string_type(), named::compression_error()), {p.string}),
                  });
 }
 

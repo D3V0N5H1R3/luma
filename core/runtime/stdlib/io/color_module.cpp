@@ -17,6 +17,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
@@ -474,6 +475,88 @@ struct Cmyk {
     return Rgba{to_channel(r), to_channel(g), to_channel(b), std::clamp(alpha, 0.0, 1.0)};
 }
 
+// ─── Gradients (Color.Stop / Color.Gradient) ───
+
+// Serialise an RGBA colour to the CSS the GraphicalUi web-view accepts, matching
+// the Color.to_css function (rgb() when opaque, rgba() otherwise).
+[[nodiscard]] std::string rgba_to_css(const Rgba& c) {
+    if (c.alpha >= 1.0) {
+        return std::format("rgb({}, {}, {})", c.red, c.green, c.blue);
+    }
+
+    return std::format("rgba({}, {}, {}, {})", c.red, c.green, c.blue, format_number(c.alpha));
+}
+
+// A single gradient colour stop: an RGBA colour at a 0–1 position.
+struct Stop {
+    Rgba color;
+    double position;
+};
+
+// Build a Color.Stop record value (type_name "Stop").  color is a nested
+// Color.Color record; position is clamped to 0–1.
+[[nodiscard]] Value make_stop(const Rgba& color, double position) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Stop";
+    rec->fields.emplace_back("color", make_color(color));
+    rec->fields.emplace_back("position", Value{std::clamp(position, 0.0, 1.0)});
+
+    return Value{std::move(rec)};
+}
+
+// Read a Color.Stop record argument (nested Color.Color plus a 0–1 position).
+// Throws when the value is not a stop-shaped record.
+[[nodiscard]] Stop read_stop(const Value& value, std::string_view func, const SourceLocation& loc) {
+    if (!value.is_record()) {
+        throw RuntimeError{std::string{func} + ": expected a Color.Stop record", loc,
+                           "build one with Color.stop(color, position)"};
+    }
+
+    const auto& rec = value.as_record();
+    const Value* color = rec->find_field("color");
+    const Value* position = rec->find_field("position");
+
+    if (color == nullptr || position == nullptr ||
+        !(position->is_integer() || position->is_number())) {
+        throw RuntimeError{std::string{func} + ": expected a Color.Stop record", loc,
+                           "build one with Color.stop(color, position)"};
+    }
+
+    return Stop{read_color(*color, func, loc), std::clamp(position->to_numeric(), 0.0, 1.0)};
+}
+
+// Read the angle and the (position-sorted) stops of a Color.Gradient record.
+// Throws when the value is not a gradient-shaped record.
+[[nodiscard]] std::vector<Stop> read_gradient_stops(const Value& value, std::string_view func,
+                                                    const SourceLocation& loc, double& angle_out) {
+    if (!value.is_record()) {
+        throw RuntimeError{std::string{func} + ": expected a Color.Gradient record", loc,
+                           "build one with Color.gradient(angle, stops)"};
+    }
+
+    const auto& rec = value.as_record();
+    const Value* angle = rec->find_field("angle");
+    const Value* stops = rec->find_field("stops");
+
+    if (angle == nullptr || !(angle->is_integer() || angle->is_number()) || stops == nullptr ||
+        !stops->is_array()) {
+        throw RuntimeError{std::string{func} + ": expected a Color.Gradient record", loc,
+                           "build one with Color.gradient(angle, stops)"};
+    }
+
+    angle_out = angle->to_numeric();
+
+    std::vector<Stop> parsed;
+    for (const auto& element : *stops->as_array()->elements) {
+        parsed.push_back(read_stop(element, func, loc));
+    }
+
+    std::stable_sort(parsed.begin(), parsed.end(),
+                     [](const Stop& a, const Stop& b) { return a.position < b.position; });
+
+    return parsed;
+}
+
 } // namespace
 
 void register_color_ns(const EnvPtr& env) {
@@ -687,6 +770,91 @@ void register_color_ns(const EnvPtr& env) {
 
             // Preserve the original alpha through the round-trip (HSL drops it).
             return make_color(hsl_to_rgb(hsl, c.alpha));
+        })
+        // ── Gradients (Color.Stop / Color.Gradient) ──────────────────────────
+        // A multi-stop linear gradient that serialises to the CSS linear-gradient
+        // the GraphicalUi web-view already draws (gradient_to_css), and can be
+        // sampled at any 0–1 position (gradient_at).  Pure data + free functions,
+        // reusing Color.Color and its CSS serialisation.
+        .func("stop", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto color = read_color(args[0], "Color.stop", loc);
+            const double position = expect_numeric(args[1], "Color.stop", loc);
+
+            return make_stop(color, position);
+        })
+        .func("gradient", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const double angle = expect_numeric(args[0], "Color.gradient", loc);
+            const auto& stops = expect_array(args[1], "Color.gradient", loc);
+
+            // Validate each element is a Color.Stop (throws otherwise), then store
+            // the array verbatim so the record round-trips.
+            for (const auto& element : *stops->elements) {
+                (void)read_stop(element, "Color.gradient", loc);
+            }
+
+            auto rec = std::make_shared<RecordValue>();
+            rec->type_name = "Gradient";
+            rec->fields.emplace_back("angle", Value{angle});
+            rec->fields.emplace_back("stops", args[1]);
+
+            return Value{std::move(rec)};
+        })
+        .func("gradient_to_css", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            double angle = 0.0;
+            const auto stops = read_gradient_stops(args[0], "Color.gradient_to_css", loc, angle);
+
+            std::string out = std::format("linear-gradient({}deg", format_number(angle));
+
+            for (const auto& stop : stops) {
+                out += std::format(", {} {}%", rgba_to_css(stop.color),
+                                   format_number(stop.position * 100.0));
+            }
+
+            out += ")";
+
+            return Value{std::move(out)};
+        })
+        .func("gradient_at", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            double angle = 0.0;
+            const auto stops = read_gradient_stops(args[0], "Color.gradient_at", loc, angle);
+            const double query =
+                std::clamp(expect_numeric(args[1], "Color.gradient_at", loc), 0.0, 1.0);
+
+            // An empty gradient samples to transparent black; a single stop is a
+            // solid colour everywhere.
+            if (stops.empty()) {
+                return make_color(Rgba{0, 0, 0, 0.0});
+            }
+            if (query <= stops.front().position) {
+                return make_color(stops.front().color);
+            }
+            if (query >= stops.back().position) {
+                return make_color(stops.back().color);
+            }
+
+            // Find the enclosing [lo, hi] segment and lerp within it.
+            for (std::size_t i = 1; i < stops.size(); ++i) {
+                const Stop& hi = stops[i];
+                if (query > hi.position) {
+                    continue;
+                }
+
+                const Stop& lo = stops[i - 1];
+                const double span = hi.position - lo.position;
+                const double t = span > 0.0 ? (query - lo.position) / span : 0.0;
+
+                return make_color(Rgba{lerp_channel(lo.color.red, hi.color.red, t),
+                                       lerp_channel(lo.color.green, hi.color.green, t),
+                                       lerp_channel(lo.color.blue, hi.color.blue, t),
+                                       (lo.color.alpha * (1.0 - t)) + (hi.color.alpha * t)});
+            }
+
+            // Unreachable — query is strictly between the first and last stop.
+            return make_color(stops.back().color);
         });
 }
 

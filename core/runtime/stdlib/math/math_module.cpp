@@ -103,6 +103,64 @@ struct IntervalBounds {
     return IntervalBounds{.min = field("min"), .max = field("max")};
 }
 
+// A Math.Rect record's fields, as doubles.  width/height are non-negative (the
+// constructor clamps them).
+struct RectBounds {
+    double x;
+    double y;
+    double width;
+    double height;
+};
+
+// Build a Math.Rect record value (type_name "Rect").  width/height are clamped to
+// be non-negative so a degenerate rectangle is empty rather than inside-out,
+// keeping contains/intersects/area well-defined (the beginner-friendly "clamp
+// over throw" convention, like String.truncate).
+[[nodiscard]] Value make_rect(const RectBounds& r) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Rect";
+    rec->fields.emplace_back("x", Value{r.x});
+    rec->fields.emplace_back("y", Value{r.y});
+    rec->fields.emplace_back("width", Value{std::max(r.width, 0.0)});
+    rec->fields.emplace_back("height", Value{std::max(r.height, 0.0)});
+
+    return Value{std::move(rec)};
+}
+
+// Build a Math.Vector2 record value (type_name "Vector2"), matching make_vec2 in
+// math_vectors.cpp — used by Math.rect_center.
+[[nodiscard]] Value make_rect_vec2(double x, double y) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Vector2";
+    rec->fields.emplace_back("x", Value{x});
+    rec->fields.emplace_back("y", Value{y});
+
+    return Value{std::move(rec)};
+}
+
+// Read a Math.Rect record's x/y/width/height fields.  Throws when the argument is
+// not a record; missing fields default to 0.0.  width/height are clamped to be
+// non-negative so a hand-built record can never carry inside-out extents into a
+// derivation.  Mirrors read_interval.
+[[nodiscard]] RectBounds read_rect(const Value& value, std::string_view func,
+                                   const SourceLocation& loc) {
+    if (!value.is_record()) {
+        throw RuntimeError{std::string{func} + ": expected a Math.Rect record", loc,
+                           "build one with Math.rect(x, y, width, height)"};
+    }
+
+    const auto& rec = value.as_record();
+    const auto field = [&rec](std::string_view name) -> double {
+        const Value* v = rec->find_field(name);
+        return v != nullptr ? v->to_numeric() : 0.0;
+    };
+
+    return RectBounds{.x = field("x"),
+                      .y = field("y"),
+                      .width = std::max(field("width"), 0.0),
+                      .height = std::max(field("height"), 0.0)};
+}
+
 } // namespace
 
 void register_math_ns(const EnvPtr& env) {
@@ -359,6 +417,85 @@ void register_math_ns(const EnvPtr& env) {
             // Closed intervals, consistent with interval_contains: touching
             // endpoints (a.max == b.min) count as overlapping at that point.
             return Value{a.min <= b.max && b.min <= a.max};
+        })
+        // ── Math.Rect ────────────────────────────────────────────────────────
+        // An axis-aligned rectangle { x, y, width, height }, the 2D analogue of
+        // Math.Interval.  A total constructor (dimensions clamped non-negative)
+        // plus contains/intersects/intersection/union/center/area, so beginners
+        // get named layout and hit-testing instead of hand-rolled overlap
+        // arithmetic.  Edges are half-open ([x, x+width)) — consistent with
+        // DOMRect hit-testing — so a zero-size rect contains nothing.
+        .func("rect", 4)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const double x = expect_numeric(args[0], "Math.rect", loc);
+            const double y = expect_numeric(args[1], "Math.rect", loc);
+            const double width = expect_numeric(args[2], "Math.rect", loc);
+            const double height = expect_numeric(args[3], "Math.rect", loc);
+
+            return make_rect(RectBounds{.x = x, .y = y, .width = width, .height = height});
+        })
+        .func("rect_contains", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto r = read_rect(args[0], "Math.rect_contains", loc);
+            const double px = expect_numeric(args[1], "Math.rect_contains", loc);
+            const double py = expect_numeric(args[2], "Math.rect_contains", loc);
+
+            // Half-open: the min edges are inside, the max edges are outside.
+            return Value{px >= r.x && px < r.x + r.width && py >= r.y && py < r.y + r.height};
+        })
+        .func("rect_intersects", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_rect(args[0], "Math.rect_intersects", loc);
+            const auto b = read_rect(args[1], "Math.rect_intersects", loc);
+
+            // Half-open overlap: touching edges (a.x + a.width == b.x) do not
+            // count as intersecting, consistent with rect_contains.
+            return Value{a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height &&
+                         b.y < a.y + a.height};
+        })
+        .func("rect_intersection", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_rect(args[0], "Math.rect_intersection", loc);
+            const auto b = read_rect(args[1], "Math.rect_intersection", loc);
+
+            const double left = std::max(a.x, b.x);
+            const double top = std::max(a.y, b.y);
+            const double right = std::min(a.x + a.width, b.x + b.width);
+            const double bottom = std::min(a.y + a.height, b.y + b.height);
+
+            // No positive-area overlap → none.  The one fallible operation
+            // returns optional<Math.Rect> (none is Value{NullValue{}}).
+            if (right <= left || bottom <= top) {
+                return Value{NullValue{}};
+            }
+
+            return make_rect(
+                RectBounds{.x = left, .y = top, .width = right - left, .height = bottom - top});
+        })
+        .func("rect_union", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_rect(args[0], "Math.rect_union", loc);
+            const auto b = read_rect(args[1], "Math.rect_union", loc);
+
+            const double left = std::min(a.x, b.x);
+            const double top = std::min(a.y, b.y);
+            const double right = std::max(a.x + a.width, b.x + b.width);
+            const double bottom = std::max(a.y + a.height, b.y + b.height);
+
+            return make_rect(
+                RectBounds{.x = left, .y = top, .width = right - left, .height = bottom - top});
+        })
+        .func("rect_center", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto r = read_rect(args[0], "Math.rect_center", loc);
+
+            return make_rect_vec2(r.x + r.width / 2.0, r.y + r.height / 2.0);
+        })
+        .func("rect_area", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto r = read_rect(args[0], "Math.rect_area", loc);
+
+            return Value{r.width * r.height};
         });
 
     register_math_analysis(env);
