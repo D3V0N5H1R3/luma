@@ -112,6 +112,8 @@ void register_regular_expression_functions(std::vector<FunctionSpec>& specs, con
                      m.fn("find_all", 2, "(text: string, pattern: string)",
                           R::result(R::array(named::match())), {p.string, p.string}),
                      m.fn("is_valid", 1, "(pattern: string)", R::boolean_type(), {p.string}),
+                     m.fn("compile_typed", 1, "(pattern: string)",
+                          R::result(R::string_type(), named::regex_error()), {p.string}),
                      m.fn("matches", 2, "(text: string, pattern: string)", R::result_boolean(),
                           {p.string, p.string}),
                      m.fn("replace", 3, "(text: string, pattern: string, replacement: string)",

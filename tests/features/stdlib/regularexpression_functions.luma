@@ -320,3 +320,68 @@ function void test_regularexpression_oversized_pattern() {
     assert(RegularExpression.is_valid(within_limit))
 }
 
+
+# ═══════════════════════════════════════════════════════════
+# RegularExpression.Error (opt-in typed errors via compile_typed)
+# ═══════════════════════════════════════════════════════════
+
+# Exhaustive match over every RegularExpression.Error variant, doubling as a check
+# that the choice is fully registered, exhaustively matchable, and usable as a
+# parameter type annotation. The InvalidSyntax payload is bound but unused (hence
+# the leading underscore).
+function string regex_error_label(RegularExpression.Error e) {
+    return match e {
+        case RegularExpression.Error.InvalidSyntax(_message) { "invalid_syntax" }
+        case RegularExpression.Error.Unsafe                  { "unsafe" }
+        case RegularExpression.Error.TooLarge                { "too_large" }
+    }
+}
+
+function string compile_typed_label(result<string, RegularExpression.Error> r) {
+    return match r {
+        success(_pattern) { "ok" }
+        failure(e)        { regex_error_label(e) }
+    }
+}
+
+@test
+function void test_regex_compile_typed_valid_returns_pattern() {
+    result<string, RegularExpression.Error> r = RegularExpression.compile_typed("[0-9]+")
+
+    assert(Result.is_success(r), "a safe well-formed pattern compiles")
+    assert(Result.unwrap(r) == "[0-9]+", "the validated pattern is returned on success")
+}
+
+@test
+function void test_regex_compile_typed_invalid_syntax() {
+    result<string, RegularExpression.Error> r = RegularExpression.compile_typed("(unclosed")
+
+    assert(Result.is_failure(r), "an unbalanced group fails")
+    assert(compile_typed_label(r) == "invalid_syntax", "a typo classifies as InvalidSyntax")
+}
+
+@test
+function void test_regex_compile_typed_unsafe() {
+    result<string, RegularExpression.Error> r = RegularExpression.compile_typed("(a+)+")
+
+    assert(Result.is_failure(r), "a nested quantifier is rejected")
+    assert(compile_typed_label(r) == "unsafe", "a ReDoS-prone pattern classifies as Unsafe")
+}
+
+@test
+function void test_regex_compile_typed_carries_message() {
+    # The InvalidSyntax payload carries the engine's non-empty diagnostic message.
+    result<string, RegularExpression.Error> r = RegularExpression.compile_typed("(unclosed")
+
+    string detail = match r {
+        success(_pattern) { "" }
+        failure(e) {
+            match e {
+                case RegularExpression.Error.InvalidSyntax(message) { message }
+                else { "" }
+            }
+        }
+    }
+
+    assert(String.length(detail) > 0, "InvalidSyntax carries a diagnostic message")
+}

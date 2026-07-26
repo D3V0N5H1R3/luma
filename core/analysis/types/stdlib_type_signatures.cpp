@@ -146,6 +146,12 @@ namespace {
             if (desc.named_type == "Socket.IpAddress") {
                 return TypeInfo::make_named(K::Choice, "Socket.IpAddress");
             }
+            if (desc.named_type == "Socket.Error") {
+                return TypeInfo::make_named(K::Choice, "Socket.Error");
+            }
+            if (desc.named_type == "RegularExpression.Error") {
+                return TypeInfo::make_named(K::Choice, "RegularExpression.Error");
+            }
             if (desc.named_type == "Compression.Format") {
                 return TypeInfo::make_named(K::Choice, "Compression.Format");
             }

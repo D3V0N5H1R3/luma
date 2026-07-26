@@ -158,6 +158,76 @@ struct Polar {
     return Vec3{x->to_numeric(), y->to_numeric(), z->to_numeric()};
 }
 
+// A quaternion (w scalar part, x/y/z vector part).  All components are Luma
+// `number`.
+struct Quat {
+    double w;
+    double x;
+    double y;
+    double z;
+};
+
+// Build a Math.Quaternion record value (type_name "Quaternion").
+[[nodiscard]] Value make_quat(const Quat& q) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Quaternion";
+    rec->fields.emplace_back("w", Value{q.w});
+    rec->fields.emplace_back("x", Value{q.x});
+    rec->fields.emplace_back("y", Value{q.y});
+    rec->fields.emplace_back("z", Value{q.z});
+
+    return Value{std::move(rec)};
+}
+
+// Read a Math.Quaternion argument.  Throws when the value is not a
+// quaternion-shaped record.
+[[nodiscard]] Quat read_quat(const Value& value, std::string_view func, const SourceLocation& loc) {
+    const auto invalid = [&] {
+        throw RuntimeError{std::string{func} + ": expected a Math.Quaternion record", loc,
+                           "build one with Math.quaternion(w, x, y, z)"};
+    };
+
+    if (!value.is_record()) {
+        invalid();
+    }
+
+    const auto& rec = value.as_record();
+    const Value* w = rec->find_field("w");
+    const Value* x = rec->find_field("x");
+    const Value* y = rec->find_field("y");
+    const Value* z = rec->find_field("z");
+
+    const auto numeric = [](const Value* v) {
+        return v != nullptr && (v->is_integer() || v->is_number());
+    };
+
+    if (!numeric(w) || !numeric(x) || !numeric(y) || !numeric(z)) {
+        invalid();
+    }
+
+    return Quat{w->to_numeric(), x->to_numeric(), y->to_numeric(), z->to_numeric()};
+}
+
+// Hamilton product a·b (quaternion multiplication is not commutative).
+[[nodiscard]] Quat quat_mul(const Quat& a, const Quat& b) {
+    return Quat{(a.w * b.w) - (a.x * b.x) - (a.y * b.y) - (a.z * b.z),
+                (a.w * b.x) + (a.x * b.w) + (a.y * b.z) - (a.z * b.y),
+                (a.w * b.y) - (a.x * b.z) + (a.y * b.w) + (a.z * b.x),
+                (a.w * b.z) + (a.x * b.y) - (a.y * b.x) + (a.z * b.w)};
+}
+
+// Unit-normalise a quaternion.  A zero quaternion has no direction; return it
+// unchanged rather than dividing by zero (mirrors vec3_normalize's leniency).
+[[nodiscard]] Quat quat_unit(const Quat& q) {
+    const double len = std::sqrt((q.w * q.w) + (q.x * q.x) + (q.y * q.y) + (q.z * q.z));
+
+    if (len == 0.0) {
+        return q;
+    }
+
+    return Quat{q.w / len, q.x / len, q.y / len, q.z / len};
+}
+
 // A 2×2 matrix in row-major order.  Every entry is a Luma `number`.
 struct Mat2 {
     double m00, m01;
@@ -371,6 +441,70 @@ void register_math_vectors(const EnvPtr& env) {
             }
 
             return make_vec3(Vec3{a.x / len, a.y / len, a.z / len});
+        })
+        // ── Math.Quaternion ──────────────────────────────────────────────────
+        // A gimbal-lock-free 3D rotation primitive beside Math.Vector3/Matrix3.
+        .func("quaternion", 4)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto w = expect_numeric(args[0], "Math.quaternion", loc);
+            const auto x = expect_numeric(args[1], "Math.quaternion", loc);
+            const auto y = expect_numeric(args[2], "Math.quaternion", loc);
+            const auto z = expect_numeric(args[3], "Math.quaternion", loc);
+
+            return make_quat(Quat{w, x, y, z});
+        })
+        // Build a unit rotation quaternion from an axis and an angle (radians).
+        // The axis is normalised first, so any non-zero axis works; a zero axis
+        // yields the identity rotation.
+        .func("quat_from_axis_angle", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto axis = read_vec3(args[0], "Math.quat_from_axis_angle", loc);
+            const auto angle = expect_numeric(args[1], "Math.quat_from_axis_angle", loc);
+
+            const double len = std::sqrt((axis.x * axis.x) + (axis.y * axis.y) + (axis.z * axis.z));
+
+            if (len == 0.0) {
+                return make_quat(Quat{1.0, 0.0, 0.0, 0.0});
+            }
+
+            const double half = angle * 0.5;
+            const double s = std::sin(half) / len;
+
+            return make_quat(Quat{std::cos(half), axis.x * s, axis.y * s, axis.z * s});
+        })
+        // Compose two rotations (Hamilton product a·b — not commutative).
+        .func("quat_multiply", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_quat(args[0], "Math.quat_multiply", loc);
+            const auto b = read_quat(args[1], "Math.quat_multiply", loc);
+
+            return make_quat(quat_mul(a, b));
+        })
+        .func("quat_normalize", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto q = read_quat(args[0], "Math.quat_normalize", loc);
+
+            return make_quat(quat_unit(q));
+        })
+        // Rotate a Math.Vector3 by a quaternion.  The quaternion is normalised
+        // first, so a slightly denormalised rotation still behaves.  Uses
+        // v' = v + 2w(u×v) + 2(u×(u×v)) with u the vector part, avoiding an
+        // explicit inverse.
+        .func("quat_rotate_vector", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto q = quat_unit(read_quat(args[0], "Math.quat_rotate_vector", loc));
+            const auto v = read_vec3(args[1], "Math.quat_rotate_vector", loc);
+
+            const Vec3 u{q.x, q.y, q.z};
+
+            // t = 2 * (u × v)
+            const Vec3 t{2.0 * ((u.y * v.z) - (u.z * v.y)), 2.0 * ((u.z * v.x) - (u.x * v.z)),
+                         2.0 * ((u.x * v.y) - (u.y * v.x))};
+
+            // v' = v + w*t + (u × t)
+            return make_vec3(Vec3{v.x + (q.w * t.x) + ((u.y * t.z) - (u.z * t.y)),
+                                  v.y + (q.w * t.y) + ((u.z * t.x) - (u.x * t.z)),
+                                  v.z + (q.w * t.z) + ((u.x * t.y) - (u.y * t.x))});
         })
         // ── Math.Matrix2 ─────────────────────────────────────────────────────
         .func("matrix2", 4)

@@ -198,6 +198,86 @@ namespace {
                                           std::move(path), std::move(expires), secure, http_only));
 }
 
+// Build an Http.MediaType record.  The short runtime type_name "MediaType"
+// matches the "Http.MediaType" record registered in stdlib_type_arities.cpp.
+[[nodiscard]] Value make_media_type(std::string type, std::string subtype,
+                                    std::shared_ptr<DictionaryValue> parameters) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "MediaType";
+    rec->fields.emplace_back("type", Value{std::move(type)});
+    rec->fields.emplace_back("subtype", Value{std::move(subtype)});
+    rec->fields.emplace_back("parameters", Value{std::move(parameters)});
+
+    return Value{std::move(rec)};
+}
+
+// Strip one layer of surrounding double quotes from a parameter value (RFC 9110
+// quoted-string), leaving unquoted values untouched.
+[[nodiscard]] std::string unquote(std::string_view s) {
+    if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
+        return std::string{s.substr(1, s.size() - 2)};
+    }
+
+    return std::string{s};
+}
+
+// Parse a Content-Type header value ("type/subtype; key=value; ...") into an
+// Http.MediaType.  `type`/`subtype` are lower-cased (RFC 9110 case-insensitive)
+// and parameter keys lower-cased; parameter values keep their case (a quoted
+// value is unquoted).  Lenient on the parameter list (a malformed parameter is
+// skipped) but fails when the essential "type/subtype" form is absent.
+[[nodiscard]] Value parse_media_type_header(const std::string& header) {
+    // The media type is everything before the first ';'; the remainder is the
+    // parameter list.
+    const auto semi = header.find(';');
+    const auto essence = trim(std::string_view{header}.substr(0, semi));
+
+    const auto slash = essence.find('/');
+
+    if (slash == std::string::npos) {
+        return make_failure_value(
+            error_msg("Http", "parse_media_type", "expected a 'type/subtype' media type"));
+    }
+
+    std::string type = to_lower(trim(std::string_view{essence}.substr(0, slash)));
+    std::string subtype = to_lower(trim(std::string_view{essence}.substr(slash + 1)));
+
+    if (type.empty() || subtype.empty()) {
+        return make_failure_value(
+            error_msg("Http", "parse_media_type", "the type and subtype must not be empty"));
+    }
+
+    auto parameters = std::make_shared<DictionaryValue>();
+
+    std::size_t pos = semi == std::string::npos ? header.size() : semi + 1;
+
+    while (pos < header.size()) {
+        const auto next = header.find(';', pos);
+        const auto end = next == std::string::npos ? header.size() : next;
+        const std::string_view segment{header.data() + pos, end - pos};
+
+        const auto eq = segment.find('=');
+
+        if (eq != std::string_view::npos) {
+            std::string key = to_lower(trim(segment.substr(0, eq)));
+            std::string value = unquote(trim(segment.substr(eq + 1)));
+
+            if (!key.empty()) {
+                parameters->set(std::move(key), Value{std::move(value)});
+            }
+        }
+
+        if (next == std::string::npos) {
+            break;
+        }
+
+        pos = next + 1;
+    }
+
+    return make_success_value(
+        make_media_type(std::move(type), std::move(subtype), std::move(parameters)));
+}
+
 } // anonymous namespace
 
 void register_http_parsing(const EnvPtr& env) {
@@ -265,6 +345,16 @@ void register_http_parsing(const EnvPtr& env) {
             const auto& header = expect_string(args[0], "Http.parse_cookie", loc);
 
             return parse_cookie_header(header);
+        })
+        // Http.parse_media_type(header) -> result<Http.MediaType>
+        // Parse a Content-Type header value into a structured record so "is this
+        // JSON?" or reading the charset no longer needs manual string splitting.
+        // Mirrors Http.parse_url / Http.parse_cookie.
+        .func("parse_media_type", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& header = expect_string(args[0], "Http.parse_media_type", loc);
+
+            return parse_media_type_header(header);
         })
         // Http.cookie_header(cookie) -> string
         .func("cookie_header", 1)

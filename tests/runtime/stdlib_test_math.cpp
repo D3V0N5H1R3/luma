@@ -1055,6 +1055,86 @@ LUMA_TEST(math_matrix3_identity_multiply_transform) {
     ASSERT_NEAR(prod.as_record()->find_field("m11")->as_number(), 2.0, 1e-9);
 }
 
+// --- Math.Quaternion (N06) ---
+
+LUMA_TEST(math_quaternion_constructor) {
+    const auto q = eval("Math.quaternion(1.0, 2.0, 3.0, 4.0)");
+    ASSERT_TRUE(q.is_record());
+    ASSERT_EQ(q.as_record()->type_name, std::string{"Quaternion"});
+    ASSERT_NEAR(q.as_record()->find_field("w")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("x")->as_number(), 2.0, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("y")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("z")->as_number(), 4.0, 1e-9);
+}
+
+LUMA_TEST(math_quat_from_axis_angle_is_unit) {
+    // A 90-degree rotation about Z: w = cos(45°), z = sin(45°).
+    const auto q = eval("Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 1.0), Math.pi / 2.0)");
+    ASSERT_EQ(q.as_record()->type_name, std::string{"Quaternion"});
+    ASSERT_NEAR(q.as_record()->find_field("w")->as_number(), 0.7071067811865476, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("y")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("z")->as_number(), 0.7071067811865476, 1e-9);
+}
+
+LUMA_TEST(math_quat_from_axis_angle_normalizes_axis) {
+    // A non-unit axis (0,0,2) yields the same rotation as the unit axis.
+    const auto q = eval("Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 2.0), Math.pi / 2.0)");
+    ASSERT_NEAR(q.as_record()->find_field("z")->as_number(), 0.7071067811865476, 1e-9);
+
+    // A zero axis yields the identity rotation.
+    const auto id = eval("Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 0.0), 1.0)");
+    ASSERT_NEAR(id.as_record()->find_field("w")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(id.as_record()->find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(id.as_record()->find_field("z")->as_number(), 0.0, 1e-9);
+}
+
+LUMA_TEST(math_quat_multiply_is_hamilton_product) {
+    // i * j = k in quaternion algebra: (0,1,0,0) * (0,0,1,0) = (0,0,0,1).
+    const auto q = eval("Math.quat_multiply(Math.quaternion(0.0, 1.0, 0.0, 0.0), "
+                        "Math.quaternion(0.0, 0.0, 1.0, 0.0))");
+    ASSERT_NEAR(q.as_record()->find_field("w")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("y")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("z")->as_number(), 1.0, 1e-9);
+}
+
+LUMA_TEST(math_quat_normalize_unit_length) {
+    const auto q = eval("Math.quat_normalize(Math.quaternion(1.0, 1.0, 1.0, 1.0))");
+    // Each component of a normalised (1,1,1,1) is 0.5.
+    ASSERT_NEAR(q.as_record()->find_field("w")->as_number(), 0.5, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("x")->as_number(), 0.5, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("y")->as_number(), 0.5, 1e-9);
+    ASSERT_NEAR(q.as_record()->find_field("z")->as_number(), 0.5, 1e-9);
+
+    // A zero quaternion has no direction; it is returned unchanged.
+    const auto zero = eval("Math.quat_normalize(Math.quaternion(0.0, 0.0, 0.0, 0.0))");
+    ASSERT_NEAR(zero.as_record()->find_field("w")->as_number(), 0.0, 1e-9);
+}
+
+LUMA_TEST(math_quat_rotate_vector) {
+    // Rotating the unit-x vector 90 degrees about Z yields the unit-y vector.
+    const auto v = eval("Math.quat_rotate_vector("
+                        "Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 1.0), Math.pi / 2.0), "
+                        "Math.vector3(1.0, 0.0, 0.0))");
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Vector3"});
+    ASSERT_NEAR(v.as_record()->find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("y")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("z")->as_number(), 0.0, 1e-9);
+
+    // A point on the rotation axis is unchanged by the rotation.
+    const auto axis = eval("Math.quat_rotate_vector("
+                           "Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 1.0), Math.pi / 2.0), "
+                           "Math.vector3(0.0, 0.0, 5.0))");
+    ASSERT_NEAR(axis.as_record()->find_field("z")->as_number(), 5.0, 1e-9);
+}
+
+LUMA_TEST(math_quat_rejects_non_record) {
+    ASSERT_THROWS(eval("Math.quat_multiply(42, Math.quaternion(1.0, 0.0, 0.0, 0.0))"));
+    ASSERT_THROWS(eval("Math.quat_normalize(\"not a quaternion\")"));
+    ASSERT_THROWS(eval("Math.quat_rotate_vector(Math.quaternion(1.0, 0.0, 0.0, 0.0), 42)"));
+}
+
 int main() {
     LUMA_RUN_ALL();
 }

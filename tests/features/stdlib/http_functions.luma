@@ -577,3 +577,42 @@ function void test_http_get_typed_ssrf_private_range_is_blocked() {
     assert(get_typed_label(r1) == "blocked", "a 10.0.0.0/8 address classifies as Blocked")
     assert(get_typed_label(r2) == "blocked", "a 192.168.0.0/16 address classifies as Blocked")
 }
+
+# ═══════════════════════════════════════════════════════════
+# Http.MediaType (parsed Content-Type via Http.parse_media_type)
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_http_parse_media_type_basic() {
+    Http.MediaType mt = Result.unwrap(Http.parse_media_type("text/html; charset=utf-8"))
+
+    assert(mt.type == "text", "the type half is parsed")
+    assert(mt.subtype == "html", "the subtype half is parsed")
+    assert(Dictionary.get_or(mt.parameters, "charset", "?") == "utf-8", "the charset parameter is read")
+}
+
+@test
+function void test_http_parse_media_type_lowercases_essence() {
+    Http.MediaType mt = Result.unwrap(Http.parse_media_type("Application/JSON; Charset=UTF-8"))
+
+    assert(mt.type == "application", "the type is lower-cased (RFC 9110 case-insensitive)")
+    assert(mt.subtype == "json", "the subtype is lower-cased")
+    assert(Dictionary.get_or(mt.parameters, "charset", "?") == "UTF-8",
+           "the parameter key is lower-cased but the value keeps its case")
+}
+
+@test
+function void test_http_parse_media_type_no_parameters() {
+    Http.MediaType mt = Result.unwrap(Http.parse_media_type("image/png"))
+
+    assert(mt.type == "image", "the type is parsed")
+    assert(mt.subtype == "png", "the subtype is parsed")
+    assert(Dictionary.is_empty(mt.parameters), "there are no parameters")
+}
+
+@test
+function void test_http_parse_media_type_malformed_fails() {
+    result<Http.MediaType> r = Http.parse_media_type("not-a-media-type")
+
+    assert(Result.is_failure(r), "a value without a type/subtype slash fails")
+}

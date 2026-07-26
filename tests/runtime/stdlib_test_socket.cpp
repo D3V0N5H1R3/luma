@@ -354,6 +354,91 @@ static void test_socket_udp_bind_rejects_invalid_port() {
                         "Socket.udp_bind(s, \"127.0.0.1\", 99999)\n");
 }
 
+// ─── Socket: typed transport errors (the Socket.Error choice) ────────────────
+//
+// The *_typed companions surface a transport failure as a Socket.Error choice
+// instead of an opaque string, so a program can branch on the category.  These
+// exercise the deterministic, network-free paths (a closed handle, a refused
+// loopback port, and an unresolvable host), leaving the remaining variants
+// (Timeout / AddressInUse / ConnectionReset) to the exhaustive Luma match test —
+// they are not reliably triggerable through the public API on every platform
+// (e.g. listen() always sets SO_REUSEADDR, so a double-bind does not fault).
+
+// Reads the Socket.Error variant name from a *_typed failure result, asserting
+// the failure carries a typed Socket.Error choice rather than a string message.
+[[nodiscard]] static std::string socket_error_variant_of(const luma::Value& v) {
+    const auto& inner = v.as_result()->owned_inner;
+    if (!inner->is_choice()) {
+        return "<not-a-choice>";
+    }
+    return inner->as_choice()->type_name + "." + inner->as_choice()->variant;
+}
+
+static void test_socket_typed_registered() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Socket.connect_typed"));
+    ASSERT_TRUE(env->has("Socket.listen_typed"));
+    ASSERT_TRUE(env->has("Socket.send_typed"));
+    ASSERT_TRUE(env->has("Socket.receive_typed"));
+}
+
+static void test_socket_send_typed_on_closed_is_not_connected() {
+    const auto v = eval("socket s = Result.unwrap(Socket.udp_create())\n"
+                        "Socket.close(s)\n"
+                        "Socket.send_typed(s, \"data\")\n");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(socket_error_variant_of(v), "Error.NotConnected");
+}
+
+static void test_socket_receive_typed_on_closed_is_not_connected() {
+    const auto v = eval("socket s = Result.unwrap(Socket.udp_create())\n"
+                        "Socket.close(s)\n"
+                        "Socket.receive_typed(s, 1024)\n");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(socket_error_variant_of(v), "Error.NotConnected");
+}
+
+static void test_socket_receive_typed_non_positive_max_bytes_is_other() {
+    const auto v = eval("socket s = Result.unwrap(Socket.udp_create())\n"
+                        "Socket.receive_typed(s, 0)\n");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(socket_error_variant_of(v), "Error.Other");
+}
+
+static void test_socket_connect_typed_refused_is_connection_refused() {
+    // Listen on an ephemeral loopback port, capture it, then close the listener
+    // so nothing is accepting; connecting to that port must be refused.
+    const auto v = eval("socket srv = Result.unwrap(Socket.listen(\"127.0.0.1\", 0))\n"
+                        "array<string> parts = String.split(Result.unwrap(Socket.local_address("
+                        "srv)), \":\")\n"
+                        "integer port = Result.unwrap(Converter.to_integer(parts[1]))\n"
+                        "Socket.close(srv)\n"
+                        "Socket.connect_typed(\"127.0.0.1\", port)\n");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(socket_error_variant_of(v), "Error.ConnectionRefused");
+}
+
+static void test_socket_connect_typed_invalid_host_is_host_unreachable() {
+    // An unresolvable host fails before any connect attempt; classified as
+    // HostUnreachable (name resolution could not locate the target).
+    const auto v = eval("Socket.connect_typed(\"invalid.host.that.does.not.exist.example\", 80)\n");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(socket_error_variant_of(v), "Error.HostUnreachable");
+}
+
+static void test_socket_connect_typed_invalid_port_is_other() {
+    const auto v = eval("Socket.connect_typed(\"127.0.0.1\", 99999)\n");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(socket_error_variant_of(v), "Error.Other");
+}
+
 int main() {
     RUN(test_socket_accept_on_non_server_fails);
     RUN(test_socket_close_is_idempotent);
@@ -391,6 +476,14 @@ int main() {
     RUN(test_socket_udp_send_receive_roundtrip);
     RUN(test_socket_udp_send_rejects_invalid_port);
     RUN(test_socket_udp_send_rejects_non_string_data);
+
+    RUN(test_socket_typed_registered);
+    RUN(test_socket_send_typed_on_closed_is_not_connected);
+    RUN(test_socket_receive_typed_on_closed_is_not_connected);
+    RUN(test_socket_receive_typed_non_positive_max_bytes_is_other);
+    RUN(test_socket_connect_typed_refused_is_connection_refused);
+    RUN(test_socket_connect_typed_invalid_host_is_host_unreachable);
+    RUN(test_socket_connect_typed_invalid_port_is_other);
 
     return SUMMARY();
 }

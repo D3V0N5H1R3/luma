@@ -460,6 +460,65 @@ static void test_regex_split_token_limit_propagates() {
     ASSERT_TRUE(luma::test::eval_throws("RegularExpression.split(\"a,b,c,d,e\", \",\")"));
 }
 
+// ─── RegularExpression.compile_typed (typed error via the RegularExpression.Error
+// choice) ────────────────────────────────────────────────────────────────────
+
+// Reads the RegularExpression.Error variant name from a compile_typed failure.
+[[nodiscard]] static std::string regex_error_variant_of(const luma::Value& v) {
+    const auto& inner = v.as_result()->owned_inner;
+    if (!inner->is_choice()) {
+        return "<not-a-choice>";
+    }
+    return inner->as_choice()->type_name + "." + inner->as_choice()->variant;
+}
+
+static void test_regex_compile_typed_registered() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("RegularExpression.compile_typed"));
+}
+
+static void test_regex_compile_typed_valid_returns_pattern() {
+    // A safe, well-formed pattern succeeds and carries the validated pattern.
+    const auto v = eval("RegularExpression.compile_typed(\"[0-9]+\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_string(), "[0-9]+");
+}
+
+static void test_regex_compile_typed_invalid_syntax() {
+    // An unbalanced group is a syntax error, surfaced as InvalidSyntax with a
+    // non-empty diagnostic message payload.
+    const auto v = eval("RegularExpression.compile_typed(\"(unclosed\")");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(regex_error_variant_of(v), "Error.InvalidSyntax");
+
+    const auto& inner = v.as_result()->owned_inner;
+    ASSERT_TRUE(inner->is_choice());
+    ASSERT_FALSE(inner->as_choice()->fields.empty());
+    ASSERT_TRUE(inner->as_choice()->fields.at(0).is_string());
+    ASSERT_FALSE(inner->as_choice()->fields.at(0).as_string().empty());
+}
+
+static void test_regex_compile_typed_unsafe() {
+    // A nested quantifier is rejected by the ReDoS guard as Unsafe.
+    const auto v = eval("RegularExpression.compile_typed(\"(a+)+\")");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(regex_error_variant_of(v), "Error.Unsafe");
+}
+
+static void test_regex_compile_typed_too_large() {
+    // A pattern beyond max_regex_pattern_size (10,000 bytes) is TooLarge.
+    const std::string too_big =
+        "RegularExpression.compile_typed(\"" + std::string(10'001, 'a') + "\")";
+    const auto v = eval(too_big);
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(regex_error_variant_of(v), "Error.TooLarge");
+}
+
 int main() {
     RUN(test_regex_find);
     RUN(test_regex_find_all);
@@ -486,5 +545,10 @@ int main() {
     RUN(test_regex_replace);
     RUN(test_regex_replace_all);
     RUN(test_regex_split);
+    RUN(test_regex_compile_typed_registered);
+    RUN(test_regex_compile_typed_valid_returns_pattern);
+    RUN(test_regex_compile_typed_invalid_syntax);
+    RUN(test_regex_compile_typed_unsafe);
+    RUN(test_regex_compile_typed_too_large);
     return SUMMARY();
 }

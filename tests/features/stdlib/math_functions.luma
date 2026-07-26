@@ -1045,3 +1045,66 @@ function void test_math_matrix3() {
 
     assert(Math.approximately_equal(product.m11, 2.0, 0.001), "identity * scale keeps scale")
 }
+
+# ═══════════════════════════════════════════════════════════
+# Math.Quaternion (gimbal-lock-free 3D rotation)
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_math_quaternion_constructor() {
+    Math.Quaternion q = Math.quaternion(1.0, 2.0, 3.0, 4.0)
+
+    assert(Math.approximately_equal(q.w, 1.0, 0.001), "w component")
+    assert(Math.approximately_equal(q.x, 2.0, 0.001), "x component")
+    assert(Math.approximately_equal(q.y, 3.0, 0.001), "y component")
+    assert(Math.approximately_equal(q.z, 4.0, 0.001), "z component")
+}
+
+@test
+function void test_math_quat_from_axis_angle_is_unit() {
+    # 90-degree rotation about Z: w = z = cos(45 deg) = sin(45 deg).
+    Math.Quaternion q = Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 1.0), Math.pi / 2.0)
+
+    assert(Math.approximately_equal(q.w, 0.7071068, 0.001), "scalar part is cos(45 deg)")
+    assert(Math.approximately_equal(q.z, 0.7071068, 0.001), "vector part is sin(45 deg) about Z")
+}
+
+@test
+function void test_math_quat_multiply_is_hamilton_product() {
+    # i * j = k: (0,1,0,0) * (0,0,1,0) = (0,0,0,1).
+    Math.Quaternion i = Math.quaternion(0.0, 1.0, 0.0, 0.0)
+    Math.Quaternion j = Math.quaternion(0.0, 0.0, 1.0, 0.0)
+    Math.Quaternion k = Math.quat_multiply(i, j)
+
+    assert(Math.approximately_equal(k.z, 1.0, 0.001), "i * j = k")
+    assert(Math.approximately_equal(k.w, 0.0, 0.001), "scalar part is zero")
+}
+
+@test
+function void test_math_quat_normalize_unit_length() {
+    Math.Quaternion q = Math.quat_normalize(Math.quaternion(1.0, 1.0, 1.0, 1.0))
+
+    # Each component of a normalised (1,1,1,1) is 0.5.
+    assert(Math.approximately_equal(q.w, 0.5, 0.001), "normalised w")
+    assert(Math.approximately_equal(q.x, 0.5, 0.001), "normalised x")
+}
+
+@test
+function void test_math_quat_rotate_vector() {
+    # Rotating unit-x by 90 degrees about Z yields unit-y.
+    Math.Quaternion q = Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 1.0), Math.pi / 2.0)
+    Math.Vector3 v = Math.quat_rotate_vector(q, Math.vector3(1.0, 0.0, 0.0))
+
+    assert(Math.approximately_equal(v.x, 0.0, 0.001), "x becomes 0")
+    assert(Math.approximately_equal(v.y, 1.0, 0.001), "x rotates onto y")
+    assert(Math.approximately_equal(v.z, 0.0, 0.001), "z stays 0")
+}
+
+@test
+function void test_math_quat_rotate_vector_on_axis_is_fixed() {
+    # A point on the rotation axis is unchanged by the rotation.
+    Math.Quaternion q = Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 1.0), Math.pi / 2.0)
+    Math.Vector3 v = Math.quat_rotate_vector(q, Math.vector3(0.0, 0.0, 5.0))
+
+    assert(Math.approximately_equal(v.z, 5.0, 0.001), "the axis component is fixed")
+}

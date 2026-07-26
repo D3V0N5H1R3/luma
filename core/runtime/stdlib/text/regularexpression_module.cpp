@@ -514,6 +514,47 @@ template <typename Func>
     }
 }
 
+// Build a RegularExpression.Error choice value.  The short runtime type_name
+// "Error" matches how the type checker registers the choice from
+// stdlib_type_arities.cpp; the qualified "RegularExpression.Error" is resolved
+// separately by the type checker.  InvalidSyntax carries the engine's diagnostic
+// message; Unsafe and TooLarge are unit variants.
+[[nodiscard]] Value make_regex_error(std::string_view variant, std::optional<std::string> message) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Error";
+    cv->variant = std::string{variant};
+
+    if (message.has_value()) {
+        cv->fields.emplace_back(Value{*std::move(message)});
+    }
+
+    return Value{std::move(cv)};
+}
+
+// Classify and (attempt to) compile a pattern, returning a
+// result<string, RegularExpression.Error>: TooLarge (over the size limit),
+// Unsafe (rejected by the ReDoS guard), InvalidSyntax(message) (std::regex could
+// not parse it), or success carrying the validated pattern.  Reuses the exact
+// checks the string-error path runs, just naming each failure category.
+[[nodiscard]] Value compile_pattern_typed(const std::string& pattern) {
+    if (pattern.size() > ResourceLimits::max_regex_pattern_size) {
+        return Value{ResultValue::failure(make_regex_error("TooLarge", std::nullopt))};
+    }
+
+    if (!is_pattern_redos_safe(pattern)) {
+        return Value{ResultValue::failure(make_regex_error("Unsafe", std::nullopt))};
+    }
+
+    try {
+        (void)get_compiled_regex(parse_named_capture_groups(pattern).cleaned);
+    } catch (const std::regex_error& e) {
+        return Value{
+            ResultValue::failure(make_regex_error("InvalidSyntax", std::string{e.what()}))};
+    }
+
+    return make_success_value(Value{pattern});
+}
+
 } // namespace
 
 void register_regularexpression_ns(const EnvPtr& env) {
@@ -656,6 +697,20 @@ void register_regularexpression_ns(const EnvPtr& env) {
             } catch (const std::exception&) {
                 return Value{false};
             }
+        })
+        // RegularExpression.compile_typed(pattern) -> result<string, RegularExpression.Error>
+        // Opt-in typed-error companion: validate a pattern and, on failure, surface
+        // *why* it was rejected as a RegularExpression.Error choice — InvalidSyntax
+        // (a typo, carrying the engine's message), Unsafe (rejected by the ReDoS
+        // guard as catastrophically slow), or TooLarge (over the size limit) —
+        // instead of a bare boolean or an opaque string.  On success the payload is
+        // the validated pattern, reusable directly in matches/find/replace.  The
+        // string-error / boolean functions are left untouched.
+        .func("compile_typed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "RegularExpression.compile_typed", loc);
+
+            return compile_pattern_typed(args[0].as_string());
         });
 }
 

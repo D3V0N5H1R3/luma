@@ -716,6 +716,75 @@ static void test_http_cookie_functions_registered() {
     ASSERT_TRUE(env->has("Http.cookie_header"));
 }
 
+// ─── Http.parse_media_type (parsed Content-Type via the Http.MediaType record) ─
+
+static void test_http_parse_media_type_basic() {
+    const auto v = eval(R"(Http.parse_media_type("text/html; charset=utf-8"))");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->type_name, std::string{"MediaType"});
+    ASSERT_EQ(rec->find_field("type")->as_string(), "text");
+    ASSERT_EQ(rec->find_field("subtype")->as_string(), "html");
+
+    const auto& params = rec->find_field("parameters")->as_dictionary();
+    const auto* charset = params->find("charset");
+    ASSERT_TRUE(charset != nullptr);
+    ASSERT_EQ(charset->as_string(), "utf-8");
+}
+
+static void test_http_parse_media_type_lowercases_essence() {
+    // The type/subtype are case-insensitive (RFC 9110) and lower-cased; the
+    // parameter key is lower-cased but its value keeps its case.
+    const auto v = eval(R"(Http.parse_media_type("Application/JSON; Charset=UTF-8"))");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->find_field("type")->as_string(), "application");
+    ASSERT_EQ(rec->find_field("subtype")->as_string(), "json");
+
+    const auto& params = rec->find_field("parameters")->as_dictionary();
+    const auto* charset = params->find("charset");
+    ASSERT_TRUE(charset != nullptr);
+    ASSERT_EQ(charset->as_string(), "UTF-8");
+}
+
+static void test_http_parse_media_type_no_parameters() {
+    const auto v = eval(R"(Http.parse_media_type("image/png"))");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& rec = v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec->find_field("type")->as_string(), "image");
+    ASSERT_EQ(rec->find_field("subtype")->as_string(), "png");
+    ASSERT_TRUE(rec->find_field("parameters")->as_dictionary()->entries.empty());
+}
+
+static void test_http_parse_media_type_unquotes_parameter_value() {
+    const auto v = eval(R"(Http.parse_media_type("text/plain; boundary=\"a b c\""))");
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& params =
+        v.as_result()->owned_inner->as_record()->find_field("parameters")->as_dictionary();
+    const auto* boundary = params->find("boundary");
+    ASSERT_TRUE(boundary != nullptr);
+    ASSERT_EQ(boundary->as_string(), "a b c");
+}
+
+static void test_http_parse_media_type_malformed_fails() {
+    // Missing the "type/subtype" slash form.
+    ASSERT_RESULT_FAILURE(eval(R"(Http.parse_media_type("not-a-media-type"))"));
+    // Empty subtype.
+    ASSERT_RESULT_FAILURE(eval(R"(Http.parse_media_type("text/"))"));
+    // Empty type.
+    ASSERT_RESULT_FAILURE(eval(R"(Http.parse_media_type("/html"))"));
+}
+
+static void test_http_parse_media_type_registered() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Http.parse_media_type"));
+}
+
 int main() {
     RUN(test_http_build_query);
     RUN(test_http_https_reaches_request_pipeline);
@@ -785,6 +854,13 @@ int main() {
     RUN(test_http_parse_cookie_empty_name_fails);
     RUN(test_http_cookie_header_roundtrip);
     RUN(test_http_cookie_functions_registered);
+
+    RUN(test_http_parse_media_type_basic);
+    RUN(test_http_parse_media_type_lowercases_essence);
+    RUN(test_http_parse_media_type_no_parameters);
+    RUN(test_http_parse_media_type_unquotes_parameter_value);
+    RUN(test_http_parse_media_type_malformed_fails);
+    RUN(test_http_parse_media_type_registered);
 
     return SUMMARY();
 }

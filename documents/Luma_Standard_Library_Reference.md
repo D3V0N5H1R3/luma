@@ -1455,6 +1455,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.method_to_string(method)`       | `(Http.Method)`                            | `string`                | Convert an `Http.Method` variant to its uppercase HTTP verb           |
 | `Http.parse_query(qs)`                | `(string)`                                 | `dictionary<string>`    | Parse query string into dictionary                                   |
 | `Http.parse_cookie(header)`           | `(string)`                                 | `result<Http.Cookie>`   | Parse a `Set-Cookie` header into a typed `Http.Cookie`               |
+| `Http.parse_media_type(header)`       | `(string)`                                 | `result<Http.MediaType>` | Parse a `Content-Type` header into a typed `Http.MediaType`         |
 | `Http.parse_url(url)`                 | `(string)`                                 | `Http.UrlParts`         | Parse URL into record with `scheme`, `host`, `port`, `path`, `query` |
 | `Http.patch(url, body)`               | `(string, string)`                         | `result<Http.Response>` | PATCH request                                                        |
 | `Http.patch_with(url, body, headers)` | `(string, string, dictionary<string>)`     | `result<Http.Response>` | PATCH with body and custom headers                                   |
@@ -1471,6 +1472,14 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 `Http.Response` record fields: `status` (`integer`), `reason` (`string`), `body` (`string`), `headers` (`dictionary<string>`).
 
 **`Http.Cookie`** is a flat record decoding a `Set-Cookie` header — `name: string`, `value: string`, `domain: string`, `path: string`, `expires: string`, `secure: boolean`, `http_only: boolean`. `Http.parse_cookie(header)` returns `result<Http.Cookie>` (the parse is lenient — unknown attributes are ignored — and fails only when the mandatory `name=value` pair is missing or its name is empty), and `Http.cookie_header(cookie)` formats a cookie back into a header string. A `Set-Cookie` value from `Http.Response.headers` is otherwise an opaque string a program must hand-split on `;` and `=`; this pair gives it the same structured treatment `Http.parse_url` gives a URL.
+
+**`Http.MediaType`** is a record decoding a `Content-Type` header value — `type: string`, `subtype: string`, `parameters: dictionary<string>`. `Http.parse_media_type(header)` returns `result<Http.MediaType>`: `"text/html; charset=utf-8"` becomes `{ type = "text", subtype = "html", parameters = { charset = "utf-8" } }`. The `type`/`subtype` are lower-cased (RFC 9110 makes them case-insensitive) and parameter keys lower-cased, while parameter values keep their case (a quoted value like `boundary="a b c"` is unquoted); the parse is lenient on the parameter list but fails when the essential `type/subtype` form is absent. This gives the last stringly-typed response header the same structured treatment as `Http.parse_url` / `Http.parse_cookie`, so deciding "is this JSON?" (`mt.subtype == "json"`) or reading the charset no longer means manual string splitting.
+
+```luma
+Http.MediaType mt = Result.unwrap(Http.parse_media_type("application/json; charset=utf-8"))
+boolean is_json = mt.type == "application" && mt.subtype == "json"
+string charset = Dictionary.get_or(mt.parameters, "charset", "utf-8")
+```
 
 `Http.Request` record fields: `method` (`Http.Method`), `url` (`string`), `headers` (`dictionary<string>`), `body` (`string`), `timeout_ms` (`integer`). Unlike the `Http.request` options dictionary — which is homogeneous and so forces the verb to be stringified — an `Http.Request` carries the `Http.Method` choice natively, so the request is type-checked and discoverable and its method can be matched exhaustively. Build one with `Http.request_of` (common case) or `Http.request_with` (full control), then run it with `Http.send`:
 
@@ -1852,6 +1861,11 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.mat3_multiply(a, b)`            | `(Math.Matrix3, Math.Matrix3)`   | `Math.Matrix3`    | Matrix product `a · b`                                                           |
 | `Math.mat3_determinant(m)`            | `(Math.Matrix3)`                 | `number`          | Determinant of a 3×3 matrix                                                      |
 | `Math.mat3_transform(m, v)`           | `(Math.Matrix3, Math.Vector3)`   | `Math.Vector3`    | Apply the transform `m · v`                                                      |
+| `Math.quaternion(w, x, y, z)`         | `(number, number, number, number)` | `Math.Quaternion` | Construct a quaternion from its components                                     |
+| `Math.quat_from_axis_angle(axis, angle)` | `(Math.Vector3, number)`      | `Math.Quaternion` | Unit rotation quaternion about `axis` by `angle` radians (axis is normalised)   |
+| `Math.quat_multiply(a, b)`            | `(Math.Quaternion, Math.Quaternion)` | `Math.Quaternion` | Compose two rotations (Hamilton product `a · b`)                            |
+| `Math.quat_normalize(q)`              | `(Math.Quaternion)`              | `Math.Quaternion` | Unit quaternion (the zero quaternion is returned unchanged)                     |
+| `Math.quat_rotate_vector(q, v)`       | `(Math.Quaternion, Math.Vector3)` | `Math.Vector3`   | Rotate `v` by `q` (`q` is normalised first)                                     |
 | `Math.interval(min, max)`             | `(number, number)`               | `result<Math.Interval>` | Build a closed numeric interval; fail if `max < min`                      |
 | `Math.interval_contains(iv, x)`       | `(Math.Interval, number)`        | `boolean`         | Whether `x` lies within the closed interval                                     |
 | `Math.interval_clamp(iv, x)`          | `(Math.Interval, number)`        | `number`          | Clamp `x` into `[min, max]`                                                      |
@@ -1873,6 +1887,15 @@ assert(Array.length(h.counts) == 3)
 `Math.Vector2 { x: number, y: number }` and `Math.Vector3 { x: number, y: number, z: number }` are typed geometry vectors for 2D/3D work — game positions, GraphicalUi layout, physics — where named `.x` / `.y` / `.z` components are far more teachable than the index arithmetic of `LinearAlgebra`'s general `array<number>` vectors. Like `Math.Complex`, they are pure data plus a pipe-first free-function family — `vec2_*` / `vec3_*` for `add`, `sub`, `scale`, `dot`, `length`, and `normalize`, with `vec3_cross` for the 3D cross product — and no operator overloading. `normalize` returns the zero vector unchanged rather than dividing by zero. `Math.to_polar` / `Math.from_polar` bridge `Math.Vector2` to the `Math.Polar` record below.
 
 `Math.Matrix2 { m00, m01, m10, m11 }` and `Math.Matrix3 { m00 … m22 }` (all `number`, row-major) are the typed transform-matrix companions to the vectors, for the 2×2/3×3 linear transforms that `LinearAlgebra`'s general `array<array<number>>` expresses only through index arithmetic. Build them with `Math.matrix2` / `Math.matrix3` or the ready-made `Math.mat2_identity` / `Math.mat3_identity`; `mat*_multiply` composes transforms, `mat*_determinant` reports the scale factor, and `mat2_transform` / `mat3_transform` apply a matrix to a `Math.Vector2` / `Math.Vector3`. Data plus free functions, no operator overloading — the same philosophy as the vectors. `LinearAlgebra` remains for general N-dimensional work.
+
+`Math.Quaternion { w, x, y, z }` (all `number`) is the gimbal-lock-free 3D-rotation companion to the vectors and matrices, for composing and applying rotations without hand-building rotation matrices. `Math.quaternion(w, x, y, z)` builds one from raw components, but the everyday constructor is `Math.quat_from_axis_angle(axis, angle)`, which produces a unit rotation of `angle` radians about `axis` (a `Math.Vector3`, normalised for you). `Math.quat_multiply(a, b)` composes two rotations (the Hamilton product — order matters), `Math.quat_normalize(q)` renormalises a drifted quaternion (a zero quaternion is returned unchanged, mirroring `vec3_normalize`), and `Math.quat_rotate_vector(q, v)` rotates a `Math.Vector3` by `q` (normalising `q` first, so a slightly denormalised rotation still behaves). Data plus pipe-first free functions, the same philosophy as `Math.Vector3` / `Math.Matrix3`.
+
+```luma
+# Rotate the unit-x vector 90° about the Z axis → the unit-y vector.
+Math.Quaternion spin = Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 1.0), Math.pi / 2.0)
+Math.Vector3 rotated = Math.quat_rotate_vector(spin, Math.vector3(1.0, 0.0, 0.0))
+assert(Math.approximately_equal(rotated.y, 1.0, 0.001))
+```
 
 `Math.Interval { min: number, max: number }` is a closed numeric range — the general-purpose sibling of `DateTime.Interval`. `Math.interval(min, max)` is a validating constructor that fails when `max < min`, so an `Interval` is always well-formed. It replaces hand-rolled `x >= lo && x <= hi` with the teachable `Math.interval_contains` (closed, so both endpoints count), and adds `Math.interval_clamp` (bound `x` into the range), `Math.interval_length` (`max - min`), and `Math.intervals_overlap` (closed, so touching endpoints count).
 
@@ -2237,6 +2260,7 @@ string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 | `RegularExpression.find(s, pattern)`              | `(string, string)`         | `result<RegularExpression.Match>`        | First match; fail if pattern is invalid                       |
 | `RegularExpression.find_all(s, pattern)`          | `(string, string)`         | `result<array<RegularExpression.Match>>` | All matches; fail if pattern is invalid                       |
 | `RegularExpression.is_valid(pattern)`             | `(string)`                 | `boolean`                                | Whether `pattern` is a valid regex                            |
+| `RegularExpression.compile_typed(pattern)`        | `(string)`                 | `result<string, RegularExpression.Error>` | Validate a pattern; on failure the error is a typed `RegularExpression.Error` |
 | `RegularExpression.matches(s, pattern)`           | `(string, string)`         | `result<boolean>`                        | Whether `pattern` is found in `s`; fail if pattern is invalid |
 | `RegularExpression.replace(s, pattern, repl)`     | `(string, string, string)` | `result<string>`                         | Replace first match; fail if pattern is invalid               |
 | `RegularExpression.replace_all(s, pattern, repl)` | `(string, string, string)` | `result<string>`                         | Replace all matches; fail if pattern is invalid               |
@@ -2274,6 +2298,21 @@ print(year.text)  # "2024"
 > **Engine limitation (medium risk)** — The C++ standard library's `std::regex` ECMAScript engine has **no native support** for named capture groups: neither `(?<name>...)` nor `(?P<name>...)` parses, and both throw a compile error from `std::regex` directly. Named-group support is therefore implemented entirely client-side: before compiling the pattern, Luma strips the `<name>`/`P<name>` annotation down to a plain `(` (preserving the group's ordinal position exactly, so nothing about the underlying match semantics changes) and separately records a group-index-to-name map, which is used after matching to populate `named_groups`. Once compiled, a named group behaves exactly like an ordinary capturing group — there is no way to distinguish "named" at the regex-engine level, only in Luma's bookkeeping around it. A malformed or unterminated named-group annotation (e.g. a missing `>`) is left untouched and surfaces as an ordinary invalid-pattern failure (`is_valid` returns `false`, and the fallible functions return `failure`) rather than a crash. `(?<=...)` and `(?<!...)` (lookbehind assertions) are recognized as _not_ named-group syntax and are left unchanged — though `std::regex`'s ECMAScript grammar does not support lookbehind at all (only lookahead, `(?=...)`/`(?!...)`), so a pattern using it will fail to compile regardless of named-group handling.
 
 > **Resource limits** — Regular expression patterns are capped at a maximum byte size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_REGEX_PATTERN_SIZE`). Patterns exceeding the limit return `failure` (or `false` from `is_valid`). The regex engine uses the ECMAScript dialect provided by the C++ standard library. There is no built-in protection against catastrophic backtracking — patterns with nested quantifiers such as `(a+)+b` can take exponential time on non-matching input. When processing untrusted patterns, keep them simple and avoid nested repetition operators (`*`, `+`, `{n,m}` inside groups that are themselves repeated).
+
+`RegularExpression.Error` is a choice type classifying _why_ a pattern was rejected — `InvalidSyntax(message)` (a typo the engine could not parse, carrying its diagnostic message), `Unsafe` (rejected by the ReDoS guard as catastrophically slow, e.g. the nested quantifier `(a+)+`), and `TooLarge` (past the pattern size limit). It is surfaced by `RegularExpression.compile_typed(pattern)`, which returns `result<string, RegularExpression.Error>`: on success the payload is the validated pattern (reusable directly in `matches`/`find`/`replace`), and on failure the typed category tells a beginner apart a typo from a pattern that was refused for being dangerously slow or too big — a distinction the module already computes internally but that `is_valid`'s bare `boolean` and the other functions' opaque string error hide. This is opt-in and additive (mirroring `Http.get_typed` / `Http.Error` and `FileSystem.read_file_typed` / `FileSystem.IoError`): `is_valid` and every string-error function are unchanged.
+
+```luma
+match RegularExpression.compile_typed(user_pattern) {
+    success(pattern) { search_with(pattern) }
+    failure(e) {
+        match e {
+            case RegularExpression.Error.InvalidSyntax(message) { print("bad pattern: ${message}") }
+            case RegularExpression.Error.Unsafe { print("pattern rejected as too slow") }
+            case RegularExpression.Error.TooLarge { print("pattern too large") }
+        }
+    }
+}
+```
 
 ## 33 — Resource
 
@@ -2371,16 +2410,20 @@ Cross-platform TCP and UDP networking.
 | `Socket.accept(srv)`                   | `(socket)`                          | `result<socket>`           | Accept incoming connection                                   |
 | `Socket.close(s)`                      | `(socket)`                          | `none`                     | Close the socket                                             |
 | `Socket.connect(host, port)`           | `(string, integer)`                 | `result<socket>`           | TCP connect (30 s timeout)                                   |
+| `Socket.connect_typed(host, port)`     | `(string, integer)`                 | `result<socket, Socket.Error>` | TCP connect; on failure the error is a typed `Socket.Error` instead of a string |
 | `Socket.is_connected(s)`               | `(socket)`                          | `boolean`                  | Whether the socket handle is valid                           |
 | `Socket.ip_to_string(ip)`              | `(Socket.IpAddress)`                | `string`                   | Canonical text of a parsed IP address                        |
 | `Socket.listen(host, port)`            | `(string, integer)`                 | `result<socket>`           | Bind and listen for TCP connections                          |
+| `Socket.listen_typed(host, port)`      | `(string, integer)`                 | `result<socket, Socket.Error>` | Bind and listen; on failure the error is a typed `Socket.Error` (e.g. `AddressInUse`) |
 | `Socket.local_address(s)`              | `(socket)`                          | `result<string>`           | Local `"host:port"`                                          |
 | `Socket.local_address_parts(s)`        | `(socket)`                          | `result<Socket.Address>`   | Local address as a `{ host, port }` record (IPv6-safe; no string parsing) |
 | `Socket.parse_ip(text)`                | `(string)`                          | `result<Socket.IpAddress>` | Validate and classify an IPv4/IPv6 literal (no OS call)      |
 | `Socket.receive(s, max)`               | `(socket, integer)`                 | `result<string>`           | Receive up to `max` bytes                                    |
+| `Socket.receive_typed(s, max)`         | `(socket, integer)`                 | `result<string, Socket.Error>` | Receive up to `max` bytes; on failure the error is a typed `Socket.Error` |
 | `Socket.remote_address(s)`             | `(socket)`                          | `result<string>`           | Remote `"host:port"`                                         |
 | `Socket.remote_address_parts(s)`       | `(socket)`                          | `result<Socket.Address>`   | Remote address as a `{ host, port }` record (IPv6-safe; no string parsing) |
 | `Socket.send(s, data)`                 | `(socket, string)`                  | `result<integer>`          | Send data; returns bytes sent                                |
+| `Socket.send_typed(s, data)`           | `(socket, string)`                  | `result<integer, Socket.Error>` | Send data; on failure the error is a typed `Socket.Error` |
 | `Socket.set_timeout(s, ms)`            | `(socket, integer)`                 | `result<boolean>`          | Set send/recv timeout (does not affect connect)              |
 | `Socket.udp_bind(s, host, port)`       | `(socket, string, integer)`         | `result<boolean>`          | Bind UDP socket to address                                   |
 | `Socket.udp_create()`                  | `()`                                | `result<socket>`           | Create UDP socket                                            |
@@ -2398,6 +2441,22 @@ Socket.IpAddress ip = Result.unwrap(Socket.parse_ip("2001:DB8::1"))
 string family = match ip {
     case Socket.IpAddress.V4(_a) { "IPv4" }
     case Socket.IpAddress.V6(_a) { "IPv6" }
+}
+```
+
+`Socket.Error` is a choice type classifying _why_ a transport operation failed — `ConnectionRefused` (nothing is listening on the target port), `Timeout` (the connect or receive did not complete in time), `HostUnreachable` (the host could not be resolved or reached), `AddressInUse` (a `listen` bind clashed with a port already in use), `ConnectionReset` (the peer reset or closed the connection mid-transfer), `NotConnected` (the socket handle is closed or not connected), and `Other` (any other failure). It is surfaced by the opt-in `*_typed` companions — `Socket.connect_typed`, `Socket.listen_typed`, `Socket.send_typed`, and `Socket.receive_typed` — which return `result<T, Socket.Error>`: the value on success is exactly what the string-error function returns, and the error on failure is the typed category, so a program can retry only on `Timeout`, fall back only on `ConnectionRefused`, or report a `HostUnreachable` target — instead of substring-matching an opaque message. This is additive (mirroring `Http.get_typed` / `Http.Error` and `FileSystem.read_file_typed` / `FileSystem.IoError`): the plain `Socket.connect`, `Socket.listen`, `Socket.send`, and `Socket.receive` keep their string-error `result<T>`.
+
+```luma
+match Socket.connect_typed("127.0.0.1", 8080) {
+    success(conn) { use_connection(conn) }
+    failure(e) {
+        match e {
+            case Socket.Error.ConnectionRefused { print("nothing is listening — will retry") }
+            case Socket.Error.Timeout { print("connect timed out") }
+            case Socket.Error.HostUnreachable { print("cannot reach host") }
+            else { print("connection failed") }
+        }
+    }
 }
 ```
 
