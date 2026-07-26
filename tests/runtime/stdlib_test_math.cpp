@@ -1005,8 +1005,95 @@ LUMA_TEST(math_interval_clamp_length_overlap) {
               false);
 }
 
-// --- Math.Matrix2 / Math.Matrix3 (T07) ---
+// --- Math.Rect (N03) ---
 
+LUMA_TEST(math_rect_construct_and_fields) {
+    const auto v = eval("Math.rect(1.0, 2.0, 30.0, 40.0)");
+    ASSERT_TRUE(v.is_record());
+
+    const auto& rec = v.as_record();
+    ASSERT_EQ(rec->type_name, std::string{"Rect"});
+    ASSERT_NEAR(rec->find_field("x")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("y")->as_number(), 2.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("width")->as_number(), 30.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("height")->as_number(), 40.0, 1e-9);
+}
+
+LUMA_TEST(math_rect_negative_dimensions_clamped) {
+    // A degenerate (inside-out) rectangle clamps its extent to zero.
+    const auto v = eval("Math.rect(5.0, 5.0, -3.0, -4.0)");
+    const auto& rec = v.as_record();
+    ASSERT_NEAR(rec->find_field("width")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("height")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(eval("Math.rect_area(Math.rect(5.0, 5.0, -3.0, -4.0))").as_number(), 0.0, 1e-9);
+}
+
+LUMA_TEST(math_rect_contains_half_open) {
+    // Half-open: the min edges are inside, the max edges are outside.
+    ASSERT_EQ(eval("Math.rect_contains(Math.rect(0.0, 0.0, 10.0, 10.0), 5.0, 5.0)").as_bool(),
+              true);
+    ASSERT_EQ(eval("Math.rect_contains(Math.rect(0.0, 0.0, 10.0, 10.0), 0.0, 0.0)").as_bool(),
+              true);
+    ASSERT_EQ(eval("Math.rect_contains(Math.rect(0.0, 0.0, 10.0, 10.0), 10.0, 5.0)").as_bool(),
+              false);
+    ASSERT_EQ(eval("Math.rect_contains(Math.rect(0.0, 0.0, 10.0, 10.0), 5.0, 10.0)").as_bool(),
+              false);
+}
+
+LUMA_TEST(math_rect_intersects) {
+    ASSERT_EQ(eval("Math.rect_intersects(Math.rect(0.0, 0.0, 10.0, 10.0), "
+                   "Math.rect(5.0, 5.0, 10.0, 10.0))")
+                  .as_bool(),
+              true);
+    // Touching edges do not count (half-open).
+    ASSERT_EQ(eval("Math.rect_intersects(Math.rect(0.0, 0.0, 10.0, 10.0), "
+                   "Math.rect(10.0, 0.0, 5.0, 5.0))")
+                  .as_bool(),
+              false);
+}
+
+LUMA_TEST(math_rect_intersection_some_and_none) {
+    ASSERT_EQ(eval("Optional.is_some(Math.rect_intersection(Math.rect(0.0, 0.0, 10.0, 10.0), "
+                   "Math.rect(5.0, 5.0, 10.0, 10.0)))")
+                  .as_bool(),
+              true);
+
+    const auto inter = eval("Optional.unwrap(Math.rect_intersection("
+                            "Math.rect(0.0, 0.0, 10.0, 10.0), Math.rect(5.0, 5.0, 10.0, 10.0)))");
+    const auto& rec = inter.as_record();
+    ASSERT_NEAR(rec->find_field("x")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("y")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("width")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("height")->as_number(), 5.0, 1e-9);
+
+    // Disjoint rectangles → none.
+    ASSERT_EQ(eval("Optional.is_none(Math.rect_intersection(Math.rect(0.0, 0.0, 5.0, 5.0), "
+                   "Math.rect(10.0, 10.0, 5.0, 5.0)))")
+                  .as_bool(),
+              true);
+}
+
+LUMA_TEST(math_rect_union) {
+    const auto v = eval("Math.rect_union(Math.rect(0.0, 0.0, 5.0, 5.0), "
+                        "Math.rect(10.0, 10.0, 5.0, 5.0))");
+    const auto& rec = v.as_record();
+    ASSERT_NEAR(rec->find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("y")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("width")->as_number(), 15.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("height")->as_number(), 15.0, 1e-9);
+}
+
+LUMA_TEST(math_rect_center_and_area) {
+    const auto c = eval("Math.rect_center(Math.rect(0.0, 0.0, 10.0, 20.0))");
+    ASSERT_TRUE(c.is_record());
+    ASSERT_EQ(c.as_record()->type_name, std::string{"Vector2"});
+    ASSERT_NEAR(c.as_record()->find_field("x")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(c.as_record()->find_field("y")->as_number(), 10.0, 1e-9);
+
+    ASSERT_NEAR(eval("Math.rect_area(Math.rect(0.0, 0.0, 10.0, 20.0))").as_number(), 200.0, 1e-9);
+}
+
+// --- Math.Matrix2 / Math.Matrix3 (T07) ---
 LUMA_TEST(math_matrix2_identity_and_transform) {
     const auto id = eval("Math.mat2_identity()");
     ASSERT_TRUE(id.is_record());

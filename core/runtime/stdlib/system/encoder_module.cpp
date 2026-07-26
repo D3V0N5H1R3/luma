@@ -189,6 +189,25 @@ enum class TextEncoding {
     return Value{std::move(arr)};
 }
 
+// ─── Typed decode errors (Encoder.Error) ───
+
+// Wrap an Encoder.Error variant name in a ChoiceValue.  Runtime short name
+// "Error" mirrors make_io_error_choice (the type checker resolves the qualified
+// "Encoder.Error" separately).  The four variant names must match the
+// ChoiceDeclaration in core/analysis/types/stdlib_type_arities.cpp exactly.
+[[nodiscard]] Value make_encoder_error_choice(std::string_view variant) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Error";
+    cv->variant = std::string{variant};
+
+    return Value{std::move(cv)};
+}
+
+// Build a result<string, Encoder.Error> failure carrying the typed error choice.
+[[nodiscard]] Value make_encoder_error_failure(std::string_view variant) {
+    return Value{ResultValue::failure(make_encoder_error_choice(variant))};
+}
+
 } // namespace
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -297,6 +316,79 @@ void register_encoder_ns(const EnvPtr& env) {
 
             // Unreachable — expect_encoding rejects any other variant.
             return make_failure_value("Encoder.decode_text: unknown encoding");
+        })
+        // ── Opt-in typed-error decode slice (Encoder.Error) ───
+        // decode_base64_typed / decode_url_typed / decode_text_typed mirror their
+        // string-error counterparts but surface an Encoder.Error choice
+        // (result<string, Encoder.Error>) so a caller can branch on *why* a decode
+        // failed.  The string-error decoders are left untouched.
+        .func("decode_base64_typed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Encoder.decode_base64_typed", loc);
+
+            auto decoded = base64_decode(args[0].as_string());
+
+            if (!decoded) {
+                return make_encoder_error_failure("InvalidBase64");
+            }
+
+            return make_success_value(Value{std::move(*decoded)});
+        })
+        .func("decode_url_typed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Encoder.decode_url_typed", loc);
+
+            auto decoded = url_decode(args[0].as_string());
+
+            if (!decoded) {
+                return make_encoder_error_failure("InvalidPercentEncoding");
+            }
+
+            return make_success_value(Value{std::move(*decoded)});
+        })
+        .func("decode_text_typed", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& array = expect_array(args[0], "Encoder.decode_text_typed", loc);
+            const auto encoding = expect_encoding(args[1], "Encoder.decode_text_typed", loc);
+
+            // Bytes outside 0–255 are not a valid byte stream for any encoding;
+            // classify that as the byte-domain failure for the requested
+            // encoding (ASCII → InvalidAscii, otherwise InvalidUtf8).
+            std::string bytes;
+            if (read_bytes(*array->elements, "Encoder.decode_text_typed", bytes)) {
+                return make_encoder_error_failure(encoding == TextEncoding::Ascii ? "InvalidAscii"
+                                                                                  : "InvalidUtf8");
+            }
+
+            switch (encoding) {
+                case TextEncoding::Utf8:
+                    if (!is_valid_utf8(bytes)) {
+                        return make_encoder_error_failure("InvalidUtf8");
+                    }
+                    return make_success_value(Value{std::move(bytes)});
+
+                case TextEncoding::Ascii:
+                    for (const char c : bytes) {
+                        if (static_cast<std::uint8_t>(c) > 0x7F) {
+                            return make_encoder_error_failure("InvalidAscii");
+                        }
+                    }
+                    return make_success_value(Value{std::move(bytes)});
+
+                case TextEncoding::Latin1: {
+                    // Every 0–255 byte is a valid Latin-1 codepoint U+0000–U+00FF;
+                    // re-encode as UTF-8 so the result is a well-formed Luma string
+                    // (this branch cannot fail).
+                    std::string utf8;
+                    for (const char c : bytes) {
+                        utf8 += utf8_encode(static_cast<std::uint8_t>(c));
+                    }
+                    return make_success_value(Value{std::move(utf8)});
+                }
+            }
+
+            // Unreachable — expect_encoding rejects any other variant.
+            return make_encoder_error_failure("InvalidUtf8");
         });
 }
 

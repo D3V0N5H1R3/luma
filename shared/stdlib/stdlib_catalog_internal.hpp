@@ -232,6 +232,12 @@ namespace named {
     return ReturnTypeDesc::named("Interval");
 }
 
+// Math.rect() / rect_* take and return these axis-aligned rectangle records
+// (bare short name "Rect", like interval() / vector2()).
+[[nodiscard]] inline ReturnTypeDesc rect() {
+    return ReturnTypeDesc::named("Rect");
+}
+
 // DateTime.zoned() / zoned_* take and return these offset-aware timestamp records
 // (bare short name "Zoned", like interval()).
 [[nodiscard]] inline ReturnTypeDesc zoned() {
@@ -366,6 +372,18 @@ namespace named {
     return ReturnTypeDesc::named("Cmyk");
 }
 
+// Color.stop() builds these gradient colour-stop records (bare short name "Stop",
+// like color()).
+[[nodiscard]] inline ReturnTypeDesc color_stop() {
+    return ReturnTypeDesc::named("Stop");
+}
+
+// Color.gradient() builds these multi-stop linear-gradient records (bare short
+// name "Gradient", like color()).
+[[nodiscard]] inline ReturnTypeDesc gradient() {
+    return ReturnTypeDesc::named("Gradient");
+}
+
 // Encoder.encode_text / decode_text take this text-encoding selector choice.
 [[nodiscard]] inline ReturnTypeDesc encoding() {
     return ReturnTypeDesc::named("Encoder.Encoding");
@@ -374,6 +392,21 @@ namespace named {
 // Compression.compress / decompress take this algorithm-selector choice.
 [[nodiscard]] inline ReturnTypeDesc compression_format() {
     return ReturnTypeDesc::named("Compression.Format");
+}
+
+// Typed decompression-error choice (fully-qualified, like compression_format).
+// Used as the error parameter of result<string, Compression.Error> on the
+// decompress_typed / inflate_typed / gunzip_typed slice, mirroring
+// FileSystem.IoError.
+[[nodiscard]] inline ReturnTypeDesc compression_error() {
+    return ReturnTypeDesc::named("Compression.Error");
+}
+
+// Typed decode-error choice (fully-qualified, like encoding()).  Used as the
+// error parameter of result<string, Encoder.Error> on the decode_base64_typed /
+// decode_text_typed slice, mirroring FileSystem.IoError.
+[[nodiscard]] inline ReturnTypeDesc encoder_error() {
+    return ReturnTypeDesc::named("Encoder.Error");
 }
 
 [[nodiscard]] inline ReturnTypeDesc process_result() {

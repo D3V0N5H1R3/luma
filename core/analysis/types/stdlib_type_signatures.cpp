@@ -155,6 +155,12 @@ namespace {
             if (desc.named_type == "Compression.Format") {
                 return TypeInfo::make_named(K::Choice, "Compression.Format");
             }
+            if (desc.named_type == "Compression.Error") {
+                return TypeInfo::make_named(K::Choice, "Compression.Error");
+            }
+            if (desc.named_type == "Encoder.Error") {
+                return TypeInfo::make_named(K::Choice, "Encoder.Error");
+            }
             if (desc.named_type == "Decimal.Error") {
                 return TypeInfo::make_named(K::Choice, "Decimal.Error");
             }
