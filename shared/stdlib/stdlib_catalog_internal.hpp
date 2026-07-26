@@ -183,6 +183,13 @@ namespace named {
     return ReturnTypeDesc::named("Match");
 }
 
+// RegularExpression.compile_typed surfaces failures as this choice (result<string,
+// RegularExpression.Error>); like http_error() it uses the fully-qualified name
+// and needs a matching branch in stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc regex_error() {
+    return ReturnTypeDesc::named("RegularExpression.Error");
+}
+
 [[nodiscard]] inline ReturnTypeDesc dialect() {
     return ReturnTypeDesc::named("Dialect");
 }
@@ -295,6 +302,12 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc matrix3() {
     return ReturnTypeDesc::named("Matrix3");
+}
+
+// Math.quaternion() / quat_* take and return this unit-rotation record (bare
+// short name, like vector3()).
+[[nodiscard]] inline ReturnTypeDesc quaternion() {
+    return ReturnTypeDesc::named("Quaternion");
 }
 
 // Math.five_number_summary() returns this box-plot record (bare short name).
@@ -439,8 +452,21 @@ namespace named {
     return ReturnTypeDesc::named("Socket.IpAddress");
 }
 
+// Socket.*_typed surface a transport failure as this choice (result<T,
+// Socket.Error>), so — like http_error() — it uses the fully-qualified name and
+// needs a matching branch in stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc socket_error() {
+    return ReturnTypeDesc::named("Socket.Error");
+}
+
 [[nodiscard]] inline ReturnTypeDesc url_parts() {
     return ReturnTypeDesc::named("UrlParts");
+}
+
+// Http.parse_media_type returns this parsed Content-Type record (bare short name,
+// resolved as a record via the default map lookup).
+[[nodiscard]] inline ReturnTypeDesc media_type() {
+    return ReturnTypeDesc::named("MediaType");
 }
 
 // Http.parse_cookie / cookie_header parse and format this flat cookie record

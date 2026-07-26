@@ -376,6 +376,74 @@ constexpr std::int64_t k_max_port = 65535;
     return Value{std::move(cv)};
 }
 
+// ─── Typed transport errors (the Socket.Error choice) ────────────────────────
+//
+// The *_typed slice of the module (connect_typed / listen_typed / send_typed /
+// receive_typed) classifies a transport failure into a Socket.Error variant so a
+// program can branch on the category instead of substring-matching an opaque
+// message.  The string-error connect/listen/send/receive functions are left
+// untouched.  Mirrors http_error_variant()/make_http_error_choice() in
+// http_module_request.cpp.
+
+// Map a platform-neutral error category to its Socket.Error choice variant name.
+// The names must match the Socket.Error ChoiceDeclaration in
+// core/analysis/types/stdlib_type_arities.cpp exactly (PascalCase).
+[[nodiscard]] std::string_view socket_error_variant(platform_socket::ErrorCategory category) {
+    switch (category) {
+        case platform_socket::ErrorCategory::ConnectionRefused:
+            return "ConnectionRefused";
+        case platform_socket::ErrorCategory::TimedOut:
+            return "Timeout";
+        case platform_socket::ErrorCategory::HostUnreachable:
+            return "HostUnreachable";
+        case platform_socket::ErrorCategory::AddressInUse:
+            return "AddressInUse";
+        case platform_socket::ErrorCategory::ConnectionReset:
+            return "ConnectionReset";
+        case platform_socket::ErrorCategory::NotConnected:
+            return "NotConnected";
+        case platform_socket::ErrorCategory::Other:
+            return "Other";
+    }
+
+    return "Other";
+}
+
+// Wrap a Socket.Error variant name in a ChoiceValue.  The runtime short name
+// "Error" matches how the type checker registers the choice from
+// stdlib_type_arities.cpp; the qualified "Socket.Error" is resolved separately by
+// the type checker (mirroring make_http_error_choice / make_ip_address).
+[[nodiscard]] Value make_socket_error_choice(std::string_view variant) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Error";
+    cv->variant = std::string{variant};
+
+    return Value{std::move(cv)};
+}
+
+// Build a failure result carrying the Socket.Error variant for a category.
+[[nodiscard]] Value socket_error_failure(platform_socket::ErrorCategory category) {
+    return Value{ResultValue::failure(make_socket_error_choice(socket_error_variant(category)))};
+}
+
+// Build a failure result carrying the Socket.Error variant for the current
+// platform socket error (errno / WSAGetLastError()).  Call immediately after the
+// failing syscall so the error code is still current.
+[[nodiscard]] Value socket_error_failure_from_last() {
+    return socket_error_failure(
+        platform_socket::classify_error(platform_socket::last_error_code()));
+}
+
+// Typed counterpart of check_socket_open: a closed handle is a NotConnected
+// transport error.  Returns nullopt when the socket is usable.
+[[nodiscard]] std::optional<Value> check_socket_open_typed(const std::shared_ptr<SocketValue>& sv) {
+    if (!sv->is_valid()) {
+        return socket_error_failure(platform_socket::ErrorCategory::NotConnected);
+    }
+
+    return std::nullopt;
+}
+
 } // namespace
 
 // ─── Module registration ─────────────────────────────────────────────────────
@@ -420,6 +488,64 @@ void register_socket_ns(const EnvPtr& env) {
             if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
                                           k_connect_timeout_ms)) {
                 return socket_failure("connect");
+            }
+
+            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
+
+            guard.release();
+
+            return make_success_value(Value{std::move(sv)});
+        })
+        // Socket.connect_typed(string host, integer port) -> result<socket, Socket.Error>
+        // Opt-in typed-error variant of Socket.connect: a transport failure is
+        // surfaced as a Socket.Error choice (ConnectionRefused / Timeout /
+        // HostUnreachable / ...) rather than an opaque string, so a program can
+        // match the category — retry only on Timeout, fall back only on
+        // ConnectionRefused.  Mirrors Http.get_typed; string-error Socket.connect
+        // is left untouched.
+        .func("connect_typed", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Socket.connect_typed", loc);
+
+            ensure_winsock();
+
+            const auto& host = args[0].as_string();
+            const auto port_val = expect_integer(args[1], "Socket.connect_typed", loc);
+
+            if (port_val < 0 || port_val > k_max_port) {
+                return socket_error_failure(platform_socket::ErrorCategory::Other);
+            }
+
+            const auto port = static_cast<int>(port_val);
+
+            auto info = resolve_address(host, port, SOCK_STREAM, false);
+
+            if (!info) {
+                return socket_error_failure(platform_socket::ErrorCategory::HostUnreachable);
+            }
+
+            if (SocketValue::open_count() >= ResourceLimits::max_open_sockets) {
+                return socket_error_failure(platform_socket::ErrorCategory::Other);
+            }
+
+            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+
+            if (sock == invalid_socket_handle) {
+                return socket_error_failure_from_last();
+            }
+
+            SocketGuard guard{sock};
+
+            bool timed_out = false;
+            int error_code = 0;
+
+            if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
+                                          k_connect_timeout_ms, &timed_out, &error_code)) {
+                if (timed_out) {
+                    return socket_error_failure(platform_socket::ErrorCategory::TimedOut);
+                }
+
+                return socket_error_failure(platform_socket::classify_error(error_code));
             }
 
             auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
@@ -476,6 +602,64 @@ void register_socket_ns(const EnvPtr& env) {
 
             if (::listen(sock, SOMAXCONN) != 0) {
                 return socket_failure("listen");
+            }
+
+            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Server);
+
+            guard.release();
+
+            return make_success_value(Value{std::move(sv)});
+        })
+        // Socket.listen_typed(string host, integer port) -> result<socket, Socket.Error>
+        // Opt-in typed-error variant of Socket.listen: a bind clash on an already-
+        // used port surfaces as Socket.Error.AddressInUse instead of an opaque
+        // string, so a server can react to the category.  String-error
+        // Socket.listen is left untouched.
+        .func("listen_typed", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Socket.listen_typed", loc);
+
+            ensure_winsock();
+
+            const auto& host = args[0].as_string();
+            const auto port_val = expect_integer(args[1], "Socket.listen_typed", loc);
+
+            if (port_val < 0 || port_val > k_max_port) {
+                return socket_error_failure(platform_socket::ErrorCategory::Other);
+            }
+
+            const auto port = static_cast<int>(port_val);
+
+            auto info = resolve_address(host, port, SOCK_STREAM, true);
+
+            if (!info) {
+                return socket_error_failure(platform_socket::ErrorCategory::HostUnreachable);
+            }
+
+            if (SocketValue::open_count() >= ResourceLimits::max_open_sockets) {
+                return socket_error_failure(platform_socket::ErrorCategory::Other);
+            }
+
+            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+
+            if (sock == invalid_socket_handle) {
+                return socket_error_failure_from_last();
+            }
+
+            SocketGuard guard{sock};
+
+            const int opt{1};
+
+            setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt),
+                       sizeof(opt));
+
+            if (::bind(sock, info->ai_addr,
+                       static_cast<platform_socket::addr_length_t>(info->ai_addrlen)) != 0) {
+                return socket_error_failure_from_last();
+            }
+
+            if (::listen(sock, SOMAXCONN) != 0) {
+                return socket_error_failure_from_last();
             }
 
             auto sv = std::make_shared<SocketValue>(sock, SocketRole::Server);
@@ -547,6 +731,32 @@ void register_socket_ns(const EnvPtr& env) {
 
             return make_success_value(Value{static_cast<std::int64_t>(sent)});
         })
+        // Socket.send_typed(socket s, string data) -> result<integer, Socket.Error>
+        // Opt-in typed-error variant of Socket.send: a broken connection surfaces
+        // as Socket.Error.ConnectionReset (or NotConnected for a closed handle)
+        // instead of an opaque string.  String-error Socket.send is unchanged.
+        .func("send_typed", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& sv = expect_socket(args[0], "Socket.send_typed", loc);
+
+            (void)expect_string(args[1], "Socket.send_typed", loc);
+
+            if (auto err = check_socket_open_typed(sv)) {
+                return *err;
+            }
+
+            const auto& data = args[1].as_string();
+
+            const auto sent =
+                ::send(sv->handle.load(), data.c_str(),
+                       static_cast<platform_socket::io_length_t>(data.size()), MSG_NOSIGNAL);
+
+            if (sent < 0) {
+                return socket_error_failure_from_last();
+            }
+
+            return make_success_value(Value{static_cast<std::int64_t>(sent)});
+        })
         // Socket.receive(socket s, integer max_bytes) -> result<string>
         // Receive up to max_bytes from the socket.
         .func("receive", 2)
@@ -571,6 +781,42 @@ void register_socket_ns(const EnvPtr& env) {
 
             if (received < 0) {
                 return socket_failure("receive");
+            }
+
+            buffer.resize(static_cast<std::size_t>(received));
+
+            return make_success_value(Value{std::move(buffer)});
+        })
+        // Socket.receive_typed(socket s, integer max_bytes) -> result<string, Socket.Error>
+        // Opt-in typed-error variant of Socket.receive: a reset peer surfaces as
+        // Socket.Error.ConnectionReset, a receive-timeout as Timeout, and a closed
+        // handle as NotConnected, instead of an opaque string.  String-error
+        // Socket.receive is unchanged.
+        .func("receive_typed", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& sv = expect_socket(args[0], "Socket.receive_typed", loc);
+
+            if (auto err = check_socket_open_typed(sv)) {
+                return *err;
+            }
+
+            const auto max_bytes = expect_integer(args[1], "Socket.receive_typed", loc);
+
+            if (max_bytes <= 0) {
+                return socket_error_failure(platform_socket::ErrorCategory::Other);
+            }
+
+            const auto buf_size =
+                static_cast<std::size_t>(std::min(max_bytes, k_max_recv_buffer_bytes));
+
+            std::string buffer(buf_size, '\0');
+
+            const auto received =
+                ::recv(sv->handle.load(), buffer.data(),
+                       static_cast<platform_socket::io_length_t>(buffer.size()), 0);
+
+            if (received < 0) {
+                return socket_error_failure_from_last();
             }
 
             buffer.resize(static_cast<std::size_t>(received));

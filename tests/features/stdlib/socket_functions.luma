@@ -432,3 +432,114 @@ function void test_socket_parse_ip() {
     assert(Result.is_failure(Socket.parse_ip("999.0.0.1")), "invalid IPv4 fails")
     assert(Result.is_failure(Socket.parse_ip("not an ip")), "garbage fails")
 }
+
+# ═══════════════════════════════════════════════════════════
+# Socket.Error (opt-in typed transport errors via *_typed)
+# ═══════════════════════════════════════════════════════════
+
+# Exhaustive match over every Socket.Error variant. Beyond labelling a category,
+# this doubles as a check that Socket.Error is fully registered, exhaustively
+# matchable, and usable as a parameter type annotation.
+function string socket_error_label(Socket.Error e) {
+    return match e {
+        case Socket.Error.ConnectionRefused { "connection_refused" }
+        case Socket.Error.Timeout           { "timeout" }
+        case Socket.Error.HostUnreachable   { "host_unreachable" }
+        case Socket.Error.AddressInUse      { "address_in_use" }
+        case Socket.Error.ConnectionReset   { "connection_reset" }
+        case Socket.Error.NotConnected      { "not_connected" }
+        case Socket.Error.Other             { "other" }
+    }
+}
+
+# Classify a connect_typed result into a label.
+function string connect_typed_label(result<socket, Socket.Error> r) {
+    return match r {
+        success(_conn) { "unexpected_success" }
+        failure(e)     { socket_error_label(e) }
+    }
+}
+
+# Classify a send_typed result into a label.
+function string send_typed_label(result<integer, Socket.Error> r) {
+    return match r {
+        success(_n) { "unexpected_success" }
+        failure(e)  { socket_error_label(e) }
+    }
+}
+
+# Classify a receive_typed result into a label.
+function string receive_typed_label(result<string, Socket.Error> r) {
+    return match r {
+        success(_s) { "unexpected_success" }
+        failure(e)  { socket_error_label(e) }
+    }
+}
+
+@test
+function void test_socket_send_typed_on_closed_is_not_connected() {
+    socket s = Result.unwrap(Socket.udp_create())
+    Socket.close(s)
+
+    result<integer, Socket.Error> r = Socket.send_typed(s, "data")
+
+    assert(Result.is_failure(r), "sending on a closed socket fails")
+    assert(send_typed_label(r) == "not_connected", "a closed socket classifies as NotConnected")
+}
+
+@test
+function void test_socket_receive_typed_on_closed_is_not_connected() {
+    socket s = Result.unwrap(Socket.udp_create())
+    Socket.close(s)
+
+    result<string, Socket.Error> r = Socket.receive_typed(s, 1024)
+
+    assert(Result.is_failure(r), "receiving on a closed socket fails")
+    assert(receive_typed_label(r) == "not_connected", "a closed socket classifies as NotConnected")
+}
+
+@test
+function void test_socket_receive_typed_non_positive_max_bytes_is_other() {
+    socket s = Result.unwrap(Socket.udp_create())
+
+    result<string, Socket.Error> r = Socket.receive_typed(s, 0)
+
+    assert(Result.is_failure(r), "a non-positive max_bytes fails")
+    assert(receive_typed_label(r) == "other", "an invalid max_bytes classifies as Other")
+
+    Socket.close(s)
+}
+
+@test
+function void test_socket_connect_typed_refused_is_connection_refused() {
+    # Listen on an ephemeral loopback port, capture it, then close the listener so
+    # nothing is accepting; connecting to that port must be refused.
+    socket srv = Result.unwrap(Socket.listen("127.0.0.1", 0))
+    array<string> parts = String.split(Result.unwrap(Socket.local_address(srv)), ":")
+    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+    Socket.close(srv)
+
+    result<socket, Socket.Error> r = Socket.connect_typed("127.0.0.1", port)
+
+    assert(Result.is_failure(r), "connecting to an unbound loopback port fails")
+    assert(connect_typed_label(r) == "connection_refused",
+           "an unbound port classifies as ConnectionRefused")
+}
+
+@test
+function void test_socket_connect_typed_invalid_host_is_host_unreachable() {
+    result<socket, Socket.Error> r =
+        Socket.connect_typed("invalid.host.that.does.not.exist.example", 80)
+
+    assert(Result.is_failure(r), "an unresolvable host fails")
+    assert(connect_typed_label(r) == "host_unreachable",
+           "an unresolvable host classifies as HostUnreachable")
+}
+
+@test
+function void test_socket_error_is_exhaustively_matchable() {
+    # Drive the label function with a concrete failure so the exhaustive match
+    # over all seven variants is exercised at runtime.
+    result<socket, Socket.Error> r = Socket.connect_typed("127.0.0.1", 99999)
+    assert(connect_typed_label(r) == "other", "an out-of-range port classifies as Other")
+}

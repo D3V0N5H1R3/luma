@@ -227,6 +227,15 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("number", "m12"), field("number", "m20"), field("number", "m21"),
                    field("number", "m22"));
 
+        // Math.quaternion() / quat_* take and return these unit-rotation records
+        // (type_name "Quaternion").  w is the scalar part and x/y/z the vector
+        // part — all measurements, so `number`.  A gimbal-lock-free 3D rotation
+        // primitive beside Math.Vector3/Math.Matrix3; built by Math.quaternion or
+        // Math.quat_from_axis_angle, composed with Math.quat_multiply, and applied
+        // to a Math.Vector3 with Math.quat_rotate_vector.
+        add_record(st, "Math.Quaternion", field("number", "w"), field("number", "x"),
+                   field("number", "y"), field("number", "z"));
+
         // Math.interval() constructs these closed numeric-range records (type_name
         // "Interval").  min/max are plain measurements (`number`); the validating
         // constructor guarantees max >= min so contains/clamp/length/overlap take one
@@ -343,6 +352,15 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
 
         add_record(st, "Http.UrlParts", field("string", "scheme"), field("string", "host"),
                    field("string", "port"), field("string", "path"), field("string", "query"));
+
+        // Http.parse_media_type decodes a Content-Type header value into this
+        // record (type_name "MediaType").  `type`/`subtype` are the two halves of
+        // "type/subtype" (lower-cased, RFC 9110 case-insensitive), and `parameters`
+        // is the trailing "; key=value" pairs as a dictionary (keys lower-cased).
+        // Structured, so "is this JSON?" or reading the charset no longer needs
+        // manual string splitting, mirroring Http.UrlParts/Http.parse_url.
+        add_record(st, "Http.MediaType", field("string", "type"), field("string", "subtype"),
+                   field_of(dict_ann("string"), "parameters"));
 
         // Http.parse_cookie decodes a Set-Cookie header into this flat cookie
         // record (type_name "Cookie"); Http.cookie_header formats it back.  Keeping
@@ -1059,6 +1077,33 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choices.push_back(std::move(ch));
         }
 
+        // ── RegularExpression.Error ─────────────────────
+        // Opt-in typed error surfaced via result<string, RegularExpression.Error>
+        // on RegularExpression.compile_typed (the string payload on success is the
+        // validated pattern, reusable in matches/find/replace), leaving the
+        // existing string-error / boolean functions untouched.  Turns the module's
+        // existing internal distinction into a teachable, exhaustive choice: a
+        // typo (`InvalidSyntax(message)`, carrying the engine's diagnostic), a
+        // pattern rejected as catastrophically slow (`Unsafe`, the ReDoS guard),
+        // and a pattern past the size limit (`TooLarge`).  Variant names must match
+        // regex_error_variant() in
+        // core/runtime/stdlib/text/regularexpression_module.cpp exactly.  Mirrors
+        // the FileSystem.IoError / Http.Error / Socket.Error prototypes.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Error");
+
+            auto invalid_syntax = ChoiceVariant{};
+            invalid_syntax.name = "InvalidSyntax";
+            invalid_syntax.fields.push_back(Parameter{.type = ann("string"), .name = "message"});
+
+            ch->variants.push_back(std::move(invalid_syntax));
+            ch->variants.push_back(ChoiceVariant{.name = "Unsafe", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "TooLarge", .fields = {}});
+
+            st.choice_map["RegularExpression.Error"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
         // ── Socket.IpAddress ────────────────────────────
         // A parsed, validated IP literal, split into its two families so the
         // V4/V6 distinction is match-exhaustive and autocompleted (Socket.Address
@@ -1084,6 +1129,31 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(std::move(v6));
 
             st.choice_map["Socket.IpAddress"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Socket.Error ────────────────────────────────
+        // Opt-in typed transport error surfaced via result<T, Socket.Error> on
+        // the *_typed slice of Socket (connect_typed / listen_typed / send_typed
+        // / receive_typed), leaving the string-error connect/listen/send/receive
+        // untouched.  Variant names must match socket_error_variant() in
+        // core/runtime/stdlib/io/socket_module.cpp exactly (PascalCase).  A
+        // closed, match-able set of transport-level failure categories, so a
+        // program can retry only on Timeout, fall back only on ConnectionRefused,
+        // or report a HostUnreachable target — instead of brittle substring
+        // matching on an opaque error string.  Mirrors the FileSystem.IoError /
+        // Http.Error prototypes.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Error");
+            ch->variants.push_back(ChoiceVariant{.name = "ConnectionRefused", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Timeout", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "HostUnreachable", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "AddressInUse", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "ConnectionReset", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "NotConnected", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Other", .fields = {}});
+
+            st.choice_map["Socket.Error"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

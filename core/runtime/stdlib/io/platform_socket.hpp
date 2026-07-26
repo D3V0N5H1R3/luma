@@ -90,6 +90,87 @@ inline std::string last_error() {
 #endif
 }
 
+// Return the last socket error as a platform-native numeric code (errno on
+// POSIX, WSAGetLastError() on Windows).  The companion to last_error(), used to
+// classify a failure into a transport category via classify_error().
+[[nodiscard]] inline int last_error_code() {
+#ifdef _WIN32
+    return WSAGetLastError();
+#else
+    return errno;
+#endif
+}
+
+// Platform-neutral transport-failure category.  Maps the numerous errno /
+// WSAGetLastError() codes onto the small, closed set surfaced by the Socket.Error
+// choice, so socket_module.cpp can classify a failure without spelling out the
+// platform-specific error constants at each call site.
+enum class ErrorCategory {
+    ConnectionRefused,
+    TimedOut,
+    HostUnreachable,
+    AddressInUse,
+    ConnectionReset,
+    NotConnected,
+    Other,
+};
+
+// Classify a platform-native socket error code (from last_error_code() or the
+// SO_ERROR value returned by get_pending_error()) into a transport category.
+[[nodiscard]] inline ErrorCategory classify_error(int code) {
+#ifdef _WIN32
+    switch (code) {
+        case WSAECONNREFUSED:
+            return ErrorCategory::ConnectionRefused;
+        case WSAETIMEDOUT:
+            return ErrorCategory::TimedOut;
+        case WSAEHOSTUNREACH:
+        case WSAEHOSTDOWN:
+        case WSAENETUNREACH:
+        case WSAENETDOWN:
+            return ErrorCategory::HostUnreachable;
+        case WSAEADDRINUSE:
+            return ErrorCategory::AddressInUse;
+        case WSAECONNRESET:
+        case WSAECONNABORTED:
+            return ErrorCategory::ConnectionReset;
+        case WSAENOTCONN:
+        case WSAENOTSOCK:
+            return ErrorCategory::NotConnected;
+        default:
+            return ErrorCategory::Other;
+    }
+#else
+    switch (code) {
+        case ECONNREFUSED:
+            return ErrorCategory::ConnectionRefused;
+        case ETIMEDOUT:
+        case EAGAIN:
+#if defined(EWOULDBLOCK) && EWOULDBLOCK != EAGAIN
+        case EWOULDBLOCK:
+#endif
+            return ErrorCategory::TimedOut;
+        case EHOSTUNREACH:
+        case EHOSTDOWN:
+        case ENETUNREACH:
+        case ENETDOWN:
+            return ErrorCategory::HostUnreachable;
+        case EADDRINUSE:
+            return ErrorCategory::AddressInUse;
+        case ECONNRESET:
+        case ECONNABORTED:
+        case EPIPE:
+            return ErrorCategory::ConnectionReset;
+        case ENOTCONN:
+        case ENOTSOCK:
+        case EBADF:
+            return ErrorCategory::NotConnected;
+        default:
+            return ErrorCategory::Other;
+    }
+#endif
+}
+
 // Check whether the last socket error indicates that a non-blocking
 // connect is still in progress.
 [[nodiscard]] inline bool is_connect_in_progress() {
@@ -227,14 +308,22 @@ namespace luma {
 
 [[nodiscard]] inline bool tcp_connect_with_timeout(SocketHandle sock, const struct sockaddr* addr,
                                                    int addrlen, int timeout_ms,
-                                                   bool* timed_out = nullptr) {
+                                                   bool* timed_out = nullptr,
+                                                   int* error_code = nullptr) {
     if (timed_out != nullptr) {
         *timed_out = false;
+    }
+
+    if (error_code != nullptr) {
+        *error_code = 0;
     }
 
     const int saved_flags = platform_socket::set_non_blocking(sock);
 
     if (saved_flags < 0) {
+        if (error_code != nullptr) {
+            *error_code = platform_socket::last_error_code();
+        }
         return false;
     }
 
@@ -246,6 +335,11 @@ namespace luma {
     }
 
     if (!platform_socket::is_connect_in_progress()) {
+        // Capture the error before set_blocking(), whose fcntl()/ioctlsocket()
+        // call would clobber errno / WSAGetLastError().
+        if (error_code != nullptr) {
+            *error_code = platform_socket::last_error_code();
+        }
         platform_socket::set_blocking(sock, saved_flags);
         return false;
     }
@@ -265,19 +359,30 @@ namespace luma {
 
     const int sel = select(platform_socket::select_nfds(sock), nullptr, &wr, &ex, &tv);
 
+    // Read the select() error before set_blocking() can overwrite it.
+    const int select_err = platform_socket::last_error_code();
+
     platform_socket::set_blocking(sock, saved_flags);
 
     if (sel <= 0) {
         // sel == 0 means the connect did not complete within the timeout window;
         // sel < 0 is a select() error.  Report the timeout distinctly so callers
         // can classify it separately from a refused/failed connection.
-        if (timed_out != nullptr && sel == 0) {
-            *timed_out = true;
+        if (sel == 0) {
+            if (timed_out != nullptr) {
+                *timed_out = true;
+            }
+        } else if (error_code != nullptr) {
+            *error_code = select_err;
         }
         return false;
     }
 
     const int err = platform_socket::get_pending_error(sock);
+
+    if (err != 0 && error_code != nullptr) {
+        *error_code = err;
+    }
 
     return err == 0;
 }
