@@ -1,9 +1,11 @@
 // Math module — typed 2D/3D geometry vectors and small transform matrices.
 //
-// Math.Vector2 { x, y }, Math.Vector3 { x, y, z }, Math.Matrix2 { m00..m11 } and
-// Math.Matrix3 { m00..m22 } records plus minimal free-function families (vector
+// Math.Vector2 { x, y }, Math.Vector3 { x, y, z }, Math.Vector4 { x, y, z, w },
+// Math.Matrix2 { m00..m11 }, Math.Matrix3 { m00..m22 } and Math.Matrix4
+// { m00..m33 } records plus minimal free-function families (vector
 // add/sub/scale/dot/length/normalize/cross; matrix identity/multiply/determinant
-// and vector-transform).  Named components make 2D/3D work far more teachable
+// and vector-transform, with homogeneous perspective/look-at for Matrix4).  Named
+// components make 2D/3D work far more teachable
 // than the index arithmetic of LinearAlgebra's array<number>.  Data + pipe-first
 // free functions, no operator overloading.  Registered via register_math_vectors().
 
@@ -158,6 +160,56 @@ struct Polar {
     return Vec3{x->to_numeric(), y->to_numeric(), z->to_numeric()};
 }
 
+// A 4D vector.  Components are measurements, so all four are Luma `number`.  The
+// w component carries homogeneous coordinates for Math.Matrix4 transforms.
+struct Vec4 {
+    double x;
+    double y;
+    double z;
+    double w;
+};
+
+// Build a Math.Vector4 record value (type_name "Vector4").
+[[nodiscard]] Value make_vec4(const Vec4& v) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Vector4";
+    rec->fields.emplace_back("x", Value{v.x});
+    rec->fields.emplace_back("y", Value{v.y});
+    rec->fields.emplace_back("z", Value{v.z});
+    rec->fields.emplace_back("w", Value{v.w});
+
+    return Value{std::move(rec)};
+}
+
+// Read a Math.Vector4 argument.  Throws when the value is not a 4D-vector-shaped
+// record.
+[[nodiscard]] Vec4 read_vec4(const Value& value, std::string_view func, const SourceLocation& loc) {
+    const auto invalid = [&] {
+        throw RuntimeError{std::string{func} + ": expected a Math.Vector4 record", loc,
+                           "build one with Math.vector4(x, y, z, w)"};
+    };
+
+    if (!value.is_record()) {
+        invalid();
+    }
+
+    const auto& rec = value.as_record();
+    const Value* x = rec->find_field("x");
+    const Value* y = rec->find_field("y");
+    const Value* z = rec->find_field("z");
+    const Value* w = rec->find_field("w");
+
+    const auto numeric = [](const Value* v) {
+        return v != nullptr && (v->is_integer() || v->is_number());
+    };
+
+    if (!numeric(x) || !numeric(y) || !numeric(z) || !numeric(w)) {
+        invalid();
+    }
+
+    return Vec4{x->to_numeric(), y->to_numeric(), z->to_numeric(), w->to_numeric()};
+}
+
 // A quaternion (w scalar part, x/y/z vector part).  All components are Luma
 // `number`.
 struct Quat {
@@ -305,6 +357,57 @@ struct Mat3 {
                 f("m12"), f("m20"), f("m21"), f("m22")};
 }
 
+// A 4×4 matrix in row-major order.  The homogeneous 3D transform companion to
+// Mat3; every entry is a Luma `number`.
+struct Mat4 {
+    double m00, m01, m02, m03;
+    double m10, m11, m12, m13;
+    double m20, m21, m22, m23;
+    double m30, m31, m32, m33;
+};
+
+// Build a Math.Matrix4 record value (type_name "Matrix4").
+[[nodiscard]] Value make_mat4(const Mat4& m) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Matrix4";
+    rec->fields.emplace_back("m00", Value{m.m00});
+    rec->fields.emplace_back("m01", Value{m.m01});
+    rec->fields.emplace_back("m02", Value{m.m02});
+    rec->fields.emplace_back("m03", Value{m.m03});
+    rec->fields.emplace_back("m10", Value{m.m10});
+    rec->fields.emplace_back("m11", Value{m.m11});
+    rec->fields.emplace_back("m12", Value{m.m12});
+    rec->fields.emplace_back("m13", Value{m.m13});
+    rec->fields.emplace_back("m20", Value{m.m20});
+    rec->fields.emplace_back("m21", Value{m.m21});
+    rec->fields.emplace_back("m22", Value{m.m22});
+    rec->fields.emplace_back("m23", Value{m.m23});
+    rec->fields.emplace_back("m30", Value{m.m30});
+    rec->fields.emplace_back("m31", Value{m.m31});
+    rec->fields.emplace_back("m32", Value{m.m32});
+    rec->fields.emplace_back("m33", Value{m.m33});
+
+    return Value{std::move(rec)};
+}
+
+// Read a Math.Matrix4 argument.  Throws when the value is not a 4×4-matrix-shaped
+// record; missing fields default to 0.0.
+[[nodiscard]] Mat4 read_mat4(const Value& value, std::string_view func, const SourceLocation& loc) {
+    if (!value.is_record()) {
+        throw RuntimeError{std::string{func} + ": expected a Math.Matrix4 record", loc,
+                           "build one with Math.matrix4(m00, ..., m33)"};
+    }
+
+    const auto& rec = value.as_record();
+    const auto f = [&rec](std::string_view name) -> double {
+        const Value* v = rec->find_field(name);
+        return v != nullptr ? v->to_numeric() : 0.0;
+    };
+
+    return Mat4{f("m00"), f("m01"), f("m02"), f("m03"), f("m10"), f("m11"), f("m12"), f("m13"),
+                f("m20"), f("m21"), f("m22"), f("m23"), f("m30"), f("m31"), f("m32"), f("m33")};
+}
+
 } // namespace
 
 // Typed 2D/3D geometry vectors: constructors plus a minimal arithmetic family.
@@ -441,6 +544,62 @@ void register_math_vectors(const EnvPtr& env) {
             }
 
             return make_vec3(Vec3{a.x / len, a.y / len, a.z / len});
+        })
+        // ── Math.Vector4 ─────────────────────────────────────────────────────
+        // Homogeneous 4D vectors for full 3D transforms (Math.Matrix4).
+        .func("vector4", 4)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto x = expect_numeric(args[0], "Math.vector4", loc);
+            const auto y = expect_numeric(args[1], "Math.vector4", loc);
+            const auto z = expect_numeric(args[2], "Math.vector4", loc);
+            const auto w = expect_numeric(args[3], "Math.vector4", loc);
+
+            return make_vec4(Vec4{x, y, z, w});
+        })
+        .func("vec4_add", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_vec4(args[0], "Math.vec4_add", loc);
+            const auto b = read_vec4(args[1], "Math.vec4_add", loc);
+
+            return make_vec4(Vec4{a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w});
+        })
+        .func("vec4_sub", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_vec4(args[0], "Math.vec4_sub", loc);
+            const auto b = read_vec4(args[1], "Math.vec4_sub", loc);
+
+            return make_vec4(Vec4{a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w});
+        })
+        .func("vec4_scale", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_vec4(args[0], "Math.vec4_scale", loc);
+            const auto s = expect_numeric(args[1], "Math.vec4_scale", loc);
+
+            return make_vec4(Vec4{a.x * s, a.y * s, a.z * s, a.w * s});
+        })
+        .func("vec4_dot", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_vec4(args[0], "Math.vec4_dot", loc);
+            const auto b = read_vec4(args[1], "Math.vec4_dot", loc);
+
+            return Value{(a.x * b.x) + (a.y * b.y) + (a.z * b.z) + (a.w * b.w)};
+        })
+        .func("vec4_length", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_vec4(args[0], "Math.vec4_length", loc);
+
+            return Value{std::sqrt((a.x * a.x) + (a.y * a.y) + (a.z * a.z) + (a.w * a.w))};
+        })
+        .func("vec4_normalize", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_vec4(args[0], "Math.vec4_normalize", loc);
+            const double len = std::sqrt((a.x * a.x) + (a.y * a.y) + (a.z * a.z) + (a.w * a.w));
+
+            if (len == 0.0) {
+                return make_vec4(a);
+            }
+
+            return make_vec4(Vec4{a.x / len, a.y / len, a.z / len, a.w / len});
         })
         // ── Math.Quaternion ──────────────────────────────────────────────────
         // A gimbal-lock-free 3D rotation primitive beside Math.Vector3/Matrix3.
@@ -588,6 +747,175 @@ void register_math_vectors(const EnvPtr& env) {
             return make_vec3(Vec3{(m.m00 * v.x) + (m.m01 * v.y) + (m.m02 * v.z),
                                   (m.m10 * v.x) + (m.m11 * v.y) + (m.m12 * v.z),
                                   (m.m20 * v.x) + (m.m21 * v.y) + (m.m22 * v.z)});
+        })
+        // ── Math.Matrix4 ─────────────────────────────────────────────────────
+        // Homogeneous 3D transforms — the full model/view/projection matrix.
+        .func("matrix4", 16)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return make_mat4(Mat4{expect_numeric(args[0], "Math.matrix4", loc),
+                                  expect_numeric(args[1], "Math.matrix4", loc),
+                                  expect_numeric(args[2], "Math.matrix4", loc),
+                                  expect_numeric(args[3], "Math.matrix4", loc),
+                                  expect_numeric(args[4], "Math.matrix4", loc),
+                                  expect_numeric(args[5], "Math.matrix4", loc),
+                                  expect_numeric(args[6], "Math.matrix4", loc),
+                                  expect_numeric(args[7], "Math.matrix4", loc),
+                                  expect_numeric(args[8], "Math.matrix4", loc),
+                                  expect_numeric(args[9], "Math.matrix4", loc),
+                                  expect_numeric(args[10], "Math.matrix4", loc),
+                                  expect_numeric(args[11], "Math.matrix4", loc),
+                                  expect_numeric(args[12], "Math.matrix4", loc),
+                                  expect_numeric(args[13], "Math.matrix4", loc),
+                                  expect_numeric(args[14], "Math.matrix4", loc),
+                                  expect_numeric(args[15], "Math.matrix4", loc)});
+        })
+        .func("mat4_identity", 0)
+        .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
+            return make_mat4(Mat4{1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+                                  0.0, 0.0, 1.0});
+        })
+        .func("mat4_multiply", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_mat4(args[0], "Math.mat4_multiply", loc);
+            const auto b = read_mat4(args[1], "Math.mat4_multiply", loc);
+
+            return make_mat4(
+                Mat4{(a.m00 * b.m00) + (a.m01 * b.m10) + (a.m02 * b.m20) + (a.m03 * b.m30),
+                     (a.m00 * b.m01) + (a.m01 * b.m11) + (a.m02 * b.m21) + (a.m03 * b.m31),
+                     (a.m00 * b.m02) + (a.m01 * b.m12) + (a.m02 * b.m22) + (a.m03 * b.m32),
+                     (a.m00 * b.m03) + (a.m01 * b.m13) + (a.m02 * b.m23) + (a.m03 * b.m33),
+                     (a.m10 * b.m00) + (a.m11 * b.m10) + (a.m12 * b.m20) + (a.m13 * b.m30),
+                     (a.m10 * b.m01) + (a.m11 * b.m11) + (a.m12 * b.m21) + (a.m13 * b.m31),
+                     (a.m10 * b.m02) + (a.m11 * b.m12) + (a.m12 * b.m22) + (a.m13 * b.m32),
+                     (a.m10 * b.m03) + (a.m11 * b.m13) + (a.m12 * b.m23) + (a.m13 * b.m33),
+                     (a.m20 * b.m00) + (a.m21 * b.m10) + (a.m22 * b.m20) + (a.m23 * b.m30),
+                     (a.m20 * b.m01) + (a.m21 * b.m11) + (a.m22 * b.m21) + (a.m23 * b.m31),
+                     (a.m20 * b.m02) + (a.m21 * b.m12) + (a.m22 * b.m22) + (a.m23 * b.m32),
+                     (a.m20 * b.m03) + (a.m21 * b.m13) + (a.m22 * b.m23) + (a.m23 * b.m33),
+                     (a.m30 * b.m00) + (a.m31 * b.m10) + (a.m32 * b.m20) + (a.m33 * b.m30),
+                     (a.m30 * b.m01) + (a.m31 * b.m11) + (a.m32 * b.m21) + (a.m33 * b.m31),
+                     (a.m30 * b.m02) + (a.m31 * b.m12) + (a.m32 * b.m22) + (a.m33 * b.m32),
+                     (a.m30 * b.m03) + (a.m31 * b.m13) + (a.m32 * b.m23) + (a.m33 * b.m33)});
+        })
+        .func("mat4_determinant", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto m = read_mat4(args[0], "Math.mat4_determinant", loc);
+
+            // Laplace expansion using the six 2×2 minors of the bottom two rows.
+            const double s0 = (m.m00 * m.m11) - (m.m01 * m.m10);
+            const double s1 = (m.m00 * m.m12) - (m.m02 * m.m10);
+            const double s2 = (m.m00 * m.m13) - (m.m03 * m.m10);
+            const double s3 = (m.m01 * m.m12) - (m.m02 * m.m11);
+            const double s4 = (m.m01 * m.m13) - (m.m03 * m.m11);
+            const double s5 = (m.m02 * m.m13) - (m.m03 * m.m12);
+
+            const double c5 = (m.m22 * m.m33) - (m.m23 * m.m32);
+            const double c4 = (m.m21 * m.m33) - (m.m23 * m.m31);
+            const double c3 = (m.m21 * m.m32) - (m.m22 * m.m31);
+            const double c2 = (m.m20 * m.m33) - (m.m23 * m.m30);
+            const double c1 = (m.m20 * m.m32) - (m.m22 * m.m30);
+            const double c0 = (m.m20 * m.m31) - (m.m21 * m.m30);
+
+            return Value{(s0 * c5) - (s1 * c4) + (s2 * c3) + (s3 * c2) - (s4 * c1) + (s5 * c0)};
+        })
+        .func("mat4_transform", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto m = read_mat4(args[0], "Math.mat4_transform", loc);
+            const auto v = read_vec4(args[1], "Math.mat4_transform", loc);
+
+            return make_vec4(Vec4{(m.m00 * v.x) + (m.m01 * v.y) + (m.m02 * v.z) + (m.m03 * v.w),
+                                  (m.m10 * v.x) + (m.m11 * v.y) + (m.m12 * v.z) + (m.m13 * v.w),
+                                  (m.m20 * v.x) + (m.m21 * v.y) + (m.m22 * v.z) + (m.m23 * v.w),
+                                  (m.m30 * v.x) + (m.m31 * v.y) + (m.m32 * v.z) + (m.m33 * v.w)});
+        })
+        // Transform a Math.Vector3 point as homogeneous (x, y, z, 1), then divide
+        // by the resulting w so a perspective matrix produces the projected point.
+        // A zero w (a point at infinity) is left undivided rather than dividing by
+        // zero.
+        .func("mat4_transform_point", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto m = read_mat4(args[0], "Math.mat4_transform_point", loc);
+            const auto v = read_vec3(args[1], "Math.mat4_transform_point", loc);
+
+            const double x = (m.m00 * v.x) + (m.m01 * v.y) + (m.m02 * v.z) + m.m03;
+            const double y = (m.m10 * v.x) + (m.m11 * v.y) + (m.m12 * v.z) + m.m13;
+            const double z = (m.m20 * v.x) + (m.m21 * v.y) + (m.m22 * v.z) + m.m23;
+            const double w = (m.m30 * v.x) + (m.m31 * v.y) + (m.m32 * v.z) + m.m33;
+
+            if (w == 0.0) {
+                return make_vec3(Vec3{x, y, z});
+            }
+
+            return make_vec3(Vec3{x / w, y / w, z / w});
+        })
+        // Right-handed perspective projection (OpenGL convention, clip z in
+        // [-1, 1]).  fov_y is the vertical field of view in radians, aspect is
+        // width / height.  A degenerate fov_y or near == far yields the identity
+        // rather than dividing by zero.
+        .func("mat4_perspective", 4)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto fov_y = expect_numeric(args[0], "Math.mat4_perspective", loc);
+            const auto aspect = expect_numeric(args[1], "Math.mat4_perspective", loc);
+            const auto near = expect_numeric(args[2], "Math.mat4_perspective", loc);
+            const auto far = expect_numeric(args[3], "Math.mat4_perspective", loc);
+
+            const double tan_half = std::tan(fov_y * 0.5);
+
+            if (tan_half == 0.0 || aspect == 0.0 || near == far) {
+                return make_mat4(Mat4{1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
+                                      0.0, 0.0, 0.0, 1.0});
+            }
+
+            const double f = 1.0 / tan_half;
+            const double range = near - far;
+
+            return make_mat4(Mat4{f / aspect, 0.0, 0.0, 0.0, 0.0, f, 0.0, 0.0, 0.0, 0.0,
+                                  (far + near) / range, (2.0 * far * near) / range, 0.0, 0.0, -1.0,
+                                  0.0});
+        })
+        // Right-handed look-at view matrix.  eye, center, and up are
+        // Math.Vector3.  A degenerate forward or right axis (eye == center, or up
+        // parallel to the view direction) yields the identity rather than a
+        // NaN-filled matrix.
+        .func("mat4_look_at", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto eye = read_vec3(args[0], "Math.mat4_look_at", loc);
+            const auto center = read_vec3(args[1], "Math.mat4_look_at", loc);
+            const auto up = read_vec3(args[2], "Math.mat4_look_at", loc);
+
+            const auto normalize = [](const Vec3& v) -> Vec3 {
+                const double len = std::sqrt((v.x * v.x) + (v.y * v.y) + (v.z * v.z));
+                if (len == 0.0) {
+                    return v;
+                }
+                return Vec3{v.x / len, v.y / len, v.z / len};
+            };
+            const auto cross = [](const Vec3& a, const Vec3& b) -> Vec3 {
+                return Vec3{(a.y * b.z) - (a.z * b.y), (a.z * b.x) - (a.x * b.z),
+                            (a.x * b.y) - (a.y * b.x)};
+            };
+            const auto dot = [](const Vec3& a, const Vec3& b) -> double {
+                return (a.x * b.x) + (a.y * b.y) + (a.z * b.z);
+            };
+            const auto length = [](const Vec3& v) -> double {
+                return std::sqrt((v.x * v.x) + (v.y * v.y) + (v.z * v.z));
+            };
+
+            const Vec3 forward =
+                normalize(Vec3{center.x - eye.x, center.y - eye.y, center.z - eye.z});
+            const Vec3 side_raw = cross(forward, up);
+
+            if (length(forward) == 0.0 || length(side_raw) == 0.0) {
+                return make_mat4(Mat4{1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
+                                      0.0, 0.0, 0.0, 1.0});
+            }
+
+            const Vec3 side = normalize(side_raw);
+            const Vec3 upward = cross(side, forward);
+
+            return make_mat4(Mat4{side.x, side.y, side.z, -dot(side, eye), upward.x, upward.y,
+                                  upward.z, -dot(upward, eye), -forward.x, -forward.y, -forward.z,
+                                  dot(forward, eye), 0.0, 0.0, 0.0, 1.0});
         });
 }
 

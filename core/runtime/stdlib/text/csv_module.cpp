@@ -5,6 +5,7 @@
 #include <format>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -311,6 +312,76 @@ struct LineColumn {
     return make_success_value(rows_to_value(rows));
 }
 
+// ─── Csv.Table (headers + positional rows as one shape) ──────────────────────
+
+// Build an array<string> Value from a list of strings.
+[[nodiscard]] Value make_string_array(const std::vector<std::string>& items) {
+    auto arr = std::make_shared<ArrayValue>();
+
+    for (const auto& s : items) {
+        arr->elements->emplace_back(s);
+    }
+
+    return Value{std::move(arr)};
+}
+
+// Build a Csv.Table record { headers: array<string>, rows: array<array<string>> }
+// (type_name "Table").  Carries the header row once plus positional data rows,
+// preserving column order — the shape deserialize_records loses.
+[[nodiscard]] Value make_table_record(const std::vector<std::string>& headers,
+                                      const std::vector<std::vector<std::string>>& rows) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Table";
+    rec->fields.emplace_back("headers", make_string_array(headers));
+    rec->fields.emplace_back("rows", rows_to_value(rows));
+
+    return Value{std::move(rec)};
+}
+
+// The header names and positional data rows read from a Csv.Table argument.
+struct TableParts {
+    std::vector<std::string> headers;
+    std::vector<std::vector<std::string>> rows;
+};
+
+// Read a Csv.Table argument.  Returns std::nullopt when the value is not a
+// table-shaped record so the caller can raise a typed failure.
+[[nodiscard]] std::optional<TableParts> read_table(const Value& value) {
+    if (!value.is_record()) {
+        return std::nullopt;
+    }
+
+    const auto& rec = value.as_record();
+    const Value* headers = rec->find_field("headers");
+    const Value* rows = rec->find_field("rows");
+
+    if (headers == nullptr || rows == nullptr || !headers->is_array() || !rows->is_array()) {
+        return std::nullopt;
+    }
+
+    TableParts parts;
+
+    for (const auto& h : *headers->as_array()->elements) {
+        parts.headers.push_back(h.to_string());
+    }
+
+    for (const auto& row_val : *rows->as_array()->elements) {
+        if (!row_val.is_array()) {
+            return std::nullopt;
+        }
+
+        std::vector<std::string> row;
+
+        for (const auto& field : *row_val.as_array()->elements) {
+            row.push_back(field.to_string());
+        }
+
+        parts.rows.push_back(std::move(row));
+    }
+
+    return parts;
+}
+
 } // namespace
 
 // ─── Registration ────────────────────────────────────────────────────────────
@@ -335,6 +406,95 @@ void register_csv_ns(const EnvPtr& env) {
 
             return parse_csv_to_records_result(args[0].as_string(), CsvOptions{},
                                                "deserialize_records");
+        })
+        // ── Csv.Table (headers + positional rows) ────────────────────────────
+        // Parse into a Csv.Table: the first row becomes the header, the rest the
+        // positional rows.  Preserves column order and carries the header even
+        // when there are zero data rows.  Located failure via Csv.ParseError,
+        // mirroring deserialize_detailed.
+        .func("deserialize_table", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Csv.deserialize_table", loc);
+
+            const auto& input = args[0].as_string();
+            auto [rows, success, error, error_offset] = parse_csv(input, CsvOptions{});
+
+            if (!success) {
+                const auto pos = offset_to_line_column(input, error_offset);
+
+                return Value{
+                    ResultValue::failure(make_parse_error_record(error, pos.line, pos.column))};
+            }
+
+            std::vector<std::string> headers;
+            std::vector<std::vector<std::string>> data;
+
+            if (!rows.empty()) {
+                headers = rows.front();
+                data.assign(rows.begin() + 1, rows.end());
+            }
+
+            return make_success_value(make_table_record(headers, data));
+        })
+        // Serialize a Csv.Table back to CSV text: the header row is emitted
+        // first, then every positional row.  Returns result<string>.
+        .func("serialize_table", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            const auto table = read_table(args[0]);
+
+            if (!table) {
+                return failure_msg("Csv", "serialize_table", "expected a Csv.Table record",
+                                   error_codes::type_mismatch);
+            }
+
+            std::vector<std::vector<std::string>> rows;
+            rows.reserve(table->rows.size() + 1);
+            rows.push_back(table->headers);
+
+            for (const auto& row : table->rows) {
+                rows.push_back(row);
+            }
+
+            return make_success_value(Value{serialize_rows(rows, CsvOptions{})});
+        })
+        // Extract one named column from a Csv.Table as array<string> (short cells
+        // are padded with "").  Fails with not_found when no header matches.
+        .func("column", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto table = read_table(args[0]);
+
+            if (!table) {
+                return failure_msg("Csv", "column", "expected a Csv.Table record",
+                                   error_codes::type_mismatch);
+            }
+
+            (void)expect_string(args[1], "Csv.column", loc);
+            const auto& name = args[1].as_string();
+
+            std::size_t index{0};
+            bool found{false};
+
+            for (std::size_t i{0}; i < table->headers.size(); ++i) {
+                if (table->headers[i] == name) {
+                    index = i;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found) {
+                return failure_msg("Csv", "column", std::format("no column named '{}'", name),
+                                   error_codes::not_found);
+            }
+
+            std::vector<std::string> column;
+            column.reserve(table->rows.size());
+
+            for (const auto& row : table->rows) {
+                column.push_back(index < row.size() ? row[index] : "");
+            }
+
+            return make_success_value(make_string_array(column));
         })
         .func("deserialize_with", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

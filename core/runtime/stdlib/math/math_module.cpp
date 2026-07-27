@@ -30,6 +30,38 @@ namespace {
 
 constexpr double pi{std::numbers::pi};
 
+// Convert a Math.Angle choice value — Radians(number) | Degrees(number) — to a
+// magnitude in radians.  Throws when the value is not a well-formed angle (only
+// reachable by bypassing the type checker).  Used by Math.to_radians /
+// Math.to_degrees / Math.sin_of.
+[[nodiscard]] double angle_to_radians(const Value& value, std::string_view func,
+                                      const SourceLocation& loc) {
+    if (!value.is_choice()) {
+        throw RuntimeError{std::string{func} + ": expected a Math.Angle value", loc,
+                           "build one with Math.Angle.Radians(x) or Math.Angle.Degrees(x)"};
+    }
+
+    const auto& choice = *value.as_choice();
+
+    if (choice.fields.empty() || !(choice.fields[0].is_integer() || choice.fields[0].is_number())) {
+        throw RuntimeError{std::string{func} + ": malformed Math.Angle payload", loc,
+                           "build one with Math.Angle.Radians(x) or Math.Angle.Degrees(x)"};
+    }
+
+    const double magnitude = choice.fields[0].to_numeric();
+
+    if (choice.variant == "Radians") {
+        return magnitude;
+    }
+
+    if (choice.variant == "Degrees") {
+        return magnitude * pi / 180.0;
+    }
+
+    throw RuntimeError{std::string{func} + ": unknown Math.Angle variant '" + choice.variant + "'",
+                       loc, "use Math.Angle.Radians or Math.Angle.Degrees"};
+}
+
 // Maximum input for int64_t factorial (21! overflows).
 constexpr std::int64_t k_max_factorial_input = 20;
 
@@ -161,6 +193,78 @@ struct RectBounds {
                       .height = std::max(field("height"), 0.0)};
 }
 
+// A point read from a Math.Vector2 record's x/y fields.
+struct Vec2Point {
+    double x;
+    double y;
+};
+
+// A Math.Circle record's fields, as doubles.  radius is non-negative (the
+// constructor clamps it).
+struct CircleData {
+    double cx;
+    double cy;
+    double radius;
+};
+
+// Read a Math.Vector2 record's x/y fields.  Throws when the argument is not a
+// record; missing fields default to 0.0.  Shared by the circle constructor and
+// circle_contains (whose point argument is a Math.Vector2).
+[[nodiscard]] Vec2Point read_vec2_point(const Value& value, std::string_view func,
+                                        const SourceLocation& loc) {
+    if (!value.is_record()) {
+        throw RuntimeError{std::string{func} + ": expected a Math.Vector2 record", loc,
+                           "build one with Math.vector2(x, y)"};
+    }
+
+    const auto& rec = value.as_record();
+    const auto field = [&rec](std::string_view name) -> double {
+        const Value* v = rec->find_field(name);
+        return v != nullptr ? v->to_numeric() : 0.0;
+    };
+
+    return Vec2Point{.x = field("x"), .y = field("y")};
+}
+
+// Build a Math.Circle record value (type_name "Circle") from a centre and radius.
+// radius is clamped to be non-negative so a degenerate circle is a point rather
+// than inside-out, keeping contains/intersects well-defined (the beginner-friendly
+// "clamp over throw" convention, like Math.rect).
+[[nodiscard]] Value make_circle(double cx, double cy, double radius) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Circle";
+    rec->fields.emplace_back("center", make_rect_vec2(cx, cy));
+    rec->fields.emplace_back("radius", Value{std::max(radius, 0.0)});
+
+    return Value{std::move(rec)};
+}
+
+// Read a Math.Circle record's centre and radius.  Throws when the argument is not
+// a record; a missing centre defaults to the origin and a missing radius to 0.0.
+// radius is clamped non-negative so a hand-built record can never carry an
+// inside-out radius into a derivation.  Mirrors read_rect.
+[[nodiscard]] CircleData read_circle(const Value& value, std::string_view func,
+                                     const SourceLocation& loc) {
+    if (!value.is_record()) {
+        throw RuntimeError{std::string{func} + ": expected a Math.Circle record", loc,
+                           "build one with Math.circle(center, radius)"};
+    }
+
+    const auto& rec = value.as_record();
+    const Value* center = rec->find_field("center");
+    const Value* radius = rec->find_field("radius");
+
+    Vec2Point c{.x = 0.0, .y = 0.0};
+
+    if (center != nullptr) {
+        c = read_vec2_point(*center, func, loc);
+    }
+
+    const double r = radius != nullptr ? std::max(radius->to_numeric(), 0.0) : 0.0;
+
+    return CircleData{.cx = c.x, .cy = c.y, .radius = r};
+}
+
 } // namespace
 
 void register_math_ns(const EnvPtr& env) {
@@ -169,6 +273,10 @@ void register_math_ns(const EnvPtr& env) {
     env->define("Math.e", Value{std::numbers::e}, false);
     env->define("Math.tau", Value{2.0 * pi}, false);
     env->define("Math.infinity", Value{std::numeric_limits<double>::infinity()}, false);
+    env->define("Math.nan", Value{std::numeric_limits<double>::quiet_NaN()}, false);
+    env->define("Math.epsilon", Value{std::numeric_limits<double>::epsilon()}, false);
+    env->define("Math.max_integer", Value{std::numeric_limits<std::int64_t>::max()}, false);
+    env->define("Math.min_integer", Value{std::numeric_limits<std::int64_t>::min()}, false);
 
     ModuleBuilder{"Math", env}
         .checked_unary_to_int("floor", [](double x) { return std::floor(x); })
@@ -233,6 +341,78 @@ void register_math_ns(const EnvPtr& env) {
 
             for (std::int64_t i{2}; i <= n; ++i) {
                 result *= i;
+            }
+
+            return make_success_value(Value{result});
+        })
+        .func("combinations", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto n = expect_integer(args[0], "Math.combinations", loc);
+            auto k = expect_integer(args[1], "Math.combinations", loc);
+
+            if (n < 0 || k < 0) {
+                return make_failure_value(error_msg("Math", "combinations", "negative number"));
+            }
+
+            if (k > n) {
+                return make_failure_value(error_msg("Math", "combinations", "k must not exceed n"));
+            }
+
+            // C(n, k) == C(n, n - k); pick the smaller k to minimise iterations.
+            if (k > n - k) {
+                k = n - k;
+            }
+
+            std::int64_t result{1};
+
+            for (std::int64_t i{1}; i <= k; ++i) {
+                // result = result * (n - k + i) / i, kept exact by cancelling the
+                // gcd first: after dividing both terms by gcd(numerator, i) the
+                // reduced divisor exactly divides the running result, so no
+                // intermediate fraction and no false overflow of a representable
+                // result.
+                std::int64_t numerator = n - k + i;
+                std::int64_t divisor = i;
+                const std::int64_t common = std::gcd(numerator, divisor);
+
+                numerator /= common;
+                divisor /= common;
+                result /= divisor;
+
+                if (would_overflow_mul(result, numerator)) {
+                    return make_failure_value(
+                        error_msg("Math", "combinations", "integer overflow"));
+                }
+
+                result *= numerator;
+            }
+
+            return make_success_value(Value{result});
+        })
+        .func("permutations", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto n = expect_integer(args[0], "Math.permutations", loc);
+            auto k = expect_integer(args[1], "Math.permutations", loc);
+
+            if (n < 0 || k < 0) {
+                return make_failure_value(error_msg("Math", "permutations", "negative number"));
+            }
+
+            if (k > n) {
+                return make_failure_value(error_msg("Math", "permutations", "k must not exceed n"));
+            }
+
+            std::int64_t result{1};
+
+            for (std::int64_t i{0}; i < k; ++i) {
+                const std::int64_t factor = n - i;
+
+                if (would_overflow_mul(result, factor)) {
+                    return make_failure_value(
+                        error_msg("Math", "permutations", "integer overflow"));
+                }
+
+                result *= factor;
             }
 
             return make_success_value(Value{result});
@@ -302,6 +482,19 @@ void register_math_ns(const EnvPtr& env) {
 
             return Value{true};
         })
+        .func("is_even", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto n = expect_integer(args[0], "Math.is_even", loc);
+            // C++ truncates toward zero, so n % 2 is 0 for every even integer
+            // including negatives (e.g. -4 % 2 == 0).
+            return Value{n % 2 == 0};
+        })
+        .func("is_odd", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto n = expect_integer(args[0], "Math.is_odd", loc);
+            // For negatives n % 2 is -1 (e.g. -3 % 2 == -1), so compare against 0.
+            return Value{n % 2 != 0};
+        })
         .func("clamp", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto val = expect_numeric(args[0], "Math.clamp", loc);
@@ -366,6 +559,23 @@ void register_math_ns(const EnvPtr& env) {
         .func("radians", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return Value{expect_numeric(args[0], "Math.radians", loc) * pi / 180.0};
+        })
+        // ── Math.Angle (unit-safe angle) ─────────────────────────────────────
+        // Optional convenience wrappers around the Math.Angle choice
+        // (Radians(number) | Degrees(number)).  They make an easy-to-confuse
+        // quantity self-documenting; the bare number-radians trig APIs stay
+        // primary.
+        .func("to_radians", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{angle_to_radians(args[0], "Math.to_radians", loc)};
+        })
+        .func("to_degrees", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{angle_to_radians(args[0], "Math.to_degrees", loc) * 180.0 / pi};
+        })
+        .func("sin_of", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{std::sin(angle_to_radians(args[0], "Math.sin_of", loc))};
         })
         // ── Math.Interval ────────────────────────────────────────────────────
         // A closed numeric range [min, max].  Mirrors DateTime.Interval: a
@@ -496,6 +706,58 @@ void register_math_ns(const EnvPtr& env) {
             const auto r = read_rect(args[0], "Math.rect_area", loc);
 
             return Value{r.width * r.height};
+        })
+        // ── Math.Circle ──────────────────────────────────────────────────────
+        // A 2D circle { center: Math.Vector2, radius }, the disk companion to
+        // Math.Rect.  A total constructor (radius clamped non-negative) plus
+        // contains/intersects/circle_rect_intersects, so beginners get the common
+        // circle collision tests without hand-writing the distance-squared
+        // comparison.  All predicates use inclusive (closed-disk) boundaries.
+        .func("circle", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto center = read_vec2_point(args[0], "Math.circle", loc);
+            const double radius = expect_numeric(args[1], "Math.circle", loc);
+
+            return make_circle(center.x, center.y, radius);
+        })
+        .func("circle_contains", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_circle(args[0], "Math.circle_contains", loc);
+            const auto p = read_vec2_point(args[1], "Math.circle_contains", loc);
+
+            // Closed disk: a point exactly on the boundary counts as contained.
+            const double dx = p.x - c.cx;
+            const double dy = p.y - c.cy;
+
+            return Value{dx * dx + dy * dy <= c.radius * c.radius};
+        })
+        .func("circle_intersects", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_circle(args[0], "Math.circle_intersects", loc);
+            const auto b = read_circle(args[1], "Math.circle_intersects", loc);
+
+            // Two disks overlap (or touch) when the distance between centres is at
+            // most the sum of the radii — compared squared to avoid a sqrt.
+            const double dx = a.cx - b.cx;
+            const double dy = a.cy - b.cy;
+            const double sum = a.radius + b.radius;
+
+            return Value{dx * dx + dy * dy <= sum * sum};
+        })
+        .func("circle_rect_intersects", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_circle(args[0], "Math.circle_rect_intersects", loc);
+            const auto r = read_rect(args[1], "Math.circle_rect_intersects", loc);
+
+            // Distance from the circle centre to the closest point on the rect: if
+            // that is within the radius, the shapes overlap.  Edges are inclusive,
+            // matching the closed-disk contains predicate.
+            const double closest_x = std::clamp(c.cx, r.x, r.x + r.width);
+            const double closest_y = std::clamp(c.cy, r.y, r.y + r.height);
+            const double dx = c.cx - closest_x;
+            const double dy = c.cy - closest_y;
+
+            return Value{dx * dx + dy * dy <= c.radius * c.radius};
         });
 
     register_math_analysis(env);

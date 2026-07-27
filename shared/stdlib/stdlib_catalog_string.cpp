@@ -49,6 +49,7 @@ void register_string_functions(std::vector<FunctionSpec>& specs, const ModuleBui
             m.fn("levenshtein_distance", 2, "(a: string, b: string)", R::integer_type(),
                  {p.string, p.string}),
             m.fn("length", 1, "(value: string)", R::integer_type(), {p.string}),
+            m.fn("lines", 1, "(value: string)", R::array_string(), {p.string}),
             m.fn("lowercase", 1, "(value: string)", R::string_type(), {p.string}),
             m.fn("matches", 2, "(value: string, pattern: string)", R::result_boolean(),
                  {p.string, p.string}),

@@ -58,6 +58,24 @@ function void test_datetime_day_of_week() {
 }
 
 @test
+function void test_datetime_day_of_year() {
+    # 2024 is a leap year: 2024-03-15 is day 31 + 29 + 15 = 75.
+    number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+
+    assert(Result.unwrap(DateTime.day_of_year(timestamp)) == 75)
+
+    # January 1st is day 1.
+    number new_year = Result.unwrap(DateTime.from_parts(2024, 1, 1, 0, 0, 0))
+
+    assert(Result.unwrap(DateTime.day_of_year(new_year)) == 1)
+
+    # December 31st of a leap year is day 366.
+    number year_end = Result.unwrap(DateTime.from_parts(2024, 12, 31, 0, 0, 0))
+
+    assert(Result.unwrap(DateTime.day_of_year(year_end)) == 366)
+}
+
+@test
 function void test_datetime_is_leap_year() {
     assert(DateTime.is_leap_year(2024))
     assert(!DateTime.is_leap_year(2023))
@@ -847,4 +865,30 @@ function void test_datetime_combine_and_extract_roundtrip() {
 
     assert(back_date.month == 6 && back_date.day == 15, "date_of recovers the calendar date")
     assert(back_time.hour == 9 && back_time.minute == 30, "time_of recovers the wall-clock time")
+}
+
+
+# ─── DateTime.Period (calendar-aware span) ───
+
+@test
+function void test_datetime_period() {
+    DateTime.Period p = DateTime.period(1, 2, 3)
+    assert(p.years == 1 && p.months == 2 && p.days == 3, "period stores its components")
+
+    # 2024-03-15 13:30 UTC + 1y 2m 3d, day-clamp free.
+    number base = 1710509400.0
+    number shifted = Result.unwrap(DateTime.add_period(base, p))
+    assert(shifted > base, "add_period advances the instant")
+
+    DateTime.Period span = Result.unwrap(DateTime.between_dates(base, shifted))
+    assert(span.years == 1 && span.months == 2 && span.days == 3,
+        "between_dates recovers the applied period")
+}
+
+@test
+function void test_datetime_between_dates_negative() {
+    number base = 1710509400.0
+    number later = Result.unwrap(DateTime.add_period(base, DateTime.period(2, 0, 0)))
+    DateTime.Period span = Result.unwrap(DateTime.between_dates(later, base))
+    assert(span.years == -2, "a start after end yields a negative span")
 }

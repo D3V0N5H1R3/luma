@@ -183,6 +183,30 @@ function void test_array_zip() {
 }
 
 @test
+function void test_array_unzip() {
+    (array<integer>, array<string>) split = Array.unzip([(1, "a"), (2, "b"), (3, "c")])
+
+    array<integer> nums = split.0
+    array<string> letters = split.1
+
+    assert(Array.length(nums) == 3)
+    assert(Array.length(letters) == 3)
+    assert(nums[0] == 1)
+    assert(nums[2] == 3)
+    assert(letters[0] == "a")
+    assert(letters[2] == "c")
+}
+
+@test
+function void test_array_unzip_roundtrip() {
+    array<(integer, integer)> pairs = Array.zip([1, 2, 3], [4, 5, 6])
+    (array<integer>, array<integer>) split = Array.unzip(pairs)
+
+    assert(split.0[1] == 2)
+    assert(split.1[2] == 6)
+}
+
+@test
 function void test_array_sum() {
     assert(Result.unwrap(Array.sum([1, 2, 3, 4, 5])) == 15)
     assert(Math.approximately_equal(Result.unwrap(Array.sum([1.5, 2.5])), 4.0))
@@ -376,6 +400,63 @@ function void test_array_group_by() {
 
     assert(Array.length(Result.unwrap(Dictionary.get(groups, "1"))) == 2)
     assert(Array.length(Result.unwrap(Dictionary.get(groups, "2"))) == 2)
+}
+
+# ─── Array.max_by / Array.min_by ──────────────────────────
+
+@test
+function void test_array_max_by() {
+    optional<string> longest = Array.max_by(["a", "ccc", "bb"], (string s) -> String.length(s))
+
+    assert(Optional.unwrap(longest) == "ccc")
+
+    # The first element wins ties, so the result is stable.
+    optional<string> tie = Array.max_by(["ab", "cd", "e"], (string s) -> String.length(s))
+
+    assert(Optional.unwrap(tie) == "ab")
+
+    # An empty array yields none.
+    assert(Optional.is_none(Array.max_by([], (integer x) -> x)))
+}
+
+@test
+function void test_array_min_by() {
+    optional<string> shortest = Array.min_by(["aaa", "c", "bb"], (string s) -> String.length(s))
+
+    assert(Optional.unwrap(shortest) == "c")
+
+    optional<string> tie = Array.min_by(["a", "b", "cc"], (string s) -> String.length(s))
+
+    assert(Optional.unwrap(tie) == "a")
+
+    assert(Optional.is_none(Array.min_by([], (integer x) -> x)))
+}
+
+# ─── Array.count_by ───────────────────────────────────────
+
+@test
+function void test_array_count_by() {
+    dictionary<integer> tally = Array.count_by(["a", "b", "a", "c", "a"], (string s) -> s)
+
+    assert(Dictionary.get_or(tally, "a", 0) == 3)
+    assert(Dictionary.get_or(tally, "b", 0) == 1)
+    assert(Dictionary.get_or(tally, "c", 0) == 1)
+
+    dictionary<integer> empty = Array.count_by([], (integer x) -> Converter.to_string(x))
+
+    assert(Dictionary.length(empty) == 0)
+}
+
+# ─── Array.sum_by ─────────────────────────────────────────
+
+@test
+function void test_array_sum_by() {
+    number total = Array.sum_by([1, 2, 3, 4], (integer x) -> x)
+
+    assert(Math.approximately_equal(total, 10.0))
+
+    # An empty array sums to 0.
+    assert(Math.approximately_equal(Array.sum_by([], (integer x) -> x), 0.0))
 }
 
 # ─── Array.join ───────────────────────────────────────────

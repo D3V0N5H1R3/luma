@@ -298,6 +298,43 @@ void register_http_parsing(const EnvPtr& env) {
 
             return Value{std::string{"Bearer "} + token};
         })
+        // Http.authorization_header(auth) -> string
+        // Renders an Http.Auth choice into its Authorization header value: a
+        // Basic(username, password) becomes "Basic <base64(username:password)>" and a
+        // Bearer(token) becomes "Bearer <token>".  The typed choice makes a scheme
+        // typo a compile error, mirroring Http.method_to_string over Http.Method; the
+        // free basic_auth / bearer_auth helpers remain for the stringly-typed path.
+        .func("authorization_header", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_choice()) {
+                throw RuntimeError{
+                    std::string{"Http.authorization_header: expected an Http.Auth choice"}, loc,
+                    "pass Http.Auth.Basic(user, pass) or Http.Auth.Bearer(token)"};
+            }
+
+            const auto& auth = *args[0].as_choice();
+
+            const auto field_string = [&](std::size_t index) -> std::string {
+                return index < auth.fields.size() && auth.fields[index].is_string()
+                           ? auth.fields[index].as_string()
+                           : std::string{};
+            };
+
+            if (auth.variant == "Basic") {
+                const auto credentials = field_string(0) + ":" + field_string(1);
+
+                return Value{std::string{"Basic "} + base64_encode(credentials)};
+            }
+
+            if (auth.variant == "Bearer") {
+                return Value{std::string{"Bearer "} + field_string(0)};
+            }
+
+            throw RuntimeError{
+                std::format("Http.authorization_header: unknown Http.Auth variant '{}'",
+                            auth.variant),
+                loc, "use Http.Auth.Basic(user, pass) or Http.Auth.Bearer(token)"};
+        })
         // Http.parse_url(url) -> dictionary<string>
         .func("parse_url", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

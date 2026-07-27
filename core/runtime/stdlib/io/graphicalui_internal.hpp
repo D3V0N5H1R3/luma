@@ -69,6 +69,11 @@ inline void register_graphicalui_constants(const EnvPtr& env) {
         {"GraphicalUi.VAR_RADIUS_LG", "var(--gui-radius-lg)"},
         {"GraphicalUi.VAR_RADIUS_FULL", "var(--gui-radius-full)"},
         {"GraphicalUi.VAR_SHADOW", "var(--gui-shadow)"},
+        // Semantic elevation ladder for the Solaris `Shadow` token.
+        {"GraphicalUi.VAR_SHADOW_NONE", "none"},
+        {"GraphicalUi.VAR_SHADOW_SM", "var(--gui-elevation-1)"},
+        {"GraphicalUi.VAR_SHADOW_MD", "var(--gui-elevation-3)"},
+        {"GraphicalUi.VAR_SHADOW_LG", "var(--gui-elevation-6)"},
         {"GraphicalUi.VAR_GAP", "var(--gui-gap)"},
         {"GraphicalUi.VAR_SPACE_XS", "var(--gui-space-xs)"},
         {"GraphicalUi.VAR_SPACE_SM", "var(--gui-space-sm)"},

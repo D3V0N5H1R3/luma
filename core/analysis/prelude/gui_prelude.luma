@@ -85,6 +85,25 @@ choice Radius {
     Full
 }
 
+# Elevation — how much an element visibly "floats" above the page. A semantic
+# depth scale (exactly paralleling `Radius`): raise a card or panel with
+# `|> Solaris.shadow(Shadow.Medium)`, or flatten one with `Shadow.None`.
+choice Shadow {
+    None,
+    Small,
+    Medium,
+    Large
+}
+
+# A hairline or thick outline around any element. Pair with `Solaris.border`
+# for the weight and `Solaris.border_color` (a `Color`) for the tint; the
+# default tint is the theme's neutral border.
+choice Border {
+    None,
+    Thin,
+    Thick
+}
+
 # A forced colour scheme. Dark mode is automatic (it follows the OS), so this is
 # only for apps that want to pin or toggle the mode themselves.
 choice Scheme {
@@ -124,6 +143,9 @@ record View {
     Length node_width = Length.Shrink,
     Length node_height = Length.Shrink,
     Radius radius = Radius.Medium,
+    Shadow shadow = Shadow.None,
+    Border border = Border.None,
+    Color border_tint = Color.Muted,
     boolean centered = false,
     boolean checked = false,
     string placeholder = "",
@@ -161,6 +183,9 @@ record View {
     boolean has_align = false,
     boolean has_justify = false,
     boolean has_radius = false,
+    boolean has_shadow = false,
+    boolean has_border = false,
+    boolean has_border_tint = false,
     array<View> children = []
 }
 
@@ -503,6 +528,23 @@ namespace Solaris {
         return node with { radius = r, has_radius = true }
     }
 
+    # Elevation — how much the element floats above the page.
+    function View shadow(View node, Shadow s) {
+        return node with { shadow = s, has_shadow = true }
+    }
+
+    # Outline weight (hairline `Thin` or heavier `Thick`); `None` removes it.
+    function View border(View node, Border b) {
+        return node with { border = b, has_border = true }
+    }
+
+    # Outline colour, using the shared `Color` token. Only takes effect when a
+    # `border` weight is also applied; otherwise the theme's neutral border is
+    # used.
+    function View border_color(View node, Color c) {
+        return node with { border_tint = c, has_border_tint = true }
+    }
+
     # Initial checked state for a checkbox.
     function View checked(View node, boolean state) {
         return node with { checked = state }
@@ -639,6 +681,39 @@ namespace Solaris {
         }
     }
 
+    # Map a Shadow token to a CSS `box-shadow` (theme-aware elevation ladder).
+    internal function string shadow_css(Shadow s) {
+        return match s {
+            case Shadow.None   { GraphicalUi.VAR_SHADOW_NONE }
+            case Shadow.Small  { GraphicalUi.VAR_SHADOW_SM }
+            case Shadow.Medium { GraphicalUi.VAR_SHADOW_MD }
+            case Shadow.Large  { GraphicalUi.VAR_SHADOW_LG }
+        }
+    }
+
+    # Map a Border token to a CSS `border` width/style fragment.
+    internal function string border_width_css(Border b) {
+        return match b {
+            case Border.None  { "none" }
+            case Border.Thin  { "1px solid" }
+            case Border.Thick { "2px solid" }
+        }
+    }
+
+    # Compose the full CSS `border` shorthand for a View: width/style from the
+    # `Border` token, tint from the `Color` token (theme border when unset).
+    internal function string border_css(View node) {
+        string width = Solaris.border_width_css(node.border)
+        if width == "none" {
+            return "none"
+        }
+        mutable string tint = GraphicalUi.VAR_BORDER
+        if node.has_border_tint {
+            tint = Solaris.color_value(node.border_tint)
+        }
+        return "${width} ${tint}"
+    }
+
     # Width/height style fragment for any View, honouring the `width`/`height`
     # modifiers. Fill/Fixed become width/height; FillPortion becomes `flex`.
     internal function dictionary size_style(View node) {
@@ -681,6 +756,14 @@ namespace Solaris {
 
         if node.has_radius {
             style["border_radius"] = Solaris.radius_css(node.radius)
+        }
+
+        if node.has_shadow {
+            style["box_shadow"] = Solaris.shadow_css(node.shadow)
+        }
+
+        if node.has_border {
+            style["border"] = Solaris.border_css(node)
         }
 
         return style

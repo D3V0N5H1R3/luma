@@ -84,6 +84,33 @@ LUMA_TEST(math_factorial) {
     ASSERT_EVAL_INT("Math.factorial(5)", 120);
 }
 
+LUMA_TEST(math_combinations) {
+    ASSERT_EVAL_INT("Math.combinations(5, 2)", 10);
+
+    ASSERT_EVAL_INT("Math.combinations(5, 0)", 1);
+
+    ASSERT_EVAL_INT("Math.combinations(5, 5)", 1);
+
+    // Symmetry: C(n, k) == C(n, n - k).
+    ASSERT_EVAL_INT("Math.combinations(10, 3)", 120);
+
+    ASSERT_EVAL_INT("Math.combinations(10, 7)", 120);
+
+    // A large but representable central binomial coefficient (does not overflow
+    // even though the equivalent factorials would).
+    ASSERT_EVAL_INT("Math.combinations(62, 31)", 465428353255261088);
+}
+
+LUMA_TEST(math_permutations) {
+    ASSERT_EVAL_INT("Math.permutations(5, 2)", 20);
+
+    ASSERT_EVAL_INT("Math.permutations(5, 0)", 1);
+
+    ASSERT_EVAL_INT("Math.permutations(5, 5)", 120);
+
+    ASSERT_EVAL_INT("Math.permutations(10, 3)", 720);
+}
+
 LUMA_TEST(math_floor_ceil_round) {
     ASSERT_EVAL_INT("Math.floor(3.7)", 3);
 
@@ -118,6 +145,35 @@ LUMA_TEST(math_is_prime) {
     // Large prime (2^31-1) exercises the overflow-safe `i <= n / i` trial
     // division near where the old `i * i` form would begin to overflow.
     ASSERT_EQ(eval("Math.is_prime(2147483647)").as_bool(), true);
+}
+
+LUMA_TEST(math_is_even_odd) {
+    ASSERT_EQ(eval("Math.is_even(4)").as_bool(), true);
+    ASSERT_EQ(eval("Math.is_even(3)").as_bool(), false);
+    ASSERT_EQ(eval("Math.is_even(0)").as_bool(), true);
+    // Negative-safe: -4 is even, -3 is odd.
+    ASSERT_EQ(eval("Math.is_even(-4)").as_bool(), true);
+    ASSERT_EQ(eval("Math.is_odd(-3)").as_bool(), true);
+    ASSERT_EQ(eval("Math.is_odd(4)").as_bool(), false);
+    ASSERT_EQ(eval("Math.is_odd(3)").as_bool(), true);
+}
+
+LUMA_TEST(math_integer_bounds) {
+    ASSERT_EQ(eval("Math.max_integer").as_integer(), 9223372036854775807LL);
+    ASSERT_EQ(eval("Math.min_integer").as_integer(), -9223372036854775807LL - 1);
+}
+
+LUMA_TEST(math_epsilon) {
+    // Machine epsilon is positive and smaller than any everyday tolerance.
+    ASSERT_TRUE(eval("Math.epsilon").as_number() > 0.0);
+    ASSERT_TRUE(eval("Math.epsilon").as_number() < 1e-15);
+    // 1.0 + epsilon is distinguishable from 1.0.
+    ASSERT_EQ(eval("1.0 + Math.epsilon > 1.0").as_bool(), true);
+}
+
+LUMA_TEST(math_nan) {
+    ASSERT_EQ(eval("Math.is_not_a_number(Math.nan)").as_bool(), true);
+    ASSERT_EQ(eval("Math.is_infinite(Math.nan)").as_bool(), false);
 }
 
 LUMA_TEST(math_lerp) {
@@ -557,6 +613,30 @@ LUMA_TEST(math_factorial_negative) {
 
 LUMA_TEST(math_factorial_overflow) {
     ASSERT_EVAL_FAILURE("Math.factorial(21)");
+}
+
+LUMA_TEST(math_combinations_invalid) {
+    ASSERT_EVAL_FAILURE("Math.combinations(-1, 2)");
+
+    ASSERT_EVAL_FAILURE("Math.combinations(5, -1)");
+
+    ASSERT_EVAL_FAILURE("Math.combinations(3, 5)");
+}
+
+LUMA_TEST(math_combinations_overflow) {
+    ASSERT_EVAL_FAILURE("Math.combinations(100, 50)");
+}
+
+LUMA_TEST(math_permutations_invalid) {
+    ASSERT_EVAL_FAILURE("Math.permutations(-1, 2)");
+
+    ASSERT_EVAL_FAILURE("Math.permutations(5, -1)");
+
+    ASSERT_EVAL_FAILURE("Math.permutations(3, 5)");
+}
+
+LUMA_TEST(math_permutations_overflow) {
+    ASSERT_EVAL_FAILURE("Math.permutations(30, 20)");
 }
 
 LUMA_TEST(math_square_root_negative) {
@@ -1093,6 +1173,88 @@ LUMA_TEST(math_rect_center_and_area) {
     ASSERT_NEAR(eval("Math.rect_area(Math.rect(0.0, 0.0, 10.0, 20.0))").as_number(), 200.0, 1e-9);
 }
 
+// --- Math.Circle (N05) ---
+
+LUMA_TEST(math_circle_construct_and_fields) {
+    const auto v = eval("Math.circle(Math.vector2(3.0, 4.0), 5.0)");
+    ASSERT_TRUE(v.is_record());
+
+    const auto& rec = v.as_record();
+    ASSERT_EQ(rec->type_name, std::string{"Circle"});
+    ASSERT_NEAR(rec->find_field("radius")->as_number(), 5.0, 1e-9);
+
+    const auto* center = rec->find_field("center");
+    ASSERT_TRUE(center->is_record());
+    ASSERT_EQ(center->as_record()->type_name, std::string{"Vector2"});
+    ASSERT_NEAR(center->as_record()->find_field("x")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(center->as_record()->find_field("y")->as_number(), 4.0, 1e-9);
+}
+
+LUMA_TEST(math_circle_negative_radius_clamped) {
+    // A negative radius clamps to zero (a degenerate circle is a point).
+    const auto v = eval("Math.circle(Math.vector2(0.0, 0.0), -3.0)");
+    ASSERT_NEAR(v.as_record()->find_field("radius")->as_number(), 0.0, 1e-9);
+}
+
+LUMA_TEST(math_circle_contains_closed_disk) {
+    // Closed disk: a point exactly on the boundary (distance 5 == radius) counts.
+    ASSERT_EQ(eval("Math.circle_contains(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.vector2(3.0, 4.0))")
+                  .as_bool(),
+              true);
+    ASSERT_EQ(eval("Math.circle_contains(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.vector2(0.0, 0.0))")
+                  .as_bool(),
+              true);
+    // Just outside the boundary → not contained.
+    ASSERT_EQ(eval("Math.circle_contains(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.vector2(3.0, 4.1))")
+                  .as_bool(),
+              false);
+}
+
+LUMA_TEST(math_circle_intersects) {
+    // Overlapping: centres 6 apart, radii 5 + 5 = 10 → overlap.
+    ASSERT_EQ(eval("Math.circle_intersects(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.circle(Math.vector2(6.0, 0.0), 5.0))")
+                  .as_bool(),
+              true);
+    // Exactly touching: centres 10 apart, radii 5 + 5 = 10 → inclusive touch.
+    ASSERT_EQ(eval("Math.circle_intersects(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.circle(Math.vector2(10.0, 0.0), 5.0))")
+                  .as_bool(),
+              true);
+    // Disjoint: centres 12 apart, radii 5 + 5 = 10 → no overlap.
+    ASSERT_EQ(eval("Math.circle_intersects(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.circle(Math.vector2(12.0, 0.0), 5.0))")
+                  .as_bool(),
+              false);
+}
+
+LUMA_TEST(math_circle_rect_intersects) {
+    // Circle centre inside the rect → overlap.
+    ASSERT_EQ(eval("Math.circle_rect_intersects(Math.circle(Math.vector2(5.0, 5.0), 2.0), "
+                   "Math.rect(0.0, 0.0, 10.0, 10.0))")
+                  .as_bool(),
+              true);
+    // Circle near an edge, within radius of the closest point → overlap.
+    ASSERT_EQ(eval("Math.circle_rect_intersects(Math.circle(Math.vector2(11.0, 5.0), 2.0), "
+                   "Math.rect(0.0, 0.0, 10.0, 10.0))")
+                  .as_bool(),
+              true);
+    // Far corner: closest point (10,10) is distance ~2.83 from centre (12,12) > radius 2.
+    ASSERT_EQ(eval("Math.circle_rect_intersects(Math.circle(Math.vector2(12.0, 12.0), 2.0), "
+                   "Math.rect(0.0, 0.0, 10.0, 10.0))")
+                  .as_bool(),
+              false);
+}
+
+LUMA_TEST(math_circle_rejects_non_record) {
+    ASSERT_TRUE(luma::test::eval_throws("Math.circle_contains(42, Math.vector2(0.0, 0.0))"));
+    ASSERT_TRUE(luma::test::eval_throws(
+        "Math.circle_rect_intersects(Math.circle(Math.vector2(0.0, 0.0), 1.0), 42)"));
+}
+
 // --- Math.Matrix2 / Math.Matrix3 (T07) ---
 LUMA_TEST(math_matrix2_identity_and_transform) {
     const auto id = eval("Math.mat2_identity()");
@@ -1140,6 +1302,130 @@ LUMA_TEST(math_matrix3_identity_multiply_transform) {
         eval("Math.mat3_multiply(Math.mat3_identity(), Math.matrix3(1.0, 0.0, 0.0, 0.0, 2.0, 0.0, "
              "0.0, 0.0, 3.0))");
     ASSERT_NEAR(prod.as_record()->find_field("m11")->as_number(), 2.0, 1e-9);
+}
+
+// --- Math.Vector4 / Math.Matrix4 (N02) ---
+
+LUMA_TEST(math_vector4_and_arithmetic) {
+    const auto v = eval("Math.vector4(1.0, 2.0, 3.0, 4.0)");
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Vector4"});
+    ASSERT_NEAR(v.as_record()->find_field("x")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("w")->as_number(), 4.0, 1e-9);
+
+    // 3-4-... length: (1,2,2,4) has length sqrt(1+4+4+16) = 5.
+    ASSERT_NEAR(eval("Math.vec4_length(Math.vector4(1.0, 2.0, 2.0, 4.0))").as_number(), 5.0, 1e-9);
+
+    ASSERT_NEAR(eval("Math.vec4_dot(Math.vector4(1.0, 2.0, 3.0, 4.0), "
+                     "Math.vector4(1.0, 1.0, 1.0, 1.0))")
+                    .as_number(),
+                10.0, 1e-9);
+
+    const auto sum = eval("Math.vec4_add(Math.vector4(1.0, 2.0, 3.0, 4.0), "
+                          "Math.vector4(4.0, 3.0, 2.0, 1.0))");
+    ASSERT_NEAR(sum.as_record()->find_field("x")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(sum.as_record()->find_field("w")->as_number(), 5.0, 1e-9);
+
+    const auto diff = eval("Math.vec4_sub(Math.vector4(4.0, 3.0, 2.0, 1.0), "
+                           "Math.vector4(1.0, 1.0, 1.0, 1.0))");
+    ASSERT_NEAR(diff.as_record()->find_field("x")->as_number(), 3.0, 1e-9);
+
+    const auto scaled = eval("Math.vec4_scale(Math.vector4(1.0, 2.0, 3.0, 4.0), 2.0)");
+    ASSERT_NEAR(scaled.as_record()->find_field("z")->as_number(), 6.0, 1e-9);
+
+    const auto norm = eval("Math.vec4_normalize(Math.vector4(0.0, 0.0, 0.0, 5.0))");
+    ASSERT_NEAR(norm.as_record()->find_field("w")->as_number(), 1.0, 1e-9);
+
+    // The zero vector normalises to itself rather than dividing by zero.
+    const auto zero = eval("Math.vec4_normalize(Math.vector4(0.0, 0.0, 0.0, 0.0))");
+    ASSERT_NEAR(zero.as_record()->find_field("x")->as_number(), 0.0, 1e-9);
+}
+
+LUMA_TEST(math_matrix4_identity_multiply_transform) {
+    const auto id = eval("Math.mat4_identity()");
+    ASSERT_TRUE(id.is_record());
+    ASSERT_EQ(id.as_record()->type_name, std::string{"Matrix4"});
+    ASSERT_NEAR(id.as_record()->find_field("m00")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(id.as_record()->find_field("m33")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(id.as_record()->find_field("m01")->as_number(), 0.0, 1e-9);
+
+    ASSERT_NEAR(eval("Math.mat4_determinant(Math.mat4_identity())").as_number(), 1.0, 1e-9);
+
+    // Identity leaves a 4D vector unchanged.
+    const auto v = eval("Math.mat4_transform(Math.mat4_identity(), "
+                        "Math.vector4(1.0, 2.0, 3.0, 4.0))");
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Vector4"});
+    ASSERT_NEAR(v.as_record()->find_field("z")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("w")->as_number(), 4.0, 1e-9);
+
+    // A * identity == A.
+    const auto prod = eval("Math.mat4_multiply(Math.matrix4("
+                           "2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, "
+                           "0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0, 1.0), Math.mat4_identity())");
+    ASSERT_NEAR(prod.as_record()->find_field("m11")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(prod.as_record()->find_field("m22")->as_number(), 4.0, 1e-9);
+
+    // Determinant of a diagonal scale matrix is the product of the diagonal.
+    ASSERT_NEAR(eval("Math.mat4_determinant(Math.matrix4("
+                     "2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, "
+                     "0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0, 5.0))")
+                    .as_number(),
+                120.0, 1e-9);
+}
+
+LUMA_TEST(math_matrix4_transform_point_translation) {
+    // A translation matrix moves a point by (10, 20, 30).
+    const auto p = eval("Math.mat4_transform_point(Math.matrix4("
+                        "1.0, 0.0, 0.0, 10.0, 0.0, 1.0, 0.0, 20.0, "
+                        "0.0, 0.0, 1.0, 30.0, 0.0, 0.0, 0.0, 1.0), Math.vector3(1.0, 2.0, 3.0))");
+    ASSERT_EQ(p.as_record()->type_name, std::string{"Vector3"});
+    ASSERT_NEAR(p.as_record()->find_field("x")->as_number(), 11.0, 1e-9);
+    ASSERT_NEAR(p.as_record()->find_field("y")->as_number(), 22.0, 1e-9);
+    ASSERT_NEAR(p.as_record()->find_field("z")->as_number(), 33.0, 1e-9);
+}
+
+LUMA_TEST(math_matrix4_perspective_and_look_at) {
+    // Perspective is a valid Matrix4 with the -1 in the w row that enables the
+    // homogeneous divide.
+    const auto proj = eval("Math.mat4_perspective(Math.pi / 2.0, 1.0, 1.0, 100.0)");
+    ASSERT_EQ(proj.as_record()->type_name, std::string{"Matrix4"});
+    // fov 90°, aspect 1 => m00 = m11 = 1 / tan(45°) = 1.
+    ASSERT_NEAR(proj.as_record()->find_field("m00")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(proj.as_record()->find_field("m11")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(proj.as_record()->find_field("m32")->as_number(), -1.0, 1e-9);
+
+    // Looking down the -Z axis from the origin: the eye maps to the view-space
+    // origin, so transforming the eye position yields (0, 0, 0).
+    const auto view = eval("Math.mat4_look_at(Math.vector3(0.0, 0.0, 5.0), "
+                           "Math.vector3(0.0, 0.0, 0.0), Math.vector3(0.0, 1.0, 0.0))");
+    ASSERT_EQ(view.as_record()->type_name, std::string{"Matrix4"});
+    const auto at_eye =
+        eval("Math.mat4_transform_point(Math.mat4_look_at(Math.vector3(0.0, 0.0, 5.0), "
+             "Math.vector3(0.0, 0.0, 0.0), Math.vector3(0.0, 1.0, 0.0)), "
+             "Math.vector3(0.0, 0.0, 5.0))");
+    ASSERT_NEAR(at_eye.as_record()->find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(at_eye.as_record()->find_field("y")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(at_eye.as_record()->find_field("z")->as_number(), 0.0, 1e-9);
+}
+
+// --- Math.Angle (N07) ---
+
+LUMA_TEST(math_angle_to_radians_and_degrees) {
+    // 90 degrees is pi/2 radians.
+    ASSERT_NEAR(eval("Math.to_radians(Math.Angle.Degrees(90.0))").as_number(), 1.5707963267948966,
+                1e-9);
+    // Radians pass through unchanged.
+    ASSERT_NEAR(eval("Math.to_radians(Math.Angle.Radians(1.5))").as_number(), 1.5, 1e-9);
+    // pi radians is 180 degrees.
+    ASSERT_NEAR(eval("Math.to_degrees(Math.Angle.Radians(Math.pi))").as_number(), 180.0, 1e-9);
+    // Degrees pass through unchanged.
+    ASSERT_NEAR(eval("Math.to_degrees(Math.Angle.Degrees(45.0))").as_number(), 45.0, 1e-9);
+}
+
+LUMA_TEST(math_sin_of_angle) {
+    ASSERT_NEAR(eval("Math.sin_of(Math.Angle.Degrees(90.0))").as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(eval("Math.sin_of(Math.Angle.Degrees(0.0))").as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(eval("Math.sin_of(Math.Angle.Radians(Math.pi / 2.0))").as_number(), 1.0, 1e-9);
 }
 
 // --- Math.Quaternion (N06) ---
