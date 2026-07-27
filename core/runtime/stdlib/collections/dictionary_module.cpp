@@ -210,6 +210,37 @@ void register_dictionary_ns(const EnvPtr& env) {
                           });
                           return Value{std::move(dict)};
                       })
+        // Dictionary.merge_with(dictionary<V>, dictionary<V>, func(V, V) -> V)
+        //   -> dictionary<V>
+        // Like merge, but resolves a key present in BOTH dictionaries by calling
+        // the combiner f(value_from_a, value_from_b); keys unique to either side
+        // are copied through unchanged.  The inputs are never mutated.
+        .func("merge_with", 3)
+        .extract_body(expect_dict,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          const auto& other =
+                              expect_dict(args[1], "Dictionary.merge_with", loc)->entries;
+                          expect_callable(args[2], "Dictionary.merge_with", loc);
+
+                          ensure_dictionary_capacity(src->entries.size(), other.size(),
+                                                     "Dictionary.merge_with", loc);
+
+                          auto dict = clone_dict(src);
+
+                          std::vector<Value> call_args(2);
+                          for (const auto& [key, value] : other) {
+                              const auto* existing = dict->find(key);
+
+                              if (existing != nullptr) {
+                                  call_args[0] = *existing;
+                                  call_args[1] = value;
+                                  dict->set(key, invoke_callable(args[2], call_args, loc));
+                              } else {
+                                  dict->set(key, value);
+                              }
+                          }
+                          return Value{std::move(dict)};
+                      })
         .func("is_empty", 1)
         .extract_body(expect_dict,
                       [](const auto& dict, const Args&, SourceLocation) -> Value {

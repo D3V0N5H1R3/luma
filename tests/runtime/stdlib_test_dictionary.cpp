@@ -140,6 +140,50 @@ static void test_dictionary_merge_overlay_wins() {
               9);
 }
 
+// ─── merge_with ───────────────────────────────────────────────────────
+
+static void test_dictionary_merge_with_combines_shared_keys() {
+    // Shared key "b" is combined with the summing combiner; unique keys pass
+    // through unchanged.
+    const auto v = eval("Dictionary.merge_with({\"a\": 1, \"b\": 2}, {\"b\": 9, \"c\": 3}, "
+                        "(number x, number y) -> x + y)");
+
+    ASSERT_TRUE(v.is_dictionary());
+    ASSERT_EQ(v.as_dictionary()->entries.size(), 3U);
+    ASSERT_EQ(eval("Dictionary.get_or(Dictionary.merge_with({\"a\": 1, \"b\": 2}, "
+                   "{\"b\": 9, \"c\": 3}, (number x, number y) -> x + y), \"b\", 0)")
+                  .as_integer(),
+              11);
+}
+
+static void test_dictionary_merge_with_combiner_argument_order() {
+    // An asymmetric combiner (x - y) proves the argument order on a shared key:
+    // the first argument is a's value, the second is b's value.
+    // a["k"] == 10, b["k"] == 3, so 10 - 3 == 7 (not 3 - 10 == -7).
+    ASSERT_EQ(eval("Dictionary.get_or(Dictionary.merge_with({\"k\": 10}, {\"k\": 3}, "
+                   "(number x, number y) -> x - y), \"k\", 0)")
+                  .as_integer(),
+              7);
+}
+
+static void test_dictionary_merge_with_unique_keys_passthrough() {
+    // The combiner is never called when the key sets are disjoint.
+    ASSERT_EQ(eval("Dictionary.get_or(Dictionary.merge_with({\"a\": 1}, {\"b\": 2}, "
+                   "(number x, number y) -> x * 100), \"b\", 0)")
+                  .as_integer(),
+              2);
+}
+
+static void test_dictionary_merge_with_does_not_mutate_inputs() {
+    // The original dictionaries are untouched by the merge.
+    ASSERT_EQ(eval("a = {\"k\": 1}\n"
+                   "b = {\"k\": 2}\n"
+                   "ignore = Dictionary.merge_with(a, b, (number x, number y) -> x + y)\n"
+                   "Dictionary.get_or(a, \"k\", 0)")
+                  .as_integer(),
+              1);
+}
+
 // ─── each ─────────────────────────────────────────────────────────────
 
 static void test_dictionary_each() {
@@ -547,6 +591,7 @@ static void test_dictionary_module() {
     ASSERT_TRUE(env->has("Dictionary.values"));
     ASSERT_TRUE(env->has("Dictionary.length"));
     ASSERT_TRUE(env->has("Dictionary.merge"));
+    ASSERT_TRUE(env->has("Dictionary.merge_with"));
     ASSERT_TRUE(env->has("Dictionary.deep_merge"));
     ASSERT_TRUE(env->has("Dictionary.from_keys"));
     ASSERT_TRUE(env->has("Dictionary.from_entries"));
@@ -600,6 +645,10 @@ int main() {
     RUN(test_dictionary_values);
     RUN(test_dictionary_merge);
     RUN(test_dictionary_merge_overlay_wins);
+    RUN(test_dictionary_merge_with_combines_shared_keys);
+    RUN(test_dictionary_merge_with_combiner_argument_order);
+    RUN(test_dictionary_merge_with_unique_keys_passthrough);
+    RUN(test_dictionary_merge_with_does_not_mutate_inputs);
     RUN(test_dictionary_each);
     RUN(test_dictionary_each_callback_error);
     RUN(test_dictionary_from_keys);

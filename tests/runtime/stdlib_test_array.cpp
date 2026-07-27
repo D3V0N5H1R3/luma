@@ -616,6 +616,50 @@ static void test_array_zip_unequal_lengths() {
     ASSERT_EQ(eval("Array.zip([1, 2, 3], [10])").as_array()->elements->size(), 1U);
 }
 
+static void test_array_unzip() {
+    // The inverse of zip: an array of pairs splits into two parallel arrays.
+    const auto v = eval("Array.unzip([(1, \"a\"), (2, \"b\"), (3, \"c\")])");
+
+    ASSERT_TRUE(v.is_tuple());
+    ASSERT_EQ(v.as_tuple()->elements.size(), 2U);
+
+    const auto& firsts = v.as_tuple()->elements[0];
+    const auto& seconds = v.as_tuple()->elements[1];
+
+    ASSERT_TRUE(firsts.is_array());
+    ASSERT_TRUE(seconds.is_array());
+    ASSERT_EQ(firsts.as_array()->elements->size(), 3U);
+    ASSERT_EQ(seconds.as_array()->elements->size(), 3U);
+
+    ASSERT_EQ((*firsts.as_array()->elements)[0].as_integer(), 1);
+    ASSERT_EQ((*firsts.as_array()->elements)[2].as_integer(), 3);
+    ASSERT_EQ((*seconds.as_array()->elements)[0].as_string(), std::string("a"));
+    ASSERT_EQ((*seconds.as_array()->elements)[2].as_string(), std::string("c"));
+}
+
+static void test_array_unzip_empty() {
+    const auto v = eval("Array.unzip([])");
+
+    ASSERT_TRUE(v.is_tuple());
+    ASSERT_EQ(v.as_tuple()->elements[0].as_array()->elements->size(), 0U);
+    ASSERT_EQ(v.as_tuple()->elements[1].as_array()->elements->size(), 0U);
+}
+
+// unzip . zip is the identity on the pair of inputs.
+static void test_array_unzip_roundtrip() {
+    const auto v = eval("Array.unzip(Array.zip([1, 2, 3], [4, 5, 6]))");
+
+    ASSERT_TRUE(v.is_tuple());
+    ASSERT_EQ((*v.as_tuple()->elements[0].as_array()->elements)[1].as_integer(), 2);
+    ASSERT_EQ((*v.as_tuple()->elements[1].as_array()->elements)[2].as_integer(), 6);
+}
+
+// A non-2-tuple element is rejected with a runtime error (reachable through the
+// unchecked eval pipeline).
+static void test_array_unzip_malformed_throws() {
+    ASSERT_TRUE(throws_runtime("Array.unzip([(1, 2), 3])"));
+}
+
 static void test_array_take() {
     const auto v = eval("Array.take([1, 2, 3, 4, 5], 2)");
 
@@ -961,6 +1005,10 @@ int main() {
     RUN(test_array_sort_by_inconsistent_keys_is_safe);
     RUN(test_array_zip);
     RUN(test_array_zip_unequal_lengths);
+    RUN(test_array_unzip);
+    RUN(test_array_unzip_empty);
+    RUN(test_array_unzip_roundtrip);
+    RUN(test_array_unzip_malformed_throws);
     RUN(test_array_take);
     RUN(test_array_drop);
     RUN(test_array_enumerate);
