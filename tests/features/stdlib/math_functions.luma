@@ -84,6 +84,24 @@ function void test_math_factorial() {
 }
 
 @test
+function void test_math_combinations() {
+    assert(Result.unwrap(Math.combinations(5, 0)) == 1)
+    assert(Result.unwrap(Math.combinations(5, 5)) == 1)
+    assert(Result.unwrap(Math.combinations(5, 2)) == 10)
+    assert(Result.unwrap(Math.combinations(10, 3)) == 120)
+    # Symmetry: C(n, k) == C(n, n - k).
+    assert(Result.unwrap(Math.combinations(10, 7)) == 120)
+}
+
+@test
+function void test_math_permutations() {
+    assert(Result.unwrap(Math.permutations(5, 0)) == 1)
+    assert(Result.unwrap(Math.permutations(5, 2)) == 20)
+    assert(Result.unwrap(Math.permutations(5, 5)) == 120)
+    assert(Result.unwrap(Math.permutations(10, 3)) == 720)
+}
+
+@test
 function void test_math_gcd() {
     assert(Result.unwrap(Math.greatest_common_divisor(12, 8)) == 4)
     assert(Result.unwrap(Math.greatest_common_divisor(7, 13)) == 1)
@@ -104,6 +122,48 @@ function void test_math_is_prime() {
     assert(!Math.is_prime(4))
     assert(Math.is_prime(17))
     assert(!Math.is_prime(100))
+}
+
+@test
+function void test_math_is_even_odd() {
+    assert(Math.is_even(0))
+    assert(Math.is_even(4))
+    assert(!Math.is_even(3))
+    assert(Math.is_odd(3))
+    assert(!Math.is_odd(4))
+
+    # Parity is correct for negative integers.
+    assert(Math.is_even(-4))
+    assert(Math.is_odd(-3))
+    assert(!Math.is_even(-3))
+}
+
+@test
+function void test_math_integer_bounds() {
+    # The 64-bit signed integer bounds.
+    assert(Math.max_integer == 9223372036854775807)
+    assert(Math.min_integer < 0)
+    assert(Math.max_integer > 0)
+    # Their magnitudes bracket every other integer.
+    assert(Math.max_integer > 1000000)
+    assert(Math.min_integer < -1000000)
+}
+
+@test
+function void test_math_epsilon() {
+    # Machine epsilon is a tiny positive tolerance.
+    assert(Math.epsilon > 0.0)
+    assert(Math.epsilon < 0.001)
+    # It is the smallest step distinguishable from 1.0.
+    assert(1.0 + Math.epsilon > 1.0)
+}
+
+@test
+function void test_math_nan() {
+    # Math.nan is the quiet not-a-number sentinel; test it with the predicate,
+    # never with '=='.
+    assert(Math.is_not_a_number(Math.nan))
+    assert(!Math.is_infinite(Math.nan))
 }
 
 @test
@@ -372,6 +432,22 @@ function void test_math_factorial_too_large() {
     result<integer> r = Math.factorial(21)
 
     assert(Result.is_failure(r), "factorial above 20 should fail")
+}
+
+@test
+function void test_math_combinations_invalid() {
+    assert(Result.is_failure(Math.combinations(-1, 2)), "negative n should fail")
+    assert(Result.is_failure(Math.combinations(5, -1)), "negative k should fail")
+    assert(Result.is_failure(Math.combinations(3, 5)), "k > n should fail")
+    assert(Result.is_failure(Math.combinations(100, 50)), "overflow should fail")
+}
+
+@test
+function void test_math_permutations_invalid() {
+    assert(Result.is_failure(Math.permutations(-1, 2)), "negative n should fail")
+    assert(Result.is_failure(Math.permutations(5, -1)), "negative k should fail")
+    assert(Result.is_failure(Math.permutations(3, 5)), "k > n should fail")
+    assert(Result.is_failure(Math.permutations(30, 20)), "overflow should fail")
 }
 
 @test
@@ -1047,6 +1123,84 @@ function void test_math_matrix3() {
 }
 
 # ═══════════════════════════════════════════════════════════
+# Math.Vector4 / Math.Matrix4 (homogeneous 3D transforms)
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_math_vector4() {
+    Math.Vector4 v = Math.vector4(1.0, 2.0, 2.0, 4.0)
+
+    assert(Math.approximately_equal(v.w, 4.0, 0.001), "w component")
+    assert(Math.approximately_equal(Math.vec4_length(v), 5.0, 0.001), "4D length")
+    assert(Math.approximately_equal(
+        Math.vec4_dot(Math.vector4(1.0, 2.0, 3.0, 4.0), Math.vector4(1.0, 1.0, 1.0, 1.0)), 10.0,
+        0.001), "dot with ones sums components")
+
+    Math.Vector4 unit = Math.vec4_normalize(Math.vector4(0.0, 0.0, 0.0, 5.0))
+    assert(Math.approximately_equal(unit.w, 1.0, 0.001), "normalized w is 1")
+}
+
+@test
+function void test_math_matrix4() {
+    Math.Matrix4 id = Math.mat4_identity()
+    Math.Vector4 v = Math.mat4_transform(id, Math.vector4(1.0, 2.0, 3.0, 4.0))
+
+    assert(Math.approximately_equal(v.z, 3.0, 0.001), "identity keeps z")
+    assert(Math.approximately_equal(v.w, 4.0, 0.001), "identity keeps w")
+    assert(Math.approximately_equal(Math.mat4_determinant(id), 1.0, 0.001),
+        "identity determinant is 1")
+
+    # A translation matrix moves a point.
+    Math.Matrix4 translate = Math.matrix4(
+        1.0, 0.0, 0.0, 10.0,
+        0.0, 1.0, 0.0, 20.0,
+        0.0, 0.0, 1.0, 30.0,
+        0.0, 0.0, 0.0, 1.0)
+    Math.Vector3 moved = Math.mat4_transform_point(translate, Math.vector3(1.0, 2.0, 3.0))
+
+    assert(Math.approximately_equal(moved.x, 11.0, 0.001), "translated x")
+    assert(Math.approximately_equal(moved.z, 33.0, 0.001), "translated z")
+}
+
+@test
+function void test_math_matrix4_camera() {
+    # fov 90 deg, aspect 1 => m00 = m11 = 1 / tan(45 deg) = 1.
+    Math.Matrix4 projection = Math.mat4_perspective(Math.pi / 2.0, 1.0, 1.0, 100.0)
+    assert(Math.approximately_equal(projection.m00, 1.0, 0.001), "perspective m00")
+    assert(Math.approximately_equal(projection.m32, -1.0, 0.001), "perspective enables divide")
+
+    # The camera position maps to the view-space origin.
+    Math.Matrix4 view = Math.mat4_look_at(
+        Math.vector3(0.0, 0.0, 5.0),
+        Math.vector3(0.0, 0.0, 0.0),
+        Math.vector3(0.0, 1.0, 0.0))
+    Math.Vector3 at_eye = Math.mat4_transform_point(view, Math.vector3(0.0, 0.0, 5.0))
+
+    assert(Math.approximately_equal(at_eye.x, 0.0, 0.001), "eye maps to origin x")
+    assert(Math.approximately_equal(at_eye.z, 0.0, 0.001), "eye maps to origin z")
+}
+
+# ═══════════════════════════════════════════════════════════
+# Math.Angle (optional unit-safe angle)
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_math_angle() {
+    Math.Angle ninety = Math.Angle.Degrees(90.0)
+    assert(Math.approximately_equal(Math.to_radians(ninety), Math.pi / 2.0, 0.001),
+        "90 degrees is pi/2 radians")
+    assert(Math.approximately_equal(Math.sin_of(ninety), 1.0, 0.001), "sin of 90 degrees is 1")
+
+    Math.Angle half_turn = Math.Angle.Radians(Math.pi)
+    assert(Math.approximately_equal(Math.to_degrees(half_turn), 180.0, 0.001),
+        "pi radians is 180 degrees")
+
+    # Same-unit conversions pass through unchanged.
+    assert(Math.approximately_equal(Math.to_radians(Math.Angle.Radians(1.25)), 1.25, 0.001),
+        "radians pass through")
+}
+
+# ═══════════════════════════════════════════════════════════
 # Math.Quaternion (gimbal-lock-free 3D rotation)
 # ═══════════════════════════════════════════════════════════
 
@@ -1171,3 +1325,52 @@ function void test_math_rect_union_center_area() {
 
     assert(Math.approximately_equal(Math.rect_area(Math.rect(0.0, 0.0, 10.0, 20.0)), 200.0, 0.001))
 }
+
+# ─── Math.Circle (N05) — 2D circle geometry ───
+
+@test
+function void test_math_circle_construct() {
+    Math.Circle c = Math.circle(Math.vector2(3.0, 4.0), 5.0)
+
+    assert(Math.approximately_equal(c.center.x, 3.0, 0.001))
+    assert(Math.approximately_equal(c.center.y, 4.0, 0.001))
+    assert(Math.approximately_equal(c.radius, 5.0, 0.001))
+
+    # A negative radius clamps to zero (a degenerate circle is a point).
+    Math.Circle degenerate = Math.circle(Math.vector2(0.0, 0.0), -3.0)
+    assert(Math.approximately_equal(degenerate.radius, 0.0, 0.001))
+}
+
+@test
+function void test_math_circle_contains_closed_disk() {
+    Math.Circle c = Math.circle(Math.vector2(0.0, 0.0), 5.0)
+
+    assert(Math.circle_contains(c, Math.vector2(0.0, 0.0)), "the centre is contained")
+    assert(Math.circle_contains(c, Math.vector2(3.0, 4.0)), "the boundary is inclusive")
+    assert(!Math.circle_contains(c, Math.vector2(3.0, 4.1)), "just outside is excluded")
+}
+
+@test
+function void test_math_circle_intersects() {
+    Math.Circle a = Math.circle(Math.vector2(0.0, 0.0), 5.0)
+
+    assert(Math.circle_intersects(a, Math.circle(Math.vector2(6.0, 0.0), 5.0)),
+        "overlapping circles intersect")
+    assert(Math.circle_intersects(a, Math.circle(Math.vector2(10.0, 0.0), 5.0)),
+        "exactly touching circles intersect (inclusive)")
+    assert(!Math.circle_intersects(a, Math.circle(Math.vector2(12.0, 0.0), 5.0)),
+        "disjoint circles do not intersect")
+}
+
+@test
+function void test_math_circle_rect_intersects() {
+    Math.Rect r = Math.rect(0.0, 0.0, 10.0, 10.0)
+
+    assert(Math.circle_rect_intersects(Math.circle(Math.vector2(5.0, 5.0), 2.0), r),
+        "a circle centred inside the rect overlaps")
+    assert(Math.circle_rect_intersects(Math.circle(Math.vector2(11.0, 5.0), 2.0), r),
+        "a circle within radius of an edge overlaps")
+    assert(!Math.circle_rect_intersects(Math.circle(Math.vector2(12.0, 12.0), 2.0), r),
+        "a circle beyond the far corner does not overlap")
+}
+

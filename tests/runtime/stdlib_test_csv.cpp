@@ -380,6 +380,69 @@ static void test_csv_codec_reports_error_offset() {
     ASSERT_EQ(result.error_offset, static_cast<std::size_t>(4));
 }
 
+// --- Csv.Table (N05) ---
+
+static void test_csv_deserialize_table_shape() {
+    const auto v = eval(R"(Csv.deserialize_table("name,age\nAlice,30\nBob,25"))");
+    ASSERT_TRUE(v.is_result());
+    ASSERT_TRUE(v.as_result()->is_success);
+
+    const auto& rec = *v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec.type_name, std::string{"Table"});
+
+    const auto& headers = *rec.find_field("headers")->as_array()->elements;
+    ASSERT_EQ(headers.size(), static_cast<std::size_t>(2));
+    ASSERT_EQ(headers[0].as_string(), std::string{"name"});
+
+    const auto& rows = *rec.find_field("rows")->as_array()->elements;
+    ASSERT_EQ(rows.size(), static_cast<std::size_t>(2));
+    ASSERT_EQ((*rows[1].as_array()->elements)[0].as_string(), std::string{"Bob"});
+}
+
+static void test_csv_deserialize_table_empty_keeps_header() {
+    // A header-only CSV yields headers but zero rows — the shape the record form
+    // preserves where deserialize_records cannot.
+    const auto v = eval(R"(Csv.deserialize_table("name,age"))");
+    ASSERT_TRUE(v.as_result()->is_success);
+
+    const auto& rec = *v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec.find_field("headers")->as_array()->elements->size(), static_cast<std::size_t>(2));
+    ASSERT_EQ(rec.find_field("rows")->as_array()->elements->size(), static_cast<std::size_t>(0));
+}
+
+static void test_csv_deserialize_table_failure() {
+    const auto v = eval(R"(Csv.deserialize_table("\"oops"))");
+    ASSERT_FALSE(v.as_result()->is_success);
+    ASSERT_EQ(v.as_result()->owned_inner->as_record()->type_name, std::string{"ParseError"});
+}
+
+static void test_csv_column_extracts_by_name() {
+    const auto v = eval(
+        R"(Csv.deserialize_table("name,age\nAlice,30\nBob,25") |> Result.unwrap() |> Csv.column("age"))");
+    ASSERT_TRUE(v.as_result()->is_success);
+
+    const auto& col = *v.as_result()->owned_inner->as_array()->elements;
+    ASSERT_EQ(col.size(), static_cast<std::size_t>(2));
+    ASSERT_EQ(col[0].as_string(), std::string{"30"});
+    ASSERT_EQ(col[1].as_string(), std::string{"25"});
+}
+
+static void test_csv_column_unknown_fails() {
+    const auto v = eval(
+        R"(Csv.deserialize_table("name,age\nAlice,30") |> Result.unwrap() |> Csv.column("missing"))");
+    ASSERT_FALSE(v.as_result()->is_success);
+}
+
+static void test_csv_serialize_table_roundtrips() {
+    const auto v = eval(
+        R"(Csv.deserialize_table("name,age\nAlice,30\nBob,25") |> Result.unwrap() |> Csv.serialize_table())");
+    ASSERT_TRUE(v.as_result()->is_success);
+
+    const auto& text = v.as_result()->owned_inner->as_string();
+    ASSERT_TRUE(text.find("name,age") != std::string::npos);
+    ASSERT_TRUE(text.find("Bob,25") != std::string::npos);
+}
+
 int main() {
     RUN(test_csv_count_rows);
     RUN(test_csv_count_rows_empty);
@@ -391,6 +454,12 @@ int main() {
     RUN(test_csv_deserialize_detailed_failure_message);
     RUN(test_csv_deserialize_detailed_failure_location);
     RUN(test_csv_codec_reports_error_offset);
+    RUN(test_csv_deserialize_table_shape);
+    RUN(test_csv_deserialize_table_empty_keeps_header);
+    RUN(test_csv_deserialize_table_failure);
+    RUN(test_csv_column_extracts_by_name);
+    RUN(test_csv_column_unknown_fails);
+    RUN(test_csv_serialize_table_roundtrips);
     RUN(test_csv_deserialize_escaped_quote);
     RUN(test_csv_deserialize_multiline_field);
     RUN(test_csv_deserialize_non_string_throws);

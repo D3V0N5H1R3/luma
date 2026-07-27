@@ -210,6 +210,37 @@ void register_dictionary_ns(const EnvPtr& env) {
                           });
                           return Value{std::move(dict)};
                       })
+        // Dictionary.merge_with(dictionary<V>, dictionary<V>, func(V, V) -> V)
+        //   -> dictionary<V>
+        // Like merge, but resolves a key present in BOTH dictionaries by calling
+        // the combiner f(value_from_a, value_from_b); keys unique to either side
+        // are copied through unchanged.  The inputs are never mutated.
+        .func("merge_with", 3)
+        .extract_body(expect_dict,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          const auto& other =
+                              expect_dict(args[1], "Dictionary.merge_with", loc)->entries;
+                          expect_callable(args[2], "Dictionary.merge_with", loc);
+
+                          ensure_dictionary_capacity(src->entries.size(), other.size(),
+                                                     "Dictionary.merge_with", loc);
+
+                          auto dict = clone_dict(src);
+
+                          std::vector<Value> call_args(2);
+                          for (const auto& [key, value] : other) {
+                              const auto* existing = dict->find(key);
+
+                              if (existing != nullptr) {
+                                  call_args[0] = *existing;
+                                  call_args[1] = value;
+                                  dict->set(key, invoke_callable(args[2], call_args, loc));
+                              } else {
+                                  dict->set(key, value);
+                              }
+                          }
+                          return Value{std::move(dict)};
+                      })
         .func("is_empty", 1)
         .extract_body(expect_dict,
                       [](const auto& dict, const Args&, SourceLocation) -> Value {
@@ -327,6 +358,31 @@ void register_dictionary_ns(const EnvPtr& env) {
         .extract_body(expect_dict,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {
                           return dict_map_values(*src, args[1], loc);
+                      })
+        // Dictionary.update(dictionary<V>, string, fn(optional<V>) -> V) -> dictionary<V>
+        // Read-modify-write for a single key: the updater receives the current
+        // value, or none when the key is absent, and returns the new value.
+        // Returns a new dictionary (the input is never mutated).
+        .func("update", 3)
+        .extract_body(expect_dict,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          const auto& key = expect_string_key(args[1], "Dictionary.update", loc);
+                          expect_callable(args[2], "Dictionary.update", loc);
+
+                          const auto* existing = src->find(key);
+
+                          if (existing == nullptr) {
+                              ensure_dictionary_capacity(src->entries.size(), 1,
+                                                         "Dictionary.update", loc);
+                          }
+
+                          std::vector<Value> call_args(1);
+                          call_args[0] = existing != nullptr ? *existing : Value{NullValue{}};
+                          auto new_value = invoke_callable(args[2], call_args, loc);
+
+                          auto dict = clone_dict(src);
+                          dict->set(key, std::move(new_value));
+                          return Value{std::move(dict)};
                       })
         .func("filter", 2)
         .extract_body(expect_dict,

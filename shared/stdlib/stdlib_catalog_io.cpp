@@ -147,6 +147,7 @@ void register_http_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
     append_specs(
         specs,
         {
+            m.fn("authorization_header", 1, "(auth: Http.Auth)", R::string_type(), {p.any}),
             m.fn("basic_auth", 2, "(user: string, pass: string)", R::string_type(),
                  {p.string, p.string}),
             m.fn("bearer_auth", 1, "(token: string)", R::string_type(), {p.string}),

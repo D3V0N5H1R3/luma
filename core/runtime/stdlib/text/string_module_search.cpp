@@ -103,6 +103,53 @@ void register_string_search(const EnvPtr& env) {
                                             loc);
                       })
 
+        // String.lines(string) -> array<string>
+        // Splits on universal newlines (\n, \r\n, \r), stripping the line
+        // terminators, and — unlike String.split(text, "\n") — never emits a
+        // spurious trailing empty element when the text ends with a newline.
+        .func("lines", 1)
+        .extract_body(expect_string,
+                      [](const auto& s, const Args&, SourceLocation loc) -> Value {
+                          auto arr = std::make_shared<ArrayValue>();
+
+                          const std::size_t n = s.size();
+                          std::size_t start{0};
+                          std::size_t i{0};
+
+                          const auto push_line = [&](std::size_t from, std::size_t to) {
+                              if (arr->elements->size() >= ResourceLimits::max_array_size) {
+                                  throw RuntimeError{error_msg("String", "lines",
+                                                               "result exceeds maximum array size"),
+                                                     loc};
+                              }
+                              arr->elements->push_back(Value{s.substr(from, to - from)});
+                          };
+
+                          while (i < n) {
+                              const char c = s[i];
+                              if (c == '\n' || c == '\r') {
+                                  push_line(start, i);
+                                  // Treat "\r\n" as a single terminator.
+                                  if (c == '\r' && i + 1 < n && s[i + 1] == '\n') {
+                                      i += 2;
+                                  } else {
+                                      i += 1;
+                                  }
+                                  start = i;
+                              } else {
+                                  ++i;
+                              }
+                          }
+
+                          // Emit the final segment only when it is non-empty, so
+                          // text ending in a newline yields no trailing empty line.
+                          if (start < n) {
+                              push_line(start, n);
+                          }
+
+                          return Value{std::move(arr)};
+                      })
+
         .func("join", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto& elems_arr = expect_array(args[0], "String.join", loc);

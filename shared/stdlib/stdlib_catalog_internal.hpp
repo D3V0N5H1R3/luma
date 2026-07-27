@@ -227,6 +227,12 @@ namespace named {
     return ReturnTypeDesc::named("Duration");
 }
 
+// DateTime.period() / add_period / between_dates take and return these
+// calendar-span records (bare short name "Period", like duration()).
+[[nodiscard]] inline ReturnTypeDesc period() {
+    return ReturnTypeDesc::named("Period");
+}
+
 // DateTime.interval() / interval_* take and return these range records (bare name).
 [[nodiscard]] inline ReturnTypeDesc interval() {
     return ReturnTypeDesc::named("Interval");
@@ -236,6 +242,12 @@ namespace named {
 // (bare short name "Rect", like interval() / vector2()).
 [[nodiscard]] inline ReturnTypeDesc rect() {
     return ReturnTypeDesc::named("Rect");
+}
+
+// Math.circle() / circle_* take and return these 2D circle records (bare short
+// name "Circle", like rect() / vector2()).
+[[nodiscard]] inline ReturnTypeDesc circle() {
+    return ReturnTypeDesc::named("Circle");
 }
 
 // DateTime.zoned() / zoned_* take and return these offset-aware timestamp records
@@ -300,6 +312,10 @@ namespace named {
     return ReturnTypeDesc::named("Vector3");
 }
 
+[[nodiscard]] inline ReturnTypeDesc vector4() {
+    return ReturnTypeDesc::named("Vector4");
+}
+
 // Math.matrix2() / mat2_* and Math.matrix3() / mat3_* take and return these
 // typed transform-matrix records (bare short names, like vector2()).
 [[nodiscard]] inline ReturnTypeDesc matrix2() {
@@ -308,6 +324,16 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc matrix3() {
     return ReturnTypeDesc::named("Matrix3");
+}
+
+[[nodiscard]] inline ReturnTypeDesc matrix4() {
+    return ReturnTypeDesc::named("Matrix4");
+}
+
+// Math.to_radians / to_degrees / sin_of consume this optional unit-safe angle
+// choice (qualified "Math.Angle", a payload-carrying choice like Terminal.Key).
+[[nodiscard]] inline ReturnTypeDesc angle() {
+    return ReturnTypeDesc::named("Math.Angle");
 }
 
 // Math.quaternion() / quat_* take and return this unit-rotation record (bare
@@ -344,6 +370,12 @@ namespace named {
     return ReturnTypeDesc::named("ParseError");
 }
 
+// Csv.deserialize_table() / serialize_table / column take and return this
+// header+rows table record (bare short name "Table").
+[[nodiscard]] inline ReturnTypeDesc csv_table() {
+    return ReturnTypeDesc::named("Table");
+}
+
 [[nodiscard]] inline ReturnTypeDesc xml_parse_error() {
     return ReturnTypeDesc::named("ParseError");
 }
@@ -352,6 +384,12 @@ namespace named {
 // Color, so the record's qualified name is Color.Color (bare short name "Color").
 [[nodiscard]] inline ReturnTypeDesc color() {
     return ReturnTypeDesc::named("Color");
+}
+
+// Color.from_name(Color.Name) consumes this curated named-colour choice
+// (qualified "Color.Name", like the exhaustive Terminal.Color palette).
+[[nodiscard]] inline ReturnTypeDesc color_name() {
+    return ReturnTypeDesc::named("Color.Name");
 }
 
 // Color.to_hsl / from_hsl / rotate_hue pivot through this hue/saturation/lightness

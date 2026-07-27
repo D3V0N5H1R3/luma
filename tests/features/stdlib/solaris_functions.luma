@@ -357,3 +357,104 @@ function void test_string_accent_still_works() {
     dictionary applied = Dictionary.get_or(config, "theme", {})
     assert(Dictionary.get_or(applied, "accent", "") == "#101010")
 }
+
+# ═══════════════════════════════════════════════════════════
+# Elevation & outline tokens — the typed Shadow and Border
+# design tokens flow through `common_style` into every widget's
+# CSS style bag, so a card/panel can visibly float or gain a
+# hairline outline. A mistyped variant is a compile error.
+# ═══════════════════════════════════════════════════════════
+
+# A tiny app whose view root carries a single depth/outline token,
+# selected by `variant`, so `test_render` returns the styled widget.
+record TokenModel {
+    string variant = ""
+}
+
+function TokenModel token_update(TokenModel model, integer _msg) {
+    return model
+}
+
+function View token_view(TokenModel model) {
+    return match model.variant {
+        case == "shadow_none"   { Solaris.column([]) |> Solaris.shadow(Shadow.None) }
+        case == "shadow_small"  { Solaris.column([]) |> Solaris.shadow(Shadow.Small) }
+        case == "shadow_medium" { Solaris.column([]) |> Solaris.shadow(Shadow.Medium) }
+        case == "shadow_large"  { Solaris.column([]) |> Solaris.shadow(Shadow.Large) }
+        case == "border_none"   { Solaris.column([]) |> Solaris.border(Border.None) }
+        case == "border_thin"   { Solaris.column([]) |> Solaris.border(Border.Thin) }
+        case == "border_thick"  { Solaris.column([]) |> Solaris.border(Border.Thick) }
+        case == "border_tinted" {
+            Solaris.column([])
+                |> Solaris.border(Border.Thick)
+                |> Solaris.border_color(Color.Primary)
+        }
+        else { Solaris.column([]) }
+    }
+}
+
+function dictionary token_app() {
+    return Solaris.app("Solaris Tokens", TokenModel {}, token_update, token_view)
+}
+
+# Resolve one variant to its rendered style dictionary.
+function dictionary token_style(string variant) {
+    dictionary tree = GraphicalUi.test_render(token_app(), TokenModel { variant = variant })
+    return Dictionary.get_or(tree, "style", {})
+}
+
+# ─── Shadow: each variant maps onto the theme elevation ladder ──
+
+@test
+function void test_shadow_none_maps_to_none() {
+    assert(Dictionary.get_or(token_style("shadow_none"), "box_shadow", "") == GraphicalUi.VAR_SHADOW_NONE)
+}
+
+@test
+function void test_shadow_small_maps_to_low_elevation() {
+    assert(Dictionary.get_or(token_style("shadow_small"), "box_shadow", "") == GraphicalUi.VAR_SHADOW_SM)
+}
+
+@test
+function void test_shadow_medium_maps_to_mid_elevation() {
+    assert(Dictionary.get_or(token_style("shadow_medium"), "box_shadow", "") == GraphicalUi.VAR_SHADOW_MD)
+}
+
+@test
+function void test_shadow_large_maps_to_high_elevation() {
+    assert(Dictionary.get_or(token_style("shadow_large"), "box_shadow", "") == GraphicalUi.VAR_SHADOW_LG)
+}
+
+@test
+function void test_no_shadow_modifier_emits_no_box_shadow() {
+    # Purely additive: an unstyled column never sets box_shadow itself.
+    assert(Dictionary.get_or(token_style("plain"), "box_shadow", "") == "")
+}
+
+# ─── Border: weight token composes with the Color tint ──
+
+@test
+function void test_border_none_emits_none() {
+    assert(Dictionary.get_or(token_style("border_none"), "border", "") == "none")
+}
+
+@test
+function void test_border_thin_uses_theme_border_colour() {
+    assert(Dictionary.get_or(token_style("border_thin"), "border", "") == "1px solid ${GraphicalUi.VAR_BORDER}")
+}
+
+@test
+function void test_border_thick_uses_theme_border_colour() {
+    assert(Dictionary.get_or(token_style("border_thick"), "border", "") == "2px solid ${GraphicalUi.VAR_BORDER}")
+}
+
+@test
+function void test_border_color_tints_with_the_color_token() {
+    assert(Dictionary.get_or(token_style("border_tinted"), "border", "") == "2px solid ${GraphicalUi.VAR_PRIMARY}")
+}
+
+@test
+function void test_no_border_modifier_emits_no_border() {
+    assert(Dictionary.get_or(token_style("plain"), "border", "") == "")
+}
+

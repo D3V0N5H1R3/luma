@@ -283,6 +283,9 @@ each visual concern.
 | `Solaris.justify(Justify j)` | Main-axis distribution of children. |
 | `Solaris.center()` | Centres content. |
 | `Solaris.rounded(Radius r)` | Corner rounding. |
+| `Solaris.shadow(Shadow s)` | Elevation — how much the element floats above the page. |
+| `Solaris.border(Border b)` | Outline weight (`Thin`/`Thick`); `None` removes it. |
+| `Solaris.border_color(Color c)` | Outline colour (only with a `border` weight; defaults to the theme border). |
 
 ### Input state and identity
 
@@ -315,6 +318,8 @@ never `Solaris.TextScale`.
 | `Justify` | `Start`, `Center`, `End`, `SpaceBetween`, `SpaceAround` |
 | `Length` | `Shrink`, `Fill`, `Fixed(number value)`, `FillPortion(integer weight)` |
 | `Radius` | `None`, `Small`, `Medium`, `Large`, `Full` |
+| `Shadow` | `None`, `Small`, `Medium`, `Large` |
+| `Border` | `None`, `Thin`, `Thick` |
 | `Scheme` | `Light`, `Dark`, `Auto` |
 
 `Length.Fixed` carries a number, so a fixed width is written
@@ -564,10 +569,10 @@ Solaris surfaces the common, beginner-friendly subset of the engine. A few
 things are deliberately out of scope for the surface:
 
 - **Some visual details are approximate.** Modifiers such as `align`, `justify`,
-  `rounded`, `height`, `key`, and `label` are honoured, but a handful of design
-  tokens render at the engine's nearest built-in value rather than a pixel-exact
-  match to the design concept. Layouts stay consistent and accessible; the exact
-  spacing may differ by a point or two.
+  `rounded`, `shadow`, `border`, `height`, `key`, and `label` are honoured, but a
+  handful of design tokens render at the engine's nearest built-in value rather
+  than a pixel-exact match to the design concept. Layouts stay consistent and
+  accessible; the exact spacing may differ by a point or two.
 - **`menu` is in-page, not a native menu bar,** and Solaris does not add a system
   tray icon. Desktop notifications are available through the `Solaris.notify`
   command.

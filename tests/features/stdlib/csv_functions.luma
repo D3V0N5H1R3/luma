@@ -375,3 +375,32 @@ function void test_csv_deserialize_detailed_failure_location() {
         }
     }
 }
+
+
+# ─── Csv.Table (headers + positional rows) ───
+
+@test
+function void test_csv_table() {
+    Csv.Table t = Result.unwrap(Csv.deserialize_table("name,age\nAlice,30\nBob,25"))
+    assert(Array.length(t.headers) == 2, "two headers")
+    assert(t.headers[0] == "name", "column order preserved")
+    assert(Array.length(t.rows) == 2, "two data rows")
+
+    array<string> names = Result.unwrap(Csv.column(t, "name"))
+    assert(names[0] == "Alice" && names[1] == "Bob", "column extracts by name")
+
+    string text = Result.unwrap(Csv.serialize_table(t))
+    assert(String.contains(text, "name,age"), "serialize emits the header row")
+    assert(String.contains(text, "Bob,25"), "serialize emits every data row")
+}
+
+@test
+function void test_csv_table_empty_and_missing_column() {
+    # A header-only table keeps the header with zero rows.
+    Csv.Table header_only = Result.unwrap(Csv.deserialize_table("a,b,c"))
+    assert(Array.length(header_only.headers) == 3, "header retained with no data rows")
+    assert(Array.length(header_only.rows) == 0, "no data rows")
+
+    result<array<string>> missing = Csv.column(header_only, "nope")
+    assert(Result.is_failure(missing), "an unknown column fails")
+}

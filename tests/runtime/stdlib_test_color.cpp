@@ -2,6 +2,32 @@
 
 #include "stdlib_test_helpers.hpp"
 
+// --- Color.Name (N06) ---
+
+LUMA_TEST(color_from_name_red) {
+    const auto v = eval("Color.from_name(Color.Name.Red)");
+    ASSERT_TRUE(v.is_record());
+
+    const auto& rec = v.as_record();
+    ASSERT_EQ(rec->type_name, std::string{"Color"});
+    ASSERT_EQ(rec->find_field("red")->as_integer(), static_cast<std::int64_t>(255));
+    ASSERT_EQ(rec->find_field("green")->as_integer(), static_cast<std::int64_t>(0));
+    ASSERT_EQ(rec->find_field("blue")->as_integer(), static_cast<std::int64_t>(0));
+    ASSERT_NEAR(rec->find_field("alpha")->as_number(), 1.0, 1e-9);
+}
+
+LUMA_TEST(color_from_name_css_canonical) {
+    // CSS-canonical: Green is 0,128,0 (distinct from Lime 0,255,0).
+    const auto green = eval("Color.from_name(Color.Name.Green)");
+    ASSERT_EQ(green.as_record()->find_field("green")->as_integer(), static_cast<std::int64_t>(128));
+
+    const auto lime = eval("Color.from_name(Color.Name.Lime)");
+    ASSERT_EQ(lime.as_record()->find_field("green")->as_integer(), static_cast<std::int64_t>(255));
+
+    const auto orange = eval("Color.to_hex(Color.from_name(Color.Name.Orange))");
+    ASSERT_EQ(orange.as_string(), std::string{"#ffa500"});
+}
+
 LUMA_TEST(color_rgb) {
     const auto v = eval("Color.rgb(1, 114, 173)");
     ASSERT_RESULT_SUCCESS(v);
