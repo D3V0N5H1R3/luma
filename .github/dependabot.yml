@@ -21,6 +21,12 @@ updates:
     groups:
       npm:
         patterns: ["*"]
+    ignore:
+      # typescript-eslint (and tslib) peer-require typescript "<6.1.0", so the
+      # TypeScript 7.x "native" line breaks `npm ci` (ERESOLVE) and CI. Hold
+      # major TypeScript bumps until typescript-eslint officially supports them.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # Cargo (Rust) dependencies for the Zed extension and its Tree-sitter grammar.
   - package-ecosystem: "cargo"
