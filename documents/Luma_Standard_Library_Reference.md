@@ -912,6 +912,10 @@ GraphicalUi.VAR_INPUT_BORDER   # string — "var(--gui-input-border)"
 GraphicalUi.VAR_INPUT_FOCUS    # string — "var(--gui-input-focus)"
 GraphicalUi.VAR_RADIUS         # string — "var(--gui-radius)"
 GraphicalUi.VAR_SHADOW         # string — "var(--gui-shadow)"
+GraphicalUi.VAR_SHADOW_NONE    # string — "none"                   (Solaris Shadow.None)
+GraphicalUi.VAR_SHADOW_SM      # string — "var(--gui-elevation-1)" (Solaris Shadow.Small)
+GraphicalUi.VAR_SHADOW_MD      # string — "var(--gui-elevation-3)" (Solaris Shadow.Medium)
+GraphicalUi.VAR_SHADOW_LG      # string — "var(--gui-elevation-6)" (Solaris Shadow.Large)
 GraphicalUi.VAR_GAP            # string — "var(--gui-gap)"
 GraphicalUi.VAR_DISABLED_BG    # string — "var(--gui-disabled-bg)"
 GraphicalUi.VAR_DISABLED_FG    # string — "var(--gui-disabled-fg)"
