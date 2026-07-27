@@ -1959,7 +1959,6 @@ Math.Matrix4 view_projection = Math.mat4_multiply(projection, view)
 Math.Vector3 screen = Math.mat4_transform_point(view_projection, Math.vector3(0.0, 0.0, 0.0))
 ```
 
-
 `Math.Quaternion { w, x, y, z }` (all `number`) is the gimbal-lock-free 3D-rotation companion to the vectors and matrices, for composing and applying rotations without hand-building rotation matrices. `Math.quaternion(w, x, y, z)` builds one from raw components, but the everyday constructor is `Math.quat_from_axis_angle(axis, angle)`, which produces a unit rotation of `angle` radians about `axis` (a `Math.Vector3`, normalised for you). `Math.quat_multiply(a, b)` composes two rotations (the Hamilton product — order matters), `Math.quat_normalize(q)` renormalises a drifted quaternion (a zero quaternion is returned unchanged, mirroring `vec3_normalize`), and `Math.quat_rotate_vector(q, v)` rotates a `Math.Vector3` by `q` (normalising `q` first, so a slightly denormalised rotation still behaves). Data plus pipe-first free functions, the same philosophy as `Math.Vector3` / `Math.Matrix3`.
 
 ```luma
