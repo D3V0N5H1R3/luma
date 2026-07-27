@@ -1142,6 +1142,130 @@ LUMA_TEST(math_matrix3_identity_multiply_transform) {
     ASSERT_NEAR(prod.as_record()->find_field("m11")->as_number(), 2.0, 1e-9);
 }
 
+// --- Math.Vector4 / Math.Matrix4 (N02) ---
+
+LUMA_TEST(math_vector4_and_arithmetic) {
+    const auto v = eval("Math.vector4(1.0, 2.0, 3.0, 4.0)");
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Vector4"});
+    ASSERT_NEAR(v.as_record()->find_field("x")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("w")->as_number(), 4.0, 1e-9);
+
+    // 3-4-... length: (1,2,2,4) has length sqrt(1+4+4+16) = 5.
+    ASSERT_NEAR(eval("Math.vec4_length(Math.vector4(1.0, 2.0, 2.0, 4.0))").as_number(), 5.0, 1e-9);
+
+    ASSERT_NEAR(eval("Math.vec4_dot(Math.vector4(1.0, 2.0, 3.0, 4.0), "
+                     "Math.vector4(1.0, 1.0, 1.0, 1.0))")
+                    .as_number(),
+                10.0, 1e-9);
+
+    const auto sum = eval("Math.vec4_add(Math.vector4(1.0, 2.0, 3.0, 4.0), "
+                          "Math.vector4(4.0, 3.0, 2.0, 1.0))");
+    ASSERT_NEAR(sum.as_record()->find_field("x")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(sum.as_record()->find_field("w")->as_number(), 5.0, 1e-9);
+
+    const auto diff = eval("Math.vec4_sub(Math.vector4(4.0, 3.0, 2.0, 1.0), "
+                           "Math.vector4(1.0, 1.0, 1.0, 1.0))");
+    ASSERT_NEAR(diff.as_record()->find_field("x")->as_number(), 3.0, 1e-9);
+
+    const auto scaled = eval("Math.vec4_scale(Math.vector4(1.0, 2.0, 3.0, 4.0), 2.0)");
+    ASSERT_NEAR(scaled.as_record()->find_field("z")->as_number(), 6.0, 1e-9);
+
+    const auto norm = eval("Math.vec4_normalize(Math.vector4(0.0, 0.0, 0.0, 5.0))");
+    ASSERT_NEAR(norm.as_record()->find_field("w")->as_number(), 1.0, 1e-9);
+
+    // The zero vector normalises to itself rather than dividing by zero.
+    const auto zero = eval("Math.vec4_normalize(Math.vector4(0.0, 0.0, 0.0, 0.0))");
+    ASSERT_NEAR(zero.as_record()->find_field("x")->as_number(), 0.0, 1e-9);
+}
+
+LUMA_TEST(math_matrix4_identity_multiply_transform) {
+    const auto id = eval("Math.mat4_identity()");
+    ASSERT_TRUE(id.is_record());
+    ASSERT_EQ(id.as_record()->type_name, std::string{"Matrix4"});
+    ASSERT_NEAR(id.as_record()->find_field("m00")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(id.as_record()->find_field("m33")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(id.as_record()->find_field("m01")->as_number(), 0.0, 1e-9);
+
+    ASSERT_NEAR(eval("Math.mat4_determinant(Math.mat4_identity())").as_number(), 1.0, 1e-9);
+
+    // Identity leaves a 4D vector unchanged.
+    const auto v = eval("Math.mat4_transform(Math.mat4_identity(), "
+                        "Math.vector4(1.0, 2.0, 3.0, 4.0))");
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Vector4"});
+    ASSERT_NEAR(v.as_record()->find_field("z")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(v.as_record()->find_field("w")->as_number(), 4.0, 1e-9);
+
+    // A * identity == A.
+    const auto prod = eval("Math.mat4_multiply(Math.matrix4("
+                           "2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, "
+                           "0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0, 1.0), Math.mat4_identity())");
+    ASSERT_NEAR(prod.as_record()->find_field("m11")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(prod.as_record()->find_field("m22")->as_number(), 4.0, 1e-9);
+
+    // Determinant of a diagonal scale matrix is the product of the diagonal.
+    ASSERT_NEAR(eval("Math.mat4_determinant(Math.matrix4("
+                     "2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, "
+                     "0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0, 5.0))")
+                    .as_number(),
+                120.0, 1e-9);
+}
+
+LUMA_TEST(math_matrix4_transform_point_translation) {
+    // A translation matrix moves a point by (10, 20, 30).
+    const auto p = eval("Math.mat4_transform_point(Math.matrix4("
+                        "1.0, 0.0, 0.0, 10.0, 0.0, 1.0, 0.0, 20.0, "
+                        "0.0, 0.0, 1.0, 30.0, 0.0, 0.0, 0.0, 1.0), Math.vector3(1.0, 2.0, 3.0))");
+    ASSERT_EQ(p.as_record()->type_name, std::string{"Vector3"});
+    ASSERT_NEAR(p.as_record()->find_field("x")->as_number(), 11.0, 1e-9);
+    ASSERT_NEAR(p.as_record()->find_field("y")->as_number(), 22.0, 1e-9);
+    ASSERT_NEAR(p.as_record()->find_field("z")->as_number(), 33.0, 1e-9);
+}
+
+LUMA_TEST(math_matrix4_perspective_and_look_at) {
+    // Perspective is a valid Matrix4 with the -1 in the w row that enables the
+    // homogeneous divide.
+    const auto proj = eval("Math.mat4_perspective(Math.pi / 2.0, 1.0, 1.0, 100.0)");
+    ASSERT_EQ(proj.as_record()->type_name, std::string{"Matrix4"});
+    // fov 90°, aspect 1 => m00 = m11 = 1 / tan(45°) = 1.
+    ASSERT_NEAR(proj.as_record()->find_field("m00")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(proj.as_record()->find_field("m11")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(proj.as_record()->find_field("m32")->as_number(), -1.0, 1e-9);
+
+    // Looking down the -Z axis from the origin: the eye maps to the view-space
+    // origin, so transforming the eye position yields (0, 0, 0).
+    const auto view = eval("Math.mat4_look_at(Math.vector3(0.0, 0.0, 5.0), "
+                           "Math.vector3(0.0, 0.0, 0.0), Math.vector3(0.0, 1.0, 0.0))");
+    ASSERT_EQ(view.as_record()->type_name, std::string{"Matrix4"});
+    const auto at_eye =
+        eval("Math.mat4_transform_point(Math.mat4_look_at(Math.vector3(0.0, 0.0, 5.0), "
+             "Math.vector3(0.0, 0.0, 0.0), Math.vector3(0.0, 1.0, 0.0)), "
+             "Math.vector3(0.0, 0.0, 5.0))");
+    ASSERT_NEAR(at_eye.as_record()->find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(at_eye.as_record()->find_field("y")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(at_eye.as_record()->find_field("z")->as_number(), 0.0, 1e-9);
+}
+
+// --- Math.Angle (N07) ---
+
+LUMA_TEST(math_angle_to_radians_and_degrees) {
+    // 90 degrees is pi/2 radians.
+    ASSERT_NEAR(eval("Math.to_radians(Math.Angle.Degrees(90.0))").as_number(), 1.5707963267948966,
+                1e-9);
+    // Radians pass through unchanged.
+    ASSERT_NEAR(eval("Math.to_radians(Math.Angle.Radians(1.5))").as_number(), 1.5, 1e-9);
+    // pi radians is 180 degrees.
+    ASSERT_NEAR(eval("Math.to_degrees(Math.Angle.Radians(Math.pi))").as_number(), 180.0, 1e-9);
+    // Degrees pass through unchanged.
+    ASSERT_NEAR(eval("Math.to_degrees(Math.Angle.Degrees(45.0))").as_number(), 45.0, 1e-9);
+}
+
+LUMA_TEST(math_sin_of_angle) {
+    ASSERT_NEAR(eval("Math.sin_of(Math.Angle.Degrees(90.0))").as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(eval("Math.sin_of(Math.Angle.Degrees(0.0))").as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(eval("Math.sin_of(Math.Angle.Radians(Math.pi / 2.0))").as_number(), 1.0, 1e-9);
+}
+
 // --- Math.Quaternion (N06) ---
 
 LUMA_TEST(math_quaternion_constructor) {

@@ -307,6 +307,9 @@ Parse and serialise comma-separated values.
 | `Csv.deserialize_detailed(s)`    | `(string)`                                   | `result<array<array<string>>, Csv.ParseError>` | Like `Csv.deserialize`, but a failure carries the located `Csv.ParseError` |
 | `Csv.header(s)`                  | `(string)`                                   | `result<array<string>>`             | Extract header row                                                |
 | `Csv.deserialize_with(s, opts)`  | `(string, Csv.Dialect \| dictionary<string>)` | `result<array<array<string>>>`     | Parse with custom delimiter/quoting                               |
+| `Csv.deserialize_table(s)`       | `(string)`                                   | `result<Csv.Table, Csv.ParseError>` | Parse into a `Csv.Table` (first row is the header, the rest are positional rows) |
+| `Csv.serialize_table(t)`         | `(Csv.Table)`                                | `result<string>`                    | Serialise a `Csv.Table` (header row first, then each positional row) |
+| `Csv.column(t, name)`            | `(Csv.Table, string)`                        | `result<array<string>>`             | Extract one named column from a `Csv.Table`; fail if no header matches |
 | `Csv.read_file(path)`            | `(string)`                                   | `result<array<dictionary<string>>>` | Read and parse CSV file                                           |
 | `Csv.serialize(rows)`            | `(array<array<string>>)`                     | `result<string>`                    | Serialise rows to CSV string; fail if row is not array            |
 | `Csv.serialize_records(records)` | `(array<dictionary<string>>)`                | `string`                            | Serialise records to CSV with header                              |
@@ -321,6 +324,8 @@ discoverable, so a mistyped field is a compile error rather than a silently igno
 
 **`Csv.Dialect`** record fields: `delimiter: string` (single character), `quote: string` (single
 character).
+
+**`Csv.Table`** record fields: `headers: array<string>`, `rows: array<array<string>>`. It carries the header row once plus the positional data rows, so it preserves column order (which the `array<dictionary<string>>` shape of `Csv.deserialize_records` loses) and keeps the header even when there are zero data rows. `Csv.deserialize_table(s)` parses into it (returning `Csv.ParseError` on a malformed CSV, like `deserialize_detailed`), `Csv.serialize_table(t)` round-trips it back to CSV text, and `Csv.column(t, name)` pulls a single column by header name as `array<string>` (short rows are padded with `""`), returning `failure` when no header matches. It sits alongside the existing row and record shapes — reach for it when you want "print the columns, then the rows" with column order intact.
 
 `Csv.deserialize_detailed(s)` is an additive companion to `Csv.deserialize` — it leaves
 `Csv.deserialize` unchanged and returns `result<array<array<string>>, Csv.ParseError>`, where
@@ -338,6 +343,9 @@ surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 | `DateTime.add_milliseconds(ts, n)`         | `(number, integer)`                                      | `number`                     | Add `n` milliseconds to a Unix timestamp                                 |
 | `DateTime.add_seconds(ts, n)`              | `(number, number)`                                       | `number`                     | Add `n` seconds to a Unix timestamp                                      |
 | `DateTime.add_years(ts, n)`                | `(number, integer)`                                      | `result<number>`             | Add `n` calendar years (clamps Feb 29); fail if out of range             |
+| `DateTime.period(years, months, days)`     | `(integer, integer, integer)`                            | `DateTime.Period`            | Construct a calendar span (any component may be negative)                |
+| `DateTime.add_period(ts, p)`               | `(number, DateTime.Period)`                              | `result<number>`             | Add a calendar span (year/month with day clamping, then whole days); fail if out of range |
+| `DateTime.between_dates(a, b)`             | `(number, number)`                                       | `result<DateTime.Period>`    | The calendar span from `a` to `b` (date components only; negative if `a` is after `b`) |
 | `DateTime.break_duration(total_seconds)`   | `(number)`                                               | `DateTime.Duration`          | Break a span in seconds into a `days`/`hours`/`minutes`/`seconds`/`milliseconds` record (with a `negative` flag) |
 | `DateTime.day_of_month(ts)`                | `(number)`                                               | `result<integer>`            | Day of month (1–31); fail if out of supported range (year 0001–9999)     |
 | `DateTime.day_of_week(ts)`                 | `(number)`                                               | `result<integer>`            | 1 (Monday) to 7 (Sunday); fail if out of range                           |
@@ -414,6 +422,8 @@ result<number> ts = DateTime.combine(d, t)
 ```
 
 `DateTime.Duration` record fields: `days`, `hours`, `minutes`, `seconds`, `milliseconds` (all `integer`), and `negative` (`boolean`). `break_duration` splits a `number` span in seconds into this human-readable breakdown — the `hours`/`minutes`/`seconds` components are normalised (0–23, 0–59, 0–59) and the sign is carried in `negative` — and `format_duration` renders it back into a compact string such as `"1h 2m 5s"`.
+
+`DateTime.Period` record fields: `years`, `months`, `days` (all `integer`, any may be negative). Where `DateTime.Duration` models a fixed wall-clock span (a number of seconds), a `Period` models a **calendar** span — "1 year, 2 months, 3 days" — whose real length depends on which month and year it is applied to. `DateTime.period(years, months, days)` is a total constructor; `DateTime.add_period(ts, p)` applies it to an instant (the year and month components first, clamping the day to the target month's length exactly like `add_months`/`add_years`, then the whole-day component), returning `failure` only when the result leaves the supported range; and `DateTime.between_dates(a, b)` measures the calendar span between two instants using their date components only (time-of-day is ignored), yielding a negative `Period` when `a` is after `b`. The two shapes are complementary: keep `Duration` for elapsed time, reach for `Period` for "add one month" calendar arithmetic.
 
 `DateTime.Interval` record fields: `start` (`number`), `end` (`number`) — a pair of Unix timestamps modelling a time range rather than a point. `DateTime.interval(start, end)` is a validating constructor that returns `failure` when `end < start`, so an `Interval` value is always well-formed. Intervals are closed (both endpoints are included): `DateTime.interval_contains` treats a timestamp equal to `start` or `end` as contained, and `DateTime.intervals_overlap` counts two intervals that merely touch at an endpoint as overlapping. `DateTime.interval_duration` returns `end - start` in seconds. Timestamps stay plain `number` values, so the existing `DateTime` point helpers still apply.
 
@@ -1850,6 +1860,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.round(x)`                       | `(number)`                       | `result<integer>` | Round to nearest integer; fail on overflow                                       |
 | `Math.sign(x)`                        | `(number)`                       | `integer`         | −1, 0, or 1                                                                      |
 | `Math.sign_of(x)`                     | `(number)`                       | `Sign`            | Sign of `x` as a typed `Sign` choice (`Negative`, `Zero`, `Positive`)           |
+| `Math.sin_of(angle)`                  | `(Math.Angle)`                   | `number`          | Sine of a unit-safe `Math.Angle` (converts to radians first)                    |
 | `Math.sine(x)`                        | `(number)`                       | `result<number>`  | Sine; fail if result is NaN or infinite                                          |
 | `Math.smooth_step(edge0, edge1, x)`   | `(number, number, number)`       | `result<number>`  | Smoothstep interpolation between `edge0` and `edge1`; fail if `edge0 == edge1`   |
 | `Math.square_root(x)`                 | `(number)`                       | `result<number>`  | Square root; fail if `x` is negative                                             |
@@ -1857,7 +1868,9 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.sum(arr)`                       | `(array<number>)`                | `result<integer \| number>` | Sum of all elements; fail on a non-numeric element                               |
 | `Math.summarize(arr)`                 | `(array<number>)`                | `result<Math.Summary>` | Descriptive statistics (count, min, max, mean, median, std. dev.) in one pass; fail if empty |
 | `Math.tangent(x)`                     | `(number)`                       | `result<number>`  | Tangent; fail if result is NaN or infinite                                       |
+| `Math.to_degrees(angle)`              | `(Math.Angle)`                   | `number`          | The `Math.Angle` as a number of degrees                                         |
 | `Math.to_polar(v)`                    | `(Math.Vector2)`                 | `Math.Polar`      | Convert a `Math.Vector2` to a `Math.Polar` (total conversion)                     |
+| `Math.to_radians(angle)`              | `(Math.Angle)`                   | `number`          | The `Math.Angle` as a number of radians                                         |
 | `Math.truncate(x)`                    | `(number)`                       | `result<integer>` | Truncate toward zero; fail on overflow                                           |
 | `Math.variance(arr)`                  | `(array<number>)`                | `result<number>`  | Variance; fail if empty                                                          |
 | `Math.vector2(x, y)`                  | `(number, number)`               | `Math.Vector2`    | Construct a 2D vector                                                            |
@@ -1875,6 +1888,13 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.vec3_cross(a, b)`               | `(Math.Vector3, Math.Vector3)`   | `Math.Vector3`    | Cross product `a × b`                                                            |
 | `Math.vec3_length(v)`                 | `(Math.Vector3)`                 | `number`          | Euclidean length                                                                 |
 | `Math.vec3_normalize(v)`              | `(Math.Vector3)`                 | `Math.Vector3`    | Unit vector (the zero vector is returned unchanged)                             |
+| `Math.vector4(x, y, z, w)`            | `(number, number, number, number)` | `Math.Vector4`  | Construct a 4D (homogeneous) vector                                              |
+| `Math.vec4_add(a, b)`                 | `(Math.Vector4, Math.Vector4)`   | `Math.Vector4`    | Component-wise sum `a + b`                                                        |
+| `Math.vec4_sub(a, b)`                 | `(Math.Vector4, Math.Vector4)`   | `Math.Vector4`    | Component-wise difference `a - b`                                                |
+| `Math.vec4_scale(v, s)`               | `(Math.Vector4, number)`         | `Math.Vector4`    | Scale `v` by scalar `s`                                                          |
+| `Math.vec4_dot(a, b)`                 | `(Math.Vector4, Math.Vector4)`   | `number`          | Dot product                                                                      |
+| `Math.vec4_length(v)`                 | `(Math.Vector4)`                 | `number`          | Euclidean length                                                                 |
+| `Math.vec4_normalize(v)`              | `(Math.Vector4)`                 | `Math.Vector4`    | Unit vector (the zero vector is returned unchanged)                             |
 | `Math.matrix2(m00, m01, m10, m11)`    | `(number, number, number, number)` | `Math.Matrix2`  | Construct a 2×2 matrix (row-major)                                              |
 | `Math.mat2_identity()`                | `()`                             | `Math.Matrix2`    | The 2×2 identity matrix                                                          |
 | `Math.mat2_multiply(a, b)`            | `(Math.Matrix2, Math.Matrix2)`   | `Math.Matrix2`    | Matrix product `a · b`                                                           |
@@ -1885,6 +1905,14 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.mat3_multiply(a, b)`            | `(Math.Matrix3, Math.Matrix3)`   | `Math.Matrix3`    | Matrix product `a · b`                                                           |
 | `Math.mat3_determinant(m)`            | `(Math.Matrix3)`                 | `number`          | Determinant of a 3×3 matrix                                                      |
 | `Math.mat3_transform(m, v)`           | `(Math.Matrix3, Math.Vector3)`   | `Math.Vector3`    | Apply the transform `m · v`                                                      |
+| `Math.matrix4(m00, …, m33)`           | `(number × 16)`                  | `Math.Matrix4`    | Construct a 4×4 matrix (row-major)                                              |
+| `Math.mat4_identity()`                | `()`                             | `Math.Matrix4`    | The 4×4 identity matrix                                                          |
+| `Math.mat4_multiply(a, b)`            | `(Math.Matrix4, Math.Matrix4)`   | `Math.Matrix4`    | Matrix product `a · b`                                                           |
+| `Math.mat4_determinant(m)`            | `(Math.Matrix4)`                 | `number`          | Determinant of a 4×4 matrix                                                      |
+| `Math.mat4_transform(m, v)`           | `(Math.Matrix4, Math.Vector4)`   | `Math.Vector4`    | Apply the transform `m · v` to a 4D vector                                       |
+| `Math.mat4_transform_point(m, v)`     | `(Math.Matrix4, Math.Vector3)`   | `Math.Vector3`    | Transform a 3D point as homogeneous `(x, y, z, 1)`, dividing by the result `w`   |
+| `Math.mat4_perspective(fov_y, aspect, near, far)` | `(number, number, number, number)` | `Math.Matrix4` | Right-handed perspective projection (`fov_y` in radians)                |
+| `Math.mat4_look_at(eye, center, up)`  | `(Math.Vector3, Math.Vector3, Math.Vector3)` | `Math.Matrix4` | Right-handed look-at view matrix                                    |
 | `Math.quaternion(w, x, y, z)`         | `(number, number, number, number)` | `Math.Quaternion` | Construct a quaternion from its components                                     |
 | `Math.quat_from_axis_angle(axis, angle)` | `(Math.Vector3, number)`      | `Math.Quaternion` | Unit rotation quaternion about `axis` by `angle` radians (axis is normalised)   |
 | `Math.quat_multiply(a, b)`            | `(Math.Quaternion, Math.Quaternion)` | `Math.Quaternion` | Compose two rotations (Hamilton product `a · b`)                            |
@@ -1917,7 +1945,19 @@ assert(Array.length(h.counts) == 3)
 
 `Math.Vector2 { x: number, y: number }` and `Math.Vector3 { x: number, y: number, z: number }` are typed geometry vectors for 2D/3D work — game positions, GraphicalUi layout, physics — where named `.x` / `.y` / `.z` components are far more teachable than the index arithmetic of `LinearAlgebra`'s general `array<number>` vectors. Like `Math.Complex`, they are pure data plus a pipe-first free-function family — `vec2_*` / `vec3_*` for `add`, `sub`, `scale`, `dot`, `length`, and `normalize`, with `vec3_cross` for the 3D cross product — and no operator overloading. `normalize` returns the zero vector unchanged rather than dividing by zero. `Math.to_polar` / `Math.from_polar` bridge `Math.Vector2` to the `Math.Polar` record below.
 
+`Math.Vector4 { x, y, z, w }` (all `number`) completes the fixed-size vector ladder: the extra `w` component carries the homogeneous coordinate that full 3D transforms (`Math.Matrix4`) need, so a point is `(x, y, z, 1.0)` and a direction is `(x, y, z, 0.0)`. It has the same pipe-first `vec4_*` family — `add`, `sub`, `scale`, `dot`, `length`, `normalize` (there is no 4D cross product) — with the same zero-vector leniency in `normalize`.
+
 `Math.Matrix2 { m00, m01, m10, m11 }` and `Math.Matrix3 { m00 … m22 }` (all `number`, row-major) are the typed transform-matrix companions to the vectors, for the 2×2/3×3 linear transforms that `LinearAlgebra`'s general `array<array<number>>` expresses only through index arithmetic. Build them with `Math.matrix2` / `Math.matrix3` or the ready-made `Math.mat2_identity` / `Math.mat3_identity`; `mat*_multiply` composes transforms, `mat*_determinant` reports the scale factor, and `mat2_transform` / `mat3_transform` apply a matrix to a `Math.Vector2` / `Math.Vector3`. Data plus free functions, no operator overloading — the same philosophy as the vectors. `LinearAlgebra` remains for general N-dimensional work.
+
+`Math.Matrix4 { m00 … m33 }` (all `number`, row-major) is the 4×4 homogeneous-transform companion — the full model / view / projection matrix of 3D graphics that the smaller matrices cannot express. Build one with `Math.matrix4`, the ready-made `Math.mat4_identity`, or the two camera constructors: `Math.mat4_perspective(fov_y, aspect, near, far)` (a right-handed perspective projection, `fov_y` in radians, OpenGL clip-space convention) and `Math.mat4_look_at(eye, center, up)` (a right-handed view matrix, all three arguments `Math.Vector3`). `Math.mat4_multiply(a, b)` composes transforms (`a · b`, so the rightmost is applied first) and `Math.mat4_determinant(m)` reports the scale factor. Apply a matrix with either `Math.mat4_transform(m, v)` — the direct `m · v` on a `Math.Vector4` — or `Math.mat4_transform_point(m, v)`, which transforms a `Math.Vector3` point as `(x, y, z, 1.0)` and divides the result by its `w` so a perspective matrix yields the projected point. Degenerate inputs (a zero `w`, `near == far`, an `eye == center` look-at) fail safe — the divide is skipped or the identity is returned — rather than producing `NaN`. Data plus pipe-first free functions, the same philosophy as `Math.Matrix3`.
+
+```luma
+# Project a world-space point through a camera.
+Math.Matrix4 view = Math.mat4_look_at(Math.vector3(0.0, 0.0, 5.0), Math.vector3(0.0, 0.0, 0.0), Math.vector3(0.0, 1.0, 0.0))
+Math.Matrix4 projection = Math.mat4_perspective(Math.pi / 2.0, 1.0, 1.0, 100.0)
+Math.Matrix4 view_projection = Math.mat4_multiply(projection, view)
+Math.Vector3 screen = Math.mat4_transform_point(view_projection, Math.vector3(0.0, 0.0, 0.0))
+```
 
 `Math.Quaternion { w, x, y, z }` (all `number`) is the gimbal-lock-free 3D-rotation companion to the vectors and matrices, for composing and applying rotations without hand-building rotation matrices. `Math.quaternion(w, x, y, z)` builds one from raw components, but the everyday constructor is `Math.quat_from_axis_angle(axis, angle)`, which produces a unit rotation of `angle` radians about `axis` (a `Math.Vector3`, normalised for you). `Math.quat_multiply(a, b)` composes two rotations (the Hamilton product — order matters), `Math.quat_normalize(q)` renormalises a drifted quaternion (a zero quaternion is returned unchanged, mirroring `vec3_normalize`), and `Math.quat_rotate_vector(q, v)` rotates a `Math.Vector3` by `q` (normalising `q` first, so a slightly denormalised rotation still behaves). Data plus pipe-first free functions, the same philosophy as `Math.Vector3` / `Math.Matrix3`.
 
@@ -1962,6 +2002,8 @@ Math.Vector2 v = Math.from_polar(p)                    # back to (3.0, 4.0)
 `Math.LineFit` is the ordinary least-squares regression result — `slope: number`, `intercept: number`, `r_squared: number` — returned by `Math.linear_fit(xs, ys)` for the trend line `y = slope · x + intercept`. It fails on mismatched array lengths, fewer than two points, or a zero x-variance (a vertical line). Mirrors `Math.Summary`: a plain returned record built by a single call.
 
 `Sign` is a **top-level** choice type (not namespaced, like `Ordering`) with three variants — `Sign.Negative`, `Sign.Zero`, `Sign.Positive` — the self-documenting answer to "which way does this number point?". `Math.sign_of(x)` returns it, so a `match` is exhaustive and autocompleted instead of comparing against the magic `-1` / `0` / `1` that `Math.sign` returns (where `-1` could be misread as an error sentinel). `Math.sign` is unchanged for callers that want the integer.
+
+`Math.Angle` is an **optional** unit-safe angle: a payload-carrying choice with two variants — `Math.Angle.Radians(number)` and `Math.Angle.Degrees(number)` — that makes the radians-versus-degrees distinction explicit at the call site, so mixing the two becomes a visible choice rather than a silent bug. `Math.to_radians(angle)` and `Math.to_degrees(angle)` convert to a bare `number` in either unit, and `Math.sin_of(angle)` takes the sine of an angle regardless of how it was expressed. This is a **convenience, not a replacement**: the primary trig APIs (`Math.sine`, `Math.cosine`, `Math.radians`, `Math.degrees`) still take and return bare number radians, so reach for `Math.Angle` only where the extra clarity is worth the wrapper.
 
 ```luma
 string direction = match Math.sign_of(-4.2) {
@@ -2948,6 +2990,7 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.from_hex(hex)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
 | `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
 | `Color.from_hsv(h)`             | `(Color.Hsv)`                               | `Color.Color`        | Convert an HSV (HSB) colour to RGBA (alpha 1.0)                          |
+| `Color.from_name(name)`         | `(Color.Name)`                              | `Color.Color`        | Build an opaque colour from a curated named colour (`Color.Name`)       |
 | `Color.gradient(angle, stops)`  | `(number, array<Color.Stop>)`               | `Color.Gradient`     | Build a multi-stop linear gradient at `angle` degrees                   |
 | `Color.gradient_at(g, position)` | `(Color.Gradient, number)`                 | `Color.Color`        | Sample the interpolated colour at `position` (0–1, clamped)             |
 | `Color.gradient_to_css(g)`      | `(Color.Gradient)`                          | `string`             | Serialise to a CSS `linear-gradient(...)` string                        |
@@ -2970,6 +3013,8 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 **`Color.Hsv`** is the hue/saturation/**value** (HSB) sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `value: number` (0–1 ratios). It is the model most colour pickers and palette generators use, so `Color.to_hsv` / `Color.from_hsv` are the natural pair for building tints and shades by "value". Like HSL it drops alpha (`from_hsv` produces an opaque colour), and both spaces serialise through the same RGBA `to_css` path.
 
 **`Color.Cmyk`** is the cyan/magenta/yellow/**key** (black) sibling of `Color.Color` — `cyan: number`, `magenta: number`, `yellow: number`, and `key: number` (all 0–1 ratios). It is the subtractive model used by print production, so `Color.to_cmyk` / `Color.from_cmyk` are the natural pair for previewing how an on-screen colour will separate to ink. Like HSL/HSV it drops alpha (`from_cmyk` produces an opaque colour), and it serialises through the same RGBA `to_css` path.
+
+**`Color.Name`** is a curated palette of common named colours as an exhaustive choice — `Black`, `White`, `Red`, `Green`, `Lime`, `Blue`, `Yellow`, `Cyan`, `Magenta`, `Gray`, `Silver`, `Orange`, `Purple`, `Pink`, `Brown` (a subset of the CSS named colours, not all 140). `Color.from_name(name)` maps a variant to its opaque `Color.Color`, giving beginners a typo-proof, autocompleted alternative to remembering hex strings — a misspelled colour is a compile error, not a runtime surprise. The values are CSS-canonical, so `Color.Name.Green` is `0,128,0` and `Color.Name.Lime` is `0,255,0` (matching the web platform). It parallels the exhaustive `Terminal.Color` palette; for any colour outside the curated set, `Color.rgb` / `Color.from_hex` remain.
 
 **`Color.Stop`** (`color: Color.Color`, `position: number`) and **`Color.Gradient`** (`angle: number`, `stops: array<Color.Stop>`) add a multi-stop linear gradient built from the existing `Color.Color` record. `Color.stop(color, position)` pairs a colour with its 0–1 position along the gradient axis (position clamped to [0, 1]), and `Color.gradient(angle, stops)` assembles them at an `angle` in degrees. `Color.gradient_to_css(g)` serialises to a CSS `linear-gradient(...)` string the GraphicalUi web-view already draws — so a gradient background, chart fill, or header can be _computed_ instead of hand-written — and `Color.gradient_at(g, position)` samples the interpolated colour at any 0–1 position (clamping to the first/last stop outside their range, and linearly interpolating each channel and alpha between the two surrounding stops). Pure data plus free functions, reusing `Color.Color` and its CSS-serialisation convention.
 
