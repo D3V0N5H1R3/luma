@@ -120,6 +120,35 @@ LUMA_TEST(math_is_prime) {
     ASSERT_EQ(eval("Math.is_prime(2147483647)").as_bool(), true);
 }
 
+LUMA_TEST(math_is_even_odd) {
+    ASSERT_EQ(eval("Math.is_even(4)").as_bool(), true);
+    ASSERT_EQ(eval("Math.is_even(3)").as_bool(), false);
+    ASSERT_EQ(eval("Math.is_even(0)").as_bool(), true);
+    // Negative-safe: -4 is even, -3 is odd.
+    ASSERT_EQ(eval("Math.is_even(-4)").as_bool(), true);
+    ASSERT_EQ(eval("Math.is_odd(-3)").as_bool(), true);
+    ASSERT_EQ(eval("Math.is_odd(4)").as_bool(), false);
+    ASSERT_EQ(eval("Math.is_odd(3)").as_bool(), true);
+}
+
+LUMA_TEST(math_integer_bounds) {
+    ASSERT_EQ(eval("Math.max_integer").as_integer(), 9223372036854775807LL);
+    ASSERT_EQ(eval("Math.min_integer").as_integer(), -9223372036854775807LL - 1);
+}
+
+LUMA_TEST(math_epsilon) {
+    // Machine epsilon is positive and smaller than any everyday tolerance.
+    ASSERT_TRUE(eval("Math.epsilon").as_number() > 0.0);
+    ASSERT_TRUE(eval("Math.epsilon").as_number() < 1e-15);
+    // 1.0 + epsilon is distinguishable from 1.0.
+    ASSERT_EQ(eval("1.0 + Math.epsilon > 1.0").as_bool(), true);
+}
+
+LUMA_TEST(math_nan) {
+    ASSERT_EQ(eval("Math.is_not_a_number(Math.nan)").as_bool(), true);
+    ASSERT_EQ(eval("Math.is_infinite(Math.nan)").as_bool(), false);
+}
+
 LUMA_TEST(math_lerp) {
     // Happy path: returns result<number>.
     ASSERT_EVAL_NUM("Math.lerp(0.0, 10.0, 0.5)", 5.0);

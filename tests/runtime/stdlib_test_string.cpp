@@ -703,6 +703,32 @@ static void test_string_from_codepoints_surrogate() {
     ASSERT_EVAL_FAILURE("String.from_codepoints([55296])");
 }
 
+static void test_string_lines() {
+    // Universal newlines: \n, \r\n and lone \r all split; terminators stripped;
+    // no trailing empty element after a final newline.
+    const auto v = eval("String.lines(\"a\\r\\nb\\nc\\rd\\n\")");
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), 4U);
+    ASSERT_EQ((*v.as_array()->elements)[0].as_string(), "a");
+    ASSERT_EQ((*v.as_array()->elements)[1].as_string(), "b");
+    ASSERT_EQ((*v.as_array()->elements)[2].as_string(), "c");
+    ASSERT_EQ((*v.as_array()->elements)[3].as_string(), "d");
+
+    // Empty string -> no lines.
+    ASSERT_EQ(eval("String.lines(\"\")").as_array()->elements->size(), 0U);
+
+    // Blank interior lines are preserved.
+    const auto blanks = eval("String.lines(\"a\\n\\nb\")");
+    ASSERT_EQ(blanks.as_array()->elements->size(), 3U);
+    ASSERT_EQ((*blanks.as_array()->elements)[1].as_string(), "");
+
+    // A single newline yields one empty line.
+    ASSERT_EQ(eval("String.lines(\"\\n\")").as_array()->elements->size(), 1U);
+
+    // No trailing terminator: single line preserved.
+    ASSERT_EQ(eval("String.lines(\"abc\")").as_array()->elements->size(), 1U);
+}
+
 int main() {
     RUN(test_string_byte_length);
     RUN(test_string_byte_length_multibyte);
@@ -809,6 +835,7 @@ int main() {
     RUN(test_string_truncate);
     RUN(test_string_search_negative);
     RUN(test_string_from_codepoints_surrogate);
+    RUN(test_string_lines);
     RUN(test_native_type_error_is_catchable);
 
     return SUMMARY();

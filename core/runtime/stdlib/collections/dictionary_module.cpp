@@ -328,6 +328,31 @@ void register_dictionary_ns(const EnvPtr& env) {
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {
                           return dict_map_values(*src, args[1], loc);
                       })
+        // Dictionary.update(dictionary<V>, string, fn(optional<V>) -> V) -> dictionary<V>
+        // Read-modify-write for a single key: the updater receives the current
+        // value, or none when the key is absent, and returns the new value.
+        // Returns a new dictionary (the input is never mutated).
+        .func("update", 3)
+        .extract_body(expect_dict,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          const auto& key = expect_string_key(args[1], "Dictionary.update", loc);
+                          expect_callable(args[2], "Dictionary.update", loc);
+
+                          const auto* existing = src->find(key);
+
+                          if (existing == nullptr) {
+                              ensure_dictionary_capacity(src->entries.size(), 1,
+                                                         "Dictionary.update", loc);
+                          }
+
+                          std::vector<Value> call_args(1);
+                          call_args[0] = existing != nullptr ? *existing : Value{NullValue{}};
+                          auto new_value = invoke_callable(args[2], call_args, loc);
+
+                          auto dict = clone_dict(src);
+                          dict->set(key, std::move(new_value));
+                          return Value{std::move(dict)};
+                      })
         .func("filter", 2)
         .extract_body(expect_dict,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {

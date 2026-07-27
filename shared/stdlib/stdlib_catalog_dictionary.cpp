@@ -45,6 +45,8 @@ void register_dictionary_functions(std::vector<FunctionSpec>& specs, const Modul
             m.fn("to_array", 1, "(dict: dictionary<V>)", R::array(named::key_value()),
                  {p.dict_any}),
             m.fn("to_entries", 1, "(dict: dictionary<V>)", R::array_any(), {p.dict_any}),
+            m.fn("update", 3, "(dict: dictionary<V>, key: string, updater: func(optional<V>) -> V)",
+                 R::dict_any(), {p.dict_any, p.string, p.func}),
             m.fn("values", 1, "(dict: dictionary<V>)", R::array_any(), {p.dict_any}),
             m.fn("pick", 2, "(dict: dictionary<V>, keys: array<string>)", R::dict_any(),
                  {p.dict_any, p.array_string}),

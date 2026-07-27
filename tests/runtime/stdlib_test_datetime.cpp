@@ -180,6 +180,7 @@ static void test_datetime_module() {
     ASSERT_TRUE(env->has("DateTime.year"));
     ASSERT_TRUE(env->has("DateTime.month"));
     ASSERT_TRUE(env->has("DateTime.day_of_month"));
+    ASSERT_TRUE(env->has("DateTime.day_of_year"));
     ASSERT_TRUE(env->has("DateTime.is_leap_year"));
     ASSERT_TRUE(env->has("DateTime.to_iso_string"));
     ASSERT_TRUE(env->has("DateTime.difference_seconds"));
@@ -306,6 +307,15 @@ static void test_datetime_hour_minute_second_valid() {
 static void test_datetime_day_of_week_valid() {
     // 2024-03-15 is a Friday → 5 (1 = Monday .. 7 = Sunday).
     ASSERT_EVAL_INT("DateTime.day_of_week(1710497400.0)", 5);
+}
+
+static void test_datetime_day_of_year_valid() {
+    // 2024 is a leap year: 2024-03-15 is day 31 + 29 + 15 = 75.
+    ASSERT_EVAL_INT("DateTime.day_of_year(1710497400.0)", 75);
+    // 2024-01-01 is day 1.
+    ASSERT_EVAL_INT("DateTime.day_of_year(1704067200.0)", 1);
+    // Out-of-range timestamp fails cleanly like the other accessors.
+    ASSERT_EVAL_FAILURE("DateTime.day_of_year(-99999999999.0)");
 }
 
 static void test_datetime_weekday_returns_choice() {
@@ -1080,6 +1090,7 @@ int main() {
     RUN(test_datetime_day_of_month_valid);
     RUN(test_datetime_hour_minute_second_valid);
     RUN(test_datetime_day_of_week_valid);
+    RUN(test_datetime_day_of_year_valid);
     RUN(test_datetime_weekday_returns_choice);
     RUN(test_datetime_weekday_out_of_range);
     RUN(test_datetime_weekday_from_number_valid);
