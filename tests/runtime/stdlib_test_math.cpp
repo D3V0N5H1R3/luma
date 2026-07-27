@@ -84,6 +84,33 @@ LUMA_TEST(math_factorial) {
     ASSERT_EVAL_INT("Math.factorial(5)", 120);
 }
 
+LUMA_TEST(math_combinations) {
+    ASSERT_EVAL_INT("Math.combinations(5, 2)", 10);
+
+    ASSERT_EVAL_INT("Math.combinations(5, 0)", 1);
+
+    ASSERT_EVAL_INT("Math.combinations(5, 5)", 1);
+
+    // Symmetry: C(n, k) == C(n, n - k).
+    ASSERT_EVAL_INT("Math.combinations(10, 3)", 120);
+
+    ASSERT_EVAL_INT("Math.combinations(10, 7)", 120);
+
+    // A large but representable central binomial coefficient (does not overflow
+    // even though the equivalent factorials would).
+    ASSERT_EVAL_INT("Math.combinations(62, 31)", 465428353255261088);
+}
+
+LUMA_TEST(math_permutations) {
+    ASSERT_EVAL_INT("Math.permutations(5, 2)", 20);
+
+    ASSERT_EVAL_INT("Math.permutations(5, 0)", 1);
+
+    ASSERT_EVAL_INT("Math.permutations(5, 5)", 120);
+
+    ASSERT_EVAL_INT("Math.permutations(10, 3)", 720);
+}
+
 LUMA_TEST(math_floor_ceil_round) {
     ASSERT_EVAL_INT("Math.floor(3.7)", 3);
 
@@ -586,6 +613,30 @@ LUMA_TEST(math_factorial_negative) {
 
 LUMA_TEST(math_factorial_overflow) {
     ASSERT_EVAL_FAILURE("Math.factorial(21)");
+}
+
+LUMA_TEST(math_combinations_invalid) {
+    ASSERT_EVAL_FAILURE("Math.combinations(-1, 2)");
+
+    ASSERT_EVAL_FAILURE("Math.combinations(5, -1)");
+
+    ASSERT_EVAL_FAILURE("Math.combinations(3, 5)");
+}
+
+LUMA_TEST(math_combinations_overflow) {
+    ASSERT_EVAL_FAILURE("Math.combinations(100, 50)");
+}
+
+LUMA_TEST(math_permutations_invalid) {
+    ASSERT_EVAL_FAILURE("Math.permutations(-1, 2)");
+
+    ASSERT_EVAL_FAILURE("Math.permutations(5, -1)");
+
+    ASSERT_EVAL_FAILURE("Math.permutations(3, 5)");
+}
+
+LUMA_TEST(math_permutations_overflow) {
+    ASSERT_EVAL_FAILURE("Math.permutations(30, 20)");
 }
 
 LUMA_TEST(math_square_root_negative) {

@@ -124,6 +124,7 @@ These require no namespace prefix:
 | `Array.take(arr, n)`             | `(array<T>, integer)`                  | `array<T>`                     | Take the first `n` elements                                                |
 | `Array.take_while(arr, fn)`      | `(array<T>, function(T) -> boolean)`   | `result<array<T>>`             | Take elements while predicate is true; fail if predicate throws            |
 | `Array.unique(arr)`              | `(array<T>)`                           | `array<T>`                     | Deduplicate elements                                                       |
+| `Array.unzip(arr)`               | `(array<(T, U)>)`                      | `(array<T>, array<U>)`         | Split an array of pairs into two parallel arrays (inverse of `zip`)        |
 | `Array.windows(arr, n)`          | `(array<T>, integer)`                  | `result<array<array<T>>>`      | Overlapping sliding windows of size `n`; fail if `n` is not > 0            |
 | `Array.zip(a, b)`                | `(array<T>, array<U>)`                 | `array<(T, U)>`                | Pair elements into tuples; truncates to shorter array                      |
 | `Array.scan(arr, init, fn)`      | `(array<T>, U, function(U, T) -> U)`   | `result<array<U>>`             | Like reduce but returns all intermediate values; fail if callback throws   |
@@ -563,6 +564,7 @@ Dictionaries preserve insertion order. All reads and writes use string keys.
 | `Dictionary.map(d, fn)`           | `(dictionary<T>, function(string, T) -> U)`       | `result<dictionary<U>>`                  | Transform every entry; `fn` receives `(key, value)`, returns new value; fail if callback throws |
 | `Dictionary.map_values(d, fn)`    | `(dictionary<T>, function(T) -> U)`               | `result<dictionary<U>>`                  | Transform every value; fail if callback throws                                                  |
 | `Dictionary.merge(a, b)`          | `(dictionary<T>, dictionary<T>)`                  | `dictionary<T>`                          | Merge; `b` wins on conflicts                                                                    |
+| `Dictionary.merge_with(a, b, fn)` | `(dictionary<T>, dictionary<T>, function(T, T) -> T)` | `dictionary<T>`                      | Merge; on a shared key `fn(value_from_a, value_from_b)` resolves the conflict                   |
 | `Dictionary.omit(d, keys)`        | `(dictionary<T>, array<string>)`                  | `dictionary<T>`                          | New dictionary excluding entries whose keys are in `keys`                                       |
 | `Dictionary.partition(d, fn)`     | `(dictionary<T>, function(string, T) -> boolean)` | `result<(dictionary<T>, dictionary<T>)>` | Split into `(matches, rest)`; `fn` receives `(key, value)`; fail if predicate throws            |
 | `Dictionary.pick(d, keys)`        | `(dictionary<T>, array<string>)`                  | `dictionary<T>`                          | New dictionary containing only entries whose keys are in `keys`                                 |
@@ -1819,6 +1821,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.arc_tangent(x)`                 | `(number)`                       | `result<number>`  | Inverse tangent                                                                  |
 | `Math.atan2(y, x)`                    | `(number, number)`               | `result<number>`  | Arctangent of y/x considering signs; fail if result is NaN                       |
 | `Math.ceil(x)`                        | `(number)`                       | `result<integer>` | Round up to nearest integer; fail on overflow                                    |
+| `Math.combinations(n, k)`             | `(integer, integer)`             | `result<integer>` | Number of ways to choose `k` of `n` (nCr); fail if `n < 0`, `k < 0`, `k > n`, or overflow |
 | `Math.complex(real, imaginary)`       | `(number, number)`               | `Math.Complex`    | Construct a complex number                                                        |
 | `Math.complex_add(a, b)`              | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Sum `a + b`                                                                       |
 | `Math.complex_argument(c)`            | `(Math.Complex)`                 | `number`          | Argument (phase angle) of `c` in radians                                          |
@@ -1870,6 +1873,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.min(a, b)`                      | `(number, number)`               | `number`          | Smaller of two values                                                            |
 | `Math.mode(arr)`                      | `(array<number>)`                | `result<number>`  | Most frequent value; fail if empty                                               |
 | `Math.percentile(arr, p)`             | `(array<number>, number)`        | `result<number>`  | p-th percentile; fail if empty or `p` outside [0, 100]                           |
+| `Math.permutations(n, k)`             | `(integer, integer)`             | `result<integer>` | Number of ordered arrangements of `k` of `n` (nPr); fail if `n < 0`, `k < 0`, `k > n`, or overflow |
 | `Math.power(base, exp)`               | `(number, number)`               | `result<number>`  | `base` raised to `exp`; fail if result is NaN or Inf                             |
 | `Math.radians(deg)`                   | `(number)`                       | `number`          | Convert degrees to radians                                                       |
 | `Math.remainder(a, b)`                | `(integer \| number, integer \| number)` | `result<integer \| number>` | Remainder of `a` divided by `b`; fail if `b` is zero                             |

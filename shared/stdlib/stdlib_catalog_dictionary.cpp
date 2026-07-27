@@ -34,6 +34,8 @@ void register_dictionary_functions(std::vector<FunctionSpec>& specs, const Modul
                  R::result(R::dict(R::any_type())), {p.dict_any, p.func}),
             m.fn("merge", 2, "(a: dictionary<V>, b: dictionary<V>)", R::dict_any(),
                  {p.dict_any, p.dict_any}),
+            m.fn("merge_with", 3, "(a: dictionary<V>, b: dictionary<V>, f: func(V, V) -> V)",
+                 R::dict_any(), {p.dict_any, p.dict_any, p.func}),
             m.fn("partition", 2, "(dict: dictionary<V>, f: func(string, V) -> boolean)",
                  R::result_any(), {p.dict_any, p.func}),
             m.fn("reduce", 3, "(dict: dictionary<V>, initial: U, f: func(U, string, V) -> U)",

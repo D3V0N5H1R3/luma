@@ -84,6 +84,24 @@ function void test_math_factorial() {
 }
 
 @test
+function void test_math_combinations() {
+    assert(Result.unwrap(Math.combinations(5, 0)) == 1)
+    assert(Result.unwrap(Math.combinations(5, 5)) == 1)
+    assert(Result.unwrap(Math.combinations(5, 2)) == 10)
+    assert(Result.unwrap(Math.combinations(10, 3)) == 120)
+    # Symmetry: C(n, k) == C(n, n - k).
+    assert(Result.unwrap(Math.combinations(10, 7)) == 120)
+}
+
+@test
+function void test_math_permutations() {
+    assert(Result.unwrap(Math.permutations(5, 0)) == 1)
+    assert(Result.unwrap(Math.permutations(5, 2)) == 20)
+    assert(Result.unwrap(Math.permutations(5, 5)) == 120)
+    assert(Result.unwrap(Math.permutations(10, 3)) == 720)
+}
+
+@test
 function void test_math_gcd() {
     assert(Result.unwrap(Math.greatest_common_divisor(12, 8)) == 4)
     assert(Result.unwrap(Math.greatest_common_divisor(7, 13)) == 1)
@@ -414,6 +432,22 @@ function void test_math_factorial_too_large() {
     result<integer> r = Math.factorial(21)
 
     assert(Result.is_failure(r), "factorial above 20 should fail")
+}
+
+@test
+function void test_math_combinations_invalid() {
+    assert(Result.is_failure(Math.combinations(-1, 2)), "negative n should fail")
+    assert(Result.is_failure(Math.combinations(5, -1)), "negative k should fail")
+    assert(Result.is_failure(Math.combinations(3, 5)), "k > n should fail")
+    assert(Result.is_failure(Math.combinations(100, 50)), "overflow should fail")
+}
+
+@test
+function void test_math_permutations_invalid() {
+    assert(Result.is_failure(Math.permutations(-1, 2)), "negative n should fail")
+    assert(Result.is_failure(Math.permutations(5, -1)), "negative k should fail")
+    assert(Result.is_failure(Math.permutations(3, 5)), "k > n should fail")
+    assert(Result.is_failure(Math.permutations(30, 20)), "overflow should fail")
 }
 
 @test

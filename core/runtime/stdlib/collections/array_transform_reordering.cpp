@@ -168,7 +168,30 @@ void register_array_transform_reordering(const EnvPtr& env) {
                               arr->elements->push_back(make_tuple_pair((*a->elements)[i], b[i]));
                           }
                           return Value{std::move(arr)};
-                      });
+                      })
+        // Array.unzip(array<(T, U)>) -> (array<T>, array<U>) — the inverse of
+        // Array.zip: split an array of pairs back into two parallel arrays.
+        .func("unzip", 1)
+        .extract_body(expect_array, [](const auto& src, const Args&, SourceLocation loc) -> Value {
+            auto firsts = std::make_shared<ArrayValue>();
+            auto seconds = std::make_shared<ArrayValue>();
+            firsts->elements->reserve(src->elements->size());
+            seconds->elements->reserve(src->elements->size());
+
+            for (const auto& elem : *src->elements) {
+                if (!elem.is_tuple() || elem.as_tuple()->elements.size() != 2) {
+                    throw RuntimeError{"Array.unzip: each element must be a 2-tuple", loc,
+                                       "pass an array of (T, U) pairs, e.g. the "
+                                       "output of Array.zip"};
+                }
+
+                const auto& pair = elem.as_tuple()->elements;
+                firsts->elements->push_back(pair[0]);
+                seconds->elements->push_back(pair[1]);
+            }
+
+            return make_tuple_pair(Value{std::move(firsts)}, Value{std::move(seconds)});
+        });
 }
 
 } // namespace luma

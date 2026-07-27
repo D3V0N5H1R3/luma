@@ -96,6 +96,8 @@ void register_array_functions(std::vector<FunctionSpec>& specs, const ModuleBuil
             m.fn("take_while", 2, "(arr: array<T>, f: func(T) -> boolean)", R::result_array_any(),
                  {p.array_any, p.func}),
             m.fn("unique", 1, "(arr: array<T>)", R::array_any(), {p.array_any}),
+            m.fn("unzip", 1, "(arr: array<(T, U)>)", R::tuple({R::array_any(), R::array_any()}),
+                 {p.array_any}),
             m.fn("zip", 2, "(a: array<T>, b: array<U>)", R::array_any(),
                  {p.array_any, p.array_any}),
             m.fn("windows", 2, "(arr: array<T>, size: integer)",

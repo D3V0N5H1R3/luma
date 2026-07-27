@@ -345,6 +345,78 @@ void register_math_ns(const EnvPtr& env) {
 
             return make_success_value(Value{result});
         })
+        .func("combinations", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto n = expect_integer(args[0], "Math.combinations", loc);
+            auto k = expect_integer(args[1], "Math.combinations", loc);
+
+            if (n < 0 || k < 0) {
+                return make_failure_value(error_msg("Math", "combinations", "negative number"));
+            }
+
+            if (k > n) {
+                return make_failure_value(error_msg("Math", "combinations", "k must not exceed n"));
+            }
+
+            // C(n, k) == C(n, n - k); pick the smaller k to minimise iterations.
+            if (k > n - k) {
+                k = n - k;
+            }
+
+            std::int64_t result{1};
+
+            for (std::int64_t i{1}; i <= k; ++i) {
+                // result = result * (n - k + i) / i, kept exact by cancelling the
+                // gcd first: after dividing both terms by gcd(numerator, i) the
+                // reduced divisor exactly divides the running result, so no
+                // intermediate fraction and no false overflow of a representable
+                // result.
+                std::int64_t numerator = n - k + i;
+                std::int64_t divisor = i;
+                const std::int64_t common = std::gcd(numerator, divisor);
+
+                numerator /= common;
+                divisor /= common;
+                result /= divisor;
+
+                if (would_overflow_mul(result, numerator)) {
+                    return make_failure_value(
+                        error_msg("Math", "combinations", "integer overflow"));
+                }
+
+                result *= numerator;
+            }
+
+            return make_success_value(Value{result});
+        })
+        .func("permutations", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto n = expect_integer(args[0], "Math.permutations", loc);
+            auto k = expect_integer(args[1], "Math.permutations", loc);
+
+            if (n < 0 || k < 0) {
+                return make_failure_value(error_msg("Math", "permutations", "negative number"));
+            }
+
+            if (k > n) {
+                return make_failure_value(error_msg("Math", "permutations", "k must not exceed n"));
+            }
+
+            std::int64_t result{1};
+
+            for (std::int64_t i{0}; i < k; ++i) {
+                const std::int64_t factor = n - i;
+
+                if (would_overflow_mul(result, factor)) {
+                    return make_failure_value(
+                        error_msg("Math", "permutations", "integer overflow"));
+                }
+
+                result *= factor;
+            }
+
+            return make_success_value(Value{result});
+        })
         .func("greatest_common_divisor", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto first = expect_integer(args[0], "Math.greatest_common_divisor", loc);
