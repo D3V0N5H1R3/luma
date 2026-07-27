@@ -1474,6 +1474,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 
 | Function                              | Parameter Types                            | Return Type             | Description                                                          |
 | ------------------------------------- | ------------------------------------------ | ----------------------- | -------------------------------------------------------------------- |
+| `Http.authorization_header(auth)`     | `(Http.Auth)`                              | `string`                | Render an `Http.Auth` choice into its `Authorization` header value    |
 | `Http.basic_auth(user, pass)`         | `(string, string)`                         | `string`                | Build a Basic `Authorization` header value                           |
 | `Http.bearer_auth(token)`             | `(string)`                                 | `string`                | Build a Bearer `Authorization` header value                          |
 | `Http.build_query(params)`            | `(dictionary<string>)`                     | `string`                | Build query string (e.g. `"a=1&b=2"`)                                |
@@ -1559,8 +1560,16 @@ failure(_other) { print("request failed") }
 }
 ```
 
-> **Security note** — HTTP header names and values are validated to reject carriage-return (`\r`) and line-feed (`\n`) characters. Supplying headers that contain these characters returns a `failure` result to prevent CRLF header injection.
+`Http.Auth` is a choice type modelling request credentials as a closed, exhaustive set: `Basic(username, password)` carries HTTP Basic credentials and `Bearer(token)` a bearer/OAuth token. `Http.authorization_header(auth)` renders it into the exact `Authorization` header value — `Basic(u, p)` becomes `"Basic " + base64("u:p")` and `Bearer(t)` becomes `"Bearer " + t` — so a scheme typo is a compile error instead of a hand-built `"Authrization"` header. It is the typed companion to the stringly-typed `Http.basic_auth` / `Http.bearer_auth` helpers (which remain), mirroring how `Http.method_to_string` renders an `Http.Method`:
 
+```luma
+Http.Auth auth = Http.Auth.Bearer("my-token")
+result<Http.Response> r = Http.get_with(
+    "http://example.com/api",
+    {"Authorization": Http.authorization_header(auth)})
+```
+
+> **Security note** — HTTP header names and values are validated to reject carriage-return (`\r`) and line-feed (`\n`) characters. Supplying headers that contain these characters returns a `failure` result to prevent CRLF header injection.
 > **Proxy support** — When the `HTTPS_PROXY`, `HTTP_PROXY`, or `ALL_PROXY` environment variables are set (lower-case variants are also honoured), requests are routed through the named HTTP proxy: `https` URLs use a `CONNECT` tunnel (TLS remains end-to-end with the origin server, so certificate verification is unaffected), and plain `http` URLs are forwarded with an absolute-form request line. `NO_PROXY` (comma-separated host or domain suffixes) bypasses the proxy for matching hosts. Proxy credentials supplied in the proxy URL's userinfo are sent via `Proxy-Authorization`. SSRF protection still applies to the request target: requests resolving to private, loopback, or otherwise reserved addresses are rejected even when a proxy is configured.
 
 ## 19 — Console
@@ -1930,6 +1939,10 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.rect_union(a, b)`               | `(Math.Rect, Math.Rect)`         | `Math.Rect`       | The smallest rectangle containing both                                          |
 | `Math.rect_center(r)`                 | `(Math.Rect)`                    | `Math.Vector2`    | The centre point of the rectangle                                               |
 | `Math.rect_area(r)`                   | `(Math.Rect)`                    | `number`          | Area (`width × height`)                                                          |
+| `Math.circle(center, radius)`         | `(Math.Vector2, number)`         | `Math.Circle`     | Build a circle (a negative radius clamps to 0)                                   |
+| `Math.circle_contains(c, point)`      | `(Math.Circle, Math.Vector2)`    | `boolean`         | Whether `point` lies in the closed disk (the boundary is inclusive)             |
+| `Math.circle_intersects(a, b)`        | `(Math.Circle, Math.Circle)`     | `boolean`         | Whether two circles overlap or touch                                            |
+| `Math.circle_rect_intersects(c, r)`   | `(Math.Circle, Math.Rect)`       | `boolean`         | Whether a circle and a rectangle overlap                                        |
 
 `Math.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
 
@@ -1979,6 +1992,15 @@ match Math.rect_intersection(a, b) {
     case some(overlap) { print("overlap area is ${Math.rect_area(overlap)}") }   # 25.0
     case none { print("disjoint") }
 }
+```
+
+`Math.Circle { center: Math.Vector2, radius: number }` is a 2D circle — the disk companion to `Math.Rect`, reusing `Math.Vector2` for its centre. `Math.circle(center, radius)` is a total constructor that clamps a negative radius to 0 (so a degenerate circle is a point rather than inside-out). All predicates use inclusive (closed-disk) boundaries: `Math.circle_contains(c, point)` is true when a point lies within or exactly on the boundary, `Math.circle_intersects(a, b)` is true when two circles overlap or merely touch, and `Math.circle_rect_intersects(c, rect)` is true when a circle overlaps an axis-aligned `Math.Rect` (comparing the circle centre against the closest point on the rectangle). They give a beginner the two most common collision tests after rectangles without hand-writing the distance-squared comparison. Pure data plus total boolean predicates, mirroring `Math.Rect`. Note that the circle predicates are inclusive whereas the `Math.Rect` predicates are half-open, so the two families disagree on an exactly-touching edge (a point on a circle's boundary is contained, but a point on a rectangle's max edge is not).
+
+```luma
+Math.Circle c = Math.circle(Math.vector2(0.0, 0.0), 5.0)
+print(Math.circle_contains(c, Math.vector2(3.0, 4.0)))                    # true (on the boundary)
+print(Math.circle_intersects(c, Math.circle(Math.vector2(9.0, 0.0), 5.0)))   # true
+print(Math.circle_rect_intersects(c, Math.rect(4.0, 4.0, 2.0, 2.0)))     # false
 ```
 
 `Math.Fraction` is a record of exact rational numbers — `numerator: integer` and `denominator: integer` — always stored in lowest terms with a strictly positive denominator (the sign lives in the numerator, and zero is stored as `0/1`). Unlike `number`, a fraction never loses precision, so `1/3 + 1/6` is exactly `1/2`; unlike `Decimal` (base-10), it represents thirds exactly. Like `Decimal`, the type avoids operator overloading: build values with `Math.fraction(numerator, denominator)` (a validating constructor that fails on a zero denominator) and combine them with the `Math.fraction_*` free functions. `add`/`subtract`/`multiply` return a `Math.Fraction` directly and raise a catchable runtime error on int64 overflow (mirroring native integer `+`), while `divide` returns `result<Math.Fraction>` and fails on division by a zero fraction. `Math.fraction_compare` returns the top-level `Ordering` choice for an exhaustive `match`.

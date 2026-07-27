@@ -244,6 +244,12 @@ namespace named {
     return ReturnTypeDesc::named("Rect");
 }
 
+// Math.circle() / circle_* take and return these 2D circle records (bare short
+// name "Circle", like rect() / vector2()).
+[[nodiscard]] inline ReturnTypeDesc circle() {
+    return ReturnTypeDesc::named("Circle");
+}
+
 // DateTime.zoned() / zoned_* take and return these offset-aware timestamp records
 // (bare short name "Zoned", like interval()).
 [[nodiscard]] inline ReturnTypeDesc zoned() {

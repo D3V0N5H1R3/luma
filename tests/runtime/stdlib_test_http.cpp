@@ -133,6 +133,37 @@ static void test_http_bearer_auth_empty() {
     ASSERT_EQ(v.as_string(), "Bearer ");
 }
 
+// ─── Http: authorization_header (Http.Auth choice → Authorization value) ───────
+
+static void test_http_authorization_header_basic() {
+    // Basic(user, pass) → "Basic " + base64("user:pass"); dXNlcjpwYXNz == "user:pass".
+    const auto v = eval(R"(Http.authorization_header(Http.Auth.Basic("user", "pass")))");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "Basic dXNlcjpwYXNz");
+}
+
+static void test_http_authorization_header_basic_matches_basic_auth() {
+    // The typed choice renders the exact same header as the stringly-typed helper.
+    const auto typed =
+        eval(R"(Http.authorization_header(Http.Auth.Basic("aladdin", "opensesame")))");
+    const auto plain = eval(R"(Http.basic_auth("aladdin", "opensesame"))");
+
+    ASSERT_EQ(typed.as_string(), plain.as_string());
+}
+
+static void test_http_authorization_header_bearer() {
+    const auto v = eval(R"(Http.authorization_header(Http.Auth.Bearer("tok-123")))");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "Bearer tok-123");
+}
+
+static void test_http_authorization_header_rejects_non_choice() {
+    // A plain string is not an Http.Auth choice — the renderer rejects it.
+    ASSERT_TRUE(luma::test::eval_throws(R"(Http.authorization_header("Basic x"))"));
+}
+
 // ─── Http: method_to_string (Http.Method choice → verb string) ────────────────
 
 static void test_http_method_to_string_all_verbs() {
@@ -795,6 +826,10 @@ int main() {
     RUN(test_http_basic_auth_empty_credentials);
     RUN(test_http_bearer_auth);
     RUN(test_http_bearer_auth_empty);
+    RUN(test_http_authorization_header_basic);
+    RUN(test_http_authorization_header_basic_matches_basic_auth);
+    RUN(test_http_authorization_header_bearer);
+    RUN(test_http_authorization_header_rejects_non_choice);
     RUN(test_http_method_to_string_all_verbs);
     RUN(test_http_method_to_string_rejects_non_choice);
     RUN(test_http_status_class_all_families);
