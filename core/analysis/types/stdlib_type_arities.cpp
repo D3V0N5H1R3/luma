@@ -297,6 +297,14 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Math.Rect", field("number", "x"), field("number", "y"),
                    field("number", "width"), field("number", "height"));
 
+        // Math.circle() constructs these 2D circle records (type_name "Circle"):
+        // a Math.Vector2 centre plus a non-negative radius.  Data reusing
+        // Math.Vector2, with total boolean predicates (contains / intersects /
+        // circle_rect_intersects) so a beginner writing a simple game gets the
+        // second-most-common collision test after rectangles without hand-writing
+        // the distance-squared comparison — mirroring Math.Rect.
+        add_record(st, "Math.Circle", field("Math.Vector2", "center"), field("number", "radius"));
+
         // Math.five_number_summary() returns this box-plot record (type_name
         // "FiveNumberSummary"): the five order statistics needed to draw a box
         // plot.  Mirrors Math.Summary; every field is a number.
@@ -849,6 +857,34 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Options", .fields = {}});
 
             st.choice_map["Http.Method"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Http.Auth ───────────────────────────────────
+        // Request credentials as a closed, exhaustive set: Basic(username, password)
+        // carries HTTP Basic credentials, Bearer(token) a bearer/OAuth token.  Both
+        // are payload-bearing variants (like Log.Output.File), so a typo in the scheme
+        // is a compile error instead of a hand-built "Authrization" header.  Rendered
+        // into the Authorization header value by Http.authorization_header (base64 via
+        // the shared base64 codec for Basic), mirroring Http.Method / Log.Output.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Auth");
+
+            // Both variants carry string payloads, so build them by moving Parameters
+            // into the fields vector (a Parameter holds a move-only default_value).
+            ChoiceVariant basic_variant;
+            basic_variant.name = "Basic";
+            basic_variant.fields.push_back(Parameter{.type = ann("string"), .name = "username"});
+            basic_variant.fields.push_back(Parameter{.type = ann("string"), .name = "password"});
+
+            ChoiceVariant bearer_variant;
+            bearer_variant.name = "Bearer";
+            bearer_variant.fields.push_back(Parameter{.type = ann("string"), .name = "token"});
+
+            ch->variants.push_back(std::move(basic_variant));
+            ch->variants.push_back(std::move(bearer_variant));
+
+            st.choice_map["Http.Auth"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

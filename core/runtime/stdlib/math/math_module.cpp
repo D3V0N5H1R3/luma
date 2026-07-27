@@ -193,6 +193,78 @@ struct RectBounds {
                       .height = std::max(field("height"), 0.0)};
 }
 
+// A point read from a Math.Vector2 record's x/y fields.
+struct Vec2Point {
+    double x;
+    double y;
+};
+
+// A Math.Circle record's fields, as doubles.  radius is non-negative (the
+// constructor clamps it).
+struct CircleData {
+    double cx;
+    double cy;
+    double radius;
+};
+
+// Read a Math.Vector2 record's x/y fields.  Throws when the argument is not a
+// record; missing fields default to 0.0.  Shared by the circle constructor and
+// circle_contains (whose point argument is a Math.Vector2).
+[[nodiscard]] Vec2Point read_vec2_point(const Value& value, std::string_view func,
+                                        const SourceLocation& loc) {
+    if (!value.is_record()) {
+        throw RuntimeError{std::string{func} + ": expected a Math.Vector2 record", loc,
+                           "build one with Math.vector2(x, y)"};
+    }
+
+    const auto& rec = value.as_record();
+    const auto field = [&rec](std::string_view name) -> double {
+        const Value* v = rec->find_field(name);
+        return v != nullptr ? v->to_numeric() : 0.0;
+    };
+
+    return Vec2Point{.x = field("x"), .y = field("y")};
+}
+
+// Build a Math.Circle record value (type_name "Circle") from a centre and radius.
+// radius is clamped to be non-negative so a degenerate circle is a point rather
+// than inside-out, keeping contains/intersects well-defined (the beginner-friendly
+// "clamp over throw" convention, like Math.rect).
+[[nodiscard]] Value make_circle(double cx, double cy, double radius) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Circle";
+    rec->fields.emplace_back("center", make_rect_vec2(cx, cy));
+    rec->fields.emplace_back("radius", Value{std::max(radius, 0.0)});
+
+    return Value{std::move(rec)};
+}
+
+// Read a Math.Circle record's centre and radius.  Throws when the argument is not
+// a record; a missing centre defaults to the origin and a missing radius to 0.0.
+// radius is clamped non-negative so a hand-built record can never carry an
+// inside-out radius into a derivation.  Mirrors read_rect.
+[[nodiscard]] CircleData read_circle(const Value& value, std::string_view func,
+                                     const SourceLocation& loc) {
+    if (!value.is_record()) {
+        throw RuntimeError{std::string{func} + ": expected a Math.Circle record", loc,
+                           "build one with Math.circle(center, radius)"};
+    }
+
+    const auto& rec = value.as_record();
+    const Value* center = rec->find_field("center");
+    const Value* radius = rec->find_field("radius");
+
+    Vec2Point c{.x = 0.0, .y = 0.0};
+
+    if (center != nullptr) {
+        c = read_vec2_point(*center, func, loc);
+    }
+
+    const double r = radius != nullptr ? std::max(radius->to_numeric(), 0.0) : 0.0;
+
+    return CircleData{.cx = c.x, .cy = c.y, .radius = r};
+}
+
 } // namespace
 
 void register_math_ns(const EnvPtr& env) {
@@ -545,6 +617,58 @@ void register_math_ns(const EnvPtr& env) {
             const auto r = read_rect(args[0], "Math.rect_area", loc);
 
             return Value{r.width * r.height};
+        })
+        // ── Math.Circle ──────────────────────────────────────────────────────
+        // A 2D circle { center: Math.Vector2, radius }, the disk companion to
+        // Math.Rect.  A total constructor (radius clamped non-negative) plus
+        // contains/intersects/circle_rect_intersects, so beginners get the common
+        // circle collision tests without hand-writing the distance-squared
+        // comparison.  All predicates use inclusive (closed-disk) boundaries.
+        .func("circle", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto center = read_vec2_point(args[0], "Math.circle", loc);
+            const double radius = expect_numeric(args[1], "Math.circle", loc);
+
+            return make_circle(center.x, center.y, radius);
+        })
+        .func("circle_contains", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_circle(args[0], "Math.circle_contains", loc);
+            const auto p = read_vec2_point(args[1], "Math.circle_contains", loc);
+
+            // Closed disk: a point exactly on the boundary counts as contained.
+            const double dx = p.x - c.cx;
+            const double dy = p.y - c.cy;
+
+            return Value{dx * dx + dy * dy <= c.radius * c.radius};
+        })
+        .func("circle_intersects", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = read_circle(args[0], "Math.circle_intersects", loc);
+            const auto b = read_circle(args[1], "Math.circle_intersects", loc);
+
+            // Two disks overlap (or touch) when the distance between centres is at
+            // most the sum of the radii — compared squared to avoid a sqrt.
+            const double dx = a.cx - b.cx;
+            const double dy = a.cy - b.cy;
+            const double sum = a.radius + b.radius;
+
+            return Value{dx * dx + dy * dy <= sum * sum};
+        })
+        .func("circle_rect_intersects", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_circle(args[0], "Math.circle_rect_intersects", loc);
+            const auto r = read_rect(args[1], "Math.circle_rect_intersects", loc);
+
+            // Distance from the circle centre to the closest point on the rect: if
+            // that is within the radius, the shapes overlap.  Edges are inclusive,
+            // matching the closed-disk contains predicate.
+            const double closest_x = std::clamp(c.cx, r.x, r.x + r.width);
+            const double closest_y = std::clamp(c.cy, r.y, r.y + r.height);
+            const double dx = c.cx - closest_x;
+            const double dy = c.cy - closest_y;
+
+            return Value{dx * dx + dy * dy <= c.radius * c.radius};
         });
 
     register_math_analysis(env);

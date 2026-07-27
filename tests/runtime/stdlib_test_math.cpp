@@ -1093,6 +1093,88 @@ LUMA_TEST(math_rect_center_and_area) {
     ASSERT_NEAR(eval("Math.rect_area(Math.rect(0.0, 0.0, 10.0, 20.0))").as_number(), 200.0, 1e-9);
 }
 
+// --- Math.Circle (N05) ---
+
+LUMA_TEST(math_circle_construct_and_fields) {
+    const auto v = eval("Math.circle(Math.vector2(3.0, 4.0), 5.0)");
+    ASSERT_TRUE(v.is_record());
+
+    const auto& rec = v.as_record();
+    ASSERT_EQ(rec->type_name, std::string{"Circle"});
+    ASSERT_NEAR(rec->find_field("radius")->as_number(), 5.0, 1e-9);
+
+    const auto* center = rec->find_field("center");
+    ASSERT_TRUE(center->is_record());
+    ASSERT_EQ(center->as_record()->type_name, std::string{"Vector2"});
+    ASSERT_NEAR(center->as_record()->find_field("x")->as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(center->as_record()->find_field("y")->as_number(), 4.0, 1e-9);
+}
+
+LUMA_TEST(math_circle_negative_radius_clamped) {
+    // A negative radius clamps to zero (a degenerate circle is a point).
+    const auto v = eval("Math.circle(Math.vector2(0.0, 0.0), -3.0)");
+    ASSERT_NEAR(v.as_record()->find_field("radius")->as_number(), 0.0, 1e-9);
+}
+
+LUMA_TEST(math_circle_contains_closed_disk) {
+    // Closed disk: a point exactly on the boundary (distance 5 == radius) counts.
+    ASSERT_EQ(eval("Math.circle_contains(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.vector2(3.0, 4.0))")
+                  .as_bool(),
+              true);
+    ASSERT_EQ(eval("Math.circle_contains(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.vector2(0.0, 0.0))")
+                  .as_bool(),
+              true);
+    // Just outside the boundary → not contained.
+    ASSERT_EQ(eval("Math.circle_contains(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.vector2(3.0, 4.1))")
+                  .as_bool(),
+              false);
+}
+
+LUMA_TEST(math_circle_intersects) {
+    // Overlapping: centres 6 apart, radii 5 + 5 = 10 → overlap.
+    ASSERT_EQ(eval("Math.circle_intersects(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.circle(Math.vector2(6.0, 0.0), 5.0))")
+                  .as_bool(),
+              true);
+    // Exactly touching: centres 10 apart, radii 5 + 5 = 10 → inclusive touch.
+    ASSERT_EQ(eval("Math.circle_intersects(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.circle(Math.vector2(10.0, 0.0), 5.0))")
+                  .as_bool(),
+              true);
+    // Disjoint: centres 12 apart, radii 5 + 5 = 10 → no overlap.
+    ASSERT_EQ(eval("Math.circle_intersects(Math.circle(Math.vector2(0.0, 0.0), 5.0), "
+                   "Math.circle(Math.vector2(12.0, 0.0), 5.0))")
+                  .as_bool(),
+              false);
+}
+
+LUMA_TEST(math_circle_rect_intersects) {
+    // Circle centre inside the rect → overlap.
+    ASSERT_EQ(eval("Math.circle_rect_intersects(Math.circle(Math.vector2(5.0, 5.0), 2.0), "
+                   "Math.rect(0.0, 0.0, 10.0, 10.0))")
+                  .as_bool(),
+              true);
+    // Circle near an edge, within radius of the closest point → overlap.
+    ASSERT_EQ(eval("Math.circle_rect_intersects(Math.circle(Math.vector2(11.0, 5.0), 2.0), "
+                   "Math.rect(0.0, 0.0, 10.0, 10.0))")
+                  .as_bool(),
+              true);
+    // Far corner: closest point (10,10) is distance ~2.83 from centre (12,12) > radius 2.
+    ASSERT_EQ(eval("Math.circle_rect_intersects(Math.circle(Math.vector2(12.0, 12.0), 2.0), "
+                   "Math.rect(0.0, 0.0, 10.0, 10.0))")
+                  .as_bool(),
+              false);
+}
+
+LUMA_TEST(math_circle_rejects_non_record) {
+    ASSERT_TRUE(luma::test::eval_throws("Math.circle_contains(42, Math.vector2(0.0, 0.0))"));
+    ASSERT_TRUE(luma::test::eval_throws(
+        "Math.circle_rect_intersects(Math.circle(Math.vector2(0.0, 0.0), 1.0), 42)"));
+}
+
 // --- Math.Matrix2 / Math.Matrix3 (T07) ---
 LUMA_TEST(math_matrix2_identity_and_transform) {
     const auto id = eval("Math.mat2_identity()");

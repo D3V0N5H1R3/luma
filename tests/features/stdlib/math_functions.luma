@@ -1249,3 +1249,52 @@ function void test_math_rect_union_center_area() {
 
     assert(Math.approximately_equal(Math.rect_area(Math.rect(0.0, 0.0, 10.0, 20.0)), 200.0, 0.001))
 }
+
+# ─── Math.Circle (N05) — 2D circle geometry ───
+
+@test
+function void test_math_circle_construct() {
+    Math.Circle c = Math.circle(Math.vector2(3.0, 4.0), 5.0)
+
+    assert(Math.approximately_equal(c.center.x, 3.0, 0.001))
+    assert(Math.approximately_equal(c.center.y, 4.0, 0.001))
+    assert(Math.approximately_equal(c.radius, 5.0, 0.001))
+
+    # A negative radius clamps to zero (a degenerate circle is a point).
+    Math.Circle degenerate = Math.circle(Math.vector2(0.0, 0.0), -3.0)
+    assert(Math.approximately_equal(degenerate.radius, 0.0, 0.001))
+}
+
+@test
+function void test_math_circle_contains_closed_disk() {
+    Math.Circle c = Math.circle(Math.vector2(0.0, 0.0), 5.0)
+
+    assert(Math.circle_contains(c, Math.vector2(0.0, 0.0)), "the centre is contained")
+    assert(Math.circle_contains(c, Math.vector2(3.0, 4.0)), "the boundary is inclusive")
+    assert(!Math.circle_contains(c, Math.vector2(3.0, 4.1)), "just outside is excluded")
+}
+
+@test
+function void test_math_circle_intersects() {
+    Math.Circle a = Math.circle(Math.vector2(0.0, 0.0), 5.0)
+
+    assert(Math.circle_intersects(a, Math.circle(Math.vector2(6.0, 0.0), 5.0)),
+        "overlapping circles intersect")
+    assert(Math.circle_intersects(a, Math.circle(Math.vector2(10.0, 0.0), 5.0)),
+        "exactly touching circles intersect (inclusive)")
+    assert(!Math.circle_intersects(a, Math.circle(Math.vector2(12.0, 0.0), 5.0)),
+        "disjoint circles do not intersect")
+}
+
+@test
+function void test_math_circle_rect_intersects() {
+    Math.Rect r = Math.rect(0.0, 0.0, 10.0, 10.0)
+
+    assert(Math.circle_rect_intersects(Math.circle(Math.vector2(5.0, 5.0), 2.0), r),
+        "a circle centred inside the rect overlaps")
+    assert(Math.circle_rect_intersects(Math.circle(Math.vector2(11.0, 5.0), 2.0), r),
+        "a circle within radius of an edge overlaps")
+    assert(!Math.circle_rect_intersects(Math.circle(Math.vector2(12.0, 12.0), 2.0), r),
+        "a circle beyond the far corner does not overlap")
+}
+
