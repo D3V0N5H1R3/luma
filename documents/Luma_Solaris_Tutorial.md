@@ -489,6 +489,20 @@ Solaris.card([ Solaris.text("Nicely rounded") ])
     |> Solaris.padding(Spacing.L)
 ```
 
+**`Solaris.shadow(Shadow s)`** raises an element off the page — how much it
+"floats": `Shadow.None`, `Shadow.Small`, `Shadow.Medium`, `Shadow.Large`.
+
+**`Solaris.border(Border b)`** draws an outline — `Border.None`, `Border.Thin`,
+`Border.Thick` — and **`Solaris.border_color(Color c)`** tints it with any
+`Color` (the theme's neutral border is used when you omit it).
+
+```luma
+Solaris.card([ Solaris.text("Floating, outlined card") ])
+    |> Solaris.shadow(Shadow.Medium)
+    |> Solaris.border(Border.Thin)
+    |> Solaris.border_color(Color.Primary)
+```
+
 ### One Obvious Modifier per Concern
 
 Notice the shape of all of this: there is exactly one obvious modifier for each visual concern — one for size, one for emphasis, one for gaps, one for rounding — and they chain with `|>`. You compose a look by piping a handful of tokens onto a control, and because they're types, you can't pass a nonsensical value.
