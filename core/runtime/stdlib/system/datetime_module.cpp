@@ -442,6 +442,13 @@ void register_datetime_ns(const EnvPtr& env) {
              const int dow{t.tm_wday == 0 ? 7 : t.tm_wday};
              return Value{static_cast<std::int64_t>(dow)};
          }},
+        {.name = "day_of_year",
+         .extractor = [](const std::tm& t) -> Value {
+             // tm_yday is 0-based (0 = Jan 1); expose the 1-based ordinal day
+             // (1-366) that beginners expect.  gmtime populates tm_yday
+             // leap-year-aware.
+             return Value{static_cast<std::int64_t>(t.tm_yday + 1)};
+         }},
     };
 
     ModuleBuilder builder{"DateTime", env};

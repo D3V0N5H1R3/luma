@@ -51,6 +51,27 @@ function void test_dictionary_set_and_remove() {
 }
 
 @test
+function void test_dictionary_update() {
+    dictionary<integer> counts = {"x": 5}
+
+    # An existing key: the updater sees the current value.
+    dictionary<integer> bumped =
+        Dictionary.update(counts, "x", (optional<integer> cur) -> Optional.unwrap_or(cur, 0) + 1)
+
+    assert(Dictionary.get_or(bumped, "x", 0) == 6)
+
+    # An absent key: the updater sees none and can seed a default.
+    dictionary<integer> seeded =
+        Dictionary.update(counts, "y", (optional<integer> cur) -> Optional.unwrap_or(cur, 0) + 1)
+
+    assert(Dictionary.get_or(seeded, "y", 0) == 1)
+
+    # The input dictionary is never mutated.
+    assert(Dictionary.get_or(counts, "x", 0) == 5)
+    assert(!Dictionary.has(counts, "y"))
+}
+
+@test
 function void test_dictionary_keys_values() {
     dictionary<integer> coords = {"x": 1, "y": 2}
 

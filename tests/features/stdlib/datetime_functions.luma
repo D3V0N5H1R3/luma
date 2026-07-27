@@ -58,6 +58,24 @@ function void test_datetime_day_of_week() {
 }
 
 @test
+function void test_datetime_day_of_year() {
+    # 2024 is a leap year: 2024-03-15 is day 31 + 29 + 15 = 75.
+    number timestamp = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+
+    assert(Result.unwrap(DateTime.day_of_year(timestamp)) == 75)
+
+    # January 1st is day 1.
+    number new_year = Result.unwrap(DateTime.from_parts(2024, 1, 1, 0, 0, 0))
+
+    assert(Result.unwrap(DateTime.day_of_year(new_year)) == 1)
+
+    # December 31st of a leap year is day 366.
+    number year_end = Result.unwrap(DateTime.from_parts(2024, 12, 31, 0, 0, 0))
+
+    assert(Result.unwrap(DateTime.day_of_year(year_end)) == 366)
+}
+
+@test
 function void test_datetime_is_leap_year() {
     assert(DateTime.is_leap_year(2024))
     assert(!DateTime.is_leap_year(2023))

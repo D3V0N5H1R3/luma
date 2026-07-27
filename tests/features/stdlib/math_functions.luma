@@ -107,6 +107,48 @@ function void test_math_is_prime() {
 }
 
 @test
+function void test_math_is_even_odd() {
+    assert(Math.is_even(0))
+    assert(Math.is_even(4))
+    assert(!Math.is_even(3))
+    assert(Math.is_odd(3))
+    assert(!Math.is_odd(4))
+
+    # Parity is correct for negative integers.
+    assert(Math.is_even(-4))
+    assert(Math.is_odd(-3))
+    assert(!Math.is_even(-3))
+}
+
+@test
+function void test_math_integer_bounds() {
+    # The 64-bit signed integer bounds.
+    assert(Math.max_integer == 9223372036854775807)
+    assert(Math.min_integer < 0)
+    assert(Math.max_integer > 0)
+    # Their magnitudes bracket every other integer.
+    assert(Math.max_integer > 1000000)
+    assert(Math.min_integer < -1000000)
+}
+
+@test
+function void test_math_epsilon() {
+    # Machine epsilon is a tiny positive tolerance.
+    assert(Math.epsilon > 0.0)
+    assert(Math.epsilon < 0.001)
+    # It is the smallest step distinguishable from 1.0.
+    assert(1.0 + Math.epsilon > 1.0)
+}
+
+@test
+function void test_math_nan() {
+    # Math.nan is the quiet not-a-number sentinel; test it with the predicate,
+    # never with '=='.
+    assert(Math.is_not_a_number(Math.nan))
+    assert(!Math.is_infinite(Math.nan))
+}
+
+@test
 function void test_math_clamp() {
     assert(Math.approximately_equal(Result.unwrap(Math.clamp(5, 0, 10)), 5.0))
     assert(Math.approximately_equal(Result.unwrap(Math.clamp(-5, 0, 10)), 0.0))

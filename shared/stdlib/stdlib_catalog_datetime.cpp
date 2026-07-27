@@ -33,6 +33,7 @@ void register_date_time_functions(std::vector<FunctionSpec>& specs, const Module
             m.fn("date_of", 1, "(timestamp: number)", R::result(named::date()), {p.number}),
             m.fn("day_of_month", 1, "(timestamp: number)", R::result_integer(), {p.number}),
             m.fn("day_of_week", 1, "(timestamp: number)", R::result_integer(), {p.number}),
+            m.fn("day_of_year", 1, "(timestamp: number)", R::result_integer(), {p.number}),
             m.fn("days_in_month", 2, "(year: integer, month: integer)", R::result_integer(),
                  {p.integer, p.integer}),
             m.fn("difference_days", 2, "(start: number, end: number)", R::number_type(),

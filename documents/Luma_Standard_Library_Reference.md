@@ -81,6 +81,7 @@ These require no namespace prefix:
 | `Array.contains(arr, v)`         | `(array<T>, T)`                        | `boolean`                      | Whether `v` is present in the array                                        |
 | `Array.concat(a, b)`             | `(array<T>, array<T>)`                 | `array<T>`                     | Concatenate two arrays                                                     |
 | `Array.count(arr, fn)`           | `(array<T>, function(T) -> boolean)`   | `result<integer>`              | Number of matching elements; fail if predicate throws                      |
+| `Array.count_by(arr, key)`       | `(array<T>, function(T) -> string)`    | `dictionary<integer>`          | Per-bucket occurrence counts keyed by `key` (like `group_by` counting)     |
 | `Array.drop(arr, n)`             | `(array<T>, integer)`                  | `array<T>`                     | Drop the first `n` elements                                                |
 | `Array.drop_while(arr, fn)`      | `(array<T>, function(T) -> boolean)`   | `result<array<T>>`             | Drop elements while predicate is true; fail if predicate throws            |
 | `Array.each(arr, fn)`            | `(array<T>, function(T) -> none)`      | `result<none>`                 | Iterate for side effects; fail if callback throws                          |
@@ -103,7 +104,9 @@ These require no namespace prefix:
 | `Array.length(arr)`              | `(array<T>)`                           | `integer`                      | Number of elements                                                         |
 | `Array.map(arr, fn)`             | `(array<T>, function(T) -> U)`         | `result<array<U>>`             | Transform each element; fail if callback throws                            |
 | `Array.max(arr)`                 | `(array<T>)`                           | `result<T>`                    | Maximum value; fail if empty                                               |
+| `Array.max_by(arr, key)`         | `(array<T>, function(T) -> number)`    | `optional<T>`                  | Element with the greatest key; `none` if empty; first element wins ties    |
 | `Array.min(arr)`                 | `(array<T>)`                           | `result<T>`                    | Minimum value; fail if empty                                               |
+| `Array.min_by(arr, key)`         | `(array<T>, function(T) -> number)`    | `optional<T>`                  | Element with the smallest key; `none` if empty; first element wins ties    |
 | `Array.partition(arr, fn)`       | `(array<T>, function(T) -> boolean)`   | `result<(array<T>, array<T>)>` | Split into `(matches, rest)`; fail if predicate throws                     |
 | `Array.pop(arr)`                 | `(array<T>)`                           | `result<(array<T>, T)>`        | Remove last element; fail if empty                                         |
 | `Array.push(arr, v)`             | `(array<T>, T)`                        | `array<T>`                     | New array with `v` appended                                                |
@@ -117,6 +120,7 @@ These require no namespace prefix:
 | `Array.sort(arr, fn)`            | `(array<T>, function(T, T) -> number)` | `result<array<T>>`             | Sort by comparator; fail if comparator throws                              |
 | `Array.sort_by(arr, fn)`         | `(array<T>, function(T) -> U)`         | `result<array<T>>`             | Sort by key function; fail if key function throws                          |
 | `Array.sum(arr)`                 | `(array<T>)`                           | `result<integer \| number>`    | Sum numeric elements; fail if non-numeric element found                    |
+| `Array.sum_by(arr, key)`         | `(array<T>, function(T) -> number)`    | `number`                       | Total of the projected key over every element; `0` for an empty array      |
 | `Array.take(arr, n)`             | `(array<T>, integer)`                  | `array<T>`                     | Take the first `n` elements                                                |
 | `Array.take_while(arr, fn)`      | `(array<T>, function(T) -> boolean)`   | `result<array<T>>`             | Take elements while predicate is true; fail if predicate throws            |
 | `Array.unique(arr)`              | `(array<T>)`                           | `array<T>`                     | Deduplicate elements                                                       |
@@ -349,6 +353,7 @@ surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 | `DateTime.break_duration(total_seconds)`   | `(number)`                                               | `DateTime.Duration`          | Break a span in seconds into a `days`/`hours`/`minutes`/`seconds`/`milliseconds` record (with a `negative` flag) |
 | `DateTime.day_of_month(ts)`                | `(number)`                                               | `result<integer>`            | Day of month (1–31); fail if out of supported range (year 0001–9999)     |
 | `DateTime.day_of_week(ts)`                 | `(number)`                                               | `result<integer>`            | 1 (Monday) to 7 (Sunday); fail if out of range                           |
+| `DateTime.day_of_year(ts)`                 | `(number)`                                               | `result<integer>`            | Ordinal day of the year (1–366, leap-aware); fail if out of range        |
 | `DateTime.days_in_month(year, month)`      | `(integer, integer)`                                     | `result<integer>`            | Days in given month; fail if month not in [1, 12]                        |
 | `DateTime.difference_days(t1, t2)`         | `(number, number)`                                       | `number`                     | Absolute difference in days                                              |
 | `DateTime.difference_hours(t1, t2)`        | `(number, number)`                                       | `number`                     | Absolute difference in hours                                             |
@@ -566,6 +571,7 @@ Dictionaries preserve insertion order. All reads and writes use string keys.
 | `Dictionary.set(d, k, v)`         | `(dictionary<T>, string, T)`                      | `dictionary<T>`                          | New dictionary with key set                                                                     |
 | `Dictionary.to_array(d)`          | `(dictionary<T>)`                                 | `array<KeyValue>`                        | Each element is a record with `.key` (`string`) and `.value` fields                             |
 | `Dictionary.to_entries(d)`        | `(dictionary<T>)`                                 | `array<(string, T)>`                     | Each element is a `(key, value)` tuple                                                          |
+| `Dictionary.update(d, k, fn)`     | `(dictionary<T>, string, function(optional<T>) -> T)` | `dictionary<T>`                      | New dictionary with `k` set to `fn(current-or-none)` (read-modify-write for one key)            |
 | `Dictionary.values(d)`            | `(dictionary<T>)`                                 | `array<T>`                               | Array of values                                                                                 |
 
 `Dictionary.KeyValue` record fields: `key: string`, `value` (the dictionary's value type `V`). It is the element type of `Dictionary.to_array`, so a program can annotate the result as `array<Dictionary.KeyValue>` and read `.key`/`.value` directly. Use `Dictionary.to_entries` instead when you want `(key, value)` tuples rather than records.
@@ -1847,7 +1853,9 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.hyperbolic_tangent(x)`          | `(number)`                       | `number`          | Hyperbolic tangent (always bounded to [−1, 1])                                   |
 | `Math.hypot(x, y)`                    | `(number, number)`               | `number`          | Hypotenuse √(x² + y²)                                                            |
 | `Math.is_infinite(x)`                 | `(number)`                       | `boolean`         | Whether `x` is +∞ or −∞                                                          |
+| `Math.is_even(n)`                     | `(integer)`                      | `boolean`         | Whether `n` is even (negative-safe)                                             |
 | `Math.is_not_a_number(x)`             | `(number)`                       | `boolean`         | Whether `x` is NaN                                                               |
+| `Math.is_odd(n)`                      | `(integer)`                      | `boolean`         | Whether `n` is odd (negative-safe)                                              |
 | `Math.is_prime(n)`                    | `(integer)`                      | `boolean`         | Whether `n` is prime                                                             |
 | `Math.least_common_multiple(a, b)`    | `(integer, integer)`             | `result<integer>` | LCM of `a` and `b`; fail on overflow                                             |
 | `Math.lerp(a, b, t)`                  | `(number, number, number)`       | `result<number>`  | Linear interpolation; fail if `t` outside [0, 1]                                 |
@@ -2037,12 +2045,16 @@ case Sign.Positive { "rising" }
 
 **Constants:**
 
-| Constant        | Type     | Value             |
-| --------------- | -------- | ----------------- |
-| `Math.e`        | `number` | 2.718281828459045 |
-| `Math.pi`       | `number` | 3.141592653589793 |
-| `Math.tau`      | `number` | 6.283185307179586 |
-| `Math.infinity` | `number` | ∞                 |
+| Constant        | Type      | Value                      |
+| --------------- | --------- | -------------------------- |
+| `Math.e`        | `number`  | 2.718281828459045          |
+| `Math.pi`       | `number`  | 3.141592653589793          |
+| `Math.tau`      | `number`  | 6.283185307179586          |
+| `Math.infinity` | `number`  | ∞                          |
+| `Math.nan`      | `number`  | quiet NaN (test with `Math.is_not_a_number`, never `==`) |
+| `Math.epsilon`  | `number`  | 2.220446049250313e-16 (machine epsilon; the default tolerance to reach for with `Math.approximately_equal`) |
+| `Math.max_integer` | `integer` | 9223372036854775807 (2⁶³−1) |
+| `Math.min_integer` | `integer` | −9223372036854775808 (−2⁶³) |
 
 ## 26 — Optional
 
@@ -2625,6 +2637,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `String.last_index_of(s, sub)`      | `(string, string)`             | `result<integer>` | Last index of `sub`; fail if not found                                          |
 | `String.length(s)`                  | `(string)`                     | `integer`         | Number of Unicode codepoints (not bytes)                                        |
 | `String.levenshtein_distance(a, b)` | `(string, string)`             | `integer`         | Edit distance between two strings                                               |
+| `String.lines(s)`                   | `(string)`                     | `array<string>`   | Split into lines on `\n`, `\r\n`, `\r`; no trailing empty after a final newline |
 | `String.lowercase(s)`               | `(string)`                     | `string`          | Convert to lowercase                                                            |
 | `String.matches(s, glob)`           | `(string, string)`             | `result<boolean>` | Glob match (`*` = any chars, `?` = one char)                                    |
 | `String.pad_left(s, width, fill)`   | `(string, integer, string)`    | `result<string>`  | Left-pad to `width`; fail if `width` exceeds the maximum                        |

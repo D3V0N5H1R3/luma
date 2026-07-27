@@ -834,6 +834,55 @@ static void test_array_min_max_numbers() {
     ASSERT_EVAL_NUM("Array.max([1, 3.5, 2])", 3.5);
 }
 
+static void test_array_max_by() {
+    // Returns the element with the greatest key (some), not the key itself.
+    const auto v = eval("Array.max_by([\"a\", \"ccc\", \"bb\"], (string s) -> String.length(s))");
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), std::string("ccc"));
+
+    // First element wins ties (stable).
+    const auto tie = eval("Array.max_by([\"ab\", \"cd\", \"e\"], (string s) -> String.length(s))");
+    ASSERT_EQ(tie.as_string(), std::string("ab"));
+
+    // Empty array -> none.
+    ASSERT_TRUE(eval("Array.max_by([], (integer x) -> x)").is_null());
+}
+
+static void test_array_min_by() {
+    const auto v = eval("Array.min_by([\"aaa\", \"c\", \"bb\"], (string s) -> String.length(s))");
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), std::string("c"));
+
+    // First minimum wins ties.
+    const auto tie = eval("Array.min_by([\"a\", \"b\", \"cc\"], (string s) -> String.length(s))");
+    ASSERT_EQ(tie.as_string(), std::string("a"));
+
+    ASSERT_TRUE(eval("Array.min_by([], (integer x) -> x)").is_null());
+}
+
+static void test_array_count_by() {
+    const auto v = eval("Array.count_by([\"a\", \"b\", \"a\", \"c\", \"a\"], (string s) -> s)");
+    ASSERT_TRUE(v.is_dictionary());
+
+    const auto& dict = *v.as_dictionary();
+    ASSERT_EQ(dict.find("a")->as_integer(), 3);
+    ASSERT_EQ(dict.find("b")->as_integer(), 1);
+    ASSERT_EQ(dict.find("c")->as_integer(), 1);
+
+    // Empty array -> empty dictionary.
+    ASSERT_EQ(eval("Array.count_by([], (integer x) -> Converter.to_string(x))")
+                  .as_dictionary()
+                  ->entries.size(),
+              0U);
+}
+
+static void test_array_sum_by() {
+    ASSERT_EQ(eval("Array.sum_by([1, 2, 3, 4], (integer x) -> x)").as_number(), 10.0);
+
+    // Empty array sums to 0.
+    ASSERT_EQ(eval("Array.sum_by([], (integer x) -> x)").as_number(), 0.0);
+}
+
 int main() {
     RUN(test_array_all);
     RUN(test_array_any);
@@ -929,6 +978,11 @@ int main() {
     RUN(test_array_rotate_wraps);
     RUN(test_array_unique_preserves_order);
     RUN(test_array_min_max_numbers);
+
+    RUN(test_array_max_by);
+    RUN(test_array_min_by);
+    RUN(test_array_count_by);
+    RUN(test_array_sum_by);
 
     return SUMMARY();
 }

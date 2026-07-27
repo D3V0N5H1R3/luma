@@ -560,6 +560,24 @@ static void test_dictionary_module() {
     ASSERT_TRUE(env->has("Dictionary.flip"));
 }
 
+static void test_dictionary_update() {
+    // Existing key: updater sees the current value.
+    const auto v = eval("Dictionary.update({\"x\": 5}, \"x\", "
+                        "(optional<integer> cur) -> Optional.unwrap_or(cur, 0) + 1)");
+    ASSERT_TRUE(v.is_dictionary());
+    ASSERT_EQ(v.as_dictionary()->find("x")->as_integer(), 6);
+
+    // Absent key: updater sees none.
+    const auto w = eval("Dictionary.update({\"x\": 5}, \"y\", "
+                        "(optional<integer> cur) -> Optional.unwrap_or(cur, 0) + 1)");
+    ASSERT_EQ(w.as_dictionary()->find("y")->as_integer(), 1);
+    // Original entry is preserved and the input is not mutated.
+    ASSERT_EQ(w.as_dictionary()->find("x")->as_integer(), 5);
+
+    // Non-string key is rejected.
+    ASSERT_THROWS(eval("Dictionary.update({\"x\": 5}, 1, (optional<integer> c) -> 0)"));
+}
+
 int main() {
     RUN(test_dictionary_has);
     RUN(test_dictionary_has_non_string_key_throws);
@@ -602,6 +620,7 @@ int main() {
     RUN(test_dictionary_deep_merge_max_depth_throws);
     RUN(test_dictionary_map_values);
     RUN(test_dictionary_map_values_callback_error);
+    RUN(test_dictionary_update);
     RUN(test_dictionary_filter);
     RUN(test_dictionary_filter_callback_error);
     RUN(test_dictionary_has_value);

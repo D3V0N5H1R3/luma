@@ -273,6 +273,10 @@ void register_math_ns(const EnvPtr& env) {
     env->define("Math.e", Value{std::numbers::e}, false);
     env->define("Math.tau", Value{2.0 * pi}, false);
     env->define("Math.infinity", Value{std::numeric_limits<double>::infinity()}, false);
+    env->define("Math.nan", Value{std::numeric_limits<double>::quiet_NaN()}, false);
+    env->define("Math.epsilon", Value{std::numeric_limits<double>::epsilon()}, false);
+    env->define("Math.max_integer", Value{std::numeric_limits<std::int64_t>::max()}, false);
+    env->define("Math.min_integer", Value{std::numeric_limits<std::int64_t>::min()}, false);
 
     ModuleBuilder{"Math", env}
         .checked_unary_to_int("floor", [](double x) { return std::floor(x); })
@@ -405,6 +409,19 @@ void register_math_ns(const EnvPtr& env) {
             }
 
             return Value{true};
+        })
+        .func("is_even", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto n = expect_integer(args[0], "Math.is_even", loc);
+            // C++ truncates toward zero, so n % 2 is 0 for every even integer
+            // including negatives (e.g. -4 % 2 == 0).
+            return Value{n % 2 == 0};
+        })
+        .func("is_odd", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto n = expect_integer(args[0], "Math.is_odd", loc);
+            // For negatives n % 2 is -1 (e.g. -3 % 2 == -1), so compare against 0.
+            return Value{n % 2 != 0};
         })
         .func("clamp", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

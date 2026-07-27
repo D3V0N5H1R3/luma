@@ -81,6 +81,80 @@ void register_array_transform_aggregate(const EnvPtr& env) {
                               return *it;
                           });
                       })
+        // Array.max_by(array<T>, fn(T) -> number) -> optional<T>
+        // Returns the element with the greatest key, or none for an empty array.
+        // The first element wins ties (strict >), so the result is stable.
+        .func("max_by", 2)
+        .extract_body(expect_array,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Array.max_by", loc);
+
+                          if (src->elements->empty()) {
+                              return Value{NullValue{}};
+                          }
+
+                          std::vector<Value> call_args(1);
+                          const Value* best{nullptr};
+                          double best_key{0.0};
+
+                          for (const auto& elem : *src->elements) {
+                              call_args[0] = elem;
+                              const double key =
+                                  invoke_callable(args[1], call_args, loc).to_numeric();
+
+                              if (best == nullptr || key > best_key) {
+                                  best = &elem;
+                                  best_key = key;
+                              }
+                          }
+
+                          return *best;
+                      })
+        // Array.min_by(array<T>, fn(T) -> number) -> optional<T>
+        // Mirror of max_by using strict < so the first minimum wins ties.
+        .func("min_by", 2)
+        .extract_body(expect_array,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Array.min_by", loc);
+
+                          if (src->elements->empty()) {
+                              return Value{NullValue{}};
+                          }
+
+                          std::vector<Value> call_args(1);
+                          const Value* best{nullptr};
+                          double best_key{0.0};
+
+                          for (const auto& elem : *src->elements) {
+                              call_args[0] = elem;
+                              const double key =
+                                  invoke_callable(args[1], call_args, loc).to_numeric();
+
+                              if (best == nullptr || key < best_key) {
+                                  best = &elem;
+                                  best_key = key;
+                              }
+                          }
+
+                          return *best;
+                      })
+        // Array.sum_by(array<T>, fn(T) -> number) -> number
+        // Totals the projected key of every element; an empty array sums to 0.
+        .func("sum_by", 2)
+        .extract_body(expect_array,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Array.sum_by", loc);
+
+                          double total{0.0};
+                          std::vector<Value> call_args(1);
+
+                          for (const auto& elem : *src->elements) {
+                              call_args[0] = elem;
+                              total += invoke_callable(args[1], call_args, loc).to_numeric();
+                          }
+
+                          return Value{total};
+                      })
         .func("slice", 3)
         .extract_body(expect_array,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {
