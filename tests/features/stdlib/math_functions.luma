@@ -1047,6 +1047,84 @@ function void test_math_matrix3() {
 }
 
 # ═══════════════════════════════════════════════════════════
+# Math.Vector4 / Math.Matrix4 (homogeneous 3D transforms)
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_math_vector4() {
+    Math.Vector4 v = Math.vector4(1.0, 2.0, 2.0, 4.0)
+
+    assert(Math.approximately_equal(v.w, 4.0, 0.001), "w component")
+    assert(Math.approximately_equal(Math.vec4_length(v), 5.0, 0.001), "4D length")
+    assert(Math.approximately_equal(
+        Math.vec4_dot(Math.vector4(1.0, 2.0, 3.0, 4.0), Math.vector4(1.0, 1.0, 1.0, 1.0)), 10.0,
+        0.001), "dot with ones sums components")
+
+    Math.Vector4 unit = Math.vec4_normalize(Math.vector4(0.0, 0.0, 0.0, 5.0))
+    assert(Math.approximately_equal(unit.w, 1.0, 0.001), "normalized w is 1")
+}
+
+@test
+function void test_math_matrix4() {
+    Math.Matrix4 id = Math.mat4_identity()
+    Math.Vector4 v = Math.mat4_transform(id, Math.vector4(1.0, 2.0, 3.0, 4.0))
+
+    assert(Math.approximately_equal(v.z, 3.0, 0.001), "identity keeps z")
+    assert(Math.approximately_equal(v.w, 4.0, 0.001), "identity keeps w")
+    assert(Math.approximately_equal(Math.mat4_determinant(id), 1.0, 0.001),
+        "identity determinant is 1")
+
+    # A translation matrix moves a point.
+    Math.Matrix4 translate = Math.matrix4(
+        1.0, 0.0, 0.0, 10.0,
+        0.0, 1.0, 0.0, 20.0,
+        0.0, 0.0, 1.0, 30.0,
+        0.0, 0.0, 0.0, 1.0)
+    Math.Vector3 moved = Math.mat4_transform_point(translate, Math.vector3(1.0, 2.0, 3.0))
+
+    assert(Math.approximately_equal(moved.x, 11.0, 0.001), "translated x")
+    assert(Math.approximately_equal(moved.z, 33.0, 0.001), "translated z")
+}
+
+@test
+function void test_math_matrix4_camera() {
+    # fov 90 deg, aspect 1 => m00 = m11 = 1 / tan(45 deg) = 1.
+    Math.Matrix4 projection = Math.mat4_perspective(Math.pi / 2.0, 1.0, 1.0, 100.0)
+    assert(Math.approximately_equal(projection.m00, 1.0, 0.001), "perspective m00")
+    assert(Math.approximately_equal(projection.m32, -1.0, 0.001), "perspective enables divide")
+
+    # The camera position maps to the view-space origin.
+    Math.Matrix4 view = Math.mat4_look_at(
+        Math.vector3(0.0, 0.0, 5.0),
+        Math.vector3(0.0, 0.0, 0.0),
+        Math.vector3(0.0, 1.0, 0.0))
+    Math.Vector3 at_eye = Math.mat4_transform_point(view, Math.vector3(0.0, 0.0, 5.0))
+
+    assert(Math.approximately_equal(at_eye.x, 0.0, 0.001), "eye maps to origin x")
+    assert(Math.approximately_equal(at_eye.z, 0.0, 0.001), "eye maps to origin z")
+}
+
+# ═══════════════════════════════════════════════════════════
+# Math.Angle (optional unit-safe angle)
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_math_angle() {
+    Math.Angle ninety = Math.Angle.Degrees(90.0)
+    assert(Math.approximately_equal(Math.to_radians(ninety), Math.pi / 2.0, 0.001),
+        "90 degrees is pi/2 radians")
+    assert(Math.approximately_equal(Math.sin_of(ninety), 1.0, 0.001), "sin of 90 degrees is 1")
+
+    Math.Angle half_turn = Math.Angle.Radians(Math.pi)
+    assert(Math.approximately_equal(Math.to_degrees(half_turn), 180.0, 0.001),
+        "pi radians is 180 degrees")
+
+    # Same-unit conversions pass through unchanged.
+    assert(Math.approximately_equal(Math.to_radians(Math.Angle.Radians(1.25)), 1.25, 0.001),
+        "radians pass through")
+}
+
+# ═══════════════════════════════════════════════════════════
 # Math.Quaternion (gimbal-lock-free 3D rotation)
 # ═══════════════════════════════════════════════════════════
 

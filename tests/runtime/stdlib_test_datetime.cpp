@@ -45,6 +45,50 @@ static void test_datetime_add_years() {
     ASSERT_TRUE(v.as_result()->owned_inner->as_number() > 1710497400.0);
 }
 
+// --- DateTime.Period (N03) ---
+
+static void test_datetime_period_constructs() {
+    const auto v = eval("DateTime.period(1, 2, 3)");
+
+    ASSERT_TRUE(v.is_record());
+    ASSERT_EQ(v.as_record()->type_name, std::string{"Period"});
+    ASSERT_EQ(v.as_record()->find_field("years")->as_integer(), static_cast<std::int64_t>(1));
+    ASSERT_EQ(v.as_record()->find_field("months")->as_integer(), static_cast<std::int64_t>(2));
+    ASSERT_EQ(v.as_record()->find_field("days")->as_integer(), static_cast<std::int64_t>(3));
+}
+
+static void test_datetime_add_period_advances() {
+    // 2024-03-15 + 1 year 2 months 3 days (no day clamping) advances the instant.
+    const auto v = eval("DateTime.add_period(1710497400.0, DateTime.period(1, 2, 3))");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->as_number() > 1710497400.0);
+}
+
+static void test_datetime_between_dates_roundtrips() {
+    // between_dates recovers exactly the period add_period applied (day-clamp-free).
+    const auto v =
+        eval("DateTime.between_dates(1710497400.0, "
+             "Result.unwrap(DateTime.add_period(1710497400.0, DateTime.period(1, 2, 3))))");
+
+    ASSERT_RESULT_SUCCESS(v);
+    const auto& rec = *v.as_result()->owned_inner->as_record();
+    ASSERT_EQ(rec.type_name, std::string{"Period"});
+    ASSERT_EQ(rec.find_field("years")->as_integer(), static_cast<std::int64_t>(1));
+    ASSERT_EQ(rec.find_field("months")->as_integer(), static_cast<std::int64_t>(2));
+    ASSERT_EQ(rec.find_field("days")->as_integer(), static_cast<std::int64_t>(3));
+}
+
+static void test_datetime_between_dates_negative_when_reversed() {
+    // start after end yields a negative span.
+    const auto v = eval("DateTime.between_dates(Result.unwrap(DateTime.add_period(1710497400.0, "
+                        "DateTime.period(1, 0, 0))), 1710497400.0)");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_record()->find_field("years")->as_integer(),
+              static_cast<std::int64_t>(-1));
+}
+
 static void test_datetime_days_in_month() {
     ASSERT_EVAL_INT("DateTime.days_in_month(2024, 2)", 29);
 
@@ -1002,6 +1046,10 @@ int main() {
     RUN(test_datetime_add_months);
     RUN(test_datetime_add_seconds);
     RUN(test_datetime_add_years);
+    RUN(test_datetime_period_constructs);
+    RUN(test_datetime_add_period_advances);
+    RUN(test_datetime_between_dates_roundtrips);
+    RUN(test_datetime_between_dates_negative_when_reversed);
     RUN(test_datetime_days_in_month);
     RUN(test_datetime_days_in_month_invalid);
     RUN(test_datetime_difference_days);

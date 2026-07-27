@@ -30,6 +30,38 @@ namespace {
 
 constexpr double pi{std::numbers::pi};
 
+// Convert a Math.Angle choice value — Radians(number) | Degrees(number) — to a
+// magnitude in radians.  Throws when the value is not a well-formed angle (only
+// reachable by bypassing the type checker).  Used by Math.to_radians /
+// Math.to_degrees / Math.sin_of.
+[[nodiscard]] double angle_to_radians(const Value& value, std::string_view func,
+                                      const SourceLocation& loc) {
+    if (!value.is_choice()) {
+        throw RuntimeError{std::string{func} + ": expected a Math.Angle value", loc,
+                           "build one with Math.Angle.Radians(x) or Math.Angle.Degrees(x)"};
+    }
+
+    const auto& choice = *value.as_choice();
+
+    if (choice.fields.empty() || !(choice.fields[0].is_integer() || choice.fields[0].is_number())) {
+        throw RuntimeError{std::string{func} + ": malformed Math.Angle payload", loc,
+                           "build one with Math.Angle.Radians(x) or Math.Angle.Degrees(x)"};
+    }
+
+    const double magnitude = choice.fields[0].to_numeric();
+
+    if (choice.variant == "Radians") {
+        return magnitude;
+    }
+
+    if (choice.variant == "Degrees") {
+        return magnitude * pi / 180.0;
+    }
+
+    throw RuntimeError{std::string{func} + ": unknown Math.Angle variant '" + choice.variant + "'",
+                       loc, "use Math.Angle.Radians or Math.Angle.Degrees"};
+}
+
 // Maximum input for int64_t factorial (21! overflows).
 constexpr std::int64_t k_max_factorial_input = 20;
 
@@ -366,6 +398,23 @@ void register_math_ns(const EnvPtr& env) {
         .func("radians", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return Value{expect_numeric(args[0], "Math.radians", loc) * pi / 180.0};
+        })
+        // ── Math.Angle (unit-safe angle) ─────────────────────────────────────
+        // Optional convenience wrappers around the Math.Angle choice
+        // (Radians(number) | Degrees(number)).  They make an easy-to-confuse
+        // quantity self-documenting; the bare number-radians trig APIs stay
+        // primary.
+        .func("to_radians", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{angle_to_radians(args[0], "Math.to_radians", loc)};
+        })
+        .func("to_degrees", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{angle_to_radians(args[0], "Math.to_degrees", loc) * 180.0 / pi};
+        })
+        .func("sin_of", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{std::sin(angle_to_radians(args[0], "Math.sin_of", loc))};
         })
         // ── Math.Interval ────────────────────────────────────────────────────
         // A closed numeric range [min, max].  Mirrors DateTime.Interval: a

@@ -14,6 +14,8 @@ void register_color_functions(std::vector<FunctionSpec>& specs, const ModuleBuil
                      m.fn("from_hex", 1, "(hex: string)", R::result(named::color()), {p.string}),
                      m.fn("from_hsl", 1, "(hsl: Color.Hsl)", named::color(), {named::hsl()}),
                      m.fn("from_hsv", 1, "(hsv: Color.Hsv)", named::color(), {named::hsv()}),
+                     m.fn("from_name", 1, "(name: Color.Name)", named::color(),
+                          {named::color_name()}),
                      m.fn("gradient", 2, "(angle: number, stops: array<Color.Stop>)",
                           named::gradient(), {p.number, R::array(named::color_stop())}),
                      m.fn("gradient_at", 2, "(g: Color.Gradient, position: number)", named::color(),

@@ -206,3 +206,20 @@ function void test_color_gradient_at_interpolates() {
     assert(finish.blue == 255, "position 1 is the last stop")
 }
 
+
+
+# ─── Color.Name (curated named colours) ───
+
+@test
+function void test_color_from_name() {
+    Color.Color red = Color.from_name(Color.Name.Red)
+    assert(red.red == 255 && red.green == 0 && red.blue == 0, "Red maps to pure red")
+
+    # CSS-canonical: Green is 0,128,0; Lime is 0,255,0.
+    Color.Color green = Color.from_name(Color.Name.Green)
+    assert(green.green == 128, "Green is the CSS 0,128,0")
+    Color.Color lime = Color.from_name(Color.Name.Lime)
+    assert(lime.green == 255, "Lime is 0,255,0")
+
+    assert(Color.to_hex(Color.from_name(Color.Name.Orange)) == "#ffa500", "Orange hex")
+}
