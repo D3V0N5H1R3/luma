@@ -616,6 +616,50 @@ static void test_array_zip_unequal_lengths() {
     ASSERT_EQ(eval("Array.zip([1, 2, 3], [10])").as_array()->elements->size(), 1U);
 }
 
+static void test_array_unzip() {
+    // The inverse of zip: an array of pairs splits into two parallel arrays.
+    const auto v = eval("Array.unzip([(1, \"a\"), (2, \"b\"), (3, \"c\")])");
+
+    ASSERT_TRUE(v.is_tuple());
+    ASSERT_EQ(v.as_tuple()->elements.size(), 2U);
+
+    const auto& firsts = v.as_tuple()->elements[0];
+    const auto& seconds = v.as_tuple()->elements[1];
+
+    ASSERT_TRUE(firsts.is_array());
+    ASSERT_TRUE(seconds.is_array());
+    ASSERT_EQ(firsts.as_array()->elements->size(), 3U);
+    ASSERT_EQ(seconds.as_array()->elements->size(), 3U);
+
+    ASSERT_EQ((*firsts.as_array()->elements)[0].as_integer(), 1);
+    ASSERT_EQ((*firsts.as_array()->elements)[2].as_integer(), 3);
+    ASSERT_EQ((*seconds.as_array()->elements)[0].as_string(), std::string("a"));
+    ASSERT_EQ((*seconds.as_array()->elements)[2].as_string(), std::string("c"));
+}
+
+static void test_array_unzip_empty() {
+    const auto v = eval("Array.unzip([])");
+
+    ASSERT_TRUE(v.is_tuple());
+    ASSERT_EQ(v.as_tuple()->elements[0].as_array()->elements->size(), 0U);
+    ASSERT_EQ(v.as_tuple()->elements[1].as_array()->elements->size(), 0U);
+}
+
+// unzip . zip is the identity on the pair of inputs.
+static void test_array_unzip_roundtrip() {
+    const auto v = eval("Array.unzip(Array.zip([1, 2, 3], [4, 5, 6]))");
+
+    ASSERT_TRUE(v.is_tuple());
+    ASSERT_EQ((*v.as_tuple()->elements[0].as_array()->elements)[1].as_integer(), 2);
+    ASSERT_EQ((*v.as_tuple()->elements[1].as_array()->elements)[2].as_integer(), 6);
+}
+
+// A non-2-tuple element is rejected with a runtime error (reachable through the
+// unchecked eval pipeline).
+static void test_array_unzip_malformed_throws() {
+    ASSERT_TRUE(throws_runtime("Array.unzip([(1, 2), 3])"));
+}
+
 static void test_array_take() {
     const auto v = eval("Array.take([1, 2, 3, 4, 5], 2)");
 
@@ -834,6 +878,55 @@ static void test_array_min_max_numbers() {
     ASSERT_EVAL_NUM("Array.max([1, 3.5, 2])", 3.5);
 }
 
+static void test_array_max_by() {
+    // Returns the element with the greatest key (some), not the key itself.
+    const auto v = eval("Array.max_by([\"a\", \"ccc\", \"bb\"], (string s) -> String.length(s))");
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), std::string("ccc"));
+
+    // First element wins ties (stable).
+    const auto tie = eval("Array.max_by([\"ab\", \"cd\", \"e\"], (string s) -> String.length(s))");
+    ASSERT_EQ(tie.as_string(), std::string("ab"));
+
+    // Empty array -> none.
+    ASSERT_TRUE(eval("Array.max_by([], (integer x) -> x)").is_null());
+}
+
+static void test_array_min_by() {
+    const auto v = eval("Array.min_by([\"aaa\", \"c\", \"bb\"], (string s) -> String.length(s))");
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), std::string("c"));
+
+    // First minimum wins ties.
+    const auto tie = eval("Array.min_by([\"a\", \"b\", \"cc\"], (string s) -> String.length(s))");
+    ASSERT_EQ(tie.as_string(), std::string("a"));
+
+    ASSERT_TRUE(eval("Array.min_by([], (integer x) -> x)").is_null());
+}
+
+static void test_array_count_by() {
+    const auto v = eval("Array.count_by([\"a\", \"b\", \"a\", \"c\", \"a\"], (string s) -> s)");
+    ASSERT_TRUE(v.is_dictionary());
+
+    const auto& dict = *v.as_dictionary();
+    ASSERT_EQ(dict.find("a")->as_integer(), 3);
+    ASSERT_EQ(dict.find("b")->as_integer(), 1);
+    ASSERT_EQ(dict.find("c")->as_integer(), 1);
+
+    // Empty array -> empty dictionary.
+    ASSERT_EQ(eval("Array.count_by([], (integer x) -> Converter.to_string(x))")
+                  .as_dictionary()
+                  ->entries.size(),
+              0U);
+}
+
+static void test_array_sum_by() {
+    ASSERT_EQ(eval("Array.sum_by([1, 2, 3, 4], (integer x) -> x)").as_number(), 10.0);
+
+    // Empty array sums to 0.
+    ASSERT_EQ(eval("Array.sum_by([], (integer x) -> x)").as_number(), 0.0);
+}
+
 int main() {
     RUN(test_array_all);
     RUN(test_array_any);
@@ -912,6 +1005,10 @@ int main() {
     RUN(test_array_sort_by_inconsistent_keys_is_safe);
     RUN(test_array_zip);
     RUN(test_array_zip_unequal_lengths);
+    RUN(test_array_unzip);
+    RUN(test_array_unzip_empty);
+    RUN(test_array_unzip_roundtrip);
+    RUN(test_array_unzip_malformed_throws);
     RUN(test_array_take);
     RUN(test_array_drop);
     RUN(test_array_enumerate);
@@ -929,6 +1026,11 @@ int main() {
     RUN(test_array_rotate_wraps);
     RUN(test_array_unique_preserves_order);
     RUN(test_array_min_max_numbers);
+
+    RUN(test_array_max_by);
+    RUN(test_array_min_by);
+    RUN(test_array_count_by);
+    RUN(test_array_sum_by);
 
     return SUMMARY();
 }

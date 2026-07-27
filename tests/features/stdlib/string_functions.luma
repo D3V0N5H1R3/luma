@@ -98,6 +98,26 @@ function void test_string_split_n() {
 }
 
 @test
+function void test_string_lines() {
+    # Universal newlines: \n, \r\n and lone \r all split; terminators stripped.
+    array<string> lines = String.lines("a\r\nb\nc\rd\n")
+
+    assert(Array.length(lines) == 4)
+    assert(lines[0] == "a")
+    assert(lines[1] == "b")
+    assert(lines[2] == "c")
+    assert(lines[3] == "d")
+
+    # No spurious trailing empty element after a final newline.
+    assert(Array.length(String.lines("one\ntwo\n")) == 2)
+
+    # An empty string has no lines; blank interior lines are preserved.
+    assert(Array.length(String.lines("")) == 0)
+    assert(Array.length(String.lines("a\n\nb")) == 3)
+    assert(String.lines("a\n\nb")[1] == "")
+}
+
+@test
 function void test_string_join() {
     array<string> items = ["a", "b", "c"]
 

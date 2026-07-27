@@ -236,6 +236,32 @@ void register_array_functional(const EnvPtr& env) {
                               return Value{std::move(dict)};
                           });
                       })
+        // Array.count_by(array<T>, fn(T) -> string) -> dictionary<integer>
+        // Tallies how many elements fall into each bucket named by the key
+        // function.  Like Array.group_by, but accumulates a count instead of
+        // collecting the elements themselves.
+        .func("count_by", 2)
+        .extract_body(expect_array,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Array.count_by", loc);
+
+                          auto dict = std::make_shared<DictionaryValue>();
+
+                          std::vector<Value> fn_args(1);
+                          for (const auto& elem : *src->elements) {
+                              fn_args[0] = elem;
+                              const auto key = invoke_callable(args[1], fn_args, loc).to_string();
+
+                              auto* existing = dict->find(key);
+                              if (existing != nullptr && existing->is_integer()) {
+                                  *existing = Value{existing->as_integer() + 1};
+                              } else {
+                                  dict->set(key, Value{std::int64_t{1}});
+                              }
+                          }
+
+                          return Value{std::move(dict)};
+                      })
         .func("find_last", 2)
         .extract_body(expect_array,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {

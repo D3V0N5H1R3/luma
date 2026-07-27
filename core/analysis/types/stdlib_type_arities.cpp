@@ -69,6 +69,18 @@ namespace {
     return ta;
 }
 
+// ─── Helper: build a TypeAnnotation for array<array<T>> ───
+
+[[nodiscard]] TypeAnnotation array2_ann(const std::string& element_type) {
+    TypeAnnotation inner{"array"};
+    inner.type_params().push_back(ann(element_type));
+
+    TypeAnnotation outer{"array"};
+    outer.type_params().push_back(std::move(inner));
+
+    return outer;
+}
+
 // ─── Helper: build a RecordField ───
 
 [[nodiscard]] RecordField field(const std::string& type_name, const std::string& field_name) {
@@ -144,6 +156,18 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("integer", "minutes"), field("integer", "seconds"),
                    field("integer", "milliseconds"), field("boolean", "negative"));
 
+        // DateTime.period() constructs these calendar-span records (type_name
+        // "Period").  Where DateTime.Duration models a wall-clock span (a fixed
+        // number of seconds), a Period models a *calendar* span — "1 year, 2
+        // months, 3 days" — whose real length depends on which month/year it is
+        // added to.  All three components are whole counts (integer) and may be
+        // negative.  Built by DateTime.period, applied to an instant by
+        // DateTime.add_period, and measured between two instants by
+        // DateTime.between_dates, reusing the existing add_months/add_years
+        // calendar arithmetic.
+        add_record(st, "DateTime.Period", field("integer", "years"), field("integer", "months"),
+                   field("integer", "days"));
+
         // DateTime.interval() constructs these range records (type_name "Interval").
         // Timestamps stay plain `number` seconds — the record only pairs a start and
         // end so contains/overlap/duration take one typed range instead of two loose
@@ -213,6 +237,13 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Math.Vector3", field("number", "x"), field("number", "y"),
                    field("number", "z"));
 
+        // Math.vector4() / vec4_* take and return these 4D geometry records
+        // (type_name "Vector4").  The extra w component carries homogeneous
+        // coordinates for full 3D transforms (Math.Matrix4), completing the
+        // fixed-size vector ladder beside Math.Vector2/Math.Vector3.
+        add_record(st, "Math.Vector4", field("number", "x"), field("number", "y"),
+                   field("number", "z"), field("number", "w"));
+
         // Math.matrix2() / mat2_* take and return these 2×2 transform matrices
         // (type_name "Matrix2").  Named .m00/.m01/.m10/.m11 components make small
         // linear transforms teachable, mirroring Math.Vector2 over LinearAlgebra's
@@ -226,6 +257,19 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("number", "m02"), field("number", "m10"), field("number", "m11"),
                    field("number", "m12"), field("number", "m20"), field("number", "m21"),
                    field("number", "m22"));
+
+        // Math.matrix4() / mat4_* take and return these 4×4 transform matrices
+        // (type_name "Matrix4").  Row-major named components m00..m33 — the
+        // homogeneous 3D transform companion to Math.Matrix3, built by
+        // Math.matrix4 / Math.mat4_identity / Math.mat4_perspective /
+        // Math.mat4_look_at and applied to a Math.Vector3 point with
+        // Math.mat4_transform_point.
+        add_record(st, "Math.Matrix4", field("number", "m00"), field("number", "m01"),
+                   field("number", "m02"), field("number", "m03"), field("number", "m10"),
+                   field("number", "m11"), field("number", "m12"), field("number", "m13"),
+                   field("number", "m20"), field("number", "m21"), field("number", "m22"),
+                   field("number", "m23"), field("number", "m30"), field("number", "m31"),
+                   field("number", "m32"), field("number", "m33"));
 
         // Math.quaternion() / quat_* take and return these unit-rotation records
         // (type_name "Quaternion").  w is the scalar part and x/y/z the vector
@@ -253,6 +297,14 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Math.Rect", field("number", "x"), field("number", "y"),
                    field("number", "width"), field("number", "height"));
 
+        // Math.circle() constructs these 2D circle records (type_name "Circle"):
+        // a Math.Vector2 centre plus a non-negative radius.  Data reusing
+        // Math.Vector2, with total boolean predicates (contains / intersects /
+        // circle_rect_intersects) so a beginner writing a simple game gets the
+        // second-most-common collision test after rectangles without hand-writing
+        // the distance-squared comparison — mirroring Math.Rect.
+        add_record(st, "Math.Circle", field("Math.Vector2", "center"), field("number", "radius"));
+
         // Math.five_number_summary() returns this box-plot record (type_name
         // "FiveNumberSummary"): the five order statistics needed to draw a box
         // plot.  Mirrors Math.Summary; every field is a number.
@@ -277,6 +329,16 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Socket.Address", field("string", "host"), field("integer", "port"));
 
         add_record(st, "Csv.Dialect", field("string", "delimiter"), field("string", "quote"));
+
+        // Csv.deserialize_table() returns this header+rows table shape (type_name
+        // "Table") as result<Csv.Table, Csv.ParseError>.  headers carries the
+        // column names once and rows the positional cells, preserving column
+        // order (which the array<dictionary<string>> shape of deserialize_records
+        // loses) and keeping the header even when there are zero data rows.
+        // Csv.serialize_table round-trips it and Csv.column extracts a column by
+        // name.
+        add_record(st, "Csv.Table", field_of(array_ann("string"), "headers"),
+                   field_of(array2_ann("string"), "rows"));
 
         // Csv.deserialize_detailed() surfaces this located parse failure (type_name
         // "ParseError") as the error type of its
@@ -341,6 +403,27 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // functions, reusing Color.Color and its CSS-serialisation convention.
         add_record(st, "Color.Gradient", field("number", "angle"),
                    field_of(array_ann("Color.Stop"), "stops"));
+
+        // ── Color.Name ──────────────────────────────────
+        // A curated palette of common named colours (a subset of the CSS named
+        // colours, not all 140), giving beginners a typo-proof, autocompleted
+        // alternative to remembering hex strings — the Color analogue of the
+        // exhaustive Terminal.Color palette.  Color.from_name(Color.Name) maps a
+        // variant to its Color.Color RGB value.  Variant names must match
+        // rgb_for_color_name() in core/runtime/stdlib/io/color_module.cpp exactly
+        // (PascalCase); CSS-canonical values (so Green is 0,128,0 and Lime is
+        // 0,255,0, matching the web platform).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Name");
+            for (const char* variant :
+                 {"Black", "White", "Red", "Green", "Lime", "Blue", "Yellow", "Cyan", "Magenta",
+                  "Gray", "Silver", "Orange", "Purple", "Pink", "Brown"}) {
+                ch->variants.push_back(ChoiceVariant{.name = variant, .fields = {}});
+            }
+
+            st.choice_map["Color.Name"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
 
         // Dictionary.to_array emits these key/value pairs at runtime (each a
         // record with type_name "KeyValue").  The `value` field carries the
@@ -777,6 +860,34 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choices.push_back(std::move(ch));
         }
 
+        // ── Http.Auth ───────────────────────────────────
+        // Request credentials as a closed, exhaustive set: Basic(username, password)
+        // carries HTTP Basic credentials, Bearer(token) a bearer/OAuth token.  Both
+        // are payload-bearing variants (like Log.Output.File), so a typo in the scheme
+        // is a compile error instead of a hand-built "Authrization" header.  Rendered
+        // into the Authorization header value by Http.authorization_header (base64 via
+        // the shared base64 codec for Basic), mirroring Http.Method / Log.Output.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Auth");
+
+            // Both variants carry string payloads, so build them by moving Parameters
+            // into the fields vector (a Parameter holds a move-only default_value).
+            ChoiceVariant basic_variant;
+            basic_variant.name = "Basic";
+            basic_variant.fields.push_back(Parameter{.type = ann("string"), .name = "username"});
+            basic_variant.fields.push_back(Parameter{.type = ann("string"), .name = "password"});
+
+            ChoiceVariant bearer_variant;
+            bearer_variant.name = "Bearer";
+            bearer_variant.fields.push_back(Parameter{.type = ann("string"), .name = "token"});
+
+            ch->variants.push_back(std::move(basic_variant));
+            ch->variants.push_back(std::move(bearer_variant));
+
+            st.choice_map["Http.Auth"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
         // ── Terminal.Color ──────────────────────────────
         // Variant names map to the lowercase colour names in color_map() in
         // core/runtime/stdlib/io/terminal_module.cpp (PascalCase → snake_case:
@@ -1033,6 +1144,33 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Positive", .fields = {}});
 
             st.choice_map["Sign"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── Math.Angle ──────────────────────────────────
+        // Optional unit-safe angle: a payload-carrying choice that makes the
+        // radians-vs-degrees distinction explicit at the call site, so mixing the
+        // two becomes a visible choice rather than a silent bug.  Both payloads
+        // are a `number` measurement.  Consumed by Math.to_radians /
+        // Math.to_degrees / Math.sin_of; the existing number-radians trig APIs
+        // stay primary, so this is a convenience, not a replacement.  Variant
+        // names must match angle_to_radians() in
+        // core/runtime/stdlib/math/math_module.cpp exactly (Radians / Degrees).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Angle");
+
+            ChoiceVariant radians_variant;
+            radians_variant.name = "Radians";
+            radians_variant.fields.push_back(Parameter{.type = ann("number"), .name = "value"});
+
+            ChoiceVariant degrees_variant;
+            degrees_variant.name = "Degrees";
+            degrees_variant.fields.push_back(Parameter{.type = ann("number"), .name = "value"});
+
+            ch->variants.push_back(std::move(radians_variant));
+            ch->variants.push_back(std::move(degrees_variant));
+
+            st.choice_map["Math.Angle"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

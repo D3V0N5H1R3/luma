@@ -341,6 +341,43 @@ function void test_http_method_to_string() {
     assert(Http.method_to_string(Http.Method.Options) == "OPTIONS")
 }
 
+# An exhaustive match over every Http.Auth variant. With no else branch it only
+# type-checks if the choice declares exactly these two variants, so it doubles as
+# a check that Http.Auth is fully registered, annotatable, and destructurable.
+function string auth_scheme(Http.Auth auth) {
+    return match auth {
+    case Http.Auth.Basic(_user, _pass) { "basic" }
+    case Http.Auth.Bearer(_token)      { "bearer" }
+    }
+}
+
+@test
+function void test_http_auth_is_exhaustive() {
+    # Payload variants construct and destructure through an exhaustive match.
+    assert(auth_scheme(Http.Auth.Basic("user", "pass")) == "basic")
+    assert(auth_scheme(Http.Auth.Bearer("tok")) == "bearer")
+
+    # The type annotates a local and carries its payload.
+    Http.Auth a = Http.Auth.Bearer("secret")
+    string scheme = match a {
+    case Http.Auth.Basic(_u, _p) { "basic" }
+    case Http.Auth.Bearer(token) { token }
+    }
+    assert(scheme == "secret")
+}
+
+@test
+function void test_http_authorization_header() {
+    # Basic renders base64("user:pass"); it matches the stringly-typed helper.
+    assert(Http.authorization_header(Http.Auth.Basic("user", "pass")) == "Basic dXNlcjpwYXNz")
+    assert(Http.authorization_header(Http.Auth.Basic("aladdin", "opensesame"))
+        == Http.basic_auth("aladdin", "opensesame"))
+
+    # Bearer prefixes the token; it matches the stringly-typed helper.
+    assert(Http.authorization_header(Http.Auth.Bearer("tok-123")) == "Bearer tok-123")
+    assert(Http.authorization_header(Http.Auth.Bearer("tok-123")) == Http.bearer_auth("tok-123"))
+}
+
 @test
 function void test_http_request_with_method_choice() {
     # Http.method_to_string lets a program pick the verb type-safely and feed it

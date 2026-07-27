@@ -81,6 +81,87 @@ void register_array_transform_aggregate(const EnvPtr& env) {
                               return *it;
                           });
                       })
+        // Array.max_by(array<T>, fn(T) -> number) -> optional<T>
+        // Returns the element with the greatest key, or none for an empty array.
+        // The first element wins ties (strict >), so the result is stable.
+        .func("max_by", 2)
+        .extract_body(expect_array,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Array.max_by", loc);
+
+                          const auto& elements = *src->elements;
+                          if (elements.empty()) {
+                              return Value{NullValue{}};
+                          }
+
+                          // Seed from the first element so the tracked index is
+                          // always valid, then scan the rest with a strict '>'
+                          // so ties keep the earliest element.
+                          std::vector<Value> call_args(1);
+                          call_args[0] = elements.front();
+                          std::size_t best_index{0};
+                          double best_key = invoke_callable(args[1], call_args, loc).to_numeric();
+
+                          for (std::size_t i = 1; i < elements.size(); ++i) {
+                              call_args[0] = elements[i];
+                              const double key =
+                                  invoke_callable(args[1], call_args, loc).to_numeric();
+
+                              if (key > best_key) {
+                                  best_index = i;
+                                  best_key = key;
+                              }
+                          }
+
+                          return elements[best_index];
+                      })
+        // Array.min_by(array<T>, fn(T) -> number) -> optional<T>
+        // Mirror of max_by using strict < so the first minimum wins ties.
+        .func("min_by", 2)
+        .extract_body(expect_array,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Array.min_by", loc);
+
+                          const auto& elements = *src->elements;
+                          if (elements.empty()) {
+                              return Value{NullValue{}};
+                          }
+
+                          std::vector<Value> call_args(1);
+                          call_args[0] = elements.front();
+                          std::size_t best_index{0};
+                          double best_key = invoke_callable(args[1], call_args, loc).to_numeric();
+
+                          for (std::size_t i = 1; i < elements.size(); ++i) {
+                              call_args[0] = elements[i];
+                              const double key =
+                                  invoke_callable(args[1], call_args, loc).to_numeric();
+
+                              if (key < best_key) {
+                                  best_index = i;
+                                  best_key = key;
+                              }
+                          }
+
+                          return elements[best_index];
+                      })
+        // Array.sum_by(array<T>, fn(T) -> number) -> number
+        // Totals the projected key of every element; an empty array sums to 0.
+        .func("sum_by", 2)
+        .extract_body(expect_array,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Array.sum_by", loc);
+
+                          double total{0.0};
+                          std::vector<Value> call_args(1);
+
+                          for (const auto& elem : *src->elements) {
+                              call_args[0] = elem;
+                              total += invoke_callable(args[1], call_args, loc).to_numeric();
+                          }
+
+                          return Value{total};
+                      })
         .func("slice", 3)
         .extract_body(expect_array,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {

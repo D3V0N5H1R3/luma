@@ -164,6 +164,12 @@ namespace {
             if (desc.named_type == "Decimal.Error") {
                 return TypeInfo::make_named(K::Choice, "Decimal.Error");
             }
+            if (desc.named_type == "Color.Name") {
+                return TypeInfo::make_named(K::Choice, "Color.Name");
+            }
+            if (desc.named_type == "Math.Angle") {
+                return TypeInfo::make_named(K::Choice, "Math.Angle");
+            }
             return TypeInfo::make_named(K::Record, desc.named_type);
 
         case RK::Unspecified:
@@ -386,6 +392,9 @@ struct Refiner {
          "Array.sum"},
         true, [](const RefineContext& c) { return TypeInfo::make_result(c.elem); });
 
+    add({"Array.max_by", "Array.min_by"}, true,
+        [](const RefineContext& c) { return TypeInfo::make_optional(c.elem); });
+
     add({"Array.reduce"}, true, [](const RefineContext& c) -> TypeInfo {
         if (c.arg_types.size() >= 2) {
             return TypeInfo::make_result(c.arg_types[1]);
@@ -420,8 +429,9 @@ struct Refiner {
     add({"Dictionary.values"}, true,
         [](const RefineContext& c) { return TypeInfo::make_array(c.elem); });
 
-    add({"Dictionary.set", "Dictionary.remove", "Dictionary.merge", "Dictionary.deep_merge"}, true,
-        [](const RefineContext& c) { return TypeInfo::make_dict(c.elem); });
+    add({"Dictionary.set", "Dictionary.remove", "Dictionary.merge", "Dictionary.deep_merge",
+         "Dictionary.update"},
+        true, [](const RefineContext& c) { return TypeInfo::make_dict(c.elem); });
 
     add({"Dictionary.invert"}, true,
         [](const RefineContext&) { return TypeInfo::make_dict(TypeInfo::make(K::String)); });

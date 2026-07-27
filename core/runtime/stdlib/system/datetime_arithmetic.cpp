@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -60,6 +62,103 @@ namespace {
     return [scale](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
         return Value{args[0].to_numeric() + (args[1].to_numeric() * scale)};
     };
+}
+
+// Build a DateTime.Period record value (type_name "Period").  All three
+// components are whole counts, stored as integer Values.
+[[nodiscard]] Value make_period_record(std::int64_t years, std::int64_t months, std::int64_t days) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "Period";
+    rec->fields.emplace_back("years", Value{years});
+    rec->fields.emplace_back("months", Value{months});
+    rec->fields.emplace_back("days", Value{days});
+
+    return Value{std::move(rec)};
+}
+
+// The integer years/months/days of a DateTime.Period argument.
+struct PeriodParts {
+    std::int64_t years;
+    std::int64_t months;
+    std::int64_t days;
+};
+
+// Read a DateTime.Period argument.  Returns std::nullopt when the value is not a
+// period-shaped record so the caller can raise a typed failure.
+[[nodiscard]] std::optional<PeriodParts> read_period(const Value& value) {
+    if (!value.is_record()) {
+        return std::nullopt;
+    }
+
+    const auto& rec = value.as_record();
+    const auto read = [&rec](std::string_view name, std::int64_t& out) -> bool {
+        const Value* v = rec->find_field(name);
+        if (v == nullptr || !(v->is_integer() || v->is_number())) {
+            return false;
+        }
+        out = v->is_integer() ? v->as_integer() : static_cast<std::int64_t>(v->to_numeric());
+        return true;
+    };
+
+    PeriodParts parts{};
+    if (!read("years", parts.years) || !read("months", parts.months) || !read("days", parts.days)) {
+        return std::nullopt;
+    }
+
+    return parts;
+}
+
+// Proleptic-month index (year * 12 + zero-indexed month) for a 1-indexed month,
+// the monotonic key that makes calendar month arithmetic a plain subtraction.
+[[nodiscard]] std::int64_t proleptic_month(std::int64_t year, int month_1indexed) {
+    return (year * 12) + (month_1indexed - 1);
+}
+
+// The (year, 1-indexed month, day) reached by adding a signed month delta to a
+// date, clamping the day to the target month's length (so 31 Jan + 1 month = 28
+// or 29 Feb).  Returns std::nullopt when the result leaves the 0001-9999 range.
+struct Ymd {
+    int year;
+    int month; // 1-indexed
+    int day;
+};
+
+[[nodiscard]] std::optional<Ymd> add_months_to_date(std::int64_t year, int month_1indexed, int day,
+                                                    std::int64_t delta) {
+    const std::int64_t total = proleptic_month(year, month_1indexed) + delta;
+    std::int64_t new_year = total / 12;
+    std::int64_t new_month = total % 12;
+
+    if (new_month < 0) {
+        new_month += 12;
+        new_year -= 1;
+    }
+
+    if (new_year < 1 || new_year > 9999) {
+        return std::nullopt;
+    }
+
+    const int month_out = static_cast<int>(new_month) + 1;
+    const int max_day = days_in_month_for(month_out, new_year);
+
+    return Ymd{static_cast<int>(new_year), month_out, std::min(day, max_day)};
+}
+
+// Whole days since 1970-01-01 for a calendar date (midnight UTC), used to count
+// the trailing-day remainder of DateTime.between_dates exactly.  Returns
+// std::nullopt when the date is outside the supported range.
+[[nodiscard]] std::optional<std::int64_t> epoch_day(int year, int month_1indexed, int day) {
+    std::tm t{};
+    t.tm_year = year - 1900;
+    t.tm_mon = month_1indexed - 1;
+    t.tm_mday = day;
+
+    const auto unix_time = tm_to_unix(t);
+    if (!unix_time) {
+        return std::nullopt;
+    }
+
+    return static_cast<std::int64_t>(std::floor(*unix_time / 86400.0));
 }
 
 } // namespace
@@ -233,6 +332,116 @@ void register_datetime_arithmetic(const EnvPtr& env) {
             }
 
             return make_success_value(Value{unix_time});
+        })
+        // ── DateTime.Period (calendar-aware span) ────────────────────────────
+        // Total constructor: a calendar span is just three whole counts and may
+        // be negative, so it never fails.
+        .func("period", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto years = expect_integer(args[0], "DateTime.period", loc);
+            const auto months = expect_integer(args[1], "DateTime.period", loc);
+            const auto days = expect_integer(args[2], "DateTime.period", loc);
+
+            return make_period_record(years, months, days);
+        })
+        // Apply a calendar span to an instant: add the year+month component with
+        // month-length day clamping (reusing the add_months/add_years rules),
+        // then add the whole-day component as seconds.  Fails when the timestamp
+        // or the result leaves the supported 0001-9999 range.
+        .func("add_period", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            const auto tm = to_tm(args[0].to_numeric());
+
+            if (!tm) {
+                return make_failure_value(
+                    error_msg("DateTime", "add_period", k_timestamp_range_error));
+            }
+
+            const auto period = read_period(args[1]);
+
+            if (!period) {
+                return make_failure_value(
+                    error_msg("DateTime", "add_period", "expected a DateTime.Period record"));
+            }
+
+            // Bound the year/month components before combining them so the month
+            // arithmetic below cannot overflow int64 — anything this large is far
+            // outside the calendar range and fails the same way as add_months.
+            constexpr std::int64_t k_max_years = 100000;
+            constexpr std::int64_t k_max_months = 1200000;
+
+            if (std::abs(period->years) > k_max_years || std::abs(period->months) > k_max_months) {
+                return make_failure_value(
+                    error_msg("DateTime", "add_period", "resulting date is out of range"));
+            }
+
+            const std::int64_t month_delta = (period->years * 12) + period->months;
+            const auto shifted = add_months_to_date(static_cast<std::int64_t>(tm->tm_year) + 1900,
+                                                    tm->tm_mon + 1, tm->tm_mday, month_delta);
+
+            if (!shifted) {
+                return make_failure_value(
+                    error_msg("DateTime", "add_period", "resulting date is out of range"));
+            }
+
+            double unix_time{};
+
+            if (auto err = rebuild_to_unix(shifted->year - 1900, shifted->month - 1, shifted->day,
+                                           *tm, "add_period", unix_time)) {
+                return *std::move(err);
+            }
+
+            // The day component is a plain wall-clock offset, matching add_days.
+            return make_success_value(
+                Value{unix_time + (static_cast<double>(period->days) * 86400.0)});
+        })
+        // Measure the calendar span from start to end as a DateTime.Period, using
+        // the date components only (time-of-day is ignored) with Java
+        // Period.between borrow semantics.  A start after end yields a negative
+        // span.  Fails when either instant leaves the supported range.
+        .func("between_dates", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            const auto start = to_tm(args[0].to_numeric());
+            const auto end = to_tm(args[1].to_numeric());
+
+            if (!start || !end) {
+                return make_failure_value(
+                    error_msg("DateTime", "between_dates", k_timestamp_range_error));
+            }
+
+            const std::int64_t start_year = static_cast<std::int64_t>(start->tm_year) + 1900;
+            const std::int64_t end_year = static_cast<std::int64_t>(end->tm_year) + 1900;
+            const int start_month = start->tm_mon + 1;
+            const int end_month = end->tm_mon + 1;
+            const int start_day = start->tm_mday;
+            const int end_day = end->tm_mday;
+
+            std::int64_t total_months =
+                proleptic_month(end_year, end_month) - proleptic_month(start_year, start_month);
+            std::int64_t days = static_cast<std::int64_t>(end_day) - start_day;
+
+            if (total_months > 0 && days < 0) {
+                total_months -= 1;
+                // Recount the trailing days exactly from the borrowed anchor date.
+                const auto anchor =
+                    add_months_to_date(start_year, start_month, start_day, total_months);
+                const auto anchor_epoch =
+                    anchor ? epoch_day(anchor->year, anchor->month, anchor->day) : std::nullopt;
+                const auto end_epoch = epoch_day(static_cast<int>(end_year), end_month, end_day);
+
+                if (!anchor_epoch || !end_epoch) {
+                    return make_failure_value(
+                        error_msg("DateTime", "between_dates", "resulting span is out of range"));
+                }
+
+                days = *end_epoch - *anchor_epoch;
+            } else if (total_months < 0 && days > 0) {
+                total_months += 1;
+                days -= days_in_month_for(end_month, end_year);
+            }
+
+            return make_success_value(
+                make_period_record(total_months / 12, total_months % 12, days));
         });
 }
 

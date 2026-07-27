@@ -51,6 +51,27 @@ function void test_dictionary_set_and_remove() {
 }
 
 @test
+function void test_dictionary_update() {
+    dictionary<integer> counts = {"x": 5}
+
+    # An existing key: the updater sees the current value.
+    dictionary<integer> bumped =
+        Dictionary.update(counts, "x", (optional<integer> cur) -> Optional.unwrap_or(cur, 0) + 1)
+
+    assert(Dictionary.get_or(bumped, "x", 0) == 6)
+
+    # An absent key: the updater sees none and can seed a default.
+    dictionary<integer> seeded =
+        Dictionary.update(counts, "y", (optional<integer> cur) -> Optional.unwrap_or(cur, 0) + 1)
+
+    assert(Dictionary.get_or(seeded, "y", 0) == 1)
+
+    # The input dictionary is never mutated.
+    assert(Dictionary.get_or(counts, "x", 0) == 5)
+    assert(!Dictionary.has(counts, "y"))
+}
+
+@test
 function void test_dictionary_keys_values() {
     dictionary<integer> coords = {"x": 1, "y": 2}
 
@@ -76,6 +97,20 @@ function void test_dictionary_merge() {
     assert(Dictionary.get_or(merged, "a", "") == "1")
     assert(Dictionary.get_or(merged, "b", "") == "99")
     assert(Dictionary.get_or(merged, "c", "") == "3")
+}
+
+@test
+function void test_dictionary_merge_with() {
+    dictionary<integer> a = {"x": 1, "y": 2}
+    dictionary<integer> b = {"y": 10, "z": 3}
+    # Shared key "y" is combined by summing; unique keys pass through.
+    dictionary<integer> merged = Dictionary.merge_with(a, b, (integer l, integer r) -> l + r)
+
+    assert(Dictionary.get_or(merged, "x", 0) == 1)
+    assert(Dictionary.get_or(merged, "y", 0) == 12)
+    assert(Dictionary.get_or(merged, "z", 0) == 3)
+    # Inputs are unchanged.
+    assert(Dictionary.get_or(a, "y", 0) == 2)
 }
 
 @test

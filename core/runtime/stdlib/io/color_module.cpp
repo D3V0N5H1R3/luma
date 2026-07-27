@@ -9,6 +9,7 @@
 #include "runtime/stdlib/io/color_module.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <format>
@@ -557,6 +558,47 @@ struct Stop {
     return parsed;
 }
 
+// Map a Color.Name variant to its CSS-canonical RGB value (opaque).  Returns
+// std::nullopt for an unrecognised variant so the caller can raise a runtime
+// error — though the exhaustive Color.Name choice makes that unreachable from
+// type-checked code.  Values must match the variant list of the "Color.Name"
+// choice in stdlib_type_arities.cpp.
+[[nodiscard]] std::optional<Rgba> rgb_for_color_name(std::string_view variant) {
+    struct NamedColor {
+        std::string_view name;
+        int red;
+        int green;
+        int blue;
+    };
+
+    // CSS-canonical values (Green is 0,128,0; Lime is 0,255,0).
+    static constexpr std::array<NamedColor, 15> k_named_colors{{
+        {"Black", 0, 0, 0},
+        {"White", 255, 255, 255},
+        {"Red", 255, 0, 0},
+        {"Green", 0, 128, 0},
+        {"Lime", 0, 255, 0},
+        {"Blue", 0, 0, 255},
+        {"Yellow", 255, 255, 0},
+        {"Cyan", 0, 255, 255},
+        {"Magenta", 255, 0, 255},
+        {"Gray", 128, 128, 128},
+        {"Silver", 192, 192, 192},
+        {"Orange", 255, 165, 0},
+        {"Purple", 128, 0, 128},
+        {"Pink", 255, 192, 203},
+        {"Brown", 165, 42, 42},
+    }};
+
+    for (const auto& entry : k_named_colors) {
+        if (entry.name == variant) {
+            return Rgba{entry.red, entry.green, entry.blue, 1.0};
+        }
+    }
+
+    return std::nullopt;
+}
+
 } // namespace
 
 void register_color_ns(const EnvPtr& env) {
@@ -649,6 +691,28 @@ void register_color_ns(const EnvPtr& env) {
             }
 
             return make_success_value(make_color(Rgba{*r, *g, *b, alpha}));
+        })
+        // Build an opaque Color.Color from a curated named colour.  Total over the
+        // exhaustive Color.Name choice, so it returns a Color directly rather than
+        // a result; an unrecognised variant (only reachable by bypassing the type
+        // checker) raises a runtime error.
+        .func("from_name", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_choice()) {
+                throw RuntimeError{"Color.from_name: expected a Color.Name value", loc,
+                                   "pass one of Color.Name.Red, Color.Name.Blue, …"};
+            }
+
+            const auto& variant = args[0].as_choice()->variant;
+            const auto rgb = rgb_for_color_name(variant);
+
+            if (!rgb) {
+                throw RuntimeError{
+                    std::format("Color.from_name: unknown colour 'Color.Name.{}'", variant), loc,
+                    "pass one of the Color.Name variants"};
+            }
+
+            return make_color(*rgb);
         })
         .func("to_hex", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
