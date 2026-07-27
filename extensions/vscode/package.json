@@ -507,16 +507,16 @@
         "@types/mocha": "^10.0.10",
         "@types/node": "^26.1.1",
         "@types/vscode": "^1.125.0",
-        "@vscode/test-electron": "^3.0.0",
+        "@vscode/test-electron": "^3.1.0",
         "@vscode/vsce": "^3.9.2",
         "esbuild": "^0.28.1",
-        "eslint": "^10.7.0",
+        "eslint": "^10.8.0",
         "glob": "^13.0.6",
-        "globals": "^17.7.0",
+        "globals": "^17.8.0",
         "mocha": "^11.7.6",
-        "prettier": "^3.9.5",
-        "typescript": "^5.9.3",
-        "typescript-eslint": "^8.64.0"
+        "prettier": "^3.9.6",
+        "typescript": "^7.0.2",
+        "typescript-eslint": "^8.65.0"
     },
     "overrides": {
         "serialize-javascript": "^7.0.5",
