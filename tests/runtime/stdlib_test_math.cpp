@@ -130,6 +130,14 @@ LUMA_TEST(math_is_infinite) {
     ASSERT_EQ(eval("Math.is_infinite(0.0)").as_bool(), false);
 }
 
+LUMA_TEST(math_is_finite) {
+    ASSERT_EQ(eval("Math.is_finite(3.14)").as_bool(), true);
+    ASSERT_EQ(eval("Math.is_finite(0.0)").as_bool(), true);
+    ASSERT_EQ(eval("Math.is_finite(Math.infinity)").as_bool(), false);
+    ASSERT_EQ(eval("Math.is_finite(-Math.infinity)").as_bool(), false);
+    ASSERT_EQ(eval("Math.is_finite(Math.infinity - Math.infinity)").as_bool(), false);
+}
+
 LUMA_TEST(math_is_not_a_number) {
     // Math.infinity - Math.infinity produces NaN.
     ASSERT_EQ(eval("Math.is_not_a_number(Math.infinity - Math.infinity)").as_bool(), true);
@@ -860,6 +868,31 @@ LUMA_TEST(math_rounding_out_of_integer_range) {
     ASSERT_EVAL_FAILURE("Math.ceil(1e30)");
     ASSERT_EVAL_FAILURE("Math.round(1e30)");
     ASSERT_EVAL_FAILURE("Math.truncate(1e30)");
+}
+
+LUMA_TEST(math_round_to) {
+    const auto a = eval("Math.round_to(3.14159, 2)");
+    ASSERT_RESULT_SUCCESS(a);
+    ASSERT_NEAR(a.as_result()->owned_inner->as_number(), 3.14, 1e-9);
+
+    const auto b = eval("Math.round_to(2.5, 0)");
+    ASSERT_RESULT_SUCCESS(b);
+    ASSERT_NEAR(b.as_result()->owned_inner->as_number(), 3.0, 1e-9);
+
+    const auto c = eval("Math.round_to(-1.2345, 2)");
+    ASSERT_RESULT_SUCCESS(c);
+    ASSERT_NEAR(c.as_result()->owned_inner->as_number(), -1.23, 1e-9);
+
+    // Negative places and places above the cap fail.
+    ASSERT_EVAL_FAILURE("Math.round_to(1.5, -1)");
+    ASSERT_EVAL_FAILURE("Math.round_to(1.5, 16)");
+
+    // Non-finite input fails.
+    ASSERT_EVAL_FAILURE("Math.round_to(Math.infinity, 2)");
+
+    // A finite input whose scaled value overflows to ±inf must fail rather
+    // than wrap a non-finite value in a success result.
+    ASSERT_EVAL_FAILURE("Math.round_to(1.0e300, 15)");
 }
 
 LUMA_TEST(math_approximately_equal_negative_epsilon) {

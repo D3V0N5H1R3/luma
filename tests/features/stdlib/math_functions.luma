@@ -390,6 +390,24 @@ function void test_math_is_infinite() {
 }
 
 @test
+function void test_math_is_finite() {
+    assert(Math.is_finite(3.14))
+    assert(Math.is_finite(0.0))
+    assert(!Math.is_finite(Math.infinity))
+    assert(!Math.is_finite(-Math.infinity))
+    assert(!Math.is_finite(Math.nan))
+}
+
+@test
+function void test_math_round_to() {
+    assert(Math.approximately_equal(Result.unwrap(Math.round_to(3.14159, 2)), 3.14, 0.0001))
+    assert(Math.approximately_equal(Result.unwrap(Math.round_to(2.5, 0)), 3.0, 0.0001))
+    assert(Math.approximately_equal(Result.unwrap(Math.round_to(-1.2345, 2)), -1.23, 0.0001))
+    assert(Result.is_failure(Math.round_to(1.5, -1)))
+    assert(Result.is_failure(Math.round_to(1.5, 16)))
+}
+
+@test
 function void test_math_is_not_a_number() {
     # Use integer / 0 produces a runtime error, but 0.0 / 0.0 is only
     # possible through Math.infinity arithmetic.

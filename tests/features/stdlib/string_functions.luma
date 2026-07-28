@@ -774,6 +774,22 @@ function void test_string_search_negative() {
 }
 
 @test
+function void test_string_equals_ignore_case() {
+    assert(String.equals_ignore_case("Hello", "hello"))
+    assert(String.equals_ignore_case("HELLO", "hello"))
+    assert(!String.equals_ignore_case("hello", "world"))
+    assert(!String.equals_ignore_case("abc", "ab"))
+}
+
+@test
+function void test_string_contains_ignore_case() {
+    assert(String.contains_ignore_case("Hello World", "world"))
+    assert(String.contains_ignore_case("Hello World", "WORLD"))
+    assert(!String.contains_ignore_case("Hello World", "xyz"))
+    assert(String.contains_ignore_case("abc", ""))
+}
+
+@test
 function void test_string_from_codepoints_surrogate() {
     # UTF-16 surrogate halves (U+D800-U+DFFF) are not valid scalar values.
     result<string> r = String.from_codepoints([55296])

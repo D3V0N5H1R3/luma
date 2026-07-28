@@ -99,6 +99,8 @@ These require no namespace prefix:
 | `Array.index_of(arr, v)`         | `(array<T>, T)`                        | `result<integer>`              | First index of `v`; fail if not found                                      |
 | `Array.insert_at(arr, i, v)`     | `(array<T>, integer, T)`               | `result<array<T>>`             | Insert `v` at index `i`; fail if index out of bounds                       |
 | `Array.is_empty(arr)`            | `(array<T>)`                           | `boolean`                      | Whether the array has no elements                                          |
+| `Array.is_sorted(arr)`           | `(array<T>)`                           | `boolean`                      | Whether the array is in ascending natural order                            |
+| `Array.is_sorted_by(arr, key)`   | `(array<T>, function(T) -> U)`         | `result<boolean>`              | Whether the array is ascending by the projected key; fail if key throws    |
 | `Array.join(arr, sep)`           | `(array<T>, string)`                   | `string`                       | Concatenate elements as strings separated by `sep`                         |
 | `Array.last(arr)`                | `(array<T>)`                           | `result<T>`                    | Last element; fail if empty                                                |
 | `Array.length(arr)`              | `(array<T>)`                           | `integer`                      | Number of elements                                                         |
@@ -109,6 +111,7 @@ These require no namespace prefix:
 | `Array.min_by(arr, key)`         | `(array<T>, function(T) -> number)`    | `optional<T>`                  | Element with the smallest key; `none` if empty; first element wins ties    |
 | `Array.partition(arr, fn)`       | `(array<T>, function(T) -> boolean)`   | `result<(array<T>, array<T>)>` | Split into `(matches, rest)`; fail if predicate throws                     |
 | `Array.pop(arr)`                 | `(array<T>)`                           | `result<(array<T>, T)>`        | Remove last element; fail if empty                                         |
+| `Array.product(arr)`             | `(array<T>)`                           | `result<integer \| number>`    | Multiply numeric elements; `1` for an empty array; fail if non-numeric element found |
 | `Array.push(arr, v)`             | `(array<T>, T)`                        | `array<T>`                     | New array with `v` appended                                                |
 | `Array.range(start, end)`        | `(integer, integer)`                   | `result<array<integer>>`       | Generate `[start, start+1, ..., end-1]`; fail if range exceeds limit       |
 | `Array.reduce(arr, init, fn)`    | `(array<T>, U, function(U, T) -> U)`   | `result<U>`                    | Fold left with accumulator; fail if `fn` is not callable                   |
@@ -1856,6 +1859,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.hyperbolic_tangent(x)`          | `(number)`                       | `number`          | Hyperbolic tangent (always bounded to [−1, 1])                                   |
 | `Math.hypot(x, y)`                    | `(number, number)`               | `number`          | Hypotenuse √(x² + y²)                                                            |
 | `Math.is_infinite(x)`                 | `(number)`                       | `boolean`         | Whether `x` is +∞ or −∞                                                          |
+| `Math.is_finite(x)`                   | `(number)`                       | `boolean`         | Whether `x` is neither ±∞ nor NaN                                                |
 | `Math.is_even(n)`                     | `(integer)`                      | `boolean`         | Whether `n` is even (negative-safe)                                             |
 | `Math.is_not_a_number(x)`             | `(number)`                       | `boolean`         | Whether `x` is NaN                                                               |
 | `Math.is_odd(n)`                      | `(integer)`                      | `boolean`         | Whether `n` is odd (negative-safe)                                              |
@@ -1879,6 +1883,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.remainder(a, b)`                | `(integer \| number, integer \| number)` | `result<integer \| number>` | Remainder of `a` divided by `b`; fail if `b` is zero                             |
 | `Math.remap(value, in_min, in_max, out_min, out_max)` | `(number, number, number, number, number)` | `result<number>` | Linearly re-map `value` from input range to output range; fail if `in_min == in_max` |
 | `Math.round(x)`                       | `(number)`                       | `result<integer>` | Round to nearest integer; fail on overflow                                       |
+| `Math.round_to(x, places)`            | `(number, integer)`              | `result<number>`  | Round `x` to `places` decimal places; fail if `places` is negative or above 15   |
 | `Math.sign(x)`                        | `(number)`                       | `integer`         | −1, 0, or 1                                                                      |
 | `Math.sign_of(x)`                     | `(number)`                       | `Sign`            | Sign of `x` as a typed `Sign` choice (`Negative`, `Zero`, `Positive`)           |
 | `Math.sin_of(angle)`                  | `(Math.Angle)`                   | `number`          | Sine of a unit-safe `Math.Angle` (converts to radians first)                    |
@@ -2618,9 +2623,11 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `String.common_prefix(a, b)`        | `(string, string)`             | `string`          | Longest common prefix of two strings                                            |
 | `String.common_suffix(a, b)`        | `(string, string)`             | `string`          | Longest common suffix of two strings                                            |
 | `String.contains(s, sub)`           | `(string, string)`             | `boolean`         | Whether `s` contains `sub`                                                      |
+| `String.contains_ignore_case(s, sub)` | `(string, string)`           | `boolean`         | Whether `s` contains `sub`, ignoring ASCII case                                 |
 | `String.count(s, sub)`              | `(string, string)`             | `integer`         | Number of non-overlapping occurrences of `sub`                                  |
 | `String.dedent(s)`                  | `(string)`                     | `string`          | Remove common leading whitespace                                                |
 | `String.ends_with(s, suffix)`       | `(string, string)`             | `boolean`         | Whether `s` ends with `suffix`                                                  |
+| `String.equals_ignore_case(a, b)`   | `(string, string)`             | `boolean`         | Whether `a` and `b` are equal, ignoring ASCII case                              |
 | `String.format_number(n, decimals)` | `(number, integer)`            | `string`          | Format number with fixed decimal places                                         |
 | `String.from_bytes(bytes)`          | `(array<integer>)`             | `result<string>`  | Build string from byte values                                                   |
 | `String.from_codepoints(cps)`       | `(array<integer>)`             | `result<string>`  | Build string from Unicode codepoints                                            |
@@ -2676,7 +2683,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 
 > **Note:** `String.length` returns an `integer` — the number of Unicode codepoints (not bytes). Use `String.byte_length` to get the byte count of a string.
 
-> **Note:** `String.uppercase()` and `String.lowercase()` only transform ASCII characters (a–z, A–Z). Non-ASCII UTF-8 code points (e.g., `ü`, `é`, `ñ`) pass through unchanged. Use these functions only when working with ASCII text.
+> **Note:** `String.uppercase()`, `String.lowercase()`, `String.equals_ignore_case()`, and `String.contains_ignore_case()` only fold ASCII characters (a–z, A–Z). Non-ASCII UTF-8 code points (e.g., `ü`, `é`, `ñ`) are compared or passed through unchanged. Use these functions only when working with ASCII text.
 
 > **Resource limits** — `String.center`, `String.pad_left`, and `String.pad_right` cap their target `width`, and `String.repeat` caps its repeat count and result size. See the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits) for Luma's resource limits and their `LUMA_LIMIT_*` overrides.
 

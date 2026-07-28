@@ -282,6 +282,42 @@ void register_math_ns(const EnvPtr& env) {
         .checked_unary_to_int("floor", [](double x) { return std::floor(x); })
         .checked_unary_to_int("ceil", [](double x) { return std::ceil(x); })
         .checked_unary_to_int("round", [](double x) { return std::round(x); })
+        // Math.round_to(x: number, places: integer) -> result<number>
+        // Round x to `places` decimal places, returning a number (unlike
+        // Math.round, which returns an integer).  Fails if places is negative or
+        // exceeds the precision a 64-bit double can represent.
+        .func("round_to", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto x = expect_numeric(args[0], "Math.round_to", loc);
+            const auto places = expect_integer(args[1], "Math.round_to", loc);
+
+            constexpr std::int64_t k_max_places{15};
+
+            if (places < 0) {
+                return make_failure_value(
+                    error_msg("Math", "round_to", "places must not be negative"));
+            }
+            if (places > k_max_places) {
+                return make_failure_value(error_msg(
+                    "Math", "round_to", std::format("places must not exceed {}", k_max_places)));
+            }
+            if (!std::isfinite(x)) {
+                return make_failure_value(error_msg("Math", "round_to", "value must be finite"));
+            }
+
+            const double factor = std::pow(10.0, static_cast<double>(places));
+            const double result = std::round(x * factor) / factor;
+
+            // A finite x with large places can overflow x * factor to ±inf,
+            // yielding inf/NaN — reject it rather than wrap a non-real number in
+            // a success result (mirrors Math.power's is_valid_numeric guard).
+            if (!stdlib::is_valid_numeric(result)) {
+                return make_failure_value(
+                    error_msg("Math", "round_to", "result is not a finite number"));
+            }
+
+            return make_success_value(Value{result});
+        })
         .func("absolute", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto val = expect_numeric(args[0], "Math.absolute", loc);
