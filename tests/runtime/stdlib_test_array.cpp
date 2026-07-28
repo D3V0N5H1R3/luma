@@ -927,6 +927,57 @@ static void test_array_sum_by() {
     ASSERT_EQ(eval("Array.sum_by([], (integer x) -> x)").as_number(), 0.0);
 }
 
+static void test_array_product() {
+    ASSERT_EVAL_INT("Array.product([1, 2, 3, 4])", 24);
+
+    // Empty array yields the multiplicative identity 1.
+    ASSERT_EVAL_INT("Array.product([])", 1);
+
+    // A number element promotes the whole product to a number.
+    const auto mixed = eval("Array.product([2, 2.5])");
+    ASSERT_RESULT_SUCCESS(mixed);
+    ASSERT_EQ(mixed.as_result()->owned_inner->as_number(), 5.0);
+}
+
+static void test_array_product_non_numeric() {
+    ASSERT_EVAL_FAILURE("Array.product([1, \"bad\", 3])");
+}
+
+static void test_array_product_overflow_promotes_to_number() {
+    // An all-integer product that overflows int64 promotes to a number rather
+    // than wrapping — mirrors Array.sum.
+    const auto v = eval("Array.product([9223372036854775807, 2])");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+
+    ASSERT_TRUE(inner.is_number());
+    ASSERT_TRUE(inner.as_number() > 9.0e18);
+}
+
+static void test_array_is_sorted() {
+    ASSERT_TRUE(eval("Array.is_sorted([1, 2, 2, 3])").as_bool());
+    ASSERT_FALSE(eval("Array.is_sorted([3, 1, 2])").as_bool());
+    ASSERT_TRUE(eval("Array.is_sorted([])").as_bool());
+    ASSERT_TRUE(eval("Array.is_sorted([42])").as_bool());
+    ASSERT_TRUE(eval("Array.is_sorted([\"a\", \"b\", \"c\"])").as_bool());
+    ASSERT_FALSE(eval("Array.is_sorted([\"b\", \"a\"])").as_bool());
+}
+
+static void test_array_is_sorted_by() {
+    const auto ok = eval("Array.is_sorted_by([1, 2, 3], (integer x) -> -x)");
+    ASSERT_RESULT_SUCCESS(ok);
+    ASSERT_FALSE(ok.as_result()->owned_inner->as_bool());
+
+    const auto asc = eval("Array.is_sorted_by([3, 2, 1], (integer x) -> -x)");
+    ASSERT_RESULT_SUCCESS(asc);
+    ASSERT_TRUE(asc.as_result()->owned_inner->as_bool());
+
+    // A throwing key function surfaces as a result failure.
+    ASSERT_RESULT_FAILURE(eval("Array.is_sorted_by([1, 2, 3], (integer x) -> x / 0)"));
+}
+
 int main() {
     RUN(test_array_all);
     RUN(test_array_any);
@@ -1031,6 +1082,11 @@ int main() {
     RUN(test_array_min_by);
     RUN(test_array_count_by);
     RUN(test_array_sum_by);
+    RUN(test_array_product);
+    RUN(test_array_product_non_numeric);
+    RUN(test_array_product_overflow_promotes_to_number);
+    RUN(test_array_is_sorted);
+    RUN(test_array_is_sorted_by);
 
     return SUMMARY();
 }

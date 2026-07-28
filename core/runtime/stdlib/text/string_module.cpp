@@ -1,6 +1,7 @@
 #include "runtime/stdlib/text/string_module.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -9,6 +10,7 @@
 #include <numeric>
 #include <regex>
 #include <sstream>
+#include <string_view>
 
 #include "analysis/source/source_location.hpp"
 #include "common/utf8.hpp"
@@ -30,6 +32,31 @@ template <typename CharFn> [[nodiscard]] std::string transform_ascii(std::string
         return (c < 0x80) ? static_cast<char>(fn(c)) : static_cast<char>(c);
     });
     return s;
+}
+
+// ASCII-only lowercase of a single byte; bytes >= 0x80 are left untouched so
+// multi-byte UTF-8 sequences compare literally (matching String.uppercase /
+// String.lowercase, which only fold the ASCII range).
+[[nodiscard]] inline char ascii_lower(char c) {
+    const auto uc = static_cast<unsigned char>(c);
+    return uc < 0x80 ? static_cast<char>(std::tolower(uc)) : c;
+}
+
+// ASCII case-insensitive string equality.
+[[nodiscard]] bool ascii_iequals(std::string_view a, std::string_view b) {
+    return a.size() == b.size() && std::ranges::equal(a, b, [](char x, char y) {
+               return ascii_lower(x) == ascii_lower(y);
+           });
+}
+
+// ASCII case-insensitive substring test.  An empty needle always matches.
+[[nodiscard]] bool ascii_icontains(std::string_view haystack, std::string_view needle) {
+    if (needle.empty()) {
+        return true;
+    }
+    const auto found = std::ranges::search(
+        haystack, needle, [](char x, char y) { return ascii_lower(x) == ascii_lower(y); });
+    return !found.empty();
 }
 
 // Shared body for String.index_of / last_index_of.  `from_end` selects rfind
@@ -279,6 +306,18 @@ void register_string_ns(const EnvPtr& env) {
         .extract_body(expect_string,
                       [](const auto& s, const Args& args, SourceLocation) -> Value {
                           return Value{s.find(args[1].as_string()) != std::string::npos};
+                      })
+
+        .func("equals_ignore_case", 2)
+        .extract_body(expect_string,
+                      [](const auto& a, const Args& args, SourceLocation) -> Value {
+                          return Value{ascii_iequals(a, args[1].as_string())};
+                      })
+
+        .func("contains_ignore_case", 2)
+        .extract_body(expect_string,
+                      [](const auto& s, const Args& args, SourceLocation) -> Value {
+                          return Value{ascii_icontains(s, args[1].as_string())};
                       })
 
         .func("starts_with", 2)

@@ -50,6 +50,10 @@ void register_math_analysis(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return Value{std::isinf(expect_numeric(args[0], "Math.is_infinite", loc))};
         })
+        .func("is_finite", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{std::isfinite(expect_numeric(args[0], "Math.is_finite", loc))};
+        })
         // approximately_equal accepts 2 or 3 arguments, so uses native() directly.
         .native(
             "approximately_equal",

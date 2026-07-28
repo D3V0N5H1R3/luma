@@ -213,6 +213,27 @@ function void test_array_sum() {
 }
 
 @test
+function void test_array_product() {
+    assert(Result.unwrap(Array.product([1, 2, 3, 4])) == 24)
+    assert(Result.unwrap(Array.product([])) == 1)
+    assert(Math.approximately_equal(Result.unwrap(Array.product([2.0, 2.5])), 5.0))
+}
+
+@test
+function void test_array_is_sorted() {
+    assert(Array.is_sorted([1, 2, 2, 3]))
+    assert(!Array.is_sorted([3, 1, 2]))
+    assert(Array.is_sorted([]))
+    assert(Array.is_sorted(["a", "b", "c"]))
+}
+
+@test
+function void test_array_is_sorted_by() {
+    assert(Result.unwrap(Array.is_sorted_by([3, 2, 1], (integer x) -> -x)))
+    assert(!Result.unwrap(Array.is_sorted_by([1, 2, 3], (integer x) -> -x)))
+}
+
+@test
 function void test_array_min_max() {
     array<integer> values = [3, 1, 4, 1, 5, 9]
 

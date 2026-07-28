@@ -48,6 +48,25 @@ static void test_string_contains() {
     ASSERT_EQ(v.as_bool(), true);
 }
 
+static void test_string_equals_ignore_case() {
+    ASSERT_TRUE(eval("String.equals_ignore_case(\"Hello\", \"hello\")").as_bool());
+    ASSERT_TRUE(eval("String.equals_ignore_case(\"HELLO\", \"hello\")").as_bool());
+    ASSERT_FALSE(eval("String.equals_ignore_case(\"hello\", \"world\")").as_bool());
+    ASSERT_TRUE(eval("String.equals_ignore_case(\"\", \"\")").as_bool());
+    ASSERT_FALSE(eval("String.equals_ignore_case(\"abc\", \"ab\")").as_bool());
+    // Non-ASCII bytes compare literally (case folding is ASCII-only).
+    ASSERT_TRUE(eval("String.equals_ignore_case(\"café\", \"CAFé\")").as_bool());
+    ASSERT_FALSE(eval("String.equals_ignore_case(\"café\", \"CAFÉ\")").as_bool());
+}
+
+static void test_string_contains_ignore_case() {
+    ASSERT_TRUE(eval("String.contains_ignore_case(\"Hello World\", \"world\")").as_bool());
+    ASSERT_TRUE(eval("String.contains_ignore_case(\"Hello World\", \"WORLD\")").as_bool());
+    ASSERT_FALSE(eval("String.contains_ignore_case(\"Hello World\", \"xyz\")").as_bool());
+    // An empty needle always matches.
+    ASSERT_TRUE(eval("String.contains_ignore_case(\"abc\", \"\")").as_bool());
+}
+
 static void test_string_ends_with() {
     const auto v = eval("String.ends_with(\"hello world\", \"world\")");
 
@@ -734,6 +753,8 @@ int main() {
     RUN(test_string_byte_length_multibyte);
     RUN(test_string_characters_multibyte);
     RUN(test_string_contains);
+    RUN(test_string_equals_ignore_case);
+    RUN(test_string_contains_ignore_case);
     RUN(test_string_ends_with);
     RUN(test_string_from_bytes);
     RUN(test_string_from_bytes_above_255);

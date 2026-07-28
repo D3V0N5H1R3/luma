@@ -49,6 +49,36 @@ void register_array_transform_aggregate(const EnvPtr& env) {
                           }
                           return make_success_value(all_int ? Value{int_sum} : Value{dbl_sum});
                       })
+        // Array.product(array<integer | number>) -> result<integer | number>
+        // Multiplies every element; an empty array yields the identity 1.  Fails
+        // on a non-numeric element.  Mirrors Array.sum: an all-integer product
+        // that overflows int64 promotes to a number rather than failing.
+        .func("product", 1)
+        .extract_body(expect_array,
+                      [](const auto& src, const Args&, SourceLocation) -> Value {
+                          bool all_int{true};
+                          std::int64_t int_prod{1};
+                          double dbl_prod{1.0};
+
+                          for (const auto& elem : *src->elements) {
+                              if (elem.is_integer()) {
+                                  if (all_int && would_overflow_mul(int_prod, elem.as_integer())) {
+                                      all_int = false;
+                                  }
+                                  if (all_int) {
+                                      int_prod *= elem.as_integer();
+                                  }
+                                  dbl_prod *= static_cast<double>(elem.as_integer());
+                              } else if (elem.is_number()) {
+                                  all_int = false;
+                                  dbl_prod *= elem.as_number();
+                              } else {
+                                  return make_failure_value(
+                                      error_msg("Array", "product", "non-numeric element"));
+                              }
+                          }
+                          return make_success_value(all_int ? Value{int_prod} : Value{dbl_prod});
+                      })
         .func("min", 1)
         .extract_body(expect_array,
                       [](const auto& src, const Args&, SourceLocation loc) -> Value {

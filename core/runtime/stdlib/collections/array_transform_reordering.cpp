@@ -108,6 +108,52 @@ void register_array_transform_reordering(const EnvPtr& env) {
                           std::ranges::reverse(*arr->elements);
                           return Value{std::move(arr)};
                       })
+        // Array.is_sorted(array<T>) -> boolean
+        // True when the array is in ascending natural order (integer, number,
+        // string, boolean).  An empty or single-element array is trivially
+        // sorted.  Raises a (catchable) runtime error for incomparable or NaN
+        // elements — unlike Array.sort, the boolean return cannot carry a
+        // failure result, so the error propagates instead of being wrapped.
+        .func("is_sorted", 1)
+        .extract_body(
+            expect_array,
+            [](const auto& src, const Args&, SourceLocation loc) -> Value {
+                const auto& elements = *src->elements;
+                for (std::size_t i = 1; i < elements.size(); ++i) {
+                    if (compare_values(elements[i - 1], elements[i], loc, "Array.is_sorted") > 0) {
+                        return Value{false};
+                    }
+                }
+                return Value{true};
+            })
+        // Array.is_sorted_by(array<T>, func(T) -> U) -> result<boolean>
+        // True when the array is ascending by the projected key.  Fails if the
+        // key function throws, mirroring Array.sort_by.
+        .func("is_sorted_by", 2)
+        .extract_body(
+            expect_array,
+            [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                const auto& key_fn = args[1];
+
+                return apply_with_error_handling([&]() -> Value {
+                    expect_callable(key_fn, "Array.is_sorted_by", loc);
+
+                    const auto& elements = *src->elements;
+                    std::vector<Value> call_args(1);
+                    Value prev_key{};
+
+                    for (std::size_t i = 0; i < elements.size(); ++i) {
+                        call_args[0] = elements[i];
+                        Value key = invoke_callable(key_fn, call_args, loc);
+
+                        if (i > 0 && compare_values(prev_key, key, loc, "Array.is_sorted_by") > 0) {
+                            return Value{false};
+                        }
+                        prev_key = std::move(key);
+                    }
+                    return Value{true};
+                });
+            })
         .func("sort", 2)
         .extract_body(expect_array,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {
