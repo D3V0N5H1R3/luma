@@ -318,7 +318,6 @@ DecodeResult zlib_decompress_checked(const std::string& input) {
     return inflate_windowed(input, MZ_DEFAULT_WINDOW_BITS);
 }
 
-
 // === Gzip wrapper (RFC 1952) ===
 
 std::string gzip_compress(const std::string& input, std::optional<int> level) {

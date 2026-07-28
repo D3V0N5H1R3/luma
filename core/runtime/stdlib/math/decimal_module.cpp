@@ -262,8 +262,7 @@ void register_decimal_ns(const EnvPtr& env) {
             // never rejects a computation that would otherwise succeed.
             constexpr std::int64_t k_max_power_exponent = 1'000'000;
             if (exponent > k_max_power_exponent) {
-                return failure_msg("Decimal", "power",
-                                   "exponent is too large (maximum is 1000000)",
+                return failure_msg("Decimal", "power", "exponent is too large (maximum is 1000000)",
                                    error_codes::size_limit_exceeded);
             }
 
@@ -396,8 +395,8 @@ void register_decimal_ns(const EnvPtr& env) {
         })
         .func("sign", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            return Value{static_cast<std::int64_t>(
-                arg_decimal(args[0], "Decimal.sign", loc).sign())};
+            return Value{
+                static_cast<std::int64_t>(arg_decimal(args[0], "Decimal.sign", loc).sign())};
         })
         .func("negate", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

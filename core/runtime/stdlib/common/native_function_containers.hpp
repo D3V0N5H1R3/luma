@@ -754,10 +754,9 @@ template <typename Range, typename Emit> void dedup_in_order(const Range& elemen
             call_args[0] = Value{k};
             auto new_key = invoke_callable(callable, call_args, loc);
             if (!new_key.is_string()) {
-                throw RuntimeError{
-                    ErrorMessages::expected_type("Dictionary", "map_keys", "string",
-                                                 new_key.display_type_name()),
-                    loc, "the key mapping function must return a string"};
+                throw RuntimeError{ErrorMessages::expected_type("Dictionary", "map_keys", "string",
+                                                                new_key.display_type_name()),
+                                   loc, "the key mapping function must return a string"};
             }
             result->set(new_key.as_string(), v);
         }

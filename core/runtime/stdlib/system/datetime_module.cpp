@@ -410,8 +410,7 @@ enum class TruncUnit {
 // Floor (end = false) or ceil (end = true) a UTC timestamp to a unit boundary.
 // Returns result<number> — a failure when the timestamp or the rebuilt instant
 // leaves the supported 0001-9999 range.
-[[nodiscard]] Value truncate_timestamp(double ts, TruncUnit unit, bool end,
-                                       std::string_view func) {
+[[nodiscard]] Value truncate_timestamp(double ts, TruncUnit unit, bool end, std::string_view func) {
     const auto tm_opt = to_tm(ts);
     if (!tm_opt) {
         return make_failure_value(error_msg("DateTime", func, k_timestamp_range_error));
@@ -612,7 +611,8 @@ void register_datetime_ns(const EnvPtr& env) {
         })
         .func("start_of_year", 1)
         .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
-            return truncate_timestamp(args[0].to_numeric(), TruncUnit::Year, false, "start_of_year");
+            return truncate_timestamp(args[0].to_numeric(), TruncUnit::Year, false,
+                                      "start_of_year");
         })
         .func("end_of_hour", 1)
         .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {

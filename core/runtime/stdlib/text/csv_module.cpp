@@ -526,8 +526,7 @@ void register_csv_ns(const EnvPtr& env) {
 
             if (index < 0 || index >= count) {
                 return failure_msg(
-                    "Csv", "row",
-                    std::format("row index {} out of bounds (size {})", index, count),
+                    "Csv", "row", std::format("row index {} out of bounds (size {})", index, count),
                     error_codes::index_out_of_bounds);
             }
 

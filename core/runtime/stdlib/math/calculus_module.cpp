@@ -264,11 +264,11 @@ static void register_calculus_derivatives(const EnvPtr& env) {
                 return Value{call_fn(args[2], x, loc)};
             }
             if (order > k_taylor_max_terms) {
-                throw RuntimeError{
-                    error_msg("Calculus", "nth_derivative",
-                              std::format("order must be at most {}, got {}", k_taylor_max_terms,
-                                          order)),
-                    loc, "high-order finite differences lose accuracy; reduce the order"};
+                throw RuntimeError{error_msg("Calculus", "nth_derivative",
+                                             std::format("order must be at most {}, got {}",
+                                                         k_taylor_max_terms, order)),
+                                   loc,
+                                   "high-order finite differences lose accuracy; reduce the order"};
             }
 
             return Value{nth_derivative(args[2], x, order, k_default_second_deriv_step, loc)};
@@ -653,7 +653,8 @@ static void register_calculus_analysis(const EnvPtr& env) {
             for (std::size_t i = 0; i < rows; ++i) {
                 for (std::size_t j = 0; j < cols; ++j) {
                     // Entry (i, j) = ∂fields[i]/∂x[j] at point.
-                    result[i][j] = central_diff_partial((*fields_arr->elements)[i], point, j, h, loc);
+                    result[i][j] =
+                        central_diff_partial((*fields_arr->elements)[i], point, j, h, loc);
                 }
             }
 
