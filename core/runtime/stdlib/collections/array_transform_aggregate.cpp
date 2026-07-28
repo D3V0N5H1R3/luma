@@ -291,6 +291,23 @@ void register_array_transform_aggregate(const EnvPtr& env) {
                                       src->elements->end());
                 return Value{std::move(arr)};
             })
+        .func("split_at", 2)
+        .extract_body(expect_array,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          const auto raw_i = expect_integer(args[1], "Array.split_at", loc);
+                          const auto size = static_cast<std::int64_t>(src->elements->size());
+                          const auto i =
+                              static_cast<std::size_t>(std::clamp(raw_i, std::int64_t{0}, size));
+                          const auto split =
+                              src->elements->begin() + static_cast<std::ptrdiff_t>(i);
+
+                          auto head = std::make_shared<ArrayValue>();
+                          head->elements->assign(src->elements->begin(), split);
+                          auto tail = std::make_shared<ArrayValue>();
+                          tail->elements->assign(split, src->elements->end());
+
+                          return make_tuple_pair(Value{std::move(head)}, Value{std::move(tail)});
+                      })
         .func("enumerate", 1)
         .extract_body(expect_array,
                       [](const auto& src, const Args&, SourceLocation) -> Value {

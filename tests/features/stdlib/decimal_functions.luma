@@ -295,3 +295,92 @@ function Decimal.Error unwrap_error(result<decimal, Decimal.Error> r) {
         failure(e) { e }
     }
 }
+
+# ─── sum / product ───
+
+@test
+function void test_decimal_sum() {
+    decimal total = Decimal.sum([dec("1.10"), dec("2.20"), dec("3.30")])
+    assert(Decimal.equals(total, dec("6.60")))
+    # Empty sum is exact zero
+    assert(Decimal.is_zero(Decimal.sum([])))
+}
+
+@test
+function void test_decimal_product() {
+    decimal p = Decimal.product([dec("2"), dec("2.5"), dec("4")])
+    assert(Decimal.equals(p, dec("20")))
+    # Empty product is exact one
+    assert(Decimal.equals(Decimal.product([]), dec("1")))
+}
+
+# ─── power ───
+
+@test
+function void test_decimal_power() {
+    decimal r = Result.unwrap(Decimal.power(dec("1.05"), 2))
+    assert(Decimal.equals(r, dec("1.1025")))
+    # Exponent 0 is exactly 1
+    assert(Decimal.equals(Result.unwrap(Decimal.power(dec("42.5"), 0)), dec("1")))
+    # Negative exponent fails
+    assert(Result.is_failure(Decimal.power(dec("2"), -1)))
+    # An excessively large exponent fails instead of hanging
+    assert(Result.is_failure(Decimal.power(dec("1"), 2000000)))
+}
+
+# ─── min / max ───
+
+@test
+function void test_decimal_min_max() {
+    assert(Decimal.equals(Decimal.min(dec("1.5"), dec("2.5")), dec("1.5")))
+    assert(Decimal.equals(Decimal.max(dec("1.5"), dec("2.5")), dec("2.5")))
+    # scale-insensitive tie
+    assert(Decimal.equals(Decimal.min(dec("1.50"), dec("1.5")), dec("1.5")))
+}
+
+# ─── sign family ───
+
+@test
+function void test_decimal_sign_family() {
+    assert(Decimal.is_positive(dec("0.01")))
+    assert(!Decimal.is_positive(dec("0")))
+    assert(!Decimal.is_positive(dec("-1")))
+
+    assert(Decimal.sign(dec("3.5")) == 1)
+    assert(Decimal.sign(dec("0")) == 0)
+    assert(Decimal.sign(dec("-3.5")) == -1)
+}
+
+# ─── comparison predicates ───
+
+@test
+function void test_decimal_comparisons() {
+    assert(Decimal.less_than(dec("1.5"), dec("2")))
+    assert(!Decimal.less_than(dec("2"), dec("2")))
+    assert(Decimal.greater_than(dec("3"), dec("2.9")))
+    assert(Decimal.less_or_equal(dec("2.0"), dec("2")))
+    assert(Decimal.greater_or_equal(dec("2.0"), dec("2")))
+}
+
+# ─── remainder ───
+
+@test
+function void test_decimal_remainder() {
+    assert(Decimal.equals(Result.unwrap(Decimal.remainder(dec("10"), dec("3"))), dec("1")))
+    assert(Decimal.equals(Result.unwrap(Decimal.remainder(dec("10.5"), dec("2"))), dec("0.5")))
+    # Sign follows the dividend
+    assert(Decimal.equals(Result.unwrap(Decimal.remainder(dec("-10"), dec("3"))), dec("-1")))
+    # Zero divisor fails
+    assert(Result.is_failure(Decimal.remainder(dec("1"), dec("0"))))
+}
+
+# ─── to_integer ───
+
+@test
+function void test_decimal_to_integer() {
+    assert(Result.unwrap(Decimal.to_integer(dec("42"))) == 42)
+    assert(Result.unwrap(Decimal.to_integer(dec("42.00"))) == 42)
+    assert(Result.unwrap(Decimal.to_integer(dec("-7"))) == -7)
+    # Fractional part fails
+    assert(Result.is_failure(Decimal.to_integer(dec("42.5"))))
+}

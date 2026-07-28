@@ -30,6 +30,9 @@ public:
     [[nodiscard]] virtual std::size_t size() const = 0;
     [[nodiscard]] virtual bool is_full() const = 0;
 
+    // Configured fixed capacity of a bounded buffer, or 0 for an unbounded one.
+    [[nodiscard]] virtual std::size_t capacity() const noexcept = 0;
+
     // Returns true if this is a bounded (fixed-capacity) channel. Bounded
     // channels block senders when full, providing back-pressure. Unbounded
     // channels grow up to max_channel_queue_size.
@@ -78,6 +81,10 @@ public:
         return true;
     }
 
+    [[nodiscard]] std::size_t capacity() const noexcept override {
+        return capacity_;
+    }
+
 private:
     std::vector<Value> ring_;
     std::size_t capacity_;
@@ -116,6 +123,10 @@ public:
 
     [[nodiscard]] bool is_bounded() const noexcept override {
         return false;
+    }
+
+    [[nodiscard]] std::size_t capacity() const noexcept override {
+        return 0;
     }
 
 private:

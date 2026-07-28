@@ -462,3 +462,86 @@ function void test_channel_receive_all_drains_after_close() {
     assert(items[0] == 7, "first drained value")
     assert(items[1] == 8, "second drained value")
 }
+
+@test
+function void test_channel_poll() {
+    channel<integer> ch = Channel.new()
+    boolean _s = Channel.send(ch, 99)
+
+    # A value is ready
+    assert(Optional.is_some(Channel.poll(ch)))
+    # Now empty
+    assert(Optional.is_none(Channel.poll(ch)))
+}
+
+@test
+function void test_channel_poll_value() {
+    channel<integer> ch = Channel.new()
+    boolean _s = Channel.send(ch, 7)
+
+    assert(Optional.unwrap(Channel.poll(ch)) == 7)
+}
+
+@test
+function void test_channel_is_full() {
+    channel<integer> bounded = Channel.new_buffered(2)
+    assert(!Channel.is_full(bounded))
+
+    boolean _a = Channel.send(bounded, 1)
+    boolean _b = Channel.send(bounded, 2)
+    assert(Channel.is_full(bounded))
+
+    # Unbounded channels are never full
+    channel<integer> unbounded = Channel.new()
+    boolean _c = Channel.send(unbounded, 1)
+    assert(!Channel.is_full(unbounded))
+}
+
+@test
+function void test_channel_capacity() {
+    channel<integer> bounded = Channel.new_buffered(5)
+    assert(Optional.unwrap(Channel.capacity(bounded)) == 5)
+
+    channel<integer> unbounded = Channel.new()
+    assert(Optional.is_none(Channel.capacity(unbounded)))
+}
+
+@test
+function void test_channel_send_all() {
+    channel<integer> ch = Channel.new()
+    integer sent = Channel.send_all(ch, [1, 2, 3, 4])
+
+    assert(sent == 4)
+
+    array<integer> drained = Channel.receive_all(ch)
+    assert(Array.length(drained) == 4)
+    assert(drained[0] == 1)
+    assert(drained[3] == 4)
+}
+
+@test
+function void test_channel_send_all_closed() {
+    channel<integer> ch = Channel.new()
+    Channel.close(ch)
+
+    integer sent = Channel.send_all(ch, [1, 2, 3])
+    assert(sent == 0, "sending to a closed channel sends nothing")
+}
+
+@test
+function void test_channel_consume() {
+    channel<integer> ch = Channel.new()
+    boolean _a = Channel.send(ch, 10)
+    boolean _b = Channel.send(ch, 20)
+    boolean _c = Channel.send(ch, 30)
+    Channel.close(ch)
+
+    reference<integer> total = Reference.new(0)
+    result<integer> count = Channel.consume(ch, (integer v) -> {
+        Reference.set(total, Reference.get(total) + v)
+    })
+
+    assert(Result.is_success(count))
+    assert(Result.unwrap(count) == 3, "consumed three values")
+    assert(Reference.get(total) == 60, "sum of consumed values")
+}

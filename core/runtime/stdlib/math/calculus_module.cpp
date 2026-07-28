@@ -249,6 +249,42 @@ static void register_calculus_derivatives(const EnvPtr& env) {
 
             return Value{(f_plus - (2.0 * f_mid) + f_minus) / (h * h)};
         })
+        .func("nth_derivative", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto x = args[0].to_numeric();
+            const auto order = expect_integer(args[1], "Calculus.nth_derivative", loc);
+
+            if (order < 0) {
+                throw RuntimeError{
+                    error_msg("Calculus", "nth_derivative",
+                              std::format("order must be zero or greater, got {}", order)),
+                    loc, "pass a non-negative integer order"};
+            }
+            if (order == 0) {
+                return Value{call_fn(args[2], x, loc)};
+            }
+            if (order > k_taylor_max_terms) {
+                throw RuntimeError{error_msg("Calculus", "nth_derivative",
+                                             std::format("order must be at most {}, got {}",
+                                                         k_taylor_max_terms, order)),
+                                   loc,
+                                   "high-order finite differences lose accuracy; reduce the order"};
+            }
+
+            return Value{nth_derivative(args[2], x, order, k_default_second_deriv_step, loc)};
+        })
+        .func("differentiate", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            // Return the derivative as a first-class function that numerically
+            // differentiates the captured `fn` at its argument.
+            Value fn = args[0];
+            return Value{std::make_shared<NativeFunctionValue>(
+                "Calculus.differentiate.fn",
+                [fn](std::span<const Value> inner_args, SourceLocation inner_loc) -> Value {
+                    const auto x = inner_args[0].to_numeric();
+                    return Value{derivative(fn, x, k_default_step_size, inner_loc)};
+                })};
+        })
         .func("gradient", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto point = to_vec(args[0], "Calculus.gradient", loc);
@@ -293,6 +329,20 @@ static void register_calculus_derivatives(const EnvPtr& env) {
             }
 
             return Value{integrate_simpson(args[3], a, b, n, loc)};
+        })
+        .func("arc_length", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = args[0].to_numeric();
+            const auto b = args[1].to_numeric();
+
+            // Length of y = f(x) over [a, b] is ∫ √(1 + f'(x)²) dx, integrated
+            // with the same Simpson rule behind Calculus.integrate.
+            const auto integrand = [&](double x) {
+                const auto slope = derivative(args[2], x, k_default_step_size, loc);
+                return std::sqrt(1.0 + (slope * slope));
+            };
+
+            return Value{simpson_rule(integrand, a, b, k_default_integration_steps)};
         });
 }
 
@@ -575,6 +625,90 @@ static void register_calculus_analysis(const EnvPtr& env) {
                                              pd(1, 0) - pd(0, 1)};
 
             return make_success_value(from_vec(result));
+        })
+        .func("jacobian", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& point_arr = expect_array(args[0], "Calculus.jacobian", loc);
+            const auto& fields_arr = expect_array(args[1], "Calculus.jacobian", loc);
+
+            const auto rows = fields_arr->elements->size();
+            const auto cols = point_arr->elements->size();
+
+            if (rows == 0 || cols == 0) {
+                return make_failure_value("Calculus.jacobian: point and fields must be non-empty");
+            }
+
+            // Guard the element count so an untrusted size cannot drive an
+            // unbounded allocation (matches the hessian guard).
+            if (rows > ResourceLimits::max_array_size / cols) {
+                return make_failure_value(
+                    "Calculus.jacobian: matrix exceeds the maximum element count");
+            }
+
+            const auto point = to_vec(args[0], "Calculus.jacobian", loc);
+
+            constexpr double h = k_default_step_size;
+            std::vector<std::vector<double>> result(rows, std::vector<double>(cols));
+
+            for (std::size_t i = 0; i < rows; ++i) {
+                for (std::size_t j = 0; j < cols; ++j) {
+                    // Entry (i, j) = ∂fields[i]/∂x[j] at point.
+                    result[i][j] =
+                        central_diff_partial((*fields_arr->elements)[i], point, j, h, loc);
+                }
+            }
+
+            return make_success_value(from_mat(result));
+        })
+        .func("laplacian", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto point = to_vec(args[0], "Calculus.laplacian", loc);
+            const auto n = point.size();
+
+            constexpr double h = k_default_second_deriv_step;
+            const auto f_mid = call_multi_fn(args[1], point, loc);
+
+            double laplacian = 0.0;
+            for (std::size_t i = 0; i < n; ++i) {
+                auto plus = point;
+                plus[i] += h;
+                auto minus = point;
+                minus[i] -= h;
+
+                const auto f_plus = call_multi_fn(args[1], plus, loc);
+                const auto f_minus = call_multi_fn(args[1], minus, loc);
+
+                // Sum of unmixed second partials ∂²f/∂xᵢ² (trace of the Hessian).
+                laplacian += (f_plus - (2.0 * f_mid) + f_minus) / (h * h);
+            }
+
+            return Value{laplacian};
+        })
+        .func("product_series", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto start = expect_integer(args[0], "Calculus.product_series", loc);
+            const auto count = expect_integer(args[1], "Calculus.product_series", loc);
+
+            // The ∏ analogue of sum_series: product fn(start) · … · fn(start + n - 1);
+            // an empty product (count ≤ 0) is 1.
+            if (count > k_max_series_terms) {
+                throw RuntimeError{
+                    std::format("Calculus.product_series: too many terms, maximum is {}",
+                                k_max_series_terms),
+                    loc, "reduce the term count"};
+            }
+
+            double product{1.0};
+
+            const auto base = static_cast<std::uint64_t>(start);
+            for (std::int64_t k{0}; k < count; ++k) {
+                const auto i = static_cast<std::int64_t>(base + static_cast<std::uint64_t>(k));
+                std::vector<Value> call_args{Value{i}};
+
+                product *= result_to_numeric(invoke_callable(args[2], call_args, loc), loc);
+            }
+
+            return Value{product};
         })
         .func("convolution", 5)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

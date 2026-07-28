@@ -1257,6 +1257,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Format");
             ch->variants.push_back(ChoiceVariant{.name = "Deflate", .fields = {}});
             ch->variants.push_back(ChoiceVariant{.name = "Gzip", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Zlib", .fields = {}});
             ch->variants.push_back(ChoiceVariant{.name = "Rle", .fields = {}});
 
             st.choice_map["Compression.Format"] = ch.get();

@@ -260,6 +260,17 @@ void register_converter_ns(const EnvPtr& env) {
             const auto n = expect_integer(args[0], "Converter.to_hexadecimal", loc);
             return Value{std::format("{:x}", n)};
         })
+        .func("to_octal", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto n = expect_integer(args[0], "Converter.to_octal", loc);
+            return Value{std::format("{:o}", n)};
+        })
+        .func("from_octal", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Converter.from_octal", loc);
+            return parse_in_base(args[0].as_string(), 8,
+                                 error_msg("Converter", "from_octal", "invalid octal string"));
+        })
         .func("from_hexadecimal", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             (void)expect_string(args[0], "Converter.from_hexadecimal", loc);

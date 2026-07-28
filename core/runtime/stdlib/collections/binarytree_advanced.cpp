@@ -112,6 +112,113 @@ void register_binarytree_advanced(const EnvPtr& env) {
                 return std::move(accumulator);
             });
         })
+        .func("map", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_tree(args[0], "BinaryTree.map", loc);
+
+            std::vector<Value> elems;
+            inorder(src->root, elems);
+
+            auto result = std::make_shared<BinaryTreeValue>();
+
+            return apply_with_error_handling([&]() -> Value {
+                std::vector<Value> call_args(1);
+                for (const auto& elem : elems) {
+                    call_args[0] = elem;
+                    // The mapped values re-sort under the BST ordering and
+                    // duplicates collapse — tree_insert handles both.
+                    tree_insert(*result, invoke_callable(args[1], call_args, loc), loc);
+                }
+
+                return Value{std::move(result)};
+            });
+        })
+        .func("count", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_tree(args[0], "BinaryTree.count", loc);
+
+            std::vector<Value> elems;
+            inorder(src->root, elems);
+
+            return iter_count(elems.begin(), elems.end(), args[1], loc);
+        })
+        .func("find", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_tree(args[0], "BinaryTree.find", loc);
+
+            std::vector<Value> elems;
+            inorder(src->root, elems);
+
+            return apply_with_error_handling([&]() -> Value {
+                std::vector<Value> call_args(1);
+                for (const auto& elem : elems) {
+                    call_args[0] = elem;
+                    if (invoke_callable(args[1], call_args, loc).is_truthy()) {
+                        return elem; // some(elem)
+                    }
+                }
+
+                return Value{NullValue{}}; // none
+            });
+        })
+        .func("any", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_tree(args[0], "BinaryTree.any", loc);
+
+            std::vector<Value> elems;
+            inorder(src->root, elems);
+
+            return iter_any(elems.begin(), elems.end(), args[1], loc);
+        })
+        .func("all", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_tree(args[0], "BinaryTree.all", loc);
+
+            std::vector<Value> elems;
+            inorder(src->root, elems);
+
+            return iter_all(elems.begin(), elems.end(), args[1], loc);
+        })
+        .func("each", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_tree(args[0], "BinaryTree.each", loc);
+
+            std::vector<Value> elems;
+            inorder(src->root, elems);
+
+            return apply_with_error_handling([&]() -> Value {
+                std::vector<Value> call_args(1);
+                for (const auto& elem : elems) {
+                    call_args[0] = elem;
+                    static_cast<void>(invoke_callable(args[1], call_args, loc));
+                }
+
+                return args[0]; // return the tree unchanged for chaining
+            });
+        })
+        .func("is_balanced", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_tree(args[0], "BinaryTree.is_balanced", loc);
+
+            return Value{balanced_height(src->root) >= 0};
+        })
+        .func("equals", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto a = expect_tree(args[0], "BinaryTree.equals", loc);
+            auto b = expect_tree(args[1], "BinaryTree.equals", loc);
+
+            std::vector<Value> a_elems;
+            std::vector<Value> b_elems;
+            inorder(a->root, a_elems);
+            inorder(b->root, b_elems);
+
+            const bool same =
+                a_elems.size() == b_elems.size() &&
+                std::equal(a_elems.begin(), a_elems.end(), b_elems.begin(),
+                           [](const Value& x, const Value& y) { return x.equals(y); });
+
+            return Value{same};
+        })
         .func("partition", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             auto src = expect_tree(args[0], "BinaryTree.partition", loc);

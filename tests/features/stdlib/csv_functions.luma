@@ -404,3 +404,46 @@ function void test_csv_table_empty_and_missing_column() {
     result<array<string>> missing = Csv.column(header_only, "nope")
     assert(Result.is_failure(missing), "an unknown column fails")
 }
+
+@test
+function void test_csv_row() {
+    Csv.Table t = Result.unwrap(Csv.deserialize_table("name,age\nAlice,30\nBob,25"))
+
+    dictionary<string> first = Result.unwrap(Csv.row(t, 0))
+    assert(Dictionary.get_or(first, "name", "") == "Alice", "row keyed by header")
+    assert(Dictionary.get_or(first, "age", "") == "30", "row value by header")
+
+    dictionary<string> second = Result.unwrap(Csv.row(t, 1))
+    assert(Dictionary.get_or(second, "name", "") == "Bob")
+
+    # Out-of-bounds fails
+    assert(Result.is_failure(Csv.row(t, 5)), "out-of-bounds row index fails")
+}
+
+@test
+function void test_csv_select() {
+    Csv.Table t = Result.unwrap(Csv.deserialize_table("name,age,city\nAlice,30,NYC\nBob,25,LA"))
+
+    Csv.Table projected = Result.unwrap(Csv.select(t, ["city", "name"]))
+    assert(Array.length(projected.headers) == 2, "two projected columns")
+    assert(projected.headers[0] == "city", "columns in requested order")
+    assert(projected.headers[1] == "name")
+    assert(Result.unwrap(Csv.column(projected, "city"))[0] == "NYC")
+    assert(Result.unwrap(Csv.column(projected, "name"))[1] == "Bob")
+
+    # An unknown column fails
+    assert(Result.is_failure(Csv.select(t, ["name", "nope"])), "unknown column fails")
+}
+
+@test
+function void test_csv_filter_rows() {
+    Csv.Table t = Result.unwrap(Csv.deserialize_table("name,age\nAlice,30\nBob,25\nCarol,30"))
+
+    Csv.Table thirties = Result.unwrap(
+        Csv.filter_rows(t, (dictionary<string> r) -> Dictionary.get_or(r, "age", "") == "30"))
+
+    assert(Array.length(thirties.rows) == 2, "two rows match age 30")
+    assert(Array.length(thirties.headers) == 2, "headers preserved")
+    assert(Result.unwrap(Csv.column(thirties, "name"))[0] == "Alice")
+    assert(Result.unwrap(Csv.column(thirties, "name"))[1] == "Carol")
+}

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <format>
 #include <string_view>
+#include <vector>
 
 #include "analysis/source/source_location.hpp"
 #include "runtime/concurrency/channel.hpp"
@@ -198,6 +199,32 @@ void register_channel_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
             return Value{expect_channel(args[0], "Channel.is_empty", loc)->channel->is_empty()};
         })
+        // Channel.is_full(channel ch) -> boolean
+        .func("is_full", 1)
+        .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
+            return Value{expect_channel(args[0], "Channel.is_full", loc)->channel->is_full()};
+        })
+        // Channel.capacity(channel ch) -> optional<integer>
+        .func("capacity", 1)
+        .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
+            const auto cap = expect_channel(args[0], "Channel.capacity", loc)->channel->capacity();
+            if (!cap) {
+                return Value{NullValue{}}; // unbounded ⇒ none
+            }
+            return Value{static_cast<std::int64_t>(*cap)};
+        })
+        // Channel.poll(channel<T> ch) -> optional<T>
+        // Non-throwing, non-blocking receive: some(value) when ready, none when
+        // the channel is currently empty (open or closed-and-drained).
+        .func("poll", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& ch = expect_channel(args[0], "Channel.poll", loc)->channel;
+            try {
+                return ch->try_receive(); // some(value)
+            } catch (const ChannelError&) {
+                return Value{NullValue{}}; // none — empty (open) or drained-closed
+            }
+        })
         // Channel.receive_all(channel<T> ch) -> array<T>
         .func("receive_all", 1)
         .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
@@ -215,6 +242,59 @@ void register_channel_ns(const EnvPtr& env) {
             }
 
             return Value{std::move(arr)};
+        })
+        // Channel.send_all(channel<T> ch, array<T> values) -> integer
+        // Blocking-sends each element in order; returns the count actually sent,
+        // stopping early if the channel closes mid-send.
+        .func("send_all", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& ch = expect_channel(args[0], "Channel.send_all", loc)->channel;
+            const auto& arr = expect_array(args[1], "Channel.send_all", loc);
+
+            std::int64_t sent{0};
+            for (const auto& elem : *arr->elements) {
+                try {
+                    ch->send(elem.deep_copy());
+                    ++sent;
+                } catch (const ChannelClosedError&) {
+                    break; // channel closed mid-send — stop, report the partial count
+                } catch (const ChannelFullError&) {
+                    // Mirror Channel.send: an unbounded channel hitting the safety
+                    // cap is a clear, catchable error rather than a silent stop.
+                    throw RuntimeError{
+                        error_msg("Channel", "send_all",
+                                  "channel buffer is full (reached the maximum queue size)"),
+                        loc,
+                        "receive values faster, use a bounded channel for back-pressure, "
+                        "or send fewer values"};
+                }
+            }
+
+            return Value{sent};
+        })
+        // Channel.consume(channel<T> ch, fn(T) -> void) -> result<integer>
+        // Blocking-receives and applies fn to each value until the channel closes
+        // and drains; returns the count consumed, or a failure if fn throws.
+        // Blocks until close — call it inside a task.
+        .func("consume", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& ch = expect_channel(args[0], "Channel.consume", loc)->channel;
+            expect_callable(args[1], "Channel.consume", loc);
+
+            return apply_with_error_handling([&]() -> Value {
+                std::int64_t count{0};
+                std::vector<Value> call_args(1);
+                while (true) {
+                    try {
+                        call_args[0] = ch->receive();
+                    } catch (const ChannelClosedError&) {
+                        break; // closed and drained
+                    }
+                    static_cast<void>(invoke_callable(args[1], call_args, loc));
+                    ++count;
+                }
+                return Value{count};
+            });
         })
         // Channel.select(channels: array<channel<T>>) -> result<(integer, T)>
         // Waits for data on any of the given channels and returns (index, value).

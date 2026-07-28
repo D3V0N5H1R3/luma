@@ -155,7 +155,13 @@ DecodeResult rle_decode_checked(const std::string& input) {
 
 // === Deflate / Inflate via miniz ===
 
-std::string deflate_compress(const std::string& input, std::optional<int> level) {
+namespace {
+
+// Shared deflate compressor.  A negative `window_bits` selects raw deflate
+// (RFC 1951, no wrapper); a positive value selects the zlib wrapper (RFC 1950,
+// 2-byte header + Adler-32 trailer).
+[[nodiscard]] std::string deflate_compress_windowed(const std::string& input,
+                                                    std::optional<int> level, int window_bits) {
     if (input.empty()) {
         return {};
     }
@@ -168,15 +174,13 @@ std::string deflate_compress(const std::string& input, std::optional<int> level)
     const mz_ulong bound = mz_compressBound(static_cast<mz_ulong>(input.size()));
     std::vector<uint8_t> buf(bound);
 
-    // Use the streaming API with negative window bits for raw deflate
-    // (RFC 1951) without zlib wrapper, matching the original API semantics.
     mz_stream stream{};
     stream.next_in = reinterpret_cast<const unsigned char*>(input.data());
     stream.avail_in = static_cast<mz_uint32>(input.size());
     stream.next_out = buf.data();
     stream.avail_out = static_cast<mz_uint32>(buf.size());
 
-    if (mz_deflateInit2(&stream, compression_level, MZ_DEFLATED, -MZ_DEFAULT_WINDOW_BITS, 9,
+    if (mz_deflateInit2(&stream, compression_level, MZ_DEFLATED, window_bits, 9,
                         MZ_DEFAULT_STRATEGY) != MZ_OK) {
         return {};
     }
@@ -191,17 +195,9 @@ std::string deflate_compress(const std::string& input, std::optional<int> level)
     return std::string(reinterpret_cast<const char*>(buf.data()), stream.total_out);
 }
 
-std::optional<std::string> deflate_decompress(const std::string& input) {
-    auto result = deflate_decompress_checked(input);
-
-    if (result.is_ok()) {
-        return std::move(result).value();
-    }
-
-    return std::nullopt;
-}
-
-DecodeResult deflate_decompress_checked(const std::string& input) {
+// Shared inflate decompressor.  `window_bits` mirrors deflate_compress_windowed:
+// negative for raw deflate, positive for the zlib wrapper.
+[[nodiscard]] DecodeResult inflate_windowed(const std::string& input, int window_bits) {
     if (input.empty()) {
         return DecodeResult::ok(std::string{});
     }
@@ -212,8 +208,7 @@ DecodeResult deflate_decompress_checked(const std::string& input) {
     stream.next_in = reinterpret_cast<const unsigned char*>(input.data());
     stream.avail_in = static_cast<mz_uint32>(input.size());
 
-    // Negative window bits = raw deflate (no zlib header).
-    if (mz_inflateInit2(&stream, -MZ_DEFAULT_WINDOW_BITS) != MZ_OK) {
+    if (mz_inflateInit2(&stream, window_bits) != MZ_OK) {
         return DecodeResult::err(DecodeError::Corrupt);
     }
 
@@ -277,6 +272,50 @@ DecodeResult deflate_decompress_checked(const std::string& input) {
     mz_inflateEnd(&stream);
 
     return DecodeResult::ok(std::move(out));
+}
+
+} // namespace
+
+std::string deflate_compress(const std::string& input, std::optional<int> level) {
+    // Negative window bits = raw deflate (RFC 1951, no zlib wrapper).
+    return deflate_compress_windowed(input, level, -MZ_DEFAULT_WINDOW_BITS);
+}
+
+std::optional<std::string> deflate_decompress(const std::string& input) {
+    auto result = deflate_decompress_checked(input);
+
+    if (result.is_ok()) {
+        return std::move(result).value();
+    }
+
+    return std::nullopt;
+}
+
+DecodeResult deflate_decompress_checked(const std::string& input) {
+    // Negative window bits = raw deflate (no zlib header).
+    return inflate_windowed(input, -MZ_DEFAULT_WINDOW_BITS);
+}
+
+// === Zlib wrapper (RFC 1950: 2-byte header + Adler-32 trailer) ===
+
+std::string zlib_compress(const std::string& input, std::optional<int> level) {
+    // Positive window bits = zlib-wrapped deflate.
+    return deflate_compress_windowed(input, level, MZ_DEFAULT_WINDOW_BITS);
+}
+
+std::optional<std::string> zlib_decompress(const std::string& input) {
+    auto result = zlib_decompress_checked(input);
+
+    if (result.is_ok()) {
+        return std::move(result).value();
+    }
+
+    return std::nullopt;
+}
+
+DecodeResult zlib_decompress_checked(const std::string& input) {
+    // Positive window bits = zlib-wrapped deflate.
+    return inflate_windowed(input, MZ_DEFAULT_WINDOW_BITS);
 }
 
 // === Gzip wrapper (RFC 1952) ===

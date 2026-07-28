@@ -101,6 +101,13 @@ void register_array_functional(const EnvPtr& env) {
                           return iter_any(src->elements->begin(), src->elements->end(), args[1],
                                           loc);
                       })
+        .func("none", 2)
+        .extract_body(expect_array,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Array.none", loc);
+                          return iter_none(src->elements->begin(), src->elements->end(), args[1],
+                                           loc);
+                      })
         .func("count", 2)
         .extract_body(expect_array,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {

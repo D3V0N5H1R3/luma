@@ -72,6 +72,15 @@ inline constexpr int k_max_deflate_level = 9;
 
 [[nodiscard]] DecodeResult deflate_decompress_checked(const std::string& input);
 
+// === Zlib wrapper (RFC 1950: 2-byte header + Adler-32 trailer) ===
+
+[[nodiscard]] std::string zlib_compress(const std::string& input,
+                                        std::optional<int> level = std::nullopt);
+
+[[nodiscard]] std::optional<std::string> zlib_decompress(const std::string& input);
+
+[[nodiscard]] DecodeResult zlib_decompress_checked(const std::string& input);
+
 // === Gzip wrapper (RFC 1952) ===
 
 [[nodiscard]] std::string gzip_compress(const std::string& input,

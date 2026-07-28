@@ -359,6 +359,12 @@ void register_dictionary_ns(const EnvPtr& env) {
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {
                           return dict_map_values(*src, args[1], loc);
                       })
+        .func("map_keys", 2)
+        .extract_body(expect_dict,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Dictionary.map_keys", loc);
+                          return dict_map_keys(*src, args[1], loc);
+                      })
         // Dictionary.update(dictionary<V>, string, fn(optional<V>) -> V) -> dictionary<V>
         // Read-modify-write for a single key: the updater receives the current
         // value, or none when the key is absent, and returns the new value.
@@ -474,6 +480,41 @@ void register_dictionary_ns(const EnvPtr& env) {
                           expect_callable(args[1], "Dictionary.count", loc);
                           return dict_count(*src, args[1], loc);
                       })
+        .func("any", 2)
+        .extract_body(expect_dict,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Dictionary.any", loc);
+                          return dict_any(*src, args[1], loc);
+                      })
+        .func("all", 2)
+        .extract_body(expect_dict,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Dictionary.all", loc);
+                          return dict_all(*src, args[1], loc);
+                      })
+        .func("from_arrays", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& keys = expect_array(args[0], "Dictionary.from_arrays", loc);
+            const auto& values = expect_array(args[1], "Dictionary.from_arrays", loc);
+
+            if (keys->elements->size() != values->elements->size()) {
+                return make_failure_value(
+                    "Dictionary.from_arrays: keys and values must have the same length",
+                    std::string{error_codes::invalid_argument}, "Dictionary.from_arrays");
+            }
+
+            ensure_dictionary_capacity(0, keys->elements->size(), "Dictionary.from_arrays", loc);
+            expect_string_elements(*keys, "Dictionary.from_arrays", loc);
+
+            auto dict = std::make_shared<DictionaryValue>();
+            dict->rebuild_index();
+
+            for (std::size_t i{0}; i < keys->elements->size(); ++i) {
+                dict->set((*keys->elements)[i].as_string(), (*values->elements)[i]);
+            }
+
+            return make_success_value(Value{std::move(dict)});
+        })
         .func("flip", 1)
         .extract_body(expect_dict, [](const auto& src, const Args&, SourceLocation) -> Value {
             auto dict = std::make_shared<DictionaryValue>();

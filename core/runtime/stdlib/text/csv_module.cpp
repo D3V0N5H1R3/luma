@@ -382,6 +382,20 @@ struct TableParts {
     return parts;
 }
 
+// Build a header-keyed dictionary<string> from one data row.  Short rows are
+// padded with "" so every header is present (mirroring Csv.column's padding).
+[[nodiscard]] Value row_to_record(const std::vector<std::string>& headers,
+                                  const std::vector<std::string>& row) {
+    auto dict = std::make_shared<DictionaryValue>();
+    dict->rebuild_index();
+
+    for (std::size_t i{0}; i < headers.size(); ++i) {
+        dict->set(headers[i], Value{i < row.size() ? row[i] : std::string{}});
+    }
+
+    return Value{std::move(dict)};
+}
+
 } // namespace
 
 // ─── Registration ────────────────────────────────────────────────────────────
@@ -495,6 +509,108 @@ void register_csv_ns(const EnvPtr& env) {
             }
 
             return make_success_value(make_string_array(column));
+        })
+        // Extract one data row (0-based) from a Csv.Table as a header-keyed
+        // dictionary<string> (short rows padded with "").  Fails on out-of-bounds.
+        .func("row", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto table = read_table(args[0]);
+
+            if (!table) {
+                return failure_msg("Csv", "row", "expected a Csv.Table record",
+                                   error_codes::type_mismatch);
+            }
+
+            const auto index = expect_integer(args[1], "Csv.row", loc);
+            const auto count = static_cast<std::int64_t>(table->rows.size());
+
+            if (index < 0 || index >= count) {
+                return failure_msg(
+                    "Csv", "row", std::format("row index {} out of bounds (size {})", index, count),
+                    error_codes::index_out_of_bounds);
+            }
+
+            return make_success_value(
+                row_to_record(table->headers, table->rows[static_cast<std::size_t>(index)]));
+        })
+        // Project a subset of columns (in the given order) into a new Csv.Table.
+        // Fails with not_found if any requested name is absent from the header.
+        .func("select", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto table = read_table(args[0]);
+
+            if (!table) {
+                return failure_msg("Csv", "select", "expected a Csv.Table record",
+                                   error_codes::type_mismatch);
+            }
+
+            const auto& names_arr = expect_array(args[1], "Csv.select", loc);
+
+            std::vector<std::string> names;
+            std::vector<std::size_t> indices;
+            names.reserve(names_arr->elements->size());
+            indices.reserve(names_arr->elements->size());
+
+            for (const auto& name_val : *names_arr->elements) {
+                const auto& name = name_val.to_string();
+
+                bool found{false};
+                for (std::size_t i{0}; i < table->headers.size(); ++i) {
+                    if (table->headers[i] == name) {
+                        indices.push_back(i);
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    return failure_msg("Csv", "select", std::format("no column named '{}'", name),
+                                       error_codes::not_found);
+                }
+
+                names.push_back(name);
+            }
+
+            std::vector<std::vector<std::string>> rows;
+            rows.reserve(table->rows.size());
+
+            for (const auto& row : table->rows) {
+                std::vector<std::string> projected;
+                projected.reserve(indices.size());
+                for (const auto idx : indices) {
+                    projected.push_back(idx < row.size() ? row[idx] : std::string{});
+                }
+                rows.push_back(std::move(projected));
+            }
+
+            return make_success_value(make_table_record(names, rows));
+        })
+        // Keep only the data rows for which fn(row-record) returns true,
+        // preserving the headers.  Fails if the predicate throws.
+        .func("filter_rows", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto table = read_table(args[0]);
+
+            if (!table) {
+                return failure_msg("Csv", "filter_rows", "expected a Csv.Table record",
+                                   error_codes::type_mismatch);
+            }
+
+            expect_callable(args[1], "Csv.filter_rows", loc);
+
+            return apply_with_error_handling([&]() -> Value {
+                std::vector<std::vector<std::string>> kept;
+                std::vector<Value> call_args(1);
+
+                for (const auto& row : table->rows) {
+                    call_args[0] = row_to_record(table->headers, row);
+                    if (invoke_callable(args[1], call_args, loc).is_truthy()) {
+                        kept.push_back(row);
+                    }
+                }
+
+                return make_table_record(table->headers, kept);
+            });
         })
         .func("deserialize_with", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

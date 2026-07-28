@@ -471,3 +471,87 @@ function void test_calculus_hessian_mixed_partial() {
     assert(Math.approximately_equal(h[1][0], 1.0, 0.01))
     assert(Math.approximately_equal(h[0][0], 0.0, 0.01))
 }
+
+# ───────────────────────────────────────────────────────────
+# Additions: jacobian, laplacian, arc_length, nth_derivative,
+# differentiate, product_series
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_calculus_jacobian() {
+    # f0 = x*y, f1 = x+y at (2, 3): J = [[3, 2], [1, 1]]
+    result<array<array<number>>> r = Calculus.jacobian(
+        [2.0, 3.0],
+        [(array<number> v) -> v[0] * v[1], (array<number> v) -> v[0] + v[1]])
+
+    array<array<number>> j = Result.unwrap(r)
+    assert(Math.approximately_equal(j[0][0], 3.0, 0.01))
+    assert(Math.approximately_equal(j[0][1], 2.0, 0.01))
+    assert(Math.approximately_equal(j[1][0], 1.0, 0.01))
+    assert(Math.approximately_equal(j[1][1], 1.0, 0.01))
+}
+
+@test
+function void test_calculus_laplacian() {
+    # f = x^2 + y^2 at (1, 1): Laplacian = 2 + 2 = 4
+    number lap = Calculus.laplacian([1.0, 1.0], (array<number> v) -> v[0] * v[0] + v[1] * v[1])
+
+    assert(Math.approximately_equal(lap, 4.0, 0.01))
+}
+
+@test
+function void test_calculus_arc_length() {
+    # y = x over [0, 1] has length sqrt(2)
+    number len = Calculus.arc_length(0.0, 1.0, (number x) -> x)
+
+    assert(Math.approximately_equal(len, Result.unwrap(Math.square_root(2.0)), 0.001))
+}
+
+@test
+function void test_calculus_nth_derivative() {
+    # 0th derivative is fn itself
+    assert(Math.approximately_equal(Calculus.nth_derivative(2.0, 0, (number x) -> x * x), 4.0, 0.001))
+    # 1st derivative of x^2 at 2 is 4
+    assert(Math.approximately_equal(Calculus.nth_derivative(2.0, 1, (number x) -> x * x), 4.0, 0.01))
+    # 1st derivative of sine at 0 is cos(0) = 1
+    assert(Math.approximately_equal(Calculus.nth_derivative(0.0, 1, Math.sine), 1.0, 0.01))
+}
+
+@test
+function void test_calculus_nth_derivative_negative_throws() {
+    mutable boolean has_thrown = false
+    try {
+        number _d = Calculus.nth_derivative(1.0, -1, (number x) -> x)
+    } catch(_err) {
+        has_thrown = true
+    }
+    assert(has_thrown)
+}
+
+@test
+function void test_calculus_differentiate() {
+    # differentiate returns the derivative as a first-class function.  Passing it
+    # to Calculus.root finds a stationary point of x^2 - 4 (its derivative 2x is
+    # zero at x = 0), demonstrating the function-to-function use.
+    result<number> stationary = Calculus.root(-1.0, 2.0,
+        Calculus.differentiate((number x) -> (x * x) - 4.0))
+
+    assert(Result.is_success(stationary))
+    assert(Math.approximately_equal(Result.unwrap(stationary), 0.0, 0.001))
+}
+
+@test
+function void test_calculus_product_series() {
+    # product of 1*2*3*4 = 24
+    number p = Calculus.product_series(1, 4, (integer n) -> Result.unwrap(Converter.to_number(n)))
+
+    assert(Math.approximately_equal(p, 24.0, 0.0001))
+}
+
+@test
+function void test_calculus_product_series_empty() {
+    # empty product is 1
+    number p = Calculus.product_series(1, 0, (integer n) -> Result.unwrap(Converter.to_number(n)))
+
+    assert(Math.approximately_equal(p, 1.0, 0.0001))
+}

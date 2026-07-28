@@ -235,4 +235,22 @@ bool Channel::is_empty() const {
     return buffer_->is_empty();
 }
 
+bool Channel::is_full() const {
+    const std::scoped_lock lock{mutex_};
+
+    // An unbounded channel is never reported full (it only blocks at the safety
+    // cap, which is not the user-visible "at capacity" condition).
+    return buffer_->is_bounded() && buffer_->is_full();
+}
+
+std::optional<std::size_t> Channel::capacity() const {
+    const std::scoped_lock lock{mutex_};
+
+    if (!buffer_->is_bounded()) {
+        return std::nullopt;
+    }
+
+    return buffer_->capacity();
+}
+
 } // namespace luma

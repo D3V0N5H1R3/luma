@@ -24,6 +24,8 @@ void register_encoder_functions(std::vector<FunctionSpec>& specs, const ModuleBu
             m.fn("encode_text", 2, "(text: string, encoding: Encoder.Encoding)",
                  R::result(R::array_integer()), {p.string, named::encoding()}),
             m.fn("encode_url", 1, "(value: string)", R::result_string(), {p.string}),
+            m.fn("is_valid_base64", 1, "(value: string)", R::boolean_type(), {p.string}),
+            m.fn("is_valid_utf8", 1, "(bytes: array<integer>)", R::boolean_type(), {p.array_any}),
         });
 }
 
@@ -86,6 +88,14 @@ void register_compression_functions(std::vector<FunctionSpec>& specs, const Modu
                      m.fn("inflate", 1, "(data: string)", R::result_string(), {p.string}),
                      m.fn("inflate_typed", 1, "(data: string)",
                           R::result(R::string_type(), named::compression_error()), {p.string}),
+                     m.fn("zlib_compress", 1, "(data: string)", R::string_type(), {p.string}),
+                     m.fn("zlib_compress_with", 2, "(data: string, level: integer)",
+                          R::result_string(), {p.string, p.integer}),
+                     m.fn("zlib_decompress", 1, "(data: string)", R::result_string(), {p.string}),
+                     m.fn("zlib_decompress_typed", 1, "(data: string)",
+                          R::result(R::string_type(), named::compression_error()), {p.string}),
+                     m.fn("detect_format", 1, "(data: string)",
+                          R::optional(named::compression_format()), {p.string}),
                  });
 }
 

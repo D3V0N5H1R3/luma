@@ -331,6 +331,7 @@ function void test_compression_format_runtime_dispatch() {
     array<Compression.Format> formats = [
         Compression.Format.Deflate,
         Compression.Format.Gzip,
+        Compression.Format.Zlib,
         Compression.Format.Rle
     ]
 
@@ -340,6 +341,7 @@ function void test_compression_format_runtime_dispatch() {
         string label = match format {
             case Compression.Format.Deflate { "deflate" }
             case Compression.Format.Gzip { "gzip" }
+            case Compression.Format.Zlib { "zlib" }
             case Compression.Format.Rle { "rle" }
         }
 
@@ -431,4 +433,77 @@ function void test_compression_decompress_typed_roundtrip_all_formats() {
         assert(Result.is_success(r), "decompress_typed round-trips every format")
         assert(Result.unwrap(r) == original)
     }
+}
+
+# ─── Zlib (RFC 1950) ───
+
+@test
+function void test_compression_zlib_roundtrip() {
+    string original = "hello zlib world, hello zlib world"
+    string compressed = Compression.zlib_compress(original)
+    string restored = Result.unwrap(Compression.zlib_decompress(compressed))
+
+    assert(restored == original)
+    # zlib output differs from raw deflate (it has a header/trailer)
+    assert(compressed != Compression.deflate(original))
+}
+
+@test
+function void test_compression_zlib_compress_with() {
+    string original = "aaaaaaaaaabbbbbbbbbbcccccccccc"
+    string compressed = Result.unwrap(Compression.zlib_compress_with(original, 9))
+
+    assert(Result.unwrap(Compression.zlib_decompress(compressed)) == original)
+    # Invalid level fails
+    assert(Result.is_failure(Compression.zlib_compress_with(original, 99)))
+}
+
+@test
+function void test_compression_zlib_via_format() {
+    string original = "dispatch through Compression.Format.Zlib"
+    string compressed = Compression.compress(original, Compression.Format.Zlib)
+    string restored = Result.unwrap(Compression.decompress(compressed, Compression.Format.Zlib))
+
+    assert(restored == original)
+    assert(compressed == Compression.zlib_compress(original))
+}
+
+@test
+function void test_compression_zlib_decompress_typed() {
+    string compressed = Compression.zlib_compress("typed zlib")
+    result<string, Compression.Error> r = Compression.zlib_decompress_typed(compressed)
+    assert(Result.is_success(r))
+    assert(Result.unwrap(r) == "typed zlib")
+
+    # Malformed input classifies as an error
+    result<string, Compression.Error> bad = Compression.zlib_decompress_typed("not zlib data")
+    assert(Result.is_failure(bad))
+}
+
+@test
+function void test_compression_detect_format() {
+    string gzipped = Compression.gzip("detect me")
+    optional<Compression.Format> gz = Compression.detect_format(gzipped)
+    assert(Optional.is_some(gz))
+    string gz_label = match Optional.unwrap(gz) {
+        case Compression.Format.Gzip { "gzip" }
+        case Compression.Format.Zlib { "zlib" }
+        case Compression.Format.Deflate { "deflate" }
+        case Compression.Format.Rle { "rle" }
+    }
+    assert(gz_label == "gzip")
+
+    string zlibbed = Compression.zlib_compress("detect me")
+    optional<Compression.Format> zl = Compression.detect_format(zlibbed)
+    assert(Optional.is_some(zl))
+    string zl_label = match Optional.unwrap(zl) {
+        case Compression.Format.Gzip { "gzip" }
+        case Compression.Format.Zlib { "zlib" }
+        case Compression.Format.Deflate { "deflate" }
+        case Compression.Format.Rle { "rle" }
+    }
+    assert(zl_label == "zlib")
+
+    # Unrecognised container returns none
+    assert(Optional.is_none(Compression.detect_format("plain text")))
 }

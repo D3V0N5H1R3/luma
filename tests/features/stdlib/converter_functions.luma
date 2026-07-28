@@ -97,6 +97,26 @@ function void test_converter_binary() {
 }
 
 @test
+function void test_converter_octal() {
+    assert(Converter.to_octal(493) == "755")
+    assert(Converter.to_octal(0) == "0")
+    assert(Converter.to_octal(8) == "10")
+
+    result<integer> octal_result = Converter.from_octal("755")
+
+    assert(Result.is_success(octal_result))
+    assert(Result.unwrap(octal_result) == 493)
+
+    # Round-trip.
+    assert(Result.unwrap(Converter.from_octal(Converter.to_octal(511))) == 511)
+
+    # Out-of-base digits fail.
+    result<integer> invalid_octal = Converter.from_octal("789")
+
+    assert(!Result.is_success(invalid_octal))
+}
+
+@test
 function void test_converter_ordinal() {
     assert(Converter.ordinal(1) == "1st")
     assert(Converter.ordinal(2) == "2nd")
