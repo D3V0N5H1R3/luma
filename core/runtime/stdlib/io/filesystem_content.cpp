@@ -118,6 +118,55 @@ void register_filesystem_content(const EnvPtr& env) {
                                            [&content](std::ofstream& ofs) { ofs << content; });
                                    });
         })
+        .func("read_bytes", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const std::string& path_str = expect_string(args[0], "FileSystem.read_bytes", loc);
+
+            return fs_safe_execute(path_str, "FileSystem.read_bytes", loc, false,
+                                   [](const std::filesystem::path& safe_path) -> Value {
+                                       return read_bytes_impl(safe_path, "read_bytes");
+                                   });
+        })
+        .func("write_bytes", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const std::string& path_str = expect_string(args[0], "FileSystem.write_bytes", loc);
+            const auto& bytes = expect_array(args[1], "FileSystem.write_bytes", loc);
+
+            // Validate and pack every byte before touching the disk so an
+            // out-of-range or non-integer element fails without creating a
+            // partial file.  Each element must be an integer in 0–255 (the same
+            // byte convention as String.to_bytes/from_bytes and Encoder).
+            std::string buffer{};
+            buffer.reserve(bytes->elements->size());
+
+            for (const auto& elem : *bytes->elements) {
+                if (!elem.is_integer()) {
+                    return make_failure_value(
+                        error_msg("FileSystem", "write_bytes",
+                                  "every element must be an integer byte (0-255)"));
+                }
+
+                const auto byte = elem.as_integer();
+
+                if (byte < 0 || byte > 255) {
+                    return make_failure_value(
+                        error_msg("FileSystem", "write_bytes",
+                                  std::format("byte value out of range (0-255): {}", byte)));
+                }
+
+                buffer += static_cast<char>(static_cast<std::uint8_t>(byte));
+            }
+
+            return fs_safe_execute(
+                path_str, "FileSystem.write_bytes", loc, false,
+                [&buffer](const std::filesystem::path& safe_path) -> Value {
+                    return write_to_file(
+                        safe_path, "write_bytes", std::ios::out | std::ios::binary,
+                        "cannot write file", "write failed", [&buffer](std::ofstream& ofs) {
+                            ofs.write(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+                        });
+                });
+        })
         .func("read_lines", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const std::string& path_str = expect_string(args[0], "FileSystem.read_lines", loc);

@@ -60,6 +60,25 @@ void bfs_reachable(const GraphValue& g, const std::string& start, std::set<std::
     }
 }
 
+// Build an undirected adjacency view: every edge contributes both endpoints as
+// neighbours of each other.  Used by the connectivity / bipartite / tree
+// predicates, which treat a directed graph as weakly connected (i.e. ignore
+// edge direction).  A std::map keeps iteration deterministic across platforms.
+[[nodiscard]] std::map<std::string, std::set<std::string>> undirected_view(const GraphValue& g) {
+    std::map<std::string, std::set<std::string>> view;
+
+    for (const auto& [v, edges] : g.adjacency) {
+        view[v];
+
+        for (const auto& e : edges) {
+            view[v].insert(e.to);
+            view[e.to].insert(v);
+        }
+    }
+
+    return view;
+}
+
 } // namespace
 
 // Traversals — BFS/DFS ordering, adjacency-list conversion, and connected
@@ -194,6 +213,147 @@ void register_graph_traversal(const EnvPtr& env) {
             }
 
             return make_success_value(Value{std::move(components)});
+        })
+        // has_path — direction-aware reachability from `from` to `to` without
+        // materialising the path.  Fails only if a vertex is absent; unlike
+        // shortest_path it is weight-agnostic (a plain BFS walk).
+        .func("has_path", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto g = expect_graph(args[0], "Graph.has_path", loc);
+
+            const auto& from = expect_string(args[1], "Graph.has_path", loc);
+            const auto& to = expect_string(args[2], "Graph.has_path", loc);
+
+            if (!g->adjacency.contains(from) || !g->adjacency.contains(to)) {
+                return make_failure_value(std::string{"vertex not found"});
+            }
+
+            std::set<std::string> visited;
+            std::vector<std::string> order;
+
+            bfs_reachable(*g, from, visited, order);
+
+            return make_success_value(Value{visited.contains(to)});
+        })
+        // is_connected — every vertex lies in a single component.  Undirected
+        // graphs use plain reachability; directed graphs are tested for *weak*
+        // connectivity (edge direction ignored).  A graph with 0 or 1 vertices
+        // is trivially connected.
+        .func("is_connected", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto g = expect_graph(args[0], "Graph.is_connected", loc);
+
+            if (g->adjacency.size() <= 1) {
+                return make_success_value(Value{true});
+            }
+
+            const auto view = undirected_view(*g);
+
+            // BFS from an arbitrary vertex over the undirected view; connected iff
+            // every vertex is reached.
+            std::set<std::string> visited;
+            std::vector<std::string> stack;
+
+            const auto& start = view.begin()->first;
+            stack.push_back(start);
+            visited.insert(start);
+
+            while (!stack.empty()) {
+                const auto cur = stack.back();
+                stack.pop_back();
+
+                for (const auto& n : view.at(cur)) {
+                    if (!visited.contains(n)) {
+                        visited.insert(n);
+                        stack.push_back(n);
+                    }
+                }
+            }
+
+            return make_success_value(Value{visited.size() == view.size()});
+        })
+        // is_bipartite — the vertices can be 2-coloured so no edge joins same
+        // colours (BFS colouring over the undirected view, per component).
+        .func("is_bipartite", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto g = expect_graph(args[0], "Graph.is_bipartite", loc);
+
+            const auto view = undirected_view(*g);
+
+            std::map<std::string, int> colour;
+
+            for (const auto& [start, _] : view) {
+                if (colour.contains(start)) {
+                    continue;
+                }
+
+                colour[start] = 0;
+
+                std::vector<std::string> stack{start};
+
+                while (!stack.empty()) {
+                    const auto cur = stack.back();
+                    stack.pop_back();
+
+                    const int next = colour.at(cur) ^ 1;
+
+                    for (const auto& n : view.at(cur)) {
+                        auto it = colour.find(n);
+
+                        if (it == colour.end()) {
+                            colour[n] = next;
+                            stack.push_back(n);
+                        } else if (it->second == colour.at(cur)) {
+                            return make_success_value(Value{false});
+                        }
+                    }
+                }
+            }
+
+            return make_success_value(Value{true});
+        })
+        // is_tree — connected and acyclic.  For an undirected graph a connected
+        // graph is a tree exactly when edge_count == vertex_count - 1; the same
+        // count test is applied to the weakly-connected view of a directed graph.
+        .func("is_tree", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto g = expect_graph(args[0], "Graph.is_tree", loc);
+
+            const auto vertices = g->adjacency.size();
+
+            // An empty graph is not a tree; a single isolated vertex is.
+            if (vertices == 0) {
+                return make_success_value(Value{false});
+            }
+
+            if (g->logical_edge_count() != vertices - 1) {
+                return make_success_value(Value{false});
+            }
+
+            // With exactly V-1 edges, connectivity implies acyclicity, so a single
+            // connectivity check suffices.
+            const auto view = undirected_view(*g);
+
+            std::set<std::string> visited;
+            std::vector<std::string> stack;
+
+            const auto& start = view.begin()->first;
+            stack.push_back(start);
+            visited.insert(start);
+
+            while (!stack.empty()) {
+                const auto cur = stack.back();
+                stack.pop_back();
+
+                for (const auto& n : view.at(cur)) {
+                    if (!visited.contains(n)) {
+                        visited.insert(n);
+                        stack.push_back(n);
+                    }
+                }
+            }
+
+            return make_success_value(Value{visited.size() == view.size()});
         });
 }
 

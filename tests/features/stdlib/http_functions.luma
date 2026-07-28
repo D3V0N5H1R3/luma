@@ -653,3 +653,27 @@ function void test_http_parse_media_type_malformed_fails() {
 
     assert(Result.is_failure(r), "a value without a type/subtype slash fails")
 }
+
+# ─── Http.status_text, status constants, and build_url ───────────────────
+
+@test
+function void test_http_status_text_and_constants() {
+    assert(Http.status_ok == 200, "status_ok is 200")
+    assert(Http.status_not_found == 404, "status_not_found is 404")
+    assert(Http.status_too_many_requests == 429, "status_too_many_requests is 429")
+
+    assert(Http.status_text(404) == "Not Found", "404 phrase")
+    assert(Http.status_text(200) == "OK", "200 phrase")
+    assert(Http.status_text(503) == "Service Unavailable", "503 phrase")
+    assert(Http.status_text(599) == "Server Error", "unknown 5xx falls back to class phrase")
+    assert(Http.status_text(999) == "", "out-of-range code is empty")
+}
+
+@test
+function void test_http_build_url_roundtrip() {
+    Http.UrlParts p = Http.parse_url("https://example.com:8443/a/b?q=1")
+    assert(Http.build_url(p) == "https://example.com:8443/a/b?q=1", "round-trips a full URL")
+
+    Http.UrlParts d = Http.parse_url("http://example.com/path")
+    assert(Http.build_url(d) == "http://example.com/path", "default port is omitted")
+}

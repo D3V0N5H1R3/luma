@@ -262,3 +262,29 @@ function void test_hash_typed_variants_tag_each_algorithm() {
     assert(md5 == "md5", "md5_typed tags Md5")
     assert(sha512 == "sha512", "sha512_typed tags Sha512")
 }
+
+# ─── Hash.md5_file / sha1_file / digest_file ─────────────────────────────
+
+@test
+function void test_hash_file_digests() {
+    result<boolean> _w = FileSystem.write_file("_hash_ft.txt", "abc")
+
+    # Known reference digests for the string "abc".
+    assert(Result.unwrap(Hash.md5_file("_hash_ft.txt")) == "900150983cd24fb0d6963f7d28e17f72",
+           "md5(abc)")
+    assert(Result.unwrap(Hash.sha1_file("_hash_ft.txt")) ==
+               "a9993e364706816aba3e25717850c26c9cd0d89d",
+           "sha1(abc)")
+
+    # digest_file accepts a name string and a Hash.Algorithm choice.
+    assert(Result.unwrap(Hash.digest_file("sha256", "_hash_ft.txt")) ==
+               "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+           "digest_file sha256(abc)")
+    assert(Result.unwrap(Hash.digest_file(Hash.Algorithm.Md5, "_hash_ft.txt")) ==
+               "900150983cd24fb0d6963f7d28e17f72",
+           "digest_file choice md5(abc)")
+
+    assert(Result.is_failure(Hash.md5_file("_no_such_hash_file.txt")), "missing file fails")
+
+    result<boolean> _d = FileSystem.delete("_hash_ft.txt")
+}

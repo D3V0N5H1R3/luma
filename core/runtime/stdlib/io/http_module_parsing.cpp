@@ -352,7 +352,54 @@ void register_http_parsing(const EnvPtr& env) {
 
             return Value{std::move(rec)};
         })
-        // Http.build_query(dictionary) -> string
+        // Http.build_url(parts: Http.UrlParts) -> string
+        // The inverse of parse_url: reassemble scheme/host/port/path/query into a
+        // URL string.  A port equal to the scheme's default (80 for http, 443 for
+        // https) or "0"/empty is omitted; a non-empty query is appended after "?".
+        .func("build_url", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_record()) {
+                throw RuntimeError{std::string{"Http.build_url: expected an Http.UrlParts record"},
+                                   loc, "pass the result of Http.parse_url"};
+            }
+
+            const auto& rec = *args[0].as_record();
+
+            const auto field = [&](std::string_view name) -> std::string {
+                const auto* v = rec.find_field(name);
+                return (v != nullptr && v->is_string()) ? v->as_string() : std::string{};
+            };
+
+            const std::string scheme = field("scheme");
+            const std::string host = field("host");
+            const std::string port = field("port");
+            const std::string path = field("path");
+            const std::string query = field("query");
+
+            std::string url{};
+
+            if (!scheme.empty()) {
+                url += scheme + "://";
+            }
+
+            url += host;
+
+            // Omit the port when it is empty, "0", or the scheme's default.
+            const bool default_port = (scheme == "http" && port == "80") ||
+                                      (scheme == "https" && port == "443");
+
+            if (!port.empty() && port != "0" && !default_port) {
+                url += ":" + port;
+            }
+
+            url += path;
+
+            if (!query.empty()) {
+                url += "?" + query;
+            }
+
+            return Value{std::move(url)};
+        })
         .func("build_query", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             (void)expect_dict(args[0], "Http.build_query", loc);

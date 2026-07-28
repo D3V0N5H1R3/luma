@@ -35,6 +35,7 @@
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/stdlib/common/native_function_validation.hpp"
+#include "runtime/stdlib/common/numeric_helpers.hpp"
 #include "runtime/stdlib/common/stdlib_error_helpers.hpp"
 #include "runtime/stdlib/text/json_module.hpp"
 
@@ -198,6 +199,13 @@ constexpr std::string_view k_json_value_type = "Value";
     }
 
     return &choice->fields.front();
+}
+
+// Whether `value` is a Json.Value whose variant is `want`.  Unlike
+// json_payload_of this also matches the payload-less JsonNull unit variant, so it
+// underpins the is_* type predicates.
+[[nodiscard]] bool json_variant_is(const Value& value, std::string_view want) {
+    return value.is_choice() && value.as_choice()->variant == want;
 }
 
 // Build a Json.ParseError record (type_name "ParseError") carrying the failure
@@ -367,6 +375,52 @@ void register_json_value(const EnvPtr& env) {
             }
 
             return elements[static_cast<std::size_t>(index)];
+        })
+        .func("as_integer", 1)
+        .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
+            // JSON has one number type; as_integer extracts it as a Luma integer,
+            // failing if the value is not a whole number (respecting the
+            // integer/number distinction that as_number ignores).
+            const Value* payload = json_payload_of(args[0], "JsonNumber");
+
+            if (payload == nullptr) {
+                return make_failure_value(
+                    error_msg("Json", "as_integer", "value is not a JSON number"));
+            }
+
+            const double d = payload->to_numeric();
+
+            if (const auto i = stdlib::safe_to_int64(d);
+                i && static_cast<double>(*i) == d) {
+                return make_success_value(Value{*i});
+            }
+
+            return make_failure_value(
+                error_msg("Json", "as_integer", "value is not a whole number"));
+        })
+        .func("is_object", 1)
+        .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
+            return Value{json_variant_is(args[0], "JsonObject")};
+        })
+        .func("is_array", 1)
+        .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
+            return Value{json_variant_is(args[0], "JsonArray")};
+        })
+        .func("is_string", 1)
+        .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
+            return Value{json_variant_is(args[0], "JsonString")};
+        })
+        .func("is_number", 1)
+        .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
+            return Value{json_variant_is(args[0], "JsonNumber")};
+        })
+        .func("is_bool", 1)
+        .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
+            return Value{json_variant_is(args[0], "JsonBool")};
+        })
+        .func("is_null", 1)
+        .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
+            return Value{json_variant_is(args[0], "JsonNull")};
         });
 }
 

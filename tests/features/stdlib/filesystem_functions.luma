@@ -328,6 +328,79 @@ function void test_filesystem_write_and_read_file() {
     boolean _ = Result.unwrap_or(FileSystem.delete("_test_io_tmp.txt"), false)
 }
 
+# ─── FileSystem.write_bytes / read_bytes (binary I/O) ────
+
+@test
+function void test_filesystem_write_and_read_bytes() {
+    # Bytes include a NUL (0) and 0xFF (255) — values that string-oriented
+    # read_file would corrupt, but read_bytes/write_bytes round-trip losslessly.
+    array<integer> data = [0, 72, 105, 255, 10]
+
+    result<boolean> write_result = FileSystem.write_bytes("_test_bytes_tmp.bin", data)
+
+    assert(Result.is_success(write_result))
+    assert(Result.unwrap(FileSystem.exists("_test_bytes_tmp.bin")))
+
+    result<array<integer>> read_result = FileSystem.read_bytes("_test_bytes_tmp.bin")
+
+    assert(Result.is_success(read_result))
+
+    array<integer> bytes = Result.unwrap(read_result)
+
+    assert(Array.length(bytes) == 5)
+    assert(bytes[0] == 0)
+    assert(bytes[1] == 72)
+    assert(bytes[2] == 105)
+    assert(bytes[3] == 255)
+    assert(bytes[4] == 10)
+
+    boolean _ = Result.unwrap_or(FileSystem.delete("_test_bytes_tmp.bin"), false)
+}
+
+@test
+function void test_filesystem_write_bytes_rejects_out_of_range() {
+    # A byte value outside 0–255 fails without creating a partial file.
+    result<boolean> r = FileSystem.write_bytes("_test_bytes_oob.bin", [256])
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_filesystem_read_bytes_missing() {
+    result<array<integer>> r = FileSystem.read_bytes("_nonexistent_bytes_xyz.bin")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_filesystem_create_directories_and_copy_directory() {
+    boolean _d1 = Result.unwrap_or(FileSystem.delete_directory("_test_mkdirp_ft"), false)
+    boolean _d2 = Result.unwrap_or(FileSystem.delete_directory("_test_cpdir_ft_dst"), false)
+
+    # mkdir -p creates all missing parents in one call.
+    assert(Result.is_success(FileSystem.create_directories("_test_mkdirp_ft/x/y")))
+    assert(Result.unwrap(FileSystem.is_directory("_test_mkdirp_ft/x/y")))
+
+    # Re-creating an existing path is a no-op success.
+    assert(Result.is_success(FileSystem.create_directories("_test_mkdirp_ft/x/y")))
+
+    assert(Result.is_success(FileSystem.write_file("_test_mkdirp_ft/x/note.txt", "hi")))
+
+    # Recursive copy of the whole tree.
+    assert(Result.is_success(
+        FileSystem.copy_directory("_test_mkdirp_ft", "_test_cpdir_ft_dst")
+    ))
+    assert(Result.unwrap(FileSystem.read_file("_test_cpdir_ft_dst/x/note.txt")) == "hi")
+
+    # Copying onto an existing destination fails.
+    assert(Result.is_failure(
+        FileSystem.copy_directory("_test_mkdirp_ft", "_test_cpdir_ft_dst")
+    ))
+
+    boolean _c1 = Result.unwrap_or(FileSystem.delete_directory("_test_mkdirp_ft"), false)
+    boolean _c2 = Result.unwrap_or(FileSystem.delete_directory("_test_cpdir_ft_dst"), false)
+}
+
 @test
 function void test_filesystem_file_not_found() {
     result<string> read_result = FileSystem.read_file("_nonexistent_file_xyz.txt")

@@ -26,6 +26,52 @@ namespace {
     return std::ranges::find_if(edges, [&](const GraphEdge& e) { return e.to == to; });
 }
 
+// Adds a from->to edge (and the reverse for undirected graphs) into `g`,
+// enforcing the same vertex and edge resource limits as Graph.add_edge.  Shared
+// by Graph.from_edges and Graph.from_adjacency_list so the "add endpoints as
+// vertices, then the edge" rule and its limit checks live in one place.
+void add_edge_into(GraphValue& g, const std::string& from, const std::string& to, double weight,
+                   std::string_view function_name, SourceLocation loc) {
+    if (!std::isfinite(weight)) {
+        throw RuntimeError{error_msg("Graph", function_name, "edge weight must be finite"), loc,
+                           "NaN and ±Infinity cannot be ordered safely, so they would "
+                           "break shortest-path and minimum-spanning-tree computations"};
+    }
+
+    std::size_t new_vertices = 0;
+
+    if (!g.adjacency.contains(from)) {
+        ++new_vertices;
+    }
+
+    if (!g.adjacency.contains(to)) {
+        ++new_vertices;
+    }
+
+    if (new_vertices > 0 &&
+        g.adjacency.size() + new_vertices > ResourceLimits::max_graph_vertices) {
+        throw RuntimeError{
+            error_msg("Graph", function_name, "graph exceeds maximum vertex count"), loc,
+            std::format("the maximum number of vertices is {}",
+                        ResourceLimits::max_graph_vertices)};
+    }
+
+    g.adjacency[from];
+    g.adjacency[to];
+
+    if (g.logical_edge_count() + 1 > ResourceLimits::max_graph_edges) {
+        throw RuntimeError{
+            error_msg("Graph", function_name, "graph exceeds maximum edge count"), loc,
+            std::format("the maximum number of edges is {}", ResourceLimits::max_graph_edges)};
+    }
+
+    g.adjacency[from].push_back(GraphEdge{.to = to, .weight = weight});
+
+    if (!g.directed) {
+        g.adjacency[to].push_back(GraphEdge{.to = from, .weight = weight});
+    }
+}
+
 } // namespace
 
 // Note: Graph does not use ContainerModuleBuilder because its data is stored as
@@ -158,6 +204,116 @@ static void register_graph_construction(const EnvPtr& env) {
 
             if (!result->directed) {
                 result->adjacency[to].push_back(GraphEdge{.to = from, .weight = weight});
+            }
+
+            return Value{std::move(result)};
+        })
+        // Graph.from_edges(edges, directed) — build a graph from an array of
+        // Graph.Edge records, adding each edge's endpoints as vertices.  The
+        // inverse companion of Graph.edges.
+        .func("from_edges", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& edges = expect_array(args[0], "Graph.from_edges", loc);
+            const bool directed = expect_boolean(args[1], "Graph.from_edges", loc);
+
+            auto g = std::make_shared<GraphValue>();
+            g->directed = directed;
+
+            for (const auto& elem : *edges->elements) {
+                if (!elem.is_record()) {
+                    throw RuntimeError{
+                        error_msg("Graph", "from_edges",
+                                  "each element must be a Graph.Edge record"),
+                        loc, "build edges with Graph.edges or construct Graph.Edge records"};
+                }
+
+                const auto& rec = *elem.as_record();
+                const auto* from = rec.find_field("from");
+                const auto* to = rec.find_field("to");
+                const auto* weight = rec.find_field("weight");
+
+                if (from == nullptr || !from->is_string() || to == nullptr || !to->is_string()) {
+                    throw RuntimeError{
+                        error_msg("Graph", "from_edges",
+                                  "each edge must have string 'from' and 'to' fields"),
+                        loc};
+                }
+
+                const double w =
+                    (weight != nullptr && (weight->is_number() || weight->is_integer()))
+                        ? weight->to_numeric()
+                        : 1.0;
+
+                add_edge_into(*g, from->as_string(), to->as_string(), w, "from_edges", loc);
+            }
+
+            return Value{std::move(g)};
+        })
+        // Graph.from_adjacency_list(adj, directed) — build a graph from a
+        // dictionary mapping each vertex to its array of neighbour names.  The
+        // inverse companion of Graph.to_adjacency_list.
+        .func("from_adjacency_list", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& adj = expect_dict(args[0], "Graph.from_adjacency_list", loc);
+            const bool directed = expect_boolean(args[1], "Graph.from_adjacency_list", loc);
+
+            auto g = std::make_shared<GraphValue>();
+            g->directed = directed;
+
+            for (const auto& [vertex, neighbours] : adj->entries) {
+                // A vertex may have no outgoing edges; ensure it still exists.
+                if (g->adjacency.size() + 1 > ResourceLimits::max_graph_vertices) {
+                    throw RuntimeError{
+                        error_msg("Graph", "from_adjacency_list",
+                                  "graph exceeds maximum vertex count"),
+                        loc};
+                }
+                g->adjacency[vertex];
+
+                if (!neighbours.is_array()) {
+                    throw RuntimeError{
+                        error_msg("Graph", "from_adjacency_list",
+                                  "each value must be an array of neighbour names"),
+                        loc};
+                }
+
+                for (const auto& n : *neighbours.as_array()->elements) {
+                    if (!n.is_string()) {
+                        throw RuntimeError{
+                            error_msg("Graph", "from_adjacency_list",
+                                      "neighbour names must be strings"),
+                            loc};
+                    }
+
+                    add_edge_into(*g, vertex, n.as_string(), 1.0, "from_adjacency_list", loc);
+                }
+            }
+
+            return Value{std::move(g)};
+        })
+        // Graph.reverse(g) — a new directed graph with every edge flipped
+        // (weights preserved).  For an undirected graph this returns an
+        // equivalent copy, since its edges are already symmetric.
+        .func("reverse", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto g = expect_graph(args[0], "Graph.reverse", loc);
+
+            if (!g->directed) {
+                return Value{g->clone()};
+            }
+
+            auto result = std::make_shared<GraphValue>();
+            result->directed = true;
+
+            // Preserve isolated vertices (those with no outgoing edges).
+            for (const auto& [vertex, _] : g->adjacency) {
+                result->adjacency[vertex];
+            }
+
+            for (const auto& [from, edges] : g->adjacency) {
+                for (const auto& e : edges) {
+                    result->adjacency[e.to].push_back(GraphEdge{.to = from, .weight = e.weight});
+                }
             }
 
             return Value{std::move(result)};
@@ -321,6 +477,101 @@ static void register_graph_queries(const EnvPtr& env) {
             }
 
             return make_success_value(Value{static_cast<std::int64_t>(it->second.size())});
+        })
+        .func("out_degree", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto g = expect_graph(args[0], "Graph.out_degree", loc);
+
+            const auto& key = expect_string(args[1], "Graph.out_degree", loc);
+
+            auto it = g->adjacency.find(key);
+
+            if (it == g->adjacency.end()) {
+                return make_failure_value(std::string{"vertex not found"});
+            }
+
+            // Outgoing edges are exactly the vertex's own adjacency list.
+            return make_success_value(Value{static_cast<std::int64_t>(it->second.size())});
+        })
+        .func("in_degree", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto g = expect_graph(args[0], "Graph.in_degree", loc);
+
+            const auto& key = expect_string(args[1], "Graph.in_degree", loc);
+
+            if (!g->adjacency.contains(key)) {
+                return make_failure_value(std::string{"vertex not found"});
+            }
+
+            // Count every edge across the graph that targets `key`.  For an
+            // undirected graph edges are stored symmetrically, so this equals the
+            // vertex's degree.
+            std::int64_t count = 0;
+
+            for (const auto& [_, edges] : g->adjacency) {
+                for (const auto& e : edges) {
+                    if (e.to == key) {
+                        ++count;
+                    }
+                }
+            }
+
+            return make_success_value(Value{count});
+        })
+        .func("predecessors", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto g = expect_graph(args[0], "Graph.predecessors", loc);
+
+            const auto& key = expect_string(args[1], "Graph.predecessors", loc);
+
+            if (!g->adjacency.contains(key)) {
+                return make_failure_value(std::string{"vertex not found"});
+            }
+
+            // The reverse of neighbors: every vertex with an edge into `key`.
+            // The adjacency map is unordered, so sort for deterministic output.
+            std::vector<std::string> preds;
+
+            for (const auto& [vertex, edges] : g->adjacency) {
+                const bool points_to_key = std::ranges::any_of(
+                    edges, [&](const GraphEdge& e) { return e.to == key; });
+                if (points_to_key) {
+                    preds.push_back(vertex);
+                }
+            }
+
+            std::ranges::sort(preds);
+
+            auto arr = std::make_shared<ArrayValue>();
+
+            for (const auto& p : preds) {
+                arr->elements->emplace_back(p);
+            }
+
+            return make_success_value(Value{std::move(arr)});
+        })
+        .func("density", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto g = expect_graph(args[0], "Graph.density", loc);
+
+            const auto vertices = g->adjacency.size();
+
+            // Density is undefined (conventionally 0) for a graph with fewer than
+            // two vertices — there are no possible edges.
+            if (vertices < 2) {
+                return Value{0.0};
+            }
+
+            const auto edges = static_cast<double>(g->logical_edge_count());
+            const auto max_directed =
+                static_cast<double>(vertices) * static_cast<double>(vertices - 1);
+
+            // Directed: E / (V*(V-1)).  Undirected: 2E / (V*(V-1)), since each of
+            // the E logical edges could exist between an unordered pair.
+            const double density =
+                g->directed ? edges / max_directed : (2.0 * edges) / max_directed;
+
+            return Value{density};
         })
         .func("remove_vertex", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
