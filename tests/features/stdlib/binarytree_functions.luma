@@ -329,6 +329,114 @@ function void test_binarytree_union_overlapping() {
             assert(Result.unwrap(r) == "123")
         }
 
+        # ── BinaryTree.map ──
+
+        @test
+        function void test_binarytree_map_basic() {
+            result<binary_tree> r = BinaryTree.from_array([1, 2, 3])
+            |> BinaryTree.map((integer x) -> x * 10)
+
+            binary_tree mapped = Result.unwrap(r)
+            assert(BinaryTree.length(mapped) == 3)
+            assert(BinaryTree.inorder(mapped) == [10, 20, 30])
+        }
+
+        @test
+        function void test_binarytree_map_dedup() {
+            # Mapping collapses values that collide under the ordering invariant
+            result<binary_tree> r = BinaryTree.from_array([1, 2, 3, 4])
+            |> BinaryTree.map((integer x) -> x % 2)
+
+            binary_tree mapped = Result.unwrap(r)
+            assert(BinaryTree.inorder(mapped) == [0, 1])
+        }
+
+        @test
+        function void test_binarytree_map_callback_exception() {
+            result<binary_tree> r = BinaryTree.from_array([1, 0, 2])
+            |> BinaryTree.map((integer x) -> 10 // x)
+
+            assert(Result.is_failure(r))
+        }
+
+        # ── BinaryTree.count ──
+
+        @test
+        function void test_binarytree_count() {
+            result<integer> r = BinaryTree.from_array([1, 2, 3, 4, 5, 6])
+            |> BinaryTree.count((integer x) -> x % 2 == 0)
+
+            assert(Result.unwrap(r) == 3)
+        }
+
+        # ── BinaryTree.find ──
+
+        @test
+        function void test_binarytree_find_match() {
+            # First in-order (smallest) value > 4 is 5
+            assert(Optional.unwrap(Result.unwrap(
+                BinaryTree.find(BinaryTree.from_array([5, 3, 7, 1, 9]),
+                                (integer x) -> x > 4))) == 5)
+        }
+
+        @test
+        function void test_binarytree_find_no_match() {
+            assert(Optional.is_none(Result.unwrap(
+                BinaryTree.find(BinaryTree.from_array([1, 2, 3]),
+                                (integer x) -> x > 10))))
+        }
+
+        # ── BinaryTree.any / all / each ──
+
+        @test
+        function void test_binarytree_any_all() {
+            binary_tree tree = BinaryTree.from_array([2, 4, 6])
+
+            assert(Result.unwrap(BinaryTree.any(tree, (integer x) -> x > 5)))
+            assert(!Result.unwrap(BinaryTree.any(tree, (integer x) -> x > 10)))
+            assert(Result.unwrap(BinaryTree.all(tree, (integer x) -> x % 2 == 0)))
+            assert(!Result.unwrap(BinaryTree.all(tree, (integer x) -> x > 2)))
+        }
+
+        @test
+        function void test_binarytree_each() {
+            reference<integer> total = Reference.new(0)
+            binary_tree tree = BinaryTree.from_array([1, 2, 3])
+
+            result<binary_tree> r = BinaryTree.each(tree, (integer x) -> {
+                Reference.set(total, Reference.get(total) + x)
+            })
+
+            assert(Result.is_success(r))
+            assert(Reference.get(total) == 6)
+            assert(BinaryTree.length(Result.unwrap(r)) == 3)
+        }
+
+        # ── BinaryTree.is_balanced ──
+
+        @test
+        function void test_binarytree_is_balanced() {
+            # Balanced insertion order
+            assert(BinaryTree.is_balanced(BinaryTree.from_array([2, 1, 3])))
+            # Degenerate (right-leaning) tree
+            assert(!BinaryTree.is_balanced(BinaryTree.from_array([1, 2, 3, 4, 5])))
+            # Empty tree is balanced
+            assert(BinaryTree.is_balanced(BinaryTree.new()))
+        }
+
+        # ── BinaryTree.equals ──
+
+        @test
+        function void test_binarytree_equals() {
+            # Same values, different insertion order (different shape)
+            binary_tree a = BinaryTree.from_array([1, 2, 3, 4, 5])
+            binary_tree b = BinaryTree.from_array([3, 1, 5, 2, 4])
+            assert(BinaryTree.equals(a, b))
+
+            binary_tree c = BinaryTree.from_array([1, 2, 3])
+            assert(!BinaryTree.equals(a, c))
+        }
+
 # ───────────────────────────────────────────────────────────
 # predecessor, successor, balance
 # ───────────────────────────────────────────────────────────

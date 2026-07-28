@@ -187,12 +187,16 @@ void register_datetime_arithmetic(const EnvPtr& env) {
     const ScaleFunc scale_funcs[] = {
         {.name = "difference_milliseconds", .scale = 1.0, .op = ScaleOp::difference},
         {.name = "difference_seconds", .scale = 1.0, .op = ScaleOp::difference},
+        {.name = "difference_minutes", .scale = 60.0, .op = ScaleOp::difference},
         {.name = "difference_hours", .scale = 3600.0, .op = ScaleOp::difference},
         {.name = "difference_days", .scale = 86400.0, .op = ScaleOp::difference},
+        {.name = "difference_weeks", .scale = 604800.0, .op = ScaleOp::difference},
         {.name = "add_milliseconds", .scale = 1.0, .op = ScaleOp::add},
         {.name = "add_seconds", .scale = 1.0, .op = ScaleOp::add},
+        {.name = "add_minutes", .scale = 60.0, .op = ScaleOp::add},
         {.name = "add_hours", .scale = 3600.0, .op = ScaleOp::add},
         {.name = "add_days", .scale = 86400.0, .op = ScaleOp::add},
+        {.name = "add_weeks", .scale = 604800.0, .op = ScaleOp::add},
     };
 
     for (const auto& f : scale_funcs) {

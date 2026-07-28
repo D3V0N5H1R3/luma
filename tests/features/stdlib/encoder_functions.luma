@@ -294,3 +294,30 @@ function void test_encoder_decode_text_typed_latin1_success() {
     assert(Result.is_success(r), "Latin-1 bytes always decode")
     assert(Result.unwrap(r) == "hi")
 }
+
+@test
+function void test_encoder_is_valid_base64() {
+    assert(Encoder.is_valid_base64("aGVsbG8="))
+    assert(Encoder.is_valid_base64(""))
+    assert(!Encoder.is_valid_base64("not base64!!"))
+}
+
+@test
+function void test_encoder_is_valid_base64_roundtrip() {
+    result<string> encoded = Encoder.encode_base64("hello world")
+    assert(Encoder.is_valid_base64(Result.unwrap(encoded)))
+}
+
+@test
+function void test_encoder_is_valid_utf8() {
+    # "hi" as ASCII bytes
+    assert(Encoder.is_valid_utf8([104, 105]))
+    # Valid 2-byte sequence (U+00E9 é = 0xC3 0xA9)
+    assert(Encoder.is_valid_utf8([195, 169]))
+    # Lone continuation byte is invalid
+    assert(!Encoder.is_valid_utf8([0x80]))
+    # Truncated multi-byte sequence
+    assert(!Encoder.is_valid_utf8([195]))
+    # Empty is valid
+    assert(Encoder.is_valid_utf8([]))
+}

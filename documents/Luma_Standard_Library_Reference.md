@@ -109,6 +109,7 @@ These require no namespace prefix:
 | `Array.max_by(arr, key)`         | `(array<T>, function(T) -> number)`    | `optional<T>`                  | Element with the greatest key; `none` if empty; first element wins ties    |
 | `Array.min(arr)`                 | `(array<T>)`                           | `result<T>`                    | Minimum value; fail if empty                                               |
 | `Array.min_by(arr, key)`         | `(array<T>, function(T) -> number)`    | `optional<T>`                  | Element with the smallest key; `none` if empty; first element wins ties    |
+| `Array.none(arr, fn)`            | `(array<T>, function(T) -> boolean)`   | `result<boolean>`              | `true` if no element matches; fail if predicate throws                     |
 | `Array.partition(arr, fn)`       | `(array<T>, function(T) -> boolean)`   | `result<(array<T>, array<T>)>` | Split into `(matches, rest)`; fail if predicate throws                     |
 | `Array.pop(arr)`                 | `(array<T>)`                           | `result<(array<T>, T)>`        | Remove last element; fail if empty                                         |
 | `Array.product(arr)`             | `(array<T>)`                           | `result<integer \| number>`    | Multiply numeric elements; `1` for an empty array; fail if non-numeric element found |
@@ -122,6 +123,7 @@ These require no namespace prefix:
 | `Array.slice(arr, from, to)`     | `(array<T>, integer, integer)`         | `result<array<T>>`             | Subarray `[from, to)`; fail if indices are negative or `from > to`         |
 | `Array.sort(arr, fn)`            | `(array<T>, function(T, T) -> number)` | `result<array<T>>`             | Sort by comparator; fail if comparator throws                              |
 | `Array.sort_by(arr, fn)`         | `(array<T>, function(T) -> U)`         | `result<array<T>>`             | Sort by key function; fail if key function throws                          |
+| `Array.split_at(arr, i)`         | `(array<T>, integer)`                  | `(array<T>, array<T>)`         | Split into `(take i, drop i)`; `i` is clamped to `[0, length]`             |
 | `Array.sum(arr)`                 | `(array<T>)`                           | `result<integer \| number>`    | Sum numeric elements; fail if non-numeric element found                    |
 | `Array.sum_by(arr, key)`         | `(array<T>, function(T) -> number)`    | `number`                       | Total of the projected key over every element; `0` for an empty array      |
 | `Array.take(arr, n)`             | `(array<T>, integer)`                  | `array<T>`                     | Take the first `n` elements                                                |
@@ -148,17 +150,25 @@ A binary search tree (BST) with O(log n) average-case insert, remove, and lookup
 | Function                            | Parameter Types                         | Return Type                          | Description                                                    |
 | ----------------------------------- | --------------------------------------- | ------------------------------------ | -------------------------------------------------------------- |
 | `BinaryTree.balance(t)`             | `(binary_tree)`                         | `binary_tree`                        | Return a height-balanced copy of the tree                      |
+| `BinaryTree.all(t, fn)`             | `(binary_tree, function(T) -> boolean)` | `result<boolean>`                    | `true` if every value matches; fail if predicate throws        |
+| `BinaryTree.any(t, fn)`             | `(binary_tree, function(T) -> boolean)` | `result<boolean>`                    | `true` if some value matches; fail if predicate throws         |
 | `BinaryTree.ceiling_value(t, v)`    | `(binary_tree, T)`                      | `result<T>`                          | Smallest value ≥ `v`; fail if none exists                      |
 | `BinaryTree.contains(t, v)`         | `(binary_tree, T)`                      | `boolean`                            | Whether `v` is in the tree                                     |
+| `BinaryTree.count(t, fn)`           | `(binary_tree, function(T) -> boolean)` | `result<integer>`                    | Number of values matching `fn`; fail if predicate throws       |
+| `BinaryTree.each(t, fn)`            | `(binary_tree, function(T) -> void)`    | `result<binary_tree>`                | Apply `fn` to each value in order; returns `t` unchanged       |
+| `BinaryTree.equals(a, b)`           | `(binary_tree, binary_tree)`            | `boolean`                            | Whether both hold the same set of values (shape-independent)   |
 | `BinaryTree.filter(t, fn)`          | `(binary_tree, function(T) -> boolean)` | `result<binary_tree>`                | Elements for which `fn` returns true; fail if predicate throws |
+| `BinaryTree.find(t, fn)`            | `(binary_tree, function(T) -> boolean)` | `result<optional<T>>`                | First in-order value matching `fn`; `none` if no match         |
 | `BinaryTree.floor_value(t, v)`      | `(binary_tree, T)`                      | `result<T>`                          | Largest value ≤ `v`; fail if none exists                       |
 | `BinaryTree.from_array(arr)`        | `(array<T>)`                            | `binary_tree`                        | Build tree from array                                          |
 | `BinaryTree.height(t)`              | `(binary_tree)`                         | `integer`                            | Tree height                                                    |
 | `BinaryTree.inorder(t)`             | `(binary_tree)`                         | `array<T>`                           | In-order traversal (sorted)                                    |
 | `BinaryTree.insert(t, v)`           | `(binary_tree, T)`                      | `binary_tree`                        | Insert value; returns new tree                                 |
+| `BinaryTree.is_balanced(t)`         | `(binary_tree)`                         | `boolean`                            | Whether every node's subtree heights differ by at most 1       |
 | `BinaryTree.is_empty(t)`            | `(binary_tree)`                         | `boolean`                            | Whether the tree is empty                                      |
 | `BinaryTree.length(t)`              | `(binary_tree)`                         | `integer`                            | Number of nodes                                                |
 | `BinaryTree.level_order(t)`         | `(binary_tree)`                         | `array<T>`                           | Level-order (breadth-first) traversal                          |
+| `BinaryTree.map(t, fn)`             | `(binary_tree, function(T) -> U)`       | `result<binary_tree>`                | Apply `fn` to each value and rebuild the BST (re-sorted, deduplicated); fail if `fn` throws |
 | `BinaryTree.max(t)`                 | `(binary_tree)`                         | `result<T>`                          | Maximum value; fail if empty                                   |
 | `BinaryTree.min(t)`                 | `(binary_tree)`                         | `result<T>`                          | Minimum value; fail if empty                                   |
 | `BinaryTree.new()`                  | `()`                                    | `binary_tree`                        | Empty tree                                                     |
@@ -179,20 +189,26 @@ Numerical calculus operations. Functions accept callable values (native function
 | Function                                        | Parameter Types                                                                    | Return Type             | Description                                                          |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------- |
 | `Calculus.convolution(f, g, t, a, b)`           | `(function(number) -> number, function(number) -> number, number, number, number)` | `number`                | Convolution `(f * g)(t)` integrated over `[a, b]`                    |
+| `Calculus.arc_length(a, b, fn)`                 | `(number, number, function(number) -> number)`                                     | `number`                | Length of `y = f(x)` over `[a, b]` = `∫ √(1 + f'(x)²) dx`            |
 | `Calculus.curl(point, fields)`                  | `(array<number>, array<function(array<number>) -> number>)`                        | `result<array<number>>` | Curl of a vector field at `point`; fail if dimensions mismatch       |
 | `Calculus.derivative(x, fn)`                    | `(number, function(number) -> number)`                                             | `number`                | Numerical first derivative at `x`                                    |
 | `Calculus.derivative_with(x, h, fn)`            | `(number, number, function(number) -> number)`                                     | `number`                | First derivative with custom step `h`                                |
+| `Calculus.differentiate(fn)`                    | `(function(number) -> number)`                                                     | `function(number) -> number` | The derivative as a first-class function (`g(x) ≈ fn'(x)`)      |
 | `Calculus.divergence(point, fields)`            | `(array<number>, array<function(array<number>) -> number>)`                        | `number`                | Divergence of a vector field at `point`                              |
 | `Calculus.gradient(point, fn)`                  | `(array<number>, function(array<number>) -> number)`                               | `array<number>`         | Numerical partial derivatives at a point                             |
 | `Calculus.hessian(point, fn)`                   | `(array<number>, function(array<number>) -> number)`                               | `array<array<number>>`  | Hessian matrix of second partial derivatives at `point`              |
 | `Calculus.integrate(a, b, fn)`                  | `(number, number, function(number) -> number)`                                     | `number`                | Definite integral (Simpson's rule)                                   |
 | `Calculus.integrate_with(a, b, n, fn)`          | `(number, number, integer, function(number) -> number)`                            | `number`                | Definite integral with `n` subdivisions                              |
+| `Calculus.jacobian(point, fields)`              | `(array<number>, array<function(array<number>) -> number>)`                        | `result<array<array<number>>>` | Jacobian matrix; entry `(i, j)` = `∂fields[i]/∂x[j]` at `point` |
+| `Calculus.laplacian(point, fn)`                 | `(array<number>, function(array<number>) -> number)`                               | `number`                | Sum of unmixed second partials `∇²f` (trace of the Hessian)         |
 | `Calculus.limit(x, fn)`                         | `(number, function(number) -> number)`                                             | `result<number>`        | Numerical limit (Richardson extrapolation)                           |
 | `Calculus.maximize(a, b, fn)`                   | `(number, number, function(number) -> number)`                                     | `(number, number)`      | Maximise over `[a, b]`; returns `(x_max, f(x_max))`                  |
 | `Calculus.minimize(a, b, fn)`                   | `(number, number, function(number) -> number)`                                     | `(number, number)`      | Minimise over `[a, b]` (golden section); returns `(x_min, f(x_min))` |
 | `Calculus.newton(x0, fn)`                       | `(number, function(number) -> number)`                                             | `result<number>`        | Root finding (Newton's method)                                       |
+| `Calculus.nth_derivative(x, n, fn)`             | `(number, integer, function(number) -> number)`                                    | `number`                | The `n`-th derivative at `x` (`n ≥ 0`; `n = 0` ⇒ `fn(x)`)           |
 | `Calculus.partial_derivative(point, index, fn)` | `(array<number>, integer, function(array<number>) -> number)`                      | `number`                | Partial derivative along axis `index` at `point`                     |
-| `Calculus.root(a, b, fn)`                       | `(number, number, function(number) -> number)`                                     | `result<number>`        | Root finding (bisection method)                                      |
+| `Calculus.product_series(start, n, fn)`         | `(integer, integer, function(number) -> number)`                                   | `number`                | Product `fn(start)` · ... · `fn(start + n - 1)` (empty ⇒ `1`)        |
+| `Calculus.root(a, b, fn)`                       | `(number, number, function(number) -> number)`                                     | `result<number>`        | Root finding (bisection method)                                     |
 | `Calculus.second_derivative(x, fn)`             | `(number, function(number) -> number)`                                             | `number`                | Numerical second derivative at `x`                                   |
 | `Calculus.sum_series(start, n, fn)`             | `(integer, integer, function(number) -> number)`                                   | `number`                | Sum `fn(start)` + ... + `fn(start + n - 1)`                          |
 | `Calculus.taylor(centre, n, fn)`                | `(number, integer, function(number) -> number)`                                    | `array<number>`         | Taylor series coefficients (1–20 terms)                              |
@@ -206,16 +222,21 @@ Thread-safe FIFO queues for passing values between tasks.
 | Function                          | Parameter Types            | Return Type       | Description                                                                               |
 | --------------------------------- | -------------------------- | ----------------- | ----------------------------------------------------------------------------------------- |
 | `Channel.close(ch)`               | `(channel<T>)`             | `none`            | Close the channel                                                                         |
+| `Channel.capacity(ch)`            | `(channel<T>)`             | `optional<integer>` | Buffered capacity; `none` for an unbounded channel                                      |
+| `Channel.consume(ch, fn)`         | `(channel<T>, function(T) -> none)` | `result<integer>` | Receive each value until the channel closes and drains, applying `fn`; returns the count; fail if `fn` throws. Blocks until close — call inside a task |
 | `Channel.is_closed(ch)`           | `(channel<T>)`             | `boolean`         | Whether the channel is closed                                                             |
 | `Channel.is_empty(ch)`            | `(channel<T>)`             | `boolean`         | Whether no values are buffered                                                            |
+| `Channel.is_full(ch)`             | `(channel<T>)`             | `boolean`         | Whether a buffered channel is at capacity; always `false` when unbounded                  |
 | `Channel.length(ch)`              | `(channel<T>)`             | `integer`         | Number of buffered values                                                                 |
 | `Channel.new()`                   | `()`                       | `channel<T>`      | Create unbounded channel (no capacity limit)                                              |
 | `Channel.new_buffered(cap)`       | `(integer)`                | `channel<T>`      | Create buffered channel; throws if `cap ≤ 0`                                              |
+| `Channel.poll(ch)`                | `(channel<T>)`             | `optional<T>`     | Non-blocking, non-throwing receive; `some(v)` when ready, `none` when empty (open or drained-closed). Pair with `is_closed` to tell empty-open from drained-closed |
 | `Channel.receive(ch)`             | `(channel<T>)`             | `T`               | Blocking receive; throws `ChannelClosedError` if closed and drained                       |
 | `Channel.receive_all(ch)`         | `(channel<T>)`             | `array<T>`        | Drain all buffered values                                                                 |
 | `Channel.receive_timeout(ch, ms)` | `(channel<T>, integer)`    | `result<T>`       | Timed receive; fail on timeout, throws `ChannelClosedError` if closed                     |
 | `Channel.select(channels)`        | `(array<channel<T>>)`      | `result<T>`       | Wait for the first ready channel; returns `(index, value)`; fail if all are closed        |
 | `Channel.send(ch, v)`             | `(channel<T>, T)`          | `boolean`         | Blocking send; returns `false` if the channel is closed                                      |
+| `Channel.send_all(ch, values)`    | `(channel<T>, array<T>)`   | `integer`         | Blocking-send each element in order; returns the count sent, stopping early if the channel closes mid-send |
 | `Channel.send_timeout(ch, v, ms)` | `(channel<T>, T, integer)` | `result<boolean>` | Timed send; fail on timeout, throws `ChannelClosedError` if closed                        |
 | `Channel.try_receive(ch)`         | `(channel<T>)`             | `T`               | Non-blocking receive; throws `ChannelEmptyError` if empty, `ChannelClosedError` if closed |
 | `Channel.try_send(ch, v)`         | `(channel<T>, T)`          | `boolean`         | Non-blocking send; returns `false` if the channel is full or closed      |
@@ -247,6 +268,7 @@ Compress and decompress data using Deflate (RFC 1951), Gzip (RFC 1952), and run-
 | `Compression.decompress_typed(data, format)` | `(string, Compression.Format)`  | `result<string, Compression.Error>` | Decompress `data`; on failure the error is a typed `Compression.Error` |
 | `Compression.deflate(data)`                  | `(string)`                      | `string`         | Deflate-compress data                                   |
 | `Compression.deflate_with(data, level)`      | `(string, integer)`             | `result<string>` | Deflate-compress with explicit level (0–9)              |
+| `Compression.detect_format(data)`            | `(string)`                      | `optional<Compression.Format>` | Sniff the container from magic bytes (`Gzip`/`Zlib`); `none` if unrecognised |
 | `Compression.encode_rle(s)`                  | `(string)`                      | `string`         | Run-length encode (e.g. `"aaabbbcc"` → `"3a3b2c"`)      |
 | `Compression.gunzip(data)`                   | `(string)`                      | `result<string>` | Gunzip-decompress data                                  |
 | `Compression.gunzip_file(path)`              | `(string)`                      | `result<string>` | Gunzip-decompress file contents                         |
@@ -257,8 +279,12 @@ Compress and decompress data using Deflate (RFC 1951), Gzip (RFC 1952), and run-
 | `Compression.gzip_with(data, level)`         | `(string, integer)`             | `result<string>` | Gzip-compress with explicit level (0–9)                 |
 | `Compression.inflate(data)`                  | `(string)`                      | `result<string>` | Inflate-decompress data                                 |
 | `Compression.inflate_typed(data)`            | `(string)`                      | `result<string, Compression.Error>` | Inflate-decompress data; on failure the error is a typed `Compression.Error` |
+| `Compression.zlib_compress(data)`            | `(string)`                      | `string`         | Zlib-wrapped deflate (RFC 1950)                         |
+| `Compression.zlib_compress_with(data, level)`| `(string, integer)`             | `result<string>` | Zlib-compress with explicit level (0–9)                 |
+| `Compression.zlib_decompress(data)`          | `(string)`                      | `result<string>` | Zlib-decompress (RFC 1950) data                         |
+| `Compression.zlib_decompress_typed(data)`    | `(string)`                      | `result<string, Compression.Error>` | Zlib-decompress data; on failure the error is a typed `Compression.Error` |
 
-The per-algorithm functions above (`deflate`/`inflate`, `gzip`/`gunzip`, `encode_rle`/`decode_rle`) are the primary API — reach for them when the algorithm is known at the call site. `Compression.Format` is a choice type with three variants — `Deflate`, `Gzip`, `Rle` — for the "algorithm decided at runtime" path: `Compression.compress` and `Compression.decompress` dispatch on it to the matching per-algorithm function, so code that only learns the format from user input or configuration doesn't need a hand-written switch over algorithm names. Unlike `Hash.Algorithm`, `Compression.Format` has no string dual-form — it is the sole runtime-dispatch entry point.
+The per-algorithm functions above (`deflate`/`inflate`, `gzip`/`gunzip`, `zlib_compress`/`zlib_decompress`, `encode_rle`/`decode_rle`) are the primary API — reach for them when the algorithm is known at the call site. `Compression.Format` is a choice type with four variants — `Deflate`, `Gzip`, `Zlib`, `Rle` — for the "algorithm decided at runtime" path: `Compression.compress` and `Compression.decompress` dispatch on it to the matching per-algorithm function, so code that only learns the format from user input or configuration doesn't need a hand-written switch over algorithm names. Unlike `Hash.Algorithm`, `Compression.Format` has no string dual-form — it is the sole runtime-dispatch entry point. `Compression.detect_format(data)` sniffs the container from its leading bytes (gzip's `1f 8b` magic or a valid zlib header), returning `some(Compression.Format)` or `none`, so `data |> Compression.detect_format()` composes with `decompress` for a format-agnostic decode. The `Zlib` variant is the RFC 1950 zlib wrapper (2-byte header + Adler-32 trailer) — the format Python's `zlib` module and most `Content-Encoding: deflate` HTTP bodies actually use, sitting between raw `Deflate` (RFC 1951) and `Gzip` (RFC 1952).
 
 ```luma
 Compression.Format format = Compression.Format.Gzip
@@ -290,12 +316,14 @@ Convert values between different types (e.g. string → integer, integer → str
 | `Converter.codepoint_to_character(cp)` | `(integer)`     | `result<string>`  | Character from codepoint; fail on invalid codepoint          |
 | `Converter.from_binary(s)`             | `(string)`      | `result<integer>` | Parse binary string (e.g. `"1010"` → 10)                     |
 | `Converter.from_hexadecimal(s)`        | `(string)`      | `result<integer>` | Parse hex string (e.g. `"ff"` → 255)                         |
+| `Converter.from_octal(s)`              | `(string)`      | `result<integer>` | Parse octal string (e.g. `"755"` → 493); fail on non-octal digits |
 | `Converter.from_roman(s)`              | `(string)`      | `result<integer>` | Parse Roman numeral (e.g. `"XIV"` → 14)                      |
 | `Converter.number_to_words(n)`         | `(integer)`     | `string`          | English words (e.g. `42` → `"forty two"`)                    |
 | `Converter.ordinal(n)`                 | `(integer)`     | `string`          | Ordinal suffix (e.g. `3` → `"3rd"`)                          |
 | `Converter.to_binary(n)`               | `(integer)`     | `string`          | Binary representation (e.g. `10` → `"1010"`)                 |
 | `Converter.to_boolean(s)`              | `(string)`      | `result<boolean>` | Parse `"true"`/`"false"`; throws if argument is not a string |
 | `Converter.to_hexadecimal(n)`          | `(integer)`     | `string`          | Hex representation (e.g. `255` → `"ff"`)                     |
+| `Converter.to_octal(n)`                | `(integer)`     | `string`          | Octal representation (e.g. `493` → `"755"`)                  |
 | `Converter.to_integer(v)`              | `(number\       | string)`          | `result<integer>`                                            |
 | `Converter.to_number(v)`               | `(integer\      | string)`          | `result<number>`                                             |
 | `Converter.to_roman(n)`                | `(integer)`     | `result<string>`  | Roman numeral; fail if value outside [1, 3999]               |
@@ -318,6 +346,9 @@ Parse and serialise comma-separated values.
 | `Csv.deserialize_table(s)`       | `(string)`                                   | `result<Csv.Table, Csv.ParseError>` | Parse into a `Csv.Table` (first row is the header, the rest are positional rows) |
 | `Csv.serialize_table(t)`         | `(Csv.Table)`                                | `result<string>`                    | Serialise a `Csv.Table` (header row first, then each positional row) |
 | `Csv.column(t, name)`            | `(Csv.Table, string)`                        | `result<array<string>>`             | Extract one named column from a `Csv.Table`; fail if no header matches |
+| `Csv.row(t, index)`              | `(Csv.Table, integer)`                       | `result<dictionary<string>>`        | Extract one 0-based data row as a header-keyed record (short rows padded with `""`); fail on out-of-bounds |
+| `Csv.select(t, names)`           | `(Csv.Table, array<string>)`                 | `result<Csv.Table>`                 | Project the named columns (in order) into a new `Csv.Table`; fail if any name is absent |
+| `Csv.filter_rows(t, fn)`         | `(Csv.Table, function(dictionary<string>) -> boolean)` | `result<Csv.Table>`      | Keep data rows where `fn(row-record)` is true, preserving headers; fail if the predicate throws |
 | `Csv.read_file(path)`            | `(string)`                                   | `result<array<dictionary<string>>>` | Read and parse CSV file                                           |
 | `Csv.serialize(rows)`            | `(array<array<string>>)`                     | `result<string>`                    | Serialise rows to CSV string; fail if row is not array            |
 | `Csv.serialize_records(records)` | `(array<dictionary<string>>)`                | `string`                            | Serialise records to CSV with header                              |
@@ -349,7 +380,9 @@ surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 | `DateTime.add_hours(ts, n)`                | `(number, number)`                                       | `number`                     | Add `n` hours to a Unix timestamp                                        |
 | `DateTime.add_months(ts, n)`               | `(number, integer)`                                      | `result<number>`             | Add `n` calendar months (clamps day); fail if out of range               |
 | `DateTime.add_milliseconds(ts, n)`         | `(number, integer)`                                      | `number`                     | Add `n` milliseconds to a Unix timestamp                                 |
+| `DateTime.add_minutes(ts, n)`              | `(number, number)`                                       | `number`                     | Add `n` minutes to a Unix timestamp                                      |
 | `DateTime.add_seconds(ts, n)`              | `(number, number)`                                       | `number`                     | Add `n` seconds to a Unix timestamp                                      |
+| `DateTime.add_weeks(ts, n)`                | `(number, number)`                                       | `number`                     | Add `n` weeks to a Unix timestamp                                        |
 | `DateTime.add_years(ts, n)`                | `(number, integer)`                                      | `result<number>`             | Add `n` calendar years (clamps Feb 29); fail if out of range             |
 | `DateTime.period(years, months, days)`     | `(integer, integer, integer)`                            | `DateTime.Period`            | Construct a calendar span (any component may be negative)                |
 | `DateTime.add_period(ts, p)`               | `(number, DateTime.Period)`                              | `result<number>`             | Add a calendar span (year/month with day clamping, then whole days); fail if out of range |
@@ -363,8 +396,14 @@ surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 | `DateTime.difference_hours(t1, t2)`        | `(number, number)`                                       | `number`                     | Absolute difference in hours                                             |
 | `DateTime.difference_months(t1, t2)`       | `(number, number)`                                       | `result<integer>`            | Absolute difference in calendar months; fail if out of range             |
 | `DateTime.difference_milliseconds(t1, t2)` | `(number, number)`                                       | `number`                     | Difference in milliseconds                                               |
+| `DateTime.difference_minutes(t1, t2)`      | `(number, number)`                                       | `number`                     | Absolute difference in minutes                                           |
 | `DateTime.difference_seconds(t1, t2)`      | `(number, number)`                                       | `number`                     | Absolute difference in seconds                                           |
+| `DateTime.difference_weeks(t1, t2)`        | `(number, number)`                                       | `number`                     | Absolute difference in weeks                                             |
 | `DateTime.difference_years(t1, t2)`        | `(number, number)`                                       | `result<integer>`            | Absolute difference in calendar years; fail if out of range              |
+| `DateTime.end_of_day(ts)`                  | `(number)`                                               | `result<number>`             | Last second of the timestamp's day (UTC); fail if out of range           |
+| `DateTime.end_of_hour(ts)`                 | `(number)`                                               | `result<number>`             | Last second of the timestamp's hour (UTC); fail if out of range          |
+| `DateTime.end_of_month(ts)`                | `(number)`                                               | `result<number>`             | Last second of the timestamp's month (UTC); fail if out of range         |
+| `DateTime.end_of_year(ts)`                 | `(number)`                                               | `result<number>`             | Last second of the timestamp's year (UTC); fail if out of range          |
 | `DateTime.from_iso_string(s)`              | `(string)`                                               | `result<number>`             | Parse ISO 8601 string to Unix timestamp                                  |
 | `DateTime.from_iso_string_typed(s)`        | `(string)`                                               | `result<number, DateTime.ParseError>` | Parse ISO 8601; on failure the error is a typed `DateTime.ParseError` instead of a string |
 | `DateTime.combine(date, time)`             | `(DateTime.Date, DateTime.Time)`                         | `result<number>`             | Fuse a calendar date and a wall-clock time into a UTC timestamp          |
@@ -383,6 +422,8 @@ surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 | `DateTime.is_after(a, b)`                  | `(number, number)`                                       | `boolean`                    | Whether timestamp `a` is after `b`                                       |
 | `DateTime.is_before(a, b)`                 | `(number, number)`                                       | `boolean`                    | Whether timestamp `a` is before `b`                                      |
 | `DateTime.is_leap_year(year)`              | `(integer)`                                              | `boolean`                    | Whether `year` is a leap year                                            |
+| `DateTime.is_weekday(ts)`                  | `(number)`                                               | `boolean`                    | Whether the timestamp falls on Monday–Friday                             |
+| `DateTime.is_weekend(ts)`                  | `(number)`                                               | `boolean`                    | Whether the timestamp falls on Saturday or Sunday                        |
 | `DateTime.minute(ts)`                      | `(number)`                                               | `result<integer>`            | Minute (0–59); fail if out of range                                      |
 | `DateTime.month(ts)`                       | `(number)`                                               | `result<integer>`            | Month (1–12); fail if out of range                                       |
 | `DateTime.month_from_number(n)`            | `(integer)`                                              | `result<DateTime.Month>`     | `DateTime.Month` from 1 (January)–12 (December); fail if `n` not in [1, 12] |
@@ -392,14 +433,22 @@ surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 | `DateTime.milliseconds_since_start()`      | `()`                                                     | `number`                     | Milliseconds since program start                                         |
 | `DateTime.now_iso_string()`                | `()`                                                     | `result<string>`             | Current time as `"YYYY-MM-DDTHH:MM:SSZ"`                                 |
 | `DateTime.now_unix()`                      | `()`                                                     | `number`                     | Current Unix timestamp                                                   |
+| `DateTime.parse(text, pattern)`            | `(string, string)`                                       | `result<number>`             | Parse `text` against a pattern (placeholders YYYY, MM, DD, hh, mm, ss) to a Unix timestamp; fail on mismatch or invalid fields |
 | `DateTime.second(ts)`                      | `(number)`                                               | `result<integer>`            | Second (0–59); fail if out of range                                      |
+| `DateTime.start_of_day(ts)`                | `(number)`                                               | `result<number>`             | First second of the timestamp's day (UTC); fail if out of range          |
+| `DateTime.start_of_hour(ts)`               | `(number)`                                               | `result<number>`             | First second of the timestamp's hour (UTC); fail if out of range         |
+| `DateTime.start_of_month(ts)`              | `(number)`                                               | `result<number>`             | First second of the timestamp's month (UTC); fail if out of range        |
+| `DateTime.start_of_year(ts)`               | `(number)`                                               | `result<number>`             | First second of the timestamp's year (UTC); fail if out of range         |
 | `DateTime.to_iso_string(ts)`               | `(number)`                                               | `result<string>`             | Format as `"YYYY-MM-DDTHH:MM:SSZ"`; fail if out of range                 |
 | `DateTime.to_parts(ts)`                    | `(number)`                                               | `result<DateTime.TimeParts>` | Record with year, month, day, hour, minute, second; fail if out of range |
 | `DateTime.weekday(ts)`                     | `(number)`                                               | `result<DateTime.Weekday>`   | Weekday of a timestamp as a `DateTime.Weekday` choice; fail if out of range |
 | `DateTime.weekday_from_number(n)`          | `(integer)`                                              | `result<DateTime.Weekday>`   | `DateTime.Weekday` from 1 (Monday)–7 (Sunday); fail if `n` not in [1, 7]  |
 | `DateTime.weekday_name(w)`                 | `(DateTime.Weekday)`                                     | `string`                     | English day name, `"Monday"`–`"Sunday"`                                   |
 | `DateTime.weekday_number(w)`               | `(DateTime.Weekday)`                                     | `integer`                    | ISO number of a weekday, 1 (Monday)–7 (Sunday)                           |
+| `DateTime.week_of_year(ts)`                | `(number)`                                               | `integer`                    | ISO 8601 week number (1–53; Monday-start, first-Thursday rule)           |
 | `DateTime.year(ts)`                        | `(number)`                                               | `result<integer>`            | Four-digit year; fail if out of range                                    |
+
+`DateTime` also exposes duration constants: `DateTime.seconds_per_minute` (60), `DateTime.seconds_per_hour` (3600), `DateTime.seconds_per_day` (86400), and `DateTime.days_per_week` (7) — all `integer`.
 
 ### Timezone Support (Fixed UTC Offsets)
 
@@ -485,13 +534,26 @@ Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where
 | `Decimal.from_number(n)`        | `(number)`                   | `decimal`         | Shortest exact decimal for a `number`; throws on NaN or infinity    |
 | `Decimal.from_string(s)`        | `(string)`                   | `result<decimal>` | Parse decimal text (optional sign, digits, `.`, optional `eNN` exponent); fail on malformed input |
 | `Decimal.from_string_typed(s)`  | `(string)`                   | `result<decimal, Decimal.Error>` | Like `from_string`, but on failure the error is a typed `Decimal.Error` (`InvalidFormat`) instead of a string |
+| `Decimal.greater_or_equal(a, b)`| `(decimal, decimal)`         | `boolean`         | Whether `a` ≥ `b` (readable wrapper over `compare`)                 |
+| `Decimal.greater_than(a, b)`    | `(decimal, decimal)`         | `boolean`         | Whether `a` > `b` (readable wrapper over `compare`)                 |
 | `Decimal.is_negative(d)`        | `(decimal)`                  | `boolean`         | Whether `d` is less than zero                                       |
+| `Decimal.is_positive(d)`        | `(decimal)`                  | `boolean`         | Whether `d` is greater than zero                                    |
 | `Decimal.is_zero(d)`            | `(decimal)`                  | `boolean`         | Whether `d` is zero                                                 |
+| `Decimal.less_or_equal(a, b)`   | `(decimal, decimal)`         | `boolean`         | Whether `a` ≤ `b` (readable wrapper over `compare`)                 |
+| `Decimal.less_than(a, b)`       | `(decimal, decimal)`         | `boolean`         | Whether `a` < `b` (readable wrapper over `compare`)                 |
+| `Decimal.max(a, b)`             | `(decimal, decimal)`         | `decimal`         | Larger of two decimals (scale-insensitive)                         |
+| `Decimal.min(a, b)`             | `(decimal, decimal)`         | `decimal`         | Smaller of two decimals (scale-insensitive)                        |
 | `Decimal.multiply(a, b)`        | `(decimal, decimal)`         | `decimal`         | Exact product; throws if the result would exceed the maximum decimal size |
 | `Decimal.negate(d)`             | `(decimal)`                  | `decimal`         | Additive inverse (`-d`)                                             |
+| `Decimal.power(base, exp)`      | `(decimal, integer)`         | `result<decimal>` | Exact repeated multiplication for `exp ≥ 0`; fail on negative exponent, overflow, or an exponent above 1,000,000 |
+| `Decimal.product(values)`       | `(array<decimal>)`           | `decimal`         | Exact product of all elements (empty ⇒ `1`); throws on overflow    |
+| `Decimal.remainder(a, b)`       | `(decimal, decimal)`         | `result<decimal>` | Exact remainder of `a / b` (sign of `a`); fail on zero divisor     |
 | `Decimal.round(d, places, mode)` | `(decimal, integer, RoundingMode \| string)` | `decimal`         | Round to `places` fractional digits using `mode` (a `Decimal.RoundingMode` variant or the equivalent mode string); throws on an unknown mode string |
 | `Decimal.scale(d)`              | `(decimal)`                  | `integer`         | Number of stored fractional digits                                 |
+| `Decimal.sign(d)`               | `(decimal)`                  | `integer`         | `-1`, `0`, or `1` according to the sign of `d`                      |
 | `Decimal.subtract(a, b)`        | `(decimal, decimal)`         | `decimal`         | Exact difference                                                   |
+| `Decimal.sum(values)`           | `(array<decimal>)`           | `decimal`         | Exact sum of all elements (empty ⇒ `0`)                            |
+| `Decimal.to_integer(d)`         | `(decimal)`                  | `result<integer>` | Exact integer when `d` has no fractional part; else fail (pre-round with `round(d, 0, Down)` to truncate deliberately) |
 | `Decimal.to_number(d)`          | `(decimal)`                  | `number`          | Nearest IEEE-754 `number` (may lose precision)                     |
 | `Decimal.to_string(d)`          | `(decimal)`                  | `string`          | Canonical text; preserves the value's scale (e.g. `"2.50"`)         |
 
@@ -549,6 +611,8 @@ Dictionaries preserve insertion order. All reads and writes use string keys.
 | Function                          | Parameter Types                                   | Return Type                              | Description                                                                                     |
 | --------------------------------- | ------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `Dictionary.has_value(d, v)`      | `(dictionary<T>, T)`                              | `boolean`                                | Whether any value equals `v`                                                                    |
+| `Dictionary.all(d, fn)`           | `(dictionary<T>, function(string, T) -> boolean)` | `result<boolean>`                        | `true` if every entry matches; fail if callback throws                                          |
+| `Dictionary.any(d, fn)`           | `(dictionary<T>, function(string, T) -> boolean)` | `result<boolean>`                        | `true` if any entry matches; fail if callback throws                                            |
 | `Dictionary.count(d, fn)`         | `(dictionary<T>, function(string, T) -> boolean)` | `result<integer>`                        | Count entries matching predicate                                                                |
 | `Dictionary.deep_merge(a, b)`     | `(dictionary<T>, dictionary<T>)`                  | `dictionary<T>`                          | Recursive merge; `b` wins on conflicts                                                          |
 | `Dictionary.each(d, fn)`          | `(dictionary<T>, function(string, T) -> none)`    | `result<none>`                           | Iterate key–value pairs; fail if callback throws                                                |
@@ -556,6 +620,7 @@ Dictionaries preserve insertion order. All reads and writes use string keys.
 | `Dictionary.find(d, fn)`          | `(dictionary<T>, function(string, T) -> boolean)` | `result<(string, T)>`                    | First entry where `fn` returns `true`; fail if not found                                        |
 | `Dictionary.flip(d)`              | `(dictionary<V>)`                                 | `result<dictionary<string>>`             | Swap keys and values; fail if any value is not a string                                         |
 | `Dictionary.from_entries(arr)`    | `(array<(string, T)>)`                            | `dictionary<T>`                          | Create from array of `(key, value)` tuples                                                      |
+| `Dictionary.from_arrays(ks, vs)`  | `(array<string>, array<T>)`                       | `result<dictionary<T>>`                  | Pair keys and values positionally; fail on length mismatch; last value wins on duplicate keys   |
 | `Dictionary.from_keys(keys, def)` | `(array<string>, T)`                              | `dictionary<T>`                          | Create from key list with default value                                                         |
 | `Dictionary.get(d, k)`            | `(dictionary<T>, string)`                         | `result<T>`                              | Safe lookup; fail if key not found                                                              |
 | `Dictionary.get_or(d, k, def)`    | `(dictionary<T>, string, T)`                      | `T`                                      | Lookup with default                                                                             |
@@ -565,6 +630,7 @@ Dictionaries preserve insertion order. All reads and writes use string keys.
 | `Dictionary.keys(d)`              | `(dictionary<T>)`                                 | `array<string>`                          | Array of keys                                                                                   |
 | `Dictionary.length(d)`            | `(dictionary<T>)`                                 | `integer`                                | Number of entries                                                                               |
 | `Dictionary.map(d, fn)`           | `(dictionary<T>, function(string, T) -> U)`       | `result<dictionary<U>>`                  | Transform every entry; `fn` receives `(key, value)`, returns new value; fail if callback throws |
+| `Dictionary.map_keys(d, fn)`      | `(dictionary<T>, function(string) -> string)`     | `result<dictionary<T>>`                  | Transform every key, keeping values; last write wins on collision; fail if callback throws      |
 | `Dictionary.map_values(d, fn)`    | `(dictionary<T>, function(T) -> U)`               | `result<dictionary<U>>`                  | Transform every value; fail if callback throws                                                  |
 | `Dictionary.merge(a, b)`          | `(dictionary<T>, dictionary<T>)`                  | `dictionary<T>`                          | Merge; `b` wins on conflicts                                                                    |
 | `Dictionary.merge_with(a, b, fn)` | `(dictionary<T>, dictionary<T>, function(T, T) -> T)` | `dictionary<T>`                      | Merge; on a shared key `fn(value_from_a, value_from_b)` resolves the conflict                   |
@@ -600,6 +666,8 @@ Transform the representation of a string without changing its type (e.g. Base64,
 | `Encoder.encode_base64url(s)` | `(string)`      | `result<string>` | Encode to URL-safe Base64 (no padding) |
 | `Encoder.encode_text(text, encoding)` | `(string, Encoder.Encoding)` | `result<array<integer>>` | Encode a string to raw bytes; fail if a codepoint is unrepresentable |
 | `Encoder.encode_url(s)`       | `(string)`      | `result<string>` | RFC 3986 percent-encoding              |
+| `Encoder.is_valid_base64(s)`  | `(string)`      | `boolean`        | Whether `s` is a well-formed Base64 string (non-throwing gate) |
+| `Encoder.is_valid_utf8(bytes)`| `(array<integer>)` | `boolean`     | Whether `bytes` are a valid UTF-8 sequence (non-throwing gate) |
 
 `Encoder.Encoding` is a choice type selecting a text encoding for `encode_text` / `decode_text` — `Encoder.Encoding.Utf8`, `Encoder.Encoding.Ascii`, `Encoder.Encoding.Latin1`. Typing the encoding as a closed choice (rather than a bare string) makes a `match` exhaustive and turns a typo into a compile error instead of a runtime "unknown encoding". Bytes are `array<integer>` with each element in 0–255. `encode_text` fails when a codepoint cannot be represented in the target encoding (any non-ASCII codepoint for `Ascii`, any codepoint above U+00FF for `Latin1`); `decode_text` fails on a byte outside 0–255, a non-ASCII byte under `Ascii`, or a malformed UTF-8 sequence under `Utf8`.
 

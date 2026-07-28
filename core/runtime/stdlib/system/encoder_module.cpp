@@ -224,6 +224,23 @@ void register_encoder_ns(const EnvPtr& env) {
         .raw_body(make_base64_encoder("Encoder.encode_base64url", &base64url_encode))
         .func("decode_base64url", 1)
         .raw_body(make_base64_decoder("Encoder.decode_base64url", &base64url_decode))
+        .func("is_valid_base64", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Encoder.is_valid_base64", loc);
+
+            return Value{base64_decode(args[0].as_string()).has_value()};
+        })
+        .func("is_valid_utf8", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& array = expect_array(args[0], "Encoder.is_valid_utf8", loc);
+
+            std::string bytes;
+            if (read_bytes(*array->elements, "Encoder.is_valid_utf8", bytes)) {
+                return Value{false}; // non-byte elements ⇒ not valid UTF-8 bytes
+            }
+
+            return Value{is_valid_utf8(bytes)};
+        })
         .func("encode_url", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             (void)expect_string(args[0], "Encoder.encode_url", loc);

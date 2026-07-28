@@ -739,6 +739,69 @@ template <typename Range, typename Emit> void dedup_in_order(const Range& elemen
     });
 }
 
+// Transform each key through a callable, keeping values.  The callback receives
+// the key and must return a string.  Collisions resolve last-write-wins.
+// Returns result<dictionary>.
+[[nodiscard]] inline Value dict_map_keys(const DictionaryValue& src, const Value& callable,
+                                         const SourceLocation& loc) {
+    auto result = std::make_shared<DictionaryValue>();
+    // Build the (empty) hash index up front so each set() below is O(1) rather
+    // than a linear scan, keeping the build O(n) in the number of entries.
+    result->rebuild_index();
+    return apply_with_error_handling([&]() -> Value {
+        std::vector<Value> call_args(1);
+        for (const auto& [k, v] : src.entries) {
+            call_args[0] = Value{k};
+            auto new_key = invoke_callable(callable, call_args, loc);
+            if (!new_key.is_string()) {
+                throw RuntimeError{
+                    ErrorMessages::expected_type("Dictionary", "map_keys", "string",
+                                                 new_key.display_type_name()),
+                    loc, "the key mapping function must return a string"};
+            }
+            result->set(new_key.as_string(), v);
+        }
+        return Value{std::move(result)};
+    });
+}
+
+// Returns success(true) on the first (key, value) satisfying the predicate,
+// success(false) when none do.  The callback receives (key, value).  Stops at
+// the first match.  Returns result<boolean>.
+[[nodiscard]] inline Value dict_any(const DictionaryValue& src, const Value& callable,
+                                    const SourceLocation& loc) {
+    return apply_with_error_handling([&]() -> Value {
+        std::vector<Value> call_args(2);
+        for (const auto& [k, v] : src.entries) {
+            call_args[0] = Value{k};
+            call_args[1] = v;
+            if (invoke_callable(callable, call_args, loc).is_truthy()) {
+                return Value{true};
+            }
+        }
+        return Value{false};
+    });
+}
+
+// Returns success(true) when the predicate holds for every entry (or the
+// dictionary is empty), success(false) on the first entry that fails.  The
+// callback receives (key, value).  Stops at the first failing entry.  Returns
+// result<boolean>.
+[[nodiscard]] inline Value dict_all(const DictionaryValue& src, const Value& callable,
+                                    const SourceLocation& loc) {
+    return apply_with_error_handling([&]() -> Value {
+        std::vector<Value> call_args(2);
+        for (const auto& [k, v] : src.entries) {
+            call_args[0] = Value{k};
+            call_args[1] = v;
+            if (!invoke_callable(callable, call_args, loc).is_truthy()) {
+                return Value{false};
+            }
+        }
+        return Value{true};
+    });
+}
+
 // ─── Iterator-based container operation helpers ───
 // These work with any forward iterator over Values (e.g. LinkedListNodeIterator),
 // decoupling functional operations from vector storage assumptions.
@@ -853,6 +916,24 @@ template <typename Iterator>
             }
         }
         return Value{false};
+    });
+}
+
+// Returns success(false) on the first element satisfying the predicate,
+// success(true) when none do (or the range is empty).  The negation of
+// iter_any; stops at the first matching element.
+template <typename Iterator>
+[[nodiscard]] Value iter_none(Iterator begin, Iterator end, const Value& predicate,
+                              const SourceLocation& loc) {
+    return apply_with_error_handling([&]() -> Value {
+        std::vector<Value> call_args(1);
+        for (auto it = begin; it != end; ++it) {
+            call_args[0] = *it;
+            if (invoke_callable(predicate, call_args, loc).is_truthy()) {
+                return Value{false};
+            }
+        }
+        return Value{true};
     });
 }
 

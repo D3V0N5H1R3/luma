@@ -86,6 +86,13 @@ public:
     // emptiness predicate encapsulated so callers need not compare length().
     [[nodiscard]] bool is_empty() const;
 
+    // Whether a bounded channel is currently at capacity.  Always false for an
+    // unbounded channel (which only blocks at the safety cap).
+    [[nodiscard]] bool is_full() const;
+
+    // Configured capacity of a bounded channel, or std::nullopt when unbounded.
+    [[nodiscard]] std::optional<std::size_t> capacity() const;
+
 private:
     std::unique_ptr<ChannelBuffer> buffer_;
 

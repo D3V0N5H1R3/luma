@@ -398,6 +398,78 @@ constexpr std::string_view k_month_range_error =
     return Value{ResultValue::failure(Value{std::move(cv)})};
 }
 
+// ─── start_of / end_of truncation ────────────────────────────────────────────
+
+enum class TruncUnit {
+    Hour,
+    Day,
+    Month,
+    Year
+};
+
+// Floor (end = false) or ceil (end = true) a UTC timestamp to a unit boundary.
+// Returns result<number> — a failure when the timestamp or the rebuilt instant
+// leaves the supported 0001-9999 range.
+[[nodiscard]] Value truncate_timestamp(double ts, TruncUnit unit, bool end,
+                                       std::string_view func) {
+    const auto tm_opt = to_tm(ts);
+    if (!tm_opt) {
+        return make_failure_value(error_msg("DateTime", func, k_timestamp_range_error));
+    }
+
+    std::tm t = *tm_opt;
+    const std::int64_t year = static_cast<std::int64_t>(t.tm_year) + 1900;
+
+    if (unit == TruncUnit::Year) {
+        t.tm_mon = end ? 11 : 0;
+    }
+    if (unit == TruncUnit::Year || unit == TruncUnit::Month) {
+        t.tm_mday = end ? days_in_month_for(t.tm_mon + 1, year) : 1;
+    }
+    if (unit != TruncUnit::Hour) {
+        t.tm_hour = end ? 23 : 0;
+    }
+    t.tm_min = end ? 59 : 0;
+    t.tm_sec = end ? 59 : 0;
+
+    const auto unix_time = tm_to_unix(t);
+    if (!unix_time) {
+        return make_failure_value(error_msg("DateTime", func, k_timestamp_range_error));
+    }
+
+    return make_success_value(Value{*unix_time});
+}
+
+// ─── ISO-8601 week-of-year ───────────────────────────────────────────────────
+
+// Number of ISO weeks (52 or 53) in a calendar year.
+[[nodiscard]] constexpr int iso_weeks_in_year(std::int64_t year) noexcept {
+    const auto p = [](std::int64_t y) {
+        return static_cast<int>((y + (y / 4) - (y / 100) + (y / 400)) % 7);
+    };
+
+    return (p(year) == 4 || p(year - 1) == 3) ? 53 : 52;
+}
+
+// ISO-8601 week number (1-53) for a broken-down UTC date.  Weeks start on
+// Monday; week 1 is the week containing the year's first Thursday.
+[[nodiscard]] int iso_week_of_year(const std::tm& t) noexcept {
+    const int iso_wday = (t.tm_wday == 0) ? 7 : t.tm_wday; // 1 = Monday … 7 = Sunday
+    const int yday = t.tm_yday + 1;                        // 1-based ordinal day
+    const std::int64_t year = static_cast<std::int64_t>(t.tm_year) + 1900;
+
+    int week = (yday - iso_wday + 10) / 7;
+
+    if (week < 1) {
+        return iso_weeks_in_year(year - 1); // belongs to the last week of the previous year
+    }
+    if (week > iso_weeks_in_year(year)) {
+        return 1; // belongs to week 1 of the next year
+    }
+
+    return week;
+}
+
 } // namespace
 
 static void register_datetime_parsing(const EnvPtr& env);
@@ -523,7 +595,70 @@ void register_datetime_ns(const EnvPtr& env) {
 
             return make_success_value(Value{std::move(rec)});
         })
-        // ── DateTime.Date / DateTime.Time (partial calendar/wall-clock) ──────
+        // ── start_of / end_of truncation ─────────────────────────────────────
+        .func("start_of_hour", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            return truncate_timestamp(args[0].to_numeric(), TruncUnit::Hour, false,
+                                      "start_of_hour");
+        })
+        .func("start_of_day", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            return truncate_timestamp(args[0].to_numeric(), TruncUnit::Day, false, "start_of_day");
+        })
+        .func("start_of_month", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            return truncate_timestamp(args[0].to_numeric(), TruncUnit::Month, false,
+                                      "start_of_month");
+        })
+        .func("start_of_year", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            return truncate_timestamp(args[0].to_numeric(), TruncUnit::Year, false, "start_of_year");
+        })
+        .func("end_of_hour", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            return truncate_timestamp(args[0].to_numeric(), TruncUnit::Hour, true, "end_of_hour");
+        })
+        .func("end_of_day", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            return truncate_timestamp(args[0].to_numeric(), TruncUnit::Day, true, "end_of_day");
+        })
+        .func("end_of_month", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            return truncate_timestamp(args[0].to_numeric(), TruncUnit::Month, true, "end_of_month");
+        })
+        .func("end_of_year", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            return truncate_timestamp(args[0].to_numeric(), TruncUnit::Year, true, "end_of_year");
+        })
+        // ── day-type predicates and ISO week number ──────────────────────────
+        .func("is_weekend", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto tm = to_tm(args[0].to_numeric());
+            if (!tm) {
+                throw RuntimeError{error_msg("DateTime", "is_weekend", k_timestamp_range_error),
+                                   loc, "pass a timestamp within the year 0001-9999 range"};
+            }
+            // tm_wday: 0 = Sunday, 6 = Saturday.
+            return Value{tm->tm_wday == 0 || tm->tm_wday == 6};
+        })
+        .func("is_weekday", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto tm = to_tm(args[0].to_numeric());
+            if (!tm) {
+                throw RuntimeError{error_msg("DateTime", "is_weekday", k_timestamp_range_error),
+                                   loc, "pass a timestamp within the year 0001-9999 range"};
+            }
+            return Value{tm->tm_wday != 0 && tm->tm_wday != 6};
+        })
+        .func("week_of_year", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto tm = to_tm(args[0].to_numeric());
+            if (!tm) {
+                throw RuntimeError{error_msg("DateTime", "week_of_year", k_timestamp_range_error),
+                                   loc, "pass a timestamp within the year 0001-9999 range"};
+            }
+            return Value{static_cast<std::int64_t>(iso_week_of_year(*tm))};
+        })
         // Validating constructors and extractors for the calendar-only Date and
         // wall-clock-only Time records, plus combine() to fuse them back into an
         // instant.  Date/Time are genuinely partial — a Date has no time-of-day
@@ -748,6 +883,13 @@ void register_datetime_ns(const EnvPtr& env) {
             return Value{std::string{k_month_names[static_cast<std::size_t>(month - 1)]}};
         });
 
+    // Duration constants — the scale factors the arithmetic table uses, exposed
+    // so ad-hoc timestamp maths can read as self-documenting names.
+    env->define("DateTime.seconds_per_minute", Value{static_cast<std::int64_t>(60)}, false);
+    env->define("DateTime.seconds_per_hour", Value{static_cast<std::int64_t>(3600)}, false);
+    env->define("DateTime.seconds_per_day", Value{static_cast<std::int64_t>(86400)}, false);
+    env->define("DateTime.days_per_week", Value{static_cast<std::int64_t>(7)}, false);
+
     register_datetime_arithmetic(env);
     register_datetime_parsing(env);
 }
@@ -884,6 +1026,118 @@ static void register_datetime_parsing(const EnvPtr& env) {
             replace_all(result, "ss", std::format("{:02}", tm->tm_sec));
 
             return make_success_value(Value{std::move(result)});
+        })
+        .func("parse", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "DateTime.parse", loc);
+            (void)expect_string(args[1], "DateTime.parse", loc);
+
+            const auto& input = args[0].as_string();
+            const auto& pattern = args[1].as_string();
+
+            int year{1970};
+            int mon{1};
+            int day{1};
+            int hour{0};
+            int min{0};
+            int sec{0};
+
+            std::size_t si{0};
+            std::size_t pi{0};
+
+            const auto read_digits = [&](int count, int& out) -> bool {
+                if (si + static_cast<std::size_t>(count) > input.size()) {
+                    return false;
+                }
+                int value{0};
+                for (int k{0}; k < count; ++k) {
+                    const char c = input[si];
+                    if (c < '0' || c > '9') {
+                        return false;
+                    }
+                    value = (value * 10) + (c - '0');
+                    ++si;
+                }
+                out = value;
+                return true;
+            };
+
+            const auto token_at = [&](std::string_view tok) -> bool {
+                return pattern.compare(pi, tok.size(), tok) == 0;
+            };
+
+            const auto fail = [&]() -> Value {
+                return failure_msg("DateTime", "parse", "input does not match the pattern",
+                                   error_codes::parse_error);
+            };
+
+            while (pi < pattern.size()) {
+                if (token_at("YYYY")) {
+                    if (!read_digits(4, year)) {
+                        return fail();
+                    }
+                    pi += 4;
+                } else if (token_at("MM")) {
+                    if (!read_digits(2, mon)) {
+                        return fail();
+                    }
+                    pi += 2;
+                } else if (token_at("DD")) {
+                    if (!read_digits(2, day)) {
+                        return fail();
+                    }
+                    pi += 2;
+                } else if (token_at("hh")) {
+                    if (!read_digits(2, hour)) {
+                        return fail();
+                    }
+                    pi += 2;
+                } else if (token_at("mm")) {
+                    if (!read_digits(2, min)) {
+                        return fail();
+                    }
+                    pi += 2;
+                } else if (token_at("ss")) {
+                    if (!read_digits(2, sec)) {
+                        return fail();
+                    }
+                    pi += 2;
+                } else {
+                    // Literal character — must match the input exactly.
+                    if (si >= input.size() || input[si] != pattern[pi]) {
+                        return fail();
+                    }
+                    ++si;
+                    ++pi;
+                }
+            }
+
+            if (si != input.size()) {
+                return fail(); // trailing, unmatched input
+            }
+
+            // Validate the parsed calendar fields before building the timestamp.
+            if (mon < 1 || mon > 12 || day < 1 ||
+                day > days_in_month_for(mon, static_cast<std::int64_t>(year)) || hour > 23 ||
+                min > 59 || sec > 59) {
+                return failure_msg("DateTime", "parse", "parsed date fields are out of range",
+                                   error_codes::parse_error);
+            }
+
+            std::tm t{};
+            t.tm_year = year - 1900;
+            t.tm_mon = mon - 1;
+            t.tm_mday = day;
+            t.tm_hour = hour;
+            t.tm_min = min;
+            t.tm_sec = sec;
+
+            const auto unix_time = tm_to_unix(t);
+            if (!unix_time) {
+                return make_failure_value(error_msg("DateTime", "parse", k_timestamp_range_error));
+            }
+
+            return make_success_value(Value{*unix_time});
         })
         .func("is_before", 2)
         .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {

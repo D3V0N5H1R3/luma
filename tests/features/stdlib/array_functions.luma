@@ -133,6 +133,22 @@ function void test_array_any() {
 }
 
 @test
+function void test_array_none() {
+    array<integer> values = [1, 2, 3, 4, 5]
+
+    assert(Result.unwrap(Array.none(values, (integer x) -> x > 10)))
+    assert(!Result.unwrap(Array.none(values, (integer x) -> x > 4)))
+    assert(Result.unwrap(Array.none([], (integer x) -> x > 0)))
+}
+
+@test
+function void test_array_none_callback_exception() {
+    result<boolean> r = Array.none([1, 3, 0], (integer x) -> (10 // x) > 100)
+
+    assert(Result.is_failure(r), "none callback exception should propagate as failure")
+}
+
+@test
 function void test_array_count() {
     array<integer> values = [1, 2, 3, 4, 5, 6]
 
@@ -987,6 +1003,36 @@ function void test_array_drop() {
 
     assert(Array.length(dropped) == 3)
     assert(dropped[0] == 3)
+}
+
+@test
+function void test_array_split_at() {
+    (array<integer>, array<integer>) parts = Array.split_at([1, 2, 3, 4, 5], 2)
+
+    assert(Array.length(parts.0) == 2)
+    assert(Array.length(parts.1) == 3)
+    assert(parts.0[0] == 1)
+    assert(parts.0[1] == 2)
+    assert(parts.1[0] == 3)
+    assert(parts.1[2] == 5)
+}
+
+@test
+function void test_array_split_at_clamps() {
+    (array<integer>, array<integer>) low = Array.split_at([1, 2, 3], -4)
+    assert(Array.length(low.0) == 0)
+    assert(Array.length(low.1) == 3)
+
+    (array<integer>, array<integer>) high = Array.split_at([1, 2, 3], 99)
+    assert(Array.length(high.0) == 3)
+    assert(Array.length(high.1) == 0)
+}
+
+@test
+function void test_array_split_at_empty() {
+    (array<integer>, array<integer>) parts = Array.split_at([], 2)
+    assert(Array.length(parts.0) == 0)
+    assert(Array.length(parts.1) == 0)
 }
 
 @test

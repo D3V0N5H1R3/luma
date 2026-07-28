@@ -80,6 +80,41 @@ namespace {
     return Value{ResultValue::failure(make_compression_error_choice(result.error()))};
 }
 
+// Build a Compression.Format choice value (runtime short name "Format").  Used
+// by detect_format to return some(Format) from sniffed magic bytes.
+[[nodiscard]] Value make_format_choice(std::string_view variant) {
+    auto cv = std::make_shared<ChoiceValue>();
+    cv->type_name = "Format";
+    cv->variant = std::string{variant};
+
+    return Value{std::move(cv)};
+}
+
+// Sniff the compression container from the leading bytes.  Returns the variant
+// name ("Gzip" or "Zlib") or std::nullopt when no known container is recognised
+// (raw deflate and RLE have no reliable magic).
+[[nodiscard]] std::optional<std::string_view> sniff_format(const std::string& data) {
+    if (data.size() < 2) {
+        return std::nullopt;
+    }
+
+    const auto b0 = static_cast<std::uint8_t>(data[0]);
+    const auto b1 = static_cast<std::uint8_t>(data[1]);
+
+    // Gzip: fixed magic 0x1f 0x8b (RFC 1952 §2.3).
+    if (b0 == 0x1f && b1 == 0x8b) {
+        return "Gzip";
+    }
+
+    // Zlib (RFC 1950 §2.2): low nibble of byte 0 is 8 (CM = deflate) and the
+    // two-byte header is a multiple of 31 (the FCHECK constraint).
+    if ((b0 & 0x0f) == 0x08 && (((static_cast<unsigned>(b0) << 8) | b1) % 31 == 0)) {
+        return "Zlib";
+    }
+
+    return std::nullopt;
+}
+
 } // namespace
 
 // === Registration ===
@@ -96,6 +131,9 @@ void register_compression_ns(const EnvPtr& env, bool sandbox) {
             }
             if (variant == "Gzip") {
                 return Value{compression::gzip_compress(data)};
+            }
+            if (variant == "Zlib") {
+                return Value{compression::zlib_compress(data)};
             }
             if (variant == "Rle") {
                 return Value{compression::rle_encode(data)};
@@ -118,6 +156,9 @@ void register_compression_ns(const EnvPtr& env, bool sandbox) {
             } else if (variant == "Gzip") {
                 decompressed = compression::gzip_decompress(data);
                 malformed_msg = "Compression.decompress: malformed gzip data";
+            } else if (variant == "Zlib") {
+                decompressed = compression::zlib_decompress(data);
+                malformed_msg = "Compression.decompress: malformed zlib data";
             } else if (variant == "Rle") {
                 decompressed = compression::rle_decode(data);
                 malformed_msg = "Compression.decompress: malformed RLE data";
@@ -200,6 +241,47 @@ void register_compression_ns(const EnvPtr& env, bool sandbox) {
             return make_success_value(
                 Value{compression::gzip_compress(data, static_cast<int>(level))});
         })
+        .func("zlib_compress", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Compression.zlib_compress", loc);
+            return Value{compression::zlib_compress(args[0].as_string())};
+        })
+        .func("zlib_compress_with", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& data = expect_string(args[0], "Compression.zlib_compress_with", loc);
+            const auto level = expect_integer(args[1], "Compression.zlib_compress_with", loc);
+            if (level < compression::k_min_deflate_level ||
+                level > compression::k_max_deflate_level) {
+                return make_failure_value(
+                    std::string{"Compression.zlib_compress_with: level must be between 1 and 9"});
+            }
+            return make_success_value(
+                Value{compression::zlib_compress(data, static_cast<int>(level))});
+        })
+        .func("zlib_decompress", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Compression.zlib_decompress", loc);
+            const auto decompressed = compression::zlib_decompress(args[0].as_string());
+            if (!decompressed) {
+                return make_failure_value(
+                    std::string{"Compression.zlib_decompress: malformed zlib data"});
+            }
+            return make_success_value(Value{*decompressed});
+        })
+        .func("zlib_decompress_typed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Compression.zlib_decompress_typed", loc);
+            return to_typed_result(compression::zlib_decompress_checked(args[0].as_string()));
+        })
+        .func("detect_format", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Compression.detect_format", loc);
+            const auto variant = sniff_format(args[0].as_string());
+            if (!variant) {
+                return Value{NullValue{}}; // none — unrecognised container
+            }
+            return make_format_choice(*variant); // some(Format)
+        })
         .func("compressed_size", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             (void)expect_string(args[0], "Compression.compressed_size", loc);
@@ -223,6 +305,9 @@ void register_compression_ns(const EnvPtr& env, bool sandbox) {
             }
             if (variant == "Gzip") {
                 return to_typed_result(compression::gzip_decompress_checked(data));
+            }
+            if (variant == "Zlib") {
+                return to_typed_result(compression::zlib_decompress_checked(data));
             }
             if (variant == "Rle") {
                 return to_typed_result(compression::rle_decode_checked(data));

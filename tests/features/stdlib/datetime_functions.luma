@@ -892,3 +892,129 @@ function void test_datetime_between_dates_negative() {
     DateTime.Period span = Result.unwrap(DateTime.between_dates(later, base))
     assert(span.years == -2, "a start after end yields a negative span")
 }
+
+# ─── add_minutes / add_weeks / difference_minutes / difference_weeks ───
+
+@test
+function void test_datetime_add_minutes_weeks() {
+    number base = Result.unwrap(DateTime.from_parts(2024, 3, 15, 10, 0, 0))
+
+    number plus90 = DateTime.add_minutes(base, 90.0)
+    assert(Math.approximately_equal(DateTime.difference_minutes(base, plus90), 90.0, 0.001))
+
+    number plus2w = DateTime.add_weeks(base, 2.0)
+    assert(Math.approximately_equal(DateTime.difference_weeks(base, plus2w), 2.0, 0.001))
+    # Two weeks is 14 days
+    assert(Math.approximately_equal(DateTime.difference_days(base, plus2w), 14.0, 0.001))
+}
+
+# ─── start_of / end_of ───
+
+@test
+function void test_datetime_start_of() {
+    number ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 45))
+
+    number sod = Result.unwrap(DateTime.start_of_day(ts))
+    assert(Result.unwrap(DateTime.hour(sod)) == 0)
+    assert(Result.unwrap(DateTime.minute(sod)) == 0)
+    assert(Result.unwrap(DateTime.second(sod)) == 0)
+
+    number soh = Result.unwrap(DateTime.start_of_hour(ts))
+    assert(Result.unwrap(DateTime.hour(soh)) == 14)
+    assert(Result.unwrap(DateTime.minute(soh)) == 0)
+
+    number som = Result.unwrap(DateTime.start_of_month(ts))
+    assert(Result.unwrap(DateTime.day_of_month(som)) == 1)
+
+    number soy = Result.unwrap(DateTime.start_of_year(ts))
+    assert(Result.unwrap(DateTime.month(soy)) == 1)
+    assert(Result.unwrap(DateTime.day_of_month(soy)) == 1)
+}
+
+@test
+function void test_datetime_end_of() {
+    number ts = Result.unwrap(DateTime.from_parts(2024, 3, 15, 14, 30, 45))
+
+    number eod = Result.unwrap(DateTime.end_of_day(ts))
+    assert(Result.unwrap(DateTime.hour(eod)) == 23)
+    assert(Result.unwrap(DateTime.minute(eod)) == 59)
+    assert(Result.unwrap(DateTime.second(eod)) == 59)
+
+    number eom = Result.unwrap(DateTime.end_of_month(ts))
+    assert(Result.unwrap(DateTime.day_of_month(eom)) == 31, "March has 31 days")
+
+    number eoy = Result.unwrap(DateTime.end_of_year(ts))
+    assert(Result.unwrap(DateTime.month(eoy)) == 12)
+    assert(Result.unwrap(DateTime.day_of_month(eoy)) == 31)
+}
+
+# ─── is_weekend / is_weekday ───
+
+@test
+function void test_datetime_is_weekend_weekday() {
+    # 2024-03-15 is a Friday
+    number friday = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    assert(DateTime.is_weekday(friday))
+    assert(!DateTime.is_weekend(friday))
+
+    # 2024-03-16 is a Saturday
+    number saturday = Result.unwrap(DateTime.from_parts(2024, 3, 16, 0, 0, 0))
+    assert(DateTime.is_weekend(saturday))
+    assert(!DateTime.is_weekday(saturday))
+}
+
+# ─── week_of_year ───
+
+@test
+function void test_datetime_week_of_year() {
+    # 2024-01-01 is a Monday → ISO week 1
+    number jan1 = Result.unwrap(DateTime.from_parts(2024, 1, 1, 0, 0, 0))
+    assert(DateTime.week_of_year(jan1) == 1)
+
+    # 2024-03-15 → ISO week 11
+    number mar15 = Result.unwrap(DateTime.from_parts(2024, 3, 15, 0, 0, 0))
+    assert(DateTime.week_of_year(mar15) == 11)
+}
+
+# ─── parse ───
+
+@test
+function void test_datetime_parse() {
+    number ts = Result.unwrap(DateTime.parse("2024-03-15 10:30:45", "YYYY-MM-DD hh:mm:ss"))
+
+    assert(Result.unwrap(DateTime.year(ts)) == 2024)
+    assert(Result.unwrap(DateTime.month(ts)) == 3)
+    assert(Result.unwrap(DateTime.day_of_month(ts)) == 15)
+    assert(Result.unwrap(DateTime.hour(ts)) == 10)
+    assert(Result.unwrap(DateTime.minute(ts)) == 30)
+    assert(Result.unwrap(DateTime.second(ts)) == 45)
+}
+
+@test
+function void test_datetime_parse_roundtrip() {
+    number original = Result.unwrap(DateTime.from_parts(2026, 12, 25, 14, 30, 0))
+    string formatted = Result.unwrap(DateTime.format(original, "DD/MM/YYYY hh:mm:ss"))
+    number reparsed = Result.unwrap(DateTime.parse(formatted, "DD/MM/YYYY hh:mm:ss"))
+
+    assert(Math.approximately_equal(original, reparsed, 0.001))
+}
+
+@test
+function void test_datetime_parse_failures() {
+    # Mismatched literal
+    assert(Result.is_failure(DateTime.parse("2024/03/15", "YYYY-MM-DD")))
+    # Invalid field values
+    assert(Result.is_failure(DateTime.parse("2024-13-15", "YYYY-MM-DD")))
+    # Trailing input
+    assert(Result.is_failure(DateTime.parse("2024-03-15xx", "YYYY-MM-DD")))
+}
+
+# ─── duration constants ───
+
+@test
+function void test_datetime_constants() {
+    assert(DateTime.seconds_per_minute == 60)
+    assert(DateTime.seconds_per_hour == 3600)
+    assert(DateTime.seconds_per_day == 86400)
+    assert(DateTime.days_per_week == 7)
+}

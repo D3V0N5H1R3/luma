@@ -60,6 +60,14 @@ void register_dictionary_functions(std::vector<FunctionSpec>& specs, const Modul
                  {p.dict_any}),
             m.fn("count", 2, "(dict: dictionary<V>, f: func(string, V) -> boolean)",
                  R::result_integer(), {p.dict_any, p.func}),
+            m.fn("any", 2, "(dict: dictionary<V>, f: func(string, V) -> boolean)",
+                 R::result_boolean(), {p.dict_any, p.func}),
+            m.fn("all", 2, "(dict: dictionary<V>, f: func(string, V) -> boolean)",
+                 R::result_boolean(), {p.dict_any, p.func}),
+            m.fn("map_keys", 2, "(dict: dictionary<V>, f: func(string) -> string)",
+                 R::result(R::dict(R::any_type())), {p.dict_any, p.func}),
+            m.fn("from_arrays", 2, "(keys: array<string>, values: array<V>)",
+                 R::result(R::dict(R::any_type())), {p.array_string, p.array_any}),
         });
 }
 

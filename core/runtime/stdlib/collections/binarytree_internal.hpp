@@ -284,6 +284,32 @@ inline void level_order(const std::shared_ptr<BinaryTreeNode>& root, std::vector
     return 1 + std::max(tree_height(node->left, depth + 1), tree_height(node->right, depth + 1));
 }
 
+// Returns the subtree height, or -1 if any node below it is height-unbalanced
+// (its two subtree heights differ by more than 1).  Single post-order pass used
+// by BinaryTree.is_balanced.
+[[nodiscard]] inline std::int64_t balanced_height(const std::shared_ptr<BinaryTreeNode>& node,
+                                                  int depth = 0) {
+    if (!node || depth > max_tree_depth) {
+        return 0;
+    }
+
+    const auto left = balanced_height(node->left, depth + 1);
+    if (left < 0) {
+        return -1;
+    }
+
+    const auto right = balanced_height(node->right, depth + 1);
+    if (right < 0) {
+        return -1;
+    }
+
+    if (std::abs(left - right) > 1) {
+        return -1;
+    }
+
+    return 1 + std::max(left, right);
+}
+
 // Search for a value.
 [[nodiscard]] inline bool tree_contains(const std::shared_ptr<BinaryTreeNode>& node,
                                         const Value& val, const SourceLocation& loc,

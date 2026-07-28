@@ -728,3 +728,52 @@ function void test_dictionary_invert_non_string_values() {
     assert(Dictionary.get_or(inverted, "1", "") == "a")
     assert(Dictionary.get_or(inverted, "2", "") == "b")
 }
+
+@test
+function void test_dictionary_map_keys() {
+    dictionary<integer> d = {"a": 1, "b": 2}
+    result<dictionary<integer>> r = Dictionary.map_keys(d, (string k) -> String.uppercase(k))
+
+    dictionary<integer> mapped = Result.unwrap(r)
+    assert(Dictionary.get_or(mapped, "A", 0) == 1)
+    assert(Dictionary.get_or(mapped, "B", 0) == 2)
+    assert(Dictionary.length(mapped) == 2)
+}
+
+@test
+function void test_dictionary_map_keys_collision() {
+    # Two keys map to the same new key — last write wins
+    dictionary<integer> d = {"a": 1, "b": 2}
+    result<dictionary<integer>> r = Dictionary.map_keys(d, (string _k) -> "x")
+
+    dictionary<integer> mapped = Result.unwrap(r)
+    assert(Dictionary.length(mapped) == 1)
+    assert(Dictionary.get_or(mapped, "x", 0) == 2)
+}
+
+@test
+function void test_dictionary_any_all() {
+    dictionary<integer> d = {"a": 2, "b": 4, "c": 6}
+
+    assert(Result.unwrap(Dictionary.any(d, (string _k, integer v) -> v > 5)))
+    assert(!Result.unwrap(Dictionary.any(d, (string _k, integer v) -> v > 10)))
+    assert(Result.unwrap(Dictionary.all(d, (string _k, integer v) -> v % 2 == 0)))
+    assert(!Result.unwrap(Dictionary.all(d, (string _k, integer v) -> v > 2)))
+}
+
+@test
+function void test_dictionary_from_arrays() {
+    result<dictionary<integer>> r = Dictionary.from_arrays(["a", "b", "c"], [1, 2, 3])
+
+    dictionary<integer> d = Result.unwrap(r)
+    assert(Dictionary.length(d) == 3)
+    assert(Dictionary.get_or(d, "a", 0) == 1)
+    assert(Dictionary.get_or(d, "c", 0) == 3)
+}
+
+@test
+function void test_dictionary_from_arrays_length_mismatch() {
+    result<dictionary<integer>> r = Dictionary.from_arrays(["a", "b"], [1])
+
+    assert(Result.is_failure(r))
+}

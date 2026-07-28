@@ -245,6 +245,85 @@ void register_decimal_ns(const EnvPtr& env) {
             }
             return make_success_value(make_decimal(std::move(*quotient)));
         })
+        .func("power", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& base = arg_decimal(args[0], "Decimal.power", loc);
+            const auto exponent = expect_integer(args[1], "Decimal.power", loc);
+            if (exponent < 0) {
+                return failure_msg("Decimal", "power", "exponent must be zero or greater",
+                                   error_codes::invalid_argument);
+            }
+
+            // Bound the iteration count.  Repeated multiplication normally
+            // terminates early via overflow for any |base| > 1, but degenerate
+            // bases (0, 1, -1) never grow the coefficient, so without this cap a
+            // huge exponent would spin in a tight native loop (a DoS).  Any
+            // non-degenerate base overflows well before this bound, so the cap
+            // never rejects a computation that would otherwise succeed.
+            constexpr std::int64_t k_max_power_exponent = 1'000'000;
+            if (exponent > k_max_power_exponent) {
+                return failure_msg("Decimal", "power",
+                                   "exponent is too large (maximum is 1000000)",
+                                   error_codes::size_limit_exceeded);
+            }
+
+            Decimal result{static_cast<std::int64_t>(1)};
+            for (std::int64_t i{0}; i < exponent; ++i) {
+                auto next = result.multiply(base);
+                if (!next) {
+                    return failure_msg("Decimal", "power", "result is too large to represent",
+                                       error_codes::size_limit_exceeded);
+                }
+                result = std::move(*next);
+            }
+            return make_success_value(make_decimal(std::move(result)));
+        })
+        .func("remainder", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& dividend = arg_decimal(args[0], "Decimal.remainder", loc);
+            const auto& divisor = arg_decimal(args[1], "Decimal.remainder", loc);
+            if (divisor.is_zero()) {
+                return failure_msg("Decimal", "remainder", "division by zero",
+                                   error_codes::division_by_zero);
+            }
+            // Truncate the quotient toward zero (Down) so the remainder takes the
+            // sign of the dividend, then r = dividend - trunc(dividend / divisor) * divisor.
+            auto quotient = dividend.divide(divisor, 0, RoundingMode::Down);
+            if (!quotient) {
+                return failure_msg("Decimal", "remainder", "result is too large to represent",
+                                   error_codes::size_limit_exceeded);
+            }
+            auto product = quotient->multiply(divisor);
+            if (!product) {
+                return failure_msg("Decimal", "remainder", "result is too large to represent",
+                                   error_codes::size_limit_exceeded);
+            }
+            return make_success_value(make_decimal(dividend.subtract(*product)));
+        })
+        .func("sum", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& arr = expect_array(args[0], "Decimal.sum", loc);
+            Decimal acc{static_cast<std::int64_t>(0)};
+            for (const auto& element : *arr->elements) {
+                acc = acc.add(arg_decimal(element, "Decimal.sum", loc));
+            }
+            return make_decimal(std::move(acc));
+        })
+        .func("product", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& arr = expect_array(args[0], "Decimal.product", loc);
+            Decimal acc{static_cast<std::int64_t>(1)};
+            for (const auto& element : *arr->elements) {
+                auto next = acc.multiply(arg_decimal(element, "Decimal.product", loc));
+                if (!next) {
+                    throw RuntimeError{"Decimal.product: result is too large to represent "
+                                       "(exceeds the maximum decimal size)",
+                                       loc, "reduce the magnitude or precision of the operands"};
+                }
+                acc = std::move(*next);
+            }
+            return make_decimal(std::move(acc));
+        })
         // ─── Rounding ───
         .func("round", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -266,6 +345,42 @@ void register_decimal_ns(const EnvPtr& env) {
             const auto& rhs = arg_decimal(args[1], "Decimal.equals", loc);
             return Value{lhs.equals(rhs)};
         })
+        .func("less_than", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& lhs = arg_decimal(args[0], "Decimal.less_than", loc);
+            const auto& rhs = arg_decimal(args[1], "Decimal.less_than", loc);
+            return Value{lhs.compare(rhs) < 0};
+        })
+        .func("greater_than", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& lhs = arg_decimal(args[0], "Decimal.greater_than", loc);
+            const auto& rhs = arg_decimal(args[1], "Decimal.greater_than", loc);
+            return Value{lhs.compare(rhs) > 0};
+        })
+        .func("less_or_equal", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& lhs = arg_decimal(args[0], "Decimal.less_or_equal", loc);
+            const auto& rhs = arg_decimal(args[1], "Decimal.less_or_equal", loc);
+            return Value{lhs.compare(rhs) <= 0};
+        })
+        .func("greater_or_equal", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& lhs = arg_decimal(args[0], "Decimal.greater_or_equal", loc);
+            const auto& rhs = arg_decimal(args[1], "Decimal.greater_or_equal", loc);
+            return Value{lhs.compare(rhs) >= 0};
+        })
+        .func("min", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& lhs = arg_decimal(args[0], "Decimal.min", loc);
+            const auto& rhs = arg_decimal(args[1], "Decimal.min", loc);
+            return make_decimal(lhs.compare(rhs) <= 0 ? lhs : rhs);
+        })
+        .func("max", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& lhs = arg_decimal(args[0], "Decimal.max", loc);
+            const auto& rhs = arg_decimal(args[1], "Decimal.max", loc);
+            return make_decimal(lhs.compare(rhs) >= 0 ? lhs : rhs);
+        })
         // ─── Predicates & sign ───
         .func("is_zero", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -274,6 +389,15 @@ void register_decimal_ns(const EnvPtr& env) {
         .func("is_negative", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return Value{arg_decimal(args[0], "Decimal.is_negative", loc).is_negative()};
+        })
+        .func("is_positive", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{arg_decimal(args[0], "Decimal.is_positive", loc).sign() > 0};
+        })
+        .func("sign", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{static_cast<std::int64_t>(
+                arg_decimal(args[0], "Decimal.sign", loc).sign())};
         })
         .func("negate", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -296,6 +420,29 @@ void register_decimal_ns(const EnvPtr& env) {
         .func("to_number", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return Value{arg_decimal(args[0], "Decimal.to_number", loc).to_double()};
+        })
+        .func("to_integer", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& value = arg_decimal(args[0], "Decimal.to_integer", loc);
+            const auto canonical = value.canonical();
+            if (canonical.scale() > 0) {
+                return failure_msg("Decimal", "to_integer",
+                                   "value has a fractional part; round it first "
+                                   "(e.g. Decimal.round(d, 0, Decimal.RoundingMode.Down))",
+                                   error_codes::invalid_argument);
+            }
+            const auto text = canonical.to_string();
+            try {
+                std::size_t pos{0};
+                const auto parsed = std::stoll(text, &pos);
+                if (pos == text.size()) {
+                    return make_success_value(Value{static_cast<std::int64_t>(parsed)});
+                }
+            } catch (const std::exception&) { // NOLINT(bugprone-empty-catch)
+                // Fall through to the out-of-range failure below.
+            }
+            return failure_msg("Decimal", "to_integer", "value is out of integer range",
+                               error_codes::overflow);
         });
 }
 
