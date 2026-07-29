@@ -889,6 +889,10 @@ void register_datetime_ns(const EnvPtr& env) {
     env->define("DateTime.seconds_per_hour", Value{static_cast<std::int64_t>(3600)}, false);
     env->define("DateTime.seconds_per_day", Value{static_cast<std::int64_t>(86400)}, false);
     env->define("DateTime.days_per_week", Value{static_cast<std::int64_t>(7)}, false);
+    env->define("DateTime.minutes_per_hour", Value{static_cast<std::int64_t>(60)}, false);
+    env->define("DateTime.hours_per_day", Value{static_cast<std::int64_t>(24)}, false);
+    env->define("DateTime.months_per_year", Value{static_cast<std::int64_t>(12)}, false);
+    env->define("DateTime.milliseconds_per_second", Value{static_cast<std::int64_t>(1000)}, false);
 
     register_datetime_arithmetic(env);
     register_datetime_parsing(env);

@@ -448,7 +448,7 @@ surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 | `DateTime.week_of_year(ts)`                | `(number)`                                               | `integer`                    | ISO 8601 week number (1–53; Monday-start, first-Thursday rule)           |
 | `DateTime.year(ts)`                        | `(number)`                                               | `result<integer>`            | Four-digit year; fail if out of range                                    |
 
-`DateTime` also exposes duration constants: `DateTime.seconds_per_minute` (60), `DateTime.seconds_per_hour` (3600), `DateTime.seconds_per_day` (86400), and `DateTime.days_per_week` (7) — all `integer`.
+`DateTime` also exposes duration constants: `DateTime.seconds_per_minute` (60), `DateTime.seconds_per_hour` (3600), `DateTime.seconds_per_day` (86400), `DateTime.days_per_week` (7), `DateTime.minutes_per_hour` (60), `DateTime.hours_per_day` (24), `DateTime.months_per_year` (12), and `DateTime.milliseconds_per_second` (1000) — all `integer`.
 
 ### Timezone Support (Fixed UTC Offsets)
 
@@ -2223,6 +2223,12 @@ case Sign.Positive { "rising" }
 | `Math.epsilon`  | `number`  | 2.220446049250313e-16 (machine epsilon; the default tolerance to reach for with `Math.approximately_equal`) |
 | `Math.max_integer` | `integer` | 9223372036854775807 (2⁶³−1) |
 | `Math.min_integer` | `integer` | −9223372036854775808 (−2⁶³) |
+| `Math.max_number` | `number` | 1.7976931348623157e308 (largest finite `number`) |
+| `Math.min_number` | `number` | 2.2250738585072014e-308 (smallest positive normal `number`; the most-negative `number` is `-Math.max_number`) |
+| `Math.sqrt2`    | `number`  | 1.4142135623730951 (√2)    |
+| `Math.golden_ratio` | `number` | 1.618033988749895 (φ) |
+| `Math.ln2`      | `number`  | 0.6931471805599453 (natural log of 2) |
+| `Math.ln10`     | `number`  | 2.302585092994046 (natural log of 10) |
 
 ## 26 — Optional
 
@@ -2960,6 +2966,27 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 > **Note:** `String.uppercase()`, `String.lowercase()`, `String.equals_ignore_case()`, and `String.contains_ignore_case()` only fold ASCII characters (a–z, A–Z). Non-ASCII UTF-8 code points (e.g., `ü`, `é`, `ñ`) are compared or passed through unchanged. Use these functions only when working with ASCII text.
 
 > **Resource limits** — `String.center`, `String.pad_left`, and `String.pad_right` cap their target `width`, and `String.repeat` caps its repeat count and result size. See the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits) for Luma's resource limits and their `LUMA_LIMIT_*` overrides.
+
+**Constants:**
+
+Canonical character-class alphabets — one obvious source of truth per set — for building random strings, validating input, or trimming. All are of type `string`.
+
+| Constant                  | Value                                                             |
+| ------------------------- | ---------------------------------------------------------------- |
+| `String.digits`           | `"0123456789"`                                                   |
+| `String.hex_digits`       | `"0123456789abcdef"`                                            |
+| `String.ascii_lowercase`  | `"abcdefghijklmnopqrstuvwxyz"`                                  |
+| `String.ascii_uppercase`  | `"ABCDEFGHIJKLMNOPQRSTUVWXYZ"`                                  |
+| `String.ascii_letters`    | `ascii_lowercase` + `ascii_uppercase`                            |
+| `String.whitespace`       | space, tab, newline, carriage return, form-feed, vertical-tab    |
+| `String.punctuation`      | the ASCII punctuation set ``!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~``    |
+
+```luma
+# Pick a random character from an alphabet, or test membership in a set.
+array<string> letters = String.characters(String.ascii_letters)
+string letter = Result.unwrap(Random.choice(letters))
+boolean is_punct = String.contains(String.punctuation, "!")
+```
 
 ## 39 — Task
 

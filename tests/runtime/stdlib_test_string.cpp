@@ -834,6 +834,21 @@ static void test_string_ends_with_any() {
     ASSERT_TRUE(eval("String.ends_with_any(\"hello\", [\"\"])").as_bool());
 }
 
+static void test_string_character_class_constants() {
+    ASSERT_EQ(eval("String.digits").as_string(), "0123456789");
+    ASSERT_EQ(eval("String.hex_digits").as_string(), "0123456789abcdef");
+    ASSERT_EQ(eval("String.ascii_lowercase").as_string(), "abcdefghijklmnopqrstuvwxyz");
+    ASSERT_EQ(eval("String.ascii_uppercase").as_string(), "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    ASSERT_EQ(eval("String.ascii_letters").as_string(),
+              "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    ASSERT_EQ(eval("String.whitespace").as_string(), std::string(" \t\n\r\f\v"));
+    ASSERT_EQ(eval("String.punctuation").as_string(),
+              std::string(R"(!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~)"));
+    // Composes with existing predicates.
+    ASSERT_TRUE(eval("String.is_digit(String.digits)").as_bool());
+    ASSERT_TRUE(eval("String.is_ascii(String.punctuation)").as_bool());
+}
+
 int main() {
     RUN(test_string_byte_length);
     RUN(test_string_byte_length_multibyte);
@@ -955,6 +970,8 @@ int main() {
     RUN(test_string_starts_with_any);
     RUN(test_string_ends_with_any);
     RUN(test_native_type_error_is_catchable);
+
+    RUN(test_string_character_class_constants);
 
     return SUMMARY();
 }
