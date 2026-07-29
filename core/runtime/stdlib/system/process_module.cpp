@@ -627,6 +627,87 @@ void register_process_ns(const EnvPtr& env) {
                 return Value{ResultValue::failure(make_process_error_choice("LaunchFailed"))};
             }
         })
+        // Process.run_command_timeout(command, timeout_ms) -> result<Process.CommandOutput>
+        // Timeout-bounded variant of run_command: runs the shell-free Command and,
+        // if it has not exited within timeout_ms milliseconds, forcibly kills it
+        // (SIGKILL on POSIX, TerminateProcess on Windows) and returns a failure.
+        // This is the safety affordance that prevents a hung or runaway child (a
+        // stuck network call, a program awaiting input, an infinite loop) from
+        // freezing the Luma program forever.  A command that exits within the
+        // deadline returns the same result<Process.CommandOutput> as run_command
+        // (a negative exit code — surfaced as failure — signals a launch failure).
+        .func("run_command_timeout", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (!args[0].is_record()) {
+                throw RuntimeError{"Process.run_command_timeout: expected a Process.Command record",
+                                   loc, "build one with Process.command(program, arguments)"};
+            }
+
+            const auto& rec = args[0].as_record();
+            const Value* program = rec->find_field("program");
+            const Value* arguments = rec->find_field("arguments");
+
+            if (program == nullptr || !program->is_string() || arguments == nullptr ||
+                !arguments->is_array()) {
+                throw RuntimeError{"Process.run_command_timeout: expected a Process.Command record",
+                                   loc, "build one with Process.command(program, arguments)"};
+            }
+
+            const auto timeout_ms = expect_integer(args[1], "Process.run_command_timeout", loc);
+
+            if (timeout_ms <= 0) {
+                return make_failure_value(error_msg("Process", "run_command_timeout",
+                                                    "timeout_ms must be a positive number of "
+                                                    "milliseconds"));
+            }
+
+            if (program->as_string().empty()) {
+                return make_failure_value("program must not be empty");
+            }
+
+            // Build the argv vector verbatim (argv[0] is the program): no shell,
+            // no tokenization, so metacharacters in any argument are inert.
+            std::vector<std::string> argv;
+            argv.reserve(arguments->as_array()->elements->size() + 1);
+            argv.push_back(program->as_string());
+
+            for (const auto& element : *arguments->as_array()->elements) {
+                if (!element.is_string()) {
+                    return make_failure_value("every argument must be a string");
+                }
+
+                argv.push_back(element.as_string());
+            }
+
+            try {
+                auto captured =
+                    platform_process::execute_argv_captured_timeout(std::move(argv), timeout_ms);
+
+                if (captured.timed_out) {
+                    return make_failure_value(
+                        error_msg("Process", "run_command_timeout",
+                                  std::format("command timed out after {} ms", timeout_ms)));
+                }
+
+                if (captured.exit_code < 0) {
+                    return make_failure_value("failed to execute command");
+                }
+
+                auto output = std::make_shared<RecordValue>();
+                output->type_name = "CommandOutput";
+                output->fields.emplace_back("exit_code",
+                                            Value{static_cast<std::int64_t>(captured.exit_code)});
+                output->fields.emplace_back("standard_output",
+                                            Value{std::move(captured.standard_output)});
+                output->fields.emplace_back("standard_error",
+                                            Value{std::move(captured.standard_error)});
+                output->fields.emplace_back("success", Value{captured.exit_code == 0});
+
+                return make_success_value(Value{std::move(output)});
+            } catch (const RuntimeError& e) {
+                return failure_from_exception(e);
+            }
+        })
         .func("get_process_id", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
             return Value{platform_process::current_process_id()};

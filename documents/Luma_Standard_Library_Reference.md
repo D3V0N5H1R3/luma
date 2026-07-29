@@ -2357,6 +2357,7 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 | `Process.command(program, arguments)`           | `(string, array<string>)` | `Process.Command`        | Build a shell-free command (explicit program + argument vector)          |
 | `Process.run_command(cmd)`                      | `(Process.Command)` | `result<Process.CommandOutput>` | Run a `Process.Command` directly (no shell); metacharacters are inert    |
 | `Process.run_command_typed(cmd)`                | `(Process.Command)` | `result<Process.CommandOutput, Process.Error>` | Like `run_command`; on a launch failure the error is a typed `Process.Error` |
+| `Process.run_command_timeout(cmd, timeout_ms)`  | `(Process.Command, integer)` | `result<Process.CommandOutput>` | Like `run_command`, but kills the child and fails if it overruns `timeout_ms` |
 | `Process.get_arguments()`                       | `()`               | `array<string>`                 | Command-line arguments after the file name                               |
 | `Process.get_environment_variable(name)`        | `(string)`         | `result<string>`                | Environment variable value; fail if not set                              |
 | `Process.find_executable(name)`                 | `(string)`         | `optional<string>`              | Absolute path of `name` on `PATH` (honouring `PATHEXT` on Windows), or `none`; read-only |
@@ -2380,6 +2381,17 @@ match Process.run_command(cmd) {
 ```
 
 `Process.ProcessResult` record fields: `exit_code` (`integer`), `output` (`string`).
+
+`Process.run_command_timeout(cmd, timeout_ms)` is the timeout-bounded companion of `run_command`: it runs the same shell-free `Process.Command` but, if the child has not exited within `timeout_ms` milliseconds, forcibly kills it (SIGKILL on POSIX; a kill-on-close Job Object that terminates the whole child process tree on Windows) and returns a `failure`. This is the safety affordance that prevents a hung or runaway child — a stuck network call, a program waiting on input it will never receive, an infinite loop — from freezing the Luma program forever. A command that exits within the deadline returns exactly the same `result<Process.CommandOutput>` as `run_command` (a negative exit code, surfaced as `failure`, still signals a launch failure such as an unknown program). `timeout_ms` must be a positive integer; a non-positive value fails immediately without launching anything. On a timeout the failure message reads `command timed out after <n> ms`, and the child's partial output is discarded.
+
+```luma
+# Cap a potentially slow tool at two seconds so it can never hang the script.
+Process.Command cmd = Process.command("curl", ["--silent", "https://example.com"])
+match Process.run_command_timeout(cmd, 2000) {
+    success(out) { print(out.standard_output) }
+    failure(err) { print("command did not finish: ${err}") }
+}
+```
 
 `Process.CommandOutput` record fields: `exit_code` (`integer`), `standard_output` (`string`), `standard_error` (`string`), `success` (`boolean`, true when `exit_code` is `0`). It is returned by `Process.execute`, the richer sibling of `Process.run`: where `ProcessResult` captures only stdout, `CommandOutput` keeps stdout and stderr in separate fields — essential for diagnosing a failed command, whose error text `run` discards — and adds a derived `success` convenience so callers avoid re-checking `exit_code == 0`. `Process.run` and `ProcessResult` are unchanged for the common case. The same shell-injection **security warning** above applies verbatim to `Process.execute`.
 
@@ -2491,11 +2503,21 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 - `Random.Distribution.Uniform(low: number, high: number)` — a uniform draw in `[low, high]`; fails if `high < low`.
 - `Random.Distribution.Normal(mean: number, standard_deviation: number)` — a normal (Gaussian) draw via the Box–Muller transform; fails if `standard_deviation <= 0`.
 - `Random.Distribution.Exponential(rate: number)` — an exponential draw with rate (λ) `rate`, via inverse-transform sampling; fails if `rate <= 0`.
+- `Random.Distribution.Bernoulli(probability: number)` — a weighted coin flip returning `1.0` with the given probability, else `0.0`; fails unless `0 <= probability <= 1`. **Discrete** — the result is an integer-valued `number`.
+- `Random.Distribution.Binomial(trials: integer, probability: number)` — the number of successes in `trials` independent probability-`probability` trials; fails if `trials < 0` or `probability` is outside `[0, 1]`. **Discrete** — the result is an integer-valued `number` in `[0, trials]`.
+- `Random.Distribution.Poisson(rate: number)` — the number of events in a unit interval given mean event rate `rate`; fails if `rate <= 0`. **Discrete** — the result is a non-negative integer-valued `number`.
+- `Random.Distribution.Gamma(shape: number, scale: number)` — a right-skewed positive draw parameterised by shape (k) and scale (θ); fails if `shape <= 0` or `scale <= 0`.
+- `Random.Distribution.LogNormal(mean: number, standard_deviation: number)` — a draw whose natural logarithm is normally distributed with the given `mean` and `standard_deviation`; fails if `standard_deviation <= 0`.
+
+> The discrete distributions (`Bernoulli`, `Binomial`, `Poisson`) still return a `number` — `sample_from`'s return type is `result<number>` — but the drawn value is always integer-valued (e.g. `3.0`). Convert it with `Converter.to_integer` if you need an `integer`.
 
 ```luma
 result<number> uniform = Random.sample_from(Random.Distribution.Uniform(0.0, 10.0))
 result<number> normal = Random.sample_from(Random.Distribution.Normal(0.0, 1.0))
 result<number> exponential = Random.sample_from(Random.Distribution.Exponential(0.5))
+result<number> coin = Random.sample_from(Random.Distribution.Bernoulli(0.5))
+result<number> successes = Random.sample_from(Random.Distribution.Binomial(10, 0.5))
+result<number> arrivals = Random.sample_from(Random.Distribution.Poisson(4.0))
 ```
 
 **`Random.Uuid`.** A record — `value` (`string`) — wrapping a validated canonical UUID (the `8-4-4-4-12` hex form), so a UUID is a distinct, validated type rather than an anonymous string. `Random.uuid_typed()` generates one (like `generate_uuid`, but typed), `Random.parse_uuid(s)` validates an incoming string and fails for any non-canonical input (the stored value is lower-cased so equal UUIDs compare equal regardless of input case), and `Random.uuid_to_string(u)` reads the canonical string back out. The bare-string `Random.generate_uuid` / `secure_uuid` are unchanged. Mirrors `Socket.IpAddress`, a typed wrapper over an otherwise-stringly address.

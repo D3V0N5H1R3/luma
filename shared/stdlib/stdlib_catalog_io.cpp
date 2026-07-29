@@ -110,6 +110,8 @@ void register_process_functions(std::vector<FunctionSpec>& specs, const ModuleBu
                  {named::command()}),
             m.fn("run_command_typed", 1, "(command: Process.Command)",
                  R::result(named::command_output(), named::process_error()), {named::command()}),
+            m.fn("run_command_timeout", 2, "(command: Process.Command, timeout_ms: integer)",
+                 R::result(named::command_output()), {named::command(), p.integer}),
             m.fn("set_environment_variable", 2, "(name: string, value: string)", R::result_void(),
                  {p.string, p.string}),
             m.fn("signal", 2, "(pid: integer, signal: Process.Signal)", R::result_boolean(),

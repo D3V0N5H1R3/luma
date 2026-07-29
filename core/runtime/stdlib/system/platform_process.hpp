@@ -46,6 +46,13 @@ struct CapturedOutput {
     // failure (NotFound / PermissionDenied / …) rather than only reporting the
     // negative exit_code.  Only execute_argv_captured populates this today.
     int launch_errno{0};
+
+    // True when the child was killed because it exceeded the caller-supplied
+    // deadline (only execute_argv_captured_timeout sets this).  Distinguishes a
+    // timeout — where exit_code/output are meaningless and left empty — from a
+    // launch failure (launch_errno / negative exit_code), so
+    // Process.run_command_timeout can report "timed out" specifically.
+    bool timed_out{false};
 };
 
 // Execute a command, capturing stdout and stderr separately.  Like
@@ -64,6 +71,15 @@ struct CapturedOutput {
 // exit_code on spawn failure or output-size overflow; an empty argv returns a
 // negative exit_code too.
 [[nodiscard]] CapturedOutput execute_argv_captured(std::vector<std::string> argv_strings);
+
+// Like execute_argv_captured, but bounds the child's lifetime: if it has not
+// exited within `timeout_ms` milliseconds it is forcibly killed (SIGKILL on
+// POSIX, TerminateProcess on Windows) and the returned CapturedOutput has
+// `timed_out == true` (with empty output and a sentinel exit_code).  Backs
+// Process.run_command_timeout.  A non-positive `timeout_ms` is the caller's
+// responsibility to reject before calling.
+[[nodiscard]] CapturedOutput execute_argv_captured_timeout(std::vector<std::string> argv_strings,
+                                                           std::int64_t timeout_ms);
 
 // Return the current process identifier.
 [[nodiscard]] std::int64_t current_process_id();
