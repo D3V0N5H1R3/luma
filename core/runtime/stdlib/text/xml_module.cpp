@@ -304,13 +304,19 @@ struct XmlPathSegment {
             return nullptr;
         }
 
+        // Bind the checked optional to a plain reference before dereferencing so
+        // clang-tidy's bugprone-unchecked-optional-access can pair the access
+        // with the guard above (it does not always track `optional->` after an
+        // `if (!opt)` early return).
+        const XmlPathSegment& segment = *parsed;
+
         std::size_t matched{0};
         std::shared_ptr<XmlValue> next;
 
         for (const auto& child : current->children) {
             if (child->node_type == XmlValue::NodeType::Element &&
-                child->tag_or_content == parsed->tag) {
-                if (matched == parsed->index) {
+                child->tag_or_content == segment.tag) {
+                if (matched == segment.index) {
                     next = child;
 
                     break;
