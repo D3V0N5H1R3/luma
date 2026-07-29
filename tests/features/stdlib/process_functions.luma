@@ -450,3 +450,13 @@ function void test_process_signal_missing_process_fails() {
     result<boolean> r = Process.signal(2147483646, Process.Signal.Terminate)
     assert(Result.is_failure(r), "an absent process fails")
 }
+
+@test
+function void test_process_find_executable_missing() {
+    # A name that (almost certainly) is not on PATH resolves to none rather
+    # than crashing or launching anything.
+    optional<string> found = Process.find_executable("luma_no_such_program_xyz")
+    assert(Optional.is_none(found), "an absent executable yields none")
+    # An empty name is also none.
+    assert(Optional.is_none(Process.find_executable("")))
+}

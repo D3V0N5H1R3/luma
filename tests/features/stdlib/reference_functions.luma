@@ -130,3 +130,24 @@ function void test_reference_nested_cell_shares_identity() {
 function void test_reference_type_name() {
     assert(type_of(Reference.new(42)) == "reference")
 }
+
+# ─── read-modify-write / comparison additions ────────────
+
+@test
+function void test_reference_rmw_returning() {
+    reference<integer> r = Reference.new(10)
+    assert(Reference.update_and_get(r, (integer x) -> x + 5) == 15)
+    assert(Reference.get_and_update(r, (integer x) -> x * 2) == 15)
+    assert(Reference.get(r) == 30)
+    assert(Reference.get_and_set(r, 100) == 30)
+    assert(Reference.get(r) == 100)
+}
+
+@test
+function void test_reference_equals_same() {
+    reference<integer> a = Reference.new(1)
+    reference<integer> b = Reference.new(1)
+    assert(Reference.equals(a, b))
+    assert(!Reference.same(a, b))
+    assert(Reference.same(a, a))
+}

@@ -8,14 +8,20 @@ namespace luma::stdlib::detail {
 // interoperable with the existing numeric comparator that Array.sort expects.
 void register_order_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                               const ParamShorthands& p) {
-    append_specs(specs, {
-                            m.fn("of", 2, "(a: any, b: any)", named::ordering(), {p.any, p.any}),
-                            m.fn("reverse", 1, "(o: Ordering)", named::ordering(), {p.any}),
-                            m.fn("then", 2, "(first: Ordering, second: Ordering)",
-                                 named::ordering(), {p.any, p.any}),
-                            m.fn("to_number", 1, "(o: Ordering)", R::number_type(), {p.any}),
-                            m.fn("from_number", 1, "(n: number)", named::ordering(), {p.number}),
-                        });
+    append_specs(specs,
+                 {
+                     m.fn("of", 2, "(a: any, b: any)", named::ordering(), {p.any, p.any}),
+                     m.fn("reverse", 1, "(o: Ordering)", named::ordering(), {p.any}),
+                     m.fn("then", 2, "(first: Ordering, second: Ordering)", named::ordering(),
+                          {p.any, p.any}),
+                     m.fn("to_number", 1, "(o: Ordering)", R::number_type(), {p.any}),
+                     m.fn("from_number", 1, "(n: number)", named::ordering(), {p.number}),
+                     m.fn("is_less", 1, "(o: Ordering)", R::boolean_type(), {p.any}),
+                     m.fn("is_equal", 1, "(o: Ordering)", R::boolean_type(), {p.any}),
+                     m.fn("is_greater", 1, "(o: Ordering)", R::boolean_type(), {p.any}),
+                     m.fn("is_less_or_equal", 1, "(o: Ordering)", R::boolean_type(), {p.any}),
+                     m.fn("is_greater_or_equal", 1, "(o: Ordering)", R::boolean_type(), {p.any}),
+                 });
 }
 
 } // namespace luma::stdlib::detail

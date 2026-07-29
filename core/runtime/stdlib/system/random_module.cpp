@@ -302,6 +302,47 @@ void register_random_ns(const EnvPtr& env) {
 
             return make_success_value(Value{value});
         })
+        // Random.set_seed(seed) -> none
+        // Seeds the (already thread-local) non-secure PRNG so subsequent
+        // generate_* / shuffle / sample draws are reproducible.  The secure_*
+        // family stays entropy-seeded and is unaffected.
+        .func("set_seed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto seed = expect_integer(args[0], "Random.set_seed", loc);
+
+            thread_local_generator().seed(
+                static_cast<std::mt19937::result_type>(static_cast<std::uint64_t>(seed)));
+
+            return Value{NullValue{}};
+        })
+        // Random.generate_bytes(n) -> result<array<integer>>
+        // n fast, non-secure bytes, each in [0, 255].  Fails on a negative count.
+        .func("generate_bytes", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto n = expect_integer(args[0], "Random.generate_bytes", loc);
+
+            if (n < 0) {
+                return make_failure_value(
+                    error_msg("Random", "generate_bytes", "count must be >= 0"));
+            }
+
+            if (static_cast<std::uint64_t>(n) > ResourceLimits::max_array_size) {
+                return make_failure_value(
+                    error_msg("Random", "generate_bytes", "count exceeds maximum array size"));
+            }
+
+            auto& gen = thread_local_generator();
+            std::uniform_int_distribution<int> dist{0, 255};
+
+            auto arr = std::make_shared<ArrayValue>();
+            arr->elements->reserve(static_cast<std::size_t>(n));
+
+            for (std::int64_t i{0}; i < n; ++i) {
+                arr->elements->emplace_back(static_cast<std::int64_t>(dist(gen)));
+            }
+
+            return make_success_value(Value{std::move(arr)});
+        })
         .func("generate_string", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto len_int = expect_integer(args[0], "Random.generate_string", loc);
@@ -623,6 +664,44 @@ void register_random_ns(const EnvPtr& env) {
             }
 
             return make_success_value(Value{format_uuid_bytes(bytes)});
+        })
+        // Random.secure_bytes(n) -> result<array<integer>>
+        // n cryptographically-secure bytes, each in [0, 255].  The correct source
+        // for salts, keys, and nonces.  Fails on a negative count or when the
+        // CSPRNG is unavailable.
+        .func("secure_bytes", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto n = expect_integer(args[0], "Random.secure_bytes", loc);
+
+            if (n < 0) {
+                return make_failure_value(
+                    error_msg("Random", "secure_bytes", "count must be >= 0"));
+            }
+
+            if (static_cast<std::uint64_t>(n) > ResourceLimits::max_array_size) {
+                return make_failure_value(
+                    error_msg("Random", "secure_bytes", "count exceeds maximum array size"));
+            }
+
+            if (!secure_available()) {
+                return secure_failure("secure_bytes");
+            }
+
+            const auto len = static_cast<std::size_t>(n);
+            std::vector<unsigned char> buf(len);
+
+            if (len > 0 && !secure_generate(buf.data(), buf.size())) {
+                return secure_failure("secure_bytes");
+            }
+
+            auto arr = std::make_shared<ArrayValue>();
+            arr->elements->reserve(len);
+
+            for (const auto byte : buf) {
+                arr->elements->emplace_back(static_cast<std::int64_t>(byte));
+            }
+
+            return make_success_value(Value{std::move(arr)});
         });
 }
 

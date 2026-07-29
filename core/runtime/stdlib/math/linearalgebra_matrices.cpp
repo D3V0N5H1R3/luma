@@ -466,6 +466,108 @@ void register_linearalgebra_matrices(const EnvPtr& env) {
             }
 
             return Value{true};
+        })
+        .func("hadamard_matrix", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto a = to_mat(args[0], "LinearAlgebra.hadamard_matrix", loc);
+            auto b = to_mat(args[1], "LinearAlgebra.hadamard_matrix", loc);
+
+            if (a.size() != b.size() || (!a.empty() && a[0].size() != b[0].size())) {
+                return make_failure_value("LinearAlgebra.hadamard_matrix: dimension mismatch");
+            }
+
+            for (std::size_t i{0}; i < a.size(); ++i) {
+                for (std::size_t j{0}; j < a[0].size(); ++j) {
+                    a[i][j] *= b[i][j];
+                }
+            }
+
+            return make_success_value(from_mat(a));
+        })
+        .func("rank", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto m = to_mat(args[0], "LinearAlgebra.rank", loc);
+
+            if (m.empty() || m[0].empty()) {
+                return Value{static_cast<std::int64_t>(0)};
+            }
+
+            const auto rows = m.size();
+            const auto cols = m[0].size();
+            std::size_t rank{0};
+
+            for (std::size_t col{0}; col < cols && rank < rows; ++col) {
+                // Find a pivot row at or below `rank` with the largest magnitude.
+                std::size_t pivot{rank};
+                double max_val{std::fabs(m[rank][col])};
+
+                for (std::size_t i{rank + 1}; i < rows; ++i) {
+                    if (std::fabs(m[i][col]) > max_val) {
+                        max_val = std::fabs(m[i][col]);
+                        pivot = i;
+                    }
+                }
+
+                if (max_val < k_singularity_threshold) {
+                    continue;
+                }
+
+                std::swap(m[rank], m[pivot]);
+
+                for (std::size_t i{0}; i < rows; ++i) {
+                    if (i == rank) {
+                        continue;
+                    }
+
+                    const auto factor = m[i][col] / m[rank][col];
+
+                    for (std::size_t j{col}; j < cols; ++j) {
+                        m[i][j] -= factor * m[rank][j];
+                    }
+                }
+
+                ++rank;
+            }
+
+            return Value{static_cast<std::int64_t>(rank)};
+        })
+        .func("is_identity", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto m = to_mat(args[0], "LinearAlgebra.is_identity", loc);
+
+            if (!is_square_mat(m)) {
+                return Value{false};
+            }
+
+            for (std::size_t i{0}; i < m.size(); ++i) {
+                for (std::size_t j{0}; j < m.size(); ++j) {
+                    const auto expected = (i == j) ? 1.0 : 0.0;
+
+                    if (std::fabs(m[i][j] - expected) > k_comparison_tolerance) {
+                        return Value{false};
+                    }
+                }
+            }
+
+            return Value{true};
+        })
+        .func("is_diagonal", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto m = to_mat(args[0], "LinearAlgebra.is_diagonal", loc);
+
+            if (!is_square_mat(m)) {
+                return Value{false};
+            }
+
+            for (std::size_t i{0}; i < m.size(); ++i) {
+                for (std::size_t j{0}; j < m.size(); ++j) {
+                    if (i != j && std::fabs(m[i][j]) > k_comparison_tolerance) {
+                        return Value{false};
+                    }
+                }
+            }
+
+            return Value{true};
         });
 }
 

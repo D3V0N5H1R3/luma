@@ -65,6 +65,33 @@ void register_optional_ns(const EnvPtr& env) {
 
             return args[0];
         })
+        .func("expect", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            if (args[0].is_null()) {
+                (void)expect_string(args[1], "Optional.expect", loc);
+
+                throw RuntimeError{args[1].as_string(), loc,
+                                   "the optional was none when a value was expected"};
+            }
+
+            return args[0];
+        })
+        .func("and", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation) -> Value {
+            // some(b) when a is present, otherwise none.
+            return args[0].is_null() ? Value{NullValue{}} : args[1];
+        })
+        .func("xor", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation) -> Value {
+            const bool a_some = !args[0].is_null();
+            const bool b_some = !args[1].is_null();
+
+            if (a_some == b_some) {
+                return Value{NullValue{}};
+            }
+
+            return a_some ? args[0] : args[1];
+        })
         .func("unwrap_or", 2)
         .raw_body([](std::span<const Value> args, SourceLocation) -> Value {
             return unwrap_or_impl(args[0], args[1]);

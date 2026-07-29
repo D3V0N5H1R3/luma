@@ -74,6 +74,31 @@ constexpr std::array<LevelDescriptor, 5> k_level_table = {{
     return LogLevel::Info;
 }
 
+// Resolve a Log.Level choice variant or a lowercase string name to a LogLevel,
+// mirroring the dual-form accepted by Log.set_level.  Throws on an unusable
+// argument type.
+[[nodiscard]] LogLevel resolve_level_arg(const Value& value, std::string_view function,
+                                         const SourceLocation& loc) {
+    if (value.is_choice()) {
+        const auto& variant = value.as_choice()->variant;
+
+        for (const auto& d : k_level_table) {
+            if (d.variant_name == variant) {
+                return d.level;
+            }
+        }
+
+        return LogLevel::Info;
+    }
+
+    if (value.is_string()) {
+        return string_to_level(value.as_string());
+    }
+
+    throw RuntimeError{std::string{function} + ": expected a Log.Level or string", loc,
+                       "pass a Log.Level variant or a string level name"};
+}
+
 // Default log format used by LogState initialisation and Log.reset().
 constexpr std::string_view k_default_log_format{"${timestamp} [${level}] ${message}"};
 
@@ -274,6 +299,24 @@ void register_log_ns(const EnvPtr& env, bool sandbox) {
             cv->variant = variant;
 
             return Value{std::move(cv)};
+        })
+        .func("is_enabled", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto level = resolve_level_arg(args[0], "Log.is_enabled", loc);
+
+            auto& state = log_state();
+            const std::scoped_lock lock{state.mutex};
+
+            return Value{level >= state.level};
+        })
+        .func("log", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto level = resolve_level_arg(args[0], "Log.log", loc);
+            (void)expect_string(args[1], "Log.log", loc);
+
+            write_log(level, args[1].as_string());
+
+            return Value{NullValue{}};
         })
         .func("set_format", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

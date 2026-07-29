@@ -121,3 +121,17 @@ function void test_order_reverse_sort() {
     assert(sorted[1] == 4)
     assert(sorted[4] == 1)
 }
+
+# ─── boolean predicate additions ─────────────────────────
+
+@test
+function void test_order_predicates() {
+    assert(Order.is_less(Order.of(1, 2)))
+    assert(!Order.is_less(Order.of(2, 1)))
+    assert(Order.is_equal(Order.of(3, 3)))
+    assert(Order.is_greater(Order.of(5, 2)))
+    assert(Order.is_less_or_equal(Order.of(3, 3)))
+    assert(Order.is_less_or_equal(Order.of(1, 3)))
+    assert(Order.is_greater_or_equal(Order.of(3, 3)))
+    assert(Order.is_greater_or_equal(Order.of(9, 3)))
+}

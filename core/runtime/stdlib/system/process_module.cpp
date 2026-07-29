@@ -24,6 +24,10 @@
 #include "runtime/stdlib/common/stdlib_error_helpers.hpp"
 #include "runtime/stdlib/system/platform_process.hpp"
 
+#ifndef _WIN32
+#include <unistd.h> // access(X_OK) — POSIX executable-bit test in find_executable
+#endif
+
 namespace luma {
 namespace {
 
@@ -249,6 +253,126 @@ void register_process_ns(const EnvPtr& env) {
             }
 
             return make_failure_value("environment variable not set");
+        })
+        // Process.find_executable(name) -> optional<string>
+        // Scans PATH (honouring PATHEXT on Windows) for an executable, returning
+        // its absolute path or none.  A read-only query — it never launches
+        // anything — so it complements Process.Error.NotFound.
+        .func("find_executable", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& name = expect_string(args[0], "Process.find_executable", loc);
+
+            if (name.empty()) {
+                return Value{NullValue{}};
+            }
+
+            namespace fs = std::filesystem;
+
+#ifdef _WIN32
+            constexpr char k_path_separator = ';';
+            const bool has_dir = name.find_first_of("/\\") != std::string::npos;
+
+            // Candidate extensions from PATHEXT, plus an empty one so a name that
+            // already carries its extension still matches.
+            std::vector<std::string> extensions{""};
+            {
+                const auto pathext =
+                    safe_getenv("PATHEXT").value_or(".COM;.EXE;.BAT;.CMD;.VBS;.JS;.WSF");
+                std::size_t start{0};
+
+                while (start <= pathext.size()) {
+                    const auto end = pathext.find(';', start);
+                    auto ext = pathext.substr(start, end == std::string::npos ? std::string::npos
+                                                                              : end - start);
+
+                    if (!ext.empty()) {
+                        extensions.push_back(std::move(ext));
+                    }
+
+                    if (end == std::string::npos) {
+                        break;
+                    }
+
+                    start = end + 1;
+                }
+            }
+#else
+            constexpr char k_path_separator = ':';
+            const bool has_dir = name.find('/') != std::string::npos;
+            const std::vector<std::string> extensions{""};
+#endif
+
+            // Return the absolute path of `dir/name` (with each candidate
+            // extension) when it names an existing regular file that the process
+            // can execute, else nullopt.  On Windows executability is expressed
+            // by the PATHEXT extension list; on POSIX it is the X_OK permission
+            // bit, so a non-executable regular file does not shadow a real
+            // binary that appears later on PATH (matching `which` / execvp).
+            const auto probe = [&](const fs::path& dir) -> std::optional<std::string> {
+                for (const auto& ext : extensions) {
+                    fs::path candidate = dir / (name + ext);
+                    std::error_code ec;
+
+                    if (!fs::is_regular_file(candidate, ec)) {
+                        continue;
+                    }
+
+#ifndef _WIN32
+                    if (::access(candidate.c_str(), X_OK) != 0) {
+                        continue;
+                    }
+#endif
+
+                    auto resolved = fs::weakly_canonical(candidate, ec);
+
+                    return (ec ? fs::absolute(candidate, ec) : resolved).string();
+                }
+
+                return std::nullopt;
+            };
+
+            // A name that already contains a directory component is resolved
+            // relative to the working directory, not searched on PATH.
+            if (has_dir) {
+                if (auto found = probe(fs::current_path())) {
+                    return Value{std::move(*found)};
+                }
+
+                // The name may itself be an absolute/relative path prefix.
+                if (auto found = probe(fs::path{})) {
+                    return Value{std::move(*found)};
+                }
+
+                return Value{NullValue{}};
+            }
+
+            const auto path_env = safe_getenv("PATH");
+
+            if (!path_env) {
+                return Value{NullValue{}};
+            }
+
+            std::size_t start{0};
+
+            while (start <= path_env->size()) {
+                const auto end = path_env->find(k_path_separator, start);
+                const auto dir = path_env->substr(
+                    start, end == std::string::npos ? std::string::npos : end - start);
+
+                if (!dir.empty()) {
+                    if (auto found = probe(fs::path{dir})) {
+                        return Value{std::move(*found)};
+                    }
+                }
+
+                if (end == std::string::npos) {
+                    break;
+                }
+
+                start = end + 1;
+            }
+
+            return Value{NullValue{}};
         })
         .func("current_directory", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {

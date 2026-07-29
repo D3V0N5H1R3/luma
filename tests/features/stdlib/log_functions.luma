@@ -396,3 +396,17 @@ function void test_log_output_typed_file_writes() {
         FileSystem.delete("_test_log_output_typed.log"), false)
 }
 
+
+# ─── is_enabled / log additions ──────────────────────────
+
+@test
+function void test_log_is_enabled_and_log() {
+    Log.set_level(Log.Level.Warn)
+    assert(Log.is_enabled("error"))
+    assert(Log.is_enabled(Log.Level.Warn))
+    assert(!Log.is_enabled("debug"))
+    # Log.log emits at a dynamically chosen level (no observable return).
+    Log.log("info", "dynamic level message")
+    Log.log(Log.Level.Error, "typed level message")
+    Log.reset()
+}

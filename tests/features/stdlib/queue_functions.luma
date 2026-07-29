@@ -218,3 +218,26 @@ function void test_queue_partition_all_match() {
     assert(Queue.length(matches) == 3)
     assert(Queue.is_empty(rest))
 }
+
+# ─── query / membership / reverse additions ──────────────
+
+@test
+function void test_queue_any_all_count() {
+    queue q = Queue.from_array([1, 2, 3, 4])
+    assert(Result.unwrap(Queue.any(q, (integer x) -> x > 3)))
+    assert(!Result.unwrap(Queue.all(q, (integer x) -> x > 3)))
+    assert(Result.unwrap(Queue.count(q, (integer x) -> x > 2)) == 2)
+}
+
+@test
+function void test_queue_contains_find_reverse() {
+    queue q = Queue.from_array([5, 6, 7])
+    assert(Queue.contains(q, 6))
+    assert(!Queue.contains(q, 99))
+    assert(Result.unwrap(Queue.find(q, (integer x) -> x > 5)) == 6)
+    assert(Result.is_failure(Queue.find(q, (integer x) -> x > 99)))
+    queue r = Queue.reverse(q)
+    array<integer> arr = Queue.to_array(r)
+    assert(arr[0] == 7)
+    assert(arr[2] == 5)
+}
