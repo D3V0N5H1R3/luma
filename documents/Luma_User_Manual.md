@@ -1601,6 +1601,7 @@ boolean ok = Channel.send(ch, 42) # OK — assigned
 | `Result.collect(arr)`            | `array<result<T>>` → `result<array<T>>`                                                      |
 | `Result.error(r)`                | Inner error value — runtime error if called on `success`                                     |
 | `Result.error_code(r)`           | Error code string if `failure`; empty string if `success`                                    |
+| `Result.expect(r, msg)`          | Value — runtime error combining `msg` with the underlying error if `failure`                 |
 | `Result.filter(r, fn, msg)`      | Failure with `msg` if predicate is false                                                     |
 | `Result.flat_map(r, fn)`         | Chain a function that returns `result<T>`; throws if the callback does not return a `result` |
 | `Result.flatten(r)`              | `result<result<T>>` → `result<T>`                                                            |

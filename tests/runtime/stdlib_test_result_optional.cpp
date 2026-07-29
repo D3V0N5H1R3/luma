@@ -270,6 +270,21 @@ static void test_result_unwrap() {
     ASSERT_EQ(eval("Result.unwrap(success(42))").as_integer(), 42);
 }
 
+static void test_result_expect_success() {
+    // On success, expect returns the inner value and ignores the message.
+    ASSERT_EQ(eval("Result.expect(success(42), \"should have a value\")").as_integer(), 42);
+}
+
+static void test_result_expect_failure_throws() {
+    // On failure, expect throws a RuntimeError combining the message with the
+    // underlying error text.
+    ASSERT_TRUE(luma::test::eval_throws("Result.expect(failure(\"boom\"), \"expected a value\")"));
+    ASSERT_THROWS_WITH_MESSAGE(eval("Result.expect(failure(\"boom\"), \"expected a value\")"),
+                               "expected a value");
+    ASSERT_THROWS_WITH_MESSAGE(eval("Result.expect(failure(\"boom\"), \"expected a value\")"),
+                               "boom");
+}
+
 static void test_result_unwrap_or() {
     const auto v = eval("Result.unwrap_or(failure(\"err\"), 99)");
 
@@ -544,6 +559,8 @@ int main() {
     RUN(test_result_typed_map_arity_throws);
     RUN(test_result_to_optional);
     RUN(test_result_unwrap);
+    RUN(test_result_expect_success);
+    RUN(test_result_expect_failure_throws);
     RUN(test_result_unwrap_or);
     RUN(test_result_unwrap_or_success);
     RUN(test_result_zip);

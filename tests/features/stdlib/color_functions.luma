@@ -208,6 +208,125 @@ function void test_color_gradient_at_interpolates() {
 
 
 
+# ─── Analysis / accessibility helpers ───
+
+@test
+function void test_color_luminance() {
+    number white = Color.luminance(Result.unwrap(Color.rgb(255, 255, 255)))
+    number black = Color.luminance(Result.unwrap(Color.rgb(0, 0, 0)))
+
+    assert(Math.approximately_equal(white, 1.0, 0.01), "white luminance is 1")
+    assert(Math.approximately_equal(black, 0.0, 0.01), "black luminance is 0")
+}
+
+@test
+function void test_color_brightness() {
+    number white = Color.brightness(Result.unwrap(Color.rgb(255, 255, 255)))
+    number black = Color.brightness(Result.unwrap(Color.rgb(0, 0, 0)))
+
+    assert(Math.approximately_equal(white, 1.0, 0.01), "white brightness is 1")
+    assert(Math.approximately_equal(black, 0.0, 0.01), "black brightness is 0")
+}
+
+@test
+function void test_color_is_light_is_dark() {
+    Color.Color white = Result.unwrap(Color.rgb(255, 255, 255))
+    Color.Color black = Result.unwrap(Color.rgb(0, 0, 0))
+
+    assert(Color.is_light(white), "white is light")
+    assert(!Color.is_dark(white), "white is not dark")
+    assert(Color.is_dark(black), "black is dark")
+    assert(!Color.is_light(black), "black is not light")
+}
+
+@test
+function void test_color_readable_text_color() {
+    Color.Color on_white = Color.readable_text_color(Result.unwrap(Color.rgb(255, 255, 255)))
+    assert(on_white.red == 0 && on_white.green == 0 && on_white.blue == 0,
+           "black text on a white background")
+
+    Color.Color on_black = Color.readable_text_color(Result.unwrap(Color.rgb(0, 0, 0)))
+    assert(on_black.red == 255 && on_black.green == 255 && on_black.blue == 255,
+           "white text on a black background")
+}
+
+# ─── Saturation adjustments ───
+
+@test
+function void test_color_saturate_desaturate() {
+    Color.Color red = Result.unwrap(Color.rgb(255, 0, 0))
+    Color.Hsl less = Color.to_hsl(Color.desaturate(red, 0.5))
+    assert(Math.approximately_equal(less.saturation, 0.5, 0.01), "desaturate halves saturation")
+
+    Color.Color muted = Result.unwrap(Color.rgb(150, 100, 100))
+    Color.Hsl more = Color.to_hsl(Color.saturate(muted, 1.0))
+    assert(Math.approximately_equal(more.saturation, 1.0, 0.01), "saturate clamps at 1")
+}
+
+@test
+function void test_color_grayscale() {
+    Color.Color grey = Color.grayscale(Result.unwrap(Color.rgb(255, 0, 0)))
+    assert(grey.red == grey.green && grey.green == grey.blue, "grayscale is neutral")
+}
+
+# ─── Alpha adjustments ───
+
+@test
+function void test_color_with_alpha() {
+    Color.Color c = Color.with_alpha(Result.unwrap(Color.rgb(10, 20, 30)), 0.25)
+    assert(Math.approximately_equal(c.alpha, 0.25, 0.001), "alpha is set")
+    assert(c.red == 10, "channels are preserved")
+}
+
+@test
+function void test_color_fade() {
+    Color.Color c = Color.fade(Result.unwrap(Color.rgba(10, 20, 30, 0.8)), 0.3)
+    assert(Math.approximately_equal(c.alpha, 0.5, 0.001), "fade reduces alpha")
+
+    Color.Color floored = Color.fade(Result.unwrap(Color.rgba(10, 20, 30, 0.2)), 0.5)
+    assert(Math.approximately_equal(floored.alpha, 0.0, 0.001), "fade clamps at 0")
+}
+
+# ─── Per-channel and hue-based derivations ───
+
+@test
+function void test_color_invert() {
+    Color.Color c = Color.invert(Result.unwrap(Color.rgba(255, 0, 128, 0.5)))
+    assert(c.red == 0 && c.green == 255 && c.blue == 127, "channels are inverted")
+    assert(Math.approximately_equal(c.alpha, 0.5, 0.001), "alpha is unchanged")
+}
+
+@test
+function void test_color_complement() {
+    # The complement of red is cyan (0, 255, 255).
+    Color.Color cyan = Color.complement(Result.unwrap(Color.rgb(255, 0, 0)))
+    assert(cyan.red == 0 && cyan.green == 255 && cyan.blue == 255, "red complements to cyan")
+}
+
+@test
+function void test_color_complementary() {
+    array<Color.Color> pair = Color.complementary(Result.unwrap(Color.rgb(255, 0, 0)))
+    assert(Array.length(pair) == 2, "complementary yields two colours")
+    assert(pair[0].red == 255, "the base comes first")
+    assert(pair[1].green == 255, "the complement is cyan")
+}
+
+@test
+function void test_color_triadic() {
+    array<Color.Color> triad = Color.triadic(Result.unwrap(Color.rgb(255, 0, 0)))
+    assert(Array.length(triad) == 3, "triadic yields three colours")
+    assert(triad[0].red == 255, "the base is red")
+    assert(triad[1].green == 255, "the second is green (+120)")
+    assert(triad[2].blue == 255, "the third is blue (+240)")
+}
+
+@test
+function void test_color_analogous() {
+    array<Color.Color> scheme = Color.analogous(Result.unwrap(Color.rgb(255, 0, 0)))
+    assert(Array.length(scheme) == 3, "analogous yields three colours")
+    assert(scheme[0].red == 255, "the base is unchanged")
+}
+
 # ─── Color.Name (curated named colours) ───
 
 @test

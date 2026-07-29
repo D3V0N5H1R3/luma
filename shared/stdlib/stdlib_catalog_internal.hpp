@@ -190,6 +190,20 @@ namespace named {
     return ReturnTypeDesc::named("RegularExpression.Error");
 }
 
+// RegularExpression.Flags — the typed flag set accepted by the flag-aware
+// matches_with / find_with / … variants (as array<RegularExpression.Flags>).
+// Needs a matching branch in stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc regex_flags() {
+    return ReturnTypeDesc::named("RegularExpression.Flags");
+}
+
+// Terminal.CursorStyle — the typed cursor-shape selector accepted by
+// Terminal.set_cursor_style.  Needs a matching branch in
+// stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc terminal_cursor_style() {
+    return ReturnTypeDesc::named("Terminal.CursorStyle");
+}
+
 [[nodiscard]] inline ReturnTypeDesc dialect() {
     return ReturnTypeDesc::named("Dialect");
 }

@@ -696,3 +696,161 @@ function void test_xml_deserialize_detailed_failure_location() {
         }
     }
 }
+
+# ───────────────────────────────────────────────────────────
+# Descendant search, path navigation, child edits, text and entities
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_xml_find_descendant() {
+    string tag = Xml.deserialize("<r><a><deep id=\"1\"/></a></r>")
+    |> Result.unwrap()
+    |> Xml.find_descendant("deep")
+    |> Result.unwrap()
+    |> Xml.tag()
+
+    assert(tag == "deep", "find_descendant reaches nested elements")
+}
+
+@test
+function void test_xml_find_descendant_not_found() {
+    result<xml> r = Xml.deserialize("<r><a/></r>")
+    |> Result.unwrap()
+    |> Xml.find_descendant("missing")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_xml_find_all_descendants() {
+    array<xml> items = Xml.deserialize("<r><item/><a><item/></a><item/></r>")
+    |> Result.unwrap()
+    |> Xml.find_all_descendants("item")
+
+    assert(Array.length(items) == 3, "collects matches at every depth")
+}
+
+@test
+function void test_xml_get_path() {
+    string title = Xml.deserialize("<lib><book><title>A</title></book></lib>")
+    |> Result.unwrap()
+    |> Xml.get_path("book/title")
+    |> Result.unwrap()
+    |> Xml.text()
+    |> Result.unwrap()
+
+    assert(title == "A")
+}
+
+@test
+function void test_xml_get_path_indexed() {
+    string title = Xml.deserialize(
+        "<lib><book><title>A</title></book><book><title>B</title></book></lib>")
+    |> Result.unwrap()
+    |> Xml.get_path("book[1]/title")
+    |> Result.unwrap()
+    |> Xml.text()
+    |> Result.unwrap()
+
+    assert(title == "B", "the [1] index selects the second repeated child")
+}
+
+@test
+function void test_xml_get_path_missing() {
+    result<xml> r = Xml.deserialize("<r><a/></r>")
+    |> Result.unwrap()
+    |> Xml.get_path("a/missing")
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_xml_remove_child() {
+    integer count = Xml.deserialize("<r><a/><b/><c/></r>")
+    |> Result.unwrap()
+    |> Xml.remove_child(1)
+    |> Result.unwrap()
+    |> Xml.child_count()
+
+    assert(count == 2)
+}
+
+@test
+function void test_xml_remove_child_out_of_bounds() {
+    result<xml> r = Xml.deserialize("<r><a/></r>")
+    |> Result.unwrap()
+    |> Xml.remove_child(9)
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_xml_replace_child() {
+    string s = Xml.deserialize("<r><a/><b/></r>")
+    |> Result.unwrap()
+    |> Xml.replace_child(0, Xml.element("z"))
+    |> Result.unwrap()
+    |> Xml.serialize()
+
+    assert(s == "<r><z/><b/></r>")
+}
+
+@test
+function void test_xml_replace_child_out_of_bounds() {
+    result<xml> r = Xml.deserialize("<r><a/></r>")
+    |> Result.unwrap()
+    |> Xml.replace_child(4, Xml.element("z"))
+
+    assert(Result.is_failure(r))
+}
+
+@test
+function void test_xml_inner_text() {
+    string text = Xml.deserialize("<r>a<b>b</b>c<d>d</d></r>")
+    |> Result.unwrap()
+    |> Xml.inner_text()
+
+    assert(text == "abcd", "inner_text concatenates all descendant text")
+}
+
+@test
+function void test_xml_escape() {
+    string s = Xml.escape("a<b>&\"'c")
+
+    assert(s == "a&lt;b&gt;&amp;&quot;&apos;c")
+}
+
+@test
+function void test_xml_unescape() {
+    string s = Xml.unescape("a&lt;b&gt;&amp;&quot;&apos;c")
+    |> Result.unwrap()
+
+    assert(s == "a<b>&\"'c")
+}
+
+@test
+function void test_xml_escape_unescape_roundtrip() {
+    string original = "<tag attr=\"v\" & 'x'>"
+
+    string restored = Xml.escape(original)
+    |> Xml.unescape()
+    |> Result.unwrap()
+
+    assert(restored == original)
+}
+
+@test
+function void test_xml_unescape_numeric() {
+    string s = Xml.unescape("&#65;&#x42;") |> Result.unwrap()
+
+    assert(s == "AB")
+}
+
+@test
+function void test_xml_unescape_malformed() {
+    result<string> unknown = Xml.unescape("&foo;")
+    result<string> unterminated = Xml.unescape("&amp")
+
+    assert(Result.is_failure(unknown))
+    assert(Result.is_failure(unterminated))
+}

@@ -183,6 +183,35 @@ void register_set_ns(const EnvPtr& env) {
             append_members(result->elements, b->elements, *a,
                            /*keep_when_present=*/false, "Set.symmetric_difference", loc);
             return Value{std::move(result)};
+        })
+        // Predicate queries mirroring Array.any/all/count/find.  Set stores its
+        // elements in insertion order, so find returns the first (in stored
+        // order) match, with a result<T> "not found" failure like Array.find.
+        .func("any", 2)
+        .extract_body(expect_set,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Set.any", loc);
+                          return iter_any(src->elements.begin(), src->elements.end(), args[1], loc);
+                      })
+        .func("all", 2)
+        .extract_body(expect_set,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Set.all", loc);
+                          return iter_all(src->elements.begin(), src->elements.end(), args[1], loc);
+                      })
+        .func("count", 2)
+        .extract_body(expect_set,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Set.count", loc);
+                          return iter_count(src->elements.begin(), src->elements.end(), args[1],
+                                            loc);
+                      })
+        .func("find", 2)
+        .extract_body(expect_set, [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+            expect_callable(args[1], "Set.find", loc);
+            return find_with_error_handling(
+                src->elements.begin(), src->elements.end(), args[1],
+                [](const auto& it) { return *it; }, loc);
         });
 }
 

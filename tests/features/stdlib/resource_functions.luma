@@ -281,3 +281,78 @@ function void test_resource_using_body_error_suppresses_release_error() {
     assert(String.contains(caught, "BODY_FAILURE"), "body error should propagate")
     assert(!String.contains(caught, "RELEASE_FAILURE"), "release error must be suppressed")
 }
+
+# ─── Resource.with_all ───────────────────────────────────
+
+@test
+function void test_resource_with_all_returns_body_value() {
+    # body_fn receives the whole array of resources; its return value propagates.
+    integer out = Resource.with_all(
+        [1, 2, 3],
+        (array<integer> rs) -> Array.length(rs),
+        (integer _r) -> none
+    )
+
+    assert(out == 3)
+}
+
+@test
+function void test_resource_with_all_reverse_cleanup_order() {
+    # Cleanup runs on each resource in reverse acquisition order.
+    reference<string> order = Reference.new("")
+
+    string done = Resource.with_all(
+        ["a", "b", "c"],
+        (array<string> _rs) -> "done",
+        (string r) -> Reference.set(order, Reference.get(order) + r)
+    )
+
+    assert(done == "done")
+    assert(Reference.get(order) == "cba", "cleanup must run in reverse order")
+}
+
+@test
+function void test_resource_with_all_cleanup_runs_on_error() {
+    # Every resource is cleaned up even when the body throws.
+    reference<string> order = Reference.new("")
+    mutable string caught = ""
+
+    try {
+        Resource.with_all(
+            ["a", "b", "c"],
+            (array<string> _rs) -> {
+                assert(false, "force error")
+                return "unreachable"
+            },
+            (string r) -> Reference.set(order, Reference.get(order) + r)
+        )
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.length(caught) > 0, "body error should propagate")
+    assert(Reference.get(order) == "cba", "all resources must be cleaned in reverse order")
+}
+
+@test
+function void test_resource_with_all_continues_after_cleanup_error() {
+    # A throwing cleanup is swallowed so remaining resources are still cleaned.
+    # Reverse order is c, b, a; b throws before recording, so order is "ca".
+    reference<string> order = Reference.new("")
+
+    string done = Resource.with_all(
+        ["a", "b", "c"],
+        (array<string> _rs) -> "done",
+        (string r) -> {
+            if r == "b" {
+                assert(false, "cleanup boom")
+            }
+
+            Reference.set(order, Reference.get(order) + r)
+            return none
+        }
+    )
+
+    assert(done == "done")
+    assert(Reference.get(order) == "ca", "a failing cleanup must not stop the others")
+}

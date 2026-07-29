@@ -82,6 +82,41 @@ void register_resource_ns(const EnvPtr& env) {
             const auto resource = invoke_callable(acquire_fn, no_args, loc);
 
             return run_with_cleanup(resource, body_fn, release_fn, "Resource.using:", loc);
+        })
+        .func("with_all", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& resources = expect_array(args[0], "Resource.with_all (resources)", loc);
+            const auto& body_fn = args[1];
+            const auto& cleanup_fn = args[2];
+
+            expect_callable(body_fn, "Resource.with_all (body)", loc);
+            expect_callable(cleanup_fn, "Resource.with_all (cleanup)", loc);
+
+            // Clean up every resource in reverse acquisition order. Each cleanup
+            // goes through safe_cleanup so a failing cleanup is swallowed and the
+            // remaining resources are still released.
+            const auto cleanup_all = [&]() {
+                const auto& elements = *resources->elements;
+
+                for (auto it = elements.rbegin(); it != elements.rend(); ++it) {
+                    safe_cleanup(cleanup_fn, *it, "Resource.with_all:", loc);
+                }
+            };
+
+            std::vector<Value> body_args{args[0]};
+            Value body_result;
+
+            try {
+                body_result = invoke_callable(body_fn, body_args, loc);
+            } catch (...) {
+                cleanup_all();
+
+                throw;
+            }
+
+            cleanup_all();
+
+            return body_result;
         });
 }
 

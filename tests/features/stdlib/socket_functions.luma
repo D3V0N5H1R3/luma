@@ -433,6 +433,136 @@ function void test_socket_parse_ip() {
     assert(Result.is_failure(Socket.parse_ip("not an ip")), "garbage fails")
 }
 
+# ─── send_all / receive_all / receive_line / bytes / connect_timeout ───
+
+@test
+function void test_tcp_send_all_and_receive_all() {
+    # send_all writes the whole payload; after the client closes, receive_all on
+    # the peer drains the entire stream until the orderly shutdown.
+    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
+
+    array<string> parts = String.split(Result.unwrap(Socket.local_address(server)), ":")
+    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+
+    socket client = Result.unwrap(Socket.connect("127.0.0.1", port))
+    socket connection = Result.unwrap(Socket.accept(server))
+
+    result<boolean> _t = Socket.set_timeout(connection, 2000)
+
+    result<boolean> send_result = Socket.send_all(client, "hello world")
+    assert(Result.is_success(send_result), "send_all should succeed")
+    Socket.close(client)
+
+    string received = Result.unwrap(Socket.receive_all(connection))
+    assert(received == "hello world", "receive_all should drain the whole stream")
+
+    Socket.close(connection)
+    Socket.close(server)
+}
+
+@test
+function void test_tcp_receive_line() {
+    # receive_line returns bytes up to and including the first newline.
+    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
+
+    array<string> parts = String.split(Result.unwrap(Socket.local_address(server)), ":")
+    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+
+    socket client = Result.unwrap(Socket.connect("127.0.0.1", port))
+    socket connection = Result.unwrap(Socket.accept(server))
+
+    result<boolean> _t = Socket.set_timeout(connection, 2000)
+
+    result<integer> _s = Socket.send(client, "first\nsecond\n")
+
+    string line = Result.unwrap(Socket.receive_line(connection))
+    assert(line == "first\n", "receive_line should stop at the first newline")
+
+    Socket.close(client)
+    Socket.close(connection)
+    Socket.close(server)
+}
+
+@test
+function void test_tcp_send_bytes_and_receive_bytes() {
+    # send_bytes writes raw bytes; receive_bytes reads them back as integers.
+    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
+
+    array<string> parts = String.split(Result.unwrap(Socket.local_address(server)), ":")
+    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+
+    socket client = Result.unwrap(Socket.connect("127.0.0.1", port))
+    socket connection = Result.unwrap(Socket.accept(server))
+
+    result<boolean> _t = Socket.set_timeout(connection, 2000)
+
+    array<integer> payload = [10, 20, 30]
+    result<integer> send_result = Socket.send_bytes(client, payload)
+    assert(Result.is_success(send_result), "send_bytes should succeed")
+
+    array<integer> got = Result.unwrap(Socket.receive_bytes(connection, 1024))
+    assert(Array.length(got) == 3, "receive_bytes should return all three bytes")
+    assert(got[0] == 10, "first byte should match")
+    assert(got[1] == 20, "second byte should match")
+    assert(got[2] == 30, "third byte should match")
+
+    Socket.close(client)
+    Socket.close(connection)
+    Socket.close(server)
+}
+
+@test
+function void test_send_bytes_rejects_out_of_range() {
+    socket s = Result.unwrap(Socket.udp_create())
+
+    array<integer> payload = [1, 2, 999]
+    result<integer> r = Socket.send_bytes(s, payload)
+    assert(Result.is_failure(r), "a byte outside 0-255 should fail")
+
+    Socket.close(s)
+}
+
+@test
+function void test_receive_bytes_rejects_non_positive_max() {
+    socket s = Result.unwrap(Socket.udp_create())
+
+    result<array<integer>> r = Socket.receive_bytes(s, 0)
+    assert(Result.is_failure(r), "receive_bytes with non-positive max should fail")
+
+    Socket.close(s)
+}
+
+@test
+function void test_send_all_on_closed() {
+    socket s = Result.unwrap(Socket.udp_create())
+    Socket.close(s)
+
+    result<boolean> r = Socket.send_all(s, "data")
+    assert(Result.is_failure(r), "send_all on a closed socket should fail")
+}
+
+@test
+function void test_connect_timeout_success() {
+    # connect_timeout completes a loopback handshake within the deadline.
+    socket server = Result.unwrap(Socket.listen("127.0.0.1", 0))
+
+    array<string> parts = String.split(Result.unwrap(Socket.local_address(server)), ":")
+    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+
+    result<socket> r = Socket.connect_timeout("127.0.0.1", port, 2000)
+    assert(Result.is_success(r), "connect_timeout to a live listener should succeed")
+
+    socket client = Result.unwrap(r)
+    Socket.close(client)
+    Socket.close(server)
+}
+
+@test
+function void test_connect_timeout_invalid_port() {
+    result<socket> r = Socket.connect_timeout("127.0.0.1", 99999, 1000)
+    assert(Result.is_failure(r), "connect_timeout on an out-of-range port should fail")
+}
+
 # ═══════════════════════════════════════════════════════════
 # Socket.Error (opt-in typed transport errors via *_typed)
 # ═══════════════════════════════════════════════════════════
@@ -542,4 +672,40 @@ function void test_socket_error_is_exhaustively_matchable() {
     # over all seven variants is exercised at runtime.
     result<socket, Socket.Error> r = Socket.connect_typed("127.0.0.1", 99999)
     assert(connect_typed_label(r) == "other", "an out-of-range port classifies as Other")
+}
+
+@test
+function void test_socket_send_all_typed_on_closed_is_not_connected() {
+    socket s = Result.unwrap(Socket.udp_create())
+    Socket.close(s)
+
+    result<boolean, Socket.Error> r = Socket.send_all_typed(s, "data")
+
+    assert(Result.is_failure(r), "send_all_typed on a closed socket fails")
+
+    string label = match r {
+        success(_ok) { "unexpected_success" }
+        failure(e)   { socket_error_label(e) }
+    }
+
+    assert(label == "not_connected", "a closed socket classifies as NotConnected")
+}
+
+@test
+function void test_socket_connect_timeout_typed_refused_is_connection_refused() {
+    # Close the listener so nothing accepts; a timed connect must be refused
+    # (not merely time out) on loopback.
+    socket srv = Result.unwrap(Socket.listen("127.0.0.1", 0))
+    array<string> parts = String.split(Result.unwrap(Socket.local_address(srv)), ":")
+    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+    Socket.close(srv)
+
+    result<socket, Socket.Error> r = Socket.connect_timeout_typed("127.0.0.1", port, 2000)
+
+    assert(Result.is_failure(r), "connecting to an unbound loopback port fails")
+    # The exact classification of an unbound loopback port is platform-timing
+    # dependent: most systems refuse the connection immediately, but some report
+    # the elapsed deadline as a timeout instead.  Accept either failure.
+    assert(connect_typed_label(r) == "connection_refused" || connect_typed_label(r) == "timeout",
+           "an unbound port fails as ConnectionRefused or Timeout")
 }

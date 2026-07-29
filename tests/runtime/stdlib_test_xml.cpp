@@ -239,6 +239,116 @@ static void test_xml_text_at() {
                     "Hello");
 }
 
+static void test_xml_find_descendant() {
+    const auto v =
+        eval("Xml.tag(Result.unwrap(Xml.find_descendant(Result.unwrap(Xml.deserialize("
+             "\"<r><a><deep tag=\\\"1\\\"/></a></r>\")), \"deep\")))");
+
+    ASSERT_EQ(v.as_string(), "deep");
+}
+
+static void test_xml_find_descendant_not_found() {
+    ASSERT_EVAL_FAILURE(
+        "Xml.find_descendant(Result.unwrap(Xml.deserialize(\"<r><a/></r>\")), \"missing\")");
+}
+
+static void test_xml_find_all_descendants() {
+    const auto v = eval("Xml.find_all_descendants(Result.unwrap(Xml.deserialize("
+                        "\"<r><item/><a><item/></a><item/></r>\")), \"item\")");
+
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), 3U);
+}
+
+static void test_xml_get_path() {
+    const auto v =
+        eval("Result.unwrap(Xml.text(Result.unwrap(Xml.get_path(Result.unwrap(Xml.deserialize("
+             "\"<lib><book><title>A</title></book></lib>\")), \"book/title\")))))");
+
+    ASSERT_EQ(v.as_string(), "A");
+}
+
+static void test_xml_get_path_indexed() {
+    const auto v =
+        eval("Result.unwrap(Xml.text(Result.unwrap(Xml.get_path(Result.unwrap(Xml.deserialize("
+             "\"<lib><book><title>A</title></book>"
+             "<book><title>B</title></book></lib>\")), \"book[1]/title\")))))");
+
+    ASSERT_EQ(v.as_string(), "B");
+}
+
+static void test_xml_get_path_missing() {
+    ASSERT_EVAL_FAILURE(
+        "Xml.get_path(Result.unwrap(Xml.deserialize(\"<r><a/></r>\")), \"a/missing\")");
+}
+
+static void test_xml_remove_child() {
+    const auto v = eval("Xml.child_count(Result.unwrap(Xml.remove_child(Result.unwrap("
+                        "Xml.deserialize(\"<r><a/><b/><c/></r>\")), 1)))");
+
+    ASSERT_EQ(v.as_integer(), 2);
+}
+
+static void test_xml_remove_child_removes_correct() {
+    // Removing element index 0 leaves the serialised <b/> as the first child.
+    const auto v = eval("Xml.serialize(Result.unwrap(Xml.remove_child(Result.unwrap("
+                        "Xml.deserialize(\"<r><a/><b/></r>\")), 0)))");
+
+    ASSERT_EQ(v.as_string(), "<r><b/></r>");
+}
+
+static void test_xml_remove_child_out_of_bounds() {
+    ASSERT_EVAL_FAILURE(
+        "Xml.remove_child(Result.unwrap(Xml.deserialize(\"<r><a/></r>\")), 5)");
+    ASSERT_EVAL_FAILURE(
+        "Xml.remove_child(Result.unwrap(Xml.deserialize(\"<r><a/></r>\")), -1)");
+}
+
+static void test_xml_replace_child() {
+    const auto v = eval("Xml.serialize(Result.unwrap(Xml.replace_child(Result.unwrap("
+                        "Xml.deserialize(\"<r><a/><b/></r>\")), 0, Xml.element(\"z\"))))");
+
+    ASSERT_EQ(v.as_string(), "<r><z/><b/></r>");
+}
+
+static void test_xml_replace_child_out_of_bounds() {
+    ASSERT_EVAL_FAILURE("Xml.replace_child(Result.unwrap(Xml.deserialize(\"<r><a/></r>\")), "
+                        "3, Xml.element(\"z\"))");
+}
+
+static void test_xml_inner_text() {
+    // inner_text concatenates every descendant text node, unlike Xml.text which
+    // only reads the node's own direct text children.
+    const auto v = eval("Xml.inner_text(Result.unwrap(Xml.deserialize("
+                        "\"<r>a<b>b</b>c<d>d</d></r>\")))");
+
+    ASSERT_EQ(v.as_string(), "abcd");
+}
+
+static void test_xml_escape() {
+    const auto v = eval("Xml.escape(\"a<b>&\\\"'c\")");
+
+    ASSERT_EQ(v.as_string(), "a&lt;b&gt;&amp;&quot;&apos;c");
+}
+
+static void test_xml_unescape() {
+    ASSERT_EVAL_STR("Xml.unescape(\"a&lt;b&gt;&amp;&quot;&apos;c\")", "a<b>&\"'c");
+}
+
+static void test_xml_escape_unescape_roundtrip() {
+    ASSERT_EVAL_STR("Xml.unescape(Xml.escape(\"<tag attr=\\\"v\\\" & 'x'>\"))",
+                    "<tag attr=\"v\" & 'x'>");
+}
+
+static void test_xml_unescape_numeric() {
+    ASSERT_EVAL_STR("Xml.unescape(\"&#65;&#x42;\")", "AB");
+}
+
+static void test_xml_unescape_malformed() {
+    ASSERT_EVAL_FAILURE("Xml.unescape(\"&foo;\")");
+    ASSERT_EVAL_FAILURE("Xml.unescape(\"&amp\")");
+}
+
 static void test_xml_serialize_compact() {
     const auto v = eval("Xml.serialize(Result.unwrap(Xml.deserialize(\"<r><a>x</a></r>\")))");
 
@@ -564,6 +674,23 @@ int main() {
     RUN(test_xml_find_by_attribute);
     RUN(test_xml_at);
     RUN(test_xml_text_at);
+    RUN(test_xml_find_descendant);
+    RUN(test_xml_find_descendant_not_found);
+    RUN(test_xml_find_all_descendants);
+    RUN(test_xml_get_path);
+    RUN(test_xml_get_path_indexed);
+    RUN(test_xml_get_path_missing);
+    RUN(test_xml_remove_child);
+    RUN(test_xml_remove_child_removes_correct);
+    RUN(test_xml_remove_child_out_of_bounds);
+    RUN(test_xml_replace_child);
+    RUN(test_xml_replace_child_out_of_bounds);
+    RUN(test_xml_inner_text);
+    RUN(test_xml_escape);
+    RUN(test_xml_unescape);
+    RUN(test_xml_escape_unescape_roundtrip);
+    RUN(test_xml_unescape_numeric);
+    RUN(test_xml_unescape_malformed);
     RUN(test_xml_serialize_compact);
     RUN(test_xml_entity_decode);
     RUN(test_xml_serialize_escapes_text);

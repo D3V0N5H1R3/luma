@@ -437,3 +437,15 @@ function void test_set_each_callback_failure() {
 
     assert(Result.is_failure(r), "each callback exception should propagate as failure")
 }
+
+@test
+function void test_set_any_all_count_find() {
+    set s = Set.from_array([1, 2, 3, 4])
+
+    assert(Set.any(s, (integer x) -> x > 3) |> Result.unwrap())
+    assert(Set.all(s, (integer x) -> x > 0) |> Result.unwrap())
+    assert((Set.count(s, (integer x) -> x % 2 == 0) |> Result.unwrap()) == 2)
+    # find returns the first (stored-order) match.
+    assert((Set.find(s, (integer x) -> x % 2 == 0) |> Result.unwrap()) == 2)
+    assert(Result.is_failure(Set.find(s, (integer x) -> x > 9)))
+}

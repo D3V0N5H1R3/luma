@@ -439,6 +439,161 @@ static void test_socket_connect_typed_invalid_port_is_other() {
     ASSERT_EQ(socket_error_variant_of(v), "Error.Other");
 }
 
+// ─── Socket: send_all / receive_all / receive_line / bytes / connect_timeout ─
+
+static void test_socket_extended_registered() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Socket.send_all"));
+    ASSERT_TRUE(env->has("Socket.send_all_typed"));
+    ASSERT_TRUE(env->has("Socket.receive_all"));
+    ASSERT_TRUE(env->has("Socket.receive_line"));
+    ASSERT_TRUE(env->has("Socket.connect_timeout"));
+    ASSERT_TRUE(env->has("Socket.connect_timeout_typed"));
+    ASSERT_TRUE(env->has("Socket.send_bytes"));
+    ASSERT_TRUE(env->has("Socket.receive_bytes"));
+}
+
+static void test_socket_send_bytes_rejects_out_of_range() {
+    // A byte value outside 0-255 fails before any data is sent.
+    ASSERT_EVAL_FAILURE("socket s = Result.unwrap(Socket.udp_create())\n"
+                        "Socket.send_bytes(s, [1, 2, 999])\n");
+}
+
+static void test_socket_send_bytes_rejects_negative() {
+    ASSERT_EVAL_FAILURE("socket s = Result.unwrap(Socket.udp_create())\n"
+                        "Socket.send_bytes(s, [-1])\n");
+}
+
+static void test_socket_send_all_on_closed_fails() {
+    ASSERT_EVAL_FAILURE("socket s = Result.unwrap(Socket.udp_create())\n"
+                        "Socket.close(s)\n"
+                        "Socket.send_all(s, \"data\")\n");
+}
+
+static void test_socket_send_all_typed_on_closed_is_not_connected() {
+    const auto v = eval("socket s = Result.unwrap(Socket.udp_create())\n"
+                        "Socket.close(s)\n"
+                        "Socket.send_all_typed(s, \"data\")\n");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(socket_error_variant_of(v), "Error.NotConnected");
+}
+
+static void test_socket_receive_bytes_rejects_non_positive_max() {
+    ASSERT_EVAL_FAILURE("socket s = Result.unwrap(Socket.udp_create())\n"
+                        "Socket.receive_bytes(s, 0)\n");
+}
+
+static void test_socket_receive_all_on_closed_fails() {
+    ASSERT_EVAL_FAILURE("socket s = Result.unwrap(Socket.udp_create())\n"
+                        "Socket.close(s)\n"
+                        "Socket.receive_all(s)\n");
+}
+
+static void test_socket_receive_line_on_closed_fails() {
+    ASSERT_EVAL_FAILURE("socket s = Result.unwrap(Socket.udp_create())\n"
+                        "Socket.close(s)\n"
+                        "Socket.receive_line(s)\n");
+}
+
+static void test_socket_operations_reject_non_socket_extended() {
+    ASSERT_THROWS(eval("Socket.send_all(42, \"x\")"));
+    ASSERT_THROWS(eval("Socket.send_bytes(42, [1])"));
+    ASSERT_THROWS(eval("Socket.receive_all(42)"));
+    ASSERT_THROWS(eval("Socket.receive_line(42)"));
+    ASSERT_THROWS(eval("Socket.receive_bytes(42, 10)"));
+}
+
+static void test_socket_connect_timeout_invalid_port() {
+    ASSERT_EVAL_FAILURE("Socket.connect_timeout(\"127.0.0.1\", 99999, 1000)");
+}
+
+static void test_socket_connect_timeout_negative_timeout() {
+    ASSERT_EVAL_FAILURE("Socket.connect_timeout(\"127.0.0.1\", 80, -1)");
+}
+
+static void test_socket_tcp_send_all_receive_all_roundtrip() {
+    // The client sends a payload with send_all, then closes; the server drains
+    // the whole stream with receive_all until the peer's orderly shutdown.
+    const auto v =
+        eval("socket server = Result.unwrap(Socket.listen(\"127.0.0.1\", 0))\n"
+             "array<string> parts = String.split(Result.unwrap(Socket.local_address(server)), "
+             "\":\")\n"
+             "integer port = Result.unwrap(Converter.to_integer(parts[1]))\n"
+             "socket client = Result.unwrap(Socket.connect(\"127.0.0.1\", port))\n"
+             "socket conn = Result.unwrap(Socket.accept(server))\n"
+             "result<boolean> _t = Socket.set_timeout(conn, 2000)\n"
+             "result<boolean> _s = Socket.send_all(client, \"hello world\")\n"
+             "Socket.close(client)\n"
+             "string got = Result.unwrap(Socket.receive_all(conn))\n"
+             "Socket.close(conn)\n"
+             "Socket.close(server)\n"
+             "got\n");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "hello world");
+}
+
+static void test_socket_tcp_receive_line_roundtrip() {
+    // receive_line returns bytes up to and including the first newline.
+    const auto v =
+        eval("socket server = Result.unwrap(Socket.listen(\"127.0.0.1\", 0))\n"
+             "array<string> parts = String.split(Result.unwrap(Socket.local_address(server)), "
+             "\":\")\n"
+             "integer port = Result.unwrap(Converter.to_integer(parts[1]))\n"
+             "socket client = Result.unwrap(Socket.connect(\"127.0.0.1\", port))\n"
+             "socket conn = Result.unwrap(Socket.accept(server))\n"
+             "result<boolean> _t = Socket.set_timeout(conn, 2000)\n"
+             "result<integer> _s = Socket.send(client, \"line1\\nline2\\n\")\n"
+             "string got = Result.unwrap(Socket.receive_line(conn))\n"
+             "Socket.close(client)\n"
+             "Socket.close(conn)\n"
+             "Socket.close(server)\n"
+             "got\n");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "line1\n");
+}
+
+static void test_socket_tcp_send_bytes_receive_bytes_roundtrip() {
+    // send_bytes writes raw bytes; receive_bytes reads them back as integers.
+    const auto v =
+        eval("function integer byte_echo() {\n"
+             "    socket server = Result.unwrap(Socket.listen(\"127.0.0.1\", 0))\n"
+             "    array<string> parts = String.split(Result.unwrap(Socket.local_address(server)), "
+             "\":\")\n"
+             "    integer port = Result.unwrap(Converter.to_integer(parts[1]))\n"
+             "    socket client = Result.unwrap(Socket.connect(\"127.0.0.1\", port))\n"
+             "    socket conn = Result.unwrap(Socket.accept(server))\n"
+             "    result<boolean> _t = Socket.set_timeout(conn, 2000)\n"
+             "    result<integer> _s = Socket.send_bytes(client, [10, 20, 30])\n"
+             "    array<integer> got = Result.unwrap(Socket.receive_bytes(conn, 1024))\n"
+             "    Socket.close(client)\n"
+             "    Socket.close(conn)\n"
+             "    Socket.close(server)\n"
+             "    return got[0] + got[1] + got[2]\n"
+             "}\n"
+             "byte_echo()\n");
+
+    ASSERT_TRUE(v.is_integer());
+    ASSERT_EQ(v.as_integer(), 60);
+}
+
+static void test_socket_connect_timeout_roundtrip() {
+    // connect_timeout completes a loopback handshake within the deadline.
+    const auto v = eval("socket server = Result.unwrap(Socket.listen(\"127.0.0.1\", 0))\n"
+                        "array<string> parts = String.split(Result.unwrap(Socket.local_address("
+                        "server)), \":\")\n"
+                        "integer port = Result.unwrap(Converter.to_integer(parts[1]))\n"
+                        "result<socket> r = Socket.connect_timeout(\"127.0.0.1\", port, 2000)\n"
+                        "Socket.close(server)\n"
+                        "Result.is_success(r)\n");
+
+    ASSERT_TRUE(v.is_bool());
+    ASSERT_TRUE(v.as_bool());
+}
+
 int main() {
     RUN(test_socket_accept_on_non_server_fails);
     RUN(test_socket_close_is_idempotent);
@@ -484,6 +639,22 @@ int main() {
     RUN(test_socket_connect_typed_refused_is_connection_refused);
     RUN(test_socket_connect_typed_invalid_host_is_host_unreachable);
     RUN(test_socket_connect_typed_invalid_port_is_other);
+
+    RUN(test_socket_extended_registered);
+    RUN(test_socket_send_bytes_rejects_out_of_range);
+    RUN(test_socket_send_bytes_rejects_negative);
+    RUN(test_socket_send_all_on_closed_fails);
+    RUN(test_socket_send_all_typed_on_closed_is_not_connected);
+    RUN(test_socket_receive_bytes_rejects_non_positive_max);
+    RUN(test_socket_receive_all_on_closed_fails);
+    RUN(test_socket_receive_line_on_closed_fails);
+    RUN(test_socket_operations_reject_non_socket_extended);
+    RUN(test_socket_connect_timeout_invalid_port);
+    RUN(test_socket_connect_timeout_negative_timeout);
+    RUN(test_socket_tcp_send_all_receive_all_roundtrip);
+    RUN(test_socket_tcp_receive_line_roundtrip);
+    RUN(test_socket_tcp_send_bytes_receive_bytes_roundtrip);
+    RUN(test_socket_connect_timeout_roundtrip);
 
     return SUMMARY();
 }

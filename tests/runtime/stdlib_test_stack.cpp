@@ -185,6 +185,64 @@ static void test_stack_pop_empty_fails() {
     ASSERT_RESULT_FAILURE(eval("Stack.new() |> Stack.pop()"));
 }
 
+// ─── Predicate queries, membership, pop_while, reverse ────────────
+
+static void test_stack_any_all_count() {
+    ASSERT_EQ(eval("Stack.from_array([1,2,3,4]) |> Stack.any((integer x) -> x > 3) "
+                   "|> Result.unwrap()")
+                  .as_bool(),
+              true);
+    ASSERT_EQ(eval("Stack.from_array([1,2,3,4]) |> Stack.all((integer x) -> x > 3) "
+                   "|> Result.unwrap()")
+                  .as_bool(),
+              false);
+    ASSERT_EQ(eval("Stack.from_array([1,2,3,4]) |> Stack.count((integer x) -> x % 2 == 0) "
+                   "|> Result.unwrap()")
+                  .as_integer(),
+              2);
+}
+
+static void test_stack_contains_find() {
+    ASSERT_EQ(eval("Stack.from_array([1,2,3]) |> Stack.contains(2)").as_bool(), true);
+    ASSERT_EQ(eval("Stack.from_array([1,2,3]) |> Stack.contains(9)").as_bool(), false);
+
+    // find returns the first match from the top (back).
+    ASSERT_EQ(eval("Stack.from_array([1,2,3,4]) |> Stack.find((integer x) -> x % 2 == 0) "
+                   "|> Result.unwrap()")
+                  .as_integer(),
+              4);
+    ASSERT_RESULT_FAILURE(eval("Stack.from_array([1,3]) |> Stack.find((integer x) -> x > 9)"));
+}
+
+static void test_stack_pop_while() {
+    // Pop the top run of even numbers (top-first: 4, then 2 stops at odd 3).
+    const auto v = eval("Stack.from_array([1, 3, 2, 4]) "
+                        "|> Stack.pop_while((integer x) -> x % 2 == 0) |> Result.unwrap()");
+
+    // v is a tuple (array, stack). The popped array is [4, 2] (top-first).
+    ASSERT_TRUE(v.is_tuple());
+    const auto& popped = v.as_tuple()->elements.at(0);
+
+    ASSERT_TRUE(popped.is_array());
+    ASSERT_EQ(popped.as_array()->elements->size(), 2U);
+    ASSERT_EQ((*popped.as_array()->elements)[0].as_integer(), 4);
+    ASSERT_EQ((*popped.as_array()->elements)[1].as_integer(), 2);
+
+    // Remaining stack keeps [1, 3].
+    const auto& rest = v.as_tuple()->elements.at(1);
+
+    ASSERT_EQ(rest.as_stack()->elements.size(), 2U);
+}
+
+static void test_stack_reverse() {
+    // reverse then to_array: [1,2,3] -> [3,2,1].
+    const auto v = eval("Stack.from_array([1,2,3]) |> Stack.reverse() |> Stack.to_array()");
+
+    ASSERT_EQ(v.as_array()->elements->size(), 3U);
+    ASSERT_EQ((*v.as_array()->elements)[0].as_integer(), 3);
+    ASSERT_EQ((*v.as_array()->elements)[2].as_integer(), 1);
+}
+
 static void test_stack_peek_empty_fails() {
     ASSERT_RESULT_FAILURE(eval("Stack.new() |> Stack.peek()"));
 }
@@ -235,6 +293,10 @@ int main() {
     RUN(test_stack_to_array);
     RUN(test_stack_pop_empty_fails);
     RUN(test_stack_peek_empty_fails);
+    RUN(test_stack_any_all_count);
+    RUN(test_stack_contains_find);
+    RUN(test_stack_pop_while);
+    RUN(test_stack_reverse);
     RUN(test_stack_length_wrong_type_throws);
     RUN(test_stack_push_wrong_type_throws);
     RUN(test_stack_pop_wrong_type_throws);

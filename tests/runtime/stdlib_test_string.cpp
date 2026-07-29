@@ -748,6 +748,93 @@ static void test_string_lines() {
     ASSERT_EQ(eval("String.lines(\"abc\")").as_array()->elements->size(), 1U);
 }
 
+static void test_string_split_whitespace() {
+    // Leading, trailing, and repeated whitespace collapse; no empty tokens.
+    const auto v = eval("String.split_whitespace(\"  the quick\\tbrown\\nfox  \")");
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), 4U);
+    ASSERT_EQ((*v.as_array()->elements)[0].as_string(), "the");
+    ASSERT_EQ((*v.as_array()->elements)[1].as_string(), "quick");
+    ASSERT_EQ((*v.as_array()->elements)[2].as_string(), "brown");
+    ASSERT_EQ((*v.as_array()->elements)[3].as_string(), "fox");
+
+    // All-whitespace and empty inputs yield no tokens.
+    ASSERT_EQ(eval("String.split_whitespace(\"   \")").as_array()->elements->size(), 0U);
+    ASSERT_EQ(eval("String.split_whitespace(\"\")").as_array()->elements->size(), 0U);
+}
+
+static void test_string_words() {
+    // words is an alias of split_whitespace.
+    const auto v = eval("String.words(\"a  b\\tc\")");
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), 3U);
+    ASSERT_EQ((*v.as_array()->elements)[0].as_string(), "a");
+    ASSERT_EQ((*v.as_array()->elements)[2].as_string(), "c");
+}
+
+static void test_string_word_count() {
+    ASSERT_EQ(eval("String.word_count(\"  the quick\\tbrown\\nfox  \")").as_integer(), 4);
+    ASSERT_EQ(eval("String.word_count(\"\")").as_integer(), 0);
+    ASSERT_EQ(eval("String.word_count(\"   \")").as_integer(), 0);
+    ASSERT_EQ(eval("String.word_count(\"solo\")").as_integer(), 1);
+}
+
+static void test_string_insert() {
+    ASSERT_EVAL_STR("String.insert(\"hello\", 0, \">>\")", ">>hello");
+    ASSERT_EVAL_STR("String.insert(\"hello\", 5, \"!\")", "hello!");
+    ASSERT_EVAL_STR("String.insert(\"hello\", 2, \"XY\")", "heXYllo");
+    // Codepoint indexing: insert after the 'é' (1 codepoint, 2 bytes).
+    ASSERT_EVAL_STR(
+        "String.insert(Result.unwrap(String.from_codepoints([233, 233])), 1, \"-\")",
+        "\xC3\xA9-\xC3\xA9");
+}
+
+static void test_string_insert_out_of_bounds() {
+    ASSERT_EVAL_FAILURE("String.insert(\"hello\", -1, \"x\")");
+    ASSERT_EVAL_FAILURE("String.insert(\"hello\", 6, \"x\")");
+}
+
+static void test_string_delete() {
+    ASSERT_EVAL_STR("String.delete(\"hello\", 1, 3)", "hlo");
+    ASSERT_EVAL_STR("String.delete(\"hello\", 0, 5)", "");
+    // Empty range is a no-op.
+    ASSERT_EVAL_STR("String.delete(\"hello\", 2, 2)", "hello");
+}
+
+static void test_string_delete_out_of_bounds() {
+    ASSERT_EVAL_FAILURE("String.delete(\"hello\", -1, 2)");
+    ASSERT_EVAL_FAILURE("String.delete(\"hello\", 0, 6)");
+    ASSERT_EVAL_FAILURE("String.delete(\"hello\", 3, 1)");
+}
+
+static void test_string_replace_range() {
+    ASSERT_EVAL_STR("String.replace_range(\"hello\", 1, 3, \"XY\")", "hXYlo");
+    ASSERT_EVAL_STR("String.replace_range(\"hello\", 0, 5, \"bye\")", "bye");
+    // Empty range acts as an insert.
+    ASSERT_EVAL_STR("String.replace_range(\"hello\", 2, 2, \"__\")", "he__llo");
+}
+
+static void test_string_replace_range_out_of_bounds() {
+    ASSERT_EVAL_FAILURE("String.replace_range(\"hello\", -1, 2, \"x\")");
+    ASSERT_EVAL_FAILURE("String.replace_range(\"hello\", 0, 6, \"x\")");
+    ASSERT_EVAL_FAILURE("String.replace_range(\"hello\", 3, 1, \"x\")");
+}
+
+static void test_string_starts_with_any() {
+    ASSERT_TRUE(eval("String.starts_with_any(\"hello\", [\"he\", \"xy\"])").as_bool());
+    ASSERT_TRUE(eval("String.starts_with_any(\"hello\", [\"hello\"])").as_bool());
+    ASSERT_FALSE(eval("String.starts_with_any(\"hello\", [\"xy\", \"z\"])").as_bool());
+    // An empty prefix always matches.
+    ASSERT_TRUE(eval("String.starts_with_any(\"hello\", [\"\"])").as_bool());
+}
+
+static void test_string_ends_with_any() {
+    ASSERT_TRUE(eval("String.ends_with_any(\"hello\", [\"lo\", \"xy\"])").as_bool());
+    ASSERT_TRUE(eval("String.ends_with_any(\"hello\", [\"hello\"])").as_bool());
+    ASSERT_FALSE(eval("String.ends_with_any(\"hello\", [\"xy\", \"z\"])").as_bool());
+    ASSERT_TRUE(eval("String.ends_with_any(\"hello\", [\"\"])").as_bool());
+}
+
 int main() {
     RUN(test_string_byte_length);
     RUN(test_string_byte_length_multibyte);
@@ -857,6 +944,17 @@ int main() {
     RUN(test_string_search_negative);
     RUN(test_string_from_codepoints_surrogate);
     RUN(test_string_lines);
+    RUN(test_string_split_whitespace);
+    RUN(test_string_words);
+    RUN(test_string_word_count);
+    RUN(test_string_insert);
+    RUN(test_string_insert_out_of_bounds);
+    RUN(test_string_delete);
+    RUN(test_string_delete_out_of_bounds);
+    RUN(test_string_replace_range);
+    RUN(test_string_replace_range_out_of_bounds);
+    RUN(test_string_starts_with_any);
+    RUN(test_string_ends_with_any);
     RUN(test_native_type_error_is_catchable);
 
     return SUMMARY();

@@ -751,3 +751,125 @@ function void test_terminal_parse_key_character() {
 
     assert(key_label(Terminal.parse_key("a")) == "char:a")
 }
+
+# ───────────────────────────────────────────────────────────
+# Blink styling / buffered output / line editing helpers
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_terminal_blink() {
+    # blink wraps the text in the SGR blink attribute — the text is preserved.
+    string blinking_text = Terminal.blink("flash")
+
+    assert("flash" in blinking_text)
+}
+
+@test
+function void test_terminal_flush() {
+    # flush drains buffered output; nothing is observable headlessly, but it
+    # returns a result rather than throwing.
+    result<boolean> _r = Terminal.flush()
+}
+
+@test
+function void test_terminal_insert_line() {
+    result<boolean> _r = Terminal.insert_line(1)
+}
+
+@test
+function void test_terminal_insert_line_invalid() {
+    # count < 1 should return failure.
+    result<boolean> r = Terminal.insert_line(0)
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_terminal_delete_line() {
+    result<boolean> _r = Terminal.delete_line(2)
+}
+
+@test
+function void test_terminal_delete_line_invalid() {
+    result<boolean> r = Terminal.delete_line(0)
+
+    assert(!Result.is_success(r))
+}
+
+@test
+function void test_terminal_clear_to_start_of_line() {
+    result<boolean> _r = Terminal.clear_to_start_of_line()
+}
+
+@test
+function void test_terminal_supports_unicode() {
+    boolean supports = Terminal.supports_unicode()
+
+    assert(type_of(supports) == "boolean")
+}
+
+# ───────────────────────────────────────────────────────────
+# Terminal.CursorStyle / Terminal.set_cursor_style
+# ───────────────────────────────────────────────────────────
+
+# Exhaustive match over every Terminal.CursorStyle variant.  Beyond labelling a
+# style, this doubles as a compile-time check that Terminal.CursorStyle is fully
+# registered, exhaustively matchable, and usable as a parameter type annotation.
+function integer cursor_style_code(Terminal.CursorStyle style) {
+    return match style {
+    case Terminal.CursorStyle.BlinkingBlock     { 1 }
+    case Terminal.CursorStyle.SteadyBlock       { 2 }
+    case Terminal.CursorStyle.BlinkingUnderline { 3 }
+    case Terminal.CursorStyle.SteadyUnderline   { 4 }
+    case Terminal.CursorStyle.BlinkingBar       { 5 }
+    case Terminal.CursorStyle.SteadyBar         { 6 }
+    }
+}
+
+@test
+function void test_terminal_cursor_style_variants() {
+    # Each variant maps to its DECSCUSR parameter, proving the exhaustive match
+    # compiles and every variant is registered.
+    assert(cursor_style_code(Terminal.CursorStyle.BlinkingBlock) == 1)
+    assert(cursor_style_code(Terminal.CursorStyle.SteadyBlock) == 2)
+    assert(cursor_style_code(Terminal.CursorStyle.BlinkingUnderline) == 3)
+    assert(cursor_style_code(Terminal.CursorStyle.SteadyUnderline) == 4)
+    assert(cursor_style_code(Terminal.CursorStyle.BlinkingBar) == 5)
+    assert(cursor_style_code(Terminal.CursorStyle.SteadyBar) == 6)
+}
+
+@test
+function void test_terminal_set_cursor_style() {
+    # set_cursor_style emits the DECSCUSR escape for the given style and returns
+    # a result — verify it succeeds for a valid variant.
+    result<boolean> r = Terminal.set_cursor_style(Terminal.CursorStyle.SteadyBar)
+
+    assert(Result.is_success(r))
+}
+
+# ───────────────────────────────────────────────────────────
+# Terminal.read_line (driven by the headless input harness)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_terminal_read_line_reads_scripted_input() {
+    # Printable keys append and echo, backspace deletes the last char, and Enter
+    # submits: h i x <backspace> <enter> -> "hi".
+    Terminal.test_start(["h", "i", "x", "backspace", "enter"])
+    result<string> line_result = Terminal.read_line("> ")
+    string _captured = Terminal.test_stop()
+
+    assert(Result.is_success(line_result))
+    assert(Result.unwrap(line_result) == "hi")
+}
+
+@test
+function void test_terminal_read_line_drains_to_failure() {
+    # An exhausted scripted queue makes read_line fail (end of input).
+    array<string> no_keys = []
+    Terminal.test_start(no_keys)
+    result<string> line_result = Terminal.read_line("> ")
+    string _captured = Terminal.test_stop()
+
+    assert(!Result.is_success(line_result))
+}

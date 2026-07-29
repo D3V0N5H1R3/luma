@@ -385,3 +385,161 @@ function void test_regex_compile_typed_carries_message() {
 
     assert(String.length(detail) > 0, "InvalidSyntax carries a diagnostic message")
 }
+
+
+# ═══════════════════════════════════════════════════════════
+# Flag-accepting variants (RegularExpression.Flags)
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_regularexpression_matches_with_case_insensitive() {
+    # An empty flags array behaves exactly like the flagless matches.
+    result<boolean> plain = RegularExpression.matches_with("HELLO", "hello", [])
+
+    assert(Result.is_success(plain))
+    assert(!Result.unwrap(plain), "lowercase pattern does not match uppercase text")
+
+    result<boolean> insensitive =
+    RegularExpression.matches_with("HELLO", "hello", [RegularExpression.Flags.CaseInsensitive])
+
+    assert(Result.is_success(insensitive))
+    assert(Result.unwrap(insensitive), "CaseInsensitive makes it match")
+}
+
+@test
+function void test_regularexpression_find_with_case_insensitive() {
+    RegularExpression.Match m =
+    RegularExpression.find_with("Foo BAR baz", "bar", [RegularExpression.Flags.CaseInsensitive])
+    |> Result.unwrap()
+
+    assert(m.text == "BAR")
+    assert(m.position == 4)
+    assert(m.length == 3)
+}
+
+@test
+function void test_regularexpression_find_all_with_case_insensitive() {
+    array<RegularExpression.Match> matches =
+    RegularExpression.find_all_with("aAbBaA", "a", [RegularExpression.Flags.CaseInsensitive])
+    |> Result.unwrap()
+
+    assert(Array.length(matches) == 4)
+    assert(matches[0].text == "a")
+    assert(matches[1].text == "A")
+}
+
+@test
+function void test_regularexpression_replace_with_case_insensitive() {
+    # replace_with substitutes only the first match, honouring the flag.
+    result<string> first_only =
+    RegularExpression.replace_with("Cat cat CAT", "cat", "dog",
+    [RegularExpression.Flags.CaseInsensitive])
+
+    assert(Result.is_success(first_only))
+    assert(Result.unwrap(first_only) == "dog cat CAT")
+}
+
+@test
+function void test_regularexpression_replace_all_with_case_insensitive() {
+    result<string> all =
+    RegularExpression.replace_all_with("Cat cat CAT", "cat", "dog",
+    [RegularExpression.Flags.CaseInsensitive])
+
+    assert(Result.is_success(all))
+    assert(Result.unwrap(all) == "dog dog dog")
+}
+
+@test
+function void test_regularexpression_split_with_case_insensitive() {
+    array<string> parts =
+    RegularExpression.split_with("aXbxc", "x", [RegularExpression.Flags.CaseInsensitive])
+    |> Result.unwrap()
+
+    assert(Array.length(parts) == 3)
+    assert(parts[0] == "a")
+    assert(parts[1] == "b")
+    assert(parts[2] == "c")
+}
+
+@test
+function void test_regularexpression_multiline_flag() {
+    # Without MultiLine, ^ and $ anchor to the whole string.
+    array<RegularExpression.Match> single =
+    RegularExpression.find_all("one\ntwo\nthree", "^[a-z]+$") |> Result.unwrap()
+
+    assert(Array.length(single) == 0)
+
+    # With MultiLine, ^ and $ match at every line boundary.
+    array<RegularExpression.Match> multi =
+    RegularExpression.find_all_with("one\ntwo\nthree", "^[a-z]+$",
+    [RegularExpression.Flags.MultiLine])
+    |> Result.unwrap()
+
+    assert(Array.length(multi) == 3)
+    assert(multi[0].text == "one")
+    assert(multi[2].text == "three")
+}
+
+@test
+function void test_regularexpression_dotall_flag() {
+    # Without DotAll, '.' does not cross a newline.
+    result<boolean> plain = RegularExpression.matches_with("a\nb", "a.b", [])
+
+    assert(Result.is_success(plain))
+    assert(!Result.unwrap(plain))
+
+    # With DotAll, '.' matches the newline too.
+    result<boolean> dotall =
+    RegularExpression.matches_with("a\nb", "a.b", [RegularExpression.Flags.DotAll])
+
+    assert(Result.is_success(dotall))
+    assert(Result.unwrap(dotall))
+}
+
+@test
+function void test_regularexpression_combined_flags() {
+    # CaseInsensitive + DotAll together.
+    result<boolean> both =
+    RegularExpression.matches_with("A\nB", "a.b",
+    [RegularExpression.Flags.CaseInsensitive, RegularExpression.Flags.DotAll])
+
+    assert(Result.is_success(both))
+    assert(Result.unwrap(both))
+}
+
+@test
+function void test_regularexpression_with_redos_rejected() {
+    # The ReDoS guard still runs for the flag-accepting variants.
+    assert(!Result.is_success(RegularExpression.matches_with("aaaa", "(a+)+", [])))
+    assert(!Result.is_success(
+    RegularExpression.find_with("aaaa", "(a+)+", [RegularExpression.Flags.CaseInsensitive])))
+}
+
+
+# ═══════════════════════════════════════════════════════════
+# RegularExpression.count
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_regularexpression_count() {
+    # Counts non-overlapping matches without materialising the Match array.
+    result<integer> digits = RegularExpression.count("one1two2three3", "[0-9]")
+
+    assert(Result.is_success(digits))
+    assert(Result.unwrap(digits) == 3)
+
+    # A multi-character match counts as one.
+    result<integer> runs = RegularExpression.count("aaa bbb aaa", "a+")
+
+    assert(Result.is_success(runs))
+    assert(Result.unwrap(runs) == 2)
+
+    # No match yields a success carrying zero, not a failure.
+    result<integer> empty = RegularExpression.count("abcdef", "[0-9]+")
+
+    assert(Result.is_success(empty))
+    assert(Result.unwrap(empty) == 0)
+
+    # An invalid pattern fails.
+    assert(!Result.is_success(RegularExpression.count("text", "[")))
+}

@@ -11,6 +11,12 @@
 #include <string_view>
 #include <unordered_map>
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
+#include <unordered_set>
+
+#include "common/platform_utils.hpp"
 #include "analysis/source/source_location.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
@@ -369,6 +375,76 @@ void leave_raw_mode() {
     return make_key("Character", Value{std::string{key}});
 }
 
+// Maps a Terminal.CursorStyle variant (PascalCase) to its DECSCUSR parameter
+// (`\x1b[<n> q`).  The variant list must stay in step with the
+// Terminal.CursorStyle choice in core/analysis/types/stdlib_type_arities.cpp.
+[[nodiscard]] std::optional<int> cursor_style_code(std::string_view variant) {
+    static const std::unordered_map<std::string_view, int> table = {
+        {"BlinkingBlock", 1}, {"SteadyBlock", 2},     {"BlinkingUnderline", 3},
+        {"SteadyUnderline", 4}, {"BlinkingBar", 5},   {"SteadyBar", 6},
+    };
+
+    const auto it = table.find(variant);
+    return it != table.end() ? std::optional<int>{it->second} : std::nullopt;
+}
+
+// True when a decoded key string carries printable text that read_line should
+// append to the edited line.  Named special keys (navigation, editing, function
+// keys) and modifier combinations ("ctrl+…") carry no printable text.
+[[nodiscard]] bool is_printable_key(std::string_view key) {
+    static const std::unordered_set<std::string_view> specials = {
+        "enter",  "escape", "tab",     "backspace", "space",     "up",
+        "down",   "left",   "right",   "home",      "end",       "page_up",
+        "page_down", "insert", "delete", "unknown",
+    };
+
+    if (key.empty() || specials.contains(key)) {
+        return false;
+    }
+
+    // Modifier combinations (e.g. "ctrl+a", "alt+x") carry no printable glyph.
+    if (key.find('+') != std::string_view::npos) {
+        return false;
+    }
+
+    // Function keys: 'f' followed by digits (f1..f12) are not printable text.
+    if (key.size() >= 2 && key.front() == 'f' &&
+        std::all_of(key.begin() + 1, key.end(),
+                    [](char c) { return c >= '0' && c <= '9'; })) {
+        return false;
+    }
+
+    return true;
+}
+
+// Best-effort, heuristic detection of whether the terminal can render Unicode.
+// On Windows the active output code page 65001 (CP_UTF8) is treated as capable;
+// on every platform an LC_ALL / LC_CTYPE / LANG locale advertising "UTF-8" /
+// "utf8" is treated as capable.  This is a hint, not a guarantee — fonts and
+// remote terminals may still lack glyph coverage.
+[[nodiscard]] bool detect_unicode_support() {
+#ifdef _WIN32
+    if (GetConsoleOutputCP() == 65001) {
+        return true;
+    }
+#endif
+
+    for (const char* const var : {"LC_ALL", "LC_CTYPE", "LANG"}) {
+        if (const auto value = luma::safe_getenv(var); value.has_value()) {
+            std::string lowered{*value};
+            std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+            if (lowered.find("utf-8") != std::string::npos ||
+                lowered.find("utf8") != std::string::npos) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 } // namespace
 
 // ============================================================================
@@ -624,6 +700,181 @@ void register_terminal_ns(const EnvPtr& env) {
         .func("get_escape_timeout", 0)
         .raw_body([](std::span<const Value>, SourceLocation) -> Value {
             return Value{terminal_detail::escape_timeout_ms.load(std::memory_order_relaxed)};
+        });
+
+    // === Buffered output control ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("flush", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            // Flush any output buffered by prior writes / cursor moves so it
+            // appears immediately.  Under output capture (headless tests) there
+            // is no real stream to flush; report success either way.
+            std::cout.flush();
+
+            return make_success_value(Value{true});
+        });
+
+    // === Line editing input ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("read_line", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const std::string& prompt = expect_string(args[0], "Terminal.read_line", loc);
+
+            const bool headless = headless_input_is_active();
+
+            if (!headless && !raw_mode_active) {
+                return make_failure_value(error_msg("Terminal", "read_line", k_raw_mode_required));
+            }
+
+            emit(prompt);
+
+            std::string line;
+
+            while (true) {
+                std::string key;
+
+                if (headless) {
+                    const auto scripted = next_scripted_key();
+
+                    if (!scripted) {
+                        return make_failure_value(
+                            error_msg("Terminal", "read_line", "end of scripted input"));
+                    }
+
+                    key = *scripted;
+                } else {
+                    try {
+                        key = terminal_detail::read_input(-1, loc, mouse_mode_active).key;
+                    } catch (const RuntimeError& e) {
+                        return failure_from_exception(e);
+                    }
+                }
+
+                if (key == "enter") {
+                    emit("\r\n");
+
+                    return make_success_value(Value{line});
+                }
+
+                if (key == "ctrl+c" || key == "ctrl+d") {
+                    return make_failure_value(
+                        error_msg("Terminal", "read_line", "input interrupted"));
+                }
+
+                if (key == "backspace") {
+                    if (!line.empty()) {
+                        line.pop_back();
+                        emit("\b \b");
+                    }
+
+                    continue;
+                }
+
+                if (key == "space") {
+                    line += ' ';
+                    emit(" ");
+
+                    continue;
+                }
+
+                if (is_printable_key(key)) {
+                    line += key;
+                    emit(key);
+                }
+            }
+        });
+
+    // === Cursor shape ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("set_cursor_style", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            prepare();
+
+            const Value& arg = args[0];
+
+            if (!arg.is_choice()) {
+                throw RuntimeError{
+                    "Terminal.set_cursor_style: style must be a Terminal.CursorStyle", loc,
+                    "pass a Terminal.CursorStyle variant, e.g. Terminal.CursorStyle.SteadyBar"};
+            }
+
+            const auto& variant = arg.as_choice()->variant;
+            const auto code = cursor_style_code(variant);
+
+            if (!code) {
+                throw RuntimeError{
+                    std::format("Terminal.set_cursor_style: unknown style "
+                                "'Terminal.CursorStyle.{}'",
+                                variant),
+                    loc, "use a Terminal.CursorStyle variant, e.g. Terminal.CursorStyle.SteadyBar"};
+            }
+
+            emit(std::format("\033[{} q", *code));
+
+            return make_success_value(Value{true});
+        });
+
+    // === Blink styling ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("blink", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation) -> Value {
+            prepare();
+
+            return Value{std::format("\033[5m{}\033[0m", args[0].to_string())};
+        });
+
+    // === Line insert / delete ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("insert_line", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            prepare();
+
+            const auto n = expect_integer(args[0], "Terminal.insert_line", loc);
+
+            if (n < 1) {
+                return make_failure_value(
+                    error_msg("Terminal", "insert_line", "count must be >= 1"));
+            }
+
+            emit(std::format("\033[{}L", n));
+
+            return make_success_value(Value{true});
+        })
+        .func("delete_line", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            prepare();
+
+            const auto n = expect_integer(args[0], "Terminal.delete_line", loc);
+
+            if (n < 1) {
+                return make_failure_value(
+                    error_msg("Terminal", "delete_line", "count must be >= 1"));
+            }
+
+            emit(std::format("\033[{}M", n));
+
+            return make_success_value(Value{true});
+        })
+        .func("clear_to_start_of_line", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            prepare();
+
+            emit("\033[1K");
+
+            return make_success_value(Value{true});
+        });
+
+    // === Unicode capability detection ===
+
+    ModuleBuilder{"Terminal", env}
+        .func("supports_unicode", 0)
+        .raw_body([](std::span<const Value>, SourceLocation) -> Value {
+            return Value{detect_unicode_support()};
         });
 
     // === ANSI escape code registrations (split into terminal_module_ansi.cpp) ===

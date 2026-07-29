@@ -133,6 +133,19 @@ void register_result_ns(const EnvPtr& env) {
 
             return *r->owned_inner;
         })
+        .func("expect", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& r = expect_result(args[0], "Result.expect", loc);
+            const auto& msg = expect_string(args[1], "Result.expect", loc);
+
+            if (!r->is_success) {
+                throw RuntimeError{std::format("{}: {}", msg, r->owned_inner->to_string()), loc,
+                                   "provide a successful result or handle the failure "
+                                   "with a match"};
+            }
+
+            return *r->owned_inner;
+        })
         .func("filter", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto& r = expect_result(args[0], "Result.filter", loc);

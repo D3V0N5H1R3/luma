@@ -1035,6 +1035,27 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choices.push_back(std::move(ch));
         }
 
+        // ── Terminal.CursorStyle ────────────────────────
+        // Typed cursor-shape selector consumed by Terminal.set_cursor_style,
+        // which emits the matching DECSCUSR escape ("\x1b[<n> q").  A typed choice
+        // keeps the six shapes discoverable and match-exhaustive over a bare
+        // integer.  Variant names/order must match the DECSCUSR mapping in
+        // set_cursor_style in core/runtime/stdlib/io/terminal_module.cpp:
+        // BlinkingBlock=1, SteadyBlock=2, BlinkingUnderline=3, SteadyUnderline=4,
+        // BlinkingBar=5, SteadyBar=6.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "CursorStyle");
+            ch->variants.push_back(ChoiceVariant{.name = "BlinkingBlock", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "SteadyBlock", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "BlinkingUnderline", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "SteadyUnderline", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "BlinkingBar", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "SteadyBar", .fields = {}});
+
+            st.choice_map["Terminal.CursorStyle"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
         // ── Ordering ────────────────────────────────────
         // Top-level choice (no namespace) mirroring Rust's std::cmp::Ordering.
         // Variant names must match ordering_from_sign() in
@@ -1354,6 +1375,26 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "TooLarge", .fields = {}});
 
             st.choice_map["RegularExpression.Error"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── RegularExpression.Flags ─────────────────────
+        // Typed flag set for the flag-accepting variants (matches_with /
+        // find_with / find_all_with / replace_with / replace_all_with /
+        // split_with), each taking a flags: array<RegularExpression.Flags>.  A
+        // typed choice keeps the options discoverable and match-exhaustive over a
+        // bare string.  Variant names must match parse_regex_flags() in
+        // core/runtime/stdlib/text/regularexpression_module.cpp exactly:
+        // CaseInsensitive → std::regex::icase, MultiLine → std::regex::multiline,
+        // and DotAll (no std::regex equivalent) → a `.`-to-`[\s\S]` pattern
+        // rewrite so `.` also matches a newline.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Flags");
+            ch->variants.push_back(ChoiceVariant{.name = "CaseInsensitive", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "MultiLine", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "DotAll", .fields = {}});
+
+            st.choice_map["RegularExpression.Flags"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

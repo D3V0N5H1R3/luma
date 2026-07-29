@@ -8,9 +8,13 @@ void register_task_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
         specs,
         {
             m.fn("all", 1, "(tasks: array<task<T>>)", R::result_array_any(), {p.array_any}),
+            m.fn("all_settled", 1, "(tasks: array<task<T>>)", R::array(R::result_any()),
+                 {R::array(p.task_any)}),
             m.fn("any", 1, "(tasks: array<task<T>>)", R::result_any(), {p.array_any}),
             m.fn("cancel", 1, "(t: task<T>)", R::boolean_type(), {p.task_any}),
+            m.fn("completed", 1, "(value: T)", R::task_any(), {p.any}),
             m.fn("delay", 1, "(ms: integer)", R::void_type(), {p.integer}),
+            m.fn("failed", 1, "(message: string)", R::task_any(), {p.string}),
             m.fn("flat_map", 2, "(t: task<T>, f: func(T) -> task<U>)", R::result_any(),
                  {p.task_any, p.func}),
             m.fn("is_cancelled", 1, "(t: task<T>)", R::boolean_type(), {p.task_any}),
@@ -21,9 +25,14 @@ void register_task_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
             m.fn("race", 1, "(tasks: array<task<T>>)", R::result_any(), {p.array_any}),
             m.fn("retry", 2, "(max_attempts: integer, f: func() -> result<T>)", R::result_any(),
                  {p.integer, p.func}),
+            m.fn("retry_with_backoff", 3,
+                 "(n: integer, base_delay_ms: integer, fn: function() -> T)", R::result_any(),
+                 {p.integer, p.integer, p.func}),
             m.fn("sequence", 1, "(tasks: array<task<T>>)", R::result_array_any(), {p.array_any}),
             m.fn("timeout", 2, "(t: task<T>, ms: integer)", R::result_any(),
                  {p.task_any, p.integer}),
+            m.fn("timeout_or", 3, "(task: task<T>, ms: integer, default: T)", R::any_type(),
+                 {p.task_any, p.integer, p.any}),
         });
 }
 

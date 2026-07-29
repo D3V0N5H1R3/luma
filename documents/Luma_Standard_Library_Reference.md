@@ -2591,11 +2591,18 @@ string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 | `RegularExpression.find(s, pattern)`              | `(string, string)`         | `result<RegularExpression.Match>`        | First match; fail if pattern is invalid                       |
 | `RegularExpression.find_all(s, pattern)`          | `(string, string)`         | `result<array<RegularExpression.Match>>` | All matches; fail if pattern is invalid                       |
 | `RegularExpression.is_valid(pattern)`             | `(string)`                 | `boolean`                                | Whether `pattern` is a valid regex                            |
+| `RegularExpression.count(s, pattern)`             | `(string, string)`         | `result<integer>`                        | Number of non-overlapping matches; fail if pattern is invalid |
 | `RegularExpression.compile_typed(pattern)`        | `(string)`                 | `result<string, RegularExpression.Error>` | Validate a pattern; on failure the error is a typed `RegularExpression.Error` |
 | `RegularExpression.matches(s, pattern)`           | `(string, string)`         | `result<boolean>`                        | Whether `pattern` is found in `s`; fail if pattern is invalid |
 | `RegularExpression.replace(s, pattern, repl)`     | `(string, string, string)` | `result<string>`                         | Replace first match; fail if pattern is invalid               |
 | `RegularExpression.replace_all(s, pattern, repl)` | `(string, string, string)` | `result<string>`                         | Replace all matches; fail if pattern is invalid               |
 | `RegularExpression.split(s, pattern)`             | `(string, string)`         | `result<array<string>>`                  | Split by regex; fail if pattern is invalid                    |
+| `RegularExpression.matches_with(s, pattern, flags)`         | `(string, string, array<RegularExpression.Flags>)`         | `result<boolean>`                        | Like `matches`, honouring the given flags                     |
+| `RegularExpression.find_with(s, pattern, flags)`            | `(string, string, array<RegularExpression.Flags>)`         | `result<RegularExpression.Match>`        | Like `find`, honouring the given flags                        |
+| `RegularExpression.find_all_with(s, pattern, flags)`        | `(string, string, array<RegularExpression.Flags>)`         | `result<array<RegularExpression.Match>>` | Like `find_all`, honouring the given flags                    |
+| `RegularExpression.replace_with(s, pattern, repl, flags)`   | `(string, string, string, array<RegularExpression.Flags>)` | `result<string>`                         | Like `replace`, honouring the given flags                     |
+| `RegularExpression.replace_all_with(s, pattern, repl, flags)` | `(string, string, string, array<RegularExpression.Flags>)` | `result<string>`                         | Like `replace_all`, honouring the given flags                 |
+| `RegularExpression.split_with(s, pattern, flags)`           | `(string, string, array<RegularExpression.Flags>)`         | `result<array<string>>`                  | Like `split`, honouring the given flags                       |
 
 `find` and `find_all` return `RegularExpression.Match` records with fields `text` (the matched substring), `position` (zero-based index), `length` (character count of the match), `groups` (an `array<RegularExpression.Match>` of capture-group matches), and `named_groups` (a `dictionary<RegularExpression.Capture>` of named capture-group matches, keyed by group name). Each element of `groups` is itself a `Match` record with the same `text`, `position`, and `length` fields. When the pattern contains no capture groups, `groups` is an empty array and `named_groups` is an empty dictionary.
 
@@ -2645,6 +2652,41 @@ match RegularExpression.compile_typed(user_pattern) {
 }
 ```
 
+### Match flags
+
+The `*_with` variants take a trailing `flags: array<RegularExpression.Flags>` argument, closing the most common gap in the base API — case-insensitive matching (previously only expressible by contorting the pattern into character classes like `[Hh][Ee][Ll][Ll][Oo]`). Each is otherwise identical to its flagless sibling, and an empty flags array reproduces the flagless behaviour exactly.
+
+`RegularExpression.Flags` is a choice with three unit variants:
+
+| Variant                                   | Effect                                                                                                   |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `RegularExpression.Flags.CaseInsensitive` | Matching ignores letter case (maps to `std::regex::icase`).                                              |
+| `RegularExpression.Flags.MultiLine`       | `^` and `$` also match at line boundaries, not just at the start/end of the whole string (`std::regex::multiline`). |
+| `RegularExpression.Flags.DotAll`          | `.` also matches a newline. `std::regex` has no dotall flag, so this is implemented by rewriting each unescaped `.` (outside a character class) to `[\s\S]` before compilation. |
+
+Flags may be combined by listing several in the array; passing `[]` means "no flags".
+
+```luma
+# Case-insensitive search.
+result<boolean> hit =
+    RegularExpression.matches_with("HELLO", "hello", [RegularExpression.Flags.CaseInsensitive])
+# success(true)
+
+# Match line-anchored patterns across every line, ignoring case.
+array<RegularExpression.Match> lines =
+    RegularExpression.find_all_with(
+        "One\nTWO\nthree", "^[a-z]+$",
+        [RegularExpression.Flags.MultiLine, RegularExpression.Flags.CaseInsensitive])
+    |> Result.unwrap()
+
+# Let '.' span newlines.
+result<boolean> spans =
+    RegularExpression.matches_with("a\nb", "a.b", [RegularExpression.Flags.DotAll])
+# success(true)
+```
+
+The ReDoS guard and pattern-size limit apply to the `*_with` variants exactly as they do to the flagless functions.
+
 ## 33 — Resource
 
 `Resource.with` guarantees that a cleanup function is called after a body function runs, regardless of whether the body throws a runtime error. It is the Luma equivalent of a `finally`-based cleanup block, expressed as a library function.
@@ -2655,6 +2697,7 @@ match RegularExpression.compile_typed(user_pattern) {
 | ------------------------------------------------- | --------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------- |
 | `Resource.using(acquire_fn, body_fn, release_fn)` | `(function() -> T, function(T) -> U, function(T) -> any)` | `U`         | Acquire, use, release. If `acquire_fn` throws, `release_fn` is not called                                   |
 | `Resource.with(resource, body_fn, cleanup_fn)`    | `(T, function(T) -> U, function(T) -> any)`               | `U`         | Run `body_fn(resource)`, then always call `cleanup_fn(resource)`. Return value of `cleanup_fn` is discarded |
+| `Resource.with_all(resources, body_fn, cleanup_fn)` | `(array<T>, function(array<T>) -> U, function(T) -> any)` | `U`         | Run `body_fn(resources)`, then always call `cleanup_fn` on each resource in reverse acquisition order. A cleanup error is swallowed so every resource is still released; if `body_fn` throws, its error propagates after cleanup |
 
 ### Examples
 
@@ -2710,12 +2753,16 @@ See the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--resul
 | Function                             | Parameter Types                 | Return Type          | Description                                                    |
 | ------------------------------------ | ------------------------------- | -------------------- | -------------------------------------------------------------- |
 | `Set.add(s, v)`                      | `(set, T)`                      | `set`                | Set with `v` included                                          |
+| `Set.all(s, fn)`                     | `(set, function(T) -> boolean)` | `result<boolean>`    | Whether every element matches `fn`; fail if predicate throws   |
+| `Set.any(s, fn)`                     | `(set, function(T) -> boolean)` | `result<boolean>`    | Whether any element matches `fn`; fail if predicate throws     |
 | `Set.concat(a, b)`                   | `(set, set)`                    | `set`                | Append the elements of `b` to `a`, keeping unique values       |
 | `Set.contains(s, v)`                 | `(set, T)`                      | `boolean`            | Whether `v` is in the set                                      |
+| `Set.count(s, fn)`                   | `(set, function(T) -> boolean)` | `result<integer>`    | Number of elements matching `fn`; fail if predicate throws     |
 | `Set.difference(s, other)`           | `(set, set)`                    | `set`                | Elements in `s` but not `other`                                |
 | `Set.each(s, fn)`                    | `(set, function(T) -> none)`    | `result<none>`       | Apply `fn` to each element; fail if `fn` throws                |
 | `Set.equals(s, other)`               | `(set, set)`                    | `boolean`            | Order-insensitive equality                                     |
 | `Set.filter(s, fn)`                  | `(set, function(T) -> boolean)` | `result<set>`        | Elements for which `fn` returns true; fail if predicate throws |
+| `Set.find(s, fn)`                    | `(set, function(T) -> boolean)` | `result<T>`          | First (stored-order) element matching `fn`; fail if none/throws |
 | `Set.from_array(arr)`                | `(array<T>)`                    | `set`                | Deduplicated set from array                                    |
 | `Set.intersection(s, other)`         | `(set, set)`                    | `set`                | Elements in both sets                                          |
 | `Set.is_disjoint(s, other)`          | `(set, set)`                    | `boolean`            | Whether the sets share no elements                             |
@@ -2742,6 +2789,8 @@ Cross-platform TCP and UDP networking.
 | `Socket.close(s)`                      | `(socket)`                          | `none`                     | Close the socket                                             |
 | `Socket.connect(host, port)`           | `(string, integer)`                 | `result<socket>`           | TCP connect (30 s timeout)                                   |
 | `Socket.connect_typed(host, port)`     | `(string, integer)`                 | `result<socket, Socket.Error>` | TCP connect; on failure the error is a typed `Socket.Error` instead of a string |
+| `Socket.connect_timeout(host, port, timeout_ms)` | `(string, integer, integer)`        | `result<socket>`           | TCP connect with an explicit millisecond timeout             |
+| `Socket.connect_timeout_typed(host, port, timeout_ms)` | `(string, integer, integer)`        | `result<socket, Socket.Error>` | TCP connect with an explicit timeout; on failure a typed `Socket.Error` (e.g. `Timeout`) |
 | `Socket.is_connected(s)`               | `(socket)`                          | `boolean`                  | Whether the socket handle is valid                           |
 | `Socket.ip_to_string(ip)`              | `(Socket.IpAddress)`                | `string`                   | Canonical text of a parsed IP address                        |
 | `Socket.listen(host, port)`            | `(string, integer)`                 | `result<socket>`           | Bind and listen for TCP connections                          |
@@ -2750,10 +2799,16 @@ Cross-platform TCP and UDP networking.
 | `Socket.local_address_parts(s)`        | `(socket)`                          | `result<Socket.Address>`   | Local address as a `{ host, port }` record (IPv6-safe; no string parsing) |
 | `Socket.parse_ip(text)`                | `(string)`                          | `result<Socket.IpAddress>` | Validate and classify an IPv4/IPv6 literal (no OS call)      |
 | `Socket.receive(s, max)`               | `(socket, integer)`                 | `result<string>`           | Receive up to `max` bytes                                    |
+| `Socket.receive_all(s)`                | `(socket)`                          | `result<string>`           | Read until the peer closes; accumulates the whole stream     |
+| `Socket.receive_bytes(s, max)`         | `(socket, integer)`                 | `result<array<integer>>`   | Receive up to `max` raw bytes as integers `0-255`            |
+| `Socket.receive_line(s)`               | `(socket)`                          | `result<string>`           | Read up to and including the next `\n`                       |
 | `Socket.receive_typed(s, max)`         | `(socket, integer)`                 | `result<string, Socket.Error>` | Receive up to `max` bytes; on failure the error is a typed `Socket.Error` |
 | `Socket.remote_address(s)`             | `(socket)`                          | `result<string>`           | Remote `"host:port"`                                         |
 | `Socket.remote_address_parts(s)`       | `(socket)`                          | `result<Socket.Address>`   | Remote address as a `{ host, port }` record (IPv6-safe; no string parsing) |
 | `Socket.send(s, data)`                 | `(socket, string)`                  | `result<integer>`          | Send data; returns bytes sent                                |
+| `Socket.send_all(s, data)`             | `(socket, string)`                  | `result<boolean>`          | Send every byte of `data`, looping until fully written       |
+| `Socket.send_all_typed(s, data)`       | `(socket, string)`                  | `result<boolean, Socket.Error>` | Send every byte; on failure the error is a typed `Socket.Error` |
+| `Socket.send_bytes(s, bytes)`          | `(socket, array<integer>)`          | `result<integer>`          | Send raw bytes (each `0-255`); returns bytes sent            |
 | `Socket.send_typed(s, data)`           | `(socket, string)`                  | `result<integer, Socket.Error>` | Send data; on failure the error is a typed `Socket.Error` |
 | `Socket.set_timeout(s, ms)`            | `(socket, integer)`                 | `result<boolean>`          | Set send/recv timeout (does not affect connect)              |
 | `Socket.udp_bind(s, host, port)`       | `(socket, string, integer)`         | `result<boolean>`          | Bind UDP socket to address                                   |
@@ -2799,9 +2854,14 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 
 | Function                    | Parameter Types                   | Return Type              | Description                                                     |
 | --------------------------- | --------------------------------- | ------------------------ | --------------------------------------------------------------- |
+| `Stack.all(s, fn)`          | `(stack, function(T) -> boolean)` | `result<boolean>`        | Whether every element matches `fn`; fail if predicate throws    |
+| `Stack.any(s, fn)`          | `(stack, function(T) -> boolean)` | `result<boolean>`        | Whether any element matches `fn`; fail if predicate throws      |
 | `Stack.concat(a, b)`        | `(stack, stack)`                  | `stack`                  | Concatenate two stacks                                          |
+| `Stack.contains(s, v)`      | `(stack, T)`                      | `boolean`                | Whether `v` is in the stack (value equality)                    |
+| `Stack.count(s, fn)`        | `(stack, function(T) -> boolean)` | `result<integer>`        | Number of elements matching `fn`; fail if predicate throws      |
 | `Stack.each(s, fn)`         | `(stack, function(T) -> none)`    | `result<none>`           | Iterate top to bottom for side effects; fail if callback throws |
 | `Stack.filter(s, fn)`       | `(stack, function(T) -> boolean)` | `result<stack>`          | Keep matching elements; fail if callback throws                 |
+| `Stack.find(s, fn)`         | `(stack, function(T) -> boolean)` | `result<T>`              | First match from the top; fail if none/throws                   |
 | `Stack.from_array(arr)`     | `(array<T>)`                      | `stack`                  | Create stack from array (bottom → top)                          |
 | `Stack.is_empty(s)`         | `(stack)`                         | `boolean`                | Whether the stack is empty                                      |
 | `Stack.length(s)`           | `(stack)`                         | `integer`                | Number of elements                                              |
@@ -2810,8 +2870,10 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `Stack.partition(s, fn)`    | `(stack, function(T) -> boolean)` | `result<(stack, stack)>` | Split into `(matches, rest)`; fail if predicate throws          |
 | `Stack.peek(s)`             | `(stack)`                         | `result<T>`              | View top element; fail if empty                                 |
 | `Stack.pop(s)`              | `(stack)`                         | `result<(T, stack)>`     | Pop from top; fail if empty                                     |
+| `Stack.pop_while(s, fn)`    | `(stack, function(T) -> boolean)` | `result<(array<T>, stack)>` | Pop top elements while `fn` holds (returned top-first) plus the remaining stack; fail if predicate throws |
 | `Stack.push(s, v)`          | `(stack, T)`                      | `stack`                  | Push to top                                                     |
 | `Stack.reduce(s, init, fn)` | `(stack, U, function(U, T) -> U)` | `result<U>`              | Fold elements; fail if callback throws                          |
+| `Stack.reverse(s)`          | `(stack)`                         | `stack`                  | Reverse element order (top becomes bottom)                      |
 | `Stack.to_array(s)`         | `(stack)`                         | `array<T>`               | Convert to array                                                |
 
 ## 38 — String
@@ -2830,12 +2892,15 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `String.contains_ignore_case(s, sub)` | `(string, string)`           | `boolean`         | Whether `s` contains `sub`, ignoring ASCII case                                 |
 | `String.count(s, sub)`              | `(string, string)`             | `integer`         | Number of non-overlapping occurrences of `sub`                                  |
 | `String.dedent(s)`                  | `(string)`                     | `string`          | Remove common leading whitespace                                                |
+| `String.delete(s, start, end)`      | `(string, integer, integer)`   | `result<string>`  | Remove codepoint range `[start, end)`; fail if out of bounds or `start > end`   |
 | `String.ends_with(s, suffix)`       | `(string, string)`             | `boolean`         | Whether `s` ends with `suffix`                                                  |
+| `String.ends_with_any(s, suffixes)` | `(string, array<string>)`      | `boolean`         | Whether `s` ends with any element of `suffixes`                                 |
 | `String.equals_ignore_case(a, b)`   | `(string, string)`             | `boolean`         | Whether `a` and `b` are equal, ignoring ASCII case                              |
 | `String.format_number(n, decimals)` | `(number, integer)`            | `string`          | Format number with fixed decimal places                                         |
 | `String.from_bytes(bytes)`          | `(array<integer>)`             | `result<string>`  | Build string from byte values                                                   |
 | `String.from_codepoints(cps)`       | `(array<integer>)`             | `result<string>`  | Build string from Unicode codepoints                                            |
 | `String.indent(s, prefix)`          | `(string, string)`             | `string`          | Prepend `prefix` to every line                                                  |
+| `String.insert(s, index, text)`     | `(string, integer, string)`    | `result<string>`  | Insert `text` at codepoint `index` (`0..len`); fail if out of bounds            |
 | `String.index_of(s, sub)`           | `(string, string)`             | `result<integer>` | First index of `sub`; fail if not found                                         |
 | `String.is_alpha(s)`                | `(string)`                     | `boolean`         | Whether all characters are alphabetic                                           |
 | `String.is_alphanumeric(s)`         | `(string)`                     | `boolean`         | Whether all characters are alphanumeric                                         |
@@ -2864,11 +2929,14 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `String.repeat(s, n)`               | `(string, integer)`            | `result<string>`  | Repeat `s` `n` times; fail if the count or result size exceeds the maximum      |
 | `String.replace(s, old, new)`       | `(string, string, string)`     | `string`          | Replace first occurrence                                                        |
 | `String.replace_all(s, old, new)`   | `(string, string, string)`     | `string`          | Replace all occurrences                                                         |
+| `String.replace_range(s, start, end, text)` | `(string, integer, integer, string)` | `result<string>` | Replace codepoint range `[start, end)` with `text`; fail if out of bounds or `start > end` |
 | `String.reverse(s)`                 | `(string)`                     | `string`          | Reverse the string                                                              |
 | `String.slug(s)`                    | `(string)`                     | `string`          | Convert to a URL-friendly slug                                                  |
 | `String.split(s, sep)`              | `(string, string)`             | `array<string>`   | Split by separator                                                              |
 | `String.split_n(s, sep, n)`         | `(string, string, integer)`    | `array<string>`   | Split into at most `n` parts                                                    |
+| `String.split_whitespace(s)`        | `(string)`                     | `array<string>`   | Split on runs of ASCII whitespace; no empty tokens                              |
 | `String.starts_with(s, prefix)`     | `(string, string)`             | `boolean`         | Whether `s` starts with `prefix`                                                |
+| `String.starts_with_any(s, prefixes)` | `(string, array<string>)`    | `boolean`         | Whether `s` starts with any element of `prefixes`                               |
 | `String.substring(s, start, end)`   | `(string, integer, integer)`   | `string`          | Substring by codepoint indices                                                  |
 | `String.template(tmpl, vars)`       | `(string, dictionary<string>)` | `string`          | Replace `{key}` placeholders from dictionary                                    |
 | `String.title_case(s)`              | `(string)`                     | `string`          | Capitalise first letter of each word                                            |
@@ -2884,6 +2952,8 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `String.truncate(s, max)`           | `(string, integer)`            | `string`          | Truncate to `max` characters, appending `"..."` if needed                       |
 | `String.uppercase(s)`               | `(string)`                     | `string`          | Convert to uppercase                                                            |
 | `String.wrap(s, width)`             | `(string, integer)`            | `string`          | Word-wrap at `width` columns                                                    |
+| `String.word_count(s)`              | `(string)`                     | `integer`         | Number of whitespace-separated words                                            |
+| `String.words(s)`                   | `(string)`                     | `array<string>`   | Split on runs of ASCII whitespace (alias of `split_whitespace`)                 |
 
 > **Note:** `String.length` returns an `integer` — the number of Unicode codepoints (not bytes). Use `String.byte_length` to get the byte count of a string.
 
@@ -2941,9 +3011,12 @@ Using `spawn` outside a `task_scope` still works (fire-and-forget) but produces 
 | `spawn func(args...)`   | _(direct call)_                      | `task<T>`          | Spawn a concurrent task                          |
 | `task_scope { ... }`    | _(block)_                            | `array<T>`         | Run all spawned tasks; collect results in order  |
 | `Task.all(tasks)`       | `(array<task<T>>)`                   | `result<array<T>>` | Wait for all; return results in order            |
+| `Task.all_settled(tasks)` | `(array<task<T>>)`                 | `array<result<T>>` | Await every task; one result each, never fails as a whole (fail-slow) |
 | `Task.any(tasks)`       | `(array<task<T>>)`                   | `result<T>`        | First successful result; ignore failures         |
 | `Task.cancel(t)`        | `(task<T>)`                          | `boolean`          | Cancel a task cooperatively; `true` if token set |
+| `Task.completed(value)` | `(T)`                                | `task<T>`          | A task already completed with `value` (like `Promise.resolve`) |
 | `Task.delay(ms)`        | `(integer)`                          | `none`             | Sleep for `ms` milliseconds                      |
+| `Task.failed(message)`  | `(string)`                           | `task<T>`          | A task already failed with `message` (like `Promise.reject`) |
 | `Task.flat_map(t, fn)`  | `(task<T>, function(T) -> task<U>)`  | `result<U>`        | Chain with another spawn                         |
 | `Task.is_cancelled(t)`  | `(task<T>)`                          | `boolean`          | Whether the task's cancellation token is set     |
 | `Task.is_done(t)`       | `(task<T>)`                          | `result<boolean>`  | Whether the task has completed                   |
@@ -2951,8 +3024,10 @@ Using `spawn` outside a `task_scope` still works (fire-and-forget) but produces 
 | `Task.map_n(tasks, fn)` | `(array<task<T>>, function(T) -> U)` | `result<array<U>>` | Map over all task results                        |
 | `Task.race(tasks)`      | `(array<task<T>>)`                   | `result<T>`        | Return first completed result                    |
 | `Task.retry(n, fn)`     | `(integer, function() -> T)`         | `result<T>`        | Retry up to `n` times; `n` must be > 0           |
+| `Task.retry_with_backoff(n, base_delay_ms, fn)` | `(integer, integer, function() -> T)` | `result<T>` | Retry up to `n` times with exponential backoff (`base_delay_ms`, `2×`, `4×`, …) between attempts |
 | `Task.sequence(tasks)`  | `(array<task<T>>)`                   | `result<array<T>>` | Await each in order; collect results             |
 | `Task.timeout(t, ms)`   | `(task<T>, integer)`                 | `result<T>`        | Await with timeout; fail on timeout              |
+| `Task.timeout_or(t, ms, default)` | `(task<T>, integer, T)`    | `T`                | Task's value if it completes within `ms`, else `default` (timeout or failure) |
 
 > **Resource limit** — The internal task queue holds a bounded number of pending tasks (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`). Spawning beyond this limit throws a runtime error (`task queue is full — too many pending tasks`). Design your program to await tasks before spawning more to stay within this limit.
 
@@ -2964,23 +3039,28 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | ---------------------------------------------- | ------------------------------------- | --------------------------------- | ----------------------------------------------------------------------- |
 | `Terminal.background_color(color, text)`        | `(Terminal.Color \| string, string)`  | `result<string>`                  | Named background color; accepts a `Terminal.Color` variant or string name |
 | `Terminal.bell()`                              | `()`                                  | `none`                            | Audible bell                                                            |
+| `Terminal.blink(text)`                         | `(string)`                            | `string`                          | Blinking styled text (SGR blink attribute)                              |
 | `Terminal.bold(text)`                          | `(string)`                            | `string`                          | Bold styled text                                                        |
 | `Terminal.clear_line()`                        | `()`                                  | `none`                            | Clear entire current line                                               |
 | `Terminal.clear_screen()`                      | `()`                                  | `none`                            | Clear screen and move to top-left                                       |
 | `Terminal.clear_to_end_of_line()`              | `()`                                  | `none`                            | Clear from cursor to end of line                                        |
 | `Terminal.clear_to_end_of_screen()`            | `()`                                  | `none`                            | Clear from cursor to end of screen                                      |
+| `Terminal.clear_to_start_of_line()`            | `()`                                  | `result<boolean>`                 | Clear from start of line to cursor (ANSI EL mode 1)                     |
 | `Terminal.color(color, text)`                   | `(Terminal.Color \| string, string)`  | `result<string>`                  | Named foreground color; accepts a `Terminal.Color` variant or string name |
 | `Terminal.columns()`                           | `()`                                  | `integer`                         | Terminal width in columns                                               |
+| `Terminal.delete_line(n)`                      | `(integer)`                           | `result<boolean>`                 | Delete `n` lines at the cursor (ANSI DL); fail if `n < 1`               |
 | `Terminal.dim(text)`                           | `(string)`                            | `string`                          | Dim styled text                                                         |
 | `Terminal.disable_mouse()`                     | `()`                                  | `none`                            | Disable mouse event reporting                                           |
 | `Terminal.disable_raw_mode()`                  | `()`                                  | `none`                            | Restore normal terminal mode                                            |
 | `Terminal.enable_mouse()`                      | `()`                                  | `result<none>`                    | Enable mouse events; fail if raw mode is not active                     |
 | `Terminal.enable_raw_mode()`                   | `()`                                  | `result<none>`                    | Enter raw mode; fail if OS rejects                                      |
 | `Terminal.enter_alternate_screen()`            | `()`                                  | `none`                            | Switch to alternate screen buffer                                       |
+| `Terminal.flush()`                             | `()`                                  | `result<boolean>`                 | Flush buffered output so prior writes/cursor moves appear immediately   |
 | `Terminal.get_cursor_position()`               | `()`                                  | `result<Terminal.CursorPosition>` | Current cursor position; fail if raw mode is disabled                   |
 | `Terminal.get_escape_timeout()`                | `()`                                  | `integer`                         | Current escape-sequence timeout in milliseconds                         |
 | `Terminal.get_input()`                         | `()`                                  | `result<Terminal.InputEvent>`     | Blocking structured key read; requires raw mode                         |
 | `Terminal.hide_cursor()`                       | `()`                                  | `none`                            | Hide the cursor                                                         |
+| `Terminal.insert_line(n)`                      | `(integer)`                           | `result<boolean>`                 | Insert `n` blank lines at the cursor (ANSI IL); fail if `n < 1`         |
 | `Terminal.inverse(text)`                       | `(string)`                            | `string`                          | Inverted-color styled text                                              |
 | `Terminal.is_in_raw_mode()`                    | `()`                                  | `boolean`                         | Whether raw mode is active                                              |
 | `Terminal.is_mouse_enabled()`                  | `()`                                  | `boolean`                         | Whether mouse mode is active                                            |
@@ -3001,6 +3081,7 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | `Terminal.plain_style()`                       | `()`                                  | `Terminal.Style`                  | A default `Terminal.Style` (no colours, no attributes) to override with `with` |
 | `Terminal.read_key_timeout(ms)`                | `(integer)`                           | `result<string>`                  | Non-blocking key read with timeout in ms                                |
 | `Terminal.read_key()`                          | `()`                                  | `result<string>`                  | Blocking key read; requires raw mode                                    |
+| `Terminal.read_line(prompt)`                   | `(string)`                            | `result<string>`                  | Print `prompt`, then read a line with minimal editing (printable keys, backspace, Enter); requires raw mode |
 | `Terminal.reset_scroll_region()`               | `()`                                  | `none`                            | Reset to full-screen scrolling                                          |
 | `Terminal.reset_style()`                       | `()`                                  | `none`                            | Reset all text attributes                                               |
 | `Terminal.restore_cursor()`                    | `()`                                  | `none`                            | Restore saved cursor position                                           |
@@ -3010,6 +3091,7 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | `Terminal.save_cursor()`                       | `()`                                  | `none`                            | Save current cursor position                                            |
 | `Terminal.scroll_down(n)`                      | `(integer)`                           | `none`                            | Scroll content down `n` lines                                           |
 | `Terminal.scroll_up(n)`                        | `(integer)`                           | `none`                            | Scroll content up `n` lines                                             |
+| `Terminal.set_cursor_style(style)`             | `(Terminal.CursorStyle)`              | `result<boolean>`                 | Set the cursor shape via DECSCUSR                                       |
 | `Terminal.set_escape_timeout(ms)`              | `(integer)`                           | `none`                            | Set the escape-sequence timeout in milliseconds                         |
 | `Terminal.set_scroll_region(top, bottom)`      | `(integer, integer)`                  | `result<none>`                    | Set scrollable region; fail if `top` or `bottom < 1` or `top >= bottom` |
 | `Terminal.set_title(title)`                    | `(string)`                            | `none`                            | Set the terminal window title                                           |
@@ -3019,6 +3101,7 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | `Terminal.styled(text, style)`                 | `(string, Terminal.Style)`            | `string`                          | Render `text` with a `Terminal.Style` as one combined ANSI sequence with a single reset |
 | `Terminal.supports_color()`                    | `()`                                  | `boolean`                         | Whether the terminal supports ANSI colour                               |
 | `Terminal.supports_true_color()`               | `()`                                  | `boolean`                         | Whether the terminal supports 24-bit true colour                        |
+| `Terminal.supports_unicode()`                  | `()`                                  | `boolean`                         | Best-effort heuristic (locale / `TERM` / code page) for Unicode rendering |
 | `Terminal.test_feed(keys)`                     | `(array<string>)`                     | `none`                            | Append scripted keys to the active headless test session                |
 | `Terminal.test_output()`                       | `()`                                  | `string`                          | Output captured so far in the headless test session                     |
 | `Terminal.test_remaining()`                    | `()`                                  | `integer`                         | Count of scripted keys not yet consumed                                 |
@@ -3099,6 +3182,14 @@ print(Terminal.styled("disk almost full", alert))
 print("done" |> Terminal.styled(alert))
 ```
 
+`Terminal.CursorStyle` is a closed choice that selects the cursor shape for `Terminal.set_cursor_style(style)`, which emits the matching DECSCUSR escape (`\x1b[<n> q`). Because the set is exhaustive, the shape is type-checked and autocompleted rather than passed as a raw integer. It has six unit variants, each mapping to its DECSCUSR parameter: `BlinkingBlock` (1), `SteadyBlock` (2), `BlinkingUnderline` (3), `SteadyUnderline` (4), `BlinkingBar` (5), and `SteadyBar` (6). `set_cursor_style` returns `result<boolean>`.
+
+```luma
+result<boolean> _ = Terminal.set_cursor_style(Terminal.CursorStyle.SteadyBar)
+```
+
+`Terminal.read_line(prompt)` prints `prompt` and then reads a single line while in raw mode, echoing as you type: printable keys are appended, backspace deletes the last character (with an erasing echo), and Enter submits the line. It performs no mid-line cursor movement. It requires raw mode and returns `result<string>`, failing on interrupt or end of input. `Terminal.flush()` drains any buffered output so prior writes and cursor moves appear immediately, returning `result<boolean>`. `Terminal.blink(text)` wraps text in the SGR blink attribute (returning a plain `string`, like `Terminal.bold`). `Terminal.insert_line(n)` / `Terminal.delete_line(n)` insert or delete `n` lines at the cursor (ANSI IL/DL), and `Terminal.clear_to_start_of_line()` clears from the start of the line to the cursor (ANSI EL mode 1); all three return `result<boolean>`. `Terminal.supports_unicode()` is a best-effort heuristic — it inspects the active Windows output code page and the `LC_ALL` / `LC_CTYPE` / `LANG` locale variables for a UTF-8 indication — and is a hint, not a guarantee (fonts and remote terminals may still lack glyph coverage).
+
 `Terminal.is_terminal()` returns `true` when stdout is connected to an interactive terminal device (a TTY) — for example, when a program is run directly in a console or terminal emulator. It returns `false` when stdout is **piped** to another program (`luma app.luma | grep foo`), **redirected** to a file (`luma app.luma > out.txt`), or when the process is spawned without an attached terminal (for example by a CI runner or background job). Use this to conditionally enable ANSI escape codes, colors, or interactive UI only when output goes to a real terminal.
 
 ### Interaction Testing
@@ -3170,6 +3261,8 @@ Parse, build, query, and serialise XML documents. XML nodes are opaque `xml` val
 | `Xml.element(tag)`                   | `(string)`                     | `xml`       | Create empty element          |
 | `Xml.from_dictionary(tag, d)`        | `(string, dictionary<string>)` | `xml`       | Build element from dictionary |
 | `Xml.remove_attribute(el, name)`     | `(xml, string)`                | `xml`       | Remove attribute              |
+| `Xml.remove_child(el, index)`        | `(xml, integer)`               | `result<xml>` | Remove the child element at `index` (0-based) |
+| `Xml.replace_child(el, index, child)` | `(xml, integer, xml)`         | `result<xml>` | Replace the child element at `index` (0-based) |
 | `Xml.set_attribute(el, name, value)` | `(xml, string, string)`        | `xml`       | Add/set attribute             |
 | `Xml.set_cdata(el, data)`            | `(xml, string)`                | `xml`       | Add CDATA section             |
 | `Xml.set_tag(el, tag)`               | `(xml, string)`                | `xml`       | Rename element tag            |
@@ -3188,8 +3281,12 @@ Parse, build, query, and serialise XML documents. XML nodes are opaque `xml` val
 | `Xml.find(el, tag)`                      | `(xml, string)`         | `result<xml>`        | First child by tag              |
 | `Xml.find_all(el, tag)`                  | `(xml, string)`         | `array<xml>`         | All children by tag             |
 | `Xml.find_by_attribute(el, name, value)` | `(xml, string, string)` | `result<xml>`        | First child by attribute value  |
+| `Xml.find_descendant(el, tag)`           | `(xml, string)`         | `result<xml>`        | First descendant element by tag, at any depth |
+| `Xml.find_all_descendants(el, tag)`      | `(xml, string)`         | `array<xml>`         | All descendant elements by tag, at any depth  |
+| `Xml.get_path(el, path)`                 | `(xml, string)`         | `result<xml>`        | Navigate a `/`-separated child tag path, with optional `[n]` index |
 | `Xml.has_attribute(el, name)`            | `(xml, string)`         | `boolean`            | Whether attribute exists        |
 | `Xml.has_child(el, tag)`                 | `(xml, string)`         | `boolean`            | Whether a child with tag exists |
+| `Xml.inner_text(el)`                     | `(xml)`                 | `string`             | Concatenated text of `el` and all descendants |
 | `Xml.is_leaf(el)`                        | `(xml)`                 | `boolean`            | Whether element has no children |
 | `Xml.tag(el)`                            | `(xml)`                 | `string`             | Element tag name                |
 | `Xml.text(el)`                           | `(xml)`                 | `result<string>`     | Text content                    |
@@ -3205,6 +3302,8 @@ Parse, build, query, and serialise XML documents. XML nodes are opaque `xml` val
 | `Xml.deserialize(s)`         | `(string)`      | `result<xml>`    | Parse XML string         |
 | `Xml.deserialize_detailed(s)` | `(string)`     | `result<Xml.Node, Xml.ParseError>` | Parse into a typed `Xml.Node`; a failure carries the located `Xml.ParseError` |
 | `Xml.deserialize_file(path)` | `(string)`      | `result<xml>`    | Parse XML file           |
+| `Xml.escape(s)`              | `(string)`      | `string`         | Escape the five predefined XML entities (`& < > " '`) |
+| `Xml.unescape(s)`            | `(string)`      | `result<string>` | Decode XML entity references; fails on a malformed entity |
 | `Xml.serialize(el)`          | `(xml)`         | `string`         | Compact XML string       |
 | `Xml.serialize_pretty(el)`   | `(xml)`         | `string`         | Indented XML string      |
 | `Xml.write_file(path, doc)`  | `(string, xml)` | `result<none>`   | Write XML to file        |
@@ -3224,6 +3323,8 @@ case Xml.Node.CData(content)            { print(content) }
 
 `Xml.deserialize_detailed(s)` is an additive companion to `Xml.deserialize`: on success it returns the typed `Xml.Node` tree directly (no separate `Xml.to_node` step), and on failure it returns an **`Xml.ParseError`** record — `message: string`, `line: integer`, `column: integer` (both 1-based) — so malformed markup can be diagnosed at the offending byte rather than with a bare string. It returns `result<Xml.Node, Xml.ParseError>` and mirrors `Json.parse_detailed` / `Csv.deserialize_detailed`.
 
+`Xml.find_descendant` / `Xml.find_all_descendants` are the recursive counterparts to `Xml.find` / `Xml.find_all`: they match elements at any depth in document (pre-order) order, not just among direct children. `Xml.get_path` walks a `/`-separated tag path starting from the element's children — for example `"book/title"` — and accepts an optional 0-based `[n]` index to disambiguate repeated tags, as in `"book[1]/title"`; it fails if any segment is missing. `Xml.inner_text` returns the concatenated text of an element and every descendant text and CDATA node (the DOM `textContent`), whereas `Xml.text` reads only the element's own direct text children. `Xml.remove_child` and `Xml.replace_child` are immutable like `Xml.add_child`: they return a new element with the child element at the given 0-based index (indexing the same element-only sequence `Xml.children` exposes) removed or replaced, and fail when the index is out of bounds. `Xml.escape` escapes the five predefined XML entities (`&` first, then `< > " '`), and `Xml.unescape` decodes named references (`&amp; &lt; &gt; &quot; &apos;`) plus decimal and hexadecimal numeric character references, failing on any unknown or unterminated entity.
+
 ---
 
 ## 42 — Color
@@ -3234,8 +3335,14 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 
 | Function                        | Parameter Types                             | Return Type          | Description                                                              |
 | ------------------------------- | ------------------------------------------- | -------------------- | ------------------------------------------------------------------------ |
+| `Color.analogous(c)`            | `(Color.Color)`                             | `array<Color.Color>` | `[base, hue −30°, hue +30°]` — an analogous colour scheme               |
+| `Color.brightness(c)`           | `(Color.Color)`                             | `number`             | Perceived brightness in [0, 1] (`0.299R + 0.587G + 0.114B`, normalised) |
+| `Color.complement(c)`           | `(Color.Color)`                             | `Color.Color`        | The opposite hue (equivalent to `rotate_hue(c, 180)`)                    |
+| `Color.complementary(c)`        | `(Color.Color)`                             | `array<Color.Color>` | `[base, complement]` (base plus its +180° hue)                          |
 | `Color.contrast_ratio(a, b)`    | `(Color.Color, Color.Color)`                | `number`             | WCAG contrast ratio (1:1 to 21:1)                                        |
 | `Color.darken(c, amount)`       | `(Color.Color, number)`                     | `Color.Color`        | Blend toward black by `amount` (clamped to [0, 1])                       |
+| `Color.desaturate(c, amount)`   | `(Color.Color, number)`                     | `Color.Color`        | Decrease HSL saturation by `amount` (clamped to [0, 1])                  |
+| `Color.fade(c, amount)`         | `(Color.Color, number)`                     | `Color.Color`        | Reduce alpha by `amount` (result clamped to [0, 1])                      |
 | `Color.from_cmyk(c)`            | `(Color.Cmyk)`                              | `Color.Color`        | Convert a CMYK colour to RGBA (alpha 1.0)                                |
 | `Color.from_hex(hex)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
 | `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
@@ -3244,19 +3351,30 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.gradient(angle, stops)`  | `(number, array<Color.Stop>)`               | `Color.Gradient`     | Build a multi-stop linear gradient at `angle` degrees                   |
 | `Color.gradient_at(g, position)` | `(Color.Gradient, number)`                 | `Color.Color`        | Sample the interpolated colour at `position` (0–1, clamped)             |
 | `Color.gradient_to_css(g)`      | `(Color.Gradient)`                          | `string`             | Serialise to a CSS `linear-gradient(...)` string                        |
+| `Color.grayscale(c)`            | `(Color.Color)`                             | `Color.Color`        | Fully desaturate (saturation 0), preserving lightness and alpha         |
+| `Color.invert(c)`               | `(Color.Color)`                             | `Color.Color`        | Per-channel inversion (`255 − channel`); alpha unchanged                |
+| `Color.is_dark(c)`              | `(Color.Color)`                             | `boolean`            | `true` when WCAG relative luminance ≤ 0.5                                |
+| `Color.is_light(c)`             | `(Color.Color)`                             | `boolean`            | `true` when WCAG relative luminance > 0.5                                |
 | `Color.lighten(c, amount)`      | `(Color.Color, number)`                     | `Color.Color`        | Blend toward white by `amount` (clamped to [0, 1])                       |
+| `Color.luminance(c)`            | `(Color.Color)`                             | `number`             | WCAG relative luminance in [0, 1] (alpha ignored)                       |
 | `Color.mix(a, b, t)`            | `(Color.Color, Color.Color, number)`        | `Color.Color`        | Linear blend of `a` and `b` at `t` (clamped to [0, 1])                   |
+| `Color.readable_text_color(bg)` | `(Color.Color)`                             | `Color.Color`        | Black or white — whichever has higher contrast against `bg`             |
 | `Color.rgb(r, g, b)`            | `(integer, integer, integer)`               | `result<Color.Color>` | Construct an opaque colour; fail if a channel is outside 0–255         |
 | `Color.rgba(r, g, b, a)`        | `(integer, integer, integer, number)`       | `result<Color.Color>` | Construct with alpha; fail if a channel is out of range or `a` ∉ [0, 1] |
 | `Color.rotate_hue(c, degrees)`  | `(Color.Color, number)`                     | `Color.Color`        | Rotate the hue by `degrees`, preserving saturation, lightness, and alpha |
+| `Color.saturate(c, amount)`     | `(Color.Color, number)`                     | `Color.Color`        | Increase HSL saturation by `amount` (clamped to [0, 1])                  |
 | `Color.stop(color, position)`   | `(Color.Color, number)`                     | `Color.Stop`         | Build a gradient colour stop at `position` (0–1, clamped)               |
 | `Color.to_cmyk(c)`              | `(Color.Color)`                             | `Color.Cmyk`         | Convert an RGBA colour to CMYK (alpha dropped)                           |
 | `Color.to_css(c)`               | `(Color.Color)`                             | `string`             | CSS string: `rgb(r, g, b)`, or `rgba(...)` when not fully opaque         |
 | `Color.to_hex(c)`               | `(Color.Color)`                             | `string`             | `#rrggbb`, or `#rrggbbaa` when the colour is not fully opaque            |
 | `Color.to_hsl(c)`               | `(Color.Color)`                             | `Color.Hsl`          | Convert an RGBA colour to HSL (alpha dropped)                            |
 | `Color.to_hsv(c)`               | `(Color.Color)`                             | `Color.Hsv`          | Convert an RGBA colour to HSV/HSB (alpha dropped)                        |
+| `Color.triadic(c)`              | `(Color.Color)`                             | `array<Color.Color>` | `[base, hue +120°, hue +240°]` — a triadic colour scheme                |
+| `Color.with_alpha(c, alpha)`    | `(Color.Color, number)`                     | `Color.Color`        | Set alpha to `alpha` (clamped to [0, 1])                                 |
 
 `rgb` / `rgba` / `from_hex` are validating constructors returning `result<Color.Color>`; the derivations (`lighten` / `darken` / `mix`) take already-validated colours and clamp their `amount` / `t` argument, so they return a `Color.Color` directly. `contrast_ratio` computes the WCAG 2.x relative-luminance ratio (alpha ignored) — black on white is 21:1, a colour against itself is 1:1 — feeding accessibility checks. The `to_css` output drops straight into the theme and per-widget style dictionaries the webview already consumes.
+
+**Analysis, accessibility, and scheme helpers.** `Color.luminance` exposes the same WCAG relative luminance `contrast_ratio` uses internally, and `Color.brightness` gives the simpler perceived-brightness weighting (`0.299R + 0.587G + 0.114B`) — both normalised to [0, 1]. `Color.is_light` / `Color.is_dark` threshold the relative luminance at 0.5, and `Color.readable_text_color(bg)` returns black or white — whichever has the higher contrast against `bg` — the one-call way to keep label text legible on a computed background. `Color.saturate` / `Color.desaturate` nudge HSL saturation by an amount (clamped to [0, 1]) and `Color.grayscale` drops it to zero while preserving lightness; all three keep the original alpha. `Color.with_alpha` sets the alpha channel outright while `Color.fade` reduces it by an amount (both clamped to [0, 1]), and `Color.invert` flips each RGB channel (leaving alpha untouched). For palettes, `Color.complement` returns the opposite hue, while `Color.complementary` (`[base, +180°]`), `Color.triadic` (`[base, +120°, +240°]`), and `Color.analogous` (`[base, −30°, +30°]`) return ready-made colour schemes as arrays — the hue maths that is awkward in RGB, done for you.
 
 **`Color.Hsl`** is the hue/saturation/lightness sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `lightness: number` (0–1 ratios). `Color.to_hsl` / `Color.from_hsl` convert between the two spaces, and `Color.rotate_hue(c, degrees)` shifts the hue (wrapping at 360°) while preserving saturation, lightness, and the original alpha — the natural way to build a rainbow, pastel, or complementary colour that is awkward in RGB. HSL drops alpha (so `to_hsl` discards it and `from_hsl` produces an opaque colour); everything still serialises through the same RGBA `to_css` path the webview consumes.
 

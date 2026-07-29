@@ -2,11 +2,16 @@
 
 #include <chrono>
 #include <cstdint>
+#include <exception>
 #include <format>
 #include <future>
+#include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #include "analysis/source/source_location.hpp"
 #include "runtime/concurrency/cancellation_token.hpp"
@@ -84,6 +89,28 @@ void cancel_other_tasks(std::span<const Value> elements, const std::shared_ptr<T
             elem.as_task()->token->cancel();
         }
     }
+}
+
+// Build a task whose shared state is already resolved with `value`.  Mirrors
+// the promise/shared_future machinery used by the `spawn` opcode
+// (vm_dispatch_concurrency.cpp) but performs no real async work; the future is
+// ready immediately.  The task carries no cancellation token (fire-and-forget).
+[[nodiscard]] Value make_completed_task(Value value) {
+    std::promise<Value> promise;
+    promise.set_value(std::move(value));
+
+    return Value{std::make_shared<TaskValue>(promise.get_future().share(), nullptr)};
+}
+
+// Build a task whose shared state is already resolved with a failure carrying
+// `message`.  Awaiting it (via future.get()) re-throws the RuntimeError, which
+// the scalar combinators translate into a failure result exactly as they do for
+// a spawned task that throws.
+[[nodiscard]] Value make_failed_task(std::string message) {
+    std::promise<Value> promise;
+    promise.set_exception(std::make_exception_ptr(RuntimeError{std::move(message)}));
+
+    return Value{std::make_shared<TaskValue>(promise.get_future().share(), nullptr)};
 }
 
 } // namespace
@@ -426,6 +453,133 @@ void register_task_ns(const EnvPtr& env) {
             }
 
             return make_success_value(Value{std::move(results)});
+        })
+        // Task.all_settled(array<task<T>> tasks) -> array<result<T>>
+        // Await EVERY task and return one result per task in original order.
+        // Fail-slow complement to Task.all: never fails as a whole -- each
+        // element carries that task's own success or failure.
+        .func("all_settled", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& arr = expect_array(args[0], "Task.all_settled", loc);
+
+            auto results = std::make_shared<ArrayValue>();
+
+            for (std::size_t i{0}; i < arr->elements->size(); ++i) {
+                const auto& elem = (*arr->elements)[i];
+
+                if (!elem.is_task()) {
+                    throw RuntimeError{"Task.all_settled: array element is not a task", loc,
+                                       "pass an array containing only task values"};
+                }
+
+                const auto& task = elem.as_task();
+
+                // Translate this task's outcome into a result<T> and keep it;
+                // a failure never aborts the loop (unlike Task.all).
+                results->elements->push_back(await_to_result(
+                    error_msg("Task", "all_settled", "a task was cancelled"),
+                    [&] { return make_success_value(task->future.get()); }));
+            }
+
+            return Value{std::move(results)};
+        })
+        // Task.retry_with_backoff(integer n, integer base_delay_ms,
+        //                         func() -> result<T>) -> result<T>
+        // Retry f up to n times, sleeping between attempts with exponentially
+        // increasing delays.  Backoff schedule (delay BEFORE attempt k, 0-based):
+        // attempt 0 runs immediately, then base_delay_ms, 2*base, 4*base, ... so
+        // the sleep before attempt k is base_delay_ms * 2^(k-1).  No sleep after
+        // the final attempt.  Returns on first success, or the last failure.
+        .func("retry_with_backoff", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto n = expect_integer(args[0], "Task.retry_with_backoff", loc);
+            const auto base_delay_ms = expect_integer(args[1], "Task.retry_with_backoff", loc);
+
+            expect_callable(args[2], "Task.retry_with_backoff", loc);
+
+            if (n <= 0) {
+                throw RuntimeError{"Task.retry_with_backoff: n must be > 0", loc,
+                                   "pass a positive integer for the number of attempts"};
+            }
+
+            if (base_delay_ms < 0) {
+                throw RuntimeError{"Task.retry_with_backoff: base_delay_ms must be non-negative", loc,
+                                   "use 0 or a positive number of milliseconds"};
+            }
+
+            Value last_result{NullValue{}};
+
+            for (std::int64_t i{0}; i < n; ++i) {
+                std::vector<Value> fn_args{};
+
+                last_result = invoke_callable(args[2], fn_args, loc);
+
+                if (last_result.is_result() && last_result.as_result()->is_success) {
+                    return last_result;
+                }
+
+                // Sleep with exponential backoff before the next attempt; skip
+                // after the final one.  Cap the shift to avoid undefined
+                // behaviour / absurd sleeps on large attempt counts.
+                if (i + 1 < n) {
+                    const auto shift = std::min<std::int64_t>(i, 62);
+                    const auto delay_ms = base_delay_ms * (static_cast<std::int64_t>(1) << shift);
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds{delay_ms});
+                }
+            }
+
+            // All attempts failed -- return the last result (a fail result).
+            // Wrap a bare non-result return as a fail result for consistency.
+            if (!last_result.is_result()) {
+                return make_failure_value(
+                    error_msg("Task", "retry_with_backoff", "all attempts failed"));
+            }
+
+            return last_result;
+        })
+        // Task.completed(T value) -> task<T>
+        // A task already completed with `value` (like Promise.resolve); no real
+        // async work is performed.
+        .func("completed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation /*loc*/) -> Value {
+            return make_completed_task(args[0]);
+        })
+        // Task.failed(string message) -> task<T>
+        // A task already failed with `message` (like Promise.reject).
+        .func("failed", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& message = expect_string(args[0], "Task.failed", loc);
+
+            return make_failed_task(message);
+        })
+        // Task.timeout_or(task<T> t, integer ms, T default) -> T
+        // The task's value if it completes within ms, else `default`.
+        // Equivalent to Task.timeout(t, ms) followed by unwrap_or(default):
+        // a timeout OR a task failure both fall back to `default`.
+        .func("timeout_or", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& task = expect_task(args[0], "Task.timeout_or", loc);
+
+            const auto ms = expect_integer(args[1], "Task.timeout_or", loc);
+            const auto status = task->future.wait_for(std::chrono::milliseconds{ms});
+
+            if (status == std::future_status::ready) {
+                // Completed in time: return its value, or fall back to default
+                // if the task failed or was cancelled (mirrors unwrap_or).
+                try {
+                    return task->future.get();
+                } catch (const std::exception&) {
+                    return args[2];
+                }
+            }
+
+            // Cancel the task on timeout if it has a cancellation token.
+            if (task->token) {
+                task->token->cancel();
+            }
+
+            return args[2];
         });
 }
 } // namespace luma

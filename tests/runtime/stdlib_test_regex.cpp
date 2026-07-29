@@ -519,6 +519,193 @@ static void test_regex_compile_typed_too_large() {
     ASSERT_EQ(regex_error_variant_of(v), "Error.TooLarge");
 }
 
+// ─── Flag-accepting variants (matches_with / find_with / … with
+// RegularExpression.Flags) ──────────────────────────────────────────────────
+
+static void test_regex_with_module_registered() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("RegularExpression.matches_with"));
+    ASSERT_TRUE(env->has("RegularExpression.find_with"));
+    ASSERT_TRUE(env->has("RegularExpression.find_all_with"));
+    ASSERT_TRUE(env->has("RegularExpression.replace_with"));
+    ASSERT_TRUE(env->has("RegularExpression.replace_all_with"));
+    ASSERT_TRUE(env->has("RegularExpression.split_with"));
+
+    // The Flags choice variants are bound as callable-free global values.
+    ASSERT_TRUE(env->has("RegularExpression.Flags.CaseInsensitive"));
+    ASSERT_TRUE(env->has("RegularExpression.Flags.MultiLine"));
+    ASSERT_TRUE(env->has("RegularExpression.Flags.DotAll"));
+}
+
+static void test_regex_matches_with_case_insensitive() {
+    // Without the flag the mixed-case text does not match a lowercase pattern.
+    ASSERT_EQ(eval("RegularExpression.matches_with(\"HELLO\", \"hello\", [])")
+                  .as_result()
+                  ->owned_inner->as_bool(),
+              false);
+
+    // CaseInsensitive makes it match.
+    ASSERT_EQ(eval("RegularExpression.matches_with(\"HELLO\", \"hello\", "
+                   "[RegularExpression.Flags.CaseInsensitive])")
+                  .as_result()
+                  ->owned_inner->as_bool(),
+              true);
+}
+
+static void test_regex_find_with_case_insensitive() {
+    const auto v = eval("RegularExpression.find_with(\"Foo BAR baz\", \"bar\", "
+                        "[RegularExpression.Flags.CaseInsensitive])");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+
+    ASSERT_EQ(inner.as_record()->find_field("text")->as_string(), "BAR");
+    ASSERT_EQ(inner.as_record()->find_field("position")->as_integer(), 4);
+}
+
+static void test_regex_find_all_with_case_insensitive() {
+    const auto v = eval("RegularExpression.find_all_with(\"aAbBaA\", \"a\", "
+                        "[RegularExpression.Flags.CaseInsensitive])");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& elems = *v.as_result()->owned_inner->as_array()->elements;
+
+    // Every 'a'/'A' matches: positions 0, 1, 4, 5.
+    ASSERT_EQ(elems.size(), 4U);
+}
+
+static void test_regex_replace_with_case_insensitive() {
+    // replace_with substitutes only the first match, honouring the flag.
+    ASSERT_EQ(eval("RegularExpression.replace_with(\"Cat cat CAT\", \"cat\", \"dog\", "
+                   "[RegularExpression.Flags.CaseInsensitive])")
+                  .as_result()
+                  ->owned_inner->as_string(),
+              "dog cat CAT");
+}
+
+static void test_regex_replace_all_with_case_insensitive() {
+    ASSERT_EQ(eval("RegularExpression.replace_all_with(\"Cat cat CAT\", \"cat\", \"dog\", "
+                   "[RegularExpression.Flags.CaseInsensitive])")
+                  .as_result()
+                  ->owned_inner->as_string(),
+              "dog dog dog");
+}
+
+static void test_regex_split_with_case_insensitive() {
+    const auto v = eval("RegularExpression.split_with(\"aXbxc\", \"x\", "
+                        "[RegularExpression.Flags.CaseInsensitive])");
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& elems = *v.as_result()->owned_inner->as_array()->elements;
+
+    ASSERT_EQ(elems.size(), 3U);
+    ASSERT_EQ(elems[0].as_string(), "a");
+    ASSERT_EQ(elems[1].as_string(), "b");
+    ASSERT_EQ(elems[2].as_string(), "c");
+}
+
+static void test_regex_multiline_flag() {
+    // Without MultiLine, ^ and $ anchor to the whole string, so a line-anchored
+    // pattern matches only the first line.
+    ASSERT_EQ(eval("RegularExpression.find_all(\"one\\ntwo\\nthree\", \"^[a-z]+$\")")
+                  .as_result()
+                  ->owned_inner->as_array()
+                  ->elements->size(),
+              0U);
+
+    // With MultiLine, ^ and $ match at every line boundary.
+    ASSERT_EQ(eval("RegularExpression.find_all_with(\"one\\ntwo\\nthree\", \"^[a-z]+$\", "
+                   "[RegularExpression.Flags.MultiLine])")
+                  .as_result()
+                  ->owned_inner->as_array()
+                  ->elements->size(),
+              3U);
+}
+
+static void test_regex_dotall_flag() {
+    // Without DotAll, '.' does not cross a newline.
+    ASSERT_EQ(
+        eval("RegularExpression.matches_with(\"a\\nb\", \"a.b\", [])").as_result()->owned_inner->as_bool(),
+        false);
+
+    // With DotAll, '.' matches the newline too.
+    ASSERT_EQ(eval("RegularExpression.matches_with(\"a\\nb\", \"a.b\", "
+                   "[RegularExpression.Flags.DotAll])")
+                  .as_result()
+                  ->owned_inner->as_bool(),
+              true);
+
+    // DotAll leaves an escaped dot as a literal — "a.b" still needs a real dot.
+    ASSERT_EQ(eval("RegularExpression.matches_with(\"axb\", \"a\\\\.b\", "
+                   "[RegularExpression.Flags.DotAll])")
+                  .as_result()
+                  ->owned_inner->as_bool(),
+              false);
+}
+
+static void test_regex_combined_flags() {
+    // CaseInsensitive + DotAll together.
+    ASSERT_EQ(eval("RegularExpression.matches_with(\"A\\nB\", \"a.b\", "
+                   "[RegularExpression.Flags.CaseInsensitive, RegularExpression.Flags.DotAll])")
+                  .as_result()
+                  ->owned_inner->as_bool(),
+              true);
+}
+
+static void test_regex_with_empty_flags_matches_flagless() {
+    // An empty flags array reproduces the flagless behaviour exactly.
+    ASSERT_EQ(
+        eval("RegularExpression.matches_with(\"hello\", \"^[0-9]+$\", [])").as_result()->owned_inner->as_bool(),
+        false);
+    ASSERT_EQ(eval("RegularExpression.matches_with(\"abc123\", \"[a-z]+[0-9]+\", [])")
+                  .as_result()
+                  ->owned_inner->as_bool(),
+              true);
+}
+
+static void test_regex_with_redos_rejected() {
+    // The ReDoS guard still runs for the flag-accepting variants.
+    ASSERT_RESULT_FAILURE(eval("RegularExpression.matches_with(\"aaaa\", \"(a+)+\", [])"));
+    ASSERT_RESULT_FAILURE(
+        eval("RegularExpression.find_with(\"aaaa\", \"(a+)+\", "
+             "[RegularExpression.Flags.CaseInsensitive])"));
+}
+
+static void test_regex_with_invalid_pattern_fails() {
+    // An unbalanced group still surfaces as a failure result.
+    ASSERT_RESULT_FAILURE(eval("RegularExpression.matches_with(\"text\", \"[\", [])"));
+}
+
+// ─── RegularExpression.count ────────────────────────────────────────────────
+
+static void test_regex_count() {
+    // Counts non-overlapping matches without building the Match array.
+    ASSERT_EQ(eval("RegularExpression.count(\"one1two2three3\", \"[0-9]\")")
+                  .as_result()
+                  ->owned_inner->as_integer(),
+              3);
+
+    // No match → 0 (a success carrying zero, not a failure).
+    const auto zero = eval("RegularExpression.count(\"abcdef\", \"[0-9]+\")");
+
+    ASSERT_RESULT_SUCCESS(zero);
+    ASSERT_EQ(zero.as_result()->owned_inner->as_integer(), 0);
+
+    // Multi-character matches count as one each.
+    ASSERT_EQ(eval("RegularExpression.count(\"aaa bbb aaa\", \"a+\")")
+                  .as_result()
+                  ->owned_inner->as_integer(),
+              2);
+
+    // Invalid and ReDoS-unsafe patterns fail like every other operation.
+    ASSERT_RESULT_FAILURE(eval("RegularExpression.count(\"text\", \"[\")"));
+    ASSERT_RESULT_FAILURE(eval("RegularExpression.count(\"aaaa\", \"(a+)+\")"));
+}
+
 int main() {
     RUN(test_regex_find);
     RUN(test_regex_find_all);
@@ -550,5 +737,19 @@ int main() {
     RUN(test_regex_compile_typed_invalid_syntax);
     RUN(test_regex_compile_typed_unsafe);
     RUN(test_regex_compile_typed_too_large);
+    RUN(test_regex_with_module_registered);
+    RUN(test_regex_matches_with_case_insensitive);
+    RUN(test_regex_find_with_case_insensitive);
+    RUN(test_regex_find_all_with_case_insensitive);
+    RUN(test_regex_replace_with_case_insensitive);
+    RUN(test_regex_replace_all_with_case_insensitive);
+    RUN(test_regex_split_with_case_insensitive);
+    RUN(test_regex_multiline_flag);
+    RUN(test_regex_dotall_flag);
+    RUN(test_regex_combined_flags);
+    RUN(test_regex_with_empty_flags_matches_flagless);
+    RUN(test_regex_with_redos_rejected);
+    RUN(test_regex_with_invalid_pattern_fails);
+    RUN(test_regex_count);
     return SUMMARY();
 }

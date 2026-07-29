@@ -384,6 +384,84 @@ static void test_resource_using_body_error_suppresses_release_error() {
     ASSERT_TRUE(msg.find("RELEASE_FAILURE") == std::string::npos);
 }
 
+static void test_resource_with_all_basic() {
+    // body_fn receives the whole array of resources; its return value propagates.
+    const auto v = eval("Resource.with_all(\n"
+                        "    [1, 2, 3],\n"
+                        "    (array<integer> rs) -> Array.length(rs),\n"
+                        "    (integer _r) -> none\n"
+                        ")\n");
+
+    ASSERT_EQ(v.as_integer(), 3);
+}
+
+static void test_resource_with_all_reverse_cleanup_order() {
+    // Cleanup runs on each resource in reverse acquisition order.
+    const auto v = eval("reference<string> order = Reference.new(\"\")\n"
+                        "string done = Resource.with_all(\n"
+                        "    [\"a\", \"b\", \"c\"],\n"
+                        "    (array<string> _rs) -> \"done\",\n"
+                        "    (string r) -> Reference.set(order, Reference.get(order) + r)\n"
+                        ")\n"
+                        "Reference.get(order)\n");
+
+    ASSERT_EQ(v.as_string(), "cba");
+}
+
+static void test_resource_with_all_cleanup_on_body_error() {
+    // Every resource is cleaned up (in reverse order) even when body throws,
+    // and the body error propagates.
+    const auto v = eval("reference<string> order = Reference.new(\"\")\n"
+                        "try {\n"
+                        "    Resource.with_all(\n"
+                        "        [\"a\", \"b\", \"c\"],\n"
+                        "        (array<string> _rs) -> {\n"
+                        "            assert(false, \"force error\")\n"
+                        "            return \"unreachable\"\n"
+                        "        },\n"
+                        "        (string r) -> Reference.set(order, Reference.get(order) + r)\n"
+                        "    )\n"
+                        "} catch(e) {\n"
+                        "    \"caught\"\n"
+                        "}\n"
+                        "Reference.get(order)\n");
+
+    ASSERT_EQ(v.as_string(), "cba");
+}
+
+static void test_resource_with_all_continues_after_cleanup_error() {
+    // A throwing cleanup is swallowed so the remaining resources are still
+    // cleaned up. Reverse order is c, b, a; b throws before recording, so the
+    // recorded order is "ca".
+    const auto v = eval("reference<string> order = Reference.new(\"\")\n"
+                        "string done = Resource.with_all(\n"
+                        "    [\"a\", \"b\", \"c\"],\n"
+                        "    (array<string> _rs) -> \"done\",\n"
+                        "    (string r) -> {\n"
+                        "        if r == \"b\" {\n"
+                        "            assert(false, \"cleanup boom\")\n"
+                        "        }\n"
+                        "        Reference.set(order, Reference.get(order) + r)\n"
+                        "        return none\n"
+                        "    }\n"
+                        ")\n"
+                        "Reference.get(order)\n");
+
+    ASSERT_EQ(v.as_string(), "ca");
+}
+
+static void test_resource_with_all_non_array_throws() {
+    ASSERT_THROWS_WITH_MESSAGE(
+        eval("Resource.with_all(42, (array<integer> rs) -> Array.length(rs), (integer _r) -> "
+             "none)"),
+        "Resource.with_all (resources)");
+}
+
+static void test_resource_with_all_non_callable_body_throws() {
+    ASSERT_THROWS_WITH_MESSAGE(eval("Resource.with_all([1, 2], 3, (integer _r) -> none)"),
+                               "Resource.with_all (body): expected callable");
+}
+
 int main() {
     RUN(test_print_single_value_adds_newline);
     RUN(test_print_multiple_values_space_separated);
@@ -419,6 +497,12 @@ int main() {
     RUN(test_resource_with_body_error_suppresses_cleanup_error);
     RUN(test_resource_using_release_error_on_success_propagates);
     RUN(test_resource_using_body_error_suppresses_release_error);
+    RUN(test_resource_with_all_basic);
+    RUN(test_resource_with_all_reverse_cleanup_order);
+    RUN(test_resource_with_all_cleanup_on_body_error);
+    RUN(test_resource_with_all_continues_after_cleanup_error);
+    RUN(test_resource_with_all_non_array_throws);
+    RUN(test_resource_with_all_non_callable_body_throws);
     RUN(test_stdlib_fail_no_location);
     RUN(test_stdlib_functions_registered);
     RUN(test_type_of_builtin);
