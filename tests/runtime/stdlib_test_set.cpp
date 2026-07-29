@@ -2,6 +2,25 @@
 
 #include "stdlib_test_helpers.hpp"
 
+static void test_set_any_all_count_find() {
+    ASSERT_EQ(eval("Set.from_array([1,2,3,4]) |> Set.any((integer x) -> x > 3) |> Result.unwrap()")
+                  .as_bool(),
+              true);
+    ASSERT_EQ(eval("Set.from_array([1,2,3,4]) |> Set.all((integer x) -> x > 0) |> Result.unwrap()")
+                  .as_bool(),
+              true);
+    ASSERT_EQ(eval("Set.from_array([1,2,3,4]) |> Set.count((integer x) -> x % 2 == 0) "
+                   "|> Result.unwrap()")
+                  .as_integer(),
+              2);
+    // find returns the first (stored-order) match.
+    ASSERT_EQ(eval("Set.from_array([1,2,3,4]) |> Set.find((integer x) -> x % 2 == 0) "
+                   "|> Result.unwrap()")
+                  .as_integer(),
+              2);
+    ASSERT_RESULT_FAILURE(eval("Set.from_array([1,3]) |> Set.find((integer x) -> x > 9)"));
+}
+
 static void test_set_bulk_ops_preserve_unique_results() {
     // Regression: the O(n+m) bulk-operation rewrite must preserve set semantics.
     // Results stay unique, and de-duplication still treats equal int/number
@@ -436,5 +455,6 @@ int main() {
     RUN(test_set_union_contains);
     RUN(test_set_union_wrong_type_throws);
     RUN(test_set_bulk_ops_preserve_unique_results);
+    RUN(test_set_any_all_count_find);
     return SUMMARY();
 }

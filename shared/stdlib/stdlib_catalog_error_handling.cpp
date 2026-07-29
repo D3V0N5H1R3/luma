@@ -9,6 +9,8 @@ void register_result_functions(std::vector<FunctionSpec>& specs, const ModuleBui
         {
             m.fn("collect", 1, "(arr: array<result<T>>)", R::result_any(), {p.array_any}),
             m.fn("error", 1, "(value: result<T>)", R::string_type(), {p.result_any}),
+            m.fn("expect", 2, "(value: result<T>, message: string)", R::any_type(),
+                 {p.result_any, p.string}),
             m.fn("filter", 3, "(value: result<T>, f: func(T) -> boolean, error: string)",
                  R::result_any(), {p.result_any, p.func, p.string}),
             m.fn("flat_map", 2, "(value: result<T>, f: func(T) -> result<U>)", R::result_any(),
@@ -125,6 +127,10 @@ void register_resource_functions(std::vector<FunctionSpec>& specs, const ModuleB
                  R::any_type(), {p.func, p.func, p.func}),
             m.fn("with", 3, "(resource: T, body: func(T) -> U, cleanup: func(T) -> void)",
                  R::any_type(), {p.any, p.func, p.func}),
+            m.fn("with_all", 3,
+                 "(resources: array<T>, body_fn: function(array<T>) -> U, cleanup_fn: "
+                 "function(T) -> any)",
+                 R::any_type(), {p.array_any, p.func, p.func}),
         });
 }
 

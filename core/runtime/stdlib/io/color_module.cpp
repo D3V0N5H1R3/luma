@@ -139,6 +139,24 @@ struct Rgba {
     return (0.2126 * linear(c.red)) + (0.7152 * linear(c.green)) + (0.0722 * linear(c.blue));
 }
 
+// WCAG 2.x contrast ratio between two colours (alpha ignored, opaque assumption).
+[[nodiscard]] double contrast_ratio(const Rgba& a, const Rgba& b) {
+    const double la = relative_luminance(a);
+    const double lb = relative_luminance(b);
+    const double lighter = std::max(la, lb);
+    const double darker = std::min(la, lb);
+
+    return (lighter + 0.05) / (darker + 0.05);
+}
+
+// Perceived brightness of a colour in [0, 1], using the classic weighted-sum
+// (0.299 R + 0.587 G + 0.114 B) normalised by the 0–255 channel range.
+[[nodiscard]] double perceived_brightness(const Rgba& c) {
+    return ((0.299 * static_cast<double>(c.red)) + (0.587 * static_cast<double>(c.green)) +
+            (0.114 * static_cast<double>(c.blue))) /
+           255.0;
+}
+
 // Linear interpolation between two integer channels at t in [0, 1].
 [[nodiscard]] int lerp_channel(int from, int to, double t) {
     return to_channel(((static_cast<double>(from) / 255.0) * (1.0 - t)) +
@@ -270,7 +288,18 @@ struct Hsl {
                 std::clamp(alpha, 0.0, 1.0)};
 }
 
-// A colour in the hue/saturation/value cylinder (HSB): hue in degrees [0, 360),
+// Rotate an RGBA colour's hue by `degrees` (wrapping at 360°) through HSL,
+// preserving the original saturation, lightness, and alpha.
+[[nodiscard]] Rgba rotate_hue_by(const Rgba& c, double degrees) {
+    auto hsl = rgb_to_hsl(c);
+    hsl.hue = std::fmod(hsl.hue + degrees, 360.0);
+    if (hsl.hue < 0.0) {
+        hsl.hue += 360.0;
+    }
+
+    return hsl_to_rgb(hsl, c.alpha);
+}
+
 // saturation and value as 0–1 ratios.
 struct Hsv {
     double hue;
@@ -776,14 +805,8 @@ void register_color_ns(const EnvPtr& env) {
             const auto a = read_color(args[0], "Color.contrast_ratio", loc);
             const auto b = read_color(args[1], "Color.contrast_ratio", loc);
 
-            const double la = relative_luminance(a);
-            const double lb = relative_luminance(b);
-
-            const double lighter = std::max(la, lb);
-            const double darker = std::min(la, lb);
-
             // WCAG 2.x contrast ratio, from 1:1 (identical) to 21:1 (black/white).
-            return Value{(lighter + 0.05) / (darker + 0.05)};
+            return Value{contrast_ratio(a, b)};
         })
         .func("to_hsl", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -826,14 +849,140 @@ void register_color_ns(const EnvPtr& env) {
             const auto c = read_color(args[0], "Color.rotate_hue", loc);
             const double degrees = expect_numeric(args[1], "Color.rotate_hue", loc);
 
-            auto hsl = rgb_to_hsl(c);
-            hsl.hue = std::fmod(hsl.hue + degrees, 360.0);
-            if (hsl.hue < 0.0) {
-                hsl.hue += 360.0;
-            }
-
             // Preserve the original alpha through the round-trip (HSL drops it).
+            return make_color(rotate_hue_by(c, degrees));
+        })
+        // ── Analysis / accessibility helpers ─────────────────────────────────
+        .func("luminance", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.luminance", loc);
+
+            return Value{relative_luminance(c)};
+        })
+        .func("brightness", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.brightness", loc);
+
+            return Value{perceived_brightness(c)};
+        })
+        .func("is_light", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.is_light", loc);
+
+            return Value{relative_luminance(c) > 0.5};
+        })
+        .func("is_dark", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.is_dark", loc);
+
+            return Value{relative_luminance(c) <= 0.5};
+        })
+        .func("readable_text_color", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto bg = read_color(args[0], "Color.readable_text_color", loc);
+
+            // Pick black or white — whichever has the higher WCAG contrast against
+            // the background — matching the mechanism Color.from_name would give.
+            const Rgba black{0, 0, 0, 1.0};
+            const Rgba white{255, 255, 255, 1.0};
+
+            return make_color(contrast_ratio(bg, white) >= contrast_ratio(bg, black) ? white
+                                                                                     : black);
+        })
+        // ── Saturation adjustments (via HSL, preserving alpha) ────────────────
+        .func("saturate", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.saturate", loc);
+            const double amount =
+                std::clamp(expect_numeric(args[1], "Color.saturate", loc), 0.0, 1.0);
+
+            auto hsl = rgb_to_hsl(c);
+            hsl.saturation = std::clamp(hsl.saturation + amount, 0.0, 1.0);
+
             return make_color(hsl_to_rgb(hsl, c.alpha));
+        })
+        .func("desaturate", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.desaturate", loc);
+            const double amount =
+                std::clamp(expect_numeric(args[1], "Color.desaturate", loc), 0.0, 1.0);
+
+            auto hsl = rgb_to_hsl(c);
+            hsl.saturation = std::clamp(hsl.saturation - amount, 0.0, 1.0);
+
+            return make_color(hsl_to_rgb(hsl, c.alpha));
+        })
+        .func("grayscale", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.grayscale", loc);
+
+            // Fully desaturate while preserving the original lightness and alpha.
+            auto hsl = rgb_to_hsl(c);
+            hsl.saturation = 0.0;
+
+            return make_color(hsl_to_rgb(hsl, c.alpha));
+        })
+        // ── Alpha adjustments ─────────────────────────────────────────────────
+        .func("with_alpha", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.with_alpha", loc);
+            const double alpha =
+                std::clamp(expect_numeric(args[1], "Color.with_alpha", loc), 0.0, 1.0);
+
+            return make_color(Rgba{c.red, c.green, c.blue, alpha});
+        })
+        .func("fade", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.fade", loc);
+            const double amount = std::clamp(expect_numeric(args[1], "Color.fade", loc), 0.0, 1.0);
+
+            return make_color(Rgba{c.red, c.green, c.blue, std::clamp(c.alpha - amount, 0.0, 1.0)});
+        })
+        // ── Per-channel and hue-based derivations ─────────────────────────────
+        .func("invert", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.invert", loc);
+
+            // Per-channel inversion; alpha is left unchanged.
+            return make_color(Rgba{255 - c.red, 255 - c.green, 255 - c.blue, c.alpha});
+        })
+        .func("complement", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.complement", loc);
+
+            return make_color(rotate_hue_by(c, 180.0));
+        })
+        .func("complementary", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.complementary", loc);
+
+            auto arr = std::make_shared<ArrayValue>();
+            arr->elements->push_back(make_color(c));
+            arr->elements->push_back(make_color(rotate_hue_by(c, 180.0)));
+
+            return Value{std::move(arr)};
+        })
+        .func("triadic", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.triadic", loc);
+
+            auto arr = std::make_shared<ArrayValue>();
+            arr->elements->push_back(make_color(c));
+            arr->elements->push_back(make_color(rotate_hue_by(c, 120.0)));
+            arr->elements->push_back(make_color(rotate_hue_by(c, 240.0)));
+
+            return Value{std::move(arr)};
+        })
+        .func("analogous", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto c = read_color(args[0], "Color.analogous", loc);
+
+            auto arr = std::make_shared<ArrayValue>();
+            arr->elements->push_back(make_color(c));
+            arr->elements->push_back(make_color(rotate_hue_by(c, -30.0)));
+            arr->elements->push_back(make_color(rotate_hue_by(c, 30.0)));
+
+            return Value{std::move(arr)};
         })
         // ── Gradients (Color.Stop / Color.Gradient) ──────────────────────────
         // A multi-stop linear gradient that serialises to the CSS linear-gradient

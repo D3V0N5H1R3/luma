@@ -323,6 +323,157 @@ LUMA_TEST(color_gradient_at_clamps_to_endpoints) {
     ASSERT_EQ(after.as_record()->find_field("blue")->as_integer(), static_cast<std::int64_t>(255));
 }
 
+// ─── Analysis / accessibility helpers ────────────────────────────────────────
+
+LUMA_TEST(color_luminance) {
+    // Pure white has a WCAG relative luminance of 1, black of 0.
+    ASSERT_NEAR(eval("Color.luminance(Result.unwrap(Color.rgb(255, 255, 255)))").as_number(), 1.0,
+                0.01);
+    ASSERT_NEAR(eval("Color.luminance(Result.unwrap(Color.rgb(0, 0, 0)))").as_number(), 0.0, 0.01);
+}
+
+LUMA_TEST(color_brightness) {
+    // Perceived brightness of white is 1, black is 0.
+    ASSERT_NEAR(eval("Color.brightness(Result.unwrap(Color.rgb(255, 255, 255)))").as_number(), 1.0,
+                0.01);
+    ASSERT_NEAR(eval("Color.brightness(Result.unwrap(Color.rgb(0, 0, 0)))").as_number(), 0.0, 0.01);
+}
+
+LUMA_TEST(color_is_light_is_dark) {
+    ASSERT_TRUE(eval("Color.is_light(Result.unwrap(Color.rgb(255, 255, 255)))").as_bool());
+    ASSERT_FALSE(eval("Color.is_dark(Result.unwrap(Color.rgb(255, 255, 255)))").as_bool());
+
+    ASSERT_FALSE(eval("Color.is_light(Result.unwrap(Color.rgb(0, 0, 0)))").as_bool());
+    ASSERT_TRUE(eval("Color.is_dark(Result.unwrap(Color.rgb(0, 0, 0)))").as_bool());
+}
+
+LUMA_TEST(color_readable_text_color) {
+    // White background reads best with black text; black background with white.
+    const auto on_white =
+        eval("Color.readable_text_color(Result.unwrap(Color.rgb(255, 255, 255)))");
+    ASSERT_EQ(on_white.as_record()->find_field("red")->as_integer(), static_cast<std::int64_t>(0));
+
+    const auto on_black = eval("Color.readable_text_color(Result.unwrap(Color.rgb(0, 0, 0)))");
+    ASSERT_EQ(on_black.as_record()->find_field("red")->as_integer(),
+              static_cast<std::int64_t>(255));
+}
+
+// ─── Saturation adjustments ──────────────────────────────────────────────────
+
+LUMA_TEST(color_saturate_desaturate) {
+    // Desaturating a fully saturated colour reduces its HSL saturation.
+    const auto v = eval("Color.to_hsl(Color.desaturate(Result.unwrap(Color.rgb(255, 0, 0)), 0.5))");
+    ASSERT_NEAR(v.as_record()->find_field("saturation")->as_number(), 0.5, 0.01);
+
+    // Saturate clamps to 1.0; a mid colour saturated fully reaches full saturation.
+    const auto s =
+        eval("Color.to_hsl(Color.saturate(Result.unwrap(Color.rgb(150, 100, 100)), 1.0))");
+    ASSERT_NEAR(s.as_record()->find_field("saturation")->as_number(), 1.0, 0.01);
+}
+
+LUMA_TEST(color_grayscale) {
+    // Grayscale drops saturation to zero, leaving a neutral grey (r == g == b).
+    const auto v = eval("Color.grayscale(Result.unwrap(Color.rgb(255, 0, 0)))");
+    const auto r = v.as_record()->find_field("red")->as_integer();
+    const auto g = v.as_record()->find_field("green")->as_integer();
+    const auto b = v.as_record()->find_field("blue")->as_integer();
+    ASSERT_EQ(r, g);
+    ASSERT_EQ(g, b);
+}
+
+// ─── Alpha adjustments ───────────────────────────────────────────────────────
+
+LUMA_TEST(color_with_alpha) {
+    const auto v = eval("Color.with_alpha(Result.unwrap(Color.rgb(10, 20, 30)), 0.25)");
+    ASSERT_NEAR(v.as_record()->find_field("alpha")->as_number(), 0.25, 1e-9);
+    ASSERT_EQ(v.as_record()->find_field("red")->as_integer(), static_cast<std::int64_t>(10));
+}
+
+LUMA_TEST(color_fade) {
+    // Fading reduces alpha, clamping at zero.
+    const auto v = eval("Color.fade(Result.unwrap(Color.rgba(10, 20, 30, 0.8)), 0.3)");
+    ASSERT_NEAR(v.as_record()->find_field("alpha")->as_number(), 0.5, 1e-9);
+
+    const auto floored = eval("Color.fade(Result.unwrap(Color.rgba(10, 20, 30, 0.2)), 0.5)");
+    ASSERT_NEAR(floored.as_record()->find_field("alpha")->as_number(), 0.0, 1e-9);
+}
+
+// ─── Per-channel and hue-based derivations ───────────────────────────────────
+
+LUMA_TEST(color_invert) {
+    // Inversion flips each channel and preserves alpha.
+    const auto v = eval("Color.invert(Result.unwrap(Color.rgba(255, 0, 128, 0.5)))");
+    ASSERT_EQ(v.as_record()->find_field("red")->as_integer(), static_cast<std::int64_t>(0));
+    ASSERT_EQ(v.as_record()->find_field("green")->as_integer(), static_cast<std::int64_t>(255));
+    ASSERT_EQ(v.as_record()->find_field("blue")->as_integer(), static_cast<std::int64_t>(127));
+    ASSERT_NEAR(v.as_record()->find_field("alpha")->as_number(), 0.5, 1e-9);
+}
+
+LUMA_TEST(color_complement) {
+    // The complement of red (hue 0) is cyan (hue 180): (0, 255, 255).
+    const auto v = eval("Color.complement(Result.unwrap(Color.rgb(255, 0, 0)))");
+    ASSERT_EQ(v.as_record()->find_field("red")->as_integer(), static_cast<std::int64_t>(0));
+    ASSERT_EQ(v.as_record()->find_field("green")->as_integer(), static_cast<std::int64_t>(255));
+    ASSERT_EQ(v.as_record()->find_field("blue")->as_integer(), static_cast<std::int64_t>(255));
+}
+
+LUMA_TEST(color_complementary) {
+    const auto v = eval("Color.complementary(Result.unwrap(Color.rgb(255, 0, 0)))");
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), static_cast<std::size_t>(2));
+
+    const auto& base = (*v.as_array()->elements)[0];
+    ASSERT_EQ(base.as_record()->find_field("red")->as_integer(), static_cast<std::int64_t>(255));
+
+    const auto& complement = (*v.as_array()->elements)[1];
+    ASSERT_EQ(complement.as_record()->find_field("green")->as_integer(),
+              static_cast<std::int64_t>(255));
+}
+
+LUMA_TEST(color_triadic) {
+    // Red's triad is red, green (+120), blue (+240).
+    const auto v = eval("Color.triadic(Result.unwrap(Color.rgb(255, 0, 0)))");
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), static_cast<std::size_t>(3));
+
+    ASSERT_EQ((*v.as_array()->elements)[0].as_record()->find_field("red")->as_integer(),
+              static_cast<std::int64_t>(255));
+    ASSERT_EQ((*v.as_array()->elements)[1].as_record()->find_field("green")->as_integer(),
+              static_cast<std::int64_t>(255));
+    ASSERT_EQ((*v.as_array()->elements)[2].as_record()->find_field("blue")->as_integer(),
+              static_cast<std::int64_t>(255));
+}
+
+LUMA_TEST(color_analogous) {
+    const auto v = eval("Color.analogous(Result.unwrap(Color.rgb(255, 0, 0)))");
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), static_cast<std::size_t>(3));
+
+    // The base is unchanged; the neighbours are ±30° in hue.
+    ASSERT_EQ((*v.as_array()->elements)[0].as_record()->find_field("red")->as_integer(),
+              static_cast<std::int64_t>(255));
+}
+
+LUMA_TEST(color_new_module_registration) {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Color.luminance"));
+    ASSERT_TRUE(env->has("Color.brightness"));
+    ASSERT_TRUE(env->has("Color.is_light"));
+    ASSERT_TRUE(env->has("Color.is_dark"));
+    ASSERT_TRUE(env->has("Color.readable_text_color"));
+    ASSERT_TRUE(env->has("Color.saturate"));
+    ASSERT_TRUE(env->has("Color.desaturate"));
+    ASSERT_TRUE(env->has("Color.grayscale"));
+    ASSERT_TRUE(env->has("Color.with_alpha"));
+    ASSERT_TRUE(env->has("Color.fade"));
+    ASSERT_TRUE(env->has("Color.invert"));
+    ASSERT_TRUE(env->has("Color.complement"));
+    ASSERT_TRUE(env->has("Color.complementary"));
+    ASSERT_TRUE(env->has("Color.triadic"));
+    ASSERT_TRUE(env->has("Color.analogous"));
+}
+
 int main() {
     LUMA_RUN_ALL();
 }

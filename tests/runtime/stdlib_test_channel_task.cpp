@@ -428,6 +428,77 @@ static void test_task_sequence_empty() {
     ASSERT_EQ(v.as_array()->elements->size(), 0U);
 }
 
+static void test_task_all_settled_mixed() {
+    // Fail-slow: every task yields its own result, in order, and a failure
+    // never aborts the batch.
+    const auto v = eval("Task.all_settled([Task.completed(1), Task.failed(\"boom\")])");
+
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), 2U);
+    ASSERT_TRUE((*v.as_array()->elements)[0].as_result()->is_success);
+    ASSERT_EQ((*v.as_array()->elements)[0].as_result()->owned_inner->as_integer(), 1);
+    ASSERT_TRUE(!(*v.as_array()->elements)[1].as_result()->is_success);
+}
+
+static void test_task_all_settled_empty() {
+    const auto v = eval("Task.all_settled([])");
+
+    ASSERT_TRUE(v.is_array());
+    ASSERT_EQ(v.as_array()->elements->size(), 0U);
+}
+
+static void test_task_all_settled_non_task_throws() {
+    ASSERT_THROWS(eval("Task.all_settled([42])"));
+}
+
+static void test_task_retry_with_backoff_success() {
+    // base_delay_ms of 1 keeps the test fast while still exercising the sleep path.
+    ASSERT_EVAL_INT("Task.retry_with_backoff(3, 1, () -> success(42))", 42);
+}
+
+static void test_task_retry_with_backoff_all_fail() {
+    ASSERT_EVAL_FAILURE("Task.retry_with_backoff(3, 1, () -> failure(\"oops\"))");
+}
+
+static void test_task_retry_with_backoff_eventual_success() {
+    // Fail twice, then succeed on the third attempt.
+    const auto v = eval("reference<integer> attempts = Reference.new(0)\n"
+                        "Task.retry_with_backoff(5, 1, () -> {\n"
+                        "    integer n = Reference.update_and_get(attempts, (integer x) -> x + 1)\n"
+                        "    if n < 3 { return failure(\"not yet\") }\n"
+                        "    return success(n)\n"
+                        "})\n");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_integer(), 3);
+}
+
+static void test_task_retry_with_backoff_invalid_n_throws() {
+    ASSERT_THROWS(eval("Task.retry_with_backoff(0, 1, () -> success(1))"));
+}
+
+static void test_task_completed_awaitable() {
+    ASSERT_EVAL_INT("Task.timeout(Task.completed(7), 1000)", 7);
+}
+
+static void test_task_failed_awaitable() {
+    ASSERT_EVAL_FAILURE("Task.timeout(Task.failed(\"nope\"), 1000)");
+}
+
+static void test_task_timeout_or_returns_value() {
+    const auto v = eval("Task.timeout_or(Task.completed(99), 1000, -1)");
+
+    ASSERT_TRUE(v.is_integer());
+    ASSERT_EQ(v.as_integer(), 99);
+}
+
+static void test_task_timeout_or_returns_default_on_failure() {
+    const auto v = eval("Task.timeout_or(Task.failed(\"nope\"), 1000, -1)");
+
+    ASSERT_TRUE(v.is_integer());
+    ASSERT_EQ(v.as_integer(), -1);
+}
+
 static void test_channel_select() {
     const auto v = eval("channel<integer> ch1 = Channel.new()\n"
                         "channel<integer> ch2 = Channel.new()\n"
@@ -506,6 +577,17 @@ int main() {
     RUN(test_task_any_non_task_fails);
     RUN(test_task_sequence_non_task_fails);
     RUN(test_task_map_n_empty_succeeds);
+    RUN(test_task_all_settled_mixed);
+    RUN(test_task_all_settled_empty);
+    RUN(test_task_all_settled_non_task_throws);
+    RUN(test_task_retry_with_backoff_success);
+    RUN(test_task_retry_with_backoff_all_fail);
+    RUN(test_task_retry_with_backoff_eventual_success);
+    RUN(test_task_retry_with_backoff_invalid_n_throws);
+    RUN(test_task_completed_awaitable);
+    RUN(test_task_failed_awaitable);
+    RUN(test_task_timeout_or_returns_value);
+    RUN(test_task_timeout_or_returns_default_on_failure);
     RUN(test_task_delay_returns_null);
     RUN(test_task_delay_negative_throws);
     RUN(test_thread_pool_queue_limit);

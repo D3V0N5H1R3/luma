@@ -8,9 +8,12 @@
 #include <iomanip>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <regex>
 #include <sstream>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "analysis/source/source_location.hpp"
 #include "common/utf8.hpp"
@@ -108,6 +111,70 @@ enum class TrimSide {
     }
 
     return s.substr(start, end - start);
+}
+
+// ASCII whitespace as recognised by String.split_whitespace / words /
+// word_count: space, tab, newline, carriage return, form feed, vertical tab.
+[[nodiscard]] inline bool is_ascii_whitespace(char c) {
+    switch (c) {
+        case ' ':
+        case '\t':
+        case '\n':
+        case '\r':
+        case '\f':
+        case '\v':
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Split `s` on runs of ASCII whitespace, emitting no empty tokens (leading,
+// trailing, and repeated whitespace are collapsed).  Shared by
+// String.split_whitespace / words / word_count.
+[[nodiscard]] std::vector<std::string> split_whitespace_impl(const std::string& s) {
+    std::vector<std::string> tokens{};
+
+    std::size_t i{0};
+    const std::size_t n = s.size();
+
+    while (i < n) {
+        while (i < n && is_ascii_whitespace(s[i])) {
+            ++i;
+        }
+
+        const std::size_t start = i;
+
+        while (i < n && !is_ascii_whitespace(s[i])) {
+            ++i;
+        }
+
+        if (i > start) {
+            tokens.push_back(s.substr(start, i - start));
+        }
+    }
+
+    return tokens;
+}
+
+// Validate a codepoint range [start, end) against a string of `cp_count`
+// codepoints for String.delete / replace_range.  Returns a failure message when
+// the range is out of bounds (start < 0, end > cp_count) or inverted
+// (start > end); std::nullopt when the range is valid.
+[[nodiscard]] std::optional<std::string> validate_range(std::int64_t start, std::int64_t end,
+                                                        std::int64_t cp_count,
+                                                        std::string_view function_name) {
+    if (start < 0 || end > cp_count) {
+        return ErrorMessages::index_out_of_bounds(start < 0 ? start : end,
+                                                  static_cast<std::size_t>(cp_count));
+    }
+
+    if (start > end) {
+        return ErrorMessages::value_out_of_range("String", function_name,
+                                                 "start must not exceed end");
+    }
+
+    return std::nullopt;
 }
 
 } // anonymous namespace
@@ -479,6 +546,141 @@ void register_string_ns(const EnvPtr& env) {
 
                           return make_success_value(
                               Value{apply_padding(self, fill, width, PaddingDirection::end)});
+                      })
+
+        .func("split_whitespace", 1)
+        .extract_body(expect_string,
+                      [](const auto& s, const Args&, SourceLocation loc) -> Value {
+                          auto arr = std::make_shared<ArrayValue>();
+
+                          for (auto& token : split_whitespace_impl(s)) {
+                              if (arr->elements->size() >= ResourceLimits::max_array_size) {
+                                  throw RuntimeError{error_msg("String", "split_whitespace",
+                                                               "result exceeds maximum array size"),
+                                                     loc};
+                              }
+
+                              arr->elements->push_back(Value{std::move(token)});
+                          }
+
+                          return Value{std::move(arr)};
+                      })
+
+        // String.words is an alias of String.split_whitespace.
+        .func("words", 1)
+        .extract_body(expect_string,
+                      [](const auto& s, const Args&, SourceLocation loc) -> Value {
+                          auto arr = std::make_shared<ArrayValue>();
+
+                          for (auto& token : split_whitespace_impl(s)) {
+                              if (arr->elements->size() >= ResourceLimits::max_array_size) {
+                                  throw RuntimeError{error_msg("String", "words",
+                                                               "result exceeds maximum array size"),
+                                                     loc};
+                              }
+
+                              arr->elements->push_back(Value{std::move(token)});
+                          }
+
+                          return Value{std::move(arr)};
+                      })
+
+        .func("word_count", 1)
+        .extract_body(expect_string,
+                      [](const auto& s, const Args&, SourceLocation) -> Value {
+                          return Value{static_cast<std::int64_t>(split_whitespace_impl(s).size())};
+                      })
+
+        .func("insert", 3)
+        .extract_body(expect_string,
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          (void)expect_string(args[2], "String.insert", loc);
+
+                          const auto index = expect_integer(args[1], "String.insert", loc);
+                          const auto cp_count = utf8_count(s);
+
+                          if (index < 0 || index > cp_count) {
+                              return make_failure_value(ErrorMessages::index_out_of_bounds(
+                                  index, static_cast<std::size_t>(cp_count)));
+                          }
+
+                          const auto byte_pos = utf8_byte_offset(s, index);
+
+                          std::string result = s;
+                          result.insert(byte_pos, args[2].as_string());
+
+                          return make_success_value(Value{std::move(result)});
+                      })
+
+        .func("delete", 3)
+        .extract_body(expect_string,
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto cp_count = utf8_count(s);
+                          const auto start = expect_integer(args[1], "String.delete", loc);
+                          const auto end = expect_integer(args[2], "String.delete", loc);
+
+                          if (auto err = validate_range(start, end, cp_count, "delete")) {
+                              return make_failure_value(std::move(*err));
+                          }
+
+                          const auto byte_start = utf8_byte_offset(s, start);
+                          const auto byte_end = utf8_byte_offset(s, end);
+
+                          std::string result = s;
+                          result.erase(byte_start, byte_end - byte_start);
+
+                          return make_success_value(Value{std::move(result)});
+                      })
+
+        .func("replace_range", 4)
+        .extract_body(expect_string,
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          (void)expect_string(args[3], "String.replace_range", loc);
+
+                          const auto cp_count = utf8_count(s);
+                          const auto start = expect_integer(args[1], "String.replace_range", loc);
+                          const auto end = expect_integer(args[2], "String.replace_range", loc);
+
+                          if (auto err = validate_range(start, end, cp_count, "replace_range")) {
+                              return make_failure_value(std::move(*err));
+                          }
+
+                          const auto byte_start = utf8_byte_offset(s, start);
+                          const auto byte_end = utf8_byte_offset(s, end);
+
+                          std::string result = s;
+                          result.replace(byte_start, byte_end - byte_start, args[3].as_string());
+
+                          return make_success_value(Value{std::move(result)});
+                      })
+
+        .func("starts_with_any", 2)
+        .extract_body(expect_string,
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto& prefixes =
+                              expect_array(args[1], "String.starts_with_any", loc);
+
+                          for (const auto& elem : *prefixes->elements) {
+                              if (s.starts_with(elem.as_string())) {
+                                  return Value{true};
+                              }
+                          }
+
+                          return Value{false};
+                      })
+
+        .func("ends_with_any", 2)
+        .extract_body(expect_string,
+                      [](const auto& s, const Args& args, SourceLocation loc) -> Value {
+                          const auto& suffixes = expect_array(args[1], "String.ends_with_any", loc);
+
+                          for (const auto& elem : *suffixes->elements) {
+                              if (s.ends_with(elem.as_string())) {
+                                  return Value{true};
+                              }
+                          }
+
+                          return Value{false};
                       })
 
         .func("repeat", 2)

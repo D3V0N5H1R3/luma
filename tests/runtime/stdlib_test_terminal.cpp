@@ -214,6 +214,14 @@ static void test_terminal_module() {
     ASSERT_TRUE(env->has("Terminal.supports_true_color"));
     ASSERT_TRUE(env->has("Terminal.set_escape_timeout"));
     ASSERT_TRUE(env->has("Terminal.get_escape_timeout"));
+    ASSERT_TRUE(env->has("Terminal.flush"));
+    ASSERT_TRUE(env->has("Terminal.read_line"));
+    ASSERT_TRUE(env->has("Terminal.set_cursor_style"));
+    ASSERT_TRUE(env->has("Terminal.blink"));
+    ASSERT_TRUE(env->has("Terminal.insert_line"));
+    ASSERT_TRUE(env->has("Terminal.delete_line"));
+    ASSERT_TRUE(env->has("Terminal.clear_to_start_of_line"));
+    ASSERT_TRUE(env->has("Terminal.supports_unicode"));
 }
 
 static void test_terminal_move_to_row() {
@@ -816,6 +824,107 @@ static void test_terminal_test_read_key_timeout_drains_to_timeout() {
     ASSERT_EQ(v.as_string(), "a/timeout");
 }
 
+// ── New functions: flush / blink / line insert-delete / cursor style ──────────
+
+static void test_terminal_blink_wraps_text() {
+    // blink wraps the text in the SGR blink attribute (ESC[5m … ESC[0m),
+    // mirroring bold/italic; the result is a pure string.
+    const auto v = eval("Terminal.blink(\"hi\")");
+
+    ASSERT_TRUE(v.is_string());
+
+    const auto& out = v.as_string();
+
+    ASSERT_TRUE(out.find("\033[5m") != std::string::npos);
+    ASSERT_TRUE(out.find("hi") != std::string::npos);
+    ASSERT_TRUE(out.rfind("\033[0m") == out.size() - 4);
+}
+
+static void test_terminal_flush_returns_result() {
+    // flush reports success; there is nothing to observe headlessly.
+    ASSERT_RESULT_SUCCESS(eval("Terminal.flush()"));
+}
+
+static void test_terminal_insert_delete_line() {
+    ASSERT_RESULT_SUCCESS(eval("Terminal.insert_line(2)"));
+    ASSERT_RESULT_SUCCESS(eval("Terminal.delete_line(1)"));
+}
+
+static void test_terminal_insert_delete_line_invalid() {
+    ASSERT_EVAL_FAILURE("Terminal.insert_line(0)");
+    ASSERT_EVAL_FAILURE("Terminal.delete_line(0)");
+}
+
+static void test_terminal_clear_to_start_of_line() {
+    ASSERT_RESULT_SUCCESS(eval("Terminal.clear_to_start_of_line()"));
+}
+
+static void test_terminal_set_cursor_style() {
+    // A Terminal.CursorStyle variant emits its DECSCUSR escape and returns success.
+    ASSERT_RESULT_SUCCESS(eval("Terminal.set_cursor_style(Terminal.CursorStyle.SteadyBar)"));
+    ASSERT_RESULT_SUCCESS(eval("Terminal.set_cursor_style(Terminal.CursorStyle.BlinkingBlock)"));
+}
+
+static void test_terminal_set_cursor_style_emits_decscusr() {
+    // SteadyBar is DECSCUSR parameter 6 ("\x1b[6 q").
+    const auto v = eval(R"(
+        Terminal.test_start([])
+        Terminal.set_cursor_style(Terminal.CursorStyle.SteadyBar)
+        Terminal.test_stop()
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_TRUE(v.as_string().find("\033[6 q") != std::string::npos);
+}
+
+static void test_terminal_cursor_style_variants_exist() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Terminal.CursorStyle.BlinkingBlock"));
+    ASSERT_TRUE(env->has("Terminal.CursorStyle.SteadyBlock"));
+    ASSERT_TRUE(env->has("Terminal.CursorStyle.BlinkingUnderline"));
+    ASSERT_TRUE(env->has("Terminal.CursorStyle.SteadyUnderline"));
+    ASSERT_TRUE(env->has("Terminal.CursorStyle.BlinkingBar"));
+    ASSERT_TRUE(env->has("Terminal.CursorStyle.SteadyBar"));
+}
+
+static void test_terminal_supports_unicode_returns_bool() {
+    ASSERT_TRUE(eval("Terminal.supports_unicode()").is_bool());
+}
+
+static void test_terminal_read_line_reads_scripted_input() {
+    // read_line echoes printable keys, handles backspace, and submits on Enter.
+    // Scripted keys: h i x <backspace> <enter> → "hi".
+    const auto v = eval(R"(
+        Terminal.test_start(["h", "i", "x", "backspace", "enter"])
+        string line = match Terminal.read_line("> ") {
+            success(text) { text }
+            failure(_) { "fail" }
+        }
+        Terminal.test_stop()
+        line
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "hi");
+}
+
+static void test_terminal_read_line_drains_to_failure() {
+    // An exhausted scripted queue makes read_line fail (EOF).
+    const auto v = eval(R"(
+        Terminal.test_start([])
+        boolean failed = match Terminal.read_line("> ") {
+            success(_) { false }
+            failure(_) { true }
+        }
+        Terminal.test_stop()
+        failed
+    )");
+
+    ASSERT_TRUE(v.is_bool());
+    ASSERT_TRUE(v.as_bool());
+}
+
 int main() {
     RUN(test_terminal_bold);
     RUN(test_terminal_color);
@@ -887,6 +996,18 @@ int main() {
     RUN(test_terminal_test_remaining_and_feed);
     RUN(test_terminal_test_session_reports_as_terminal);
     RUN(test_terminal_test_read_key_timeout_drains_to_timeout);
+
+    RUN(test_terminal_blink_wraps_text);
+    RUN(test_terminal_flush_returns_result);
+    RUN(test_terminal_insert_delete_line);
+    RUN(test_terminal_insert_delete_line_invalid);
+    RUN(test_terminal_clear_to_start_of_line);
+    RUN(test_terminal_set_cursor_style);
+    RUN(test_terminal_set_cursor_style_emits_decscusr);
+    RUN(test_terminal_cursor_style_variants_exist);
+    RUN(test_terminal_supports_unicode_returns_bool);
+    RUN(test_terminal_read_line_reads_scripted_input);
+    RUN(test_terminal_read_line_drains_to_failure);
 
     return SUMMARY();
 }

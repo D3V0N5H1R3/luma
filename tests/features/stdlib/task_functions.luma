@@ -282,3 +282,112 @@ function void test_task_flat_map_requires_task() {
         assert(Result.is_failure(flat_result), "Task.flat_map fails when the function returns a non-task")
     }
 }
+
+# ───────────────────────────────────────────────────────────
+# all_settled, completed, failed, timeout_or, retry_with_backoff
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_task_all_settled_mixed() {
+    task<integer> ok_task = Task.completed(7)
+    task<integer> bad_task = Task.failed("boom")
+    array<result<integer>> settled = Task.all_settled([ok_task, bad_task])
+
+    assert(Array.length(settled) == 2, "all_settled returns one entry per task")
+    assert(Result.is_success(settled[0]), "all_settled preserves the first task's success")
+    assert(Result.unwrap(settled[0]) == 7, "all_settled keeps the success value")
+    assert(Result.is_failure(settled[1]), "all_settled preserves the second task's failure")
+}
+
+@test
+function void test_task_all_settled_empty() {
+    array<result<integer>> settled = Task.all_settled([])
+
+    assert(Array.length(settled) == 0, "all_settled([]) yields an empty array")
+}
+
+@test
+function void test_task_completed_awaitable() {
+    task<integer> ready = Task.completed(42)
+    result<integer> timeout_result = Task.timeout(ready, 1000)
+
+    assert(Result.is_success(timeout_result), "Task.completed produces a ready task")
+    assert(Result.unwrap(timeout_result) == 42, "Task.completed resolves to its value")
+}
+
+@test
+function void test_task_failed_awaitable() {
+    task<integer> broken = Task.failed("nope")
+    result<integer> timeout_result = Task.timeout(broken, 1000)
+
+    assert(Result.is_failure(timeout_result), "Task.failed resolves to a failure")
+}
+
+@test
+function void test_task_timeout_or_returns_value() {
+    task<integer> ready = Task.completed(99)
+    integer value = Task.timeout_or(ready, 1000, -1)
+
+    assert(value == 99, "timeout_or returns the task value when it completes in time")
+}
+
+@test
+function void test_task_timeout_or_returns_default_on_timeout() {
+    task_scope {
+        task<integer> slow_task = spawn slow_identity(7)
+        integer value = Task.timeout_or(slow_task, 5, -1)
+
+        assert(value == -1, "timeout_or returns the default when the task is too slow")
+    }
+}
+
+@test
+function void test_task_timeout_or_returns_default_on_failure() {
+    task<integer> broken = Task.failed("nope")
+    integer value = Task.timeout_or(broken, 1000, -1)
+
+    assert(value == -1, "timeout_or falls back to the default when the task fails")
+}
+
+@test
+function void test_task_retry_with_backoff_success() {
+    result<integer> retry_result = Task.retry_with_backoff(3, 1, () -> success(42))
+
+    assert(Result.is_success(retry_result), "retry_with_backoff returns ok result")
+    assert(Result.unwrap(retry_result) == 42, "retry_with_backoff unwrapped value is correct")
+}
+
+@test
+function void test_task_retry_with_backoff_eventual_success() {
+    reference<integer> attempts = Reference.new(0)
+    result<integer> retry_result = Task.retry_with_backoff(5, 1, () -> {
+        integer count = Reference.update_and_get(attempts, (integer n) -> n + 1)
+        if count < 3 {
+            return failure("not yet")
+        }
+        return success(count)
+    })
+
+    assert(Result.is_success(retry_result), "retry_with_backoff eventually succeeds")
+    assert(Result.unwrap(retry_result) == 3, "retry_with_backoff succeeds on the third attempt")
+}
+
+@test
+function void test_task_retry_with_backoff_all_fail() {
+    result<integer> retry_result = Task.retry_with_backoff(3, 1, () -> failure("oops"))
+
+    assert(Result.is_failure(retry_result), "retry_with_backoff fails after exhausting attempts")
+}
+
+@test
+function void test_task_retry_with_backoff_invalid_n_throws() {
+    mutable boolean has_thrown = false
+
+    try {
+        result<integer> _ = Task.retry_with_backoff(0, 1, () -> success(1))
+    } catch(_err) {
+        has_thrown = true
+    }
+
+    assert(has_thrown, "retry_with_backoff throws when n <= 0")
+}

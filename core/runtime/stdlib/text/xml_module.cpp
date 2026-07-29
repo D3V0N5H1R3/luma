@@ -1,9 +1,11 @@
 #include "runtime/stdlib/text/xml_module.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cstdint>
 #include <format>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -11,6 +13,7 @@
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
+#include "common/escape.hpp"
 #include "common/resource_limits.hpp"
 #include "common/utf8.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -143,6 +146,273 @@ struct LineColumn {
                                 1;
 
     return LineColumn{line, column};
+}
+
+// Count the direct element children of a node.  Xml.child_count and Xml.children
+// only ever see element children, so remove_child / replace_child index into the
+// same element-only sequence (a caller who sees N children via Xml.children can
+// address indices 0..N-1 here regardless of interspersed text or comment nodes).
+[[nodiscard]] std::int64_t element_child_count(const XmlValue& node) {
+    return std::ranges::count_if(node.children, [](const auto& child) {
+        return child->node_type == XmlValue::NodeType::Element;
+    });
+}
+
+// Depth-first pre-order search for the first descendant element whose tag matches.
+// Unlike Xml.find (which also considers the node itself), this inspects only
+// descendants, so a self-tag match never short-circuits the search.  Depth is
+// bounded like every other native XML recursion so a programmatically built tree
+// cannot overflow the stack.
+[[nodiscard]] std::shared_ptr<XmlValue> find_descendant_element(const XmlValue& node,
+                                                                std::string_view tag, int depth,
+                                                                const SourceLocation& loc) {
+    if (depth > CompileTimeLimits::max_xml_depth) {
+        throw RuntimeError{"Xml.find_descendant: XML nesting too deep", loc};
+    }
+
+    for (const auto& child : node.children) {
+        if (child->node_type != XmlValue::NodeType::Element) {
+            continue;
+        }
+
+        if (child->tag_or_content == tag) {
+            return child;
+        }
+
+        if (auto found = find_descendant_element(*child, tag, depth + 1, loc)) {
+            return found;
+        }
+    }
+
+    return nullptr;
+}
+
+// Collect every descendant element matching `tag` in document (pre-order) order.
+void collect_descendant_elements(const XmlValue& node, std::string_view tag,
+                                 std::vector<std::shared_ptr<XmlValue>>& out, int depth,
+                                 const SourceLocation& loc) {
+    if (depth > CompileTimeLimits::max_xml_depth) {
+        throw RuntimeError{"Xml.find_all_descendants: XML nesting too deep", loc};
+    }
+
+    for (const auto& child : node.children) {
+        if (child->node_type != XmlValue::NodeType::Element) {
+            continue;
+        }
+
+        if (child->tag_or_content == tag) {
+            out.push_back(child);
+        }
+
+        collect_descendant_elements(*child, tag, out, depth + 1, loc);
+    }
+}
+
+// Concatenate the text of this node and every descendant text / CDATA node in
+// document order — the DOM textContent of the element.  The recursive counterpart
+// to Xml.text, which only reads the node's own direct text children.  Comments
+// carry no textual content and are skipped, matching textContent.
+void collect_inner_text(const XmlValue& node, std::string& out, int depth,
+                        const SourceLocation& loc) {
+    if (depth > CompileTimeLimits::max_xml_depth) {
+        throw RuntimeError{"Xml.inner_text: XML nesting too deep", loc};
+    }
+
+    for (const auto& child : node.children) {
+        switch (child->node_type) {
+            case XmlValue::NodeType::Text:
+            case XmlValue::NodeType::CData:
+                out += child->tag_or_content;
+                break;
+            case XmlValue::NodeType::Element:
+                collect_inner_text(*child, out, depth + 1, loc);
+                break;
+            case XmlValue::NodeType::Comment:
+                break;
+        }
+    }
+}
+
+// A single "tag" or "tag[n]" step of an Xml.get_path expression.  The bracketed
+// index is 0-based and selects among the repeated element children sharing `tag`.
+struct XmlPathSegment {
+    std::string tag;
+    std::size_t index;
+};
+
+// Parse one path segment.  Returns std::nullopt for a malformed segment such as
+// an unterminated or non-numeric "[...]", so navigation can fail cleanly rather
+// than silently mis-selecting a child.
+[[nodiscard]] std::optional<XmlPathSegment> parse_xml_path_segment(std::string_view seg) {
+    const auto bracket = seg.find('[');
+
+    if (bracket == std::string_view::npos) {
+        return XmlPathSegment{std::string{seg}, 0};
+    }
+
+    if (seg.empty() || seg.back() != ']') {
+        return std::nullopt;
+    }
+
+    const auto index_text = seg.substr(bracket + 1, seg.size() - bracket - 2);
+
+    if (index_text.empty()) {
+        return std::nullopt;
+    }
+
+    std::size_t index{0};
+    const auto* const first = index_text.data();
+    const auto* const last = first + index_text.size();
+    const auto [ptr, ec] = std::from_chars(first, last, index);
+
+    if (ec != std::errc{} || ptr != last) {
+        return std::nullopt;
+    }
+
+    return XmlPathSegment{std::string{seg.substr(0, bracket)}, index};
+}
+
+// Follow a "/"-separated tag path starting from `root`'s children (root itself is
+// not a segment).  Each segment selects the [index]-th direct element child with
+// the matching tag (index 0 by default).  On any missing or malformed segment it
+// records a message in `error` and returns nullptr; mirrors Json.get_path's
+// segment-at-a-time descent composed of per-segment child lookups.
+[[nodiscard]] std::shared_ptr<XmlValue> navigate_xml_get_path(const std::shared_ptr<XmlValue>& root,
+                                                              std::string_view path,
+                                                              std::string& error) {
+    auto current = root;
+    bool any_segment{false};
+    std::size_t pos{0};
+
+    while (pos <= path.size()) {
+        const auto slash = path.find('/', pos);
+        const auto seg =
+            slash == std::string_view::npos ? path.substr(pos) : path.substr(pos, slash - pos);
+        pos = slash == std::string_view::npos ? path.size() + 1 : slash + 1;
+
+        if (seg.empty()) {
+            continue;
+        }
+
+        any_segment = true;
+
+        const auto parsed = parse_xml_path_segment(seg);
+
+        if (!parsed) {
+            error = std::format("invalid path segment '{}'", seg);
+
+            return nullptr;
+        }
+
+        // Bind the checked optional to a plain reference before dereferencing so
+        // clang-tidy's bugprone-unchecked-optional-access can pair the access
+        // with the guard above (it does not always track `optional->` after an
+        // `if (!opt)` early return).
+        const XmlPathSegment& segment = *parsed;
+
+        std::size_t matched{0};
+        std::shared_ptr<XmlValue> next;
+
+        for (const auto& child : current->children) {
+            if (child->node_type == XmlValue::NodeType::Element &&
+                child->tag_or_content == segment.tag) {
+                if (matched == segment.index) {
+                    next = child;
+
+                    break;
+                }
+
+                ++matched;
+            }
+        }
+
+        if (!next) {
+            error = std::format("segment '{}' not found", seg);
+
+            return nullptr;
+        }
+
+        current = std::move(next);
+    }
+
+    if (!any_segment) {
+        error = "empty path";
+
+        return nullptr;
+    }
+
+    return current;
+}
+
+// Decode the five predefined XML entities plus optional numeric (decimal and
+// hexadecimal) character references into `out`.  Returns false and sets `error`
+// on any malformed reference — an unterminated "&amp", an unknown name "&foo;",
+// or an out-of-range code point — so Xml.unescape can surface a typed failure.
+[[nodiscard]] bool decode_xml_entities(std::string_view input, std::string& out,
+                                       std::string& error) {
+    out.reserve(input.size());
+
+    for (std::size_t i = 0; i < input.size(); ++i) {
+        if (input[i] != '&') {
+            out += input[i];
+
+            continue;
+        }
+
+        const auto semicolon = input.find(';', i);
+
+        if (semicolon == std::string_view::npos) {
+            error = "unterminated entity reference";
+
+            return false;
+        }
+
+        const auto entity = input.substr(i + 1, semicolon - i - 1);
+
+        if (entity == "amp") {
+            out += '&';
+        } else if (entity == "lt") {
+            out += '<';
+        } else if (entity == "gt") {
+            out += '>';
+        } else if (entity == "quot") {
+            out += '"';
+        } else if (entity == "apos") {
+            out += '\'';
+        } else if (!entity.empty() && entity.front() == '#') {
+            const bool hex = entity.size() >= 2 && (entity[1] == 'x' || entity[1] == 'X');
+            const auto digits = entity.substr(hex ? 2 : 1);
+
+            std::uint32_t code_point{0};
+            const auto* const first = digits.data();
+            const auto* const last = first + digits.size();
+            const auto [ptr, ec] = std::from_chars(first, last, code_point, hex ? 16 : 10);
+
+            if (digits.empty() || ec != std::errc{} || ptr != last) {
+                error = std::format("invalid numeric entity '&{};'", entity);
+
+                return false;
+            }
+
+            const auto encoded = utf8_encode(code_point);
+
+            if (encoded.empty()) {
+                error = std::format("invalid code point in entity '&{};'", entity);
+
+                return false;
+            }
+
+            out += encoded;
+        } else {
+            error = std::format("unknown entity '&{};'", entity);
+
+            return false;
+        }
+
+        i = semicolon;
+    }
+
+    return true;
 }
 
 } // namespace
@@ -450,6 +720,145 @@ void register_xml_ns(const EnvPtr& env) {
             const auto& tag = args[1].as_string();
 
             return Value{xml_detail::any_child_with_tag(*node, tag)};
+        })
+        .func("find_descendant", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto node = expect_xml(args[0], "Xml.find_descendant", loc);
+
+            const auto& tag = args[1].as_string();
+            auto found = find_descendant_element(*node, tag, 0, loc);
+
+            if (!found) {
+                return failure_msg("Xml", "find_descendant",
+                                   std::format("descendant '{}' not found", tag),
+                                   error_codes::not_found);
+            }
+
+            return make_success_value(Value{found->deep_clone()});
+        })
+        .func("find_all_descendants", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto node = expect_xml(args[0], "Xml.find_all_descendants", loc);
+
+            const auto& tag = args[1].as_string();
+            std::vector<std::shared_ptr<XmlValue>> results;
+
+            collect_descendant_elements(*node, tag, results, 0, loc);
+
+            auto arr = std::make_shared<ArrayValue>();
+            arr->elements->reserve(results.size());
+
+            for (const auto& r : results) {
+                arr->elements->emplace_back(r->deep_clone());
+            }
+
+            return Value{std::move(arr)};
+        })
+        .func("get_path", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto node = expect_xml(args[0], "Xml.get_path", loc);
+
+            const auto& path = args[1].as_string();
+            std::string error;
+            auto result = navigate_xml_get_path(node, path, error);
+
+            if (!result) {
+                return failure_msg("Xml", "get_path", std::format("path '{}': {}", path, error),
+                                   error_codes::not_found);
+            }
+
+            return make_success_value(Value{result->deep_clone()});
+        })
+        .func("remove_child", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_xml(args[0], "Xml.remove_child", loc);
+
+            const auto index = args[1].as_integer();
+            const auto count = element_child_count(*src);
+
+            if (index < 0 || index >= count) {
+                return failure_msg("Xml", "remove_child",
+                                   std::format("index {} out of bounds", index),
+                                   error_codes::index_out_of_bounds);
+            }
+
+            auto clone = src->deep_clone();
+            std::int64_t seen{0};
+
+            for (auto it = clone->children.begin(); it != clone->children.end(); ++it) {
+                if ((*it)->node_type == XmlValue::NodeType::Element) {
+                    if (seen == index) {
+                        clone->children.erase(it);
+
+                        break;
+                    }
+
+                    ++seen;
+                }
+            }
+
+            return make_success_value(Value{std::move(clone)});
+        })
+        .func("replace_child", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_xml(args[0], "Xml.replace_child", loc);
+
+            const auto index = args[1].as_integer();
+            const auto count = element_child_count(*src);
+
+            if (index < 0 || index >= count) {
+                return failure_msg("Xml", "replace_child",
+                                   std::format("index {} out of bounds", index),
+                                   error_codes::index_out_of_bounds);
+            }
+
+            auto new_child = expect_xml(args[2], "Xml.replace_child", loc)->deep_clone();
+            auto clone = src->deep_clone();
+            std::int64_t seen{0};
+
+            for (auto& child : clone->children) {
+                if (child->node_type == XmlValue::NodeType::Element) {
+                    if (seen == index) {
+                        child = std::move(new_child);
+
+                        break;
+                    }
+
+                    ++seen;
+                }
+            }
+
+            return make_success_value(Value{std::move(clone)});
+        })
+        .func("inner_text", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto node = expect_xml(args[0], "Xml.inner_text", loc);
+            std::string out;
+
+            collect_inner_text(*node, out, 0, loc);
+
+            return Value{std::move(out)};
+        })
+        .func("escape", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& text = expect_string(args[0], "Xml.escape", loc);
+            std::string out;
+
+            xml_escape_string(text, out);
+
+            return Value{std::move(out)};
+        })
+        .func("unescape", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& text = expect_string(args[0], "Xml.unescape", loc);
+            std::string out;
+            std::string error;
+
+            if (!decode_xml_entities(text, out, error)) {
+                return failure_msg("Xml", "unescape", error, error_codes::invalid_argument);
+            }
+
+            return make_success_value(Value{std::move(out)});
         });
 
     register_xml_parser(env);

@@ -152,6 +152,12 @@ namespace {
             if (desc.named_type == "RegularExpression.Error") {
                 return TypeInfo::make_named(K::Choice, "RegularExpression.Error");
             }
+            if (desc.named_type == "RegularExpression.Flags") {
+                return TypeInfo::make_named(K::Choice, "RegularExpression.Flags");
+            }
+            if (desc.named_type == "Terminal.CursorStyle") {
+                return TypeInfo::make_named(K::Choice, "Terminal.CursorStyle");
+            }
             if (desc.named_type == "Compression.Format") {
                 return TypeInfo::make_named(K::Choice, "Compression.Format");
             }

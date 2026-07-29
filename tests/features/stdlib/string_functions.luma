@@ -807,4 +807,130 @@ function void test_string_character_at_multibyte() {
     assert(Result.unwrap(String.character_at(s, 2)) == "B")
 }
 
+@test
+function void test_string_split_whitespace() {
+    # Leading, trailing, and repeated whitespace collapse; no empty tokens.
+    array<string> parts = String.split_whitespace("  the quick\tbrown\nfox  ")
+
+    assert(Array.length(parts) == 4)
+    assert(parts[0] == "the")
+    assert(parts[1] == "quick")
+    assert(parts[2] == "brown")
+    assert(parts[3] == "fox")
+
+    assert(Array.length(String.split_whitespace("   ")) == 0)
+    assert(Array.length(String.split_whitespace("")) == 0)
+}
+
+@test
+function void test_string_words() {
+    # words is an alias of split_whitespace.
+    array<string> parts = String.words("a  b\tc")
+
+    assert(Array.length(parts) == 3)
+    assert(parts[0] == "a")
+    assert(parts[1] == "b")
+    assert(parts[2] == "c")
+}
+
+@test
+function void test_string_word_count() {
+    assert(String.word_count("  the quick\tbrown\nfox  ") == 4)
+    assert(String.word_count("") == 0)
+    assert(String.word_count("   ") == 0)
+    assert(String.word_count("solo") == 1)
+}
+
+@test
+function void test_string_insert() {
+    result<string> at_start = String.insert("hello", 0, ">>")
+    assert(Result.is_success(at_start))
+    assert(Result.unwrap(at_start) == ">>hello")
+
+    result<string> at_end = String.insert("hello", 5, "!")
+    assert(Result.is_success(at_end))
+    assert(Result.unwrap(at_end) == "hello!")
+
+    result<string> at_mid = String.insert("hello", 2, "XY")
+    assert(Result.is_success(at_mid))
+    assert(Result.unwrap(at_mid) == "heXYllo")
+}
+
+@test
+function void test_string_insert_out_of_bounds() {
+    result<string> negative = String.insert("hello", -1, "x")
+    assert(Result.is_failure(negative))
+
+    result<string> too_big = String.insert("hello", 6, "x")
+    assert(Result.is_failure(too_big))
+}
+
+@test
+function void test_string_delete() {
+    result<string> mid = String.delete("hello", 1, 3)
+    assert(Result.is_success(mid))
+    assert(Result.unwrap(mid) == "hlo")
+
+    result<string> whole = String.delete("hello", 0, 5)
+    assert(Result.is_success(whole))
+    assert(Result.unwrap(whole) == "")
+
+    result<string> empty_range = String.delete("hello", 2, 2)
+    assert(Result.is_success(empty_range))
+    assert(Result.unwrap(empty_range) == "hello")
+}
+
+@test
+function void test_string_delete_out_of_bounds() {
+    result<string> negative = String.delete("hello", -1, 2)
+    assert(Result.is_failure(negative))
+
+    result<string> too_big = String.delete("hello", 0, 6)
+    assert(Result.is_failure(too_big))
+
+    result<string> inverted = String.delete("hello", 3, 1)
+    assert(Result.is_failure(inverted))
+}
+
+@test
+function void test_string_replace_range() {
+    result<string> mid = String.replace_range("hello", 1, 3, "XY")
+    assert(Result.is_success(mid))
+    assert(Result.unwrap(mid) == "hXYlo")
+
+    result<string> whole = String.replace_range("hello", 0, 5, "bye")
+    assert(Result.is_success(whole))
+    assert(Result.unwrap(whole) == "bye")
+
+    result<string> as_insert = String.replace_range("hello", 2, 2, "__")
+    assert(Result.is_success(as_insert))
+    assert(Result.unwrap(as_insert) == "he__llo")
+}
+
+@test
+function void test_string_replace_range_out_of_bounds() {
+    result<string> negative = String.replace_range("hello", -1, 2, "x")
+    assert(Result.is_failure(negative))
+
+    result<string> too_big = String.replace_range("hello", 0, 6, "x")
+    assert(Result.is_failure(too_big))
+
+    result<string> inverted = String.replace_range("hello", 3, 1, "x")
+    assert(Result.is_failure(inverted))
+}
+
+@test
+function void test_string_starts_with_any() {
+    assert(String.starts_with_any("hello", ["he", "xy"]))
+    assert(String.starts_with_any("hello", ["hello"]))
+    assert(!String.starts_with_any("hello", ["xy", "z"]))
+}
+
+@test
+function void test_string_ends_with_any() {
+    assert(String.ends_with_any("hello", ["lo", "xy"]))
+    assert(String.ends_with_any("hello", ["hello"]))
+    assert(!String.ends_with_any("hello", ["xy", "z"]))
+}
+
 

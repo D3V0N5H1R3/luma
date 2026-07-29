@@ -823,6 +823,331 @@ void register_socket_ns(const EnvPtr& env) {
 
             return make_success_value(Value{std::move(buffer)});
         })
+        // Socket.send_all(socket s, string data) -> result<boolean>
+        // Send every byte of data, looping until the whole buffer is written or a
+        // socket error occurs.  Unlike Socket.send (which exposes short writes as a
+        // byte count), send_all guarantees the full payload is delivered on success.
+        .func("send_all", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& sv = expect_socket(args[0], "Socket.send_all", loc);
+
+            (void)expect_string(args[1], "Socket.send_all", loc);
+
+            if (auto err = check_socket_open(sv)) {
+                return *err;
+            }
+
+            const auto& data = args[1].as_string();
+
+            if (!send_all(sv->handle.load(), data.data(), data.size())) {
+                return socket_failure("send");
+            }
+
+            return make_success_value(Value{true});
+        })
+        // Socket.send_all_typed(socket s, string data) -> result<boolean, Socket.Error>
+        // Opt-in typed-error variant of Socket.send_all: a broken connection
+        // surfaces as Socket.Error.ConnectionReset (or NotConnected for a closed
+        // handle) instead of an opaque string.  String-error Socket.send_all is
+        // unchanged.
+        .func("send_all_typed", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& sv = expect_socket(args[0], "Socket.send_all_typed", loc);
+
+            (void)expect_string(args[1], "Socket.send_all_typed", loc);
+
+            if (auto err = check_socket_open_typed(sv)) {
+                return *err;
+            }
+
+            const auto& data = args[1].as_string();
+
+            if (!send_all(sv->handle.load(), data.data(), data.size())) {
+                return socket_error_failure_from_last();
+            }
+
+            return make_success_value(Value{true});
+        })
+        // Socket.receive_all(socket s) -> result<string>
+        // Read until the peer closes the connection (recv returns 0) or an error
+        // occurs, accumulating the whole stream into a string bounded by
+        // ResourceLimits::max_string_size.
+        .func("receive_all", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& sv = expect_socket(args[0], "Socket.receive_all", loc);
+
+            if (auto err = check_socket_open(sv)) {
+                return *err;
+            }
+
+            std::string result;
+            std::array<char, 4096> buffer{};
+
+            while (true) {
+                const auto received =
+                    ::recv(sv->handle.load(), buffer.data(),
+                           static_cast<platform_socket::io_length_t>(buffer.size()), 0);
+
+                if (received < 0) {
+                    return socket_failure("receive");
+                }
+
+                if (received == 0) {
+                    break; // Peer performed an orderly shutdown.
+                }
+
+                if (result.size() + static_cast<std::size_t>(received) >
+                    ResourceLimits::max_string_size) {
+                    return make_failure_value(
+                        "Socket.receive_all: response exceeds maximum string size");
+                }
+
+                result.append(buffer.data(), static_cast<std::size_t>(received));
+            }
+
+            return make_success_value(Value{std::move(result)});
+        })
+        // Socket.receive_line(socket s) -> result<string>
+        // Read up to and including the next '\n'.  Reads a byte at a time so no
+        // persistent buffer is needed; returns the line with its trailing newline,
+        // or the residual bytes without a newline if the peer closes first.  The
+        // result is bounded by ResourceLimits::max_string_size.
+        .func("receive_line", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& sv = expect_socket(args[0], "Socket.receive_line", loc);
+
+            if (auto err = check_socket_open(sv)) {
+                return *err;
+            }
+
+            std::string result;
+
+            while (true) {
+                char ch{};
+
+                const auto received =
+                    ::recv(sv->handle.load(), &ch, static_cast<platform_socket::io_length_t>(1), 0);
+
+                if (received < 0) {
+                    return socket_failure("receive");
+                }
+
+                if (received == 0) {
+                    break; // Peer closed before a newline arrived.
+                }
+
+                if (result.size() + 1 > ResourceLimits::max_string_size) {
+                    return make_failure_value(
+                        "Socket.receive_line: line exceeds maximum string size");
+                }
+
+                result.push_back(ch);
+
+                if (ch == '\n') {
+                    break;
+                }
+            }
+
+            return make_success_value(Value{std::move(result)});
+        })
+        // Socket.connect_timeout(string host, integer port, integer timeout_ms)
+        //     -> result<socket>
+        // Establish a TCP connection with an explicit connect timeout (in
+        // milliseconds) via a non-blocking connect and select() on the fd, failing
+        // if the deadline elapses.  Like Socket.connect but with a caller-chosen
+        // timeout instead of the fixed 30-second default.
+        .func("connect_timeout", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Socket.connect_timeout", loc);
+
+            ensure_winsock();
+
+            const auto& host = args[0].as_string();
+            const auto port_val = expect_integer(args[1], "Socket.connect_timeout", loc);
+
+            if (auto err = validate_port(port_val)) {
+                return *err;
+            }
+
+            const auto timeout_val = expect_integer(args[2], "Socket.connect_timeout", loc);
+
+            if (timeout_val < 0 || timeout_val > INT_MAX) {
+                return make_failure_value("timeout value out of range");
+            }
+
+            const auto port = static_cast<int>(port_val);
+
+            auto info = resolve_address(host, port, SOCK_STREAM, false);
+
+            if (!info) {
+                return resolve_host_failure(host);
+            }
+
+            if (auto err = check_socket_limit("Socket.connect_timeout")) {
+                return *err;
+            }
+
+            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+
+            if (sock == invalid_socket_handle) {
+                return socket_failure("create socket");
+            }
+
+            SocketGuard guard{sock};
+
+            if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
+                                          static_cast<int>(timeout_val))) {
+                return socket_failure("connect");
+            }
+
+            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
+
+            guard.release();
+
+            return make_success_value(Value{std::move(sv)});
+        })
+        // Socket.connect_timeout_typed(string host, integer port, integer timeout_ms)
+        //     -> result<socket, Socket.Error>
+        // Opt-in typed-error variant of Socket.connect_timeout: an elapsed deadline
+        // surfaces as Socket.Error.Timeout and other transport failures as their
+        // matching variant, so a program can retry only on Timeout.  String-error
+        // Socket.connect_timeout is left untouched.
+        .func("connect_timeout_typed", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Socket.connect_timeout_typed", loc);
+
+            ensure_winsock();
+
+            const auto& host = args[0].as_string();
+            const auto port_val = expect_integer(args[1], "Socket.connect_timeout_typed", loc);
+
+            if (port_val < 0 || port_val > k_max_port) {
+                return socket_error_failure(platform_socket::ErrorCategory::Other);
+            }
+
+            const auto timeout_val = expect_integer(args[2], "Socket.connect_timeout_typed", loc);
+
+            if (timeout_val < 0 || timeout_val > INT_MAX) {
+                return socket_error_failure(platform_socket::ErrorCategory::Other);
+            }
+
+            const auto port = static_cast<int>(port_val);
+
+            auto info = resolve_address(host, port, SOCK_STREAM, false);
+
+            if (!info) {
+                return socket_error_failure(platform_socket::ErrorCategory::HostUnreachable);
+            }
+
+            if (SocketValue::open_count() >= ResourceLimits::max_open_sockets) {
+                return socket_error_failure(platform_socket::ErrorCategory::Other);
+            }
+
+            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+
+            if (sock == invalid_socket_handle) {
+                return socket_error_failure_from_last();
+            }
+
+            SocketGuard guard{sock};
+
+            bool timed_out = false;
+            int error_code = 0;
+
+            if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
+                                          static_cast<int>(timeout_val), &timed_out, &error_code)) {
+                if (timed_out) {
+                    return socket_error_failure(platform_socket::ErrorCategory::TimedOut);
+                }
+
+                return socket_error_failure(platform_socket::classify_error(error_code));
+            }
+
+            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
+
+            guard.release();
+
+            return make_success_value(Value{std::move(sv)});
+        })
+        // Socket.send_bytes(socket s, array<integer> bytes) -> result<integer>
+        // Send raw bytes (each element an integer 0-255) over the socket, looping
+        // until the whole buffer is written.  Returns the number of bytes sent.
+        .func("send_bytes", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& sv = expect_socket(args[0], "Socket.send_bytes", loc);
+            const auto& bytes = expect_array(args[1], "Socket.send_bytes", loc);
+
+            if (auto err = check_socket_open(sv)) {
+                return *err;
+            }
+
+            // Validate and pack every element before sending so an out-of-range or
+            // non-integer element fails without a partial write.  Each element must
+            // be an integer in 0-255 (the same byte convention as FileSystem and
+            // String.to_bytes).
+            std::string buffer;
+            buffer.reserve(bytes->elements->size());
+
+            for (const auto& elem : *bytes->elements) {
+                if (!elem.is_integer()) {
+                    return make_failure_value(
+                        "Socket.send_bytes: every element must be an integer byte (0-255)");
+                }
+
+                const auto byte = elem.as_integer();
+
+                if (byte < 0 || byte > 255) {
+                    return make_failure_value(std::format(
+                        "Socket.send_bytes: byte value out of range (0-255): {}", byte));
+                }
+
+                buffer += static_cast<char>(static_cast<std::uint8_t>(byte));
+            }
+
+            if (!send_all(sv->handle.load(), buffer.data(), buffer.size())) {
+                return socket_failure("send");
+            }
+
+            return make_success_value(Value{static_cast<std::int64_t>(buffer.size())});
+        })
+        // Socket.receive_bytes(socket s, integer max) -> result<array<integer>>
+        // Receive up to max raw bytes and return them as an array of integers
+        // (0-255).  A shorter array (including empty) means the peer sent fewer
+        // bytes or closed the connection.
+        .func("receive_bytes", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& sv = expect_socket(args[0], "Socket.receive_bytes", loc);
+
+            if (auto err = check_socket_open(sv)) {
+                return *err;
+            }
+
+            const auto max_bytes = expect_integer(args[1], "Socket.receive_bytes", loc);
+
+            std::string buffer;
+
+            if (auto err = make_recv_buffer(max_bytes, buffer)) {
+                return *err;
+            }
+
+            const auto received =
+                ::recv(sv->handle.load(), buffer.data(),
+                       static_cast<platform_socket::io_length_t>(buffer.size()), 0);
+
+            if (received < 0) {
+                return socket_failure("receive");
+            }
+
+            auto arr = std::make_shared<ArrayValue>();
+            arr->elements->reserve(static_cast<std::size_t>(received));
+
+            for (std::size_t i = 0; i < static_cast<std::size_t>(received); ++i) {
+                arr->elements->emplace_back(
+                    static_cast<std::int64_t>(static_cast<std::uint8_t>(buffer[i])));
+            }
+
+            return make_success_value(Value{std::move(arr)});
+        })
         // Socket.close(socket s) -> null
         // Close the socket.
         .func("close", 1)

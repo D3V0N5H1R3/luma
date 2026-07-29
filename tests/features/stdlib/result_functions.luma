@@ -443,6 +443,31 @@ function void test_result_unwrap_on_failure_throws() {
     assert(has_thrown)
 }
 
+@test
+function void test_result_expect_success() {
+    # On success, expect returns the inner value and ignores the message.
+    result<integer> ok_result = success(42)
+
+    assert(Result.expect(ok_result, "should have a value") == 42)
+}
+
+@test
+function void test_result_expect_failure_throws() {
+    # On failure, expect throws a message combining the supplied text with the
+    # underlying error.
+    mutable string caught = ""
+    result<integer> failed = failure("boom")
+
+    try {
+        integer _value = Result.expect(failed, "expected a value")
+    } catch(err) {
+        caught = err
+    }
+
+    assert(String.contains(caught, "expected a value"), "the message should be included")
+    assert(String.contains(caught, "boom"), "the underlying error should be included")
+}
+
 # ───────────────────────────────────────────────────────────
 # Passthrough: combinators leave a failure (or non-matching input) untouched
 # ───────────────────────────────────────────────────────────

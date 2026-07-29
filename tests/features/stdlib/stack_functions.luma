@@ -230,3 +230,45 @@ function void test_stack_partition_all_match() {
     assert(Stack.length(matches) == 3)
     assert(Stack.is_empty(rest))
 }
+
+@test
+function void test_stack_any_all_count() {
+    stack s = Stack.from_array([1, 2, 3, 4])
+
+    assert(Stack.any(s, (integer x) -> x > 3) |> Result.unwrap())
+    assert(!(Stack.all(s, (integer x) -> x > 3) |> Result.unwrap()))
+    assert((Stack.count(s, (integer x) -> x % 2 == 0) |> Result.unwrap()) == 2)
+}
+
+@test
+function void test_stack_contains_find() {
+    stack s = Stack.from_array([1, 2, 3])
+
+    assert(Stack.contains(s, 2))
+    assert(!Stack.contains(s, 9))
+    # find returns the first match from the top (back).
+    assert((Stack.find(s, (integer x) -> x % 2 == 0) |> Result.unwrap()) == 2)
+    assert(Result.is_failure(Stack.find(s, (integer x) -> x > 9)))
+}
+
+@test
+function void test_stack_pop_while() {
+    (array<integer> popped, stack rest) = Stack.from_array([1, 3, 2, 4])
+    |> Stack.pop_while((integer x) -> x % 2 == 0)
+    |> Result.unwrap()
+
+    assert(Array.length(popped) == 2)
+    assert(popped[0] == 4)
+    assert(popped[1] == 2)
+    assert(Stack.length(rest) == 2)
+}
+
+@test
+function void test_stack_reverse() {
+    array<integer> reversed = Stack.from_array([1, 2, 3])
+    |> Stack.reverse()
+    |> Stack.to_array()
+
+    assert(reversed[0] == 3)
+    assert(reversed[2] == 1)
+}
