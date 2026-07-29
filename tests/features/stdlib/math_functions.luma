@@ -1392,3 +1392,39 @@ function void test_math_circle_rect_intersects() {
         "a circle beyond the far corner does not overlap")
 }
 
+
+# ─── N01/N02/N05/N07 additions ───────────────────────────
+
+@test
+function void test_math_log_base_and_nth_root() {
+    assert(Math.approximately_equal(Result.unwrap(Math.log_base(8.0, 2.0)), 3.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.nth_root(27.0, 3.0)), 3.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.nth_root(-8.0, 3.0)), -2.0))
+    assert(Result.is_failure(Math.nth_root(-16.0, 4.0)))
+    assert(Result.is_failure(Math.log_base(8.0, 1.0)))
+}
+
+@test
+function void test_math_wrap_and_angles() {
+    assert(Math.approximately_equal(Math.wrap(7.0, 0.0, 5.0), 2.0))
+    assert(Math.approximately_equal(Math.wrap(-1.0, 0.0, 5.0), 4.0))
+    number diff = Math.angle_difference(Math.radians(10.0), Math.radians(350.0))
+    assert(Math.approximately_equal(diff, Math.radians(20.0)))
+    assert(Math.approximately_equal(Math.normalize_angle(0.0), 0.0))
+}
+
+@test
+function void test_math_special_functions() {
+    assert(Math.approximately_equal(Math.sigmoid(0.0), 0.5))
+    assert(Math.approximately_equal(Result.unwrap(Math.gamma(5.0)), 24.0))
+    assert(Result.is_failure(Math.gamma(0.0)))
+    assert(Math.approximately_equal(Math.erf(0.0), 0.0))
+}
+
+@test
+function void test_math_digit_helpers() {
+    assert(Math.digit_sum(1234) == 10)
+    assert(Math.digit_sum(-56) == 11)
+    assert(Math.digit_count(1000) == 4)
+    assert(Math.digit_count(0) == 1)
+}

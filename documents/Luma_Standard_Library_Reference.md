@@ -1811,8 +1811,10 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.destroy(s)`                  | `(key_value_store)`                     | `result<string>`          | Delete backing file                               |
 | `KeyValueStore.find_by_pattern(s, pattern)` | `(key_value_store, string)`             | `dictionary<string>`      | Entries whose keys match a glob pattern           |
 | `KeyValueStore.get(s, key)`                 | `(key_value_store, string)`             | `result<string>`          | Lookup by key                                     |
+| `KeyValueStore.get_or(s, key, default)`     | `(key_value_store, string, string)`     | `string`                  | Value for key, or default when absent             |
 | `KeyValueStore.get_many(s, keys)`           | `(key_value_store, array<string>)`      | `dictionary<string>`      | Lookup multiple keys                              |
 | `KeyValueStore.has(s, key)`                 | `(key_value_store, string)`             | `boolean`                 | Whether key exists                                |
+| `KeyValueStore.is_empty(s)`                 | `(key_value_store)`                     | `boolean`                 | Whether the store has zero entries                |
 | `KeyValueStore.is_read_only(s)`             | `(key_value_store)`                     | `boolean`                 | Whether the store was opened read-only            |
 | `KeyValueStore.keys(s)`                     | `(key_value_store)`                     | `array<string>`           | All keys                                          |
 | `KeyValueStore.open(path)`                  | `(string)`                              | `result<key_value_store>` | Open or create a store file                       |
@@ -1823,6 +1825,7 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.set(s, key, value)`          | `(key_value_store, string, string)`     | `result<key_value_store>` | Set a key; fail if read-only                      |
 | `KeyValueStore.set_many(s, entries)`        | `(key_value_store, dictionary<string>)` | `result<key_value_store>` | Batch set; fail if read-only                      |
 | `KeyValueStore.to_dictionary(s)`            | `(key_value_store)`                     | `dictionary<string>`      | Convert to dictionary                             |
+| `KeyValueStore.update(s, key, fn)`          | `(key_value_store, string, function(optional<string>) -> string)` | `result<key_value_store>` | Set key to `fn(current-or-none)`; fail if read-only |
 | `KeyValueStore.values(s)`                   | `(key_value_store)`                     | `array<string>`           | All values                                        |
 
 ## 22 — LinearAlgebra
@@ -1862,6 +1865,18 @@ Vector and matrix operations using arrays of numbers.
 | `LinearAlgebra.inverse(m)`            | `(array<array<number>>)`                       | `result<array<array<number>>>` | Matrix inverse                  |
 | `LinearAlgebra.is_square(m)`          | `(array<array<number>>)`                       | `boolean`                      | Whether the matrix is square    |
 | `LinearAlgebra.is_symmetric(m)`       | `(array<array<number>>)`                       | `boolean`                      | Whether the matrix is symmetric |
+| `LinearAlgebra.hadamard(a, b)`        | `(array<number>, array<number>)`               | `result<array<number>>`        | Element-wise vector product; fail on dimension mismatch |
+| `LinearAlgebra.hadamard_matrix(a, b)` | `(array<array<number>>, array<array<number>>)` | `result<array<array<number>>>` | Element-wise matrix product; fail on shape mismatch |
+| `LinearAlgebra.project(a, b)`         | `(array<number>, array<number>)`               | `result<array<number>>`        | Projection of `a` onto `b`; fail on dimension mismatch or zero `b` |
+| `LinearAlgebra.reject(a, b)`          | `(array<number>, array<number>)`               | `result<array<number>>`        | Perpendicular component `a - proj_b(a)`; fail on dimension mismatch or zero `b` |
+| `LinearAlgebra.lerp(a, b, t)`         | `(array<number>, array<number>, number)`       | `result<array<number>>`        | Component-wise `a + t·(b − a)`; fail on dimension mismatch |
+| `LinearAlgebra.outer(a, b)`           | `(array<number>, array<number>)`               | `result<array<array<number>>>` | Outer product with entry `(i,j) = a[i]·b[j]` |
+| `LinearAlgebra.rank(m)`               | `(array<array<number>>)`                       | `integer`                      | Matrix rank via Gaussian elimination |
+| `LinearAlgebra.is_identity(m)`        | `(array<array<number>>)`                       | `boolean`                      | Whether the matrix is the identity |
+| `LinearAlgebra.is_diagonal(m)`        | `(array<array<number>>)`                       | `boolean`                      | Whether all off-diagonal entries are zero |
+| `LinearAlgebra.sum(v)`                | `(array<number>)`                              | `number`                       | Sum of the vector's components  |
+| `LinearAlgebra.mean(v)`               | `(array<number>)`                              | `result<number>`               | Mean of the components; fail on empty vector |
+| `LinearAlgebra.clamp(v, lo, hi)`      | `(array<number>, number, number)`              | `array<number>`                | Clamp each component to `[lo, hi]` |
 | `LinearAlgebra.multiply(a, b)`        | `(array<array<number>>, array<array<number>>)` | `result<array<array<number>>>` | Matrix multiplication           |
 | `LinearAlgebra.multiply_vector(m, v)` | `(array<array<number>>, array<number>)`        | `result<array<number>>`        | Matrix–vector multiplication    |
 | `LinearAlgebra.rows(m)`               | `(array<array<number>>)`                       | `integer`                      | Number of rows                  |
@@ -1905,6 +1920,18 @@ A doubly-linked list with O(1) prepend/append and O(n) indexed access. All opera
 | `LinkedList.to_array(ll)`         | `(linked_list)`                            | `array<T>`                           | Convert to array                                                             |
 | `LinkedList.unique(ll)`           | `(linked_list)`                            | `linked_list`                        | Remove duplicate elements                                                    |
 | `LinkedList.zip(a, b)`            | `(linked_list, linked_list)`               | `linked_list`                        | Pair elements into tuples; truncate to shorter list                          |
+| `LinkedList.any(ll, fn)`          | `(linked_list, function(T) -> boolean)`    | `result<boolean>`                    | Whether any element matches; fail if callback throws                         |
+| `LinkedList.all(ll, fn)`          | `(linked_list, function(T) -> boolean)`    | `result<boolean>`                    | Whether all elements match; fail if callback throws                          |
+| `LinkedList.count(ll, fn)`        | `(linked_list, function(T) -> boolean)`    | `result<integer>`                    | Number of matching elements; fail if callback throws                         |
+| `LinkedList.take(ll, n)`          | `(linked_list, integer)`                   | `linked_list`                        | First `n` elements (`n` clamped to `[0, length]`)                            |
+| `LinkedList.drop(ll, n)`          | `(linked_list, integer)`                   | `linked_list`                        | All but the first `n` elements (`n` clamped)                                 |
+| `LinkedList.take_while(ll, fn)`   | `(linked_list, function(T) -> boolean)`    | `result<linked_list>`                | Leading run satisfying the predicate; fail if callback throws                |
+| `LinkedList.drop_while(ll, fn)`   | `(linked_list, function(T) -> boolean)`    | `result<linked_list>`                | Drop the leading satisfying run; fail if callback throws                     |
+| `LinkedList.min(ll)`              | `(linked_list)`                            | `result<T>`                          | Smallest element; fail if empty or incomparable                              |
+| `LinkedList.max(ll)`              | `(linked_list)`                            | `result<T>`                          | Largest element; fail if empty or incomparable                              |
+| `LinkedList.sum(ll)`              | `(linked_list)`                            | `result<integer \| number>`          | Sum of elements; fail on a non-numeric element                               |
+| `LinkedList.tail(ll)`             | `(linked_list)`                            | `result<linked_list>`                | The list without its head; fail if empty                                     |
+| `LinkedList.uncons(ll)`           | `(linked_list)`                            | `result<(T, linked_list)>`           | `(head, tail)` decomposition; fail if empty                                  |
 
 > **Performance note:** LinkedList operations (`prepend`, `append`, `remove_at`, etc.) create a full deep copy of the list, making each mutation O(n). For performance-critical workloads with frequent mutations, consider using `Array` instead, which offers O(1) amortized `push` and `pop`.
 
@@ -1919,6 +1946,8 @@ Structured logging with configurable levels. Messages are written to stderr by d
 | `Log.error(msg)`              | `(string)`         | `none`         | Log at error level                                   |
 | `Log.get_level()`             | `()`               | `Log.Level`    | Current log level                                    |
 | `Log.info(msg)`               | `(string)`         | `none`         | Log at info level                                    |
+| `Log.is_enabled(level)`       | `(Log.Level \| string)` | `boolean` | Whether a message at `level` would be emitted (guards expensive builds) |
+| `Log.log(level, msg)`         | `(Log.Level \| string, string)` | `none` | Emit `msg` at a runtime-chosen level                 |
 | `Log.reset()`                 | `()`               | `none`         | Reset level, format, output, and context to defaults |
 | `Log.set_context(key, value)` | `(string, string)` | `none`         | Add key–value context to log messages                |
 | `Log.set_format(format)`      | `(string)`         | `none`         | Set custom format template                           |
@@ -1991,6 +2020,16 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.log_10(x)`                      | `(number)`                       | `result<number>`  | Base-10 logarithm                                                                |
 | `Math.log_2(x)`                       | `(number)`                       | `result<number>`  | Base-2 logarithm                                                                 |
 | `Math.log_e(x)`                       | `(number)`                       | `result<number>`  | Natural logarithm                                                                |
+| `Math.log_base(x, base)`              | `(number, number)`               | `result<number>`  | Logarithm of `x` in arbitrary `base`; fail if `x ≤ 0`, `base ≤ 0`, or `base = 1` |
+| `Math.nth_root(x, n)`                 | `(number, number)`               | `result<number>`  | `n`-th root of `x`; fail on an even/fractional root of a negative `x` or `n = 0` |
+| `Math.wrap(x, lo, hi)`                | `(number, number, number)`       | `number`          | Wrap `x` cyclically into `[lo, hi)`                                              |
+| `Math.normalize_angle(rad)`           | `(number)`                       | `number`          | Normalise an angle (radians) to `[−π, π]`                                        |
+| `Math.angle_difference(a, b)`         | `(number, number)`               | `number`          | Shortest signed difference between two angles (radians)                          |
+| `Math.sigmoid(x)`                     | `(number)`                       | `number`          | Logistic function `1 / (1 + e^−x)`                                               |
+| `Math.gamma(x)`                       | `(number)`                       | `result<number>`  | Gamma function; fail at non-positive integer poles                               |
+| `Math.erf(x)`                         | `(number)`                       | `number`          | Error function                                                                    |
+| `Math.digit_sum(n)`                   | `(integer)`                      | `integer`         | Sum of the decimal digits of `\|n\|`                                             |
+| `Math.digit_count(n)`                 | `(integer)`                      | `integer`         | Number of decimal digits of `n`                                                  |
 | `Math.max(a, b)`                      | `(number, number)`               | `number`          | Larger of two values                                                             |
 | `Math.mean(arr)`                      | `(array<number>)`                | `result<number>`  | Arithmetic mean; fail if empty                                                   |
 | `Math.median(arr)`                    | `(array<number>)`                | `result<number>`  | Median value; fail if empty                                                      |
@@ -2205,6 +2244,9 @@ Functions for working with `optional<T>` values. All functions are available as 
 | `Optional.zip(a, b)`             | `(optional<A>, optional<B>)`                | `optional<(A, B)>` | Both some → tuple; either none → `none`                        |
 | `Optional.and_then(o, fn)`       | `(optional<T>, function(T) -> optional<U>)` | `optional<U>`      | Apply `fn` returning `optional<U>` if some; alias for `flat_map` |
 | `Optional.contains(o, value)`    | `(optional<T>, T)`                          | `boolean`          | Whether the optional holds a value equal to `value`            |
+| `Optional.expect(o, msg)`        | `(optional<T>, string)`                     | `T`                | Return inner value; runtime error with `msg` if `none`         |
+| `Optional.and(a, b)`             | `(optional<T>, optional<U>)`                | `optional<U>`      | `b` if `a` is some, otherwise `none`                           |
+| `Optional.xor(a, b)`             | `(optional<T>, optional<T>)`                | `optional<T>`      | Some iff exactly one of `a`, `b` is some                       |
 
 ```luma
 optional<integer> x = some(42)
@@ -2257,6 +2299,11 @@ a compile error rather than a sign-convention bug ("does negative mean first?").
 | `Order.then(first, second)` | `(Ordering, Ordering)` | `Ordering` | Return `first` unless it is `Equal`, then `second` (tie-break) |
 | `Order.to_number(o)`    | `(Ordering)`         | `number`    | Bridge to the numeric comparator: `-1.0` / `0.0` / `1.0`         |
 | `Order.from_number(n)`  | `(number)`           | `Ordering`  | Bridge from a negative / zero / positive comparator result       |
+| `Order.is_less(o)`      | `(Ordering)`         | `boolean`   | Whether `o` is `Less`                                            |
+| `Order.is_equal(o)`     | `(Ordering)`         | `boolean`   | Whether `o` is `Equal`                                          |
+| `Order.is_greater(o)`   | `(Ordering)`         | `boolean`   | Whether `o` is `Greater`                                        |
+| `Order.is_less_or_equal(o)` | `(Ordering)`     | `boolean`   | Whether `o` is `Less` or `Equal`                               |
+| `Order.is_greater_or_equal(o)` | `(Ordering)`  | `boolean`   | Whether `o` is `Greater` or `Equal`                            |
 
 `Order.of` compares strings, integers, numbers (with integer→number promotion), and
 booleans (`false` < `true`). Comparing values of incompatible types — or a `NaN` — is
@@ -2312,6 +2359,7 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 | `Process.run_command_typed(cmd)`                | `(Process.Command)` | `result<Process.CommandOutput, Process.Error>` | Like `run_command`; on a launch failure the error is a typed `Process.Error` |
 | `Process.get_arguments()`                       | `()`               | `array<string>`                 | Command-line arguments after the file name                               |
 | `Process.get_environment_variable(name)`        | `(string)`         | `result<string>`                | Environment variable value; fail if not set                              |
+| `Process.find_executable(name)`                 | `(string)`         | `optional<string>`              | Absolute path of `name` on `PATH` (honouring `PATHEXT` on Windows), or `none`; read-only |
 | `Process.get_process_id()`                      | `()`               | `integer`                       | Current process ID                                                       |
 | `Process.has_environment_variable(name)`        | `(string)`         | `boolean`                       | Whether the environment variable is set                                  |
 | `Process.run(cmd)`                              | `(string)`         | `result<Process.ProcessResult>` | Execute shell command and capture stdout                                 |
@@ -2391,6 +2439,11 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | Function                    | Parameter Types                   | Return Type              | Description                                            |
 | --------------------------- | --------------------------------- | ------------------------ | ------------------------------------------------------ |
 | `Queue.concat(a, b)`        | `(queue, queue)`                  | `queue`                  | Concatenate two queues                                 |
+| `Queue.any(q, fn)`          | `(queue, function(T) -> boolean)` | `result<boolean>`        | Whether any element matches; fail if callback throws   |
+| `Queue.all(q, fn)`          | `(queue, function(T) -> boolean)` | `result<boolean>`        | Whether all elements match; fail if callback throws    |
+| `Queue.count(q, fn)`        | `(queue, function(T) -> boolean)` | `result<integer>`        | Number of matching elements; fail if callback throws   |
+| `Queue.contains(q, v)`      | `(queue, T)`                      | `boolean`                | Whether `v` is in the queue (value equality)           |
+| `Queue.find(q, fn)`         | `(queue, function(T) -> boolean)` | `result<T>`              | First FIFO match; fail if none matches                 |
 | `Queue.dequeue(q)`          | `(queue)`                         | `result<(T, queue)>`     | Remove front element; fail if empty                    |
 | `Queue.each(q, fn)`         | `(queue, function(T) -> none)`    | `result<none>`           | Iterate for side effects; fail if callback throws      |
 | `Queue.enqueue(q, v)`       | `(queue, T)`                      | `queue`                  | Add element to back                                    |
@@ -2403,6 +2456,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Queue.partition(q, fn)`    | `(queue, function(T) -> boolean)` | `result<(queue, queue)>` | Split into `(matches, rest)`; fail if predicate throws |
 | `Queue.peek(q)`             | `(queue)`                         | `result<T>`              | View front element; fail if empty                      |
 | `Queue.reduce(q, init, fn)` | `(queue, U, function(U, T) -> U)` | `result<U>`              | Fold elements; fail if callback throws                 |
+| `Queue.reverse(q)`          | `(queue)`                         | `queue`                  | New queue with the element order reversed              |
 | `Queue.to_array(q)`         | `(queue)`                         | `array<T>`               | Convert to array                                       |
 
 ## 30 — Random
@@ -2413,6 +2467,8 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Random.generate_boolean()`       | `()`                  | `boolean`          | Random `true` or `false`                                                        |
 | `Random.generate_integer(lo, hi)` | `(integer, integer)`  | `result<integer>`  | Random integer in `[lo, hi]`; fail if `lo > hi`                                 |
 | `Random.generate_number()`        | `()`                  | `number`           | Random number in `[0, 1)`                                                       |
+| `Random.generate_bytes(n)`        | `(integer)`           | `result<array<integer>>` | `n` fast (non-secure) bytes, each in `[0, 255]`; fail if `n < 0`          |
+| `Random.set_seed(seed)`           | `(integer)`           | `none`             | Seed the non-secure PRNG so subsequent draws are reproducible                    |
 | `Random.generate_string(len)`     | `(integer)`           | `result<string>`   | Random alphanumeric string; fail if `len < 0`. **Not** cryptographically secure |
 | `Random.sample(arr, k)`           | `(array<T>, integer)` | `result<array<T>>` | `k` unique random elements; fail if `k > length`                                |
 | `Random.sample_from(distribution)` | `(Random.Distribution)` | `result<number>` | Draw a number from a `Random.Distribution`; see below for validation           |
@@ -2422,6 +2478,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Random.uuid_typed()`             | `()`                  | `Random.Uuid`      | UUID v4 (random) as a typed `Random.Uuid`. **Not** cryptographically secure     |
 | `Random.uuid_to_string(u)`        | `(Random.Uuid)`       | `string`           | The canonical string held by a `Random.Uuid`                                    |
 | `Random.secure_boolean()`         | `()`                  | `result<boolean>`  | Cryptographically secure random `true` or `false`                               |
+| `Random.secure_bytes(n)`          | `(integer)`           | `result<array<integer>>` | `n` cryptographically secure bytes, each in `[0, 255]`; the correct source for salts, keys, and nonces; fail if `n < 0` |
 | `Random.secure_integer(lo, hi)`   | `(integer, integer)`  | `result<integer>`  | Cryptographically secure uniform integer in `[lo, hi]`; fail if `lo > hi`       |
 | `Random.secure_number()`          | `()`                  | `result<number>`   | Cryptographically secure random number in `[0, 1)`                              |
 | `Random.secure_string(len)`       | `(integer)`           | `result<string>`   | Cryptographically secure alphanumeric string; fail if `len < 0`                 |
@@ -2462,6 +2519,11 @@ A reference cell wraps a value in a heap-allocated, thread-safe container. When 
 | `Reference.swap(ref1, ref2)` | `(reference<T>, reference<T>)`     | `none`         | Swap the values stored in two reference cells        |
 | `Reference.inspect(ref)`     | `(reference<T>)`                   | `string`       | String representation, e.g. `"ref(42)"`              |
 | `Reference.update(ref, fn)`  | `(reference<T>, function(T) -> T)` | `none`         | Apply `fn` to the current value and store the result |
+| `Reference.update_and_get(ref, fn)` | `(reference<T>, function(T) -> T)` | `T`     | Apply `fn`, store the result, and return the new value |
+| `Reference.get_and_update(ref, fn)` | `(reference<T>, function(T) -> T)` | `T`     | Apply `fn` and store it, returning the previous value |
+| `Reference.get_and_set(ref, value)` | `(reference<T>, T)`         | `T`            | Store `value` and return the previous value          |
+| `Reference.equals(a, b)`     | `(reference<T>, reference<T>)`     | `boolean`      | Whether the two cells hold equal values              |
+| `Reference.same(a, b)`       | `(reference<T>, reference<T>)`     | `boolean`      | Whether the two arguments are the same cell (identity) |
 
 ```luma
 reference<integer> count = Reference.new(0)

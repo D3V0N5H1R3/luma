@@ -139,6 +139,33 @@ void register_order_ns(const EnvPtr& env) {
 
             return make_ordering(sign);
         });
+
+    // Boolean predicates reading an Ordering as a condition, so the everyday
+    // comparison needs no match: Order.is_less(Order.of(a, b)) and friends.
+    builder.func("is_less", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{expect_ordering(args[0], "Order.is_less", loc) < 0};
+        });
+
+    builder.func("is_equal", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{expect_ordering(args[0], "Order.is_equal", loc) == 0};
+        });
+
+    builder.func("is_greater", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{expect_ordering(args[0], "Order.is_greater", loc) > 0};
+        });
+
+    builder.func("is_less_or_equal", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{expect_ordering(args[0], "Order.is_less_or_equal", loc) <= 0};
+        });
+
+    builder.func("is_greater_or_equal", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return Value{expect_ordering(args[0], "Order.is_greater_or_equal", loc) >= 0};
+        });
 }
 
 } // namespace luma

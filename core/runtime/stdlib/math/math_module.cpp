@@ -525,6 +525,47 @@ void register_math_ns(const EnvPtr& env) {
             // including negatives (e.g. -4 % 2 == 0).
             return Value{n % 2 == 0};
         })
+        .func("digit_sum", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto n = expect_integer(args[0], "Math.digit_sum", loc);
+
+            std::int64_t sum{0};
+
+            // Accumulate on the negative side so INT64_MIN (whose magnitude has no
+            // positive representation) is handled without overflow.
+            if (n > 0) {
+                n = -n;
+            }
+
+            while (n != 0) {
+                sum += -(n % 10);
+                n /= 10;
+            }
+
+            return Value{sum};
+        })
+        .func("digit_count", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto n = expect_integer(args[0], "Math.digit_count", loc);
+
+            if (n == 0) {
+                return Value{static_cast<std::int64_t>(1)};
+            }
+
+            std::int64_t count{0};
+
+            // Divide on the negative side so INT64_MIN is counted without overflow.
+            if (n > 0) {
+                n = -n;
+            }
+
+            while (n != 0) {
+                ++count;
+                n /= 10;
+            }
+
+            return Value{count};
+        })
         .func("is_odd", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto n = expect_integer(args[0], "Math.is_odd", loc);

@@ -439,3 +439,47 @@ function void test_linkedlist_remove_at_out_of_bounds_fails() {
 function void test_linkedlist_remove_at_negative_fails() {
     assert(LinkedList.from_array([1, 2]) |> LinkedList.remove_at(-1) |> Result.is_failure())
 }
+
+# ─── query / slice / reduction / decomposition additions ─
+
+@test
+function void test_linkedlist_any_all_count() {
+    linked_list ll = LinkedList.from_array([1, 2, 3, 4])
+    assert(Result.unwrap(LinkedList.any(ll, (integer x) -> x > 3)))
+    assert(!Result.unwrap(LinkedList.all(ll, (integer x) -> x > 3)))
+    assert(Result.unwrap(LinkedList.count(ll, (integer x) -> x > 2)) == 2)
+}
+
+@test
+function void test_linkedlist_take_drop() {
+    linked_list ll = LinkedList.from_array([1, 2, 3, 4, 5])
+    assert(LinkedList.length(LinkedList.take(ll, 2)) == 2)
+    assert(LinkedList.length(LinkedList.take(ll, 99)) == 5)
+    assert(LinkedList.length(LinkedList.drop(ll, 2)) == 3)
+    assert(LinkedList.length(LinkedList.drop(ll, 99)) == 0)
+    linked_list tw = Result.unwrap(LinkedList.take_while(ll, (integer x) -> x < 3))
+    assert(LinkedList.length(tw) == 2)
+    linked_list dw = Result.unwrap(LinkedList.drop_while(ll, (integer x) -> x < 3))
+    assert(LinkedList.length(dw) == 3)
+}
+
+@test
+function void test_linkedlist_min_max_sum() {
+    linked_list ll = LinkedList.from_array([3, 1, 4, 1, 5])
+    assert(Result.unwrap(LinkedList.min(ll)) == 1)
+    assert(Result.unwrap(LinkedList.max(ll)) == 5)
+    assert(Result.unwrap(LinkedList.sum(ll)) == 14)
+    assert(Result.is_failure(LinkedList.min(LinkedList.new())))
+}
+
+@test
+function void test_linkedlist_tail_uncons() {
+    linked_list ll = LinkedList.from_array([1, 2, 3])
+    linked_list t = Result.unwrap(LinkedList.tail(ll))
+    assert(LinkedList.length(t) == 2)
+    assert(Result.unwrap(LinkedList.first(t)) == 2)
+    (integer, linked_list) parts = Result.unwrap(LinkedList.uncons(ll))
+    assert(parts.0 == 1)
+    assert(LinkedList.length(parts.1) == 2)
+    assert(Result.is_failure(LinkedList.tail(LinkedList.new())))
+}

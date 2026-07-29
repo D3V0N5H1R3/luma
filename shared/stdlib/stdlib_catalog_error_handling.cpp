@@ -56,6 +56,10 @@ void register_optional_functions(std::vector<FunctionSpec>& specs, const ModuleB
                                  const ParamShorthands& p) {
     append_specs(
         specs, {
+                   m.fn("and", 2, "(a: optional<T>, b: optional<U>)", R::optional_any(),
+                        {p.optional_any, p.optional_any}),
+                   m.fn("expect", 2, "(value: optional<T>, message: string)", R::any_type(),
+                        {p.optional_any, p.string}),
                    m.fn("filter", 2, "(value: optional<T>, f: func(T) -> boolean)",
                         R::optional_any(), {p.optional_any, p.func}),
                    m.fn("flat_map", 2, "(value: optional<T>, f: func(T) -> optional<U>)",
@@ -81,6 +85,8 @@ void register_optional_functions(std::vector<FunctionSpec>& specs, const ModuleB
                         R::optional_any(), {p.optional_any, p.func}),
                    m.fn("contains", 2, "(value: optional<T>, expected: T)", R::boolean_type(),
                         {p.optional_any, p.any}),
+                   m.fn("xor", 2, "(a: optional<T>, b: optional<T>)", R::optional_any(),
+                        {p.optional_any, p.optional_any}),
                });
 }
 
@@ -89,13 +95,23 @@ void register_reference_functions(std::vector<FunctionSpec>& specs, const Module
     append_specs(specs,
                  {
                      m.fn("get", 1, "(ref: reference<T>)", R::any_type(), {p.reference_any}),
+                     m.fn("get_and_set", 2, "(ref: reference<T>, value: T)", R::any_type(),
+                          {p.reference_any, p.any}),
+                     m.fn("get_and_update", 2, "(ref: reference<T>, f: func(T) -> T)", R::any_type(),
+                          {p.reference_any, p.func}),
                      m.fn("new", 1, "(value: T)", R::any_type(), {p.any}),
                      m.fn("set", 2, "(ref: reference<T>, value: T)", R::void_type(),
                           {p.reference_any, p.any}),
                      m.fn("swap", 2, "(a: reference<T>, b: reference<T>)", R::void_type(),
                           {p.reference_any, p.reference_any}),
                      m.fn("inspect", 1, "(ref: reference<T>)", R::string_type(), {p.reference_any}),
+                     m.fn("equals", 2, "(a: reference<T>, b: reference<T>)", R::boolean_type(),
+                          {p.reference_any, p.reference_any}),
+                     m.fn("same", 2, "(a: reference<T>, b: reference<T>)", R::boolean_type(),
+                          {p.reference_any, p.reference_any}),
                      m.fn("update", 2, "(ref: reference<T>, f: func(T) -> T)", R::void_type(),
+                          {p.reference_any, p.func}),
+                     m.fn("update_and_get", 2, "(ref: reference<T>, f: func(T) -> T)", R::any_type(),
                           {p.reference_any, p.func}),
                  });
 }

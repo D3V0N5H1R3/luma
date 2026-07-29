@@ -15,6 +15,12 @@ void register_order_functions(std::vector<FunctionSpec>& specs, const ModuleBuil
                                  named::ordering(), {p.any, p.any}),
                             m.fn("to_number", 1, "(o: Ordering)", R::number_type(), {p.any}),
                             m.fn("from_number", 1, "(n: number)", named::ordering(), {p.number}),
+                            m.fn("is_less", 1, "(o: Ordering)", R::boolean_type(), {p.any}),
+                            m.fn("is_equal", 1, "(o: Ordering)", R::boolean_type(), {p.any}),
+                            m.fn("is_greater", 1, "(o: Ordering)", R::boolean_type(), {p.any}),
+                            m.fn("is_less_or_equal", 1, "(o: Ordering)", R::boolean_type(), {p.any}),
+                            m.fn("is_greater_or_equal", 1, "(o: Ordering)", R::boolean_type(),
+                                 {p.any}),
                         });
 }
 

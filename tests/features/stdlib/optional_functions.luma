@@ -222,3 +222,19 @@ function void test_optional_contains() {
     assert(!Optional.contains(empty, 42))
     assert(Optional.contains(some("hi"), "hi"))
 }
+
+# ─── expect / and / xor additions ────────────────────────
+
+@test
+function void test_optional_expect() {
+    assert(Optional.expect(some(42), "should exist") == 42)
+}
+
+@test
+function void test_optional_and_xor() {
+    assert(Optional.is_some(Optional.and(some(1), some(2))))
+    assert(Optional.is_none(Optional.and(none, some(2))))
+    assert(Optional.is_some(Optional.xor(some(1), none)))
+    assert(Optional.is_none(Optional.xor(some(1), some(2))))
+    assert(Optional.is_none(Optional.xor(none, none)))
+}

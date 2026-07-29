@@ -23,6 +23,7 @@
 #include "runtime/stdlib/common/error_messages.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
+#include "runtime/stdlib/common/native_function_containers.hpp"
 #include "runtime/stdlib/common/path_validator.hpp"
 
 namespace luma::kvs {
@@ -347,6 +348,22 @@ void register_keyvaluestore_ns(const EnvPtr& env) {
 
             return make_success_value(Value{it->second});
         })
+        // KeyValueStore.get_or(store, key, default) -> string
+        .func("get_or", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& store = expect_key_value_store(args[0], "KeyValueStore.get_or", loc);
+            const auto& key = expect_string(args[1], "KeyValueStore.get_or", loc);
+            const auto& fallback = expect_string(args[2], "KeyValueStore.get_or", loc);
+            const std::scoped_lock lock{store->mutex};
+
+            auto it = store->entries.find(key);
+
+            if (it == store->entries.end()) {
+                return Value{fallback};
+            }
+
+            return Value{it->second};
+        })
         // KeyValueStore.set(store, key, value) -> result<key_value_store>
         .func("set", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -381,6 +398,55 @@ void register_keyvaluestore_ns(const EnvPtr& env) {
             const std::scoped_lock lock{store->mutex};
 
             return Value{store->entries.contains(key)};
+        })
+        // KeyValueStore.is_empty(store) -> boolean
+        .func("is_empty", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& store = expect_key_value_store(args[0], "KeyValueStore.is_empty", loc);
+            const std::scoped_lock lock{store->mutex};
+
+            return Value{store->entries.empty()};
+        })
+        // KeyValueStore.update(store, key, fn(optional<string>) -> string) -> result<key_value_store>
+        // Read-modify-write for a single key: the updater receives the current
+        // value, or none when the key is absent, and returns the new value.
+        .func("update", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& store = expect_key_value_store(args[0], "KeyValueStore.update", loc);
+            const auto& key = expect_string(args[1], "KeyValueStore.update", loc);
+            expect_callable(args[2], "KeyValueStore.update", loc);
+
+            if (store->read_only) {
+                return read_only_failure("update");
+            }
+
+            // Read the current value (or none) under the lock, then release it
+            // before invoking the callback so a re-entrant store call cannot
+            // deadlock on the same mutex.
+            std::optional<std::string> current;
+            {
+                const std::scoped_lock lock{store->mutex};
+                auto it = store->entries.find(key);
+
+                if (it != store->entries.end()) {
+                    current = it->second;
+                }
+            }
+
+            std::vector<Value> call_args(1);
+            call_args[0] = current.has_value() ? Value{*current} : Value{NullValue{}};
+            auto new_value = invoke_callable(args[2], call_args, loc);
+            const auto& new_string = expect_string(new_value, "KeyValueStore.update", loc);
+
+            return mutate_store("update", store, [&](kvs::StoreEntries& entries) {
+                if (!entries.contains(key) &&
+                    entries.size() >= ResourceLimits::max_dictionary_size) {
+                    throw RuntimeError{"KeyValueStore exceeds maximum entry count", loc,
+                                       "the store already holds max_dictionary_size entries"};
+                }
+
+                entries[key] = new_string;
+            });
         })
         // KeyValueStore.set_many(store, dictionary) -> result<key_value_store>
         .func("set_many", 2)

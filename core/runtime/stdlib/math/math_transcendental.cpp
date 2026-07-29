@@ -121,6 +121,147 @@ void register_math_transcendental(const EnvPtr& env) {
             const auto t = std::clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
 
             return make_success_value(Value{t * t * (3.0 - (2.0 * t))});
+        })
+        // Math.log_base(value, base) -> result<number>
+        .func("log_base", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto value = expect_numeric(args[0], "Math.log_base", loc);
+            const auto base = expect_numeric(args[1], "Math.log_base", loc);
+
+            if (base <= 0.0 || base == 1.0) {
+                return make_failure_value(
+                    error_msg("Math", "log_base", "base must be positive and not 1"));
+            }
+
+            if (value <= 0.0) {
+                return make_failure_value(error_msg("Math", "log_base", "value must be positive"));
+            }
+
+            const auto result = std::log(value) / std::log(base);
+
+            if (!stdlib::is_valid_numeric(result)) {
+                return make_failure_value(
+                    error_msg("Math", "log_base", "result is not a finite number"));
+            }
+
+            return make_success_value(Value{result});
+        })
+        // Math.nth_root(value, n) -> result<number>
+        .func("nth_root", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto value = expect_numeric(args[0], "Math.nth_root", loc);
+            const auto n = expect_numeric(args[1], "Math.nth_root", loc);
+
+            if (n == 0.0) {
+                return make_failure_value(error_msg("Math", "nth_root", "root degree must not be 0"));
+            }
+
+            double result{0.0};
+
+            if (value < 0.0) {
+                // A negative radicand only has a real root for an odd-integer degree.
+                const bool odd_integer = (std::floor(n) == n) && (std::fmod(n, 2.0) != 0.0);
+
+                if (!odd_integer) {
+                    return make_failure_value(
+                        error_msg("Math", "nth_root", "even or fractional root of a negative value"));
+                }
+
+                result = -std::pow(-value, 1.0 / n);
+            } else {
+                result = std::pow(value, 1.0 / n);
+            }
+
+            if (!stdlib::is_valid_numeric(result)) {
+                return make_failure_value(
+                    error_msg("Math", "nth_root", "result is not a finite number"));
+            }
+
+            return make_success_value(Value{result});
+        })
+        // Math.wrap(x, lo, hi) -> number
+        .func("wrap", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto x = expect_numeric(args[0], "Math.wrap", loc);
+            const auto lo = expect_numeric(args[1], "Math.wrap", loc);
+            const auto hi = expect_numeric(args[2], "Math.wrap", loc);
+
+            const auto range = hi - lo;
+
+            if (range <= 0.0) {
+                return Value{lo};
+            }
+
+            auto wrapped = std::fmod(x - lo, range);
+
+            if (wrapped < 0.0) {
+                wrapped += range;
+            }
+
+            return Value{lo + wrapped};
+        })
+        // Math.normalize_angle(radians) -> number
+        .func("normalize_angle", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto radians = expect_numeric(args[0], "Math.normalize_angle", loc);
+            constexpr double two_pi = 2.0 * std::numbers::pi;
+
+            auto r = std::fmod(radians + std::numbers::pi, two_pi);
+
+            if (r < 0.0) {
+                r += two_pi;
+            }
+
+            return Value{r - std::numbers::pi};
+        })
+        // Math.angle_difference(a, b) -> number
+        .func("angle_difference", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto a = expect_numeric(args[0], "Math.angle_difference", loc);
+            const auto b = expect_numeric(args[1], "Math.angle_difference", loc);
+            constexpr double two_pi = 2.0 * std::numbers::pi;
+
+            auto r = std::fmod((a - b) + std::numbers::pi, two_pi);
+
+            if (r < 0.0) {
+                r += two_pi;
+            }
+
+            return Value{r - std::numbers::pi};
+        })
+        // Math.sigmoid(x) -> number
+        .func("sigmoid", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto x = expect_numeric(args[0], "Math.sigmoid", loc);
+
+            return Value{1.0 / (1.0 + std::exp(-x))};
+        })
+        // Math.gamma(x) -> result<number>
+        .func("gamma", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto x = expect_numeric(args[0], "Math.gamma", loc);
+
+            // The gamma function has poles at zero and the negative integers.
+            if (x <= 0.0 && std::floor(x) == x) {
+                return make_failure_value(
+                    error_msg("Math", "gamma", "gamma is undefined at non-positive integers"));
+            }
+
+            const auto result = std::tgamma(x);
+
+            if (!stdlib::is_valid_numeric(result)) {
+                return make_failure_value(
+                    error_msg("Math", "gamma", "result is not a finite number"));
+            }
+
+            return make_success_value(Value{result});
+        })
+        // Math.erf(x) -> number
+        .func("erf", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto x = expect_numeric(args[0], "Math.erf", loc);
+
+            return Value{std::erf(x)};
         });
 }
 

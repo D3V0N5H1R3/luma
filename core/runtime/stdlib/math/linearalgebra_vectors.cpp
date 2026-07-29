@@ -261,6 +261,128 @@ void register_linearalgebra_vectors(const EnvPtr& env) {
             }
 
             return Value{std::fabs(dot_product(a, b)) < k_orthogonality_tolerance};
+        })
+        .func("hadamard", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            return apply_binary_vec_op(args, "LinearAlgebra.hadamard", loc,
+                                       [](double a, double b) { return a * b; });
+        })
+        .func("project", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto a = to_vec(args[0], "LinearAlgebra.project", loc);
+            auto b = to_vec(args[1], "LinearAlgebra.project", loc);
+
+            if (auto mismatch = require_same_dimension(a, b, "LinearAlgebra.project")) {
+                return *mismatch;
+            }
+
+            const auto bb = dot_product(b, b);
+
+            if (bb < k_singularity_threshold) {
+                return make_failure_value("LinearAlgebra.project: zero vector");
+            }
+
+            const auto scale = dot_product(a, b) / bb;
+            std::vector<double> result(b.size());
+
+            for (std::size_t i{0}; i < b.size(); ++i) {
+                result[i] = scale * b[i];
+            }
+
+            return make_success_value(from_vec(result));
+        })
+        .func("reject", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto a = to_vec(args[0], "LinearAlgebra.reject", loc);
+            auto b = to_vec(args[1], "LinearAlgebra.reject", loc);
+
+            if (auto mismatch = require_same_dimension(a, b, "LinearAlgebra.reject")) {
+                return *mismatch;
+            }
+
+            const auto bb = dot_product(b, b);
+
+            if (bb < k_singularity_threshold) {
+                return make_failure_value("LinearAlgebra.reject: zero vector");
+            }
+
+            const auto scale = dot_product(a, b) / bb;
+            std::vector<double> result(a.size());
+
+            for (std::size_t i{0}; i < a.size(); ++i) {
+                result[i] = a[i] - (scale * b[i]);
+            }
+
+            return make_success_value(from_vec(result));
+        })
+        .func("lerp", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto a = to_vec(args[0], "LinearAlgebra.lerp", loc);
+            auto b = to_vec(args[1], "LinearAlgebra.lerp", loc);
+            const auto t = expect_numeric(args[2], "LinearAlgebra.lerp", loc);
+
+            if (auto mismatch = require_same_dimension(a, b, "LinearAlgebra.lerp")) {
+                return *mismatch;
+            }
+
+            std::vector<double> result(a.size());
+
+            for (std::size_t i{0}; i < a.size(); ++i) {
+                result[i] = a[i] + (t * (b[i] - a[i]));
+            }
+
+            return make_success_value(from_vec(result));
+        })
+        .func("outer", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto a = to_vec(args[0], "LinearAlgebra.outer", loc);
+            auto b = to_vec(args[1], "LinearAlgebra.outer", loc);
+
+            if (a.empty() || b.empty()) {
+                return make_failure_value("LinearAlgebra.outer: vectors must be non-empty");
+            }
+
+            std::vector<std::vector<double>> result(a.size(), std::vector<double>(b.size(), 0.0));
+
+            for (std::size_t i{0}; i < a.size(); ++i) {
+                for (std::size_t j{0}; j < b.size(); ++j) {
+                    result[i][j] = a[i] * b[j];
+                }
+            }
+
+            return make_success_value(numeric::from_mat(result));
+        })
+        .func("sum", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto v = to_vec(args[0], "LinearAlgebra.sum", loc);
+
+            return Value{std::accumulate(v.begin(), v.end(), 0.0)};
+        })
+        .func("mean", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto v = to_vec(args[0], "LinearAlgebra.mean", loc);
+
+            if (v.empty()) {
+                return make_failure_value("LinearAlgebra.mean: empty vector");
+            }
+
+            return make_success_value(
+                Value{std::accumulate(v.begin(), v.end(), 0.0) / static_cast<double>(v.size())});
+        })
+        .func("clamp", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto v = to_vec(args[0], "LinearAlgebra.clamp", loc);
+            const auto lo = expect_numeric(args[1], "LinearAlgebra.clamp", loc);
+            const auto hi = expect_numeric(args[2], "LinearAlgebra.clamp", loc);
+
+            const auto low = std::min(lo, hi);
+            const auto high = std::max(lo, hi);
+
+            for (auto& x : v) {
+                x = std::clamp(x, low, high);
+            }
+
+            return Value{from_vec(v)};
         });
 }
 

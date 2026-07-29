@@ -38,6 +38,26 @@ function void test_keyvaluestore_has_missing() {
 }
 
 @test
+function void test_keyvaluestore_get_or_present() {
+    string val = KeyValueStore.open("test_kv_luma_getor1.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.set("port", "8080")
+    |> Result.unwrap()
+    |> KeyValueStore.get_or("port", "3000")
+
+    assert(val == "8080")
+}
+
+@test
+function void test_keyvaluestore_get_or_missing() {
+    string val = KeyValueStore.open("test_kv_luma_getor2.kv")
+    |> Result.unwrap()
+    |> KeyValueStore.get_or("port", "3000")
+
+    assert(val == "3000")
+}
+
+@test
 function void test_keyvaluestore_remove() {
     boolean found = KeyValueStore.open("test_kv_luma4.kv")
     |> Result.unwrap()
@@ -465,4 +485,19 @@ function void test_keyvaluestore_destroy_read_only_fails() {
     |> KeyValueStore.destroy()
 
     assert(!Result.is_success(r))
+}
+
+@test
+function void test_keyvaluestore_is_empty_and_update() {
+    key_value_store s = Result.unwrap(KeyValueStore.open("test_kv_luma_update.kv"))
+    assert(KeyValueStore.is_empty(s))
+
+    key_value_store s2 = Result.unwrap(
+        KeyValueStore.update(s, "count", (optional<string> cur) -> Optional.unwrap_or(cur, "0")))
+    assert(!KeyValueStore.is_empty(s2))
+    assert(KeyValueStore.get_or(s2, "count", "x") == "0")
+
+    key_value_store s3 = Result.unwrap(
+        KeyValueStore.update(s2, "count", (optional<string> cur) -> Optional.unwrap_or(cur, "0") + "1"))
+    assert(KeyValueStore.get_or(s3, "count", "x") == "01")
 }

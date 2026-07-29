@@ -65,6 +65,7 @@ static void test_keyvaluestore_module() {
     ASSERT_TRUE(env->has("KeyValueStore.open"));
     ASSERT_TRUE(env->has("KeyValueStore.open_read_only"));
     ASSERT_TRUE(env->has("KeyValueStore.get"));
+    ASSERT_TRUE(env->has("KeyValueStore.get_or"));
     ASSERT_TRUE(env->has("KeyValueStore.set"));
     ASSERT_TRUE(env->has("KeyValueStore.remove"));
     ASSERT_TRUE(env->has("KeyValueStore.has"));
@@ -136,6 +137,30 @@ static void test_keyvaluestore_has_false() {
 
     ASSERT_TRUE(v.is_bool());
     ASSERT_FALSE(v.as_bool());
+}
+
+static void test_keyvaluestore_get_or_present() {
+    const auto v = eval(R"(
+        KeyValueStore.open("test_kv_cpp_getor1.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("name", "alice")
+        |> Result.unwrap()
+        |> KeyValueStore.get_or("name", "fallback")
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "alice");
+}
+
+static void test_keyvaluestore_get_or_missing_returns_default() {
+    const auto v = eval(R"(
+        KeyValueStore.open("test_kv_cpp_getor2.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.get_or("absent", "fallback")
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "fallback");
 }
 
 static void test_keyvaluestore_remove() {
@@ -614,6 +639,8 @@ int main() {
     RUN(test_keyvaluestore_set_overwrites);
     RUN(test_keyvaluestore_has);
     RUN(test_keyvaluestore_has_false);
+    RUN(test_keyvaluestore_get_or_present);
+    RUN(test_keyvaluestore_get_or_missing_returns_default);
     RUN(test_keyvaluestore_remove);
     RUN(test_keyvaluestore_count);
     RUN(test_keyvaluestore_clear);
