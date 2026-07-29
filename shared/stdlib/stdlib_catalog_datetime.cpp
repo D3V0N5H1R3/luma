@@ -138,6 +138,10 @@ void register_date_time_functions(std::vector<FunctionSpec>& specs, const Module
             m.constant("seconds_per_hour", R::integer_type()),
             m.constant("seconds_per_day", R::integer_type()),
             m.constant("days_per_week", R::integer_type()),
+            m.constant("minutes_per_hour", R::integer_type()),
+            m.constant("hours_per_day", R::integer_type()),
+            m.constant("months_per_year", R::integer_type()),
+            m.constant("milliseconds_per_second", R::integer_type()),
         });
 }
 

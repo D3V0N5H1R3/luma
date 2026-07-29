@@ -933,4 +933,27 @@ function void test_string_ends_with_any() {
     assert(!String.ends_with_any("hello", ["xy", "z"]))
 }
 
+@test
+function void test_string_character_class_constants() {
+    assert(String.digits == "0123456789")
+    assert(String.hex_digits == "0123456789abcdef")
+    assert(String.ascii_lowercase == "abcdefghijklmnopqrstuvwxyz")
+    assert(String.ascii_uppercase == "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    assert(String.ascii_letters == String.ascii_lowercase + String.ascii_uppercase)
+    assert(String.length(String.ascii_letters) == 52)
+    # Whitespace: space, tab, newline, carriage return, form-feed, vertical-tab.
+    assert(String.length(String.whitespace) == 6)
+    assert(String.contains(String.whitespace, " "))
+    assert(String.contains(String.whitespace, "\t"))
+    assert(String.contains(String.whitespace, "\n"))
+    # Punctuation is the ASCII punctuation set and excludes letters and digits.
+    assert(String.contains(String.punctuation, "!"))
+    assert(String.contains(String.punctuation, "@"))
+    assert(!String.contains(String.punctuation, "a"))
+    assert(!String.contains(String.punctuation, "0"))
+    # The constants compose with existing predicates.
+    assert(String.is_digit(String.digits))
+    assert(String.is_ascii(String.punctuation))
+}
+
 

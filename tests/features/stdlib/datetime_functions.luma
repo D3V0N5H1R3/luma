@@ -1017,4 +1017,8 @@ function void test_datetime_constants() {
     assert(DateTime.seconds_per_hour == 3600)
     assert(DateTime.seconds_per_day == 86400)
     assert(DateTime.days_per_week == 7)
+    assert(DateTime.minutes_per_hour == 60)
+    assert(DateTime.hours_per_day == 24)
+    assert(DateTime.months_per_year == 12)
+    assert(DateTime.milliseconds_per_second == 1000)
 }

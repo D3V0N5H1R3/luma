@@ -1,5 +1,7 @@
 // Standard library tests: Math module.
 
+#include <limits>
+
 #include "stdlib_test_helpers.hpp"
 
 LUMA_TEST(math_absolute) {
@@ -169,6 +171,21 @@ LUMA_TEST(math_is_even_odd) {
 LUMA_TEST(math_integer_bounds) {
     ASSERT_EQ(eval("Math.max_integer").as_integer(), 9223372036854775807LL);
     ASSERT_EQ(eval("Math.min_integer").as_integer(), -9223372036854775807LL - 1);
+}
+
+LUMA_TEST(math_number_bounds) {
+    // Largest finite double and smallest positive normal double.
+    ASSERT_EQ(eval("Math.max_number").as_number(), std::numeric_limits<double>::max());
+    ASSERT_EQ(eval("Math.min_number").as_number(), std::numeric_limits<double>::min());
+    ASSERT_TRUE(eval("Math.min_number").as_number() > 0.0);
+    ASSERT_EQ(eval("Math.is_finite(Math.max_number)").as_bool(), true);
+}
+
+LUMA_TEST(math_named_constants) {
+    ASSERT_NEAR(eval("Math.sqrt2").as_number(), 1.4142135623730951, 1e-12);
+    ASSERT_NEAR(eval("Math.golden_ratio").as_number(), 1.618033988749895, 1e-12);
+    ASSERT_NEAR(eval("Math.ln2").as_number(), 0.6931471805599453, 1e-12);
+    ASSERT_NEAR(eval("Math.ln10").as_number(), 2.302585092994046, 1e-12);
 }
 
 LUMA_TEST(math_epsilon) {

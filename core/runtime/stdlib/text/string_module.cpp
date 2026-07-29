@@ -226,6 +226,19 @@ std::string apply_padding(const std::string& input, const std::string& fill,
 }
 
 void register_string_ns(const EnvPtr& env) {
+    // Character-class constants — canonical alphabets beginners can draw from
+    // instead of hand-typing magic literals (mirrors Python's string module).
+    env->define("String.digits", Value{std::string{"0123456789"}}, false);
+    env->define("String.hex_digits", Value{std::string{"0123456789abcdef"}}, false);
+    env->define("String.ascii_lowercase", Value{std::string{"abcdefghijklmnopqrstuvwxyz"}}, false);
+    env->define("String.ascii_uppercase", Value{std::string{"ABCDEFGHIJKLMNOPQRSTUVWXYZ"}}, false);
+    env->define("String.ascii_letters",
+                Value{std::string{"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"}}, false);
+    // Space, tab, newline, carriage return, form-feed, vertical-tab.
+    env->define("String.whitespace", Value{std::string{" \t\n\r\f\v"}}, false);
+    env->define("String.punctuation", Value{std::string{R"(!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~)"}},
+                false);
+
     ModuleBuilder{"String", env}
         .func("length", 1)
         .extract_body(expect_string,

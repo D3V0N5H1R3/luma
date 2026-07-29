@@ -150,6 +150,31 @@ function void test_math_integer_bounds() {
 }
 
 @test
+function void test_math_number_bounds() {
+    # Largest finite number and smallest positive normal number.
+    assert(Math.max_number > 0.0)
+    assert(Math.min_number > 0.0)
+    assert(Math.max_number > Math.min_number)
+    assert(Math.is_finite(Math.max_number))
+    # A very large everyday value is still below the finite maximum.
+    assert(Math.max_number > 1.0e300)
+    assert(Math.min_number < 1.0e-300)
+}
+
+@test
+function void test_math_named_constants() {
+    # Constants sourced from the C++ <numbers> header.
+    assert(Math.approximately_equal(Math.sqrt2, 1.4142135623730951, 0.0000001))
+    assert(Math.approximately_equal(Math.golden_ratio, 1.618033988749895, 0.0000001))
+    assert(Math.approximately_equal(Math.ln2, 0.6931471805599453, 0.0000001))
+    assert(Math.approximately_equal(Math.ln10, 2.302585092994046, 0.0000001))
+    # sqrt2 squared is 2; golden ratio satisfies phi^2 = phi + 1.
+    assert(Math.approximately_equal(Math.sqrt2 * Math.sqrt2, 2.0, 0.0000001))
+    assert(Math.approximately_equal(Math.golden_ratio * Math.golden_ratio,
+                                    Math.golden_ratio + 1.0, 0.0000001))
+}
+
+@test
 function void test_math_epsilon() {
     # Machine epsilon is a tiny positive tolerance.
     assert(Math.epsilon > 0.0)
