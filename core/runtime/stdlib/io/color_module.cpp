@@ -299,6 +299,7 @@ struct Hsl {
 
     return hsl_to_rgb(hsl, c.alpha);
 }
+
 // saturation and value as 0–1 ratios.
 struct Hsv {
     double hue;

@@ -172,18 +172,20 @@ void register_set_ns(const EnvPtr& env) {
                           return Value{std::move(result)};
                       })
         .func("symmetric_difference", 2)
-        .extract_body(expect_set, [](const auto& a, const Args& args, SourceLocation loc) -> Value {
-            auto b = expect_set(args[1], "Set.symmetric_difference", loc);
-            auto result = std::make_shared<SetValue>();
+        .extract_body(
+            expect_set,
+            [](const auto& a, const Args& args, SourceLocation loc) -> Value {
+                auto b = expect_set(args[1], "Set.symmetric_difference", loc);
+                auto result = std::make_shared<SetValue>();
 
-            // (a \ b) followed by (b \ a); the two slices are disjoint, so
-            // append_members can push each directly (see its contract).
-            append_members(result->elements, a->elements, *b,
-                           /*keep_when_present=*/false, "Set.symmetric_difference", loc);
-            append_members(result->elements, b->elements, *a,
-                           /*keep_when_present=*/false, "Set.symmetric_difference", loc);
-            return Value{std::move(result)};
-        })
+                // (a \ b) followed by (b \ a); the two slices are disjoint, so
+                // append_members can push each directly (see its contract).
+                append_members(result->elements, a->elements, *b,
+                               /*keep_when_present=*/false, "Set.symmetric_difference", loc);
+                append_members(result->elements, b->elements, *a,
+                               /*keep_when_present=*/false, "Set.symmetric_difference", loc);
+                return Value{std::move(result)};
+            })
         // Predicate queries mirroring Array.any/all/count/find.  Set stores its
         // elements in insertion order, so find returns the first (in stored
         // order) match, with a result<T> "not found" failure like Array.find.
@@ -207,12 +209,13 @@ void register_set_ns(const EnvPtr& env) {
                                             loc);
                       })
         .func("find", 2)
-        .extract_body(expect_set, [](const auto& src, const Args& args, SourceLocation loc) -> Value {
-            expect_callable(args[1], "Set.find", loc);
-            return find_with_error_handling(
-                src->elements.begin(), src->elements.end(), args[1],
-                [](const auto& it) { return *it; }, loc);
-        });
+        .extract_body(expect_set,
+                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                          expect_callable(args[1], "Set.find", loc);
+                          return find_with_error_handling(
+                              src->elements.begin(), src->elements.end(), args[1],
+                              [](const auto& it) { return *it; }, loc);
+                      });
 }
 
 } // namespace luma

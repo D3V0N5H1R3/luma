@@ -784,9 +784,8 @@ static void test_string_insert() {
     ASSERT_EVAL_STR("String.insert(\"hello\", 5, \"!\")", "hello!");
     ASSERT_EVAL_STR("String.insert(\"hello\", 2, \"XY\")", "heXYllo");
     // Codepoint indexing: insert after the 'é' (1 codepoint, 2 bytes).
-    ASSERT_EVAL_STR(
-        "String.insert(Result.unwrap(String.from_codepoints([233, 233])), 1, \"-\")",
-        "\xC3\xA9-\xC3\xA9");
+    ASSERT_EVAL_STR("String.insert(Result.unwrap(String.from_codepoints([233, 233])), 1, \"-\")",
+                    "\xC3\xA9-\xC3\xA9");
 }
 
 static void test_string_insert_out_of_bounds() {

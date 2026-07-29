@@ -123,55 +123,54 @@ void register_string_functions(std::vector<FunctionSpec>& specs, const ModuleBui
 
 void register_regular_expression_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                            const ParamShorthands& p) {
-    append_specs(specs,
-                 {
-                     m.fn("find", 2, "(text: string, pattern: string)", R::result(named::match()),
-                          {p.string, p.string}),
-                     m.fn("find_all", 2, "(text: string, pattern: string)",
-                          R::result(R::array(named::match())), {p.string, p.string}),
-                     m.fn("is_valid", 1, "(pattern: string)", R::boolean_type(), {p.string}),
-                     m.fn("count", 2, "(text: string, pattern: string)", R::result_integer(),
-                          {p.string, p.string}),
-                     m.fn("compile_typed", 1, "(pattern: string)",
-                          R::result(R::string_type(), named::regex_error()), {p.string}),
-                     m.fn("matches", 2, "(text: string, pattern: string)", R::result_boolean(),
-                          {p.string, p.string}),
-                     m.fn("replace", 3, "(text: string, pattern: string, replacement: string)",
-                          R::result_string(), {p.string, p.string, p.string}),
-                     m.fn("replace_all", 3, "(text: string, pattern: string, replacement: string)",
-                          R::result_string(), {p.string, p.string, p.string}),
-                     m.fn("split", 2, "(text: string, pattern: string)",
-                          R::result(R::array(R::string_type())), {p.string, p.string}),
-                     // Flag-accepting variants — each takes a trailing
-                     // flags: array<RegularExpression.Flags> (CaseInsensitive /
-                     // MultiLine / DotAll), mirroring the flagless sibling above.
-                     m.fn("matches_with", 3,
-                          "(text: string, pattern: string, flags: array<RegularExpression.Flags>)",
-                          R::result_boolean(),
-                          {p.string, p.string, R::array(named::regex_flags())}),
-                     m.fn("find_with", 3,
-                          "(text: string, pattern: string, flags: array<RegularExpression.Flags>)",
-                          R::result(named::match()),
-                          {p.string, p.string, R::array(named::regex_flags())}),
-                     m.fn("find_all_with", 3,
-                          "(text: string, pattern: string, flags: array<RegularExpression.Flags>)",
-                          R::result(R::array(named::match())),
-                          {p.string, p.string, R::array(named::regex_flags())}),
-                     m.fn("replace_with", 4,
-                          "(text: string, pattern: string, replacement: string, flags: "
-                          "array<RegularExpression.Flags>)",
-                          R::result_string(),
-                          {p.string, p.string, p.string, R::array(named::regex_flags())}),
-                     m.fn("replace_all_with", 4,
-                          "(text: string, pattern: string, replacement: string, flags: "
-                          "array<RegularExpression.Flags>)",
-                          R::result_string(),
-                          {p.string, p.string, p.string, R::array(named::regex_flags())}),
-                     m.fn("split_with", 3,
-                          "(text: string, pattern: string, flags: array<RegularExpression.Flags>)",
-                          R::result(R::array(R::string_type())),
-                          {p.string, p.string, R::array(named::regex_flags())}),
-                 });
+    append_specs(
+        specs,
+        {
+            m.fn("find", 2, "(text: string, pattern: string)", R::result(named::match()),
+                 {p.string, p.string}),
+            m.fn("find_all", 2, "(text: string, pattern: string)",
+                 R::result(R::array(named::match())), {p.string, p.string}),
+            m.fn("is_valid", 1, "(pattern: string)", R::boolean_type(), {p.string}),
+            m.fn("count", 2, "(text: string, pattern: string)", R::result_integer(),
+                 {p.string, p.string}),
+            m.fn("compile_typed", 1, "(pattern: string)",
+                 R::result(R::string_type(), named::regex_error()), {p.string}),
+            m.fn("matches", 2, "(text: string, pattern: string)", R::result_boolean(),
+                 {p.string, p.string}),
+            m.fn("replace", 3, "(text: string, pattern: string, replacement: string)",
+                 R::result_string(), {p.string, p.string, p.string}),
+            m.fn("replace_all", 3, "(text: string, pattern: string, replacement: string)",
+                 R::result_string(), {p.string, p.string, p.string}),
+            m.fn("split", 2, "(text: string, pattern: string)",
+                 R::result(R::array(R::string_type())), {p.string, p.string}),
+            // Flag-accepting variants — each takes a trailing
+            // flags: array<RegularExpression.Flags> (CaseInsensitive /
+            // MultiLine / DotAll), mirroring the flagless sibling above.
+            m.fn("matches_with", 3,
+                 "(text: string, pattern: string, flags: array<RegularExpression.Flags>)",
+                 R::result_boolean(), {p.string, p.string, R::array(named::regex_flags())}),
+            m.fn("find_with", 3,
+                 "(text: string, pattern: string, flags: array<RegularExpression.Flags>)",
+                 R::result(named::match()), {p.string, p.string, R::array(named::regex_flags())}),
+            m.fn("find_all_with", 3,
+                 "(text: string, pattern: string, flags: array<RegularExpression.Flags>)",
+                 R::result(R::array(named::match())),
+                 {p.string, p.string, R::array(named::regex_flags())}),
+            m.fn("replace_with", 4,
+                 "(text: string, pattern: string, replacement: string, flags: "
+                 "array<RegularExpression.Flags>)",
+                 R::result_string(),
+                 {p.string, p.string, p.string, R::array(named::regex_flags())}),
+            m.fn("replace_all_with", 4,
+                 "(text: string, pattern: string, replacement: string, flags: "
+                 "array<RegularExpression.Flags>)",
+                 R::result_string(),
+                 {p.string, p.string, p.string, R::array(named::regex_flags())}),
+            m.fn("split_with", 3,
+                 "(text: string, pattern: string, flags: array<RegularExpression.Flags>)",
+                 R::result(R::array(R::string_type())),
+                 {p.string, p.string, R::array(named::regex_flags())}),
+        });
 }
 
 } // namespace luma::stdlib::detail

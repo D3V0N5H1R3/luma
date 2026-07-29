@@ -925,8 +925,8 @@ void register_socket_ns(const EnvPtr& env) {
             while (true) {
                 char ch{};
 
-                const auto received = ::recv(sv->handle.load(), &ch,
-                                             static_cast<platform_socket::io_length_t>(1), 0);
+                const auto received =
+                    ::recv(sv->handle.load(), &ch, static_cast<platform_socket::io_length_t>(1), 0);
 
                 if (received < 0) {
                     return socket_failure("receive");

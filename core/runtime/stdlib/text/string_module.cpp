@@ -117,15 +117,15 @@ enum class TrimSide {
 // word_count: space, tab, newline, carriage return, form feed, vertical tab.
 [[nodiscard]] inline bool is_ascii_whitespace(char c) {
     switch (c) {
-    case ' ':
-    case '\t':
-    case '\n':
-    case '\r':
-    case '\f':
-    case '\v':
-        return true;
-    default:
-        return false;
+        case ' ':
+        case '\t':
+        case '\n':
+        case '\r':
+        case '\f':
+        case '\v':
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -555,10 +555,9 @@ void register_string_ns(const EnvPtr& env) {
 
                           for (auto& token : split_whitespace_impl(s)) {
                               if (arr->elements->size() >= ResourceLimits::max_array_size) {
-                                  throw RuntimeError{
-                                      error_msg("String", "split_whitespace",
-                                                "result exceeds maximum array size"),
-                                      loc};
+                                  throw RuntimeError{error_msg("String", "split_whitespace",
+                                                               "result exceeds maximum array size"),
+                                                     loc};
                               }
 
                               arr->elements->push_back(Value{std::move(token)});

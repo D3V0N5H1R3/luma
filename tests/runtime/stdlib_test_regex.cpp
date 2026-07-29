@@ -628,9 +628,10 @@ static void test_regex_multiline_flag() {
 
 static void test_regex_dotall_flag() {
     // Without DotAll, '.' does not cross a newline.
-    ASSERT_EQ(
-        eval("RegularExpression.matches_with(\"a\\nb\", \"a.b\", [])").as_result()->owned_inner->as_bool(),
-        false);
+    ASSERT_EQ(eval("RegularExpression.matches_with(\"a\\nb\", \"a.b\", [])")
+                  .as_result()
+                  ->owned_inner->as_bool(),
+              false);
 
     // With DotAll, '.' matches the newline too.
     ASSERT_EQ(eval("RegularExpression.matches_with(\"a\\nb\", \"a.b\", "
@@ -658,9 +659,10 @@ static void test_regex_combined_flags() {
 
 static void test_regex_with_empty_flags_matches_flagless() {
     // An empty flags array reproduces the flagless behaviour exactly.
-    ASSERT_EQ(
-        eval("RegularExpression.matches_with(\"hello\", \"^[0-9]+$\", [])").as_result()->owned_inner->as_bool(),
-        false);
+    ASSERT_EQ(eval("RegularExpression.matches_with(\"hello\", \"^[0-9]+$\", [])")
+                  .as_result()
+                  ->owned_inner->as_bool(),
+              false);
     ASSERT_EQ(eval("RegularExpression.matches_with(\"abc123\", \"[a-z]+[0-9]+\", [])")
                   .as_result()
                   ->owned_inner->as_bool(),
@@ -670,9 +672,8 @@ static void test_regex_with_empty_flags_matches_flagless() {
 static void test_regex_with_redos_rejected() {
     // The ReDoS guard still runs for the flag-accepting variants.
     ASSERT_RESULT_FAILURE(eval("RegularExpression.matches_with(\"aaaa\", \"(a+)+\", [])"));
-    ASSERT_RESULT_FAILURE(
-        eval("RegularExpression.find_with(\"aaaa\", \"(a+)+\", "
-             "[RegularExpression.Flags.CaseInsensitive])"));
+    ASSERT_RESULT_FAILURE(eval("RegularExpression.find_with(\"aaaa\", \"(a+)+\", "
+                               "[RegularExpression.Flags.CaseInsensitive])"));
 }
 
 static void test_regex_with_invalid_pattern_fails() {

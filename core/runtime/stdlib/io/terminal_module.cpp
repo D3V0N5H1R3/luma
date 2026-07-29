@@ -1,8 +1,11 @@
 #include "runtime/stdlib/io/terminal_module.hpp"
 
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <charconv>
 #include <cstdint>
+#include <cstdlib>
 #include <format>
 #include <iostream>
 #include <mutex>
@@ -10,14 +13,10 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-
-#include <algorithm>
-#include <cctype>
-#include <cstdlib>
 #include <unordered_set>
 
-#include "common/platform_utils.hpp"
 #include "analysis/source/source_location.hpp"
+#include "common/platform_utils.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/stdlib/io/platform_terminal.hpp"
@@ -380,8 +379,8 @@ void leave_raw_mode() {
 // Terminal.CursorStyle choice in core/analysis/types/stdlib_type_arities.cpp.
 [[nodiscard]] std::optional<int> cursor_style_code(std::string_view variant) {
     static const std::unordered_map<std::string_view, int> table = {
-        {"BlinkingBlock", 1}, {"SteadyBlock", 2},     {"BlinkingUnderline", 3},
-        {"SteadyUnderline", 4}, {"BlinkingBar", 5},   {"SteadyBar", 6},
+        {"BlinkingBlock", 1},   {"SteadyBlock", 2}, {"BlinkingUnderline", 3},
+        {"SteadyUnderline", 4}, {"BlinkingBar", 5}, {"SteadyBar", 6},
     };
 
     const auto it = table.find(variant);
@@ -393,9 +392,8 @@ void leave_raw_mode() {
 // keys) and modifier combinations ("ctrl+…") carry no printable text.
 [[nodiscard]] bool is_printable_key(std::string_view key) {
     static const std::unordered_set<std::string_view> specials = {
-        "enter",  "escape", "tab",     "backspace", "space",     "up",
-        "down",   "left",   "right",   "home",      "end",       "page_up",
-        "page_down", "insert", "delete", "unknown",
+        "enter", "escape", "tab", "backspace", "space",     "up",     "down",   "left",
+        "right", "home",   "end", "page_up",   "page_down", "insert", "delete", "unknown",
     };
 
     if (key.empty() || specials.contains(key)) {
@@ -409,8 +407,7 @@ void leave_raw_mode() {
 
     // Function keys: 'f' followed by digits (f1..f12) are not printable text.
     if (key.size() >= 2 && key.front() == 'f' &&
-        std::all_of(key.begin() + 1, key.end(),
-                    [](char c) { return c >= '0' && c <= '9'; })) {
+        std::all_of(key.begin() + 1, key.end(), [](char c) { return c >= '0' && c <= '9'; })) {
         return false;
     }
 

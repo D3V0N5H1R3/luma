@@ -476,9 +476,9 @@ void register_task_ns(const EnvPtr& env) {
 
                 // Translate this task's outcome into a result<T> and keep it;
                 // a failure never aborts the loop (unlike Task.all).
-                results->elements->push_back(await_to_result(
-                    error_msg("Task", "all_settled", "a task was cancelled"),
-                    [&] { return make_success_value(task->future.get()); }));
+                results->elements->push_back(
+                    await_to_result(error_msg("Task", "all_settled", "a task was cancelled"),
+                                    [&] { return make_success_value(task->future.get()); }));
             }
 
             return Value{std::move(results)};
@@ -503,8 +503,8 @@ void register_task_ns(const EnvPtr& env) {
             }
 
             if (base_delay_ms < 0) {
-                throw RuntimeError{"Task.retry_with_backoff: base_delay_ms must be non-negative", loc,
-                                   "use 0 or a positive number of milliseconds"};
+                throw RuntimeError{"Task.retry_with_backoff: base_delay_ms must be non-negative",
+                                   loc, "use 0 or a positive number of milliseconds"};
             }
 
             Value last_result{NullValue{}};

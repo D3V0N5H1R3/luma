@@ -676,7 +676,8 @@ struct PreparedRegex {
 
 [[nodiscard]] PreparedRegex prepare_regex(const std::string& pattern, const RegexOptions& opts) {
     auto parsed = parse_named_capture_groups(pattern);
-    std::string engine_pattern = opts.dotall ? apply_dotall(parsed.cleaned) : std::move(parsed.cleaned);
+    std::string engine_pattern =
+        opts.dotall ? apply_dotall(parsed.cleaned) : std::move(parsed.cleaned);
 
     return {get_compiled_regex(engine_pattern, opts.syntax), std::move(parsed.group_names)};
 }
@@ -879,7 +880,8 @@ void register_regularexpression_ns(const EnvPtr& env) {
             return wrap_result_operation("RegularExpression", "matches_with", [&]() -> Value {
                 const auto prepared = prepare_regex(args[1].as_string(), opts);
 
-                return make_success_value(Value{std::regex_search(args[0].as_string(), *prepared.re)});
+                return make_success_value(
+                    Value{std::regex_search(args[0].as_string(), *prepared.re)});
             });
         })
         .func("find_with", 3)

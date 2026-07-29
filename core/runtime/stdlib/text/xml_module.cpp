@@ -286,8 +286,8 @@ struct XmlPathSegment {
 
     while (pos <= path.size()) {
         const auto slash = path.find('/', pos);
-        const auto seg = slash == std::string_view::npos ? path.substr(pos)
-                                                          : path.substr(pos, slash - pos);
+        const auto seg =
+            slash == std::string_view::npos ? path.substr(pos) : path.substr(pos, slash - pos);
         pos = slash == std::string_view::npos ? path.size() + 1 : slash + 1;
 
         if (seg.empty()) {
@@ -757,8 +757,7 @@ void register_xml_ns(const EnvPtr& env) {
             auto result = navigate_xml_get_path(node, path, error);
 
             if (!result) {
-                return failure_msg("Xml", "get_path",
-                                   std::format("path '{}': {}", path, error),
+                return failure_msg("Xml", "get_path", std::format("path '{}': {}", path, error),
                                    error_codes::not_found);
             }
 

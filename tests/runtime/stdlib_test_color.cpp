@@ -366,7 +366,8 @@ LUMA_TEST(color_saturate_desaturate) {
     ASSERT_NEAR(v.as_record()->find_field("saturation")->as_number(), 0.5, 0.01);
 
     // Saturate clamps to 1.0; a mid colour saturated fully reaches full saturation.
-    const auto s = eval("Color.to_hsl(Color.saturate(Result.unwrap(Color.rgb(150, 100, 100)), 1.0))");
+    const auto s =
+        eval("Color.to_hsl(Color.saturate(Result.unwrap(Color.rgb(150, 100, 100)), 1.0))");
     ASSERT_NEAR(s.as_record()->find_field("saturation")->as_number(), 1.0, 0.01);
 }
 

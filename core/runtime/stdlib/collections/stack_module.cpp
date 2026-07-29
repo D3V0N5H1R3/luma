@@ -104,9 +104,8 @@ void register_stack_ns(const EnvPtr& env) {
                               }
 
                               auto remaining = std::make_shared<StackValue>();
-                              remaining->elements.assign(elems.begin(),
-                                                         elems.begin() +
-                                                             static_cast<std::ptrdiff_t>(keep));
+                              remaining->elements.assign(
+                                  elems.begin(), elems.begin() + static_cast<std::ptrdiff_t>(keep));
 
                               return make_tuple_pair(Value{std::move(popped)},
                                                      Value{std::move(remaining)});

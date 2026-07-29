@@ -240,9 +240,8 @@ static void test_xml_text_at() {
 }
 
 static void test_xml_find_descendant() {
-    const auto v =
-        eval("Xml.tag(Result.unwrap(Xml.find_descendant(Result.unwrap(Xml.deserialize("
-             "\"<r><a><deep tag=\\\"1\\\"/></a></r>\")), \"deep\")))");
+    const auto v = eval("Xml.tag(Result.unwrap(Xml.find_descendant(Result.unwrap(Xml.deserialize("
+                        "\"<r><a><deep tag=\\\"1\\\"/></a></r>\")), \"deep\")))");
 
     ASSERT_EQ(v.as_string(), "deep");
 }
@@ -298,10 +297,8 @@ static void test_xml_remove_child_removes_correct() {
 }
 
 static void test_xml_remove_child_out_of_bounds() {
-    ASSERT_EVAL_FAILURE(
-        "Xml.remove_child(Result.unwrap(Xml.deserialize(\"<r><a/></r>\")), 5)");
-    ASSERT_EVAL_FAILURE(
-        "Xml.remove_child(Result.unwrap(Xml.deserialize(\"<r><a/></r>\")), -1)");
+    ASSERT_EVAL_FAILURE("Xml.remove_child(Result.unwrap(Xml.deserialize(\"<r><a/></r>\")), 5)");
+    ASSERT_EVAL_FAILURE("Xml.remove_child(Result.unwrap(Xml.deserialize(\"<r><a/></r>\")), -1)");
 }
 
 static void test_xml_replace_child() {
