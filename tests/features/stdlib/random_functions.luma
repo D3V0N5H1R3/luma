@@ -352,8 +352,16 @@ function void test_random_bytes() {
     assert(Array.length(fast) == 8)
     assert(Array.all(fast, (integer x) -> x >= 0 && x <= 255))
     assert(Result.is_failure(Random.generate_bytes(-1)))
-    array<integer> sec = Result.unwrap(Random.secure_bytes(16))
-    assert(Array.length(sec) == 16)
-    assert(Array.all(sec, (integer x) -> x >= 0 && x <= 255))
     assert(Array.length(Result.unwrap(Random.generate_bytes(0))) == 0)
+
+    # secure_bytes needs the CSPRNG (TLS); tolerate its absence so this test
+    # also passes in the feature-flag build with LUMA_FEATURE_TLS=OFF.
+    result<array<integer>> sec = Random.secure_bytes(16)
+
+    if Result.is_success(sec) {
+        array<integer> bytes = Result.unwrap(sec)
+
+        assert(Array.length(bytes) == 16)
+        assert(Array.all(bytes, (integer x) -> x >= 0 && x <= 255))
+    }
 }
