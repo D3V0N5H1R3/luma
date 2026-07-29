@@ -384,6 +384,40 @@ void register_hashset_ns(const EnvPtr& env) {
                     return make_tuple_pair(Value{std::move(matches)}, Value{std::move(rest)});
                 },
                 loc);
+        })
+        .func("any", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_hash_set(args[0], "HashSet.any", loc);
+            expect_callable(args[1], "HashSet.any", loc);
+
+            return iter_any(HashSetBucketIterator{src->buckets.begin(), src->buckets.end()},
+                            HashSetBucketIterator{}, args[1], loc);
+        })
+        .func("all", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_hash_set(args[0], "HashSet.all", loc);
+            expect_callable(args[1], "HashSet.all", loc);
+
+            return iter_all(HashSetBucketIterator{src->buckets.begin(), src->buckets.end()},
+                            HashSetBucketIterator{}, args[1], loc);
+        })
+        .func("count", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_hash_set(args[0], "HashSet.count", loc);
+            expect_callable(args[1], "HashSet.count", loc);
+
+            return iter_count(HashSetBucketIterator{src->buckets.begin(), src->buckets.end()},
+                              HashSetBucketIterator{}, args[1], loc);
+        })
+        .func("find", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            auto src = expect_hash_set(args[0], "HashSet.find", loc);
+            expect_callable(args[1], "HashSet.find", loc);
+
+            // A set is unordered, so this returns an arbitrary matching element.
+            return find_with_error_handling(
+                HashSetBucketIterator{src->buckets.begin(), src->buckets.end()},
+                HashSetBucketIterator{}, args[1], [](const auto& it) { return *it; }, loc);
         });
 }
 } // namespace luma

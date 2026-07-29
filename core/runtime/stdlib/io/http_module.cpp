@@ -117,6 +117,103 @@ constexpr int k_http_default_timeout_ms = 30000;
     return std::nullopt;
 }
 
+// Maps a status code to its standard reason phrase (RFC 9110 and common
+// extensions).  Unknown codes fall back to a generic phrase for their class, or
+// an empty string when even the class is out of range.  Shared by
+// Http.status_text.
+[[nodiscard]] std::string_view status_reason_phrase(std::int64_t status) {
+    switch (status) {
+        case 100:
+            return "Continue";
+        case 101:
+            return "Switching Protocols";
+        case 200:
+            return "OK";
+        case 201:
+            return "Created";
+        case 202:
+            return "Accepted";
+        case 204:
+            return "No Content";
+        case 206:
+            return "Partial Content";
+        case 301:
+            return "Moved Permanently";
+        case 302:
+            return "Found";
+        case 303:
+            return "See Other";
+        case 304:
+            return "Not Modified";
+        case 307:
+            return "Temporary Redirect";
+        case 308:
+            return "Permanent Redirect";
+        case 400:
+            return "Bad Request";
+        case 401:
+            return "Unauthorized";
+        case 403:
+            return "Forbidden";
+        case 404:
+            return "Not Found";
+        case 405:
+            return "Method Not Allowed";
+        case 406:
+            return "Not Acceptable";
+        case 408:
+            return "Request Timeout";
+        case 409:
+            return "Conflict";
+        case 410:
+            return "Gone";
+        case 415:
+            return "Unsupported Media Type";
+        case 418:
+            return "I'm a Teapot";
+        case 422:
+            return "Unprocessable Content";
+        case 429:
+            return "Too Many Requests";
+        case 500:
+            return "Internal Server Error";
+        case 501:
+            return "Not Implemented";
+        case 502:
+            return "Bad Gateway";
+        case 503:
+            return "Service Unavailable";
+        case 504:
+            return "Gateway Timeout";
+        case 505:
+            return "HTTP Version Not Supported";
+        default:
+            break;
+    }
+
+    // Fall back to a generic phrase for the code's class.
+    const auto variant = status_class_variant(status);
+
+    if (!variant) {
+        return "";
+    }
+
+    if (*variant == "Informational") {
+        return "Informational";
+    }
+    if (*variant == "Success") {
+        return "Success";
+    }
+    if (*variant == "Redirection") {
+        return "Redirection";
+    }
+    if (*variant == "ClientError") {
+        return "Client Error";
+    }
+
+    return "Server Error";
+}
+
 // Assembles an Http.Request record { method, url, headers, body, timeout_ms }.
 // The record carries the Http.Method choice natively — no stringified verb — so a
 // request stays typed and discoverable, mirroring how Http.Response is a record.
@@ -353,6 +450,16 @@ void register_http_ns(const EnvPtr& env) {
 
             return make_success_value(make_status_class_choice(*variant));
         })
+        // Http.status_text(code) -> string
+        // The standard reason phrase for a status code (404 -> "Not Found"), for
+        // logging and user messages.  Unknown codes fall back to a generic class
+        // phrase, or an empty string when the code is out of range.
+        .func("status_text", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto status = expect_integer(args[0], "Http.status_text", loc);
+
+            return Value{std::string{status_reason_phrase(status)}};
+        })
         // Http.is_success(response) -> boolean
         // True when the response's status is a 2xx (Success) code — the type-safe,
         // self-documenting counterpart to hand-writing `response.status >= 200 &&
@@ -509,6 +616,28 @@ void register_http_ns(const EnvPtr& env) {
 
             return make_success_value(Value{safe.string()});
         });
+
+    // Named status-code constants for readable exact-code comparisons
+    // (response.status == Http.status_not_found) instead of magic numbers.
+    env->define("Http.status_ok", Value{std::int64_t{200}}, false);
+    env->define("Http.status_created", Value{std::int64_t{201}}, false);
+    env->define("Http.status_accepted", Value{std::int64_t{202}}, false);
+    env->define("Http.status_no_content", Value{std::int64_t{204}}, false);
+    env->define("Http.status_moved_permanently", Value{std::int64_t{301}}, false);
+    env->define("Http.status_found", Value{std::int64_t{302}}, false);
+    env->define("Http.status_not_modified", Value{std::int64_t{304}}, false);
+    env->define("Http.status_bad_request", Value{std::int64_t{400}}, false);
+    env->define("Http.status_unauthorized", Value{std::int64_t{401}}, false);
+    env->define("Http.status_forbidden", Value{std::int64_t{403}}, false);
+    env->define("Http.status_not_found", Value{std::int64_t{404}}, false);
+    env->define("Http.status_method_not_allowed", Value{std::int64_t{405}}, false);
+    env->define("Http.status_conflict", Value{std::int64_t{409}}, false);
+    env->define("Http.status_too_many_requests", Value{std::int64_t{429}}, false);
+    env->define("Http.status_server_error", Value{std::int64_t{500}}, false);
+    env->define("Http.status_not_implemented", Value{std::int64_t{501}}, false);
+    env->define("Http.status_bad_gateway", Value{std::int64_t{502}}, false);
+    env->define("Http.status_service_unavailable", Value{std::int64_t{503}}, false);
+    env->define("Http.status_gateway_timeout", Value{std::int64_t{504}}, false);
 
     register_http_parsing(env);
 }

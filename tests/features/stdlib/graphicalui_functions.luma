@@ -1680,3 +1680,32 @@ function void test_graphicalui_redo_pops_last() {
     assert(Dictionary.has(GraphicalUi.redo("x", ["a", "b"]), "model"))
     assert(Dictionary.has(GraphicalUi.redo("x", ["a", "b"]), "history"))
 }
+
+# ─── scroll_to / blur / remove_local_storage / clear_local_storage ───────
+
+@test
+function void test_graphicalui_scroll_to_command() {
+    dictionary<string> cmd = GraphicalUi.scroll_to("target")
+    assert(Dictionary.get_or(cmd, "_command_type", "") == "scroll_to")
+    assert(Dictionary.get_or(cmd, "widget_id", "") == "target")
+
+    dictionary<string> cmd2 = GraphicalUi.scroll_to("target", "instant")
+    assert(Dictionary.get_or(cmd2, "behavior", "") == "instant")
+}
+
+@test
+function void test_graphicalui_blur_command() {
+    dictionary<string> cmd = GraphicalUi.blur("field1")
+    assert(Dictionary.get_or(cmd, "_command_type", "") == "blur")
+    assert(Dictionary.get_or(cmd, "widget_id", "") == "field1")
+}
+
+@test
+function void test_graphicalui_remove_and_clear_local_storage_commands() {
+    dictionary<string> rm = GraphicalUi.remove_local_storage("token")
+    assert(Dictionary.get_or(rm, "_command_type", "") == "remove_local_storage")
+    assert(Dictionary.get_or(rm, "key", "") == "token")
+
+    dictionary<string> cl = GraphicalUi.clear_local_storage()
+    assert(Dictionary.get_or(cl, "_command_type", "") == "clear_local_storage")
+}

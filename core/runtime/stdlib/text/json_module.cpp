@@ -47,6 +47,50 @@ void register_json_ns(const EnvPtr& env) {
             json_serialize_value(args[0], out, 2, 0, true);
 
             return Value{std::move(out)};
+        })
+        .func("pretty", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Json.pretty", loc);
+
+            // Reformat an existing JSON string: parse then re-emit indented.
+            return wrap_result_operation("Json", "pretty", [&]() -> Value {
+                auto root = json_parse_string(args[0].as_string());
+
+                std::string out;
+                out.reserve(512);
+                json_serialize_value(root, out, 2, 0, true);
+
+                return make_success_value(Value{std::move(out)});
+            });
+        })
+        .func("minify", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Json.minify", loc);
+
+            // Reformat an existing JSON string: parse then re-emit compact.
+            return wrap_result_operation("Json", "minify", [&]() -> Value {
+                auto root = json_parse_string(args[0].as_string());
+
+                std::string out;
+                out.reserve(256);
+                json_serialize_value(root, out, 0, 0, false);
+
+                return make_success_value(Value{std::move(out)});
+            });
+        })
+        .func("equals", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Json.equals", loc);
+            (void)expect_string(args[1], "Json.equals", loc);
+
+            // Semantic comparison: parse both and compare structurally (object key
+            // order and whitespace are ignored), unlike a raw string ==.
+            return wrap_result_operation("Json", "equals", [&]() -> Value {
+                auto a = json_parse_string(args[0].as_string());
+                auto b = json_parse_string(args[1].as_string());
+
+                return make_success_value(Value{a.equals(b)});
+            });
         });
 
     register_json_parser(env);
@@ -260,6 +304,118 @@ void register_json_parser(const EnvPtr& env) {
                 std::string out;
                 out.reserve(256);
 
+                json_serialize_value(root, out, 0, 0, false);
+
+                return make_success_value(Value{std::move(out)});
+            });
+        })
+        .func("get_or", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Json.get_or", loc);
+            (void)expect_string(args[1], "Json.get_or", loc);
+
+            // Read the value at the path, or return the default when the path is
+            // missing or the JSON is invalid.  Never fails — the softened,
+            // config-friendly counterpart of get_path.
+            const Value& fallback = args[2];
+
+            try {
+                auto root = json_parse_string(args[0].as_string());
+
+                const auto segments = json_path::parse_path_segments(args[1].as_string());
+
+                if (segments.empty()) {
+                    return root;
+                }
+
+                auto nav = json_path::navigate_path(root, segments, segments.size());
+
+                if (!nav.value) {
+                    return fallback;
+                }
+
+                return Value{*nav.value};
+            } catch (...) {
+                return fallback;
+            }
+        })
+        .func("has_path", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Json.has_path", loc);
+            (void)expect_string(args[1], "Json.has_path", loc);
+
+            // Whether the dot/[index] path exists.  Infallible: invalid JSON or a
+            // missing path is simply false.
+            try {
+                auto root = json_parse_string(args[0].as_string());
+
+                const auto segments = json_path::parse_path_segments(args[1].as_string());
+
+                if (segments.empty()) {
+                    return Value{true};
+                }
+
+                auto nav = json_path::navigate_path(root, segments, segments.size());
+
+                return Value{nav.value != nullptr};
+            } catch (...) {
+                return Value{false};
+            }
+        })
+        .func("remove_path", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Json.remove_path", loc);
+            (void)expect_string(args[1], "Json.remove_path", loc);
+
+            return wrap_result_operation("Json", "remove_path", [&]() -> Value {
+                auto root = json_parse_string(args[0].as_string());
+
+                const auto segments = json_path::parse_path_segments(args[1].as_string());
+
+                if (segments.empty()) {
+                    return make_failure_value("Json.remove_path: empty path");
+                }
+
+                // Navigate to the parent of the target.
+                auto nav = json_path::navigate_path(root, segments, segments.size() - 1);
+
+                if (!nav.value) {
+                    return make_failure_value(error_msg("Json", "remove_path", nav.error));
+                }
+
+                const auto& last = segments.back();
+                Value* parent = nav.value;
+
+                if (last.is_index) {
+                    if (!parent->is_array()) {
+                        return make_failure_value(
+                            "Json.remove_path: target parent is not an array");
+                    }
+
+                    auto& elems = *parent->as_array()->elements;
+
+                    if (is_index_out_of_bounds(last.index, elems.size())) {
+                        return make_failure_value(
+                            error_msg("Json", "remove_path",
+                                      std::format("index {} out of bounds", last.index)));
+                    }
+
+                    elems.erase(elems.begin() + static_cast<std::ptrdiff_t>(last.index));
+                } else if (parent->is_dictionary()) {
+                    auto dict = parent->as_dictionary();
+
+                    if (dict->find(last.key) == nullptr) {
+                        return make_failure_value(error_msg(
+                            "Json", "remove_path", std::format("key '{}' not found", last.key)));
+                    }
+
+                    dict->erase(last.key);
+                } else {
+                    return make_failure_value("Json.remove_path: target is not a container");
+                }
+
+                std::string out;
+                out.reserve(256);
                 json_serialize_value(root, out, 0, 0, false);
 
                 return make_success_value(Value{std::move(out)});

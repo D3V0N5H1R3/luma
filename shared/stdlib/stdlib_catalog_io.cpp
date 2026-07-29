@@ -4,13 +4,23 @@ namespace luma::stdlib::detail {
 
 void register_console_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                 const ParamShorthands& p) {
-    append_specs(specs,
-                 {
-                     m.fn("prompt", 1, "(message: string)", R::result_string(), {p.string}),
-                     m.fn("read_from_stdin", 0, "()", R::result_string(), {}),
-                     m.fn("write_to_stderr", 1, "(text: string)", R::result_boolean(), {p.string}),
-                     m.fn("write_to_stdout", 1, "(text: string)", R::result_boolean(), {p.string}),
-                 });
+    append_specs(
+        specs, {
+                   m.fn("confirm", 1, "(message: string)", R::result_boolean(), {p.string}),
+                   m.fn("flush", 0, "()", R::result_boolean(), {}),
+                   m.fn("is_interactive", 0, "()", R::boolean_type(), {}),
+                   m.fn("is_tty", 0, "()", R::boolean_type(), {}),
+                   m.fn("prompt", 1, "(message: string)", R::result_string(), {p.string}),
+                   m.fn("prompt_integer", 1, "(message: string)", R::result_integer(), {p.string}),
+                   m.fn("prompt_number", 1, "(message: string)", R::result_number(), {p.string}),
+                   m.fn("prompt_with_default", 2, "(message: string, default: string)",
+                        R::result_string(), {p.string, p.string}),
+                   m.fn("read_from_stdin", 0, "()", R::result_string(), {}),
+                   m.fn("read_line", 0, "()", R::result_string(), {}),
+                   m.fn("read_lines", 0, "()", R::result(R::array(R::string_type())), {}),
+                   m.fn("write_to_stderr", 1, "(text: string)", R::result_boolean(), {p.string}),
+                   m.fn("write_to_stdout", 1, "(text: string)", R::result_boolean(), {p.string}),
+               });
 }
 
 void register_file_system_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
@@ -23,7 +33,10 @@ void register_file_system_functions(std::vector<FunctionSpec>& specs, const Modu
                  {p.string, p.string}),
             m.fn("copy", 2, "(from: string, to: string)", R::result_boolean(),
                  {p.string, p.string}),
+            m.fn("copy_directory", 2, "(from: string, to: string)", R::result_boolean(),
+                 {p.string, p.string}),
             m.fn("create_directory", 1, "(path: string)", R::result_boolean(), {p.string}),
+            m.fn("create_directories", 1, "(path: string)", R::result_boolean(), {p.string}),
             m.fn("delete", 1, "(path: string)", R::result_boolean(), {p.string}),
             m.fn("delete_directory", 1, "(path: string)", R::result_boolean(), {p.string}),
             m.fn("exists", 1, "(path: string)", R::result_boolean(), {p.string}),
@@ -48,6 +61,7 @@ void register_file_system_functions(std::vector<FunctionSpec>& specs, const Modu
             m.fn("normalize", 1, "(path: string)", R::string_type(), {p.string}),
             m.fn("parent", 1, "(path: string)", R::string_type(), {p.string}),
             m.fn("permissions", 1, "(path: string)", R::result(named::permissions()), {p.string}),
+            m.fn("read_bytes", 1, "(path: string)", R::result(R::array_integer()), {p.string}),
             m.fn("read_file", 1, "(path: string)", R::result_string(), {p.string}),
             m.fn("read_file_limited", 2, "(path: string, max_bytes: integer)", R::result_string(),
                  {p.string, p.integer}),
@@ -64,6 +78,8 @@ void register_file_system_functions(std::vector<FunctionSpec>& specs, const Modu
             m.fn("size", 1, "(path: string)", R::result_integer(), {p.string}),
             m.fn("split_path", 1, "(path: string)", named::path_parts(), {p.string}),
             m.fn("stem", 1, "(path: string)", R::string_type(), {p.string}),
+            m.fn("write_bytes", 2, "(path: string, bytes: array<integer>)", R::result_boolean(),
+                 {p.string, R::array_integer()}),
             m.fn("write_file", 2, "(path: string, content: string)", R::result_boolean(),
                  {p.string, p.string}),
             m.fn("write_lines", 2, "(path: string, lines: array<string>)", R::result_boolean(),
@@ -152,6 +168,7 @@ void register_http_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
                  {p.string, p.string}),
             m.fn("bearer_auth", 1, "(token: string)", R::string_type(), {p.string}),
             m.fn("build_query", 1, "(params: dictionary<string>)", R::string_type(), {p.dict_any}),
+            m.fn("build_url", 1, "(parts: Http.UrlParts)", R::string_type(), {named::url_parts()}),
             m.fn("cookie_header", 1, "(cookie: Http.Cookie)", R::string_type(), {named::cookie()}),
             m.fn("delete", 1, "(url: string)", R::result(named::response()), {p.string}),
             m.fn("delete_with", 2, "(url: string, headers: dictionary<string>)",
@@ -194,6 +211,26 @@ void register_http_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
             m.fn("send", 1, "(request: Http.Request)", R::result(named::response()), {p.any}),
             m.fn("status_class", 1, "(status: integer)", R::result(named::status_class()),
                  {p.integer}),
+            m.fn("status_text", 1, "(code: integer)", R::string_type(), {p.integer}),
+            m.constant("status_ok", R::integer_type()),
+            m.constant("status_created", R::integer_type()),
+            m.constant("status_accepted", R::integer_type()),
+            m.constant("status_no_content", R::integer_type()),
+            m.constant("status_moved_permanently", R::integer_type()),
+            m.constant("status_found", R::integer_type()),
+            m.constant("status_not_modified", R::integer_type()),
+            m.constant("status_bad_request", R::integer_type()),
+            m.constant("status_unauthorized", R::integer_type()),
+            m.constant("status_forbidden", R::integer_type()),
+            m.constant("status_not_found", R::integer_type()),
+            m.constant("status_method_not_allowed", R::integer_type()),
+            m.constant("status_conflict", R::integer_type()),
+            m.constant("status_too_many_requests", R::integer_type()),
+            m.constant("status_server_error", R::integer_type()),
+            m.constant("status_not_implemented", R::integer_type()),
+            m.constant("status_bad_gateway", R::integer_type()),
+            m.constant("status_service_unavailable", R::integer_type()),
+            m.constant("status_gateway_timeout", R::integer_type()),
         });
 }
 

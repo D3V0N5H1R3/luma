@@ -1,5 +1,6 @@
 // Standard library tests: FileSystem (and Sandbox gating).
 
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -96,6 +97,115 @@ static void test_filesystem_write_read_lines() {
     ASSERT_RESULT_SUCCESS(v);
     ASSERT_TRUE(v.as_result()->owned_inner->is_array());
     ASSERT_EQ(v.as_result()->owned_inner->as_array()->elements->size(), 2U);
+}
+
+// ─── FileSystem.read_bytes / write_bytes — raw binary I/O ───
+
+static void test_filesystem_write_read_bytes_roundtrip() {
+    const LumaTempFile file{"_test_io_bytes.bin"};
+
+    // Includes a NUL (0) and 0xFF — bytes that string-oriented read_file would
+    // mangle; read_bytes/write_bytes must round-trip them losslessly.
+    const auto w = eval(R"(FileSystem.write_bytes("_test_io_bytes.bin", [0, 65, 255, 10, 200]))");
+    ASSERT_RESULT_SUCCESS(w);
+
+    const auto v = eval(R"(FileSystem.read_bytes("_test_io_bytes.bin"))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_array());
+
+    const auto& elems = *v.as_result()->owned_inner->as_array()->elements;
+    ASSERT_EQ(elems.size(), 5U);
+    ASSERT_EQ(elems[0].as_integer(), 0);
+    ASSERT_EQ(elems[1].as_integer(), 65);
+    ASSERT_EQ(elems[2].as_integer(), 255);
+    ASSERT_EQ(elems[3].as_integer(), 10);
+    ASSERT_EQ(elems[4].as_integer(), 200);
+}
+
+static void test_filesystem_write_read_bytes_empty() {
+    const LumaTempFile file{"_test_io_bytes_empty.bin"};
+
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.write_bytes("_test_io_bytes_empty.bin", []))"));
+
+    const auto v = eval(R"(FileSystem.read_bytes("_test_io_bytes_empty.bin"))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_array());
+    ASSERT_EQ(v.as_result()->owned_inner->as_array()->elements->size(), 0U);
+}
+
+static void test_filesystem_read_bytes_missing() {
+    ASSERT_EVAL_FAILURE(R"(FileSystem.read_bytes("_nonexistent_bytes.bin"))");
+}
+
+static void test_filesystem_write_bytes_rejects_out_of_range() {
+    const LumaTempFile file{"_test_bytes_oor.bin"};
+    ASSERT_EVAL_FAILURE(R"(FileSystem.write_bytes("_test_bytes_oor.bin", [256]))");
+    ASSERT_EVAL_FAILURE(R"(FileSystem.write_bytes("_test_bytes_oor.bin", [-1]))");
+}
+
+static void test_filesystem_read_bytes_rejects_traversal() {
+    ASSERT_THROWS(eval(R"(FileSystem.read_bytes("../_outside_read.bin"))"));
+}
+
+static void test_filesystem_write_bytes_rejects_traversal() {
+    ASSERT_THROWS(eval(R"(FileSystem.write_bytes("../_outside_write.bin", [1]))"));
+}
+
+// ─── FileSystem.copy_directory / create_directories ───
+
+// Force-remove a directory tree via the C++ filesystem (not the Luma layer) so a
+// stale directory left by a prior process — e.g. one an antivirus scanner briefly
+// held open on Windows — cannot wedge a later run.  Ignores errors: absence is
+// success, and a genuine lock surfaces as the test's own assertion below.
+static void force_remove_all(const char* path) {
+    std::error_code ec;
+    std::filesystem::remove_all(path, ec);
+}
+
+static void test_filesystem_create_directories_nested() {
+    force_remove_all("_test_mkdirp");
+
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.create_directories("_test_mkdirp/a/b/c"))"));
+    ASSERT_EVAL_BOOL(R"(FileSystem.is_directory("_test_mkdirp/a/b/c"))", true);
+
+    // Idempotent: a second call on an existing path is a no-op success.
+    ASSERT_RESULT_SUCCESS(eval(R"(FileSystem.create_directories("_test_mkdirp/a/b/c"))"));
+
+    force_remove_all("_test_mkdirp");
+}
+
+static void test_filesystem_copy_directory_recursive() {
+    force_remove_all("_test_cpdir_src");
+    force_remove_all("_test_cpdir_dst");
+
+    eval(R"(FileSystem.create_directories("_test_cpdir_src/sub"))");
+    eval(R"(FileSystem.write_file("_test_cpdir_src/a.txt", "a"))");
+    eval(R"(FileSystem.write_file("_test_cpdir_src/sub/b.txt", "b"))");
+
+    // Bind the result to a local: copy_directory is not idempotent (it fails if
+    // the destination exists), and ASSERT_RESULT_SUCCESS references its argument
+    // twice — evaluating the copy inline would run it a second time and see the
+    // destination it just created.
+    const auto copied = eval(R"(FileSystem.copy_directory("_test_cpdir_src", "_test_cpdir_dst"))");
+    ASSERT_RESULT_SUCCESS(copied);
+    ASSERT_EVAL_STR(R"(FileSystem.read_file("_test_cpdir_dst/a.txt"))", "a");
+    ASSERT_EVAL_STR(R"(FileSystem.read_file("_test_cpdir_dst/sub/b.txt"))", "b");
+
+    force_remove_all("_test_cpdir_src");
+    force_remove_all("_test_cpdir_dst");
+}
+
+static void test_filesystem_copy_directory_fails_if_dest_exists() {
+    force_remove_all("_test_cpdir_src2");
+    force_remove_all("_test_cpdir_dst2");
+
+    eval(R"(FileSystem.create_directories("_test_cpdir_src2"))");
+    eval(R"(FileSystem.create_directories("_test_cpdir_dst2"))");
+
+    ASSERT_EVAL_FAILURE(R"(FileSystem.copy_directory("_test_cpdir_src2", "_test_cpdir_dst2"))");
+
+    force_remove_all("_test_cpdir_src2");
+    force_remove_all("_test_cpdir_dst2");
 }
 
 static void test_filesystem_metadata_file() {
@@ -425,6 +535,10 @@ static void test_filesystem_new_functions_registered() {
     ASSERT_TRUE(env->has("FileSystem.is_symlink"));
     ASSERT_TRUE(env->has("FileSystem.get_modified_time"));
     ASSERT_TRUE(env->has("FileSystem.list_recursively"));
+    ASSERT_TRUE(env->has("FileSystem.read_bytes"));
+    ASSERT_TRUE(env->has("FileSystem.write_bytes"));
+    ASSERT_TRUE(env->has("FileSystem.copy_directory"));
+    ASSERT_TRUE(env->has("FileSystem.create_directories"));
 }
 
 static void test_filesystem_is_symlink_regular_file() {
@@ -644,6 +758,15 @@ int main() {
     RUN(test_filesystem_read_file_missing);
     RUN(test_filesystem_write_read_file);
     RUN(test_filesystem_write_read_lines);
+    RUN(test_filesystem_write_read_bytes_roundtrip);
+    RUN(test_filesystem_write_read_bytes_empty);
+    RUN(test_filesystem_read_bytes_missing);
+    RUN(test_filesystem_write_bytes_rejects_out_of_range);
+    RUN(test_filesystem_read_bytes_rejects_traversal);
+    RUN(test_filesystem_write_bytes_rejects_traversal);
+    RUN(test_filesystem_create_directories_nested);
+    RUN(test_filesystem_copy_directory_recursive);
+    RUN(test_filesystem_copy_directory_fails_if_dest_exists);
     RUN(test_filesystem_metadata_file);
     RUN(test_filesystem_metadata_directory);
     RUN(test_filesystem_metadata_nonexistent);

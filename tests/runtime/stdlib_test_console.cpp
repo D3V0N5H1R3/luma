@@ -118,6 +118,115 @@ static void test_console_write_to_stdout_rejects_non_string() {
     ASSERT_THROWS(eval("Console.write_to_stdout(42)"));
 }
 
+// ─── read_line / read_lines / typed prompts / confirm / defaults ───
+
+static void test_console_read_line_strips_newline() {
+    std::istringstream fake_stdin{"first line\nsecond line\n"};
+    const StdinRedirect guard{fake_stdin.rdbuf()};
+
+    ASSERT_EVAL_STR("Console.read_line()", "first line");
+}
+
+static void test_console_read_line_eof_fails() {
+    std::istringstream fake_stdin{""};
+    const StdinRedirect guard{fake_stdin.rdbuf()};
+
+    ASSERT_EVAL_FAILURE("Console.read_line()");
+}
+
+static void test_console_read_lines_splits_input() {
+    std::istringstream fake_stdin{"a\nb\nc\n"};
+    const StdinRedirect guard{fake_stdin.rdbuf()};
+
+    const auto v = eval("Console.read_lines()");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_array());
+
+    const auto& elems = *v.as_result()->owned_inner->as_array()->elements;
+    ASSERT_EQ(elems.size(), 3U);
+    ASSERT_EQ(elems[0].as_string(), "a");
+    ASSERT_EQ(elems[2].as_string(), "c");
+}
+
+static void test_console_prompt_integer_parses() {
+    std::istringstream fake_stdin{"  42  \n"};
+    const StdinRedirect guard{fake_stdin.rdbuf()};
+
+    const CapturedStream captured{std::cout};
+    ASSERT_EVAL_INT("Console.prompt_integer(\"n? \")", 42);
+}
+
+static void test_console_prompt_integer_rejects_non_number() {
+    std::istringstream fake_stdin{"not a number\n"};
+    const StdinRedirect guard{fake_stdin.rdbuf()};
+
+    const CapturedStream captured{std::cout};
+    ASSERT_EVAL_FAILURE("Console.prompt_integer(\"n? \")");
+}
+
+static void test_console_prompt_number_parses() {
+    std::istringstream fake_stdin{"3.14\n"};
+    const StdinRedirect guard{fake_stdin.rdbuf()};
+
+    const CapturedStream captured{std::cout};
+    const auto v = eval("Console.prompt_number(\"x? \")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_NEAR(v.as_result()->owned_inner->as_number(), 3.14, 0.0001);
+}
+
+static void test_console_confirm_yes_no() {
+    {
+        std::istringstream fake_stdin{"YES\n"};
+        const StdinRedirect guard{fake_stdin.rdbuf()};
+        const CapturedStream captured{std::cout};
+        ASSERT_EVAL_BOOL("Console.confirm(\"ok? \")", true);
+    }
+    {
+        std::istringstream fake_stdin{"n\n"};
+        const StdinRedirect guard{fake_stdin.rdbuf()};
+        const CapturedStream captured{std::cout};
+        ASSERT_EVAL_BOOL("Console.confirm(\"ok? \")", false);
+    }
+    {
+        std::istringstream fake_stdin{"maybe\n"};
+        const StdinRedirect guard{fake_stdin.rdbuf()};
+        const CapturedStream captured{std::cout};
+        ASSERT_EVAL_FAILURE("Console.confirm(\"ok? \")");
+    }
+}
+
+static void test_console_prompt_with_default() {
+    {
+        // Empty line accepts the default.
+        std::istringstream fake_stdin{"\n"};
+        const StdinRedirect guard{fake_stdin.rdbuf()};
+        const CapturedStream captured{std::cout};
+        ASSERT_EVAL_STR("Console.prompt_with_default(\"name? \", \"Anon\")", "Anon");
+    }
+    {
+        std::istringstream fake_stdin{"Alice\n"};
+        const StdinRedirect guard{fake_stdin.rdbuf()};
+        const CapturedStream captured{std::cout};
+        ASSERT_EVAL_STR("Console.prompt_with_default(\"name? \", \"Anon\")", "Alice");
+    }
+}
+
+static void test_console_new_functions_registered() {
+    const auto env = luma::test::make_std_env();
+
+    ASSERT_TRUE(env->has("Console.read_line"));
+    ASSERT_TRUE(env->has("Console.read_lines"));
+    ASSERT_TRUE(env->has("Console.flush"));
+    ASSERT_TRUE(env->has("Console.is_tty"));
+    ASSERT_TRUE(env->has("Console.is_interactive"));
+    ASSERT_TRUE(env->has("Console.prompt_integer"));
+    ASSERT_TRUE(env->has("Console.prompt_number"));
+    ASSERT_TRUE(env->has("Console.confirm"));
+    ASSERT_TRUE(env->has("Console.prompt_with_default"));
+}
+
 int main() {
     RUN(test_console_prompt_eof_fails);
     RUN(test_console_module_registers_functions);
@@ -130,6 +239,15 @@ int main() {
     RUN(test_console_write_to_stdout);
     RUN(test_console_write_to_stdout_empty_string);
     RUN(test_console_write_to_stdout_rejects_non_string);
+    RUN(test_console_read_line_strips_newline);
+    RUN(test_console_read_line_eof_fails);
+    RUN(test_console_read_lines_splits_input);
+    RUN(test_console_prompt_integer_parses);
+    RUN(test_console_prompt_integer_rejects_non_number);
+    RUN(test_console_prompt_number_parses);
+    RUN(test_console_confirm_yes_no);
+    RUN(test_console_prompt_with_default);
+    RUN(test_console_new_functions_registered);
 
     return SUMMARY();
 }

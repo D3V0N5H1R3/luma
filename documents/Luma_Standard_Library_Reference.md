@@ -685,7 +685,9 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.absolute_path(path)`          | `(string)`                | `result<string>`        | Resolve to absolute path                              |
 | `FileSystem.append_file(path, data)`      | `(string, string)`        | `result<boolean>`       | Append data to a file                                 |
 | `FileSystem.copy(src, dst)`               | `(string, string)`        | `result<boolean>`       | Copy a file                                           |
+| `FileSystem.copy_directory(from, to)`     | `(string, string)`        | `result<boolean>`       | Recursively copy a directory tree; fail if `to` exists or a symlink is encountered |
 | `FileSystem.create_directory(path)`       | `(string)`                | `result<boolean>`       | Create a directory                                    |
+| `FileSystem.create_directories(path)`     | `(string)`                | `result<boolean>`       | Create a directory and any missing parents (`mkdir -p`); no-op if it exists |
 | `FileSystem.delete(path)`                 | `(string)`                | `result<boolean>`       | Delete a file                                         |
 | `FileSystem.delete_directory(path)`       | `(string)`                | `result<boolean>`       | Delete a directory; fail if path is not a directory   |
 | `FileSystem.exists(path)`                 | `(string)`                | `result<boolean>`       | Whether the path exists                               |
@@ -707,6 +709,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.normalize(path)`              | `(string)`                | `string`                | Normalise path (e.g. `"a/b/../c"` → `"a/c"`)          |
 | `FileSystem.parent(path)`                 | `(string)`                | `string`                | Parent directory                                      |
 | `FileSystem.permissions(path)`            | `(string)`                | `result<FileSystem.Permissions>` | Report readable/writable/executable flags and POSIX mode bits; fail if the path does not exist |
+| `FileSystem.read_bytes(path)`             | `(string)`                | `result<array<integer>>` | Read entire file as raw bytes (each element 0–255); lossless for binary/non-UTF-8 data |
 | `FileSystem.read_file(path)`              | `(string)`                | `result<string>`        | Read entire file as string                            |
 | `FileSystem.read_file_limited(path, max)` | `(string, integer)`       | `result<string>`        | Read file; fail if it exceeds `max` bytes             |
 | `FileSystem.read_file_typed(path)`        | `(string)`                | `result<string, FileSystem.IoError>` | Read entire file; on failure the error is a typed `FileSystem.IoError` instead of a string |
@@ -717,6 +720,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.size(path)`                   | `(string)`                | `result<integer>`       | File size in bytes                                    |
 | `FileSystem.split_path(path)`             | `(string)`                | `FileSystem.PathParts`  | Decompose a path into parent, name, stem, extension in one call |
 | `FileSystem.stem(path)`                   | `(string)`                | `string`                | File name without extension (e.g. `"hello"`)          |
+| `FileSystem.write_bytes(path, bytes)`     | `(string, array<integer>)` | `result<boolean>`      | Write raw bytes to file (each element must be 0–255); lossless for binary data |
 | `FileSystem.write_file(path, data)`       | `(string, string)`        | `result<boolean>`       | Write string to file                                  |
 | `FileSystem.write_lines(path, lines)`     | `(string, array<string>)` | `result<boolean>`       | Write array of lines to file                          |
 
@@ -760,7 +764,7 @@ failure(_other) { print("could not read config") }
 
 `FileSystem.PathParts` record fields: `parent` (`string`), `name` (`string`), `stem` (`string`), `extension` (`string`). `split_path` answers in one typed call what `parent`, `name`, `stem`, and `extension` answer individually. It is pure string manipulation — no I/O — so it needs no filesystem access, works in sandbox mode, and never fails.
 
-> **Security note** — `append_file`, `read_file`, `read_lines`, `write_file`, and `write_lines` validate that the resolved path stays within the current working directory, which blocks cross-directory symlink traversal (e.g. a symlink pointing to `/etc/passwd` is rejected). However, a symbolic link that points to another file **within** the working directory is followed transparently. If your program accepts a user-supplied file path, validate that the resolved path refers to the expected file before reading or writing.
+> **Security note** — `append_file`, `read_bytes`, `read_file`, `read_lines`, `write_bytes`, `write_file`, and `write_lines` validate that the resolved path stays within the current working directory, which blocks cross-directory symlink traversal (e.g. a symlink pointing to `/etc/passwd` is rejected). However, a symbolic link that points to another file **within** the working directory is followed transparently. If your program accepts a user-supplied file path, validate that the resolved path refers to the expected file before reading or writing.
 
 ## 14 — Graph
 
@@ -775,19 +779,30 @@ A weighted graph supporting directed and undirected edges. Vertices are identifi
 | `Graph.breadth_first_search(g, start)`   | `(graph, string)`                 | `result<array<string>>`                  | BFS traversal from start vertex                             |
 | `Graph.connected_components(g)`          | `(graph)`                         | `result<array<array<string>>>`           | Connected components; undirected only                       |
 | `Graph.degree(g, v)`                     | `(graph, string)`                 | `result<integer>`                        | Degree of vertex; fail if not found                         |
+| `Graph.density(g)`                       | `(graph)`                         | `number`                                 | Ratio of actual to maximum possible edges; `0` for fewer than two vertices |
 | `Graph.depth_first_search(g, start)`     | `(graph, string)`                 | `result<array<string>>`                  | DFS traversal from start vertex                             |
 | `Graph.directed()`                       | `()`                              | `graph`                                  | Create an empty directed graph                              |
 | `Graph.edge_count(g)`                    | `(graph)`                         | `integer`                                | Number of edges                                             |
 | `Graph.edge_weight(g, from, to)`         | `(graph, string, string)`         | `result<number>`                         | Weight of edge; fail if not found                           |
 | `Graph.edges(g)`                         | `(graph)`                         | `array<Graph.Edge>`                      | Every edge as a typed `Graph.Edge` record, in deterministic order |
+| `Graph.from_adjacency_list(adj, directed)` | `(dictionary<array<string>>, boolean)` | `graph`                        | Build a graph from an adjacency list (inverse of `to_adjacency_list`) |
+| `Graph.from_edges(edges, directed)`      | `(array<Graph.Edge>, boolean)`    | `graph`                                  | Build a graph from `Graph.Edge` records, adding endpoints as vertices |
 | `Graph.has_cycle(g)`                     | `(graph)`                         | `boolean`                                | Whether the graph contains a cycle                          |
 | `Graph.has_edge(g, from, to)`            | `(graph, string, string)`         | `boolean`                                | Whether edge exists                                         |
+| `Graph.has_path(g, from, to)`            | `(graph, string, string)`         | `result<boolean>`                        | Whether `to` is reachable from `from` (BFS, direction-aware, weight-agnostic); fail if a vertex is missing |
 | `Graph.has_vertex(g, v)`                 | `(graph, string)`                 | `boolean`                                | Whether vertex exists                                       |
+| `Graph.in_degree(g, v)`                  | `(graph, string)`                 | `result<integer>`                        | Number of edges pointing into the vertex; fail if not found |
+| `Graph.is_bipartite(g)`                  | `(graph)`                         | `result<boolean>`                        | Whether the graph is 2-colourable (BFS colouring)          |
+| `Graph.is_connected(g)`                  | `(graph)`                         | `result<boolean>`                        | Whether all vertices form one component (directed = weakly connected) |
 | `Graph.is_directed(g)`                   | `(graph)`                         | `boolean`                                | Whether the graph is directed                               |
+| `Graph.is_tree(g)`                       | `(graph)`                         | `result<boolean>`                        | Whether the graph is connected and acyclic (`edge_count == vertex_count - 1`) |
 | `Graph.minimum_spanning_tree(g)`         | `(graph)`                         | `result<graph>`                          | Minimum spanning tree; undirected graphs only               |
 | `Graph.neighbors(g, v)`                  | `(graph, string)`                 | `result<array<string>>`                  | Adjacent vertices; fail if not found                        |
+| `Graph.out_degree(g, v)`                 | `(graph, string)`                 | `result<integer>`                        | Number of edges leaving the vertex; fail if not found       |
+| `Graph.predecessors(g, v)`               | `(graph, string)`                 | `result<array<string>>`                  | Vertices with an edge into `v` (reverse of `neighbors`); fail if not found |
 | `Graph.remove_edge(g, from, to)`         | `(graph, string, string)`         | `graph`                                  | Remove edge                                                 |
 | `Graph.remove_vertex(g, v)`              | `(graph, string)`                 | `graph`                                  | Remove vertex and its edges                                 |
+| `Graph.reverse(g)`                       | `(graph)`                         | `graph`                                  | Transpose a directed graph (flip every edge); equivalent copy for undirected |
 | `Graph.shortest_path(g, from, to)`       | `(graph, string, string)`         | `result<array<string>>`                  | Shortest path between vertices                              |
 | `Graph.shortest_path_detailed(g, from, to)` | `(graph, string, string)`      | `result<Graph.Path>`                     | Shortest path as a `{ vertices, cost }` record             |
 | `Graph.strongly_connected_components(g)` | `(graph)`                         | `result<array<array<string>>>`           | Groups of mutually reachable vertices; directed graphs only |
@@ -1372,6 +1387,8 @@ Commands represent side effects that the runtime executes on behalf of the appli
 | `GraphicalUi.write_clipboard(text)`                                | `(string)`                                                             | `command`    | Copy text to the system clipboard                               |
 | `GraphicalUi.random(min, max, on_result)`                          | `(number, number, func(number) -> any)`                                | `command`    | Generate a random number in `[min, max]`                        |
 | `GraphicalUi.focus(widget_id)`                                     | `(string)`                                                             | `command`    | Move keyboard focus to the widget with the given `id`           |
+| `GraphicalUi.blur(widget_id)`                                      | `(string)`                                                             | `command`    | Remove keyboard focus from the widget with the given `id`       |
+| `GraphicalUi.scroll_to(widget_id, behavior?)`                      | `(string, string?)`                                                    | `command`    | Scroll the widget with the given `id` into view (`behavior`: `"smooth"` default or `"instant"`) |
 | `GraphicalUi.announce(text)`                                       | `(string)`                                                             | `command`    | Announce text to screen readers via a live region               |
 | `GraphicalUi.debounce(id, milliseconds, callback)`                 | `(string, integer, func(result<string>) -> any)`                       | `command`    | Run `callback` only after `milliseconds` of inactivity for `id` |
 | `GraphicalUi.download_file(url, filename)`                         | `(string, string)`                                                     | `command`    | Download a URL to a local file named `filename`                 |
@@ -1384,6 +1401,8 @@ Commands represent side effects that the runtime executes on behalf of the appli
 | `GraphicalUi.print()`                                              | `()`                                                                   | `command`    | Open the browser print dialog                                   |
 | `GraphicalUi.read_clipboard(on_result)`                            | `(func(result<string>) -> any)`                                        | `command`    | Read text from the system clipboard                             |
 | `GraphicalUi.set_local_storage(key, value)`                        | `(string, string)`                                                     | `command`    | Write a browser local-storage value                             |
+| `GraphicalUi.remove_local_storage(key)`                            | `(string)`                                                             | `command`    | Remove a browser local-storage value by `key`                   |
+| `GraphicalUi.clear_local_storage()`                                | `()`                                                                   | `command`    | Clear all browser local-storage values                          |
 | `GraphicalUi.set_title(title)`                                     | `(string)`                                                             | `command`    | Set the application window title                                |
 | `GraphicalUi.with_command(model, command)`                         | `(any, command)`                                                       | `widget`     | Pair a new model with a command for the runtime to run          |
 
@@ -1485,11 +1504,14 @@ Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 | `Hash.algorithms()`             | `()`                       | `array<string>`  | List supported algorithm names |
 | `Hash.crc32(s)`                 | `(string)`                 | `integer`        | CRC-32 checksum                |
 | `Hash.digest(algo, s)`          | `(Hash.Algorithm \| string, string)` | `string` | Digest `s` with the named algorithm; accepts the `Hash.Algorithm` choice or its string name |
+| `Hash.digest_file(algo, path)`  | `(Hash.Algorithm \| string, string)` | `result<string>` | Streaming file digest with the named algorithm (`md5`/`sha1`/`sha256`/`sha512`); accepts the choice or string name |
 | `Hash.hmac_sha256(key, msg)`    | `(string, string)`         | `string`         | HMAC-SHA-256                   |
 | `Hash.hmac_sha512(key, msg)`    | `(string, string)`         | `string`         | HMAC-SHA-512                   |
 | `Hash.md5(s)`                   | `(string)`                 | `string`         | MD5 digest (32-char hex)       |
+| `Hash.md5_file(path)`           | `(string)`                 | `result<string>` | MD5 of file contents           |
 | `Hash.md5_typed(s)`             | `(string)`                 | `Hash.Digest`    | MD5 digest tagged with its algorithm |
 | `Hash.sha1(s)`                  | `(string)`                 | `string`         | SHA-1 digest (40-char hex)     |
+| `Hash.sha1_file(path)`          | `(string)`                 | `result<string>` | SHA-1 of file contents         |
 | `Hash.sha1_typed(s)`            | `(string)`                 | `Hash.Digest`    | SHA-1 digest tagged with its algorithm |
 | `Hash.sha256_file(path)`        | `(string)`                 | `result<string>` | SHA-256 of file contents       |
 | `Hash.sha256(s)`                | `(string)`                 | `string`         | SHA-256 digest (64-char hex)   |
@@ -1524,11 +1546,15 @@ A hash-based set providing O(1) average-case membership testing. Supports hashab
 | Function                                  | Parameter Types                      | Return Type                    | Description                                                    |
 | ----------------------------------------- | ------------------------------------ | ------------------------------ | -------------------------------------------------------------- |
 | `HashSet.add(hs, v)`                      | `(hash_set, T)`                      | `hash_set`                     | Set with `v` added                                             |
+| `HashSet.all(hs, fn)`                     | `(hash_set, function(T) -> boolean)` | `result<boolean>`              | Whether every element satisfies `fn` (short-circuits); fail if predicate throws |
+| `HashSet.any(hs, fn)`                     | `(hash_set, function(T) -> boolean)` | `result<boolean>`              | Whether any element satisfies `fn` (short-circuits); fail if predicate throws |
 | `HashSet.contains(hs, v)`                 | `(hash_set, T)`                      | `boolean`                      | Whether `v` is in the set                                      |
+| `HashSet.count(hs, fn)`                   | `(hash_set, function(T) -> boolean)` | `result<integer>`              | Number of elements satisfying `fn`; fail if predicate throws   |
 | `HashSet.difference(hs, other)`           | `(hash_set, hash_set)`               | `hash_set`                     | Elements in `hs` but not `other`                               |
 | `HashSet.each(hs, fn)`                    | `(hash_set, function(T) -> none)`    | `result<none>`                 | Apply `fn` to each element; fail if callback throws            |
 | `HashSet.equals(hs, other)`               | `(hash_set, hash_set)`               | `boolean`                      | Whether the sets contain the same elements                     |
 | `HashSet.filter(hs, fn)`                  | `(hash_set, function(T) -> boolean)` | `result<hash_set>`             | Elements for which `fn` returns true; fail if predicate throws |
+| `HashSet.find(hs, fn)`                    | `(hash_set, function(T) -> boolean)` | `result<T>`                    | An arbitrary element satisfying `fn` (the set is unordered); fail if none match or predicate throws |
 | `HashSet.from_array(arr)`                 | `(array<T>)`                         | `hash_set`                     | Create from array (deduplicates)                               |
 | `HashSet.from_set(s)`                     | `(set)`                              | `hash_set`                     | Convert from `Set`                                             |
 | `HashSet.intersection(hs, other)`         | `(hash_set, hash_set)`               | `hash_set`                     | Intersection of two sets                                       |
@@ -1557,6 +1583,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.basic_auth(user, pass)`         | `(string, string)`                         | `string`                | Build a Basic `Authorization` header value                           |
 | `Http.bearer_auth(token)`             | `(string)`                                 | `string`                | Build a Bearer `Authorization` header value                          |
 | `Http.build_query(params)`            | `(dictionary<string>)`                     | `string`                | Build query string (e.g. `"a=1&b=2"`)                                |
+| `Http.build_url(parts)`               | `(Http.UrlParts)`                          | `string`                | Reassemble a URL from its parts (inverse of `parse_url`)             |
 | `Http.cookie_header(cookie)`          | `(Http.Cookie)`                            | `string`                | Format an `Http.Cookie` back into a `Set-Cookie`-style header string  |
 | `Http.delete(url)`                    | `(string)`                                 | `result<Http.Response>` | DELETE request                                                       |
 | `Http.delete_with(url, headers)`      | `(string, dictionary<string>)`             | `result<Http.Response>` | DELETE with custom headers                                           |
@@ -1582,6 +1609,9 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.request_with(method, url, headers, body, timeout_ms)` | `(Http.Method, string, dictionary<string>, string, integer)` | `Http.Request` | Build a fully-specified typed request                    |
 | `Http.send(request)`                  | `(Http.Request)`                           | `result<Http.Response>` | Perform a typed `Http.Request` and return the response               |
 | `Http.status_class(status)`           | `(integer)`                                | `result<Http.StatusClass>` | Classify a status code into its family; fail if outside 100–599    |
+| `Http.status_text(code)`              | `(integer)`                                | `string`                | Standard reason phrase for a status code (e.g. `404` → `"Not Found"`); generic fallback for unknown codes |
+
+`Http` also defines named integer status-code constants for readable exact-code comparisons (`response.status == Http.status_not_found`): `Http.status_ok` (200), `status_created` (201), `status_accepted` (202), `status_no_content` (204), `status_moved_permanently` (301), `status_found` (302), `status_not_modified` (304), `status_bad_request` (400), `status_unauthorized` (401), `status_forbidden` (403), `status_not_found` (404), `status_method_not_allowed` (405), `status_conflict` (409), `status_too_many_requests` (429), `status_server_error` (500), `status_not_implemented` (501), `status_bad_gateway` (502), `status_service_unavailable` (503), and `status_gateway_timeout` (504).
 
 `Http.Response` record fields: `status` (`integer`), `reason` (`string`), `body` (`string`), `headers` (`dictionary<string>`).
 
@@ -1655,8 +1685,17 @@ result<Http.Response> r = Http.get_with(
 
 | Function                       | Parameter Types | Return Type       | Description                                                               |
 | ------------------------------ | --------------- | ----------------- | ------------------------------------------------------------------------- |
+| `Console.confirm(msg)`         | `(string)`      | `result<boolean>` | Prompt for yes/no (`y`/`yes`/`n`/`no`, case-insensitive); fail on other input or EOF |
+| `Console.flush()`              | `()`            | `result<boolean>` | Flush buffered stdout (so a newline-less prompt appears before a blocking read) |
+| `Console.is_interactive()`     | `()`            | `boolean`         | Whether stdin is an interactive terminal (TTY)                           |
+| `Console.is_tty()`             | `()`            | `boolean`         | Whether stdout is an interactive terminal (TTY)                          |
 | `Console.prompt(msg)`          | `(string)`      | `result<string>`  | Print prompt, read line from stdin; fail on EOF or if it exceeds the maximum string size |
+| `Console.prompt_integer(msg)`  | `(string)`      | `result<integer>` | Print prompt, read and parse a whole number; fail on invalid input or EOF |
+| `Console.prompt_number(msg)`   | `(string)`      | `result<number>`  | Print prompt, read and parse a number; fail on invalid input or EOF      |
+| `Console.prompt_with_default(msg, default)` | `(string, string)` | `result<string>` | Print prompt, read a line; return `default` on an empty line; fail on EOF |
 | `Console.read_from_stdin()`    | `()`            | `result<string>`  | Read all of stdin; fail if it exceeds the maximum string size            |
+| `Console.read_line()`          | `()`            | `result<string>`  | Read one line from stdin (newline stripped); fail on EOF or if it exceeds the maximum string size |
+| `Console.read_lines()`         | `()`            | `result<array<string>>` | Read all of stdin split into lines; fail if it exceeds the maximum string size |
 | `Console.write_to_stderr(msg)` | `(string)`      | `result<boolean>` | Write to stderr                                                           |
 | `Console.write_to_stdout(msg)` | `(string)`      | `result<boolean>` | Write to stdout                                                           |
 
@@ -1672,18 +1711,31 @@ Serialise and deserialise Luma values as JSON.
 | ------------------------------ | --------------------- | ------------------------------ | -------------------------------------------------------------------------------- |
 | `Json.as_array(v)`             | `(Json.Value)`        | `result<array<Json.Value>>`    | Extract the array payload; fail if `v` is not a `JsonArray`                       |
 | `Json.as_boolean(v)`           | `(Json.Value)`        | `result<boolean>`              | Extract the boolean payload; fail if `v` is not a `JsonBool`                      |
+| `Json.as_integer(v)`           | `(Json.Value)`        | `result<integer>`              | Extract the numeric payload as an integer; fail if `v` is not a whole `JsonNumber` |
 | `Json.as_number(v)`            | `(Json.Value)`        | `result<number>`               | Extract the numeric payload; fail if `v` is not a `JsonNumber`                    |
 | `Json.as_object(v)`            | `(Json.Value)`        | `result<dictionary<Json.Value>>` | Extract the object payload; fail if `v` is not a `JsonObject`                   |
 | `Json.as_string(v)`            | `(Json.Value)`        | `result<string>`               | Extract the string payload; fail if `v` is not a `JsonString`                    |
 | `Json.deserialize(s)`          | `(string)`            | `result<T>`                    | Parse JSON string                                                                |
+| `Json.equals(a, b)`            | `(string, string)`    | `result<boolean>`              | Compare two JSON strings structurally (key order and whitespace ignored); fail on invalid JSON |
 | `Json.field(v, key)`           | `(Json.Value, string)` | `optional<Json.Value>`        | Look up a key in a `JsonObject`; `none` if absent or `v` is not an object        |
 | `Json.get(json, path)`         | `(string, string)`    | `result<T>`                    | Navigate dot-separated path (e.g. `"user.age"`, `"items.0"`)                     |
+| `Json.get_or(json, path, default)` | `(string, string, T)` | `T`                        | Read a value at the dot/`[index]` path, or return `default` when missing or the JSON is invalid |
 | `Json.get_path(json, path)`    | `(string, string)`    | `result<T>`                    | Read a value using dot and `[index]` path syntax; fail if missing                |
+| `Json.has_path(json, path)`    | `(string, string)`    | `boolean`                      | Whether the dot/`[index]` path exists (false for invalid JSON or a missing path) |
 | `Json.index(v, i)`             | `(Json.Value, integer)` | `optional<Json.Value>`       | Index into a `JsonArray`; `none` if out of bounds or `v` is not an array          |
+| `Json.is_array(v)`             | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonArray`                                                     |
+| `Json.is_bool(v)`              | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonBool`                                                      |
+| `Json.is_null(v)`              | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonNull`                                                      |
+| `Json.is_number(v)`            | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonNumber`                                                    |
+| `Json.is_object(v)`            | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonObject`                                                    |
+| `Json.is_string(v)`            | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonString`                                                    |
 | `Json.is_valid(s)`             | `(string)`            | `boolean`                      | Whether `s` is valid JSON                                                        |
 | `Json.merge(a, b)`             | `(string, string)`    | `result<string>`               | Merge two JSON objects; `b` wins on conflicts                                    |
+| `Json.minify(s)`               | `(string)`            | `result<string>`               | Reformat a JSON string compactly; fail on invalid JSON                           |
 | `Json.parse(s)`                | `(string)`            | `result<Json.Value>`           | Parse a JSON string into the typed `Json.Value` ADT                              |
 | `Json.parse_detailed(s)`       | `(string)`            | `result<Json.Value, Json.ParseError>` | Like `Json.parse`, but a failure carries the located `Json.ParseError`  |
+| `Json.pretty(s)`               | `(string)`            | `result<string>`               | Reformat a JSON string with indentation; fail on invalid JSON                    |
+| `Json.remove_path(json, path)` | `(string, string)`    | `result<string>`               | Remove the key/element at a dot/`[index]` path; return new JSON; fail on invalid path |
 | `Json.serialize(v)`            | `(T)`                 | `string`                       | Serialise value to compact JSON                                                  |
 | `Json.serialize_pretty(v)`     | `(T)`                 | `string`                       | Serialise value to formatted JSON                                                |
 | `Json.set(json, path, v)`      | `(string, string, T)` | `result<string>`               | Replace key at path; return new JSON string                                      |

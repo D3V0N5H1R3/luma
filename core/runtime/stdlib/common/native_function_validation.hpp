@@ -121,6 +121,14 @@ expect_dict(const Value& v, std::string_view name, const SourceLocation& loc) {
     return v.to_numeric();
 }
 
+[[nodiscard]] inline bool expect_boolean(const Value& v, std::string_view name,
+                                         const SourceLocation& loc) {
+    validate_type(
+        v, [](const Value& val) { return val.is_bool(); }, "boolean", name, loc,
+        "pass a boolean value");
+    return v.as_bool();
+}
+
 [[nodiscard]] inline const std::shared_ptr<ResultValue>&
 expect_result(const Value& v, std::string_view name, const SourceLocation& loc) {
     validate_type(

@@ -661,3 +661,59 @@ function void test_json_parse_detailed_reports_line() {
 }
 
 
+
+# ─── Json.pretty / minify / equals / get_or / has_path / remove_path ─────
+
+@test
+function void test_json_pretty_minify_roundtrip() {
+    string compact = Result.unwrap(Json.minify("{ \"a\" : 1 }"))
+    assert(compact == "{\"a\":1}", "minify strips whitespace")
+
+    string pretty = Result.unwrap(Json.pretty("{\"a\":1}"))
+    assert(String.contains(pretty, "\n"), "pretty adds newlines")
+
+    assert(Result.is_failure(Json.minify("not json")), "invalid JSON fails")
+}
+
+@test
+function void test_json_equals_semantic() {
+    assert(Result.unwrap(Json.equals("{\"a\":1,\"b\":2}", "{\"b\":2,\"a\":1}")),
+           "key order is ignored")
+    assert(!Result.unwrap(Json.equals("{\"a\":1}", "{\"a\":2}")), "different values differ")
+    assert(Result.is_failure(Json.equals("bad", "{}")), "invalid JSON fails")
+}
+
+@test
+function void test_json_get_or_default() {
+    assert(Json.get_or("{\"x\":{\"y\":5}}", "x.y", 0) == 5, "reads a nested value")
+    assert(Json.get_or("{\"x\":1}", "missing", 99) == 99, "returns default when absent")
+    assert(Json.get_or("not json", "x", 7) == 7, "returns default on invalid JSON")
+}
+
+@test
+function void test_json_has_path_and_remove_path() {
+    assert(Json.has_path("{\"a\":[1,2]}", "a[1]"), "existing indexed path")
+    assert(!Json.has_path("{\"a\":1}", "b"), "missing path")
+    assert(!Json.has_path("invalid", "a"), "invalid JSON is false")
+
+    string removed = Result.unwrap(Json.remove_path("{\"a\":1,\"b\":2}", "a"))
+    assert(removed == "{\"b\":2}", "key removed")
+    assert(Result.is_failure(Json.remove_path("{\"a\":1}", "missing")), "removing absent key fails")
+}
+
+@test
+function void test_json_value_predicates_and_as_integer() {
+    Json.Value num = Result.unwrap(Json.parse("42"))
+    assert(Json.is_number(num), "42 is a number")
+    assert(!Json.is_string(num), "42 is not a string")
+    assert(Result.unwrap(Json.as_integer(num)) == 42, "as_integer extracts 42")
+
+    Json.Value frac = Result.unwrap(Json.parse("3.5"))
+    assert(Result.is_failure(Json.as_integer(frac)), "non-whole number fails as_integer")
+
+    Json.Value nil = Result.unwrap(Json.parse("null"))
+    assert(Json.is_null(nil), "null is null")
+
+    Json.Value obj = Result.unwrap(Json.parse("{}"))
+    assert(Json.is_object(obj), "{} is an object")
+}

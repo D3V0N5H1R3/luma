@@ -499,3 +499,72 @@ function void test_graph_shortest_path_detailed() {
 
     assert(Result.is_failure(missing), "a missing vertex fails")
 }
+
+# ─── Directed queries, bulk construction, and structural predicates ──────
+
+@test
+function void test_graph_in_out_degree_and_predecessors() {
+    graph g = Graph.directed()
+        |> Graph.add_edge("a", "b")
+        |> Graph.add_edge("b", "c")
+        |> Graph.add_edge("a", "c")
+
+    assert(Result.unwrap(Graph.out_degree(g, "a")) == 2, "a has two out-edges")
+    assert(Result.unwrap(Graph.in_degree(g, "c")) == 2, "c has two in-edges")
+    assert(Result.unwrap(Graph.out_degree(g, "c")) == 0, "c has no out-edges")
+
+    array<string> preds = Result.unwrap(Graph.predecessors(g, "c"))
+    assert(Array.length(preds) == 2, "c has two predecessors")
+    assert(preds[0] == "a", "predecessors are sorted")
+    assert(preds[1] == "b", "predecessors are sorted")
+
+    assert(Result.is_failure(Graph.in_degree(g, "missing")), "missing vertex fails")
+}
+
+@test
+function void test_graph_has_path_and_reverse() {
+    graph g = Graph.directed()
+        |> Graph.add_edge("a", "b")
+        |> Graph.add_edge("b", "c")
+
+    assert(Result.unwrap(Graph.has_path(g, "a", "c")), "a reaches c")
+    assert(!Result.unwrap(Graph.has_path(g, "c", "a")), "c does not reach a")
+    assert(Result.is_failure(Graph.has_path(g, "a", "z")), "missing vertex fails")
+
+    graph r = Graph.reverse(g)
+    assert(Graph.has_edge(r, "c", "b"), "reversed edge c->b")
+    assert(Graph.has_edge(r, "b", "a"), "reversed edge b->a")
+    assert(!Graph.has_edge(r, "a", "b"), "original direction is gone")
+}
+
+@test
+function void test_graph_from_edges_and_adjacency_list() {
+    graph fa = Graph.from_adjacency_list({"p": ["q"], "q": ["r"], "r": []}, true)
+    assert(Graph.edge_count(fa) == 2, "two edges built from adjacency list")
+    assert(Graph.has_edge(fa, "p", "q"), "edge p->q")
+    assert(Graph.vertex_count(fa) == 3, "three vertices including isolated r")
+
+    array<Graph.Edge> es = Graph.edges(fa)
+    graph rebuilt = Graph.from_edges(es, true)
+    assert(Graph.edge_count(rebuilt) == 2, "round-trip preserves edges")
+}
+
+@test
+function void test_graph_structural_predicates() {
+    graph tree = Graph.undirected()
+        |> Graph.add_edge("x", "y")
+        |> Graph.add_edge("y", "z")
+
+    assert(Result.unwrap(Graph.is_connected(tree)), "path is connected")
+    assert(Result.unwrap(Graph.is_tree(tree)), "path is a tree")
+    assert(Result.unwrap(Graph.is_bipartite(tree)), "path is bipartite")
+
+    graph triangle = Graph.undirected()
+        |> Graph.add_edge("a", "b")
+        |> Graph.add_edge("b", "c")
+        |> Graph.add_edge("c", "a")
+
+    assert(!Result.unwrap(Graph.is_tree(triangle)), "triangle is not a tree")
+    assert(!Result.unwrap(Graph.is_bipartite(triangle)), "odd cycle is not bipartite")
+    assert(Math.approximately_equal(Graph.density(triangle), 1.0, 0.001), "triangle is fully dense")
+}

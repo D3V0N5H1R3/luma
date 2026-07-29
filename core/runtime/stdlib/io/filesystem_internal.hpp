@@ -142,6 +142,57 @@ template <typename EntryPredicate>
     return make_success_value(Value{std::move(file_content)});
 }
 
+/// Reads a whole file as raw bytes into a result<array<integer>>, where each
+/// element is a byte value in the range 0–255.  Used by FileSystem.read_bytes
+/// for lossless binary I/O (unlike read_file, which returns a string and would
+/// corrupt non-UTF-8 data).  The byte count equals the array length, so the file
+/// is bounded by the interpreter's max array size rather than its max string
+/// size; the size is determined up front so an oversized file fails before any
+/// allocation.  The stream is opened in binary mode so no newline translation
+/// occurs on Windows.
+[[nodiscard]] inline Value read_bytes_impl(const std::filesystem::path& safe_path,
+                                           std::string_view function_name) {
+    std::error_code size_ec;
+    const auto file_bytes = std::filesystem::file_size(safe_path, size_ec);
+
+    if (size_ec) {
+        return make_failure_value(error_msg("FileSystem", function_name,
+                                            std::format("cannot determine the size of '{}': {}",
+                                                        safe_path.string(), size_ec.message())));
+    }
+
+    if (file_bytes > ResourceLimits::max_array_size) {
+        return make_failure_value(
+            error_msg("FileSystem", function_name,
+                      std::format("file '{}' exceeds the maximum readable size of {} bytes",
+                                  safe_path.string(), ResourceLimits::max_array_size)));
+    }
+
+    std::ifstream ifs{safe_path, std::ios::binary};
+
+    if (!ifs) {
+        return make_failure_value(error_msg(
+            "FileSystem", function_name, std::format("cannot read file '{}'", safe_path.string())));
+    }
+
+    const std::string data{std::istreambuf_iterator<char>{ifs}, std::istreambuf_iterator<char>{}};
+
+    if (ifs.bad()) {
+        return make_failure_value(
+            error_msg("FileSystem", function_name,
+                      std::format("error reading file '{}'", safe_path.string())));
+    }
+
+    auto arr = std::make_shared<ArrayValue>();
+    arr->elements->reserve(data.size());
+
+    for (const char ch : data) {
+        arr->elements->emplace_back(static_cast<std::int64_t>(static_cast<std::uint8_t>(ch)));
+    }
+
+    return make_success_value(Value{std::move(arr)});
+}
+
 /// Opens `safe_path` with `mode`, streams content through `write_body`, and
 /// reports the outcome as a result<boolean>.  `open_error_detail` and
 /// `write_error_detail` name the failing step in the message.  Shared by

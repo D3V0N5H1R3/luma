@@ -660,6 +660,44 @@ void cmd_set_local_storage(AppState& state, const DictionaryValue& d) {
     webview_eval(state.webview, js.c_str());
 }
 
+void cmd_remove_local_storage(AppState& state, const DictionaryValue& d) {
+    const auto key = dict_string(d, "key");
+    auto js = std::format("localStorage.removeItem('{}')", luma::js_string_escape(key));
+    webview_eval(state.webview, js.c_str());
+}
+
+void cmd_clear_local_storage(AppState& state, const DictionaryValue& /*d*/) {
+    webview_eval(state.webview, "localStorage.clear()");
+}
+
+void cmd_scroll_to(AppState& state, const DictionaryValue& d) {
+    const auto widget_id = dict_string(d, "widget_id");
+    const auto behavior = dict_string(d, "behavior");
+
+    if (!widget_id.empty()) {
+        // Only "smooth" and "instant"/"auto" are valid scrollIntoView behaviours;
+        // default to "smooth" for anything else so a stray value can't inject.
+        const std::string safe_behavior =
+            (behavior == "instant" || behavior == "auto") ? "auto" : "smooth";
+        auto js = std::format(
+            "document.getElementById('{}')?.scrollIntoView({{behavior:'{}',block:'nearest'}})",
+            luma::js_string_escape(widget_id), safe_behavior);
+        webview_eval(state.webview, js.c_str());
+    }
+}
+
+void cmd_blur(AppState& state, const DictionaryValue& d) {
+    const auto widget_id = dict_string(d, "widget_id");
+
+    // With an id, blur that element; without one, blur whatever currently has
+    // focus (the DOM active element).
+    auto js = widget_id.empty()
+                  ? std::string{"document.activeElement && document.activeElement.blur()"}
+                  : std::format("document.getElementById('{}')?.blur()",
+                                luma::js_string_escape(widget_id));
+    webview_eval(state.webview, js.c_str());
+}
+
 void cmd_download_file(AppState& state, const DictionaryValue& d) {
     const auto url = dict_string(d, "url");
     const auto filename = dict_string(d, "filename");
@@ -774,6 +812,10 @@ void cmd_debounce(AppState& state, const DictionaryValue& d) {
         {cmd::read_clipboard, cmd_read_clipboard},
         {cmd::get_local_storage, cmd_get_local_storage},
         {cmd::set_local_storage, cmd_set_local_storage},
+        {cmd::remove_local_storage, cmd_remove_local_storage},
+        {cmd::clear_local_storage, cmd_clear_local_storage},
+        {cmd::scroll_to, cmd_scroll_to},
+        {cmd::blur, cmd_blur},
         {cmd::download_file, cmd_download_file},
         {cmd::notify, cmd_notify},
         {cmd::navigate, cmd_navigate},

@@ -176,6 +176,46 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
                       return Value{std::move(w)};
                   });
 
+    // GraphicalUi.remove_local_storage(key) -> command
+    define_native(env, "GraphicalUi.remove_local_storage",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.remove_local_storage", args, 1, loc);
+                      auto key = expect_string(args[0], "GraphicalUi.remove_local_storage", loc);
+                      auto w = make_command_dict(cmd::remove_local_storage);
+                      w->set("key", Value{key});
+                      return Value{std::move(w)};
+                  });
+
+    // GraphicalUi.clear_local_storage() -> command
+    define_native(env, "GraphicalUi.clear_local_storage",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.clear_local_storage", args, 0, loc);
+                      return Value{make_command_dict(cmd::clear_local_storage)};
+                  });
+
+    // GraphicalUi.scroll_to(widget_id, behavior?) -> command
+    define_native(
+        env, "GraphicalUi.scroll_to", [](std::span<const Value> args, SourceLocation loc) -> Value {
+            expect_min_args("GraphicalUi.scroll_to", args, 1, loc);
+            auto widget_id = expect_string(args[0], "GraphicalUi.scroll_to", loc);
+            auto w = make_command_dict(cmd::scroll_to);
+            w->set("widget_id", Value{widget_id});
+            if (args.size() >= 2) {
+                w->set("behavior", Value{expect_string(args[1], "GraphicalUi.scroll_to", loc)});
+            }
+            return Value{std::move(w)};
+        });
+
+    // GraphicalUi.blur(widget_id) -> command
+    define_native(env, "GraphicalUi.blur",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.blur", args, 1, loc);
+                      auto widget_id = expect_string(args[0], "GraphicalUi.blur", loc);
+                      auto w = make_command_dict(cmd::blur);
+                      w->set("widget_id", Value{widget_id});
+                      return Value{std::move(w)};
+                  });
+
     // GraphicalUi.download_file(url, filename) -> command
     define_native(env, "GraphicalUi.download_file",
                   [](std::span<const Value> args, SourceLocation loc) -> Value {

@@ -410,3 +410,29 @@ function void test_hashset_map_failure_propagates() {
 
     assert(Result.is_failure(r))
 }
+
+# ─── HashSet.any / all / find / count ────────────────────────────────────
+
+@test
+function void test_hashset_any_all() {
+    hash_set hs = HashSet.from_array([1, 2, 3, 4])
+
+    assert(Result.unwrap(HashSet.any(hs, (integer x) -> x > 3)), "some element > 3")
+    assert(!Result.unwrap(HashSet.any(hs, (integer x) -> x > 10)), "no element > 10")
+    assert(Result.unwrap(HashSet.all(hs, (integer x) -> x > 0)), "all positive")
+    assert(!Result.unwrap(HashSet.all(hs, (integer x) -> x > 2)), "not all > 2")
+}
+
+@test
+function void test_hashset_find_count() {
+    hash_set hs = HashSet.from_array([10, 20, 30])
+
+    assert(Result.unwrap(HashSet.count(hs, (integer x) -> x >= 20)) == 2, "two elements >= 20")
+
+    result<integer> found = HashSet.find(hs, (integer x) -> x == 20)
+    assert(Result.is_success(found), "20 is found")
+    assert(Result.unwrap(found) == 20, "found value is 20")
+
+    result<integer> missing = HashSet.find(hs, (integer x) -> x == 99)
+    assert(Result.is_failure(missing), "99 is not found")
+}
