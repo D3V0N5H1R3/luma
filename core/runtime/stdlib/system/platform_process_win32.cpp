@@ -341,6 +341,171 @@ CapturedOutput execute_argv_captured(std::vector<std::string> argv) {
     return captured;
 }
 
+// Windows implementation of the timeout-bounded variant.  Both streams are
+// drained on helper threads so the calling thread is free to wait on the child
+// with a finite timeout.  To make the timeout robust, the child is placed in a
+// Job Object (kill-on-close) before it runs: on expiry — or once the top-level
+// child has finished — the WHOLE job is terminated, which closes every inherited
+// pipe write handle (including any held by surviving grandchildren) so the drain
+// threads' ReadFile calls return and the joins are guaranteed to complete.  A
+// bare TerminateProcess would kill only the direct child, so a grandchild that
+// inherited the pipe could keep it open and hang the join forever — defeating
+// the timeout.  Consequence: a timeout-bounded run reaps its entire process tree
+// (matching the "bounded execution" contract), unlike the blocking run_command.
+CapturedOutput execute_argv_captured_timeout(std::vector<std::string> argv,
+                                             std::int64_t timeout_ms) {
+    if (argv.empty()) {
+        return {};
+    }
+
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+
+    HANDLE out_read = nullptr;
+    HANDLE out_write = nullptr;
+    HANDLE err_read = nullptr;
+    HANDLE err_write = nullptr;
+
+    if (CreatePipe(&out_read, &out_write, &sa, 0) == FALSE) {
+        return {};
+    }
+
+    if (CreatePipe(&err_read, &err_write, &sa, 0) == FALSE) {
+        CloseHandle(out_read);
+        CloseHandle(out_write);
+
+        return {};
+    }
+
+    SetHandleInformation(out_read, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation(err_read, HANDLE_FLAG_INHERIT, 0);
+
+    // Job Object that kills every process it contains when its last handle is
+    // closed, so a crash on our side also cleans up the child tree.  Best-effort:
+    // if it cannot be created we fall back to terminating just the direct child.
+    HANDLE job = CreateJobObjectW(nullptr, nullptr);
+
+    if (job != nullptr) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION job_limits{};
+        job_limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &job_limits,
+                                sizeof(job_limits));
+    }
+
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = out_write;
+    si.hStdError = err_write;
+
+    PROCESS_INFORMATION pi{};
+
+    std::string safe_cmd{build_windows_cmdline(argv)};
+
+    // Create suspended so the child is assigned to the job BEFORE it can run and
+    // spawn grandchildren — otherwise a grandchild could escape the job and hold
+    // the pipe open past the timeout.
+    const BOOL ok = CreateProcessA(nullptr, safe_cmd.data(), nullptr, nullptr, TRUE,
+                                   CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, nullptr, &si, &pi);
+
+    const DWORD create_error = (ok == FALSE) ? GetLastError() : 0;
+
+    CloseHandle(out_write);
+    CloseHandle(err_write);
+
+    if (ok == FALSE) {
+        CloseHandle(out_read);
+        CloseHandle(err_read);
+
+        if (job != nullptr) {
+            CloseHandle(job);
+        }
+
+        CapturedOutput launch_failure{};
+        launch_failure.launch_errno = launch_errno_from_win32(create_error);
+
+        return launch_failure;
+    }
+
+    // Assign to the job (best-effort: nested jobs are supported on Windows 8+),
+    // then release the suspended primary thread so the child begins executing.
+    const bool have_job = (job != nullptr) && (AssignProcessToJobObject(job, pi.hProcess) != 0);
+
+    ResumeThread(pi.hThread);
+
+    std::string out_output{};
+    std::string err_output{};
+    std::atomic<bool> out_overflow{false};
+    std::atomic<bool> err_overflow{false};
+
+    // Drain BOTH streams on helper threads so the calling thread can block on the
+    // process handle with a timeout instead of on a ReadFile.
+    std::thread out_thread([&]() { drain_pipe(out_read, out_output, out_overflow, pi.hProcess); });
+    std::thread err_thread([&]() { drain_pipe(err_read, err_output, err_overflow, pi.hProcess); });
+
+    // Clamp the timeout to a valid finite DWORD: INFINITE (0xFFFFFFFF) would mean
+    // "wait forever", defeating the deadline, so cap just below it.
+    const DWORD wait_ms = (timeout_ms >= static_cast<std::int64_t>(INFINITE))
+                              ? (INFINITE - 1)
+                              : static_cast<DWORD>(timeout_ms);
+    const DWORD wait_result = WaitForSingleObject(pi.hProcess, wait_ms);
+
+    const bool timed_out = (wait_result == WAIT_TIMEOUT);
+
+    // Tear down the child tree so every inherited pipe write handle closes and the
+    // drain threads below are guaranteed to reach EOF and return.  Prefer the job
+    // (kills grandchildren too); fall back to the direct child only when the job
+    // is unavailable, and then only on timeout to preserve the non-timeout path's
+    // behaviour of letting the child exit on its own.
+    if (have_job) {
+        TerminateJobObject(job, 1);
+    } else if (timed_out) {
+        TerminateProcess(pi.hProcess, 1);
+    }
+
+    out_thread.join();
+    err_thread.join();
+
+    // The process has now exited (naturally or via termination); reap its exit
+    // code and release every handle.
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    DWORD exit_code{0};
+
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    CloseHandle(out_read);
+    CloseHandle(err_read);
+
+    if (job != nullptr) {
+        CloseHandle(job);
+    }
+
+    if (timed_out) {
+        CapturedOutput timeout_result{};
+        timeout_result.timed_out = true;
+
+        return timeout_result;
+    }
+
+    if (out_overflow.load() || err_overflow.load()) {
+        return {};
+    }
+
+    CapturedOutput captured{};
+    // Windows DWORD exit codes > INT_MAX are clamped to -1 to match POSIX WEXITSTATUS behaviour.
+    captured.exit_code = (exit_code > static_cast<DWORD>(std::numeric_limits<int>::max()))
+                             ? -1
+                             : static_cast<int>(exit_code);
+    captured.standard_output = std::move(out_output);
+    captured.standard_error = std::move(err_output);
+
+    return captured;
+}
+
 std::int64_t current_process_id() {
     return static_cast<std::int64_t>(GetCurrentProcessId());
 }

@@ -296,6 +296,57 @@ function void test_process_run_command_empty_program_fails() {
     assert(Result.is_failure(r), "an empty program name fails")
 }
 
+# ─── Process.run_command_timeout (bounded execution) ───
+# Runs a shell-free Process.Command but kills+fails it if it overruns the
+# deadline, so a hung child can never freeze the program forever.
+
+@test
+function void test_process_run_command_timeout_completes_within_deadline() {
+    mutable Process.Command cmd = Process.command("echo", ["hello"])
+
+    if (Process.has_environment_variable("OS")) {
+        cmd = Process.command("cmd", ["/c", "echo", "hello"])
+    }
+
+    result<Process.CommandOutput> r = Process.run_command_timeout(cmd, 60000)
+
+    assert(Result.is_success(r), "a fast command finishes inside the deadline")
+
+    Process.CommandOutput out = Result.unwrap(r)
+
+    assert(out.exit_code == 0, "zero exit code")
+    assert(String.contains(out.standard_output, "hello"), "captures stdout")
+}
+
+@test
+function void test_process_run_command_timeout_kills_slow_command() {
+    # A command that sleeps far longer than the 200 ms deadline must be killed
+    # and reported as a failure.  ping's inter-echo delay stands in for sleep on
+    # Windows; POSIX uses sleep directly.
+    mutable Process.Command cmd = Process.command("sleep", ["10"])
+
+    if (Process.has_environment_variable("OS")) {
+        cmd = Process.command("ping", ["-n", "10", "127.0.0.1"])
+    }
+
+    result<Process.CommandOutput> r = Process.run_command_timeout(cmd, 200)
+
+    assert(Result.is_failure(r), "an overrunning command is killed and fails")
+}
+
+@test
+function void test_process_run_command_timeout_rejects_nonpositive() {
+    mutable Process.Command cmd = Process.command("echo", ["hi"])
+
+    if (Process.has_environment_variable("OS")) {
+        cmd = Process.command("cmd", ["/c", "echo", "hi"])
+    }
+
+    result<Process.CommandOutput> r = Process.run_command_timeout(cmd, 0)
+
+    assert(Result.is_failure(r), "a non-positive timeout is rejected")
+}
+
 # ─── Process.exit_status (Process.ExitStatus) ───
 # Classifies a Process.CommandOutput's exit_code sign convention: 0 = Success,
 # a positive code = Failed(code), a negative code = LaunchFailed (the process

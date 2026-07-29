@@ -1,12 +1,15 @@
 // POSIX implementations of the platform_process primitives.
 // Compiled only on non-Windows platforms (see core/runtime/CMakeLists.txt).
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -173,8 +176,13 @@ CapturedOutput execute_command_captured(std::string_view cmd) {
 // POSIX implementation shared by execute_command_captured (which tokenizes a
 // command string first) and Process.run_command (which supplies an explicit,
 // un-tokenized argv).  See execute_command for the rationale on the
-// async-signal-safety constraints in the child below.
-CapturedOutput execute_argv_captured(std::vector<std::string> argv_strings) {
+// async-signal-safety constraints in the child below.  When `timeout_ms` is set,
+// the poll loop bounds each wait by the remaining time and, on expiry, SIGKILLs
+// the child and returns a CapturedOutput with `timed_out == true`.
+namespace {
+
+CapturedOutput execute_argv_captured_impl(std::vector<std::string> argv_strings,
+                                          std::optional<std::int64_t> timeout_ms) {
     if (argv_strings.empty()) {
         return {};
     }
@@ -283,9 +291,42 @@ CapturedOutput execute_argv_captured(std::vector<std::string> argv_strings) {
 
     int open_streams{2};
     bool overflow{false};
+    bool timed_out{false};
+
+    const std::optional<std::chrono::steady_clock::time_point> deadline =
+        timeout_ms ? std::optional{std::chrono::steady_clock::now() +
+                                   std::chrono::milliseconds(*timeout_ms)}
+                   : std::nullopt;
 
     while (open_streams > 0 && !overflow) {
-        const int ready = poll(fds.data(), fds.size(), -1);
+        // Bound each poll by the time left until the deadline; an infinite wait
+        // (-1) when no timeout was requested.
+        int poll_timeout{-1};
+
+        if (deadline) {
+            const auto now = std::chrono::steady_clock::now();
+
+            if (now >= *deadline) {
+                timed_out = true;
+
+                break;
+            }
+
+            const auto remaining =
+                std::chrono::duration_cast<std::chrono::milliseconds>(*deadline - now).count();
+            poll_timeout = static_cast<int>(
+                std::min<std::int64_t>(remaining, std::numeric_limits<int>::max()));
+        }
+
+        const int ready = poll(fds.data(), fds.size(), poll_timeout);
+
+        if (ready == 0) {
+            // Only reachable with a finite poll_timeout, i.e. the deadline
+            // expired before the child produced more output or exited.
+            timed_out = true;
+
+            break;
+        }
 
         if (ready == -1) {
             if (errno == EINTR) {
@@ -337,6 +378,18 @@ CapturedOutput execute_argv_captured(std::vector<std::string> argv_strings) {
         }
     }
 
+    if (timed_out) {
+        // The child overran its deadline: kill it and reap so it cannot linger
+        // as a zombie, then report the timeout distinctly from a launch failure.
+        kill(pid, SIGKILL);
+        waitpid(pid, nullptr, 0);
+
+        CapturedOutput timeout_result{};
+        timeout_result.timed_out = true;
+
+        return timeout_result;
+    }
+
     if (overflow) {
         kill(pid, SIGKILL);
         waitpid(pid, nullptr, 0);
@@ -351,6 +404,17 @@ CapturedOutput execute_argv_captured(std::vector<std::string> argv_strings) {
     captured.exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 
     return captured;
+}
+
+} // namespace
+
+CapturedOutput execute_argv_captured(std::vector<std::string> argv_strings) {
+    return execute_argv_captured_impl(std::move(argv_strings), std::nullopt);
+}
+
+CapturedOutput execute_argv_captured_timeout(std::vector<std::string> argv_strings,
+                                             std::int64_t timeout_ms) {
+    return execute_argv_captured_impl(std::move(argv_strings), timeout_ms);
 }
 
 std::int64_t current_process_id() {

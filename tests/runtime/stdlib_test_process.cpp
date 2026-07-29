@@ -535,6 +535,89 @@ static void test_process_run_command_typed_registered() {
     ASSERT_TRUE(env->has("Process.run_command_typed"));
 }
 
+// ─── Process.run_command_timeout (bounded execution) ─────────────────────────
+
+static void test_process_run_command_timeout_completes_within_deadline() {
+#ifdef _WIN32
+    const auto v =
+        eval(R"(Process.run_command_timeout(Process.command("cmd", ["/c", "echo", "hi"]), 60000))");
+#else
+    const auto v = eval(R"(Process.run_command_timeout(Process.command("echo", ["hi"]), 60000))");
+#endif
+
+    ASSERT_RESULT_SUCCESS(v);
+
+    const auto& inner = *v.as_result()->owned_inner;
+    ASSERT_TRUE(inner.is_record());
+    ASSERT_EQ(inner.as_record()->type_name, std::string{"CommandOutput"});
+    ASSERT_EQ(inner.as_record()->find_field("exit_code")->as_integer(),
+              static_cast<std::int64_t>(0));
+    ASSERT_TRUE(inner.as_record()->find_field("standard_output")->as_string().find("hi") !=
+                std::string::npos);
+}
+
+static void test_process_run_command_timeout_kills_slow_command() {
+    // A command that sleeps far longer than the deadline must be killed and
+    // surfaced as a failure.  ping's inter-echo delay is a portable stand-in for
+    // sleep on Windows; POSIX uses sleep directly.
+#ifdef _WIN32
+    const auto v = eval(
+        R"(Process.run_command_timeout(Process.command("ping", ["-n", "10", "127.0.0.1"]), 200))");
+#else
+    const auto v = eval(R"(Process.run_command_timeout(Process.command("sleep", ["10"]), 200))");
+#endif
+
+    ASSERT_RESULT_FAILURE(v);
+}
+
+static void test_process_run_command_timeout_kills_child_tree() {
+    // Regression: the timed-out child spawns a long-running GRANDCHILD that
+    // inherits the capture pipes.  On Windows a bare TerminateProcess would kill
+    // only the direct child, leaving the grandchild holding the pipe open and
+    // hanging the drain-thread joins forever; the Job Object must tear down the
+    // whole tree so this call returns promptly with a timeout failure.  On POSIX
+    // the direct child (sh) is killed and reaped without draining to EOF, so the
+    // orphaned grandchild cannot hang the call either.
+#ifdef _WIN32
+    const auto v = eval(
+        R"(Process.run_command_timeout(Process.command("cmd", ["/c", "ping", "-n", "20", "127.0.0.1"]), 400))");
+#else
+    const auto v =
+        eval(R"(Process.run_command_timeout(Process.command("sh", ["-c", "sleep 30"]), 300))");
+#endif
+
+    ASSERT_RESULT_FAILURE(v);
+}
+
+static void test_process_run_command_timeout_rejects_nonpositive() {
+#ifdef _WIN32
+    const auto v =
+        eval(R"(Process.run_command_timeout(Process.command("cmd", ["/c", "echo", "hi"]), 0))");
+#else
+    const auto v = eval(R"(Process.run_command_timeout(Process.command("echo", ["hi"]), 0))");
+#endif
+
+    ASSERT_RESULT_FAILURE(v);
+}
+
+static void test_process_run_command_timeout_empty_program_fails() {
+    ASSERT_EVAL_FAILURE(R"(Process.run_command_timeout(Process.command("", ["x"]), 1000))");
+}
+
+static void test_process_run_command_timeout_nonexistent_program_fails() {
+    ASSERT_EVAL_FAILURE(
+        R"(Process.run_command_timeout(Process.command("_luma_nonexistent_xyz_123", []), 1000))");
+}
+
+static void test_process_run_command_timeout_rejects_non_record() {
+    ASSERT_THROWS(eval("Process.run_command_timeout(42, 1000)"));
+}
+
+static void test_process_run_command_timeout_registered() {
+    const auto env = luma::test::make_std_env();
+    ASSERT_TRUE(env->has("Process.run_command_timeout"));
+}
+
 int main() {
     RUN(test_process_get_args_empty);
     RUN(test_process_get_args_with_values);
@@ -595,6 +678,14 @@ int main() {
     RUN(test_process_run_command_typed_empty_program_is_invalid);
     RUN(test_process_run_command_typed_rejects_non_record);
     RUN(test_process_run_command_typed_registered);
+    RUN(test_process_run_command_timeout_completes_within_deadline);
+    RUN(test_process_run_command_timeout_kills_slow_command);
+    RUN(test_process_run_command_timeout_kills_child_tree);
+    RUN(test_process_run_command_timeout_rejects_nonpositive);
+    RUN(test_process_run_command_timeout_empty_program_fails);
+    RUN(test_process_run_command_timeout_nonexistent_program_fails);
+    RUN(test_process_run_command_timeout_rejects_non_record);
+    RUN(test_process_run_command_timeout_registered);
 
     return SUMMARY();
 }
