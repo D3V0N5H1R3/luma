@@ -87,9 +87,10 @@ struct EventMessage {
         }
     }
 
-    // For dict events (mouse_event, widget_event), extract the payload
-    // fields in the same pass instead of re-parsing later.
-    if (msg.type == "mouse_event" || msg.type == "widget_event") {
+    // For dict events (mouse_event, widget_event, scroll_event), extract the
+    // payload fields in the same pass instead of re-parsing later.
+    if (msg.type == "mouse_event" || msg.type == "widget_event" ||
+        msg.type == "scroll_event") {
         auto dict = make_dict();
 
         auto set_string = [&](const char* key) {
@@ -413,6 +414,7 @@ static StringMap<SubscriptionConfig> build_subscription_map(const ArrayValue& su
         // with the JS setup dispatch.
         SubscriptionConfig config;
         config.sub_type = sub_type;
+        config.typed = dict_bool(sd, key::typed);
 
         if (const auto* desc = find_sub_descriptor(sub_type)) {
             for (std::size_t i = 0; i < desc->param_count; ++i) {
@@ -565,6 +567,84 @@ void manage_subscriptions(AppState& state) {
 // Event handler bound to the webview
 // ═══════════════════════════════════════════════════════════
 
+// Convert a mouse-event payload dictionary (x, y, button, ctrl, shift, alt) into
+// a typed GraphicalUi.MouseEvent record for GraphicalUi.on_mouse_typed callbacks.
+// Mirrors the field/variant discipline of Terminal.parse_mouse_event: x / y are
+// `number` (device pixels), the button becomes a GraphicalUi.MouseButton choice,
+// and the three modifier keys become booleans.  Missing coordinates default to 0,
+// missing modifiers to false, and any button other than "middle" / "right"
+// (including a missing one) maps to Left — keeping the record total over whatever
+// the browser emits.
+Value build_mouse_event_record(const DictionaryValue& payload) {
+    auto read_number = [&payload](const char* field_key) -> double {
+        const auto* v = payload.find(field_key);
+
+        if (v != nullptr) {
+            if (v->is_number()) {
+                return v->as_number();
+            }
+
+            if (v->is_integer()) {
+                return static_cast<double>(v->as_integer());
+            }
+        }
+
+        return 0.0;
+    };
+
+    auto button = std::make_shared<ChoiceValue>();
+    button->type_name = "MouseButton";
+    const auto button_str = dict_string(payload, "button", "left");
+
+    if (button_str == "right") {
+        button->variant = "Right";
+    } else if (button_str == "middle") {
+        button->variant = "Middle";
+    } else {
+        button->variant = "Left";
+    }
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "MouseEvent";
+    rec->fields.emplace_back("x", Value{read_number("x")});
+    rec->fields.emplace_back("y", Value{read_number("y")});
+    rec->fields.emplace_back("button", Value{std::move(button)});
+    rec->fields.emplace_back("ctrl", Value{dict_bool(payload, "ctrl")});
+    rec->fields.emplace_back("shift", Value{dict_bool(payload, "shift")});
+    rec->fields.emplace_back("alt", Value{dict_bool(payload, "alt")});
+
+    return Value{std::move(rec)};
+}
+
+// Convert a scroll-event payload dictionary (x, y) into a typed
+// GraphicalUi.ScrollPosition record for GraphicalUi.on_scroll_typed callbacks.
+// x / y are `number` (device-pixel scroll offsets); a missing field defaults to
+// 0 so the record stays total.
+Value build_scroll_position_record(const DictionaryValue& payload) {
+    auto read_number = [&payload](const char* field_key) -> double {
+        const auto* v = payload.find(field_key);
+
+        if (v != nullptr) {
+            if (v->is_number()) {
+                return v->as_number();
+            }
+
+            if (v->is_integer()) {
+                return static_cast<double>(v->as_integer());
+            }
+        }
+
+        return 0.0;
+    };
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "ScrollPosition";
+    rec->fields.emplace_back("x", Value{read_number("x")});
+    rec->fields.emplace_back("y", Value{read_number("y")});
+
+    return Value{std::move(rec)};
+}
+
 namespace {
 
 // ── Generic event dispatch helper ──────────────────────
@@ -665,11 +745,44 @@ void handle_focus_change(AppState& state, const EventMessage& event, const std::
 
 // Handler for mouse and widget events (pre-parsed dict payload).
 void handle_dict_event(AppState& state, const EventMessage& event, const std::string& /*raw*/) {
-    auto callback = (event.type == "mouse_event") ? state.find_sub_callback(event.id)
-                                                  : state.find_callback(event.id);
+    const bool is_mouse = (event.type == "mouse_event");
+    auto callback =
+        is_mouse ? state.find_sub_callback(event.id) : state.find_callback(event.id);
 
     // Use the dict payload that was already extracted during the single parse pass.
-    dispatch_event(state, callback, {Value{event.dict_payload ? event.dict_payload : make_dict()}});
+    auto payload = event.dict_payload ? event.dict_payload : make_dict();
+
+    // A GraphicalUi.on_mouse_typed subscription (flagged typed in active_subs)
+    // receives a GraphicalUi.MouseEvent record; plain on_mouse gets the dict.
+    // active_subs is only mutated on this same UI thread (manage_subscriptions),
+    // so the read needs no extra locking.
+    if (is_mouse) {
+        auto it = state.active_subs.find(event.id);
+
+        if (it != state.active_subs.end() && it->second.typed) {
+            dispatch_event(state, callback, {build_mouse_event_record(*payload)});
+            return;
+        }
+    }
+
+    dispatch_event(state, callback, {Value{std::move(payload)}});
+}
+
+// Handler for window scroll events (GraphicalUi.on_scroll / on_scroll_typed).
+// Delivers a raw {x, y} dictionary, or a typed GraphicalUi.ScrollPosition record
+// when the subscription was created via on_scroll_typed.
+void handle_scroll_event(AppState& state, const EventMessage& event, const std::string& /*raw*/) {
+    auto callback = state.find_sub_callback(event.id);
+    auto payload = event.dict_payload ? event.dict_payload : make_dict();
+
+    auto it = state.active_subs.find(event.id);
+
+    if (it != state.active_subs.end() && it->second.typed) {
+        dispatch_event(state, callback, {build_scroll_position_record(*payload)});
+        return;
+    }
+
+    dispatch_event(state, callback, {Value{std::move(payload)}});
 }
 
 // ── Hash-based dispatch table for named event types ───
@@ -701,6 +814,7 @@ constexpr EventDispatchEntry event_dispatch_entries[] = {
     {.type="online",            .handler=handle_subscription},
     {.type="offline",           .handler=handle_subscription},
     {.type="media_query",       .handler=handle_focus_change},
+    {.type="scroll_event",      .handler=handle_scroll_event},
 };
 // clang-format on
 

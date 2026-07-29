@@ -1225,6 +1225,7 @@ Spacing helpers return style dictionaries that control gap and padding within co
 | Function                                     | Parameter Types      | Return Type  | Description                                                                   |
 | -------------------------------------------- | -------------------- | ------------ | ----------------------------------------------------------------------------- |
 | `GraphicalUi.classify_device(width, height)` | `(integer, integer)` | `widget`     | Classify viewport into `"phone"`, `"tablet"`, `"desktop"`, or `"big_desktop"` |
+| `GraphicalUi.classify_device_typed(width, height)` | `(integer, integer)` | `GraphicalUi.DeviceInfo` | Typed classifier — returns a `DeviceInfo` record with choice-typed `class`/`orientation` |
 
 Returns a dictionary with `class` (device category), `orientation` (`"portrait"` or `"landscape"`), `width`, and `height`. Combine with `on_resize` to build responsive layouts:
 
@@ -1234,6 +1235,22 @@ Returns a dictionary with `class` (device category), `orientation` (`"portrait"`
 | 640 – 1023  | `"tablet"`      |
 | 1024 – 1919 | `"desktop"`     |
 | ≥ 1920      | `"big_desktop"` |
+
+`GraphicalUi.classify_device_typed(width, height)` returns a `GraphicalUi.DeviceInfo` record — `class` (`GraphicalUi.DeviceClass`: `Phone`, `Tablet`, `Desktop`, `BigDesktop`), `orientation` (`GraphicalUi.Orientation`: `Portrait`, `Landscape`), `width` (`integer`), `height` (`integer`) — using the same breakpoints, so responsive branching is an exhaustive `match` instead of magic-string comparison.
+
+### Typed choices and bridges
+
+Several stringly-typed GraphicalUi APIs have typed companions whose choices the type checker can close, so a typo is a compile error rather than a silent runtime miss. The original string forms and the `GraphicalUi.INFO/WARNING/ERROR/SUCCESS` and `GraphicalUi.PRIMARY/SECONDARY/GHOST/DANGER` constants are unchanged.
+
+| Function                                                     | Parameter Types                                    | Return Type | Description                                                          |
+| ------------------------------------------------------------ | -------------------------------------------------- | ----------- | ------------------------------------------------------------------- |
+| `GraphicalUi.alert_of(message, severity, style?)`            | `(string, GraphicalUi.Severity, dictionary?)`      | `widget`    | Typed `alert` — takes a `Severity` choice instead of a string       |
+| `GraphicalUi.toast_of(message, severity, ...)`               | `(string, GraphicalUi.Severity, ...)`              | `widget`    | Typed `toast` — takes a `Severity` choice; same trailing arguments  |
+| `GraphicalUi.severity_to_string(severity)`                   | `(GraphicalUi.Severity)`                            | `string`    | Bridge from `Severity` to the `"info"`/`"warning"`/… string         |
+| `GraphicalUi.button_of(label, on_click, variant, style?)`    | `(string, func() -> any, GraphicalUi.ButtonVariant, dictionary?)` | `widget` | Typed `button` — takes a `ButtonVariant` choice for the hierarchy   |
+| `GraphicalUi.button_variant_to_string(variant)`              | `(GraphicalUi.ButtonVariant)`                       | `string`    | Bridge from `ButtonVariant` to the `"primary"`/`"secondary"`/… string |
+
+`GraphicalUi.Severity` is a closed choice with four variants: `Info`, `Warning`, `Error`, `Success`. `GraphicalUi.ButtonVariant` is a closed choice with four variants: `Primary`, `Secondary`, `Ghost`, `Danger`.
 
 ### Display Widgets
 
@@ -1419,6 +1436,7 @@ Subscriptions let an application react to external events that are not tied to a
 | `GraphicalUi.on_resize(id, on_resize)`              | `(string, func(integer, integer) -> any)`   | `subscription` | Fire when the window is resized with `(width, height)`                   |
 | `GraphicalUi.on_focus(id, on_focus)`                | `(string, func(boolean) -> any)`            | `subscription` | Fire when the window gains or loses focus                                |
 | `GraphicalUi.on_mouse(id, event_type, on_event)`    | `(string, string, func(dictionary) -> any)` | `subscription` | Fire on mouse events (`"click"`, `"move"`, `"down"`, `"up"`, `"scroll"`) |
+| `GraphicalUi.on_mouse_typed(id, event_type, on_event)` | `(string, string, func(GraphicalUi.MouseEvent) -> any)` | `subscription` | Like `on_mouse`, but the callback receives a typed `GraphicalUi.MouseEvent` record |
 | `GraphicalUi.on_animation_frame(id, on_frame)`      | `(string, func() -> any)`                   | `subscription` | Fire before each browser animation frame                                 |
 | `GraphicalUi.on_drag(id, event_type, on_drag)`      | `(string, string, func(dictionary) -> any)` | `subscription` | Fire on drag events; `event_type` selects the phase                      |
 | `GraphicalUi.on_idle(id, timeout_ms, on_idle)`      | `(string, integer, func() -> any)`          | `subscription` | Fire after `timeout_ms` of user inactivity                               |
@@ -1431,7 +1449,23 @@ Subscriptions let an application react to external events that are not tied to a
 
 The `on_mouse` callback receives a dictionary with `x`, `y`, `button` (`"left"`, `"middle"`, `"right"`), and modifier keys (`ctrl`, `shift`, `alt`).
 
+`GraphicalUi.on_mouse_typed` is an additive, type-safe companion to `on_mouse`: it delivers the same mouse events, but the callback receives a typed `GraphicalUi.MouseEvent` record instead of a raw dictionary, so fields are autocompleted and typo-proof and the button can be matched exhaustively. Prefer it in new code; `on_mouse` stays for dynamic/dictionary handlers.
+
+`GraphicalUi.MouseEvent` record fields: `x` (`number`), `y` (`number`), `button` (`GraphicalUi.MouseButton`), `ctrl` (`boolean`), `shift` (`boolean`), `alt` (`boolean`). Coordinates are device-pixel measurements (a `number`, not an index).
+
+`GraphicalUi.MouseButton` is a closed choice with three variants, so a `match` over it is exhaustively checked by the type checker: `Left`, `Middle`, `Right`.
+
+```luma
+GraphicalUi.on_mouse_typed("canvas", "down", (GraphicalUi.MouseEvent e) -> match e.button {
+    case GraphicalUi.MouseButton.Left   { paint(e.x, e.y) }
+    case GraphicalUi.MouseButton.Middle { pan(e.x, e.y) }
+    case GraphicalUi.MouseButton.Right  { show_menu(e.x, e.y) }
+})
+```
+
 Each subscription requires a unique `id` string. The runtime uses the `id` to match subscriptions across renders — if the `id` disappears from the returned array, the listener is removed.
+
+`GraphicalUi.on_scroll_typed(id, on_scroll)` is the type-safe companion to `on_scroll`: its callback receives a typed `GraphicalUi.ScrollPosition` record instead of a raw dictionary. `GraphicalUi.ScrollPosition` fields: `x` (`number`), `y` (`number`) — the horizontal and vertical scroll offsets in device pixels.
 
 ### State History
 

@@ -620,6 +620,25 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("boolean", "underline"), field("boolean", "inverse"),
                    field("boolean", "strikethrough"));
 
+        // Typed payload delivered to a GraphicalUi.on_mouse_typed callback — the
+        // record replacement for the bare {x, y, button, ctrl, shift, alt}
+        // dictionary that GraphicalUi.on_mouse hands out.  x / y are `number`
+        // (device-pixel measurements, not indices, mirroring the DOM MouseEvent);
+        // `button` carries the GraphicalUi.MouseButton choice (fully-qualified so
+        // the annotation resolves to the choice, like Terminal.MouseEvent.kind);
+        // the three modifier flags are booleans.  Constructed by
+        // build_mouse_event_record() in core/runtime/stdlib/io/graphicalui_events.cpp.
+        add_record(st, "GraphicalUi.MouseEvent", field("number", "x"), field("number", "y"),
+                   field("GraphicalUi.MouseButton", "button"), field("boolean", "ctrl"),
+                   field("boolean", "shift"), field("boolean", "alt"));
+
+        // Typed payload delivered to a GraphicalUi.on_scroll_typed callback — the
+        // record replacement for the bare {x, y} scroll-position dictionary that
+        // GraphicalUi.on_scroll hands out.  x / y are `number` (device-pixel
+        // scroll offsets, mirroring the DOM scrollX / scrollY).  Constructed by
+        // build_scroll_position_record() in graphicalui_events.cpp.
+        add_record(st, "GraphicalUi.ScrollPosition", field("number", "x"), field("number", "y"));
+
         // ── DateTime.Weekday ────────────────────────────
         // Variant names must match k_weekday_names in
         // core/runtime/stdlib/system/datetime_module.cpp exactly (PascalCase,
@@ -1055,6 +1074,101 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             st.choice_map["Terminal.CursorStyle"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
+
+        // ── GraphicalUi.MouseButton ─────────────────────
+        // Which pointer button a GraphicalUi.MouseEvent refers to.  A closed,
+        // exhaustively-matchable choice replacing the stringly-typed "left" /
+        // "middle" / "right" the on_mouse dictionary carries in its `button` key.
+        // Variant names/order must match button_from_string() in
+        // core/runtime/stdlib/io/graphicalui_events.cpp and the JS button map in
+        // external/gui-framework/gui-subscriptions.js (index 0/1/2 → Left/Middle/
+        // Right).  A non-left/middle/right value falls back to Left, so the choice
+        // stays total over anything the browser can emit.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "MouseButton");
+            ch->variants.push_back(ChoiceVariant{.name = "Left", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Middle", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Right", .fields = {}});
+
+            st.choice_map["GraphicalUi.MouseButton"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── GraphicalUi.Severity ────────────────────────
+        // Alert / toast severity accepted by GraphicalUi.alert_of / toast_of and
+        // bridged to a string by GraphicalUi.severity_to_string.  A closed choice
+        // the type checker can enforce, replacing the open severity string (and
+        // the GraphicalUi.INFO/WARNING/ERROR/SUCCESS constants, which stay).
+        // Variant names must match severity_to_lower() in
+        // core/runtime/stdlib/io/graphicalui_helpers.hpp (Info → "info", etc.).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Severity");
+            ch->variants.push_back(ChoiceVariant{.name = "Info", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Warning", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Error", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Success", .fields = {}});
+
+            st.choice_map["GraphicalUi.Severity"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── GraphicalUi.ButtonVariant ───────────────────
+        // Button-hierarchy style accepted by GraphicalUi.button_of and bridged to
+        // a string by GraphicalUi.button_variant_to_string.  A closed choice
+        // paralleling the GraphicalUi.PRIMARY/SECONDARY/GHOST/DANGER constants
+        // (which stay).  Variant names must match button_variant_to_lower() in
+        // core/runtime/stdlib/io/graphicalui_helpers.hpp (Primary → "primary").
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "ButtonVariant");
+            ch->variants.push_back(ChoiceVariant{.name = "Primary", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Secondary", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Ghost", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Danger", .fields = {}});
+
+            st.choice_map["GraphicalUi.ButtonVariant"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── GraphicalUi.DeviceClass ─────────────────────
+        // Coarse device-size bucket returned by GraphicalUi.classify_device_typed,
+        // replacing the "phone" / "tablet" / "desktop" / "big_desktop" strings the
+        // classify_device dictionary carries in its `class` key.  Variant
+        // names/order must match register_classify_device_typed() in
+        // core/runtime/stdlib/io/graphicalui_widgets_layout.cpp (Phone < 640 <
+        // Tablet < 1024 < Desktop < 1920 ≤ BigDesktop).  Mirrors
+        // FileSystem.FileKind — a classifier that returns a closed choice.
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "DeviceClass");
+            ch->variants.push_back(ChoiceVariant{.name = "Phone", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Tablet", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Desktop", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "BigDesktop", .fields = {}});
+
+            st.choice_map["GraphicalUi.DeviceClass"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── GraphicalUi.Orientation ─────────────────────
+        // Screen orientation returned in GraphicalUi.DeviceInfo.orientation.
+        // Landscape when width ≥ height, else Portrait — must match
+        // register_classify_device_typed().
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Orientation");
+            ch->variants.push_back(ChoiceVariant{.name = "Portrait", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Landscape", .fields = {}});
+
+            st.choice_map["GraphicalUi.Orientation"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // Typed result of GraphicalUi.classify_device_typed(width, height): the
+        // record replacement for the {class, orientation, width, height}
+        // dictionary that classify_device returns.  `class` / `orientation` are
+        // fully-qualified so the annotations resolve to the choices; width /
+        // height are `integer` (discrete pixel counts).
+        add_record(st, "GraphicalUi.DeviceInfo", field("GraphicalUi.DeviceClass", "class"),
+                   field("GraphicalUi.Orientation", "orientation"), field("integer", "width"),
+                   field("integer", "height"));
 
         // ── Ordering ────────────────────────────────────
         // Top-level choice (no namespace) mirroring Rust's std::cmp::Ordering.

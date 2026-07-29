@@ -158,6 +158,14 @@ namespace {
             if (desc.named_type == "Terminal.CursorStyle") {
                 return TypeInfo::make_named(K::Choice, "Terminal.CursorStyle");
             }
+
+            if (desc.named_type == "GraphicalUi.Severity") {
+                return TypeInfo::make_named(K::Choice, "GraphicalUi.Severity");
+            }
+
+            if (desc.named_type == "GraphicalUi.ButtonVariant") {
+                return TypeInfo::make_named(K::Choice, "GraphicalUi.ButtonVariant");
+            }
             if (desc.named_type == "Compression.Format") {
                 return TypeInfo::make_named(K::Choice, "Compression.Format");
             }

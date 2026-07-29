@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -12,8 +13,18 @@
 
 #include "analysis/errors/error.hpp"
 #include "common/platform_utils.hpp"
+#include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/io/graphicalui_css.hpp"
 #include "stdlib_test_helpers.hpp"
+
+// build_mouse_event_record lives behind LUMA_HAS_WEBVIEW in graphicalui_events.cpp
+// (compiled into luma_core whenever a webview backend is available — the only
+// case this test is built).  Forward-declare it unconditionally so the test TU,
+// which does not define LUMA_HAS_WEBVIEW, can still link against it.
+namespace luma::gui_detail {
+[[nodiscard]] Value build_mouse_event_record(const DictionaryValue& payload);
+[[nodiscard]] Value build_scroll_position_record(const DictionaryValue& payload);
+} // namespace luma::gui_detail
 
 // ═══════════════════════════════════════════════════════════
 // App config validation
@@ -737,6 +748,205 @@ LUMA_TEST(on_mouse_event_type) {
     )");
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), "scroll");
+}
+
+// GraphicalUi.on_mouse_typed reuses the mouse subscription wiring but flags the
+// subscription so the runtime delivers a typed GraphicalUi.MouseEvent record.
+LUMA_TEST(on_mouse_typed_marks_typed_mouse_subscription) {
+    const auto v = eval(R"(
+        GraphicalUi.on_mouse_typed("m1", "move", (GraphicalUi.MouseEvent e) -> 0)
+    )");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+
+    const auto* sub_type = d.find("_sub_type");
+    ASSERT_TRUE(sub_type != nullptr && sub_type->is_string());
+    ASSERT_EQ(sub_type->as_string(), "mouse");
+
+    const auto* typed = d.find("_typed");
+    ASSERT_TRUE(typed != nullptr && typed->is_bool());
+    ASSERT_TRUE(typed->as_bool());
+}
+
+// build_mouse_event_record turns the browser payload dictionary into a typed
+// GraphicalUi.MouseEvent record: number coordinates, a MouseButton choice, and
+// boolean modifiers.
+LUMA_TEST(build_mouse_event_record_maps_payload) {
+    auto payload = std::make_shared<DictionaryValue>();
+    payload->set("x", Value{12.0});
+    payload->set("y", Value{34.0});
+    payload->set("button", Value{std::string{"right"}});
+    payload->set("ctrl", Value{true});
+    payload->set("shift", Value{false});
+    payload->set("alt", Value{true});
+
+    const auto rec_val = gui_detail::build_mouse_event_record(*payload);
+    ASSERT_TRUE(rec_val.is_record());
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.type_name, "MouseEvent");
+
+    const auto* x = rec.find_field("x");
+    ASSERT_TRUE(x != nullptr && x->is_number());
+    ASSERT_NEAR(x->as_number(), 12.0, 1e-9);
+
+    const auto* y = rec.find_field("y");
+    ASSERT_TRUE(y != nullptr && y->is_number());
+    ASSERT_NEAR(y->as_number(), 34.0, 1e-9);
+
+    const auto* button = rec.find_field("button");
+    ASSERT_TRUE(button != nullptr && button->is_choice());
+    ASSERT_EQ(button->as_choice()->type_name, "MouseButton");
+    ASSERT_EQ(button->as_choice()->variant, "Right");
+
+    const auto* ctrl = rec.find_field("ctrl");
+    ASSERT_TRUE(ctrl != nullptr && ctrl->is_bool());
+    ASSERT_TRUE(ctrl->as_bool());
+
+    const auto* shift = rec.find_field("shift");
+    ASSERT_TRUE(shift != nullptr && shift->is_bool());
+    ASSERT_FALSE(shift->as_bool());
+
+    const auto* alt = rec.find_field("alt");
+    ASSERT_TRUE(alt != nullptr && alt->is_bool());
+    ASSERT_TRUE(alt->as_bool());
+}
+
+// Middle-button strings map to the Middle variant.
+LUMA_TEST(build_mouse_event_record_middle_button) {
+    auto payload = std::make_shared<DictionaryValue>();
+    payload->set("button", Value{std::string{"middle"}});
+
+    const auto rec_val = gui_detail::build_mouse_event_record(*payload);
+    const auto* button = rec_val.as_record()->find_field("button");
+    ASSERT_TRUE(button != nullptr && button->is_choice());
+    ASSERT_EQ(button->as_choice()->variant, "Middle");
+}
+
+// A missing payload stays total: coordinates default to 0, modifiers to false,
+// and an absent/unknown button falls back to Left.
+LUMA_TEST(build_mouse_event_record_defaults_to_left) {
+    auto payload = std::make_shared<DictionaryValue>();
+
+    const auto rec_val = gui_detail::build_mouse_event_record(*payload);
+    const auto& rec = *rec_val.as_record();
+
+    ASSERT_NEAR(rec.find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(rec.find_field("y")->as_number(), 0.0, 1e-9);
+    ASSERT_EQ(rec.find_field("button")->as_choice()->variant, "Left");
+    ASSERT_FALSE(rec.find_field("ctrl")->as_bool());
+    ASSERT_FALSE(rec.find_field("shift")->as_bool());
+    ASSERT_FALSE(rec.find_field("alt")->as_bool());
+}
+
+// GraphicalUi.on_scroll_typed flags the scroll subscription so the runtime
+// delivers a typed GraphicalUi.ScrollPosition record.
+LUMA_TEST(on_scroll_typed_marks_typed_scroll_subscription) {
+    const auto v = eval(R"(
+        GraphicalUi.on_scroll_typed("s1", (GraphicalUi.ScrollPosition p) -> p.y)
+    )");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+
+    const auto* sub_type = d.find("_sub_type");
+    ASSERT_TRUE(sub_type != nullptr && sub_type->is_string());
+    ASSERT_EQ(sub_type->as_string(), "scroll");
+
+    const auto* typed = d.find("_typed");
+    ASSERT_TRUE(typed != nullptr && typed->is_bool());
+    ASSERT_TRUE(typed->as_bool());
+}
+
+// build_scroll_position_record turns the browser scroll payload into a typed
+// GraphicalUi.ScrollPosition record with number coordinates.
+LUMA_TEST(build_scroll_position_record_maps_payload) {
+    auto payload = std::make_shared<DictionaryValue>();
+    payload->set("x", Value{5.0});
+    payload->set("y", Value{120.0});
+
+    const auto rec_val = gui_detail::build_scroll_position_record(*payload);
+    ASSERT_TRUE(rec_val.is_record());
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.type_name, "ScrollPosition");
+
+    const auto* x = rec.find_field("x");
+    ASSERT_TRUE(x != nullptr && x->is_number());
+    ASSERT_NEAR(x->as_number(), 5.0, 1e-9);
+
+    const auto* y = rec.find_field("y");
+    ASSERT_TRUE(y != nullptr && y->is_number());
+    ASSERT_NEAR(y->as_number(), 120.0, 1e-9);
+}
+
+// A missing scroll payload defaults both coordinates to 0.
+LUMA_TEST(build_scroll_position_record_defaults_zero) {
+    auto payload = std::make_shared<DictionaryValue>();
+
+    const auto rec_val = gui_detail::build_scroll_position_record(*payload);
+    const auto& rec = *rec_val.as_record();
+    ASSERT_NEAR(rec.find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(rec.find_field("y")->as_number(), 0.0, 1e-9);
+}
+
+// GraphicalUi.classify_device_typed returns a DeviceInfo record with typed
+// DeviceClass / Orientation choices, reusing the classify_device thresholds.
+LUMA_TEST(classify_device_typed_returns_record) {
+    const auto v = eval(R"(
+        GraphicalUi.classify_device_typed(390, 844).width
+    )");
+    ASSERT_TRUE(v.is_integer());
+    ASSERT_EQ(v.as_integer(), 390);
+}
+
+// severity_to_string and button_variant_to_string bridge the typed choices back
+// to the string keys of the untyped API.
+LUMA_TEST(severity_to_string_bridge) {
+    const auto v = eval(R"(
+        [GraphicalUi.severity_to_string(GraphicalUi.Severity.Info),
+         GraphicalUi.severity_to_string(GraphicalUi.Severity.Warning),
+         GraphicalUi.severity_to_string(GraphicalUi.Severity.Error),
+         GraphicalUi.severity_to_string(GraphicalUi.Severity.Success)]
+    )");
+    ASSERT_TRUE(v.is_array());
+    const auto& e = *v.as_array()->elements;
+    ASSERT_EQ(e[0].as_string(), "info");
+    ASSERT_EQ(e[1].as_string(), "warning");
+    ASSERT_EQ(e[2].as_string(), "error");
+    ASSERT_EQ(e[3].as_string(), "success");
+}
+
+LUMA_TEST(button_variant_to_string_bridge) {
+    const auto v = eval(R"(
+        [GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Primary),
+         GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Secondary),
+         GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Ghost),
+         GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Danger)]
+    )");
+    ASSERT_TRUE(v.is_array());
+    const auto& e = *v.as_array()->elements;
+    ASSERT_EQ(e[0].as_string(), "primary");
+    ASSERT_EQ(e[1].as_string(), "secondary");
+    ASSERT_EQ(e[2].as_string(), "ghost");
+    ASSERT_EQ(e[3].as_string(), "danger");
+}
+
+// alert_of lowers a typed Severity onto the same widget the string form builds.
+LUMA_TEST(alert_of_lowers_severity) {
+    const auto v = eval(R"(
+        dictionary<string> w = GraphicalUi.alert_of("hi", GraphicalUi.Severity.Warning)
+        Dictionary.get_or(w, "severity", "")
+    )");
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "warning");
+}
+
+// toast_of lowers a typed Severity and defaults the duration.
+LUMA_TEST(toast_of_lowers_severity) {
+    const auto v = eval(R"(
+        dictionary<string> w = GraphicalUi.toast_of("saved", GraphicalUi.Severity.Success)
+        Dictionary.get_or(w, "severity", "")
+    )");
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "success");
 }
 
 LUMA_TEST(error_boundary_success) {

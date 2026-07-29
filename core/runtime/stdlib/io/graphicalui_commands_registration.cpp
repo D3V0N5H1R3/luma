@@ -383,6 +383,31 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
                       return Value{std::move(w)};
                   });
 
+    // GraphicalUi.on_mouse_typed(id, event_type, callback, throttle_ms?) -> subscription
+    // Additive typed companion to on_mouse: identical wiring (same sub::mouse JS
+    // listener), but flagged so the runtime hands the callback a typed
+    // GraphicalUi.MouseEvent record instead of the raw dictionary.  The `_typed`
+    // flag is read back by build_subscription_map / handle_dict_event.
+    define_native(env, "GraphicalUi.on_mouse_typed",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_min_args("GraphicalUi.on_mouse_typed", args, 3, loc);
+                      auto id = expect_string(args[0], "GraphicalUi.on_mouse_typed", loc);
+                      auto event_type = expect_string(args[1], "GraphicalUi.on_mouse_typed", loc);
+                      auto w = make_dict();
+                      w->set(key::sub_type, Value{std::string{sub::mouse}});
+                      w->set(key::typed, Value{true});
+                      w->set("id", Value{id});
+                      w->set("event", Value{event_type});
+                      w->set(key::callback, args[2]);
+
+                      // Optional throttle interval (4th arg, default 16ms).
+                      if (args.size() > 3 && args[3].is_integer()) {
+                          w->set("throttle_ms", args[3]);
+                      }
+
+                      return Value{std::move(w)};
+                  });
+
     register_subscription(env, "GraphicalUi.on_visibility_change", sub::visibility);
     register_subscription(env, "GraphicalUi.on_online", sub::online);
     register_subscription(env, "GraphicalUi.on_offline", sub::offline);
@@ -392,6 +417,23 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
                           SubscriptionParam::string, "query");
 
     register_subscription(env, "GraphicalUi.on_scroll", sub::scroll);
+
+    // GraphicalUi.on_scroll_typed(id, callback) -> subscription
+    // Additive typed companion to on_scroll: same scroll subscription, but flagged
+    // so the runtime delivers a typed GraphicalUi.ScrollPosition record instead of
+    // the raw {x, y} dictionary.
+    define_native(env, "GraphicalUi.on_scroll_typed",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.on_scroll_typed", args, 2, loc);
+                      auto id = expect_string(args[0], "GraphicalUi.on_scroll_typed", loc);
+                      auto w = make_dict();
+                      w->set(key::sub_type, Value{std::string{sub::scroll}});
+                      w->set(key::typed, Value{true});
+                      w->set("id", Value{id});
+                      w->set(key::callback, args[1]);
+
+                      return Value{std::move(w)};
+                  });
 
     // GraphicalUi.on_idle(id, timeout_ms, callback) -> subscription
     register_subscription(env, "GraphicalUi.on_idle", sub::idle, SubscriptionParam::integer,
