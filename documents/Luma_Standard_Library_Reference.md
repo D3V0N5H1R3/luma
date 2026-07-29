@@ -2979,7 +2979,7 @@ Canonical character-class alphabets — one obvious source of truth per set — 
 | `String.ascii_uppercase`  | `"ABCDEFGHIJKLMNOPQRSTUVWXYZ"`                                  |
 | `String.ascii_letters`    | `ascii_lowercase` + `ascii_uppercase`                            |
 | `String.whitespace`       | space, tab, newline, carriage return, form-feed, vertical-tab    |
-| `String.punctuation`      | the ASCII punctuation set ``!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~``    |
+| `String.punctuation`      | the ASCII punctuation set ``!"#$%&'()*+,-./:;<=>?@[\]^_`{\|}~``    |
 
 ```luma
 # Pick a random character from an alphabet, or test membership in a set.
