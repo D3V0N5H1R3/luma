@@ -185,6 +185,93 @@ function void test_random_sample_from_exponential_invalid_rate() {
 }
 
 @test
+function void test_random_sample_from_bernoulli() {
+    # A Bernoulli draw is an integer-valued number: exactly 0.0 or 1.0.
+    number sample = Random.sample_from(Random.Distribution.Bernoulli(0.5)) |> Result.unwrap()
+
+    assert(sample >= 0.0 && sample <= 1.0, "Bernoulli yields 0 or 1")
+
+    integer whole = Converter.to_integer(sample) |> Result.unwrap()
+    assert(whole == 0 || whole == 1, "Bernoulli draw is integer-valued 0 or 1")
+}
+
+@test
+function void test_random_sample_from_bernoulli_invalid_probability() {
+    result<number> too_low = Random.sample_from(Random.Distribution.Bernoulli(-0.1))
+    result<number> too_high = Random.sample_from(Random.Distribution.Bernoulli(1.5))
+
+    assert(Result.is_failure(too_low))
+    assert(Result.is_failure(too_high))
+}
+
+@test
+function void test_random_sample_from_binomial() {
+    # A Binomial(n, p) draw is an integer count in [0, n].
+    number sample = Random.sample_from(Random.Distribution.Binomial(10, 0.5)) |> Result.unwrap()
+
+    assert(sample >= 0.0, "at least zero successes")
+    assert(sample <= 10.0, "at most n successes")
+}
+
+@test
+function void test_random_sample_from_binomial_invalid() {
+    result<number> bad_trials = Random.sample_from(Random.Distribution.Binomial(-1, 0.5))
+    result<number> bad_probability = Random.sample_from(Random.Distribution.Binomial(5, 1.5))
+
+    assert(Result.is_failure(bad_trials))
+    assert(Result.is_failure(bad_probability))
+}
+
+@test
+function void test_random_sample_from_poisson() {
+    # A Poisson draw is a non-negative integer-valued number.
+    number sample = Random.sample_from(Random.Distribution.Poisson(3.0)) |> Result.unwrap()
+
+    assert(sample >= 0.0, "Poisson counts are non-negative")
+}
+
+@test
+function void test_random_sample_from_poisson_invalid_rate() {
+    result<number> zero_rate = Random.sample_from(Random.Distribution.Poisson(0.0))
+    result<number> negative_rate = Random.sample_from(Random.Distribution.Poisson(-1.0))
+
+    assert(Result.is_failure(zero_rate))
+    assert(Result.is_failure(negative_rate))
+}
+
+@test
+function void test_random_sample_from_gamma() {
+    number sample = Random.sample_from(Random.Distribution.Gamma(2.0, 1.5)) |> Result.unwrap()
+
+    assert(sample >= 0.0, "Gamma draws are non-negative")
+}
+
+@test
+function void test_random_sample_from_gamma_invalid() {
+    result<number> bad_shape = Random.sample_from(Random.Distribution.Gamma(0.0, 1.0))
+    result<number> bad_scale = Random.sample_from(Random.Distribution.Gamma(1.0, 0.0))
+
+    assert(Result.is_failure(bad_shape))
+    assert(Result.is_failure(bad_scale))
+}
+
+@test
+function void test_random_sample_from_lognormal() {
+    number sample = Random.sample_from(Random.Distribution.LogNormal(0.0, 1.0)) |> Result.unwrap()
+
+    assert(sample > 0.0, "LogNormal draws are strictly positive")
+}
+
+@test
+function void test_random_sample_from_lognormal_invalid_standard_deviation() {
+    result<number> zero_sd = Random.sample_from(Random.Distribution.LogNormal(0.0, 0.0))
+    result<number> negative_sd = Random.sample_from(Random.Distribution.LogNormal(0.0, -1.0))
+
+    assert(Result.is_failure(zero_sd))
+    assert(Result.is_failure(negative_sd))
+}
+
+@test
 function void test_random_generate_string_invalid() {
     result<string> bad = Random.generate_string(-1)
 

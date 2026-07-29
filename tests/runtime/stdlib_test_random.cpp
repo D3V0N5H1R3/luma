@@ -1,5 +1,6 @@
 // Standard library tests: Random.
 
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <vector>
@@ -395,6 +396,103 @@ static void test_random_sample_from_exponential_invalid_rate() {
     ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Exponential(-3.0))");
 }
 
+static void test_random_sample_from_bernoulli() {
+    // A Bernoulli draw is always exactly 0.0 or 1.0 (an integer-valued number).
+    for (int i{0}; i < 50; ++i) {
+        const auto v = eval("Random.sample_from(Random.Distribution.Bernoulli(0.5))");
+        ASSERT_RESULT_SUCCESS(v);
+        ASSERT_TRUE(v.as_result()->owned_inner->is_number());
+
+        const auto n = v.as_result()->owned_inner->as_number();
+        ASSERT_TRUE(n == 0.0 || n == 1.0);
+    }
+}
+
+static void test_random_sample_from_bernoulli_certain_outcomes() {
+    const auto always = eval("Random.sample_from(Random.Distribution.Bernoulli(1.0))");
+    ASSERT_RESULT_SUCCESS(always);
+    ASSERT_NEAR(always.as_result()->owned_inner->as_number(), 1.0, 1e-9);
+
+    const auto never = eval("Random.sample_from(Random.Distribution.Bernoulli(0.0))");
+    ASSERT_RESULT_SUCCESS(never);
+    ASSERT_NEAR(never.as_result()->owned_inner->as_number(), 0.0, 1e-9);
+}
+
+static void test_random_sample_from_bernoulli_invalid_probability() {
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Bernoulli(-0.1))");
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Bernoulli(1.5))");
+}
+
+static void test_random_sample_from_binomial() {
+    // A Binomial(n, p) draw is an integer count in [0, n].
+    for (int i{0}; i < 50; ++i) {
+        const auto v = eval("Random.sample_from(Random.Distribution.Binomial(10, 0.5))");
+        ASSERT_RESULT_SUCCESS(v);
+        ASSERT_TRUE(v.as_result()->owned_inner->is_number());
+
+        const auto n = v.as_result()->owned_inner->as_number();
+        ASSERT_GE(n, 0.0);
+        ASSERT_LE(n, 10.0);
+        ASSERT_NEAR(n, std::round(n), 1e-9);
+    }
+}
+
+static void test_random_sample_from_binomial_zero_trials() {
+    const auto v = eval("Random.sample_from(Random.Distribution.Binomial(0, 0.5))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_NEAR(v.as_result()->owned_inner->as_number(), 0.0, 1e-9);
+}
+
+static void test_random_sample_from_binomial_invalid() {
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Binomial(-1, 0.5))");
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Binomial(5, -0.1))");
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Binomial(5, 1.1))");
+}
+
+static void test_random_sample_from_poisson() {
+    // A Poisson draw is a non-negative integer-valued number.
+    for (int i{0}; i < 50; ++i) {
+        const auto v = eval("Random.sample_from(Random.Distribution.Poisson(3.0))");
+        ASSERT_RESULT_SUCCESS(v);
+        ASSERT_TRUE(v.as_result()->owned_inner->is_number());
+
+        const auto n = v.as_result()->owned_inner->as_number();
+        ASSERT_GE(n, 0.0);
+        ASSERT_NEAR(n, std::round(n), 1e-9);
+    }
+}
+
+static void test_random_sample_from_poisson_invalid_rate() {
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Poisson(0.0))");
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Poisson(-2.0))");
+}
+
+static void test_random_sample_from_gamma() {
+    const auto v = eval("Random.sample_from(Random.Distribution.Gamma(2.0, 1.5))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_number());
+    ASSERT_GE(v.as_result()->owned_inner->as_number(), 0.0);
+}
+
+static void test_random_sample_from_gamma_invalid() {
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Gamma(0.0, 1.0))");
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Gamma(1.0, 0.0))");
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.Gamma(-1.0, 1.0))");
+}
+
+static void test_random_sample_from_lognormal() {
+    // A log-normal draw is strictly positive.
+    const auto v = eval("Random.sample_from(Random.Distribution.LogNormal(0.0, 1.0))");
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->is_number());
+    ASSERT_GT(v.as_result()->owned_inner->as_number(), 0.0);
+}
+
+static void test_random_sample_from_lognormal_invalid_standard_deviation() {
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.LogNormal(0.0, 0.0))");
+    ASSERT_EVAL_FAILURE("Random.sample_from(Random.Distribution.LogNormal(0.0, -1.0))");
+}
+
 // ── uuid ───────────────────────────────────────────────────────────────
 
 static void test_random_uuid() {
@@ -655,6 +753,18 @@ int main() {
     RUN(test_random_sample_from_normal_invalid_standard_deviation);
     RUN(test_random_sample_from_exponential);
     RUN(test_random_sample_from_exponential_invalid_rate);
+    RUN(test_random_sample_from_bernoulli);
+    RUN(test_random_sample_from_bernoulli_certain_outcomes);
+    RUN(test_random_sample_from_bernoulli_invalid_probability);
+    RUN(test_random_sample_from_binomial);
+    RUN(test_random_sample_from_binomial_zero_trials);
+    RUN(test_random_sample_from_binomial_invalid);
+    RUN(test_random_sample_from_poisson);
+    RUN(test_random_sample_from_poisson_invalid_rate);
+    RUN(test_random_sample_from_gamma);
+    RUN(test_random_sample_from_gamma_invalid);
+    RUN(test_random_sample_from_lognormal);
+    RUN(test_random_sample_from_lognormal_invalid_standard_deviation);
     RUN(test_random_shuffle);
     RUN(test_random_uuid);
     RUN(test_random_uuid_unique);

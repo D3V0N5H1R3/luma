@@ -2504,11 +2504,21 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 - `Random.Distribution.Uniform(low: number, high: number)` — a uniform draw in `[low, high]`; fails if `high < low`.
 - `Random.Distribution.Normal(mean: number, standard_deviation: number)` — a normal (Gaussian) draw via the Box–Muller transform; fails if `standard_deviation <= 0`.
 - `Random.Distribution.Exponential(rate: number)` — an exponential draw with rate (λ) `rate`, via inverse-transform sampling; fails if `rate <= 0`.
+- `Random.Distribution.Bernoulli(probability: number)` — a weighted coin flip returning `1.0` with the given probability, else `0.0`; fails unless `0 <= probability <= 1`. **Discrete** — the result is an integer-valued `number`.
+- `Random.Distribution.Binomial(trials: integer, probability: number)` — the number of successes in `trials` independent probability-`probability` trials; fails if `trials < 0` or `probability` is outside `[0, 1]`. **Discrete** — the result is an integer-valued `number` in `[0, trials]`.
+- `Random.Distribution.Poisson(rate: number)` — the number of events in a unit interval given mean event rate `rate`; fails if `rate <= 0`. **Discrete** — the result is a non-negative integer-valued `number`.
+- `Random.Distribution.Gamma(shape: number, scale: number)` — a right-skewed positive draw parameterised by shape (k) and scale (θ); fails if `shape <= 0` or `scale <= 0`.
+- `Random.Distribution.LogNormal(mean: number, standard_deviation: number)` — a draw whose natural logarithm is normally distributed with the given `mean` and `standard_deviation`; fails if `standard_deviation <= 0`.
+
+> The discrete distributions (`Bernoulli`, `Binomial`, `Poisson`) still return a `number` — `sample_from`'s return type is `result<number>` — but the drawn value is always integer-valued (e.g. `3.0`). Convert it with `Converter.to_integer` if you need an `integer`.
 
 ```luma
 result<number> uniform = Random.sample_from(Random.Distribution.Uniform(0.0, 10.0))
 result<number> normal = Random.sample_from(Random.Distribution.Normal(0.0, 1.0))
 result<number> exponential = Random.sample_from(Random.Distribution.Exponential(0.5))
+result<number> coin = Random.sample_from(Random.Distribution.Bernoulli(0.5))
+result<number> successes = Random.sample_from(Random.Distribution.Binomial(10, 0.5))
+result<number> arrivals = Random.sample_from(Random.Distribution.Poisson(4.0))
 ```
 
 **`Random.Uuid`.** A record — `value` (`string`) — wrapping a validated canonical UUID (the `8-4-4-4-12` hex form), so a UUID is a distinct, validated type rather than an anonymous string. `Random.uuid_typed()` generates one (like `generate_uuid`, but typed), `Random.parse_uuid(s)` validates an incoming string and fails for any non-canonical input (the stored value is lower-cased so equal UUIDs compare equal regardless of input case), and `Random.uuid_to_string(u)` reads the canonical string back out. The bare-string `Random.generate_uuid` / `secure_uuid` are unchanged. Mirrors `Socket.IpAddress`, a typed wrapper over an otherwise-stringly address.

@@ -427,7 +427,8 @@ void register_random_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             if (!args[0].is_choice()) {
                 throw RuntimeError{"Random.sample_from: expected a Random.Distribution", loc,
-                                   "pass Random.Distribution.Uniform/Normal/Exponential"};
+                                   "pass a Random.Distribution variant, e.g. "
+                                   "Random.Distribution.Uniform/Normal/Poisson"};
             }
 
             const auto& choice = *args[0].as_choice();
@@ -481,8 +482,98 @@ void register_random_ns(const EnvPtr& env) {
                 return make_success_value(Value{-std::log(u) / rate});
             }
 
+            if (choice.variant == "Bernoulli") {
+                const auto probability =
+                    expect_numeric(choice.fields[0], "Random.sample_from", loc);
+
+                if (probability < 0.0 || probability > 1.0) {
+                    return make_failure_value(error_msg(
+                        "Random", "sample_from", "Bernoulli requires 0 <= probability <= 1"));
+                }
+
+                // Discrete: 1.0 with probability p, else 0.0 (an integer-valued
+                // number, per the Random.Distribution contract).
+                std::bernoulli_distribution dist{probability};
+
+                return make_success_value(Value{dist(thread_local_generator()) ? 1.0 : 0.0});
+            }
+
+            if (choice.variant == "Binomial") {
+                const auto trials = expect_integer(choice.fields[0], "Random.sample_from", loc);
+                const auto probability =
+                    expect_numeric(choice.fields[1], "Random.sample_from", loc);
+
+                if (trials < 0) {
+                    return make_failure_value(
+                        error_msg("Random", "sample_from", "Binomial requires trials >= 0"));
+                }
+
+                if (probability < 0.0 || probability > 1.0) {
+                    return make_failure_value(error_msg("Random", "sample_from",
+                                                        "Binomial requires 0 <= probability <= 1"));
+                }
+
+                // Discrete: successes in `trials` probability-p trials, returned
+                // as an integer-valued number.
+                std::binomial_distribution<std::int64_t> dist{trials, probability};
+
+                return make_success_value(
+                    Value{static_cast<double>(dist(thread_local_generator()))});
+            }
+
+            if (choice.variant == "Poisson") {
+                const auto rate = expect_numeric(choice.fields[0], "Random.sample_from", loc);
+
+                if (rate <= 0.0) {
+                    return make_failure_value(
+                        error_msg("Random", "sample_from", "Poisson requires rate > 0"));
+                }
+
+                // Discrete: event count in a unit interval, returned as an
+                // integer-valued number.
+                std::poisson_distribution<std::int64_t> dist{rate};
+
+                return make_success_value(
+                    Value{static_cast<double>(dist(thread_local_generator()))});
+            }
+
+            if (choice.variant == "Gamma") {
+                const auto shape = expect_numeric(choice.fields[0], "Random.sample_from", loc);
+                const auto scale = expect_numeric(choice.fields[1], "Random.sample_from", loc);
+
+                if (shape <= 0.0) {
+                    return make_failure_value(
+                        error_msg("Random", "sample_from", "Gamma requires shape > 0"));
+                }
+
+                if (scale <= 0.0) {
+                    return make_failure_value(
+                        error_msg("Random", "sample_from", "Gamma requires scale > 0"));
+                }
+
+                std::gamma_distribution<double> dist{shape, scale};
+
+                return make_success_value(Value{dist(thread_local_generator())});
+            }
+
+            if (choice.variant == "LogNormal") {
+                const auto mean = expect_numeric(choice.fields[0], "Random.sample_from", loc);
+                const auto standard_deviation =
+                    expect_numeric(choice.fields[1], "Random.sample_from", loc);
+
+                if (standard_deviation <= 0.0) {
+                    return make_failure_value(error_msg(
+                        "Random", "sample_from", "LogNormal requires standard_deviation > 0"));
+                }
+
+                std::lognormal_distribution<double> dist{mean, standard_deviation};
+
+                return make_success_value(Value{dist(thread_local_generator())});
+            }
+
             throw RuntimeError{"Random.sample_from: unknown Random.Distribution variant", loc,
-                               "use Random.Distribution.Uniform/Normal/Exponential"};
+                               "use a Random.Distribution variant: Uniform, Normal, Exponential, "
+                               "Bernoulli, Binomial, Poisson, Gamma, LogNormal"};
         })
         .func("generate_uuid", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {

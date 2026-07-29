@@ -729,7 +729,9 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // uniform draws by hand. Uniform carries its inclusive [low, high]
         // bounds; Normal carries mean and standard_deviation for a Box–Muller
         // draw; Exponential carries its rate (lambda) for an inverse-transform
-        // draw. Variant names/fields must match the match in
+        // draw. Bernoulli/Binomial/Poisson are discrete (sample_from returns an
+        // integer-valued number); Gamma/LogNormal are continuous, skewed and
+        // positive. Variant names/fields must match the match in
         // core/runtime/stdlib/system/random_module.cpp exactly (PascalCase).
         {
             auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Distribution");
@@ -752,6 +754,46 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             exponential.name = "Exponential";
             exponential.fields.push_back(Parameter{.type = ann("number"), .name = "rate"});
             ch->variants.push_back(std::move(exponential));
+
+            // Discrete: a weighted coin flip.  sample_from draws 1.0 with
+            // probability p and 0.0 otherwise (an integer-valued number).
+            ChoiceVariant bernoulli;
+            bernoulli.name = "Bernoulli";
+            bernoulli.fields.push_back(Parameter{.type = ann("number"), .name = "probability"});
+            ch->variants.push_back(std::move(bernoulli));
+
+            // Discrete: the number of successes in `trials` independent
+            // probability-`p` Bernoulli trials.  trials is an integer count;
+            // sample_from draws an integer-valued number in [0, trials].
+            ChoiceVariant binomial;
+            binomial.name = "Binomial";
+            binomial.fields.push_back(Parameter{.type = ann("integer"), .name = "trials"});
+            binomial.fields.push_back(Parameter{.type = ann("number"), .name = "probability"});
+            ch->variants.push_back(std::move(binomial));
+
+            // Discrete: the number of events in a unit interval given a mean
+            // event rate.  sample_from draws a non-negative integer-valued number.
+            ChoiceVariant poisson;
+            poisson.name = "Poisson";
+            poisson.fields.push_back(Parameter{.type = ann("number"), .name = "rate"});
+            ch->variants.push_back(std::move(poisson));
+
+            // Continuous: a right-skewed positive distribution parameterised by
+            // shape (k) and scale (theta).
+            ChoiceVariant gamma;
+            gamma.name = "Gamma";
+            gamma.fields.push_back(Parameter{.type = ann("number"), .name = "shape"});
+            gamma.fields.push_back(Parameter{.type = ann("number"), .name = "scale"});
+            ch->variants.push_back(std::move(gamma));
+
+            // Continuous: a variable whose natural logarithm is normally
+            // distributed with the given mean and standard deviation.
+            ChoiceVariant log_normal;
+            log_normal.name = "LogNormal";
+            log_normal.fields.push_back(Parameter{.type = ann("number"), .name = "mean"});
+            log_normal.fields.push_back(
+                Parameter{.type = ann("number"), .name = "standard_deviation"});
+            ch->variants.push_back(std::move(log_normal));
 
             st.choice_map["Random.Distribution"] = ch.get();
             st.choices.push_back(std::move(ch));
