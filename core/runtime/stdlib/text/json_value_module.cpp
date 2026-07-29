@@ -390,8 +390,7 @@ void register_json_value(const EnvPtr& env) {
 
             const double d = payload->to_numeric();
 
-            if (const auto i = stdlib::safe_to_int64(d);
-                i && static_cast<double>(*i) == d) {
+            if (const auto i = stdlib::safe_to_int64(d); i && static_cast<double>(*i) == d) {
                 return make_success_value(Value{*i});
             }
 

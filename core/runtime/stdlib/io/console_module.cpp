@@ -230,9 +230,8 @@ void register_console_ns(const EnvPtr& env) {
                 // Fall through to the failure result below.
             }
 
-            return make_failure_value(
-                error_msg("Console", "prompt_integer",
-                          std::format("'{}' is not a whole number", trimmed)));
+            return make_failure_value(error_msg(
+                "Console", "prompt_integer", std::format("'{}' is not a whole number", trimmed)));
         })
         .func("prompt_number", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -260,8 +259,8 @@ void register_console_ns(const EnvPtr& env) {
                 // Fall through to the failure result below.
             }
 
-            return make_failure_value(error_msg(
-                "Console", "prompt_number", std::format("'{}' is not a number", trimmed)));
+            return make_failure_value(error_msg("Console", "prompt_number",
+                                                std::format("'{}' is not a number", trimmed)));
         })
         .func("confirm", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -289,9 +288,8 @@ void register_console_ns(const EnvPtr& env) {
                 return make_success_value(Value{false});
             }
 
-            return make_failure_value(
-                error_msg("Console", "confirm",
-                          std::format("'{}' is not yes or no", trim_ascii(line))));
+            return make_failure_value(error_msg(
+                "Console", "confirm", std::format("'{}' is not yes or no", trim_ascii(line))));
         })
         .func("prompt_with_default", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

@@ -385,8 +385,8 @@ void register_http_parsing(const EnvPtr& env) {
             url += host;
 
             // Omit the port when it is empty, "0", or the scheme's default.
-            const bool default_port = (scheme == "http" && port == "80") ||
-                                      (scheme == "https" && port == "443");
+            const bool default_port =
+                (scheme == "http" && port == "80") || (scheme == "https" && port == "443");
 
             if (!port.empty() && port != "0" && !default_port) {
                 url += ":" + port;

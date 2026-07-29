@@ -118,9 +118,8 @@ constexpr std::array<HashAlgorithmSpec, 4> k_file_hash_algorithms{{
     std::error_code size_ec;
     const auto file_bytes = std::filesystem::file_size(safe, size_ec);
     if (size_ec) {
-        return make_failure_value(
-            std::format("{}: cannot determine the size of '{}': {}", qualified, safe.string(),
-                        size_ec.message()));
+        return make_failure_value(std::format("{}: cannot determine the size of '{}': {}",
+                                              qualified, safe.string(), size_ec.message()));
     }
     if (file_bytes > ResourceLimits::max_string_size) {
         return make_failure_value(std::format("{}: file '{}' exceeds the maximum size of {} bytes",
@@ -165,9 +164,8 @@ void register_hash_file(const EnvPtr& env) {
             const auto& user_path = expect_string(args[1], "Hash.digest_file", loc);
 
             if (type == MBEDTLS_MD_NONE) {
-                return make_failure_value(
-                    error_msg("Hash", "digest_file",
-                              "unknown algorithm (use md5, sha1, sha256, or sha512)"));
+                return make_failure_value(error_msg(
+                    "Hash", "digest_file", "unknown algorithm (use md5, sha1, sha256, or sha512)"));
             }
 
             return hash_file_at(user_path, type, "Hash.digest_file", loc);

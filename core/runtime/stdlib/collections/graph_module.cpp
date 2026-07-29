@@ -50,10 +50,10 @@ void add_edge_into(GraphValue& g, const std::string& from, const std::string& to
 
     if (new_vertices > 0 &&
         g.adjacency.size() + new_vertices > ResourceLimits::max_graph_vertices) {
-        throw RuntimeError{
-            error_msg("Graph", function_name, "graph exceeds maximum vertex count"), loc,
-            std::format("the maximum number of vertices is {}",
-                        ResourceLimits::max_graph_vertices)};
+        throw RuntimeError{error_msg("Graph", function_name, "graph exceeds maximum vertex count"),
+                           loc,
+                           std::format("the maximum number of vertices is {}",
+                                       ResourceLimits::max_graph_vertices)};
     }
 
     g.adjacency[from];
@@ -135,79 +135,81 @@ static void register_graph_construction(const EnvPtr& env) {
         //   3. Edge limit — counts existing logical edges (halved for undirected)
         //      and checks against ResourceLimits::max_graph_edges.
         //   4. Mutation — adds the edge (and reverse edge for undirected graphs).
-        .native("add_edge", [](std::span<const Value> args, SourceLocation loc) -> Value {
-            expect_min_args("Graph.add_edge", args, 3, loc);
+        .native("add_edge",
+                [](std::span<const Value> args, SourceLocation loc) -> Value {
+                    expect_min_args("Graph.add_edge", args, 3, loc);
 
-            auto g = expect_graph(args[0], "Graph.add_edge", loc);
+                    auto g = expect_graph(args[0], "Graph.add_edge", loc);
 
-            const auto& from = expect_string(args[1], "Graph.add_edge", loc);
-            const auto& to = expect_string(args[2], "Graph.add_edge", loc);
+                    const auto& from = expect_string(args[1], "Graph.add_edge", loc);
+                    const auto& to = expect_string(args[2], "Graph.add_edge", loc);
 
-            double weight = 1.0;
+                    double weight = 1.0;
 
-            if (args.size() >= 4) {
-                weight = expect_numeric(args[3], "Graph.add_edge", loc);
+                    if (args.size() >= 4) {
+                        weight = expect_numeric(args[3], "Graph.add_edge", loc);
 
-                // Reject every non-finite weight at the boundary — the only place
-                // a user-supplied weight enters the graph — so the weighted-path
-                // algorithms only ever see finite, orderable values.  NaN is not
-                // comparable, so it breaks the strict weak ordering that
-                // minimum_spanning_tree's edge sort relies on (undefined
-                // behaviour) and poisons dijkstra's `d + weight` relaxation.
-                // ±Infinity is just as unsafe: +Infinity is indistinguishable from
-                // the "unreachable" distance sentinel, and mixing +Infinity with
-                // -Infinity in the Floyd-Warshall relaxation (`dist[i][k] +
-                // dist[k][j]`) produces NaN, reintroducing the same unordered value
-                // that all_pairs_shortest_paths would then store.
-                if (!std::isfinite(weight)) {
-                    throw RuntimeError{
-                        error_msg("Graph", "add_edge", "edge weight must be finite"), loc,
-                        "NaN and ±Infinity cannot be ordered safely, so they would "
-                        "break shortest-path and minimum-spanning-tree computations"};
-                }
-            }
+                        // Reject every non-finite weight at the boundary — the only place
+                        // a user-supplied weight enters the graph — so the weighted-path
+                        // algorithms only ever see finite, orderable values.  NaN is not
+                        // comparable, so it breaks the strict weak ordering that
+                        // minimum_spanning_tree's edge sort relies on (undefined
+                        // behaviour) and poisons dijkstra's `d + weight` relaxation.
+                        // ±Infinity is just as unsafe: +Infinity is indistinguishable from
+                        // the "unreachable" distance sentinel, and mixing +Infinity with
+                        // -Infinity in the Floyd-Warshall relaxation (`dist[i][k] +
+                        // dist[k][j]`) produces NaN, reintroducing the same unordered value
+                        // that all_pairs_shortest_paths would then store.
+                        if (!std::isfinite(weight)) {
+                            throw RuntimeError{
+                                error_msg("Graph", "add_edge", "edge weight must be finite"), loc,
+                                "NaN and ±Infinity cannot be ordered safely, so they would "
+                                "break shortest-path and minimum-spanning-tree computations"};
+                        }
+                    }
 
-            auto result = g->clone();
+                    auto result = g->clone();
 
-            // Check vertex limit for new vertices.
-            std::size_t new_vertices = 0;
+                    // Check vertex limit for new vertices.
+                    std::size_t new_vertices = 0;
 
-            if (!result->adjacency.contains(from)) {
-                ++new_vertices;
-            }
+                    if (!result->adjacency.contains(from)) {
+                        ++new_vertices;
+                    }
 
-            if (!result->adjacency.contains(to)) {
-                ++new_vertices;
-            }
+                    if (!result->adjacency.contains(to)) {
+                        ++new_vertices;
+                    }
 
-            if (new_vertices > 0 &&
-                result->adjacency.size() + new_vertices > ResourceLimits::max_graph_vertices) {
-                throw RuntimeError{
-                    error_msg("Graph", "add_edge", "graph exceeds maximum vertex count"), loc,
-                    std::format("the maximum number of vertices is {}",
-                                ResourceLimits::max_graph_vertices)};
-            }
+                    if (new_vertices > 0 && result->adjacency.size() + new_vertices >
+                                                ResourceLimits::max_graph_vertices) {
+                        throw RuntimeError{
+                            error_msg("Graph", "add_edge", "graph exceeds maximum vertex count"),
+                            loc,
+                            std::format("the maximum number of vertices is {}",
+                                        ResourceLimits::max_graph_vertices)};
+                    }
 
-            // Ensure both vertices exist.
-            result->adjacency[from];
-            result->adjacency[to];
+                    // Ensure both vertices exist.
+                    result->adjacency[from];
+                    result->adjacency[to];
 
-            // Check edge limit (logical edge count).
-            if (result->logical_edge_count() + 1 > ResourceLimits::max_graph_edges) {
-                throw RuntimeError{
-                    error_msg("Graph", "add_edge", "graph exceeds maximum edge count"), loc,
-                    std::format("the maximum number of edges is {}",
-                                ResourceLimits::max_graph_edges)};
-            }
+                    // Check edge limit (logical edge count).
+                    if (result->logical_edge_count() + 1 > ResourceLimits::max_graph_edges) {
+                        throw RuntimeError{
+                            error_msg("Graph", "add_edge", "graph exceeds maximum edge count"), loc,
+                            std::format("the maximum number of edges is {}",
+                                        ResourceLimits::max_graph_edges)};
+                    }
 
-            result->adjacency[from].push_back(GraphEdge{.to = to, .weight = weight});
+                    result->adjacency[from].push_back(GraphEdge{.to = to, .weight = weight});
 
-            if (!result->directed) {
-                result->adjacency[to].push_back(GraphEdge{.to = from, .weight = weight});
-            }
+                    if (!result->directed) {
+                        result->adjacency[to].push_back(GraphEdge{.to = from, .weight = weight});
+                    }
 
-            return Value{std::move(result)};
-        })
+                    return Value{std::move(result)};
+                })
         // Graph.from_edges(edges, directed) — build a graph from an array of
         // Graph.Edge records, adding each edge's endpoints as vertices.  The
         // inverse companion of Graph.edges.
@@ -263,26 +265,23 @@ static void register_graph_construction(const EnvPtr& env) {
             for (const auto& [vertex, neighbours] : adj->entries) {
                 // A vertex may have no outgoing edges; ensure it still exists.
                 if (g->adjacency.size() + 1 > ResourceLimits::max_graph_vertices) {
-                    throw RuntimeError{
-                        error_msg("Graph", "from_adjacency_list",
-                                  "graph exceeds maximum vertex count"),
-                        loc};
+                    throw RuntimeError{error_msg("Graph", "from_adjacency_list",
+                                                 "graph exceeds maximum vertex count"),
+                                       loc};
                 }
                 g->adjacency[vertex];
 
                 if (!neighbours.is_array()) {
-                    throw RuntimeError{
-                        error_msg("Graph", "from_adjacency_list",
-                                  "each value must be an array of neighbour names"),
-                        loc};
+                    throw RuntimeError{error_msg("Graph", "from_adjacency_list",
+                                                 "each value must be an array of neighbour names"),
+                                       loc};
                 }
 
                 for (const auto& n : *neighbours.as_array()->elements) {
                     if (!n.is_string()) {
-                        throw RuntimeError{
-                            error_msg("Graph", "from_adjacency_list",
-                                      "neighbour names must be strings"),
-                            loc};
+                        throw RuntimeError{error_msg("Graph", "from_adjacency_list",
+                                                     "neighbour names must be strings"),
+                                           loc};
                     }
 
                     add_edge_into(*g, vertex, n.as_string(), 1.0, "from_adjacency_list", loc);
@@ -533,8 +532,8 @@ static void register_graph_queries(const EnvPtr& env) {
             std::vector<std::string> preds;
 
             for (const auto& [vertex, edges] : g->adjacency) {
-                const bool points_to_key = std::ranges::any_of(
-                    edges, [&](const GraphEdge& e) { return e.to == key; });
+                const bool points_to_key =
+                    std::ranges::any_of(edges, [&](const GraphEdge& e) { return e.to == key; });
                 if (points_to_key) {
                     preds.push_back(vertex);
                 }

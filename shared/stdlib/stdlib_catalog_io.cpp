@@ -4,24 +4,23 @@ namespace luma::stdlib::detail {
 
 void register_console_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                 const ParamShorthands& p) {
-    append_specs(specs,
-                 {
-                     m.fn("confirm", 1, "(message: string)", R::result_boolean(), {p.string}),
-                     m.fn("flush", 0, "()", R::result_boolean(), {}),
-                     m.fn("is_interactive", 0, "()", R::boolean_type(), {}),
-                     m.fn("is_tty", 0, "()", R::boolean_type(), {}),
-                     m.fn("prompt", 1, "(message: string)", R::result_string(), {p.string}),
-                     m.fn("prompt_integer", 1, "(message: string)", R::result_integer(),
-                          {p.string}),
-                     m.fn("prompt_number", 1, "(message: string)", R::result_number(), {p.string}),
-                     m.fn("prompt_with_default", 2, "(message: string, default: string)",
-                          R::result_string(), {p.string, p.string}),
-                     m.fn("read_from_stdin", 0, "()", R::result_string(), {}),
-                     m.fn("read_line", 0, "()", R::result_string(), {}),
-                     m.fn("read_lines", 0, "()", R::result(R::array(R::string_type())), {}),
-                     m.fn("write_to_stderr", 1, "(text: string)", R::result_boolean(), {p.string}),
-                     m.fn("write_to_stdout", 1, "(text: string)", R::result_boolean(), {p.string}),
-                 });
+    append_specs(
+        specs, {
+                   m.fn("confirm", 1, "(message: string)", R::result_boolean(), {p.string}),
+                   m.fn("flush", 0, "()", R::result_boolean(), {}),
+                   m.fn("is_interactive", 0, "()", R::boolean_type(), {}),
+                   m.fn("is_tty", 0, "()", R::boolean_type(), {}),
+                   m.fn("prompt", 1, "(message: string)", R::result_string(), {p.string}),
+                   m.fn("prompt_integer", 1, "(message: string)", R::result_integer(), {p.string}),
+                   m.fn("prompt_number", 1, "(message: string)", R::result_number(), {p.string}),
+                   m.fn("prompt_with_default", 2, "(message: string, default: string)",
+                        R::result_string(), {p.string, p.string}),
+                   m.fn("read_from_stdin", 0, "()", R::result_string(), {}),
+                   m.fn("read_line", 0, "()", R::result_string(), {}),
+                   m.fn("read_lines", 0, "()", R::result(R::array(R::string_type())), {}),
+                   m.fn("write_to_stderr", 1, "(text: string)", R::result_boolean(), {p.string}),
+                   m.fn("write_to_stdout", 1, "(text: string)", R::result_boolean(), {p.string}),
+               });
 }
 
 void register_file_system_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,

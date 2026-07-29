@@ -156,10 +156,9 @@ template <typename EntryPredicate>
     const auto file_bytes = std::filesystem::file_size(safe_path, size_ec);
 
     if (size_ec) {
-        return make_failure_value(
-            error_msg("FileSystem", function_name,
-                      std::format("cannot determine the size of '{}': {}", safe_path.string(),
-                                  size_ec.message())));
+        return make_failure_value(error_msg("FileSystem", function_name,
+                                            std::format("cannot determine the size of '{}': {}",
+                                                        safe_path.string(), size_ec.message())));
     }
 
     if (file_bytes > ResourceLimits::max_array_size) {
@@ -176,8 +175,7 @@ template <typename EntryPredicate>
             "FileSystem", function_name, std::format("cannot read file '{}'", safe_path.string())));
     }
 
-    const std::string data{std::istreambuf_iterator<char>{ifs},
-                           std::istreambuf_iterator<char>{}};
+    const std::string data{std::istreambuf_iterator<char>{ifs}, std::istreambuf_iterator<char>{}};
 
     if (ifs.bad()) {
         return make_failure_value(
@@ -189,8 +187,7 @@ template <typename EntryPredicate>
     arr->elements->reserve(data.size());
 
     for (const char ch : data) {
-        arr->elements->emplace_back(
-            static_cast<std::int64_t>(static_cast<std::uint8_t>(ch)));
+        arr->elements->emplace_back(static_cast<std::int64_t>(static_cast<std::uint8_t>(ch)));
     }
 
     return make_success_value(Value{std::move(arr)});

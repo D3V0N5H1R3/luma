@@ -677,8 +677,8 @@ void cmd_scroll_to(AppState& state, const DictionaryValue& d) {
     if (!widget_id.empty()) {
         // Only "smooth" and "instant"/"auto" are valid scrollIntoView behaviours;
         // default to "smooth" for anything else so a stray value can't inject.
-        const std::string safe_behavior = (behavior == "instant" || behavior == "auto") ? "auto"
-                                                                                         : "smooth";
+        const std::string safe_behavior =
+            (behavior == "instant" || behavior == "auto") ? "auto" : "smooth";
         auto js = std::format(
             "document.getElementById('{}')?.scrollIntoView({{behavior:'{}',block:'nearest'}})",
             luma::js_string_escape(widget_id), safe_behavior);

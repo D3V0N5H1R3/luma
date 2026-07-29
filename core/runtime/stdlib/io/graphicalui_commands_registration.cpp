@@ -194,18 +194,17 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
                   });
 
     // GraphicalUi.scroll_to(widget_id, behavior?) -> command
-    define_native(env, "GraphicalUi.scroll_to",
-                  [](std::span<const Value> args, SourceLocation loc) -> Value {
-                      expect_min_args("GraphicalUi.scroll_to", args, 1, loc);
-                      auto widget_id = expect_string(args[0], "GraphicalUi.scroll_to", loc);
-                      auto w = make_command_dict(cmd::scroll_to);
-                      w->set("widget_id", Value{widget_id});
-                      if (args.size() >= 2) {
-                          w->set("behavior",
-                                 Value{expect_string(args[1], "GraphicalUi.scroll_to", loc)});
-                      }
-                      return Value{std::move(w)};
-                  });
+    define_native(
+        env, "GraphicalUi.scroll_to", [](std::span<const Value> args, SourceLocation loc) -> Value {
+            expect_min_args("GraphicalUi.scroll_to", args, 1, loc);
+            auto widget_id = expect_string(args[0], "GraphicalUi.scroll_to", loc);
+            auto w = make_command_dict(cmd::scroll_to);
+            w->set("widget_id", Value{widget_id});
+            if (args.size() >= 2) {
+                w->set("behavior", Value{expect_string(args[1], "GraphicalUi.scroll_to", loc)});
+            }
+            return Value{std::move(w)};
+        });
 
     // GraphicalUi.blur(widget_id) -> command
     define_native(env, "GraphicalUi.blur",
