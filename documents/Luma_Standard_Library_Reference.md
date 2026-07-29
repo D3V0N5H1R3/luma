@@ -2393,7 +2393,6 @@ match Process.run_command_timeout(cmd, 2000) {
 }
 ```
 
-
 `Process.CommandOutput` record fields: `exit_code` (`integer`), `standard_output` (`string`), `standard_error` (`string`), `success` (`boolean`, true when `exit_code` is `0`). It is returned by `Process.execute`, the richer sibling of `Process.run`: where `ProcessResult` captures only stdout, `CommandOutput` keeps stdout and stderr in separate fields — essential for diagnosing a failed command, whose error text `run` discards — and adds a derived `success` convenience so callers avoid re-checking `exit_code == 0`. `Process.run` and `ProcessResult` are unchanged for the common case. The same shell-injection **security warning** above applies verbatim to `Process.execute`.
 
 ```luma
