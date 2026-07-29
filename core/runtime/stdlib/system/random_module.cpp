@@ -674,7 +674,8 @@ void register_random_ns(const EnvPtr& env) {
             const auto n = expect_integer(args[0], "Random.secure_bytes", loc);
 
             if (n < 0) {
-                return make_failure_value(error_msg("Random", "secure_bytes", "count must be >= 0"));
+                return make_failure_value(
+                    error_msg("Random", "secure_bytes", "count must be >= 0"));
             }
 
             if (static_cast<std::uint64_t>(n) > ResourceLimits::max_array_size) {

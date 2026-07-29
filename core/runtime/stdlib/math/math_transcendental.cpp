@@ -153,7 +153,8 @@ void register_math_transcendental(const EnvPtr& env) {
             const auto n = expect_numeric(args[1], "Math.nth_root", loc);
 
             if (n == 0.0) {
-                return make_failure_value(error_msg("Math", "nth_root", "root degree must not be 0"));
+                return make_failure_value(
+                    error_msg("Math", "nth_root", "root degree must not be 0"));
             }
 
             double result{0.0};
@@ -163,8 +164,8 @@ void register_math_transcendental(const EnvPtr& env) {
                 const bool odd_integer = (std::floor(n) == n) && (std::fmod(n, 2.0) != 0.0);
 
                 if (!odd_integer) {
-                    return make_failure_value(
-                        error_msg("Math", "nth_root", "even or fractional root of a negative value"));
+                    return make_failure_value(error_msg(
+                        "Math", "nth_root", "even or fractional root of a negative value"));
                 }
 
                 result = -std::pow(-value, 1.0 / n);

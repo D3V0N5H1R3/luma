@@ -4,25 +4,25 @@ namespace luma::stdlib::detail {
 
 void register_log_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                             const ParamShorthands& p) {
-    append_specs(specs, {
-                            m.fn("clear_context", 0, "()", R::void_type()),
-                            m.fn("debug", 1, "(message: string)", R::void_type(), {p.string}),
-                            m.fn("error", 1, "(message: string)", R::void_type(), {p.string}),
-                            m.fn("get_level", 0, "()", named::log_level()),
-                            m.fn("info", 1, "(message: string)", R::void_type(), {p.string}),
-                            m.fn("is_enabled", 1, "(level: Log.Level | string)", R::boolean_type(),
-                                 {p.any}),
-                            m.fn("log", 2, "(level: Log.Level | string, message: string)",
-                                 R::void_type(), {p.any, p.string}),
-                            m.fn("reset", 0, "()", R::void_type()),
-                            m.fn("set_context", 2, "(key: string, value: string)", R::void_type(),
-                                 {p.string, p.string}),
-                            m.fn("set_format", 1, "(format: string)", R::void_type(), {p.string}),
-                            m.fn("set_level", 1, "(level: Level)", R::void_type(), {p.log_level}),
-                            m.fn("set_output", 1, "(target: Log.Output | string)", R::result_void(),
-                                 {p.any}),
-                            m.fn("warn", 1, "(message: string)", R::void_type(), {p.string}),
-                        });
+    append_specs(
+        specs,
+        {
+            m.fn("clear_context", 0, "()", R::void_type()),
+            m.fn("debug", 1, "(message: string)", R::void_type(), {p.string}),
+            m.fn("error", 1, "(message: string)", R::void_type(), {p.string}),
+            m.fn("get_level", 0, "()", named::log_level()),
+            m.fn("info", 1, "(message: string)", R::void_type(), {p.string}),
+            m.fn("is_enabled", 1, "(level: Log.Level | string)", R::boolean_type(), {p.any}),
+            m.fn("log", 2, "(level: Log.Level | string, message: string)", R::void_type(),
+                 {p.any, p.string}),
+            m.fn("reset", 0, "()", R::void_type()),
+            m.fn("set_context", 2, "(key: string, value: string)", R::void_type(),
+                 {p.string, p.string}),
+            m.fn("set_format", 1, "(format: string)", R::void_type(), {p.string}),
+            m.fn("set_level", 1, "(level: Level)", R::void_type(), {p.log_level}),
+            m.fn("set_output", 1, "(target: Log.Output | string)", R::result_void(), {p.any}),
+            m.fn("warn", 1, "(message: string)", R::void_type(), {p.string}),
+        });
 }
 
 void register_terminal_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,

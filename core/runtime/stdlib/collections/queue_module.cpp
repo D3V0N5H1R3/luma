@@ -30,9 +30,10 @@ void register_queue_ns(const EnvPtr& env) {
                           return pop_from_end(src, ContainerEnd::Front, "Queue.dequeue");
                       })
         .func("peek", 1)
-        .extract_body(expect_queue, [](const auto& src, const Args&, SourceLocation) -> Value {
-            return peek_at_end(src, ContainerEnd::Front, "Queue.peek");
-        })
+        .extract_body(expect_queue,
+                      [](const auto& src, const Args&, SourceLocation) -> Value {
+                          return peek_at_end(src, ContainerEnd::Front, "Queue.peek");
+                      })
         // Queue.contains(q, value) -> boolean — value equality, FIFO order.
         .func("contains", 2)
         .extract_body(expect_queue,

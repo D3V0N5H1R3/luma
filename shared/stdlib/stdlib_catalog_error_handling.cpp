@@ -97,8 +97,8 @@ void register_reference_functions(std::vector<FunctionSpec>& specs, const Module
                      m.fn("get", 1, "(ref: reference<T>)", R::any_type(), {p.reference_any}),
                      m.fn("get_and_set", 2, "(ref: reference<T>, value: T)", R::any_type(),
                           {p.reference_any, p.any}),
-                     m.fn("get_and_update", 2, "(ref: reference<T>, f: func(T) -> T)", R::any_type(),
-                          {p.reference_any, p.func}),
+                     m.fn("get_and_update", 2, "(ref: reference<T>, f: func(T) -> T)",
+                          R::any_type(), {p.reference_any, p.func}),
                      m.fn("new", 1, "(value: T)", R::any_type(), {p.any}),
                      m.fn("set", 2, "(ref: reference<T>, value: T)", R::void_type(),
                           {p.reference_any, p.any}),
@@ -111,8 +111,8 @@ void register_reference_functions(std::vector<FunctionSpec>& specs, const Module
                           {p.reference_any, p.reference_any}),
                      m.fn("update", 2, "(ref: reference<T>, f: func(T) -> T)", R::void_type(),
                           {p.reference_any, p.func}),
-                     m.fn("update_and_get", 2, "(ref: reference<T>, f: func(T) -> T)", R::any_type(),
-                          {p.reference_any, p.func}),
+                     m.fn("update_and_get", 2, "(ref: reference<T>, f: func(T) -> T)",
+                          R::any_type(), {p.reference_any, p.func}),
                  });
 }
 

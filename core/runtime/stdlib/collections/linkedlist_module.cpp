@@ -651,19 +651,20 @@ void register_linkedlist_ns(const EnvPtr& env) {
                       })
         // LinkedList.unique(list) -> linked_list
         .func("unique", 1)
-        .extract_body(expect_list, [](const auto& src, const Args&, SourceLocation) -> Value {
-            auto result = std::make_shared<LinkedListValue>();
-            std::shared_ptr<LinkedListNode> tail;
+        .extract_body(expect_list,
+                      [](const auto& src, const Args&, SourceLocation) -> Value {
+                          auto result = std::make_shared<LinkedListValue>();
+                          std::shared_ptr<LinkedListNode> tail;
 
-            dedup_in_order(
-                std::ranges::subrange{LinkedListNodeIterator{src->head}, LinkedListNodeIterator{}},
-                [&](const Value& v) {
-                    LinkedListHelper::append_node(result, tail,
-                                                  std::make_shared<LinkedListNode>(v));
-                });
+                          dedup_in_order(std::ranges::subrange{LinkedListNodeIterator{src->head},
+                                                               LinkedListNodeIterator{}},
+                                         [&](const Value& v) {
+                                             LinkedListHelper::append_node(
+                                                 result, tail, std::make_shared<LinkedListNode>(v));
+                                         });
 
-            return Value{std::move(result)};
-        })
+                          return Value{std::move(result)};
+                      })
         // LinkedList.any(list, fn) -> result<boolean>
         .func("any", 2)
         .extract_body(expect_list,
@@ -696,8 +697,9 @@ void register_linkedlist_ns(const EnvPtr& env) {
         .extract_body(expect_list,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {
                           const auto n = expect_integer(args[1], "LinkedList.take", loc);
-                          const auto keep = n < 0 ? std::size_t{0}
-                                                  : std::min(static_cast<std::size_t>(n), src->count_);
+                          const auto keep =
+                              n < 0 ? std::size_t{0}
+                                    : std::min(static_cast<std::size_t>(n), src->count_);
 
                           auto result = std::make_shared<LinkedListValue>();
                           std::shared_ptr<LinkedListNode> tail;
@@ -721,8 +723,9 @@ void register_linkedlist_ns(const EnvPtr& env) {
         .extract_body(expect_list,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {
                           const auto n = expect_integer(args[1], "LinkedList.drop", loc);
-                          const auto skip = n < 0 ? std::size_t{0}
-                                                  : std::min(static_cast<std::size_t>(n), src->count_);
+                          const auto skip =
+                              n < 0 ? std::size_t{0}
+                                    : std::min(static_cast<std::size_t>(n), src->count_);
 
                           auto result = std::make_shared<LinkedListValue>();
                           std::shared_ptr<LinkedListNode> tail;
@@ -742,109 +745,109 @@ void register_linkedlist_ns(const EnvPtr& env) {
                       })
         // LinkedList.take_while(list, fn) -> result<linked_list>
         .func("take_while", 2)
-        .extract_body(expect_list,
-                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
-                          expect_callable(args[1], "LinkedList.take_while", loc);
+        .extract_body(
+            expect_list,
+            [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                expect_callable(args[1], "LinkedList.take_while", loc);
 
-                          return apply_with_error_handling([&]() -> Value {
-                              auto result = std::make_shared<LinkedListValue>();
-                              std::shared_ptr<LinkedListNode> tail;
-                              std::vector<Value> call_args(1);
+                return apply_with_error_handling([&]() -> Value {
+                    auto result = std::make_shared<LinkedListValue>();
+                    std::shared_ptr<LinkedListNode> tail;
+                    std::vector<Value> call_args(1);
 
-                              for (const Value& v :
-                                   std::ranges::subrange{LinkedListNodeIterator{src->head},
-                                                         LinkedListNodeIterator{}}) {
-                                  call_args[0] = v;
+                    for (const Value& v : std::ranges::subrange{LinkedListNodeIterator{src->head},
+                                                                LinkedListNodeIterator{}}) {
+                        call_args[0] = v;
 
-                                  if (!invoke_callable(args[1], call_args, loc).is_truthy()) {
-                                      break;
-                                  }
+                        if (!invoke_callable(args[1], call_args, loc).is_truthy()) {
+                            break;
+                        }
 
-                                  LinkedListHelper::append_node(result, tail,
-                                                                std::make_shared<LinkedListNode>(v));
-                              }
+                        LinkedListHelper::append_node(result, tail,
+                                                      std::make_shared<LinkedListNode>(v));
+                    }
 
-                              return Value{std::move(result)};
-                          });
-                      })
+                    return Value{std::move(result)};
+                });
+            })
         // LinkedList.drop_while(list, fn) -> result<linked_list>
         .func("drop_while", 2)
-        .extract_body(expect_list,
-                      [](const auto& src, const Args& args, SourceLocation loc) -> Value {
-                          expect_callable(args[1], "LinkedList.drop_while", loc);
+        .extract_body(
+            expect_list,
+            [](const auto& src, const Args& args, SourceLocation loc) -> Value {
+                expect_callable(args[1], "LinkedList.drop_while", loc);
 
-                          return apply_with_error_handling([&]() -> Value {
-                              auto result = std::make_shared<LinkedListValue>();
-                              std::shared_ptr<LinkedListNode> tail;
-                              std::vector<Value> call_args(1);
-                              bool dropping{true};
+                return apply_with_error_handling([&]() -> Value {
+                    auto result = std::make_shared<LinkedListValue>();
+                    std::shared_ptr<LinkedListNode> tail;
+                    std::vector<Value> call_args(1);
+                    bool dropping{true};
 
-                              for (const Value& v :
-                                   std::ranges::subrange{LinkedListNodeIterator{src->head},
-                                                         LinkedListNodeIterator{}}) {
-                                  if (dropping) {
-                                      call_args[0] = v;
+                    for (const Value& v : std::ranges::subrange{LinkedListNodeIterator{src->head},
+                                                                LinkedListNodeIterator{}}) {
+                        if (dropping) {
+                            call_args[0] = v;
 
-                                      if (invoke_callable(args[1], call_args, loc).is_truthy()) {
-                                          continue;
-                                      }
+                            if (invoke_callable(args[1], call_args, loc).is_truthy()) {
+                                continue;
+                            }
 
-                                      dropping = false;
-                                  }
+                            dropping = false;
+                        }
 
-                                  LinkedListHelper::append_node(result, tail,
-                                                                std::make_shared<LinkedListNode>(v));
-                              }
+                        LinkedListHelper::append_node(result, tail,
+                                                      std::make_shared<LinkedListNode>(v));
+                    }
 
-                              return Value{std::move(result)};
-                          });
-                      })
+                    return Value{std::move(result)};
+                });
+            })
         // LinkedList.min(list) -> result<T> — fails on an empty list.
         .func("min", 1)
-        .extract_body(expect_list,
-                      [](const auto& src, const Args&, SourceLocation loc) -> Value {
-                          if (src->count_ == 0) {
-                              return make_failure_value(error_msg("LinkedList", "min", "empty list"));
-                          }
+        .extract_body(
+            expect_list,
+            [](const auto& src, const Args&, SourceLocation loc) -> Value {
+                if (src->count_ == 0) {
+                    return make_failure_value(error_msg("LinkedList", "min", "empty list"));
+                }
 
-                          return apply_with_error_handling([&]() -> Value {
-                              const Value* best{nullptr};
+                return apply_with_error_handling([&]() -> Value {
+                    const Value* best{nullptr};
 
-                              for (const Value& v :
-                                   std::ranges::subrange{LinkedListNodeIterator{src->head},
-                                                         LinkedListNodeIterator{}}) {
-                                  if (best == nullptr ||
-                                      compare_values(v, *best, loc, "LinkedList.min") < 0) {
-                                      best = &v;
-                                  }
-                              }
+                    for (const Value& v : std::ranges::subrange{LinkedListNodeIterator{src->head},
+                                                                LinkedListNodeIterator{}}) {
+                        if (best == nullptr ||
+                            compare_values(v, *best, loc, "LinkedList.min") < 0) {
+                            best = &v;
+                        }
+                    }
 
-                              return *best;
-                          });
-                      })
+                    return *best;
+                });
+            })
         // LinkedList.max(list) -> result<T> — fails on an empty list.
         .func("max", 1)
-        .extract_body(expect_list,
-                      [](const auto& src, const Args&, SourceLocation loc) -> Value {
-                          if (src->count_ == 0) {
-                              return make_failure_value(error_msg("LinkedList", "max", "empty list"));
-                          }
+        .extract_body(
+            expect_list,
+            [](const auto& src, const Args&, SourceLocation loc) -> Value {
+                if (src->count_ == 0) {
+                    return make_failure_value(error_msg("LinkedList", "max", "empty list"));
+                }
 
-                          return apply_with_error_handling([&]() -> Value {
-                              const Value* best{nullptr};
+                return apply_with_error_handling([&]() -> Value {
+                    const Value* best{nullptr};
 
-                              for (const Value& v :
-                                   std::ranges::subrange{LinkedListNodeIterator{src->head},
-                                                         LinkedListNodeIterator{}}) {
-                                  if (best == nullptr ||
-                                      compare_values(v, *best, loc, "LinkedList.max") > 0) {
-                                      best = &v;
-                                  }
-                              }
+                    for (const Value& v : std::ranges::subrange{LinkedListNodeIterator{src->head},
+                                                                LinkedListNodeIterator{}}) {
+                        if (best == nullptr ||
+                            compare_values(v, *best, loc, "LinkedList.max") > 0) {
+                            best = &v;
+                        }
+                    }
 
-                              return *best;
-                          });
-                      })
+                    return *best;
+                });
+            })
         // LinkedList.sum(list) -> result<integer | number> — fails on non-numeric.
         .func("sum", 1)
         .extract_body(expect_list,
@@ -876,29 +879,27 @@ void register_linkedlist_ns(const EnvPtr& env) {
                       })
         // LinkedList.tail(list) -> result<linked_list> — the list without its head.
         .func("tail", 1)
-        .extract_body(expect_list,
-                      [](const auto& src, const Args&, SourceLocation) -> Value {
-                          if (auto fail =
-                                  LinkedListHelper::check_not_empty(src, "LinkedList.tail")) {
-                              return *std::move(fail);
-                          }
+        .extract_body(
+            expect_list,
+            [](const auto& src, const Args&, SourceLocation) -> Value {
+                if (auto fail = LinkedListHelper::check_not_empty(src, "LinkedList.tail")) {
+                    return *std::move(fail);
+                }
 
-                          return make_success_value(Value{LinkedListHelper::clone_and_remove_first(src)});
-                      })
+                return make_success_value(Value{LinkedListHelper::clone_and_remove_first(src)});
+            })
         // LinkedList.uncons(list) -> result<(T, linked_list)> — head and tail.
         .func("uncons", 1)
-        .extract_body(expect_list,
-                      [](const auto& src, const Args&, SourceLocation) -> Value {
-                          if (auto fail =
-                                  LinkedListHelper::check_not_empty(src, "LinkedList.uncons")) {
-                              return *std::move(fail);
-                          }
+        .extract_body(expect_list, [](const auto& src, const Args&, SourceLocation) -> Value {
+            if (auto fail = LinkedListHelper::check_not_empty(src, "LinkedList.uncons")) {
+                return *std::move(fail);
+            }
 
-                          auto head_value = src->head->value;
-                          auto rest = LinkedListHelper::clone_and_remove_first(src);
+            auto head_value = src->head->value;
+            auto rest = LinkedListHelper::clone_and_remove_first(src);
 
-                          return make_success_value(
-                              make_tuple_pair(std::move(head_value), Value{std::move(rest)}));
-                      });
+            return make_success_value(
+                make_tuple_pair(std::move(head_value), Value{std::move(rest)}));
+        });
 }
 } // namespace luma

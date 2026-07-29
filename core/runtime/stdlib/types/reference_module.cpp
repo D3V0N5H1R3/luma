@@ -104,12 +104,13 @@ void register_reference_ns(const EnvPtr& env) {
 
     // Reference.equals(a, b) -> boolean
     // Whether the two cells currently hold equal values (structural equality).
-    builder.func("equals", 2).raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-        const auto& ref_a = expect_reference(args[0], "Reference.equals", loc);
-        const auto& ref_b = expect_reference(args[1], "Reference.equals", loc);
+    builder.func("equals", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& ref_a = expect_reference(args[0], "Reference.equals", loc);
+            const auto& ref_b = expect_reference(args[1], "Reference.equals", loc);
 
-        return Value{ref_a->get().equals(ref_b->get())};
-    });
+            return Value{ref_a->get().equals(ref_b->get())};
+        });
 
     // Reference.same(a, b) -> boolean
     // Whether the two arguments refer to the same cell (identity).
