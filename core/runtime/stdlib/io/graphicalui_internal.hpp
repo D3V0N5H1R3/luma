@@ -230,6 +230,8 @@ inline constexpr const char* graphicalui_function_names[] = {
     "GraphicalUi.batch",
     "GraphicalUi.http_get",
     "GraphicalUi.http_post",
+    "GraphicalUi.http_get_full",
+    "GraphicalUi.http_post_full",
     "GraphicalUi.delay",
     "GraphicalUi.write_clipboard",
     "GraphicalUi.read_clipboard",
@@ -255,10 +257,14 @@ inline constexpr const char* graphicalui_function_names[] = {
     // Subscriptions.
     "GraphicalUi.on_tick",
     "GraphicalUi.on_key",
+    "GraphicalUi.on_key_typed",
     "GraphicalUi.on_resize",
+    "GraphicalUi.on_resize_typed",
     "GraphicalUi.on_focus",
     "GraphicalUi.on_mouse",
     "GraphicalUi.on_mouse_typed",
+    "GraphicalUi.on_mouse_of",
+    "GraphicalUi.mouse_event_type_to_string",
     "GraphicalUi.on_visibility_change",
     "GraphicalUi.on_online",
     "GraphicalUi.on_offline",
@@ -269,6 +275,7 @@ inline constexpr const char* graphicalui_function_names[] = {
     "GraphicalUi.on_storage_change",
     "GraphicalUi.on_animation_frame",
     "GraphicalUi.on_drag",
+    "GraphicalUi.on_drag_typed",
     // Components and routing.
     "GraphicalUi.component",
     "GraphicalUi.error_boundary",
@@ -319,6 +326,7 @@ inline constexpr const char* graphicalui_function_names[] = {
     "GraphicalUi.test_event",
     "GraphicalUi.test_find",
     "GraphicalUi.test_key",
+    "GraphicalUi.test_drag",
 };
 // clang-format on
 
