@@ -104,6 +104,9 @@ void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const Mod
                           {p.widget, p.string}),
             m.variadic_fn("drop_target", 2, "(child: widget, on_drop: func(string) -> any)",
                           named::widget(), {p.widget, p.func}),
+            m.variadic_fn("drop_target_typed", 2,
+                          "(child: widget, on_drop: func(GraphicalUi.DropEvent) -> any)",
+                          named::widget(), {p.widget, p.func}),
             m.variadic_fn("dropdown", 3,
                           "(options: array<string>, value: string, on_select: func(string) -> any, "
                           "style?: dictionary)",
@@ -310,6 +313,8 @@ void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const Mod
                           named::widget(), {p.array_any}),
             m.variadic_fn("scroll_to", 1, "(widget_id: string, behavior?: string)", named::widget(),
                           {p.string}),
+            m.fn("scroll_to_of", 2, "(widget_id: string, behavior: GraphicalUi.ScrollBehavior)",
+                 named::widget(), {p.string, named::gui_scroll_behavior()}),
             m.variadic_fn(
                 "search_input", 2,
                 "(value: string, on_change: func(string) -> any, on_clear?: func() -> any)",
@@ -318,6 +323,10 @@ void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const Mod
             m.fn("set_local_storage", 2, "(key: string, value: string)", named::widget(),
                  {p.string, p.string}),
             m.fn("set_theme_mode", 1, "(mode: string)", named::widget(), {p.string}),
+            m.fn("set_theme_mode_of", 1, "(mode: GraphicalUi.ThemeMode)", named::widget(),
+                 {named::gui_theme_mode()}),
+            m.fn("theme_mode_to_string", 1, "(mode: GraphicalUi.ThemeMode)", R::string_type(),
+                 {named::gui_theme_mode()}),
             m.fn("set_title", 1, "(title: string)", named::widget(), {p.string}),
             m.fn("severity_to_string", 1, "(severity: GraphicalUi.Severity)", R::string_type(),
                  {named::gui_severity()}),
@@ -331,6 +340,8 @@ void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const Mod
                 "(value: number, min: number, max: number, on_change: func(number) -> any, style?: "
                 "dictionary)",
                 named::widget(), {p.number, p.number, p.number, p.func}),
+            m.fn("sort_direction_to_string", 1, "(direction: GraphicalUi.SortDirection)",
+                 R::string_type(), {named::gui_sort_direction()}),
             m.fn("space_around", 0, "()", named::widget()),
             m.fn("space_between", 0, "()", named::widget()),
             m.fn("space_evenly", 0, "()", named::widget()),

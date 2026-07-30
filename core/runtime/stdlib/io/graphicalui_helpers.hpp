@@ -95,6 +95,12 @@ void on_gui_event(const char* id, const char* req, void* arg);
 // an unrecognised/missing phase to Start.  Exposed for unit testing.
 [[nodiscard]] Value build_drag_event_record(const DictionaryValue& payload);
 
+// Convert a drop-event payload dictionary (data, x, y) into a typed
+// GraphicalUi.DropEvent record — the payload GraphicalUi.drop_target_typed
+// delivers to its on_drop callback.  Missing data defaults to "" and a missing
+// coordinate to 0.  Exposed for unit testing.
+[[nodiscard]] Value build_drop_event_record(const DictionaryValue& payload);
+
 // Build a GraphicalUi.HttpResponse record {status, headers, body} — the payload
 // GraphicalUi.http_get_full / http_post_full deliver inside a result<...>.
 // Exposed for unit testing.
@@ -303,6 +309,58 @@ make_command_dict(std::string_view command_type) {
     }
 
     return "Start";
+}
+
+// Map a GraphicalUi.ThemeMode choice value to its lowercase string key
+// ("light" / "dark" / "auto") — the representation the GraphicalUi.set_theme_mode
+// command accepts.  Anything that is not a recognised variant defaults to "auto"
+// (the neutral system-follows default), keeping the bridge total.
+[[nodiscard]] inline std::string theme_mode_to_lower(const Value& v) {
+    if (v.is_choice()) {
+        const auto& variant = v.as_choice()->variant;
+
+        if (variant == "Light") {
+            return "light";
+        }
+
+        if (variant == "Dark") {
+            return "dark";
+        }
+    }
+
+    return "auto";
+}
+
+// Map a GraphicalUi.ScrollBehavior choice value to its lowercase behaviour key
+// ("smooth" / "instant" / "auto") — the value GraphicalUi.scroll_to's `behavior`
+// argument carries and the web scrollIntoView({behavior}) accepts.  Anything that
+// is not a recognised variant defaults to "auto", keeping the bridge total.
+[[nodiscard]] inline std::string scroll_behavior_to_lower(const Value& v) {
+    if (v.is_choice()) {
+        const auto& variant = v.as_choice()->variant;
+
+        if (variant == "Smooth") {
+            return "smooth";
+        }
+
+        if (variant == "Instant") {
+            return "instant";
+        }
+    }
+
+    return "auto";
+}
+
+// Map a GraphicalUi.SortDirection choice value to its lowercase direction key
+// ("asc" / "desc") — the value the GraphicalUi.table `sort_direction` option
+// carries and the JS renderer keys on.  Anything that is not a recognised variant
+// defaults to "asc", keeping the bridge total.
+[[nodiscard]] inline std::string sort_direction_to_lower(const Value& v) {
+    if (v.is_choice() && v.as_choice()->variant == "Descending") {
+        return "desc";
+    }
+
+    return "asc";
 }
 
 // Partition a trailing style/options dictionary into recognised widget-option

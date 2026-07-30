@@ -29,6 +29,7 @@ namespace luma::gui_detail {
 [[nodiscard]] Value build_key_event_record(const std::string& key, const DictionaryValue* mods);
 [[nodiscard]] Value build_window_size_record(std::int64_t width, std::int64_t height);
 [[nodiscard]] Value build_drag_event_record(const DictionaryValue& payload);
+[[nodiscard]] Value build_drop_event_record(const DictionaryValue& payload);
 [[nodiscard]] Value
 build_http_response_record_gui(int status, std::string body,
                                const std::vector<std::pair<std::string, std::string>>& headers);
@@ -1047,6 +1048,103 @@ LUMA_TEST(build_drag_event_record_defaults_to_start) {
     ASSERT_NEAR(rec.find_field("x")->as_number(), 0.0, 1e-9);
     ASSERT_EQ(rec.find_field("data")->as_string(), "");
     ASSERT_EQ(rec.find_field("phase")->as_choice()->variant, "Start");
+}
+
+// ── G04: GraphicalUi.DropEvent / drop_target_typed ─────────
+
+// build_drop_event_record maps the payload into a data string plus number drop
+// coordinates.
+LUMA_TEST(build_drop_event_record_maps_payload) {
+    auto payload = std::make_shared<DictionaryValue>();
+    payload->set("data", Value{std::string{"card-3"}});
+    payload->set("x", Value{120.0});
+    payload->set("y", Value{64.0});
+
+    const auto rec_val = gui_detail::build_drop_event_record(*payload);
+    ASSERT_TRUE(rec_val.is_record());
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.type_name, "DropEvent");
+    ASSERT_EQ(rec.find_field("data")->as_string(), "card-3");
+    ASSERT_NEAR(rec.find_field("x")->as_number(), 120.0, 1e-9);
+    ASSERT_NEAR(rec.find_field("y")->as_number(), 64.0, 1e-9);
+}
+
+// Missing fields stay total: data defaults to "" and coordinates to 0.
+LUMA_TEST(build_drop_event_record_defaults) {
+    auto payload = std::make_shared<DictionaryValue>();
+
+    const auto rec_val = gui_detail::build_drop_event_record(*payload);
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.find_field("data")->as_string(), "");
+    ASSERT_NEAR(rec.find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(rec.find_field("y")->as_number(), 0.0, 1e-9);
+}
+
+// GraphicalUi.drop_target_typed flags the widget so the renderer forwards drop
+// coordinates for a typed GraphicalUi.DropEvent.  Interactive widgets need app
+// context, so render through the headless harness.
+LUMA_TEST(drop_target_typed_flags_widget) {
+    const std::string cfg = R"({
+        "_": "gui_config", "model": 0,
+        "view": (integer _c) -> GraphicalUi.drop_target_typed(GraphicalUi.label("zone"),
+            (GraphicalUi.DropEvent e) -> e.data)
+    })";
+
+    const auto v = eval("GraphicalUi.test_render(" + cfg + ", 0)");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+    ASSERT_EQ(d.find("type")->as_string(), "drop_target");
+    ASSERT_TRUE(d.find("_drop_typed") != nullptr && d.find("_drop_typed")->as_bool());
+}
+
+// ── G05: GraphicalUi.ScrollBehavior / scroll_to_of ─────────
+
+// GraphicalUi.scroll_to_of lowers the ScrollBehavior choice to the same behavior
+// string scroll_to uses.
+LUMA_TEST(scroll_to_of_lowers_behavior_choice) {
+    const auto v = eval(R"(GraphicalUi.scroll_to_of("box", GraphicalUi.ScrollBehavior.Smooth))");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+    ASSERT_EQ(d.find("_command_type")->as_string(), "scroll_to");
+    ASSERT_EQ(d.find("behavior")->as_string(), "smooth");
+    ASSERT_EQ(d.find("widget_id")->as_string(), "box");
+}
+
+// ── G01: GraphicalUi.ThemeMode / set_theme_mode_of ─────────
+
+// GraphicalUi.set_theme_mode_of lowers the ThemeMode choice to the same mode
+// string set_theme_mode uses; theme_mode_to_string bridges each variant.
+LUMA_TEST(set_theme_mode_of_and_bridge) {
+    const auto v = eval(R"(GraphicalUi.set_theme_mode_of(GraphicalUi.ThemeMode.Dark))");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+    ASSERT_EQ(d.find("_command_type")->as_string(), "set_theme_mode");
+    ASSERT_EQ(d.find("mode")->as_string(), "dark");
+
+    ASSERT_EQ(eval(R"(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Light))").as_string(),
+              "light");
+    ASSERT_EQ(eval(R"(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Auto))").as_string(),
+              "auto");
+}
+
+// ── G06: GraphicalUi.SortDirection ─────────────────────────
+
+// GraphicalUi.sort_direction_to_string bridges each variant, and the table
+// `sort_direction` option accepts the typed choice (lowered to asc/desc).
+LUMA_TEST(sort_direction_to_string_and_table_option) {
+    ASSERT_EQ(eval(R"(GraphicalUi.sort_direction_to_string(GraphicalUi.SortDirection.Ascending))")
+                  .as_string(),
+              "asc");
+    ASSERT_EQ(eval(R"(GraphicalUi.sort_direction_to_string(GraphicalUi.SortDirection.Descending))")
+                  .as_string(),
+              "desc");
+
+    const auto v = eval(R"(
+        GraphicalUi.table(["A"], [["1"]],
+            {"sort_direction": GraphicalUi.SortDirection.Descending})
+    )");
+    ASSERT_TRUE(v.is_dictionary());
+    ASSERT_EQ(v.as_dictionary()->find("sort_direction")->as_string(), "desc");
 }
 
 // ── N02: GraphicalUi.MouseEventType / on_mouse_of ──────────

@@ -93,7 +93,7 @@ struct EventMessage {
     // string) and the modifier flags at the top level, so on_key_typed can build
     // a KeyEvent; the drag case carries `event` (phase), x, y, and `data`.
     if (msg.type == "mouse_event" || msg.type == "widget_event" || msg.type == "scroll_event" ||
-        msg.type == "keyboard" || msg.type == "drag_event") {
+        msg.type == "keyboard" || msg.type == "drag_event" || msg.type == "drop_event") {
         auto dict = make_dict();
 
         auto set_string = [&](const char* key) {
@@ -722,6 +722,37 @@ Value build_drag_event_record(const DictionaryValue& payload) {
     return Value{std::move(rec)};
 }
 
+// Convert a drop-event payload dictionary into a typed GraphicalUi.DropEvent
+// record for GraphicalUi.drop_target_typed callbacks.  `data` is the dragged
+// payload string and x / y are `number` (device-pixel drop coordinates,
+// mirroring DragEvent).  Missing data defaults to "" and missing coordinates to
+// 0 — keeping the record total over whatever the browser emits.
+Value build_drop_event_record(const DictionaryValue& payload) {
+    auto read_number = [&payload](const char* field_key) -> double {
+        const auto* v = payload.find(field_key);
+
+        if (v != nullptr) {
+            if (v->is_number()) {
+                return v->as_number();
+            }
+
+            if (v->is_integer()) {
+                return static_cast<double>(v->as_integer());
+            }
+        }
+
+        return 0.0;
+    };
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "DropEvent";
+    rec->fields.emplace_back("data", Value{dict_string(payload, "data", "")});
+    rec->fields.emplace_back("x", Value{read_number("x")});
+    rec->fields.emplace_back("y", Value{read_number("y")});
+
+    return Value{std::move(rec)};
+}
+
 namespace {
 
 // ── Generic event dispatch helper ──────────────────────
@@ -904,6 +935,14 @@ void handle_drag(AppState& state, const EventMessage& event, const std::string& 
     dispatch_event(state, callback, {Value{std::move(payload)}});
 }
 
+// Handler for typed drop events (GraphicalUi.drop_target_typed).  Builds a typed
+// GraphicalUi.DropEvent record {data, x, y} from the payload and dispatches it to
+// the drop target's on_drop callback (bound as a widget _callback_id).
+void handle_drop(AppState& state, const EventMessage& event, const std::string& /*raw*/) {
+    auto payload = event.dict_payload ? event.dict_payload : make_dict();
+    dispatch_event(state, state.find_callback(event.id), {build_drop_event_record(*payload)});
+}
+
 // ── Hash-based dispatch table for named event types ───
 
 using EventHandler = void (*)(AppState&, const EventMessage&, const std::string&);
@@ -935,6 +974,7 @@ constexpr EventDispatchEntry event_dispatch_entries[] = {
     {.type="media_query",       .handler=handle_focus_change},
     {.type="scroll_event",      .handler=handle_scroll_event},
     {.type="drag_event",        .handler=handle_drag},
+    {.type="drop_event",        .handler=handle_drop},
 };
 // clang-format on
 

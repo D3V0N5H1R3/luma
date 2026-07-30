@@ -170,6 +170,15 @@ namespace {
             if (desc.named_type == "GraphicalUi.MouseEventType") {
                 return TypeInfo::make_named(K::Choice, "GraphicalUi.MouseEventType");
             }
+            if (desc.named_type == "GraphicalUi.ThemeMode") {
+                return TypeInfo::make_named(K::Choice, "GraphicalUi.ThemeMode");
+            }
+            if (desc.named_type == "GraphicalUi.ScrollBehavior") {
+                return TypeInfo::make_named(K::Choice, "GraphicalUi.ScrollBehavior");
+            }
+            if (desc.named_type == "GraphicalUi.SortDirection") {
+                return TypeInfo::make_named(K::Choice, "GraphicalUi.SortDirection");
+            }
             if (desc.named_type == "Compression.Format") {
                 return TypeInfo::make_named(K::Choice, "Compression.Format");
             }
