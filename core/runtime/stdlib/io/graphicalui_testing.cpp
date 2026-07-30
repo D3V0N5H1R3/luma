@@ -305,7 +305,18 @@ event_id_fields(const std::string& event) {
                 continue;
             }
 
-            std::vector<Value> callback_args{Value{key_name}};
+            // A GraphicalUi.on_key_typed subscription (flagged typed) receives a
+            // GraphicalUi.KeyEvent record; plain on_key gets the bare key string.
+            // The headless test path supplies no modifiers, so they default to
+            // false — mirroring handle_keyboard's live dispatch.
+            std::vector<Value> callback_args;
+
+            if (dict_bool(sub_dict, key::typed)) {
+                callback_args.push_back(build_key_event_record(key_name, nullptr));
+            } else {
+                callback_args.push_back(Value{key_name});
+            }
+
             auto result = invoke_callable(*callback, callback_args, loc);
             apply_event_result(state, std::move(result));
             fired = true;
@@ -318,6 +329,90 @@ event_id_fields(const std::string& event) {
                            loc,
                            "ensure subscribe returns GraphicalUi.on_key with filter \"*\" or \"" +
                                key_name + "\""};
+    }
+
+    return state.model;
+}
+
+// Drive the application's drag subscriptions for a drag `phase` ("start" /
+// "move" / "end" / "enter" / "leave" / "drop") carrying `data`: call subscribe,
+// then fire every drag subscription whose filter is "*" or equals `phase`,
+// threading the model through each.  Mirrors the live dispatch (handle_drag ->
+// dispatch_event) without a window: a typed (on_drag_typed) subscription receives
+// a GraphicalUi.DragEvent record, a plain on_drag one gets the raw dictionary.
+// Throws when no drag subscription matches.
+[[nodiscard]] Value drive_drag(AppState& state, const Value& model, const std::string& phase,
+                               const std::string& data, SourceLocation loc) {
+    state.model = model;
+
+    if (state.subscribe_fn.is_null() || !state.subscribe_fn.is_callable()) {
+        throw RuntimeError{
+            error_msg("GraphicalUi", "test_drag",
+                      "config has no 'subscribe' function to receive drag events"),
+            loc,
+            "add a \"subscribe\" entry returning GraphicalUi.on_drag(...) or on_drag_typed(...)"};
+    }
+
+    std::vector<Value> sub_args{state.model};
+    const auto subs_value = invoke_callable(state.subscribe_fn, sub_args, loc);
+    const auto subscriptions = unwrap_array_arg(subs_value);
+
+    bool fired = false;
+
+    if (subscriptions.is_array()) {
+        for (const auto& sub : *subscriptions.as_array()->elements) {
+            if (!sub.is_dictionary()) {
+                continue;
+            }
+
+            const auto& sub_dict = *sub.as_dictionary();
+
+            if (dict_string(sub_dict, key::sub_type) != sub::drag) {
+                continue;
+            }
+
+            const auto filter = dict_string(sub_dict, "event", "*");
+
+            if (filter != "*" && filter != phase) {
+                continue;
+            }
+
+            const auto* callback = sub_dict.find(key::callback);
+
+            if (callback == nullptr || !callback->is_callable()) {
+                continue;
+            }
+
+            // Reconstruct the payload the browser drag listener emits, then
+            // deliver a typed GraphicalUi.DragEvent record for on_drag_typed or
+            // the raw dictionary for on_drag — mirroring handle_drag.
+            auto payload = make_dict();
+            payload->set("event", Value{phase});
+            payload->set("x", Value{0.0});
+            payload->set("y", Value{0.0});
+            payload->set("data", Value{data});
+
+            std::vector<Value> callback_args;
+
+            if (dict_bool(sub_dict, key::typed)) {
+                callback_args.push_back(build_drag_event_record(*payload));
+            } else {
+                callback_args.push_back(Value{std::move(payload)});
+            }
+
+            auto result = invoke_callable(*callback, callback_args, loc);
+            apply_event_result(state, std::move(result));
+            fired = true;
+        }
+    }
+
+    if (!fired) {
+        throw RuntimeError{
+            error_msg("GraphicalUi", "test_drag",
+                      "no drag subscription matches phase '" + phase + "'"),
+            loc,
+            "ensure subscribe returns GraphicalUi.on_drag/on_drag_typed with filter \"*\" or \"" +
+                phase + "\""};
     }
 
     return state.model;
@@ -496,6 +591,22 @@ void register_graphicalui_testing(const EnvPtr& env) {
                       const auto& key_name = expect_string(args[2], "GraphicalUi.test_key", loc);
                       HeadlessApp app{config, loc};
                       return drive_key(app.state, args[1], key_name, loc);
+                  });
+
+    // GraphicalUi.test_drag(config, model, phase, data?) -> any
+    // Deliver a drag event of the given `phase` ("start"/"move"/"end"/"enter"/
+    // "leave"/"drop") carrying optional `data` to the application's drag
+    // subscriptions (on_drag / on_drag_typed) and return the new model — the
+    // headless mirror of the live drag dispatch.
+    define_native(env, "GraphicalUi.test_drag",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_min_args("GraphicalUi.test_drag", args, 3, loc);
+                      const auto& config = *expect_dict(args[0], "GraphicalUi.test_drag", loc);
+                      const auto& phase = expect_string(args[2], "GraphicalUi.test_drag", loc);
+                      const std::string data =
+                          args.size() > 3 && args[3].is_string() ? args[3].as_string() : "";
+                      HeadlessApp app{config, loc};
+                      return drive_drag(app.state, args[1], phase, data, loc);
                   });
 
     // GraphicalUi.test_message(config, model, message) -> any

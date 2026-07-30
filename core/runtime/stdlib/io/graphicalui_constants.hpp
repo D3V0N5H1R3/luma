@@ -21,6 +21,10 @@ inline constexpr const char* http_post = "http_post";
 inline constexpr const char* http_put = "http_put";
 inline constexpr const char* http_delete = "http_delete";
 inline constexpr const char* http_patch = "http_patch";
+// Typed variants: deliver a result<GraphicalUi.HttpResponse> (status/headers/body)
+// instead of a body-only result<string>.  cmd_http detects the "_full" suffix.
+inline constexpr const char* http_get_full = "http_get_full";
+inline constexpr const char* http_post_full = "http_post_full";
 inline constexpr const char* random = "random";
 inline constexpr const char* focus = "focus";
 inline constexpr const char* announce = "announce";

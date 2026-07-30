@@ -87,9 +87,13 @@ struct EventMessage {
         }
     }
 
-    // For dict events (mouse_event, widget_event, scroll_event), extract the
-    // payload fields in the same pass instead of re-parsing later.
-    if (msg.type == "mouse_event" || msg.type == "widget_event" || msg.type == "scroll_event") {
+    // For dict events (mouse_event, widget_event, scroll_event, keyboard,
+    // drag_event), extract the payload fields in the same pass instead of
+    // re-parsing later.  The keyboard case carries its key name in `value` (a
+    // string) and the modifier flags at the top level, so on_key_typed can build
+    // a KeyEvent; the drag case carries `event` (phase), x, y, and `data`.
+    if (msg.type == "mouse_event" || msg.type == "widget_event" || msg.type == "scroll_event" ||
+        msg.type == "keyboard" || msg.type == "drag_event") {
         auto dict = make_dict();
 
         auto set_string = [&](const char* key) {
@@ -118,12 +122,14 @@ struct EventMessage {
 
         set_string("event");
         set_string("event_type");
+        set_string("data");
         set_number("x");
         set_number("y");
         set_string("button");
         set_bool("ctrl");
         set_bool("shift");
         set_bool("alt");
+        set_bool("meta");
 
         msg.dict_payload = std::move(dict);
     }
@@ -644,6 +650,78 @@ Value build_scroll_position_record(const DictionaryValue& payload) {
     return Value{std::move(rec)};
 }
 
+// Convert a keyboard-event key string plus its modifier payload dictionary into
+// a typed GraphicalUi.KeyEvent record for GraphicalUi.on_key_typed callbacks.
+// `key` is the pressed key's name (KeyboardEvent.key); the four modifier flags
+// are read from `mods` (the {ctrl, shift, alt, meta} dictionary the browser
+// emits alongside the key).  A null `mods` — as passed by the headless test
+// path — defaults every modifier to false, keeping the record total.
+Value build_key_event_record(const std::string& key, const DictionaryValue* mods) {
+    auto read_mod = [mods](const char* field_key) -> bool {
+        return mods != nullptr && dict_bool(*mods, field_key);
+    };
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "KeyEvent";
+    rec->fields.emplace_back("key", Value{key});
+    rec->fields.emplace_back("ctrl", Value{read_mod("ctrl")});
+    rec->fields.emplace_back("shift", Value{read_mod("shift")});
+    rec->fields.emplace_back("alt", Value{read_mod("alt")});
+    rec->fields.emplace_back("meta", Value{read_mod("meta")});
+
+    return Value{std::move(rec)};
+}
+
+// Convert a window-resize width/height pair into a typed GraphicalUi.WindowSize
+// record for GraphicalUi.on_resize_typed callbacks.  width / height are
+// `integer` (discrete device-pixel counts), mirroring the two loose integer
+// arguments on_resize delivers.
+Value build_window_size_record(std::int64_t width, std::int64_t height) {
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "WindowSize";
+    rec->fields.emplace_back("width", Value{width});
+    rec->fields.emplace_back("height", Value{height});
+
+    return Value{std::move(rec)};
+}
+
+// Convert a drag-event payload dictionary into a typed GraphicalUi.DragEvent
+// record for GraphicalUi.on_drag_typed callbacks.  x / y are `number` (device
+// pixels), `data` the dragged payload string, and `phase` a GraphicalUi.DragPhase
+// choice mapped from the payload's `event` key.  Missing coordinates default to
+// 0, missing data to "", and an unrecognised/missing phase to Start — keeping the
+// record total over whatever the browser emits.
+Value build_drag_event_record(const DictionaryValue& payload) {
+    auto read_number = [&payload](const char* field_key) -> double {
+        const auto* v = payload.find(field_key);
+
+        if (v != nullptr) {
+            if (v->is_number()) {
+                return v->as_number();
+            }
+
+            if (v->is_integer()) {
+                return static_cast<double>(v->as_integer());
+            }
+        }
+
+        return 0.0;
+    };
+
+    auto phase = std::make_shared<ChoiceValue>();
+    phase->type_name = "DragPhase";
+    phase->variant = drag_phase_from_string(dict_string(payload, "event", "start"));
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "DragEvent";
+    rec->fields.emplace_back("x", Value{read_number("x")});
+    rec->fields.emplace_back("y", Value{read_number("y")});
+    rec->fields.emplace_back("data", Value{dict_string(payload, "data", "")});
+    rec->fields.emplace_back("phase", Value{std::move(phase)});
+
+    return Value{std::move(rec)};
+}
+
 namespace {
 
 // ── Generic event dispatch helper ──────────────────────
@@ -691,7 +769,22 @@ void handle_keyboard(AppState& state, const EventMessage& event, const std::stri
         return;
     }
 
-    dispatch_event(state, state.find_sub_callback(event.id), {Value{event.string_value()}});
+    auto callback = state.find_sub_callback(event.id);
+
+    // A GraphicalUi.on_key_typed subscription (flagged typed in active_subs)
+    // receives a GraphicalUi.KeyEvent record built from the key name and the
+    // {ctrl, shift, alt, meta} modifier payload; plain on_key gets the bare key
+    // string.  active_subs is only mutated on this same UI thread, so the read
+    // needs no extra locking (mirrors handle_dict_event / handle_scroll_event).
+    auto it = state.active_subs.find(event.id);
+
+    if (it != state.active_subs.end() && it->second.typed) {
+        dispatch_event(state, callback,
+                       {build_key_event_record(event.string_value(), event.dict_payload.get())});
+        return;
+    }
+
+    dispatch_event(state, callback, {Value{event.string_value()}});
 }
 
 // Handler for resize events (width,height string → two integer arguments).
@@ -725,6 +818,16 @@ void handle_resize(AppState& state, const EventMessage& event, const std::string
     // §1: Track window width for responsive().
     if (w > 0) {
         state.window_width.store(w);
+    }
+
+    // A GraphicalUi.on_resize_typed subscription (flagged typed in active_subs)
+    // receives a single GraphicalUi.WindowSize record; plain on_resize gets the
+    // two loose integer arguments.
+    auto it = state.active_subs.find(event.id);
+
+    if (it != state.active_subs.end() && it->second.typed) {
+        dispatch_event(state, callback, {build_window_size_record(w, h)});
+        return;
     }
 
     dispatch_event(state, callback, {Value{w}, Value{h}});
@@ -783,6 +886,24 @@ void handle_scroll_event(AppState& state, const EventMessage& event, const std::
     dispatch_event(state, callback, {Value{std::move(payload)}});
 }
 
+// Handler for drag events (GraphicalUi.on_drag / on_drag_typed).
+// Delivers the raw {event, x, y, data} dictionary, or a typed
+// GraphicalUi.DragEvent record when the subscription was created via
+// on_drag_typed.  Mirrors handle_scroll_event.
+void handle_drag(AppState& state, const EventMessage& event, const std::string& /*raw*/) {
+    auto callback = state.find_sub_callback(event.id);
+    auto payload = event.dict_payload ? event.dict_payload : make_dict();
+
+    auto it = state.active_subs.find(event.id);
+
+    if (it != state.active_subs.end() && it->second.typed) {
+        dispatch_event(state, callback, {build_drag_event_record(*payload)});
+        return;
+    }
+
+    dispatch_event(state, callback, {Value{std::move(payload)}});
+}
+
 // ── Hash-based dispatch table for named event types ───
 
 using EventHandler = void (*)(AppState&, const EventMessage&, const std::string&);
@@ -813,6 +934,7 @@ constexpr EventDispatchEntry event_dispatch_entries[] = {
     {.type="offline",           .handler=handle_subscription},
     {.type="media_query",       .handler=handle_focus_change},
     {.type="scroll_event",      .handler=handle_scroll_event},
+    {.type="drag_event",        .handler=handle_drag},
 };
 // clang-format on
 

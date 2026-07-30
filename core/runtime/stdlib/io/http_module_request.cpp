@@ -652,10 +652,18 @@ do_http_fetch_text(const std::string& method, const std::string& url, const std:
     auto outcome = perform_http(method, url, body, extra_headers, timeout_ms);
 
     if (!outcome.ok) {
-        return {.ok = false, .body = {}, .error = std::move(outcome.error)};
+        return {.ok = false,
+                .status_code = 0,
+                .body = {},
+                .headers = {},
+                .error = std::move(outcome.error)};
     }
 
-    return {.ok = true, .body = std::move(outcome.resp.body), .error = {}};
+    return {.ok = true,
+            .status_code = outcome.resp.status_code,
+            .body = std::move(outcome.resp.body),
+            .headers = std::move(outcome.resp.headers),
+            .error = {}};
 }
 
 } // namespace luma

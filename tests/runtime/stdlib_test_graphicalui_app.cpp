@@ -1,5 +1,6 @@
 // GraphicalUi module C++ unit tests: app lifecycle, commands, subscriptions, and renderer coverage.
 
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -9,6 +10,7 @@
 #include <string>
 #include <system_error>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "analysis/errors/error.hpp"
@@ -24,6 +26,12 @@
 namespace luma::gui_detail {
 [[nodiscard]] Value build_mouse_event_record(const DictionaryValue& payload);
 [[nodiscard]] Value build_scroll_position_record(const DictionaryValue& payload);
+[[nodiscard]] Value build_key_event_record(const std::string& key, const DictionaryValue* mods);
+[[nodiscard]] Value build_window_size_record(std::int64_t width, std::int64_t height);
+[[nodiscard]] Value build_drag_event_record(const DictionaryValue& payload);
+[[nodiscard]] Value
+build_http_response_record_gui(int status, std::string body,
+                               const std::vector<std::pair<std::string, std::string>>& headers);
 } // namespace luma::gui_detail
 
 // ═══════════════════════════════════════════════════════════
@@ -885,6 +893,213 @@ LUMA_TEST(build_scroll_position_record_defaults_zero) {
     const auto& rec = *rec_val.as_record();
     ASSERT_NEAR(rec.find_field("x")->as_number(), 0.0, 1e-9);
     ASSERT_NEAR(rec.find_field("y")->as_number(), 0.0, 1e-9);
+}
+
+// GraphicalUi.on_key_typed reuses the keyboard subscription wiring but flags the
+// subscription so the runtime delivers a typed GraphicalUi.KeyEvent record.
+LUMA_TEST(on_key_typed_marks_typed_keyboard_subscription) {
+    const auto v = eval(R"(
+        GraphicalUi.on_key_typed("k1", "s", (GraphicalUi.KeyEvent e) -> e.key)
+    )");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+
+    const auto* sub_type = d.find("_sub_type");
+    ASSERT_TRUE(sub_type != nullptr && sub_type->is_string());
+    ASSERT_EQ(sub_type->as_string(), "keyboard");
+
+    const auto* filter = d.find("filter");
+    ASSERT_TRUE(filter != nullptr && filter->is_string());
+    ASSERT_EQ(filter->as_string(), "s");
+
+    const auto* typed = d.find("_typed");
+    ASSERT_TRUE(typed != nullptr && typed->is_bool());
+    ASSERT_TRUE(typed->as_bool());
+}
+
+// build_key_event_record turns the key name plus a {ctrl, shift, alt, meta}
+// modifier payload into a typed GraphicalUi.KeyEvent record.
+LUMA_TEST(build_key_event_record_maps_payload) {
+    auto mods = std::make_shared<DictionaryValue>();
+    mods->set("ctrl", Value{true});
+    mods->set("shift", Value{false});
+    mods->set("alt", Value{false});
+    mods->set("meta", Value{true});
+
+    const auto rec_val = gui_detail::build_key_event_record("s", mods.get());
+    ASSERT_TRUE(rec_val.is_record());
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.type_name, "KeyEvent");
+
+    const auto* key = rec.find_field("key");
+    ASSERT_TRUE(key != nullptr && key->is_string());
+    ASSERT_EQ(key->as_string(), "s");
+
+    const auto* ctrl = rec.find_field("ctrl");
+    ASSERT_TRUE(ctrl != nullptr && ctrl->is_bool());
+    ASSERT_TRUE(ctrl->as_bool());
+
+    const auto* shift = rec.find_field("shift");
+    ASSERT_TRUE(shift != nullptr && shift->is_bool());
+    ASSERT_FALSE(shift->as_bool());
+
+    const auto* alt = rec.find_field("alt");
+    ASSERT_TRUE(alt != nullptr && alt->is_bool());
+    ASSERT_FALSE(alt->as_bool());
+
+    const auto* meta = rec.find_field("meta");
+    ASSERT_TRUE(meta != nullptr && meta->is_bool());
+    ASSERT_TRUE(meta->as_bool());
+}
+
+// A null modifier payload (the headless test path) keeps the record total:
+// every modifier defaults to false while the key name is preserved.
+LUMA_TEST(build_key_event_record_null_mods_defaults_false) {
+    const auto rec_val = gui_detail::build_key_event_record("Enter", nullptr);
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.find_field("key")->as_string(), "Enter");
+    ASSERT_FALSE(rec.find_field("ctrl")->as_bool());
+    ASSERT_FALSE(rec.find_field("shift")->as_bool());
+    ASSERT_FALSE(rec.find_field("alt")->as_bool());
+    ASSERT_FALSE(rec.find_field("meta")->as_bool());
+}
+
+// ── N05: GraphicalUi.WindowSize / on_resize_typed ──────────
+
+// GraphicalUi.on_resize_typed flags the resize subscription so the runtime
+// delivers a single GraphicalUi.WindowSize record.
+LUMA_TEST(on_resize_typed_marks_typed_resize_subscription) {
+    const auto v = eval(R"(
+        GraphicalUi.on_resize_typed("r1", (GraphicalUi.WindowSize s) -> s.width)
+    )");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+
+    const auto* sub_type = d.find("_sub_type");
+    ASSERT_TRUE(sub_type != nullptr && sub_type->is_string());
+    ASSERT_EQ(sub_type->as_string(), "resize");
+
+    const auto* typed = d.find("_typed");
+    ASSERT_TRUE(typed != nullptr && typed->is_bool());
+    ASSERT_TRUE(typed->as_bool());
+}
+
+// build_window_size_record maps a width/height pair to integer record fields.
+LUMA_TEST(build_window_size_record_maps_dimensions) {
+    const auto rec_val = gui_detail::build_window_size_record(1280, 720);
+    ASSERT_TRUE(rec_val.is_record());
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.type_name, "WindowSize");
+    ASSERT_TRUE(rec.find_field("width")->is_integer());
+    ASSERT_EQ(rec.find_field("width")->as_integer(), 1280);
+    ASSERT_EQ(rec.find_field("height")->as_integer(), 720);
+}
+
+// ── N03: GraphicalUi.DragEvent / DragPhase / on_drag_typed ─
+
+// GraphicalUi.on_drag_typed flags the drag subscription so the runtime delivers
+// a typed GraphicalUi.DragEvent record.
+LUMA_TEST(on_drag_typed_marks_typed_drag_subscription) {
+    const auto v = eval(R"(
+        GraphicalUi.on_drag_typed("d1", (GraphicalUi.DragEvent e) -> e.data)
+    )");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+
+    const auto* sub_type = d.find("_sub_type");
+    ASSERT_TRUE(sub_type != nullptr && sub_type->is_string());
+    ASSERT_EQ(sub_type->as_string(), "drag");
+
+    const auto* typed = d.find("_typed");
+    ASSERT_TRUE(typed != nullptr && typed->is_bool());
+    ASSERT_TRUE(typed->as_bool());
+}
+
+// build_drag_event_record maps the payload into number coordinates, a data
+// string, and a DragPhase choice mapped from the `event` key.
+LUMA_TEST(build_drag_event_record_maps_payload) {
+    auto payload = std::make_shared<DictionaryValue>();
+    payload->set("x", Value{40.0});
+    payload->set("y", Value{55.0});
+    payload->set("data", Value{std::string{"card-7"}});
+    payload->set("event", Value{std::string{"drop"}});
+
+    const auto rec_val = gui_detail::build_drag_event_record(*payload);
+    ASSERT_TRUE(rec_val.is_record());
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.type_name, "DragEvent");
+    ASSERT_NEAR(rec.find_field("x")->as_number(), 40.0, 1e-9);
+    ASSERT_NEAR(rec.find_field("y")->as_number(), 55.0, 1e-9);
+    ASSERT_EQ(rec.find_field("data")->as_string(), "card-7");
+
+    const auto* phase = rec.find_field("phase");
+    ASSERT_TRUE(phase != nullptr && phase->is_choice());
+    ASSERT_EQ(phase->as_choice()->type_name, "DragPhase");
+    ASSERT_EQ(phase->as_choice()->variant, "Drop");
+}
+
+// A missing/unknown drag phase falls back to Start; missing fields stay total.
+LUMA_TEST(build_drag_event_record_defaults_to_start) {
+    auto payload = std::make_shared<DictionaryValue>();
+
+    const auto rec_val = gui_detail::build_drag_event_record(*payload);
+    const auto& rec = *rec_val.as_record();
+    ASSERT_NEAR(rec.find_field("x")->as_number(), 0.0, 1e-9);
+    ASSERT_EQ(rec.find_field("data")->as_string(), "");
+    ASSERT_EQ(rec.find_field("phase")->as_choice()->variant, "Start");
+}
+
+// ── N02: GraphicalUi.MouseEventType / on_mouse_of ──────────
+
+// GraphicalUi.on_mouse_of lowers the MouseEventType choice to the same "event"
+// key on_mouse uses, and stays untyped (raw dictionary payload).
+LUMA_TEST(on_mouse_of_lowers_event_type_choice) {
+    const auto v = eval(R"(
+        GraphicalUi.on_mouse_of("m1", GraphicalUi.MouseEventType.Down, (dictionary d) -> d)
+    )");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+    ASSERT_EQ(d.find("_sub_type")->as_string(), "mouse");
+    ASSERT_EQ(d.find("event")->as_string(), "down");
+    // Not a typed subscription — the raw dictionary is still delivered.
+    ASSERT_TRUE(d.find("_typed") == nullptr);
+}
+
+// GraphicalUi.mouse_event_type_to_string bridges each variant to its string.
+LUMA_TEST(mouse_event_type_to_string_bridges_variants) {
+    ASSERT_EQ(eval(R"(GraphicalUi.mouse_event_type_to_string(GraphicalUi.MouseEventType.Click))")
+                  .as_string(),
+              "click");
+    ASSERT_EQ(eval(R"(GraphicalUi.mouse_event_type_to_string(GraphicalUi.MouseEventType.Scroll))")
+                  .as_string(),
+              "scroll");
+}
+
+// ── N04: GraphicalUi.HttpResponse / http_get_full ──────────
+
+// GraphicalUi.http_get_full builds the typed command variant.
+LUMA_TEST(http_get_full_builds_typed_command) {
+    const auto v = eval(R"(
+        GraphicalUi.http_get_full("http://example.test", (result<GraphicalUi.HttpResponse> r) -> r)
+    )");
+    ASSERT_TRUE(v.is_dictionary());
+    ASSERT_EQ(v.as_dictionary()->find("_command_type")->as_string(), "http_get_full");
+}
+
+// build_http_response_record_gui maps status/headers/body into the record.
+LUMA_TEST(build_http_response_record_gui_maps_fields) {
+    std::vector<std::pair<std::string, std::string>> headers{{"Content-Type", "application/json"}};
+    const auto rec_val = gui_detail::build_http_response_record_gui(404, "not found", headers);
+    ASSERT_TRUE(rec_val.is_record());
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.type_name, "HttpResponse");
+    ASSERT_TRUE(rec.find_field("status")->is_integer());
+    ASSERT_EQ(rec.find_field("status")->as_integer(), 404);
+    ASSERT_EQ(rec.find_field("body")->as_string(), "not found");
+
+    const auto* hdrs = rec.find_field("headers");
+    ASSERT_TRUE(hdrs != nullptr && hdrs->is_dictionary());
+    ASSERT_EQ(hdrs->as_dictionary()->find("Content-Type")->as_string(), "application/json");
 }
 
 // GraphicalUi.classify_device_typed returns a DeviceInfo record with typed

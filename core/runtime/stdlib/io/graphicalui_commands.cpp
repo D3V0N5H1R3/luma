@@ -32,6 +32,27 @@ namespace luma::gui_detail {
     return d.find(key::gui_model) != nullptr && d.find(key::gui_command) != nullptr;
 }
 
+// Build a GraphicalUi.HttpResponse record {status, headers, body} from a
+// successful fetch result — the payload http_get_full / http_post_full deliver
+// inside a result<...>.  Mirrors Http.Response's shape.  Defined in gui_detail
+// (not the anonymous namespace) so the unit tests can link against it.
+Value build_http_response_record_gui(
+    int status, std::string body, const std::vector<std::pair<std::string, std::string>>& headers) {
+    auto headers_dict = std::make_shared<DictionaryValue>();
+
+    for (const auto& [name, value] : headers) {
+        headers_dict->set(name, Value{value});
+    }
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "HttpResponse";
+    rec->fields.emplace_back("status", Value{static_cast<std::int64_t>(status)});
+    rec->fields.emplace_back("headers", Value{std::move(headers_dict)});
+    rec->fields.emplace_back("body", Value{std::move(body)});
+
+    return Value{std::move(rec)};
+}
+
 // ═══════════════════════════════════════════════════════════
 // Command handlers — one function per command type
 // ═══════════════════════════════════════════════════════════
@@ -128,8 +149,11 @@ struct HttpResultPayload {
     std::shared_ptr<AsyncDispatchHub> hub;
     std::string cb_id;
     bool ok{false};
-    std::string body;  // Response text on success.
-    std::string error; // Error message on failure.
+    bool typed{false}; // true for http_*_full: deliver a GraphicalUi.HttpResponse.
+    int status{0};
+    std::string body;                                         // Response text on success.
+    std::vector<std::pair<std::string, std::string>> headers; // Response headers (typed only).
+    std::string error;                                        // Error message on failure.
 };
 
 // Runs on the UI thread (posted by the worker through webview_dispatch).  Builds
@@ -164,8 +188,17 @@ void deliver_http_result(webview_t /*w*/, void* arg) {
         return;
     }
 
-    Value result_val = payload->ok ? Value{ResultValue::success(Value{std::move(payload->body)})}
-                                   : Value{ResultValue::failure(Value{std::move(payload->error)})};
+    Value result_val;
+
+    if (payload->ok) {
+        Value success_val = payload->typed
+                                ? build_http_response_record_gui(
+                                      payload->status, std::move(payload->body), payload->headers)
+                                : Value{std::move(payload->body)};
+        result_val = Value{ResultValue::success(std::move(success_val))};
+    } else {
+        result_val = Value{ResultValue::failure(Value{std::move(payload->error)})};
+    }
 
     std::vector<Value> args{std::move(result_val)};
     auto result = invoke_callable(callback, args, app->loc);
@@ -189,7 +222,14 @@ void cmd_http(AppState& state, const DictionaryValue& d) {
     }
 
     // Derive the HTTP method from the command type (e.g. "http_get" → "GET").
-    auto method = std::string{type.substr(5)}; // strip the "http_" prefix
+    // Typed variants carry a "_full" suffix (http_get_full) that selects a
+    // GraphicalUi.HttpResponse payload; strip it before deriving the method.
+    const bool typed = type.size() > 5 && type.ends_with("_full");
+    auto method_part = std::string{type.substr(5)}; // strip the "http_" prefix
+    if (typed) {
+        method_part.erase(method_part.size() - 5); // strip the "_full" suffix
+    }
+    auto method = std::move(method_part);
     std::ranges::transform(method, method.begin(),
                            [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 
@@ -227,16 +267,20 @@ void cmd_http(AppState& state, const DictionaryValue& d) {
     const auto loc = state.loc;
 
     std::thread worker{[hub = std::move(hub), method = std::move(method), url, body,
-                        headers = std::move(headers), effective_timeout, cb_id, loc]() mutable {
+                        headers = std::move(headers), effective_timeout, cb_id, typed,
+                        loc]() mutable {
         auto fetched = do_http_fetch_text(method, url, body, headers, effective_timeout, loc);
 
         auto payload = std::make_unique<HttpResultPayload>();
         payload->hub = hub;
         payload->cb_id = std::move(cb_id);
         payload->ok = fetched.ok;
+        payload->typed = typed;
 
         if (fetched.ok) {
+            payload->status = fetched.status_code;
             payload->body = std::move(fetched.body);
+            payload->headers = std::move(fetched.headers);
         } else {
             payload->error = std::move(fetched.error);
         }
@@ -805,6 +849,8 @@ void cmd_debounce(AppState& state, const DictionaryValue& d) {
         {cmd::delay, cmd_delay},
         {cmd::http_get, cmd_http},
         {cmd::http_post, cmd_http},
+        {cmd::http_get_full, cmd_http},
+        {cmd::http_post_full, cmd_http},
         {cmd::random, cmd_random},
         {cmd::focus, cmd_focus},
         {cmd::announce, cmd_announce},

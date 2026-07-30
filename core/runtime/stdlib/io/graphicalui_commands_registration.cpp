@@ -118,6 +118,10 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
     register_http_command(env, "GraphicalUi.http_get", cmd::http_get, false);
     register_http_command(env, "GraphicalUi.http_post", cmd::http_post, true);
 
+    // Typed variants: deliver result<GraphicalUi.HttpResponse> (status/headers/body).
+    register_http_command(env, "GraphicalUi.http_get_full", cmd::http_get_full, false);
+    register_http_command(env, "GraphicalUi.http_post_full", cmd::http_post_full, true);
+
     define_native(env, "GraphicalUi.delay",
                   [](std::span<const Value> args, SourceLocation loc) -> Value {
                       expect_args("GraphicalUi.delay", args, 2, loc);
@@ -361,7 +365,46 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
     register_subscription(env, "GraphicalUi.on_key", sub::keyboard, SubscriptionParam::string,
                           "filter");
 
+    // GraphicalUi.on_key_typed(id, key_filter, callback) -> subscription
+    // Additive typed companion to on_key: identical wiring (same sub::keyboard JS
+    // listener and filter), but flagged so the runtime hands the callback a typed
+    // GraphicalUi.KeyEvent record (key + modifier flags) instead of the bare key
+    // string.  The `_typed` flag is read back by build_subscription_map /
+    // handle_keyboard.
+    define_native(env, "GraphicalUi.on_key_typed",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.on_key_typed", args, 3, loc);
+                      auto id = expect_string(args[0], "GraphicalUi.on_key_typed", loc);
+                      auto filter = expect_string(args[1], "GraphicalUi.on_key_typed", loc);
+                      auto w = make_dict();
+                      w->set(key::sub_type, Value{std::string{sub::keyboard}});
+                      w->set(key::typed, Value{true});
+                      w->set("id", Value{id});
+                      w->set("filter", Value{filter});
+                      w->set(key::callback, args[2]);
+
+                      return Value{std::move(w)};
+                  });
+
     register_subscription(env, "GraphicalUi.on_resize", sub::resize);
+
+    // GraphicalUi.on_resize_typed(id, callback) -> subscription
+    // Additive typed companion to on_resize: same resize subscription, but flagged
+    // so the runtime delivers a single GraphicalUi.WindowSize record instead of two
+    // loose integer arguments.
+    define_native(env, "GraphicalUi.on_resize_typed",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.on_resize_typed", args, 2, loc);
+                      auto id = expect_string(args[0], "GraphicalUi.on_resize_typed", loc);
+                      auto w = make_dict();
+                      w->set(key::sub_type, Value{std::string{sub::resize}});
+                      w->set(key::typed, Value{true});
+                      w->set("id", Value{id});
+                      w->set(key::callback, args[1]);
+
+                      return Value{std::move(w)};
+                  });
+
     register_subscription(env, "GraphicalUi.on_focus", sub::focus);
 
     define_native(env, "GraphicalUi.on_mouse",
@@ -408,6 +451,40 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
                       return Value{std::move(w)};
                   });
 
+    // GraphicalUi.on_mouse_of(id, event_type, callback, throttle_ms?) -> subscription
+    // Typo-proof companion to on_mouse: takes a GraphicalUi.MouseEventType choice
+    // instead of an open event-type string, lowering it to the same "event" key
+    // on_mouse builds so the JS wiring is identical.  It is NOT flagged typed —
+    // the callback still receives the raw dictionary; the choice only enforces the
+    // closed event-type set at compile time (pair with on_mouse_typed for a typed
+    // payload).  Mirrors alert_of/severity bridging.
+    define_native(env, "GraphicalUi.on_mouse_of",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_min_args("GraphicalUi.on_mouse_of", args, 3, loc);
+                      auto id = expect_string(args[0], "GraphicalUi.on_mouse_of", loc);
+                      auto w = make_dict();
+                      w->set(key::sub_type, Value{std::string{sub::mouse}});
+                      w->set("id", Value{id});
+                      w->set("event", Value{mouse_event_type_to_lower(args[1])});
+                      w->set(key::callback, args[2]);
+
+                      // Optional throttle interval (4th arg, default 16ms).
+                      if (args.size() > 3 && args[3].is_integer()) {
+                          w->set("throttle_ms", args[3]);
+                      }
+
+                      return Value{std::move(w)};
+                  });
+
+    // GraphicalUi.mouse_event_type_to_string(event_type) -> string
+    // Bridge from the GraphicalUi.MouseEventType choice to the "click"/"move"/
+    // "down"/"up"/"scroll" string the string-based on_mouse API accepts.
+    define_native(env, "GraphicalUi.mouse_event_type_to_string",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.mouse_event_type_to_string", args, 1, loc);
+                      return Value{mouse_event_type_to_lower(args[0])};
+                  });
+
     register_subscription(env, "GraphicalUi.on_visibility_change", sub::visibility);
     register_subscription(env, "GraphicalUi.on_online", sub::online);
     register_subscription(env, "GraphicalUi.on_offline", sub::offline);
@@ -447,9 +524,28 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
     register_subscription(env, "GraphicalUi.on_animation_frame", sub::animation_frame);
 
     // GraphicalUi.on_drag(id, event_type, callback) -> subscription
-    // event_type: "start", "move", "end", or "*" for all.
+    // event_type: "start", "move", "end", "enter", "leave", "drop", or "*" for all.
     register_subscription(env, "GraphicalUi.on_drag", sub::drag, SubscriptionParam::string,
                           "event");
+
+    // GraphicalUi.on_drag_typed(id, callback) -> subscription
+    // Additive typed companion to on_drag: same drag subscription (all phases, "*"
+    // filter), but flagged so the runtime delivers a typed GraphicalUi.DragEvent
+    // record — {x, y, data, phase} — instead of the untyped position dictionary,
+    // with the drag phase as an exhaustively-matchable GraphicalUi.DragPhase.
+    define_native(env, "GraphicalUi.on_drag_typed",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.on_drag_typed", args, 2, loc);
+                      auto id = expect_string(args[0], "GraphicalUi.on_drag_typed", loc);
+                      auto w = make_dict();
+                      w->set(key::sub_type, Value{std::string{sub::drag}});
+                      w->set(key::typed, Value{true});
+                      w->set("id", Value{id});
+                      w->set("event", Value{std::string{"*"}});
+                      w->set(key::callback, args[1]);
+
+                      return Value{std::move(w)};
+                  });
 }
 
 } // namespace luma::gui_detail
