@@ -104,6 +104,19 @@ choice Border {
     Thick
 }
 
+# The fill style of a button — an orthogonal concern to its `emphasis` colour.
+# `Solid` paints the emphasis colour (the default, so every existing button is
+# unchanged), `Outline` draws a coloured border on a transparent body, `Ghost`
+# stays transparent until hovered, and `Link` renders as inline underlined text.
+# Apply it with `Solaris.variant`; compose it with `Solaris.emphasis` for the
+# colour, exactly as `Border` composes with `Solaris.border_color`.
+choice Variant {
+    Solid,
+    Outline,
+    Ghost,
+    Link
+}
+
 # A forced colour scheme. Dark mode is automatic (it follows the OS), so this is
 # only for apps that want to pin or toggle the mode themselves.
 choice Scheme {
@@ -386,6 +399,10 @@ record View {
     boolean has_shadow = false,
     boolean has_border = false,
     boolean has_border_tint = false,
+    # Button fill style (N03) — orthogonal to `emphasis`. Only emitted when the
+    # `variant` modifier is applied, so an unstyled button keeps its solid look.
+    Variant fill = Variant.Solid,
+    boolean has_fill = false,
     # Validation state (S02): an Invalid field shows its message, a danger border,
     # and sets aria-invalid; Pending marks the field busy.
     Validation validation = Validation.Valid,
@@ -540,6 +557,24 @@ record NavItem {
     string label = "",
     any message = none,
     boolean active = false
+}
+
+# ── TYPED MENU ENTRIES ──
+#
+# One entry in a drop-down menu: an optional `icon`, a display `label`, the
+# `message` routed through `update` when it is chosen, and whether it is
+# `disabled`. Build an `array<MenuItem>` and pass it to `Solaris.menu_of`, which
+# discloses them as a pop-up list of actions — so the data (the entries) stays
+# separate from the behaviour (the message each routes), the same reshaping
+# `NavItem` applies to a navigation rail. An entry left without a `message` is
+# inert (a no-op when chosen), exactly like a `Solaris.button` with no
+# `on_click`; a `disabled` entry is shown greyed-out and is not clickable. The
+# default `icon` (`Icon.Custom("")`) resolves to no glyph, so an icon is opt-in.
+record MenuItem {
+    Icon icon = Icon.Custom(""),
+    string label = "",
+    any message = none,
+    boolean disabled = false
 }
 
 namespace Solaris {
@@ -972,6 +1007,40 @@ namespace Solaris {
         }
     }
 
+    # A typed drop-down menu (N02): a trigger labelled `label` that discloses one
+    # clickable action per `MenuItem`. Each entry routes its `message` through
+    # `update` when chosen (inert when it carries none, like a handler-less
+    # `button`); a `disabled` entry is shown greyed-out and is not interactive.
+    # Mirrors `Solaris.nav`: the data (the entries) is separate from the
+    # behaviour (the message each routes). Prefer it over `Solaris.menu` whenever
+    # entries need icons, disabling, or typed (non-string) messages.
+    function View menu_of(string label, array<MenuItem> items) {
+        mutable array<View> entries = []
+        for item in items {
+            entries = Array.append(entries, Solaris.menu_entry(item))
+        }
+        return View {
+            kind = "menu_of",
+            content = label,
+            children = entries,
+            gap = Spacing.XS
+        }
+    }
+
+    # Turn a single MenuItem into its `menu_entry` View. Internal helper for
+    # `menu_of`. The disabled flag rides on `checked` (no dedicated View field).
+    internal function View menu_entry(MenuItem item) {
+        return View {
+            kind = "menu_entry",
+            content = item.label,
+            icon_id = Solaris.icon_name(item.icon),
+            message = item.message,
+            has_message = true,
+            checked = item.disabled,
+            node_width = Length.Fill
+        }
+    }
+
     # ── FLUENT MODIFIERS — chain with `|>`. Each takes the piped View first
     #    and returns a new View (the tree is immutable). ──
 
@@ -1111,6 +1180,14 @@ namespace Solaris {
     # used.
     function View border_color(View node, Color c) {
         return node with { border_tint = c, has_border_tint = true }
+    }
+
+    # Button fill style (N03): `Solid` (default), `Outline`, `Ghost`, or `Link`.
+    # Orthogonal to `Solaris.emphasis`, which still picks the colour — e.g.
+    # `Solaris.button("Delete") |> Solaris.danger() |> Solaris.variant(Variant.Outline)`
+    # is a red-outlined button. Only affects buttons.
+    function View variant(View node, Variant v) {
+        return node with { fill = v, has_fill = true }
     }
 
     # Initial checked state for a checkbox.
@@ -1657,8 +1734,57 @@ namespace Solaris {
 
     # Style dictionary for a button View.
     internal function dictionary button_style(View node) {
-        dictionary style = {"variant": Solaris.emphasis_variant(node.emphasis)}
+        mutable dictionary style = {"variant": Solaris.emphasis_variant(node.emphasis)}
+        if node.has_fill {
+            style = Solaris.apply_fill(node, style)
+        }
         return GraphicalUi.merge_styles(style, Solaris.common_style(node))
+    }
+
+    # The accent colour a non-solid button paints with (its border/text): the
+    # emphasis colour when the button carries one, else the primary accent so an
+    # outline/link on a `Normal` button is still visibly coloured.
+    internal function string button_accent(Emphasis chosen) {
+        string col = Solaris.emphasis_color(chosen)
+        if col == "" {
+            return GraphicalUi.VAR_PRIMARY
+        }
+        return col
+    }
+
+    # Fold the fill style (N03) into a button's style dict. `Solid` is the engine
+    # default (unchanged). The others build on the engine's transparent `ghost`
+    # variant and layer explicit CSS so the fill reads as outline/ghost/link
+    # while keeping the emphasis colour.
+    internal function dictionary apply_fill(View node, dictionary style) {
+        string accent = Solaris.button_accent(node.emphasis)
+        return match node.fill {
+            case Variant.Solid { style }
+            case Variant.Ghost {
+                mutable dictionary s = style
+                s["variant"] = GraphicalUi.GHOST
+                s["color"] = accent
+                s
+            }
+            case Variant.Outline {
+                mutable dictionary s = style
+                s["variant"] = GraphicalUi.GHOST
+                s["background"] = "transparent"
+                s["border"] = "1px solid ${accent}"
+                s["color"] = accent
+                s
+            }
+            case Variant.Link {
+                mutable dictionary s = style
+                s["variant"] = GraphicalUi.GHOST
+                s["background"] = "transparent"
+                s["border"] = "none"
+                s["color"] = accent
+                s["text_decoration"] = "underline"
+                s["padding"] = "0"
+                s
+            }
+        }
     }
 
     # Style dictionary for a text field View. Carries the HTML input `type` (T01)
@@ -1760,6 +1886,34 @@ namespace Solaris {
         widget btn = GraphicalUi.button(node.content, () -> node.message, bstyle)
         widget glyph = GraphicalUi.icon(node.icon_id, 18, {"aria_hidden": "true"})
         return GraphicalUi.row([glyph, btn],
+            {"align_items": "center", "gap": "8px", "width": "100%"})
+    }
+
+    # Reconcile a single menu entry (N02). A live entry is a full-width ghost
+    # button that routes its `message` through `update` when chosen; a disabled
+    # entry (`checked`) is a muted, non-interactive label marked `aria-disabled`.
+    # An optional leading icon (`icon_id`) is decorative (`aria-hidden`); the
+    # default `Icon.Custom("")` resolves to an empty name, so it is omitted.
+    internal function widget menu_entry_widget(View node) {
+        mutable array<widget> parts = []
+        if node.icon_id != "" {
+            parts = Array.append(parts,
+                GraphicalUi.icon(node.icon_id, 16, {"aria_hidden": "true"}))
+        }
+        if node.checked {
+            parts = Array.append(parts, GraphicalUi.label(node.content, {
+                "color": GraphicalUi.VAR_TEXT_MUTED,
+                "aria_disabled": "true",
+                "width": "100%"
+            }))
+        } else {
+            parts = Array.append(parts, GraphicalUi.button(node.content, () -> node.message, {
+                "variant": GraphicalUi.GHOST,
+                "width": "100%",
+                "text_align": "left"
+            }))
+        }
+        return GraphicalUi.row(parts,
             {"align_items": "center", "gap": "8px", "width": "100%"})
     }
 
@@ -2048,6 +2202,15 @@ namespace Solaris {
             }
             case == "nav_item" {
                 Solaris.nav_item_widget(node)
+            }
+            case == "menu_of" {
+                GraphicalUi.popover(node.content,
+                    GraphicalUi.column(Solaris.child_widgets(node),
+                        {"gap": "2px", "min_width": "160px", "role": "menu"}),
+                    Solaris.common_style(node))
+            }
+            case == "menu_entry" {
+                Solaris.menu_entry_widget(node)
             }
             case == "app_shell" {
                 GraphicalUi.row(Solaris.child_widgets(node), Solaris.container_style(node))

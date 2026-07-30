@@ -301,6 +301,7 @@ Solaris.line_chart_series([
 |---|---|---|
 | Tabs | `Solaris.tabs(array<string> labels, integer active, array<View> panels)` | Switches between panels; pair with `on_tab`. |
 | Menu | `Solaris.menu(string label, array<string> items)` | An in-page dropdown menu; pair with `on_select`. |
+| Menu (typed) | `Solaris.menu_of(string label, array<MenuItem> items)` | A typed dropdown menu: each `MenuItem` carries an optional icon, routes its own message, and may be disabled. |
 | Dialog | `Solaris.dialog(string title, boolean open, array<View> children)` | A modal shown when `open` is true; pair with `on_close`. |
 | Toast | `Solaris.toast(string message)` | A transient notification banner; anchor it with `placement`. |
 | Sidebar | `Solaris.sidebar(array<View> children)` | A fixed-width navigation rail. |
@@ -318,6 +319,24 @@ icon, a text label, and a button and tracking the selection yourself:
 Solaris.nav([
     NavItem { icon = Icon.Home, label = "Home", message = Msg.Go("home"), active = model.page == "home" },
     NavItem { icon = Icon.Settings, label = "Settings", message = Msg.Go("settings"), active = model.page == "settings" }
+])
+```
+
+`Solaris.menu_of` is the same reshaping applied to a dropdown of actions. It
+takes an `array<MenuItem>` — a record
+`{ Icon icon, string label, any message, boolean disabled }` — so each entry
+declares its own optional glyph, the message it routes through `update` when
+chosen, and whether it is disabled, instead of maintaining a display list of
+strings beside a parallel list of what each one does. An entry left without a
+`message` is inert (a no-op, like a `button` with no `on_click`); a `disabled`
+entry is shown greyed-out and cannot be chosen. The default `icon`
+(`Icon.Custom("")`) resolves to no glyph, so icons are opt-in:
+
+```luma
+Solaris.menu_of("Edit", [
+    MenuItem { icon = Icon.Copy, label = "Copy", message = Msg.Copy },
+    MenuItem { icon = Icon.Trash, label = "Delete", message = Msg.Delete },
+    MenuItem { label = "Paste", disabled = model.clipboard == "" }
 ])
 ```
 
@@ -365,6 +384,7 @@ each visual concern.
 | `Solaris.danger()` | A destructive action. |
 | `Solaris.muted()` | De-emphasised / subtle. |
 | `Solaris.emphasis(Emphasis chosen)` | Any emphasis token explicitly. |
+| `Solaris.variant(Variant v)` | A button's fill style — `Solid` (default), `Outline`, `Ghost`, or `Link`. Orthogonal to `emphasis`, which still picks the colour. |
 
 ### Layout and shape
 
@@ -422,6 +442,7 @@ never `Solaris.TextScale`.
 | `Radius` | `None`, `Small`, `Medium`, `Large`, `Full` |
 | `Shadow` | `None`, `Small`, `Medium`, `Large` |
 | `Border` | `None`, `Thin`, `Thick` |
+| `Variant` | `Solid`, `Outline`, `Ghost`, `Link` (button fill style) |
 | `Scheme` | `Light`, `Dark`, `Auto` |
 | `Icon` | `Home`, `Search`, `Settings`, … (common Lucide glyphs), `Custom(string name)` |
 | `Validation` | `Valid`, `Invalid(string message)`, `Pending` |
@@ -438,9 +459,11 @@ A handful of typed **records** carry structured data alongside these tokens:
 `DataPoint { string label, number value }` and `Series { string name,
 array<DataPoint> points, Color color }` for charts, `Option { string label,
 string value }` for selects, `NavItem { Icon icon, string label, any message,
-boolean active }` for navigation rails, and `Insets { Spacing top, right, bottom,
-left }` for per-side padding. Use `Solaris.font_of(config, Font)` to set the app
-font from a `Font` token (the typed sibling of `Solaris.font(string)`).
+boolean active }` for navigation rails, `MenuItem { Icon icon, string label, any
+message, boolean disabled }` for dropdown menus, and `Insets { Spacing top,
+right, bottom, left }` for per-side padding. Use `Solaris.font_of(config, Font)`
+to set the app font from a `Font` token (the typed sibling of
+`Solaris.font(string)`).
 
 `Length.Fixed` carries a number, so a fixed width is written
 `Solaris.width(Length.Fixed(140))`. `Length.Fill` expands to fill available

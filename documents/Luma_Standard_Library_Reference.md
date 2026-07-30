@@ -858,6 +858,7 @@ _Effects_ below).
 | `Length` | `Shrink`, `Fill`, `Fixed(number value)`, `FillPortion(integer weight)` |
 | `Radius` | `None`, `Small`, `Medium`, `Large`, `Full` |
 | `Scheme` | `Light`, `Dark`, `Auto` |
+| `Variant` | `Solid`, `Outline`, `Ghost`, `Link` (button fill style) |
 | `Color` | `Primary`, `Success`, `Warning`, `Danger`, `Muted`, `Custom(string hex)` |
 | `Icon` | common Lucide glyphs (`Home`, `Search`, `Settings`, …), `Custom(string name)` |
 | `Validation` | `Valid`, `Invalid(string message)`, `Pending` |
@@ -873,7 +874,8 @@ _Effects_ below).
 Typed **records** for structured data: `DataPoint { string label, number value }`,
 `Series { string name, array<DataPoint> points, Color color }`,
 `Option { string label, string value }`,
-`NavItem { Icon icon, string label, any message, boolean active }`, and
+`NavItem { Icon icon, string label, any message, boolean active }`,
+`MenuItem { Icon icon, string label, any message, boolean disabled }`, and
 `Insets { Spacing top, right, bottom, left }`.
 
 `View` is a global `record` describing one piece of UI; `view` returns a tree of them.
@@ -920,6 +922,7 @@ Typed **records** for structured data: `DataPoint { string label, number value }
 | `Solaris.bar_chart_series` | `(array<Series> series) -> View` | A multi-series bar chart |
 | `Solaris.tabs` | `(array<string> labels, integer active, array<View> panels) -> View` | Panel switcher (pair with `on_tab`) |
 | `Solaris.menu` | `(string label, array<string> items) -> View` | In-page dropdown menu (pair with `on_select`) |
+| `Solaris.menu_of` | `(string label, array<MenuItem> items) -> View` | Typed dropdown menu: each item carries an optional icon, routes its own message, and may be disabled |
 | `Solaris.dialog` | `(string title, boolean open, array<View> children) -> View` | A modal (pair with `on_close`) |
 | `Solaris.toast` | `(string message) -> View` | A transient notification banner |
 | `Solaris.sidebar` | `(array<View> children) -> View` | A fixed-width navigation rail |
@@ -940,6 +943,7 @@ Typed **records** for structured data: `DataPoint { string label, number value }
 | `level(View, integer)` | Heading level (1–6) |
 | `size(View, TextScale)` · `weight(View, Weight)` · `bold(View)` | Typography |
 | `primary` · `secondary` · `danger` · `muted` · `emphasis(View, Emphasis)` | Semantic emphasis |
+| `variant(View, Variant)` | Button fill style (`Solid`/`Outline`/`Ghost`/`Link`) — orthogonal to `emphasis` |
 | `gap(View, Spacing)` · `padding(View, Spacing)` | Container spacing |
 | `padding_each(View, Insets)` | Per-side container padding |
 | `width(View, Length)` · `height(View, Length)` | Sizing |
