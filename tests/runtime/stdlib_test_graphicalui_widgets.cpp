@@ -456,6 +456,40 @@ LUMA_TEST(pie_chart) {
     ASSERT_EQ(v.as_string(), "pie_chart");
 }
 
+LUMA_TEST(line_chart_multi) {
+    const auto v = eval(R"(
+        dictionary<string> w = GraphicalUi.line_chart_multi(
+            ["A", "B"], ["Sales", "Costs"], [[10, 20], [6, 9]], ["#f00", "#00f"])
+        Dictionary.get_or(w, "type", "")
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "line_chart");
+}
+
+LUMA_TEST(line_chart_multi_carries_series_names) {
+    const auto v = eval(R"(
+        dictionary w = GraphicalUi.line_chart_multi(
+            ["A", "B"], ["Sales", "Costs"], [[10, 20], [6, 9]], ["#f00", "#00f"])
+        array<string> names = Dictionary.get_or(w, "series_names", [])
+        names[1]
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "Costs");
+}
+
+LUMA_TEST(vertical_bar_chart_multi) {
+    const auto v = eval(R"(
+        dictionary<string> w = GraphicalUi.vertical_bar_chart_multi(
+            ["A", "B"], ["Sales", "Costs"], [[10, 20], [6, 9]], ["#f00", "#00f"])
+        Dictionary.get_or(w, "type", "")
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "vertical_bar_chart");
+}
+
 LUMA_TEST(donut_chart) {
     const auto v = eval(R"(
         dictionary<string> w = GraphicalUi.donut_chart(["A", "B"], [10, 20], "50%")

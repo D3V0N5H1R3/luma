@@ -228,6 +228,8 @@ inline constexpr const char* graphicalui_function_names[] = {
     "GraphicalUi.scatter_plot",
     "GraphicalUi.area_chart",
     "GraphicalUi.horizontal_bar_chart",
+    "GraphicalUi.line_chart_multi",
+    "GraphicalUi.vertical_bar_chart_multi",
     // Commands.
     "GraphicalUi.none",
     "GraphicalUi.batch",

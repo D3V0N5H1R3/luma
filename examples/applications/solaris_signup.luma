@@ -1,0 +1,184 @@
+# Signup form — a tour of Solaris's typed form and data surfaces.
+#
+# Usage: luma examples/applications/solaris_signup.luma
+# Tests: luma --test examples/applications/solaris_signup.luma
+#
+# Demonstrates the typed building blocks a first form needs, each replacing a
+# raw string or hand-kept lookup with a compile-checked, autocomplete-friendly
+# type:
+#
+#   * Icon        — Solaris.icon_of(Icon.User) instead of a bare "user" string.
+#   * Option      — dropdown_of shows "United Kingdom" but delivers "GB".
+#   * Validation  — one modifier adds an error message + aria-invalid to a field.
+#   * TextAlign   — right-align a caption.
+#   * ImageFit    — an avatar that covers its box without distortion.
+#   * Insets      — per-side padding on the 4pt scale.
+#   * Placement   — a confirmation toast anchored top-centre.
+#   * Series      — a two-series chart from typed points.
+#   * Font        — a typed font family for the whole app.
+
+# ─── Message ───
+
+choice SignupMsg {
+    SetName(string value),
+    SetCountry(string value),
+    Submit
+}
+
+# ─── Model ───
+
+record SignupModel {
+    string name = "",
+    string country = "GB",
+    boolean submitted = false
+}
+
+# ─── Update ───
+
+function SignupModel signup_update(SignupModel model, SignupMsg msg) {
+    return match msg {
+        case SignupMsg.SetName(value)    { model with { name = value, submitted = false } }
+        case SignupMsg.SetCountry(value) { model with { country = value, submitted = false } }
+        case SignupMsg.Submit            { model with { submitted = true } }
+    }
+}
+
+# The name field's validity, carried in the typed Validation choice.
+function Validation name_validity(SignupModel model) {
+    if String.length(model.name) == 0 {
+        return Validation.Invalid("Please enter your name")
+    }
+    return Validation.Valid
+}
+
+function array<Option> countries() {
+    return [
+        Option { label = "United Kingdom", value = "GB" },
+        Option { label = "France", value = "FR" },
+        Option { label = "Germany", value = "DE" }
+    ]
+}
+
+# A tiny two-series chart (typed points + colours) shown beneath the form.
+function View activity_chart() {
+    return Solaris.line_chart_series([
+        Series {
+            name = "Signups",
+            color = Color.Primary,
+            points = [
+                DataPoint { label = "Mon", value = 4.0 },
+                DataPoint { label = "Tue", value = 9.0 },
+                DataPoint { label = "Wed", value = 7.0 }
+            ]
+        },
+        Series {
+            name = "Logins",
+            color = Color.Success,
+            points = [
+                DataPoint { label = "Mon", value = 12.0 },
+                DataPoint { label = "Tue", value = 15.0 },
+                DataPoint { label = "Wed", value = 18.0 }
+            ]
+        }
+    ]) |> Solaris.height(Length.Fixed(220.0))
+}
+
+# ─── View ───
+
+function View signup_view(SignupModel model) {
+    return Solaris.column([
+        Solaris.row([
+            Solaris.icon_of(Icon.User) |> Solaris.icon_size(28),
+            Solaris.heading("Create your account")
+        ]) |> Solaris.gap(Spacing.S),
+
+        Solaris.text_field(model.name)
+            |> Solaris.placeholder("Full name")
+            |> Solaris.on_change((string v) -> SignupMsg.SetName(v))
+            |> Solaris.validation(name_validity(model))
+            |> Solaris.key("name"),
+
+        Solaris.dropdown_of(countries(), model.country)
+            |> Solaris.on_select((string code) -> SignupMsg.SetCountry(code))
+            |> Solaris.key("country"),
+
+        Solaris.button("Sign up")
+            |> Solaris.on_click(SignupMsg.Submit)
+            |> Solaris.primary(),
+
+        Solaris.text("All fields are required")
+            |> Solaris.size(TextScale.Caption)
+            |> Solaris.muted()
+            |> Solaris.text_align(TextAlign.Right),
+
+        Solaris.panel("This week", [activity_chart()]),
+
+        confirmation(model)
+    ])
+        |> Solaris.padding_each(Insets { top = Spacing.L, right = Spacing.L, bottom = Spacing.M, left = Spacing.L })
+        |> Solaris.gap(Spacing.M)
+}
+
+# A top-centre toast, shown only after a successful submit.
+function View confirmation(SignupModel model) {
+    if model.submitted && String.length(model.name) > 0 {
+        return Solaris.toast("Welcome, ${model.name}!")
+            |> Solaris.placement(Placement.Top)
+    }
+    return Solaris.spacer()
+}
+
+function dictionary signup_app() {
+    return Solaris.app("Solaris Signup", SignupModel {}, signup_update, signup_view)
+        |> Solaris.font_of(Font.Sans)
+}
+
+@main
+function void main() {
+    Solaris.run(signup_app())
+}
+
+# ══════════════════════════════════════════════════════════════════════
+# TESTS — drive the same app headlessly (no window opens).
+# ══════════════════════════════════════════════════════════════════════
+
+@test
+function void test_name_field_is_invalid_when_empty() {
+    match name_validity(SignupModel { name = "" }) {
+        case Validation.Invalid(message) { assert(message == "Please enter your name") }
+        else { assert(false) }
+    }
+    match name_validity(SignupModel { name = "Ada" }) {
+        case Validation.Valid { assert(true) }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_typing_a_name_updates_the_model() {
+    SignupModel next =
+        GraphicalUi.test_input(signup_app(), SignupModel {}, "name", "Ada")
+    assert(next.name == "Ada")
+}
+
+@test
+function void test_country_dropdown_delivers_the_value_not_the_label() {
+    SignupModel next =
+        GraphicalUi.test_input(signup_app(), SignupModel {}, "country", "France")
+    assert(next.country == "FR")
+}
+
+@test
+function void test_submit_marks_the_model_submitted() {
+    SignupModel next =
+        GraphicalUi.test_click(signup_app(), SignupModel { name = "Ada" }, "Sign up")
+    assert(next.submitted)
+}
+
+@test
+function void test_multi_series_chart_carries_both_series() {
+    View chart = activity_chart()
+    assert(chart.kind == "line_chart_multi")
+    assert(chart.series_names[0] == "Signups")
+    assert(chart.series_names[1] == "Logins")
+}

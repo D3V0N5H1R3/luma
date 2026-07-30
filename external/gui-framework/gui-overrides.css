@@ -1271,6 +1271,12 @@ body {
     transform: translateX(-50%);
 }
 
+.gui-toast-region[data-position="center"] {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
 /* ── Empty state: placeholder for a blank list / panel. ──── */
 .gui-empty-state {
     display: flex;
