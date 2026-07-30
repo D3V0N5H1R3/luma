@@ -618,6 +618,23 @@ static void register_form_and_dragdrop_widgets(const EnvPtr& env) {
                       w->set("style", get_style_arg(args, 2));
                       return finalize_widget(std::move(w));
                   });
+
+    // GraphicalUi.drop_target_typed(child, on_drop, style?) -> widget
+    // Typed companion to drop_target: the on_drop callback receives a
+    // GraphicalUi.DropEvent record {data, x, y} instead of the bare data string,
+    // so the drop location is available for reordering / drop-to-position.  The
+    // `_drop_typed` flag tells the renderer to emit a "drop_event" carrying the
+    // drop coordinates.
+    define_native(env, "GraphicalUi.drop_target_typed",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_min_args("GraphicalUi.drop_target_typed", args, 2, loc);
+                      auto w = make_widget(wtype::drop_target);
+                      w->set("child", args[0]);
+                      w->set("_drop_typed", Value{true});
+                      w->set(key::deferred_callback, args[1]);
+                      w->set("style", get_style_arg(args, 2));
+                      return finalize_widget(std::move(w));
+                  });
 }
 
 static void register_theming_and_data_widgets(const EnvPtr& env) {

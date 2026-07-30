@@ -351,11 +351,23 @@
                     const data = e.dataTransfer
                         ? e.dataTransfer.getData("text/plain")
                         : "";
-                    emit({
-                        type: "callback_result",
-                        id: w._callback_id,
-                        value: data,
-                    });
+                    if (w._drop_typed) {
+                        // Typed drop_target_typed: forward the drop coordinates so
+                        // the C++ side can build a GraphicalUi.DropEvent record.
+                        emit({
+                            type: "drop_event",
+                            id: w._callback_id,
+                            data: data,
+                            x: e.clientX !== undefined ? e.clientX : 0,
+                            y: e.clientY !== undefined ? e.clientY : 0,
+                        });
+                    } else {
+                        emit({
+                            type: "callback_result",
+                            id: w._callback_id,
+                            value: data,
+                        });
+                    }
                 }
             };
             return html`<div class=${mergeClass("gui-drop-target", extraCls)} style=${style}

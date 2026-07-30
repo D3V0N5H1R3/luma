@@ -680,6 +680,16 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "GraphicalUi.DragEvent", field("number", "x"), field("number", "y"),
                    field("string", "data"), field("GraphicalUi.DragPhase", "phase"));
 
+        // Typed payload delivered to a GraphicalUi.drop_target_typed callback — the
+        // record replacement for the bare data string GraphicalUi.drop_target hands
+        // its on_drop callback, adding the drop location so a beginner can build
+        // reordering / drop-to-position interactions.  Symmetric with
+        // GraphicalUi.DragEvent: `data` is the dragged payload string; x / y are
+        // `number` (device-pixel drop coordinates, mirroring DragEvent).
+        // Constructed by build_drop_event_record() in graphicalui_events.cpp.
+        add_record(st, "GraphicalUi.DropEvent", field("string", "data"), field("number", "x"),
+                   field("number", "y"));
+
         // ── DateTime.Weekday ────────────────────────────
         // Variant names must match k_weekday_names in
         // core/runtime/stdlib/system/datetime_module.cpp exactly (PascalCase,
@@ -1241,6 +1251,55 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Drop", .fields = {}});
 
             st.choice_map["GraphicalUi.DragPhase"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── GraphicalUi.ThemeMode ───────────────────────
+        // Theme-mode override accepted by GraphicalUi.set_theme_mode_of and bridged
+        // to a string by GraphicalUi.theme_mode_to_string.  A closed choice the type
+        // checker enforces, replacing the open "light"/"dark"/"auto" string the
+        // GraphicalUi.set_theme_mode command takes (which stays).  Variant names
+        // must match theme_mode_to_lower() in
+        // core/runtime/stdlib/io/graphicalui_helpers.hpp (Light → "light", etc.).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "ThemeMode");
+            ch->variants.push_back(ChoiceVariant{.name = "Light", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Dark", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Auto", .fields = {}});
+
+            st.choice_map["GraphicalUi.ThemeMode"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── GraphicalUi.ScrollBehavior ──────────────────
+        // Scroll-animation behaviour accepted by GraphicalUi.scroll_to_of, lowered
+        // to the behavior string GraphicalUi.scroll_to takes (which stays).  A
+        // closed choice mirroring the web scrollIntoView({behavior}) values.
+        // Variant names must match scroll_behavior_to_lower() in
+        // core/runtime/stdlib/io/graphicalui_helpers.hpp (Smooth → "smooth", etc.).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "ScrollBehavior");
+            ch->variants.push_back(ChoiceVariant{.name = "Smooth", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Instant", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Auto", .fields = {}});
+
+            st.choice_map["GraphicalUi.ScrollBehavior"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── GraphicalUi.SortDirection ───────────────────
+        // Table sort direction bridged to a string by
+        // GraphicalUi.sort_direction_to_string and accepted directly as the
+        // GraphicalUi.table `sort_direction` option (lowered to "asc"/"desc").  A
+        // typed value the model can store instead of a raw direction string.
+        // Variant names must match sort_direction_to_lower() in
+        // core/runtime/stdlib/io/graphicalui_helpers.hpp (Ascending → "asc").
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "SortDirection");
+            ch->variants.push_back(ChoiceVariant{.name = "Ascending", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Descending", .fields = {}});
+
+            st.choice_map["GraphicalUi.SortDirection"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

@@ -168,6 +168,7 @@ inline constexpr const char* graphicalui_function_names[] = {
     "GraphicalUi.alert",
     "GraphicalUi.alert_of",
     "GraphicalUi.severity_to_string",
+    "GraphicalUi.sort_direction_to_string",
     "GraphicalUi.tooltip",
     "GraphicalUi.menu",
     "GraphicalUi.popover",
@@ -183,6 +184,7 @@ inline constexpr const char* graphicalui_function_names[] = {
     // Drag and drop.
     "GraphicalUi.draggable",
     "GraphicalUi.drop_target",
+    "GraphicalUi.drop_target_typed",
     // Nearby/overlay widgets.
     "GraphicalUi.above",
     "GraphicalUi.below",
@@ -240,6 +242,7 @@ inline constexpr const char* graphicalui_function_names[] = {
     "GraphicalUi.remove_local_storage",
     "GraphicalUi.clear_local_storage",
     "GraphicalUi.scroll_to",
+    "GraphicalUi.scroll_to_of",
     "GraphicalUi.blur",
     "GraphicalUi.download_file",
     "GraphicalUi.notify",
@@ -314,6 +317,8 @@ inline constexpr const char* graphicalui_function_names[] = {
     "GraphicalUi.load_stylesheet",
     "GraphicalUi.font_face",
     "GraphicalUi.set_theme_mode",
+    "GraphicalUi.set_theme_mode_of",
+    "GraphicalUi.theme_mode_to_string",
     "GraphicalUi.responsive",
     "GraphicalUi.validate_style",
     // Headless interaction-testing API (registered in graphicalui_testing.cpp).

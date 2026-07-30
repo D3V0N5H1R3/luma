@@ -200,6 +200,13 @@ static void register_table(const EnvPtr& env) {
                 w->set(key::deferred_sort_callback, *on_sort);
             }
 
+            // Accept a typed GraphicalUi.SortDirection for the `sort_direction`
+            // option, lowering it to the "asc"/"desc" string the JS renderer keys
+            // on so the model can store a typed direction (G06).
+            if (auto* dir = w->find("sort_direction"); dir != nullptr && dir->is_choice()) {
+                w->set("sort_direction", Value{sort_direction_to_lower(*dir)});
+            }
+
             w->erase("on_sort");
             w->set("style", Value{std::move(style)});
 
@@ -277,6 +284,15 @@ static void register_alert(const EnvPtr& env) {
                   [](std::span<const Value> args, SourceLocation loc) -> Value {
                       expect_args("GraphicalUi.severity_to_string", args, 1, loc);
                       return Value{severity_to_lower(args[0])};
+                  });
+
+    // GraphicalUi.sort_direction_to_string(direction) -> string
+    // Bridge from the GraphicalUi.SortDirection choice to the "asc"/"desc" string
+    // the GraphicalUi.table `sort_direction` option carries.
+    define_native(env, "GraphicalUi.sort_direction_to_string",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.sort_direction_to_string", args, 1, loc);
+                      return Value{sort_direction_to_lower(args[0])};
                   });
 }
 

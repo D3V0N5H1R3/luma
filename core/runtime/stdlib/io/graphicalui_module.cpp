@@ -469,7 +469,28 @@ void register_graphicalui_ns(const EnvPtr& env) {
                       return Value{std::move(w)};
                   });
 
-    // §1: Responsive breakpoint matching.
+    // §6: Typed theme-mode override command.
+    // GraphicalUi.set_theme_mode_of(mode) -> command
+    // Typo-proof companion to set_theme_mode: takes a GraphicalUi.ThemeMode choice
+    // and lowers it to the same "light"/"dark"/"auto" command the string form
+    // builds.  Mirrors alert_of/severity bridging.
+    define_native(env, "GraphicalUi.set_theme_mode_of",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.set_theme_mode_of", args, 1, loc);
+
+                      auto w = make_command_dict(cmd::set_theme_mode);
+                      w->set("mode", Value{gui_detail::theme_mode_to_lower(args[0])});
+                      return Value{std::move(w)};
+                  });
+
+    // GraphicalUi.theme_mode_to_string(mode) -> string
+    // Bridge from the GraphicalUi.ThemeMode choice to the "light"/"dark"/"auto"
+    // string accepted by the string-based set_theme_mode command.
+    define_native(env, "GraphicalUi.theme_mode_to_string",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.theme_mode_to_string", args, 1, loc);
+                      return Value{gui_detail::theme_mode_to_lower(args[0])};
+                  });
     define_native(env, "GraphicalUi.responsive",
                   [](std::span<const Value> args, SourceLocation loc) -> Value {
                       expect_args("GraphicalUi.responsive", args, 1, loc);

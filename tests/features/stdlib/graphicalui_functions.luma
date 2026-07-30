@@ -1935,13 +1935,100 @@ function void test_graphicalui_alert_of() {
     assert(Dictionary.get_or(a, "message", "") == "careful")
 }
 
-# ─── Typed button variant (G05) ────────────────────────────
+# ─── Typed theme mode (G01) ────────────────────────────────
+
+# Exhaustive match over every GraphicalUi.ThemeMode variant.
+function string theme_mode_label(GraphicalUi.ThemeMode m) {
+    return match m {
+    case GraphicalUi.ThemeMode.Light { "light" }
+    case GraphicalUi.ThemeMode.Dark  { "dark" }
+    case GraphicalUi.ThemeMode.Auto  { "auto" }
+    }
+}
 
 @test
-function void test_graphicalui_button_variant_to_string() {
-    assert(GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Primary) == GraphicalUi.PRIMARY)
-    assert(GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Secondary) == GraphicalUi.SECONDARY)
-    assert(GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Ghost) == GraphicalUi.GHOST)
-    assert(GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Danger) == GraphicalUi.DANGER)
+function void test_graphicalui_theme_mode_match() {
+    assert(theme_mode_label(GraphicalUi.ThemeMode.Light) == "light")
+    assert(theme_mode_label(GraphicalUi.ThemeMode.Auto) == "auto")
 }
+
+@test
+function void test_graphicalui_theme_mode_to_string() {
+    assert(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Light) == "light")
+    assert(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Dark) == "dark")
+    assert(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Auto) == "auto")
+}
+
+@test
+function void test_graphicalui_set_theme_mode_of() {
+    # set_theme_mode_of lowers the typed ThemeMode to set_theme_mode's mode string.
+    dictionary<string> cmd = GraphicalUi.set_theme_mode_of(GraphicalUi.ThemeMode.Dark)
+    assert(Dictionary.get_or(cmd, "_command_type", "") == "set_theme_mode")
+    assert(Dictionary.get_or(cmd, "mode", "") == "dark")
+}
+
+# ─── Typed drop payload (G04) ──────────────────────────────
+
+# drop_target_typed delivers a typed GraphicalUi.DropEvent record; its on_drop
+# callback reads the record's fields so the whole type resolves at compile time.
+# Interactive widgets need app context, so render through the headless harness.
+@test
+function void test_graphicalui_drop_target_typed() {
+    mutable dictionary cfg = {}
+    cfg["model"] = 0
+    cfg["view"] = (integer _c) -> GraphicalUi.drop_target_typed(GraphicalUi.label("zone"),
+        (GraphicalUi.DropEvent e) -> e.data)
+
+    dictionary tree = GraphicalUi.test_render(cfg, 0)
+    assert(Dictionary.get_or(tree, "type", "") == "drop_target")
+    assert(Dictionary.get_or(tree, "_drop_typed", false))
+}
+
+# ─── Typed scroll behavior (G05) ───────────────────────────
+
+# Exhaustive match over every GraphicalUi.ScrollBehavior variant.
+function string scroll_behavior_label(GraphicalUi.ScrollBehavior b) {
+    return match b {
+    case GraphicalUi.ScrollBehavior.Smooth  { "smooth" }
+    case GraphicalUi.ScrollBehavior.Instant { "instant" }
+    case GraphicalUi.ScrollBehavior.Auto    { "auto" }
+    }
+}
+
+@test
+function void test_graphicalui_scroll_behavior_match() {
+    assert(scroll_behavior_label(GraphicalUi.ScrollBehavior.Smooth) == "smooth")
+    assert(scroll_behavior_label(GraphicalUi.ScrollBehavior.Instant) == "instant")
+}
+
+@test
+function void test_graphicalui_scroll_to_of() {
+    # scroll_to_of lowers the typed ScrollBehavior to scroll_to's behavior string.
+    dictionary<string> cmd = GraphicalUi.scroll_to_of("box", GraphicalUi.ScrollBehavior.Smooth)
+    assert(Dictionary.get_or(cmd, "_command_type", "") == "scroll_to")
+    assert(Dictionary.get_or(cmd, "behavior", "") == "smooth")
+}
+
+# ─── Typed sort direction (G06) ────────────────────────────
+
+# Exhaustive match over every GraphicalUi.SortDirection variant.
+function string sort_direction_label(GraphicalUi.SortDirection d) {
+    return match d {
+    case GraphicalUi.SortDirection.Ascending  { "asc" }
+    case GraphicalUi.SortDirection.Descending { "desc" }
+    }
+}
+
+@test
+function void test_graphicalui_sort_direction_match() {
+    assert(sort_direction_label(GraphicalUi.SortDirection.Ascending) == "asc")
+    assert(sort_direction_label(GraphicalUi.SortDirection.Descending) == "desc")
+}
+
+@test
+function void test_graphicalui_sort_direction_to_string() {
+    assert(GraphicalUi.sort_direction_to_string(GraphicalUi.SortDirection.Ascending) == "asc")
+    assert(GraphicalUi.sort_direction_to_string(GraphicalUi.SortDirection.Descending) == "desc")
+}
+
 

@@ -210,7 +210,19 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
             return Value{std::move(w)};
         });
 
-    // GraphicalUi.blur(widget_id) -> command
+    // GraphicalUi.scroll_to_of(widget_id, behavior) -> command
+    // Typo-proof companion to scroll_to: takes a GraphicalUi.ScrollBehavior choice
+    // and lowers it to the same "smooth"/"instant"/"auto" behavior string the
+    // string form accepts.  Mirrors on_mouse_of/mouse_event_type bridging.
+    define_native(env, "GraphicalUi.scroll_to_of",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.scroll_to_of", args, 2, loc);
+                      auto widget_id = expect_string(args[0], "GraphicalUi.scroll_to_of", loc);
+                      auto w = make_command_dict(cmd::scroll_to);
+                      w->set("widget_id", Value{widget_id});
+                      w->set("behavior", Value{scroll_behavior_to_lower(args[1])});
+                      return Value{std::move(w)};
+                  });
     define_native(env, "GraphicalUi.blur",
                   [](std::span<const Value> args, SourceLocation loc) -> Value {
                       expect_args("GraphicalUi.blur", args, 1, loc);

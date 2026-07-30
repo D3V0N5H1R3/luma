@@ -530,6 +530,27 @@ namespace named {
     return ReturnTypeDesc::named("GraphicalUi.MouseEventType");
 }
 
+// GraphicalUi.ThemeMode — the typed theme-mode override accepted by
+// GraphicalUi.set_theme_mode_of / theme_mode_to_string.  Needs a matching branch
+// in stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc gui_theme_mode() {
+    return ReturnTypeDesc::named("GraphicalUi.ThemeMode");
+}
+
+// GraphicalUi.ScrollBehavior — the typed scroll behaviour accepted by
+// GraphicalUi.scroll_to_of.  Needs a matching branch in
+// stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc gui_scroll_behavior() {
+    return ReturnTypeDesc::named("GraphicalUi.ScrollBehavior");
+}
+
+// GraphicalUi.SortDirection — the typed table sort direction accepted by
+// GraphicalUi.sort_direction_to_string.  Needs a matching branch in
+// stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc gui_sort_direction() {
+    return ReturnTypeDesc::named("GraphicalUi.SortDirection");
+}
+
 // Terminal.parse_key returns this choice directly, so — like json_value() and
 // file_kind() — it uses the fully-qualified name (choices resolve qualified;
 // records such as input_event()/mouse_event() resolve by bare name).
