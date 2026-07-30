@@ -93,7 +93,8 @@ struct EventMessage {
     // string) and the modifier flags at the top level, so on_key_typed can build
     // a KeyEvent; the drag case carries `event` (phase), x, y, and `data`.
     if (msg.type == "mouse_event" || msg.type == "widget_event" || msg.type == "scroll_event" ||
-        msg.type == "keyboard" || msg.type == "drag_event" || msg.type == "drop_event") {
+        msg.type == "keyboard" || msg.type == "drag_event" || msg.type == "drop_event" ||
+        msg.type == "storage_change" || msg.type == "wheel_event") {
         auto dict = make_dict();
 
         auto set_string = [&](const char* key) {
@@ -130,6 +131,15 @@ struct EventMessage {
         set_bool("shift");
         set_bool("alt");
         set_bool("meta");
+        // Storage-change fields (StorageEvent): the changed key plus its old/new
+        // values.  oldValue / newValue are omitted by the browser (JSON null) when
+        // a key is added or cleared, so set_string leaves them absent → none.
+        set_string("key");
+        set_string("oldValue");
+        set_string("newValue");
+        // Wheel-event deltas (WheelDelta).
+        set_number("deltaX");
+        set_number("deltaY");
 
         msg.dict_payload = std::move(dict);
     }
@@ -337,7 +347,7 @@ struct SubDescriptor {
 
 // Descriptor table covering every subscription type. Simple (id-only) subscriptions
 // have no parameters; parameterised ones list them in JS argument order.
-constexpr std::array<SubDescriptor, 14> k_sub_descriptors{{
+constexpr std::array<SubDescriptor, 15> k_sub_descriptors{{
     {sub::resize, {}, 0},
     {sub::focus, {}, 0},
     {sub::visibility, {}, 0},
@@ -355,6 +365,7 @@ constexpr std::array<SubDescriptor, 14> k_sub_descriptors{{
     {sub::idle, {{{SubParamKind::interval_int, "timeout_ms", "", 30000}}}, 1},
     {sub::storage, {{{SubParamKind::filter_string, "key", "", 0}}}, 1},
     {sub::drag, {{{SubParamKind::filter_string, "event", "*", 0}}}, 1},
+    {sub::wheel, {}, 0},
 }};
 
 // Look up the descriptor for a subscription type, or nullptr if unknown.
@@ -753,6 +764,64 @@ Value build_drop_event_record(const DictionaryValue& payload) {
     return Value{std::move(rec)};
 }
 
+// Convert a storage-event payload dictionary (key, oldValue, newValue) into a
+// typed GraphicalUi.StorageEvent record for GraphicalUi.on_storage_change_typed
+// callbacks.  `key` is the changed localStorage key (default "").  old_value /
+// new_value are optional<string>: present in the payload → some(string), absent
+// → none (a null Value) — the browser omits oldValue for a newly-added key and
+// newValue for a cleared one, honouring no-null.
+Value build_storage_event_record(const DictionaryValue& payload) {
+    // A present string field becomes some(string); an absent one becomes none,
+    // which Luma represents as a null Value.
+    auto optional_field = [&payload](const char* field_key) -> Value {
+        const auto* v = payload.find(field_key);
+
+        if (v != nullptr && v->is_string()) {
+            return Value{v->as_string()};
+        }
+
+        return Value{};
+    };
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "StorageEvent";
+    rec->fields.emplace_back("key", Value{dict_string(payload, "key", "")});
+    rec->fields.emplace_back("old_value", optional_field("oldValue"));
+    rec->fields.emplace_back("new_value", optional_field("newValue"));
+
+    return Value{std::move(rec)};
+}
+
+// Convert a wheel-event payload dictionary (deltaX, deltaY) into a typed
+// GraphicalUi.WheelDelta record for GraphicalUi.on_wheel_typed callbacks.
+// delta_x / delta_y are `number` (device-pixel wheel deltas, mirroring the DOM
+// WheelEvent.deltaX / deltaY); a missing delta defaults to 0 so the record stays
+// total.
+Value build_wheel_delta_record(const DictionaryValue& payload) {
+    auto read_number = [&payload](const char* field_key) -> double {
+        const auto* v = payload.find(field_key);
+
+        if (v != nullptr) {
+            if (v->is_number()) {
+                return v->as_number();
+            }
+
+            if (v->is_integer()) {
+                return static_cast<double>(v->as_integer());
+            }
+        }
+
+        return 0.0;
+    };
+
+    auto rec = std::make_shared<RecordValue>();
+    rec->type_name = "WheelDelta";
+    rec->fields.emplace_back("delta_x", Value{read_number("deltaX")});
+    rec->fields.emplace_back("delta_y", Value{read_number("deltaY")});
+
+    return Value{std::move(rec)};
+}
+
 namespace {
 
 // ── Generic event dispatch helper ──────────────────────
@@ -943,6 +1012,60 @@ void handle_drop(AppState& state, const EventMessage& event, const std::string& 
     dispatch_event(state, state.find_callback(event.id), {build_drop_event_record(*payload)});
 }
 
+// Handler for cross-tab storage change events (GraphicalUi.on_storage_change /
+// on_storage_change_typed).  A typed subscription receives a
+// GraphicalUi.StorageEvent record {key, old_value, new_value}; a plain one gets
+// the bare new-value string ("" when the key was cleared).  Mirrors
+// handle_scroll_event.
+void handle_storage(AppState& state, const EventMessage& event, const std::string& /*raw*/) {
+    auto callback = state.find_sub_callback(event.id);
+    auto payload = event.dict_payload ? event.dict_payload : make_dict();
+
+    auto it = state.active_subs.find(event.id);
+
+    if (it != state.active_subs.end() && it->second.typed) {
+        dispatch_event(state, callback, {build_storage_event_record(*payload)});
+        return;
+    }
+
+    dispatch_event(state, callback, {Value{dict_string(*payload, "newValue", "")}});
+}
+
+// Handler for scroll-wheel delta events (GraphicalUi.on_wheel_typed).  Builds a
+// typed GraphicalUi.WheelDelta record {delta_x, delta_y} from the payload — the
+// subscription is typed-only (mirrors handle_drop for drop_target_typed).
+void handle_wheel(AppState& state, const EventMessage& event, const std::string& /*raw*/) {
+    auto payload = event.dict_payload ? event.dict_payload : make_dict();
+    dispatch_event(state, state.find_sub_callback(event.id), {build_wheel_delta_record(*payload)});
+}
+
+// Handler for document visibility change events (GraphicalUi.on_visibility_change
+// / on_visibility_change_typed).  A typed subscription receives a
+// GraphicalUi.VisibilityState choice (Visible / Hidden); a plain one gets the
+// bare boolean (!document.hidden).  Mirrors handle_scroll_event, but the payload
+// is the boolean the browser emits in `value`.
+void handle_visibility_change(AppState& state, const EventMessage& event,
+                              const std::string& /*raw*/) {
+    // Guard the variant access (see handle_keyboard): drop a malformed payload
+    // rather than throwing and wiping the UI.
+    if (!event.has_bool()) {
+        return;
+    }
+
+    auto callback = state.find_sub_callback(event.id);
+    auto it = state.active_subs.find(event.id);
+
+    if (it != state.active_subs.end() && it->second.typed) {
+        auto choice = std::make_shared<ChoiceValue>();
+        choice->type_name = "VisibilityState";
+        choice->variant = visibility_state_from_visible(event.bool_value());
+        dispatch_event(state, callback, {Value{std::move(choice)}});
+        return;
+    }
+
+    dispatch_event(state, callback, {Value{event.bool_value()}});
+}
+
 // ── Hash-based dispatch table for named event types ───
 
 using EventHandler = void (*)(AppState&, const EventMessage&, const std::string&);
@@ -968,13 +1091,15 @@ constexpr EventDispatchEntry event_dispatch_entries[] = {
     {.type="mouse_event",      .handler=handle_dict_event},
     {.type="widget_event",     .handler=handle_dict_event},
     // New subscription event types: visibility, online/offline, media query.
-    {.type="visibility_change", .handler=handle_focus_change},
+    {.type="visibility_change", .handler=handle_visibility_change},
     {.type="online",            .handler=handle_subscription},
     {.type="offline",           .handler=handle_subscription},
     {.type="media_query",       .handler=handle_focus_change},
     {.type="scroll_event",      .handler=handle_scroll_event},
     {.type="drag_event",        .handler=handle_drag},
     {.type="drop_event",        .handler=handle_drop},
+    {.type="storage_change",    .handler=handle_storage},
+    {.type="wheel_event",       .handler=handle_wheel},
 };
 // clang-format on
 

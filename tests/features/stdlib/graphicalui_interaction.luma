@@ -381,6 +381,115 @@ function dictionary raw_drag_app() {
     return config
 }
 
+# ─── Storage / wheel / visibility typed-event apps ─────────
+
+# on_storage_change_typed hands the callback a GraphicalUi.StorageEvent record;
+# matching on new_value (optional<string>) distinguishes a set from a clear, and
+# ?? reads the old value, proving the typed record is delivered through
+# test_storage.
+function array<dictionary<string>> typed_storage_subscriptions(string _model) {
+    return [
+        GraphicalUi.on_storage_change_typed("store", "theme",
+            (GraphicalUi.StorageEvent e) -> match e.new_value {
+                case some(v) { "set:" + e.key + "=" + v + " (was " + (e.old_value ?? "none") + ")" }
+                case none    { "cleared:" + e.key }
+            })
+    ]
+}
+
+function dictionary typed_storage_app() {
+    mutable dictionary config = make_gui_config("idle", multi_view)
+    config["title"] = "TypedStorage"
+    config["update"] = (string model, string msg) -> match msg {
+        case == "" { model }
+        else { msg }
+    }
+    config["subscribe"] = typed_storage_subscriptions
+    return config
+}
+
+# on_storage_change (untyped) delivers the bare new-value string.
+function array<dictionary<string>> raw_storage_subscriptions(string _model) {
+    return [
+        GraphicalUi.on_storage_change("store", "theme", (string v) -> "raw:" + v)
+    ]
+}
+
+function dictionary raw_storage_app() {
+    mutable dictionary config = make_gui_config("idle", multi_view)
+    config["title"] = "RawStorage"
+    config["update"] = (string model, string msg) -> match msg {
+        case == "" { model }
+        else { msg }
+    }
+    config["subscribe"] = raw_storage_subscriptions
+    return config
+}
+
+# on_wheel_typed hands the callback a GraphicalUi.WheelDelta record; the callback
+# reads both delta_x and delta_y (number measurements) to classify the scroll
+# direction, proving the typed record is delivered through test_wheel.
+function array<dictionary<string>> typed_wheel_subscriptions(string _model) {
+    return [
+        GraphicalUi.on_wheel_typed("wheel", (GraphicalUi.WheelDelta d) ->
+            (match d.delta_x > 0.0 { case true { "right" } case false { "left" } }) + ":" +
+            (match d.delta_y > 0.0 { case true { "down" } case false { "up" } }))
+    ]
+}
+
+function dictionary typed_wheel_app() {
+    mutable dictionary config = make_gui_config("idle", multi_view)
+    config["title"] = "TypedWheel"
+    config["update"] = (string model, string msg) -> match msg {
+        case == "" { model }
+        else { msg }
+    }
+    config["subscribe"] = typed_wheel_subscriptions
+    return config
+}
+
+# on_visibility_change_typed hands the callback a GraphicalUi.VisibilityState
+# choice; visibility_state_to_string bridges it, proving the typed choice is
+# delivered through test_visibility.
+function array<dictionary<string>> typed_visibility_subscriptions(string _model) {
+    return [
+        GraphicalUi.on_visibility_change_typed("vis", (GraphicalUi.VisibilityState s) ->
+            "vis:" + GraphicalUi.visibility_state_to_string(s))
+    ]
+}
+
+function dictionary typed_visibility_app() {
+    mutable dictionary config = make_gui_config("idle", multi_view)
+    config["title"] = "TypedVisibility"
+    config["update"] = (string model, string msg) -> match msg {
+        case == "" { model }
+        else { msg }
+    }
+    config["subscribe"] = typed_visibility_subscriptions
+    return config
+}
+
+# on_visibility_change (untyped) delivers the bare boolean (!document.hidden).
+function array<dictionary<string>> raw_visibility_subscriptions(string _model) {
+    return [
+        GraphicalUi.on_visibility_change("vis", (boolean shown) -> match shown {
+            case true  { "shown" }
+            case false { "hidden" }
+        })
+    ]
+}
+
+function dictionary raw_visibility_app() {
+    mutable dictionary config = make_gui_config("idle", multi_view)
+    config["title"] = "RawVisibility"
+    config["update"] = (string model, string msg) -> match msg {
+        case == "" { model }
+        else { msg }
+    }
+    config["subscribe"] = raw_visibility_subscriptions
+    return config
+}
+
 # ─── test_count (duplicate disambiguation) ─────────────────
 
 @test
@@ -475,6 +584,64 @@ function void test_drag_raw_delivers_dictionary() {
     # on_drag (untyped) delivers the raw {event, x, y, data} dictionary; the
     # callback reads its `data` key. The "drop" filter only fires on that phase.
     assert(GraphicalUi.test_drag(raw_drag_app(), "idle", "drop", "payload") == "got:payload")
+}
+
+# ─── test_storage (end-to-end typed storage) ───────────────
+
+@test
+function void test_storage_typed_delivers_storage_event() {
+    # on_storage_change_typed hands the callback a GraphicalUi.StorageEvent
+    # record; test_storage drives it like the live storage dispatch.
+    assert(GraphicalUi.test_storage(typed_storage_app(), "idle", "theme", "light", "dark")
+        == "set:theme=dark (was light)")
+    # An added key has no old value → old_value is optional none, read via ??.
+    assert(GraphicalUi.test_storage(typed_storage_app(), "idle", "theme", none, "dark")
+        == "set:theme=dark (was none)")
+    # A cleared key has no new value → new_value is optional none → the none branch.
+    assert(GraphicalUi.test_storage(typed_storage_app(), "idle", "theme", "dark", none)
+        == "cleared:theme")
+}
+
+@test
+function void test_storage_raw_delivers_new_value_string() {
+    # on_storage_change (untyped) delivers the bare new-value string.
+    assert(GraphicalUi.test_storage(raw_storage_app(), "idle", "theme", "light", "dark")
+        == "raw:dark")
+}
+
+# ─── test_wheel (end-to-end typed wheel) ───────────────────
+
+@test
+function void test_wheel_typed_delivers_wheel_delta() {
+    # on_wheel_typed hands the callback a GraphicalUi.WheelDelta record; the
+    # callback reads delta_x and delta_y to classify direction.
+    assert(GraphicalUi.test_wheel(typed_wheel_app(), "idle", 5.0, 10.0) == "right:down")
+    assert(GraphicalUi.test_wheel(typed_wheel_app(), "idle", -3.0, -8.0) == "left:up")
+}
+
+# ─── test_visibility (end-to-end typed visibility) ─────────
+
+@test
+function void test_visibility_typed_delivers_visibility_state() {
+    # on_visibility_change_typed hands the callback a GraphicalUi.VisibilityState
+    # choice; visibility_state_to_string bridges each variant.
+    assert(GraphicalUi.test_visibility(typed_visibility_app(), "idle", true) == "vis:visible")
+    assert(GraphicalUi.test_visibility(typed_visibility_app(), "idle", false) == "vis:hidden")
+}
+
+@test
+function void test_visibility_raw_delivers_boolean() {
+    # on_visibility_change (untyped) delivers the bare boolean.
+    assert(GraphicalUi.test_visibility(raw_visibility_app(), "idle", true) == "shown")
+    assert(GraphicalUi.test_visibility(raw_visibility_app(), "idle", false) == "hidden")
+}
+
+# ─── visibility_state_to_string (choice bridge) ────────────
+
+@test
+function void test_visibility_state_to_string_bridges_variants() {
+    assert(GraphicalUi.visibility_state_to_string(GraphicalUi.VisibilityState.Visible) == "visible")
+    assert(GraphicalUi.visibility_state_to_string(GraphicalUi.VisibilityState.Hidden) == "hidden")
 }
 
 # ─── test_find (assert on rendered widget state) ───────────

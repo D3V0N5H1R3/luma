@@ -290,6 +290,94 @@ describe("__gui_setup_drag", () => {
     });
 });
 
+describe("__gui_setup_storage", () => {
+    it("forwards a matching key change with old and new values", () => {
+        const { window, env } = fresh();
+        window.__gui_setup_storage("s1", "theme");
+        assert.equal(env.listenerCount("window", "storage"), 1);
+
+        env.dispatch("window", "storage", {
+            key: "theme",
+            oldValue: "light",
+            newValue: "dark",
+        });
+        assert.deepEqual(plain(env.emitCalls[0]), {
+            type: "storage_change",
+            id: "s1",
+            key: "theme",
+            oldValue: "light",
+            newValue: "dark",
+        });
+
+        window.__gui_remove_sub("s1");
+        assert.equal(env.listenerCount("window", "storage"), 0);
+    });
+
+    it("omits null old/new values so they map to none", () => {
+        const { window, env } = fresh();
+        window.__gui_setup_storage("s2", "token");
+
+        env.dispatch("window", "storage", {
+            key: "token",
+            oldValue: null,
+            newValue: "abc",
+        });
+        assert.deepEqual(plain(env.emitCalls[0]), {
+            type: "storage_change",
+            id: "s2",
+            key: "token",
+            newValue: "abc",
+        });
+    });
+
+    it("ignores changes to other keys unless the filter is empty", () => {
+        const { window, env } = fresh();
+        window.__gui_setup_storage("s3", "theme");
+
+        env.dispatch("window", "storage", { key: "other", oldValue: "1", newValue: "2" });
+        assert.equal(env.emitCalls.length, 0);
+
+        // A storage.clear() nulls e.key and is always forwarded.
+        env.dispatch("window", "storage", { key: null, oldValue: null, newValue: null });
+        assert.equal(env.emitCalls.length, 1);
+        assert.equal(env.emitCalls[0].key, "");
+    });
+
+    it("matches every key when the filter is empty", () => {
+        const { window, env } = fresh();
+        window.__gui_setup_storage("s4", "");
+
+        env.dispatch("window", "storage", { key: "anything", oldValue: "a", newValue: "b" });
+        assert.equal(env.emitCalls.length, 1);
+        assert.equal(env.emitCalls[0].key, "anything");
+    });
+});
+
+describe("__gui_setup_wheel", () => {
+    it("coalesces wheel deltas onto a frame, keeping the latest delta", () => {
+        const { window, env } = fresh();
+        window.__gui_setup_wheel("w1");
+        assert.equal(env.listenerCount("window", "wheel"), 1);
+
+        env.setNow(1000);
+        env.dispatch("window", "wheel", { deltaX: 1, deltaY: 2 });
+        env.dispatch("window", "wheel", { deltaX: 10, deltaY: 20 });
+        assert.equal(env.emitCalls.length, 0);
+        assert.equal(env.rafPending(), 1);
+
+        env.flushRaf();
+        assert.deepEqual(plain(env.emitCalls[0]), {
+            type: "wheel_event",
+            id: "w1",
+            deltaX: 10,
+            deltaY: 20,
+        });
+
+        window.__gui_remove_sub("w1");
+        assert.equal(env.listenerCount("window", "wheel"), 0);
+    });
+});
+
 describe("__gui_setup_resize", () => {
     it("debounces resize onto a frame and reports the window dimensions", () => {
         const { window, env } = fresh();

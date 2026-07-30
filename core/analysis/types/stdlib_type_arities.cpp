@@ -60,6 +60,15 @@ namespace {
     return ta;
 }
 
+// ─── Helper: build a TypeAnnotation for optional<T> ───
+
+[[nodiscard]] TypeAnnotation optional_ann(const std::string& value_type) {
+    TypeAnnotation ta{"optional"};
+    ta.type_params().push_back(ann(value_type));
+
+    return ta;
+}
+
 // ─── Helper: build a TypeAnnotation for array<T> ───
 
 [[nodiscard]] TypeAnnotation array_ann(const std::string& element_type) {
@@ -690,6 +699,27 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "GraphicalUi.DropEvent", field("string", "data"), field("number", "x"),
                    field("number", "y"));
 
+        // Typed payload delivered to a GraphicalUi.on_storage_change_typed callback
+        // — the record replacement for the bare new-value string
+        // GraphicalUi.on_storage_change hands out when another tab rewrites a
+        // localStorage key.  `key` is the changed key; `old_value` / `new_value`
+        // are optional<string> because a key can be added (no old value) or
+        // cleared (no new value) — honouring no-null.  Modelled on the web
+        // StorageEvent.  Constructed by build_storage_event_record() in
+        // graphicalui_events.cpp.
+        add_record(st, "GraphicalUi.StorageEvent", field("string", "key"),
+                   field_of(optional_ann("string"), "old_value"),
+                   field_of(optional_ann("string"), "new_value"));
+
+        // Typed payload delivered to a GraphicalUi.on_wheel_typed callback — the
+        // scroll-wheel delta the untyped mouse "scroll" event never exposes.
+        // delta_x / delta_y are `number` (device-pixel wheel deltas, mirroring the
+        // DOM WheelEvent.deltaX / deltaY) so a beginner can build custom zoom /
+        // horizontal-scroll / carousel interactions.  Constructed by
+        // build_wheel_delta_record() in graphicalui_events.cpp.
+        add_record(st, "GraphicalUi.WheelDelta", field("number", "delta_x"),
+                   field("number", "delta_y"));
+
         // ── DateTime.Weekday ────────────────────────────
         // Variant names must match k_weekday_names in
         // core/runtime/stdlib/system/datetime_module.cpp exactly (PascalCase,
@@ -1251,6 +1281,24 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Drop", .fields = {}});
 
             st.choice_map["GraphicalUi.DragPhase"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── GraphicalUi.VisibilityState ─────────────────
+        // Whether the document is currently Visible or Hidden — the closed,
+        // exhaustively-matchable replacement for the bare boolean
+        // GraphicalUi.on_visibility_change delivers (removing the "which way does
+        // the flag point?" trap).  Delivered to a GraphicalUi.on_visibility_change_typed
+        // callback and bridged to a string by GraphicalUi.visibility_state_to_string.
+        // Variant names/order must match visibility_state_from_visible() in
+        // core/runtime/stdlib/io/graphicalui_helpers.hpp (Page Visibility API:
+        // !document.hidden → Visible, else Hidden).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "VisibilityState");
+            ch->variants.push_back(ChoiceVariant{.name = "Visible", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Hidden", .fields = {}});
+
+            st.choice_map["GraphicalUi.VisibilityState"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 

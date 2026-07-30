@@ -294,6 +294,15 @@ static void register_alert(const EnvPtr& env) {
                       expect_args("GraphicalUi.sort_direction_to_string", args, 1, loc);
                       return Value{sort_direction_to_lower(args[0])};
                   });
+
+    // GraphicalUi.visibility_state_to_string(state) -> string
+    // Bridge from the GraphicalUi.VisibilityState choice to the "visible"/"hidden"
+    // string, mirroring the Page Visibility API's document.visibilityState.
+    define_native(env, "GraphicalUi.visibility_state_to_string",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.visibility_state_to_string", args, 1, loc);
+                      return Value{visibility_state_to_lower(args[0])};
+                  });
 }
 
 static void register_menu(const EnvPtr& env) {

@@ -270,6 +270,55 @@
         });
     };
 
+    /** Register a cross-tab localStorage change subscription.
+     *
+     * The DOM "storage" event fires in *other* tabs when a localStorage key is
+     * written. `key` filters to a single key ("" matches every key, and a
+     * `storage.clear()` that nulls `e.key` is always forwarded). oldValue /
+     * newValue are `string | null`; nulls are dropped from the payload so the
+     * typed StorageEvent maps them to `none`.
+     */
+    window.__gui_setup_storage = (id, key) => {
+        register(id, "storage", () => {
+            const handler = (e) => {
+                if (key !== "" && e.key !== null && e.key !== key) {
+                    return;
+                }
+                const payload = {
+                    type: "storage_change",
+                    id,
+                    key: e.key === null ? "" : e.key,
+                };
+                if (e.oldValue !== null && e.oldValue !== undefined) {
+                    payload.oldValue = e.oldValue;
+                }
+                if (e.newValue !== null && e.newValue !== undefined) {
+                    payload.newValue = e.newValue;
+                }
+                emit(payload);
+            };
+            window.addEventListener("storage", handler);
+            return () => window.removeEventListener("storage", handler);
+        });
+    };
+
+    /** Register a scroll-wheel delta subscription (coalesced onto rAF). */
+    window.__gui_setup_wheel = (id) => {
+        register(id, "wheel", () => {
+            const pushCoalesced = makeCoalescedEmitter(16);
+            const handler = (e) => {
+                pushCoalesced({
+                    type: "wheel_event",
+                    id,
+                    deltaX: e.deltaX,
+                    deltaY: e.deltaY,
+                });
+            };
+            window.addEventListener("wheel", handler, { passive: true });
+            return () => window.removeEventListener("wheel", handler);
+        });
+    };
+
     /** Register a document visibility change subscription. */
     window.__gui_setup_visibility = (id) => {
         register(id, "visibility", () => {

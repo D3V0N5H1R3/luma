@@ -87,6 +87,7 @@ inline constexpr const char* idle = "idle";
 inline constexpr const char* storage = "storage";
 inline constexpr const char* animation_frame = "animation_frame";
 inline constexpr const char* drag = "drag";
+inline constexpr const char* wheel = "wheel";
 
 } // namespace sub
 

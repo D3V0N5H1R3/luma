@@ -501,6 +501,25 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
     register_subscription(env, "GraphicalUi.on_online", sub::online);
     register_subscription(env, "GraphicalUi.on_offline", sub::offline);
 
+    // GraphicalUi.on_visibility_change_typed(id, callback) -> subscription
+    // Additive typed companion to on_visibility_change: same visibility
+    // subscription, but flagged so the runtime delivers a typed
+    // GraphicalUi.VisibilityState choice (Visible / Hidden) instead of the bare
+    // boolean — removing the "which way does the flag point?" trap.
+    define_native(env, "GraphicalUi.on_visibility_change_typed",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.on_visibility_change_typed", args, 2, loc);
+                      auto id =
+                          expect_string(args[0], "GraphicalUi.on_visibility_change_typed", loc);
+                      auto w = make_dict();
+                      w->set(key::sub_type, Value{std::string{sub::visibility}});
+                      w->set(key::typed, Value{true});
+                      w->set("id", Value{id});
+                      w->set(key::callback, args[1]);
+
+                      return Value{std::move(w)};
+                  });
+
     // GraphicalUi.on_media_query(id, query, callback) -> subscription
     register_subscription(env, "GraphicalUi.on_media_query", sub::media_query,
                           SubscriptionParam::string, "query");
@@ -524,6 +543,24 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
                       return Value{std::move(w)};
                   });
 
+    // GraphicalUi.on_wheel_typed(id, callback) -> subscription
+    // Reports scroll-wheel deltas as a typed GraphicalUi.WheelDelta record
+    // {delta_x, delta_y} — the wheel delta the untyped mouse "scroll" event never
+    // exposes, enabling custom zoom / horizontal-scroll / carousel interactions.
+    // Typed-only (no untyped companion), so it is always flagged typed.
+    define_native(env, "GraphicalUi.on_wheel_typed",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.on_wheel_typed", args, 2, loc);
+                      auto id = expect_string(args[0], "GraphicalUi.on_wheel_typed", loc);
+                      auto w = make_dict();
+                      w->set(key::sub_type, Value{std::string{sub::wheel}});
+                      w->set(key::typed, Value{true});
+                      w->set("id", Value{id});
+                      w->set(key::callback, args[1]);
+
+                      return Value{std::move(w)};
+                  });
+
     // GraphicalUi.on_idle(id, timeout_ms, callback) -> subscription
     register_subscription(env, "GraphicalUi.on_idle", sub::idle, SubscriptionParam::integer,
                           "timeout_ms");
@@ -531,6 +568,28 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
     // GraphicalUi.on_storage_change(id, key, callback) -> subscription
     register_subscription(env, "GraphicalUi.on_storage_change", sub::storage,
                           SubscriptionParam::string, "key");
+
+    // GraphicalUi.on_storage_change_typed(id, key, callback) -> subscription
+    // Additive typed companion to on_storage_change: same storage subscription
+    // (filtered by `key`), but flagged so the runtime delivers a typed
+    // GraphicalUi.StorageEvent record — {key, old_value, new_value} — instead of
+    // the bare new-value string, so a beginner can see what a value changed from
+    // and confirm which key fired.
+    define_native(env, "GraphicalUi.on_storage_change_typed",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.on_storage_change_typed", args, 3, loc);
+                      auto id = expect_string(args[0], "GraphicalUi.on_storage_change_typed", loc);
+                      auto storage_key =
+                          expect_string(args[1], "GraphicalUi.on_storage_change_typed", loc);
+                      auto w = make_dict();
+                      w->set(key::sub_type, Value{std::string{sub::storage}});
+                      w->set(key::typed, Value{true});
+                      w->set("id", Value{id});
+                      w->set("key", Value{storage_key});
+                      w->set(key::callback, args[2]);
+
+                      return Value{std::move(w)};
+                  });
 
     // GraphicalUi.on_animation_frame(id, callback) -> subscription
     register_subscription(env, "GraphicalUi.on_animation_frame", sub::animation_frame);
