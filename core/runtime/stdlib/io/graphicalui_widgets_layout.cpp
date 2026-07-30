@@ -253,6 +253,31 @@ static void register_alert(const EnvPtr& env) {
 
                       return finalize_widget(std::move(w));
                   });
+
+    // GraphicalUi.alert_of(message, severity, style?) -> widget
+    // Typed companion to alert: takes a GraphicalUi.Severity choice instead of a
+    // severity string, lowering it to the same widget the string form builds.
+    define_native(env, "GraphicalUi.alert_of",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_min_args("GraphicalUi.alert_of", args, 2, loc);
+
+                      auto w = make_widget(wtype::alert);
+                      w->set("message", args[0]);
+                      w->set("severity", Value{severity_to_lower(args[1])});
+                      w->set("style", get_style_arg(args, 2));
+
+                      return finalize_widget(std::move(w));
+                  });
+
+    // GraphicalUi.severity_to_string(severity) -> string
+    // Bridge from the GraphicalUi.Severity choice to the "info"/"warning"/
+    // "error"/"success" string accepted by the string-based alert/toast API and
+    // matching the GraphicalUi.INFO/WARNING/ERROR/SUCCESS constants.
+    define_native(env, "GraphicalUi.severity_to_string",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.severity_to_string", args, 1, loc);
+                      return Value{severity_to_lower(args[0])};
+                  });
 }
 
 static void register_menu(const EnvPtr& env) {
@@ -601,6 +626,48 @@ static void register_classify_device(const EnvPtr& env) {
                   });
 }
 
+// GraphicalUi.classify_device_typed(width, height) -> GraphicalUi.DeviceInfo
+// Typed companion to classify_device: reuses the identical breakpoint thresholds
+// but returns a DeviceInfo record whose `class` / `orientation` are closed
+// choices (GraphicalUi.DeviceClass / GraphicalUi.Orientation) rather than magic
+// strings, so responsive layout becomes an exhaustive match.  width / height are
+// `integer` (discrete pixel counts).
+static void register_classify_device_typed(const EnvPtr& env) {
+    define_native(env, "GraphicalUi.classify_device_typed",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.classify_device_typed", args, 2, loc);
+
+                      auto width = args[0].as_integer();
+                      auto height = args[1].as_integer();
+
+                      auto device_class = std::make_shared<ChoiceValue>();
+                      device_class->type_name = "DeviceClass";
+
+                      if (width < 640) {
+                          device_class->variant = "Phone";
+                      } else if (width < 1024) {
+                          device_class->variant = "Tablet";
+                      } else if (width < 1920) {
+                          device_class->variant = "Desktop";
+                      } else {
+                          device_class->variant = "BigDesktop";
+                      }
+
+                      auto orientation = std::make_shared<ChoiceValue>();
+                      orientation->type_name = "Orientation";
+                      orientation->variant = (width >= height) ? "Landscape" : "Portrait";
+
+                      auto rec = std::make_shared<RecordValue>();
+                      rec->type_name = "DeviceInfo";
+                      rec->fields.emplace_back("class", Value{std::move(device_class)});
+                      rec->fields.emplace_back("orientation", Value{std::move(orientation)});
+                      rec->fields.emplace_back("width", args[0]);
+                      rec->fields.emplace_back("height", args[1]);
+
+                      return Value{std::move(rec)};
+                  });
+}
+
 // ═══════════════════════════════════════════════════════════
 // Layout, overlay, animation, sizing, alignment, and spacing
 // ═══════════════════════════════════════════════════════════
@@ -784,6 +851,7 @@ void register_layout_widgets(const EnvPtr& env) {
     // ─── Device classification ───────────────────────────
 
     register_classify_device(env);
+    register_classify_device_typed(env);
 
     // GraphicalUi.card(children, style?) -> widget
     register_layout_widget(env, "GraphicalUi.card", wtype::card);

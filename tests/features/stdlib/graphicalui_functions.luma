@@ -1709,3 +1709,107 @@ function void test_graphicalui_remove_and_clear_local_storage_commands() {
     dictionary<string> cl = GraphicalUi.clear_local_storage()
     assert(Dictionary.get_or(cl, "_command_type", "") == "clear_local_storage")
 }
+
+# ─── Typed mouse events (GraphicalUi.MouseButton / MouseEvent) ──
+
+# Exhaustive match over every GraphicalUi.MouseButton variant.  Beyond labelling
+# a button, this doubles as a check that the choice is fully registered,
+# exhaustively matchable, and usable as a parameter type annotation — the typed
+# replacement for comparing the on_mouse dictionary's `button` string.
+function integer mouse_button_code(GraphicalUi.MouseButton b) {
+    return match b {
+    case GraphicalUi.MouseButton.Left   { 1 }
+    case GraphicalUi.MouseButton.Middle { 2 }
+    case GraphicalUi.MouseButton.Right  { 3 }
+    }
+}
+
+@test
+function void test_graphicalui_mouse_button_variants() {
+    # Each variant is a constructible, matchable value.
+    assert(mouse_button_code(GraphicalUi.MouseButton.Left) == 1)
+    assert(mouse_button_code(GraphicalUi.MouseButton.Middle) == 2)
+    assert(mouse_button_code(GraphicalUi.MouseButton.Right) == 3)
+}
+
+@test
+function void test_graphicalui_on_mouse_typed_is_mouse_subscription() {
+    # on_mouse_typed is an additive companion to on_mouse: it produces the same
+    # "mouse" subscription, and its callback is annotated with the typed
+    # GraphicalUi.MouseEvent record.  The lambda body exercises the record's
+    # `button` field (a GraphicalUi.MouseButton) so the whole type resolves at
+    # compile time.
+    dictionary<string> sub = GraphicalUi.on_mouse_typed("m1", "down",
+        (GraphicalUi.MouseEvent e) -> mouse_button_code(e.button))
+    assert(Dictionary.get_or(sub, "_sub_type", "") == "mouse")
+    assert(Dictionary.get_or(sub, "event", "") == "down")
+}
+
+# ─── Typed scroll events (GraphicalUi.ScrollPosition) ──────
+
+@test
+function void test_graphicalui_on_scroll_typed_is_scroll_subscription() {
+    # on_scroll_typed delivers a typed GraphicalUi.ScrollPosition record; its
+    # callback body reads the record's number fields.
+    dictionary<string> sub = GraphicalUi.on_scroll_typed("s1",
+        (GraphicalUi.ScrollPosition p) -> p.x + p.y)
+    assert(Dictionary.get_or(sub, "_sub_type", "") == "scroll")
+}
+
+# ─── Typed device classification (G02) ─────────────────────
+
+function string device_class_label(GraphicalUi.DeviceClass c) {
+    return match c {
+    case GraphicalUi.DeviceClass.Phone      { "phone" }
+    case GraphicalUi.DeviceClass.Tablet     { "tablet" }
+    case GraphicalUi.DeviceClass.Desktop    { "desktop" }
+    case GraphicalUi.DeviceClass.BigDesktop { "big_desktop" }
+    }
+}
+
+@test
+function void test_graphicalui_classify_device_typed() {
+    GraphicalUi.DeviceInfo phone = GraphicalUi.classify_device_typed(390, 844)
+    assert(device_class_label(phone.class) == "phone")
+    assert(match phone.orientation {
+        case GraphicalUi.Orientation.Portrait  { true }
+        case GraphicalUi.Orientation.Landscape { false }
+    })
+    assert(phone.width == 390)
+    assert(phone.height == 844)
+
+    GraphicalUi.DeviceInfo big = GraphicalUi.classify_device_typed(2560, 1440)
+    assert(device_class_label(big.class) == "big_desktop")
+    assert(match big.orientation {
+        case GraphicalUi.Orientation.Portrait  { false }
+        case GraphicalUi.Orientation.Landscape { true }
+    })
+}
+
+# ─── Typed severity (G03) ──────────────────────────────────
+
+@test
+function void test_graphicalui_severity_to_string() {
+    assert(GraphicalUi.severity_to_string(GraphicalUi.Severity.Info) == "info")
+    assert(GraphicalUi.severity_to_string(GraphicalUi.Severity.Warning) == GraphicalUi.WARNING)
+    assert(GraphicalUi.severity_to_string(GraphicalUi.Severity.Error) == GraphicalUi.ERROR)
+    assert(GraphicalUi.severity_to_string(GraphicalUi.Severity.Success) == GraphicalUi.SUCCESS)
+}
+
+@test
+function void test_graphicalui_alert_of() {
+    dictionary<string> a = GraphicalUi.alert_of("careful", GraphicalUi.Severity.Warning)
+    assert(Dictionary.get_or(a, "severity", "") == "warning")
+    assert(Dictionary.get_or(a, "message", "") == "careful")
+}
+
+# ─── Typed button variant (G05) ────────────────────────────
+
+@test
+function void test_graphicalui_button_variant_to_string() {
+    assert(GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Primary) == GraphicalUi.PRIMARY)
+    assert(GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Secondary) == GraphicalUi.SECONDARY)
+    assert(GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Ghost) == GraphicalUi.GHOST)
+    assert(GraphicalUi.button_variant_to_string(GraphicalUi.ButtonVariant.Danger) == GraphicalUi.DANGER)
+}
+

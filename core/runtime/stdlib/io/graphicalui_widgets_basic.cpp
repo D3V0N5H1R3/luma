@@ -34,6 +34,35 @@ void register_basic_widgets(const EnvPtr& env) {
                       return finalize_widget(std::move(w));
                   });
 
+    // GraphicalUi.button_of(label, on_click, variant, style?) -> widget
+    // Typed companion to button: takes a GraphicalUi.ButtonVariant choice for the
+    // button hierarchy instead of burying a "variant" string in the style
+    // dictionary.  The variant is lifted onto the widget exactly as the string
+    // form does; a trailing dictionary is treated purely as style.
+    define_native(env, "GraphicalUi.button_of",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_min_args("GraphicalUi.button_of", args, 3, loc);
+
+                      auto w = make_widget(wtype::button);
+                      w->set("label", args[0]);
+                      w->set(key::deferred_callback, args[1]);
+                      w->set("variant", Value{button_variant_to_lower(args[2])});
+                      w->set("style", get_style_arg(args, 3));
+
+                      return finalize_widget(std::move(w));
+                  });
+
+    // GraphicalUi.button_variant_to_string(variant) -> string
+    // Bridge from the GraphicalUi.ButtonVariant choice to the "primary"/
+    // "secondary"/"ghost"/"danger" style key accepted by the button style
+    // dictionary and matching the GraphicalUi.PRIMARY/SECONDARY/GHOST/DANGER
+    // constants.
+    define_native(env, "GraphicalUi.button_variant_to_string",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.button_variant_to_string", args, 1, loc);
+                      return Value{button_variant_to_lower(args[0])};
+                  });
+
     // GraphicalUi.text_area(value, on_change, placeholder?, on_commit?, style?) -> widget
     //
     // Mirrors text_input's trailing-argument handling: a string is the

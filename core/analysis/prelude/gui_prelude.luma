@@ -189,6 +189,76 @@ record View {
     array<View> children = []
 }
 
+# ── TYPED KEYBOARD SHORTCUTS ──
+#
+# A keyboard key, mirroring the terminal `Terminal.Key` choice (minus its
+# `Unknown` fallback — a shortcut is authored, not decoded). Build one directly
+# (`Key.Enter`, `Key.Character("s")`, `Key.Function(5)`) and combine it with
+# modifiers via `Solaris.shortcut` for `Solaris.on_key_press_of`.
+choice Key {
+    Character(string value),
+    Function(integer n),
+    Enter,
+    Escape,
+    Tab,
+    Backspace,
+    Space,
+    Up,
+    Down,
+    Left,
+    Right,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Insert,
+    Delete
+}
+
+# A key plus its modifier state — the typed replacement for a raw "Ctrl+S"
+# shortcut string. Start from `Solaris.shortcut(Key.Character("s"))` and layer
+# modifiers with the fluent `|> Solaris.ctrl()` / `shift()` / `alt()` / `meta()`
+# builders, then hand it to `Solaris.on_key_press_of`.
+record Shortcut {
+    Key key = Key.Enter,
+    boolean ctrl = false,
+    boolean shift = false,
+    boolean alt = false,
+    boolean meta = false
+}
+
+# ── TYPED THEME OVERRIDES ──
+#
+# A typed set of theme colours for `Solaris.theme_of`, the type-safe sibling of
+# `Solaris.theme(dictionary)`. Every field is a `Color`, and every field defaults
+# to the "unset" sentinel `Color.Custom("")` so a partial override only touches
+# the colours it names. Fill one with `Solaris.hex("#...")` or a semantic token
+# (`Color.Success`), leave the rest untouched.
+record Theme {
+    Color accent = Color.Custom(""),
+    Color background = Color.Custom(""),
+    Color text = Color.Custom(""),
+    Color border = Color.Custom(""),
+    # `positive` maps to the theme's success colour — `success` itself is a
+    # reserved Luma keyword (the `result` success constructor), so it cannot be a
+    # field name.
+    Color positive = Color.Custom(""),
+    Color warning = Color.Custom(""),
+    Color danger = Color.Custom(""),
+    Color muted = Color.Custom("")
+}
+
+# ── TYPED CHART SERIES ──
+#
+# One labelled point in a chart series — a `label` paired with its `value`. Build
+# an `array<DataPoint>` and pass it to `Solaris.line_chart_of` / `bar_chart_of` /
+# `pie_chart_of`, so the label and value can never fall out of sync the way two
+# parallel arrays can.
+record DataPoint {
+    string label = "",
+    number value = 0.0
+}
+
 namespace Solaris {
     # ── ELEMENT CONSTRUCTORS — each returns a `View`. ──
 
@@ -356,6 +426,43 @@ namespace Solaris {
     # A pie chart dividing the whole into slices named by `labels`, sized by `values`.
     function View pie_chart(array<string> labels, array<number> values) {
         return View { kind = "pie_chart", options = labels, values = values }
+    }
+
+    # ── TYPED CHART CONSTRUCTORS — take one `array<DataPoint>` instead of two
+    #    parallel label/value arrays, so the two can never drift out of sync.
+    #    Each unzips the points into the labels/values the chart engine expects. ──
+
+    # A line chart from a single series of typed points.
+    function View line_chart_of(array<DataPoint> points) {
+        return Solaris.line_chart(Solaris.point_labels(points), Solaris.point_values(points))
+    }
+
+    # A vertical bar chart from a single series of typed points.
+    function View bar_chart_of(array<DataPoint> points) {
+        return Solaris.bar_chart(Solaris.point_labels(points), Solaris.point_values(points))
+    }
+
+    # A pie chart from a single series of typed points.
+    function View pie_chart_of(array<DataPoint> points) {
+        return Solaris.pie_chart(Solaris.point_labels(points), Solaris.point_values(points))
+    }
+
+    # Unzip a point series into its labels (category axis).
+    internal function array<string> point_labels(array<DataPoint> points) {
+        mutable array<string> labels = []
+        for point in points {
+            labels = Array.append(labels, point.label)
+        }
+        return labels
+    }
+
+    # Unzip a point series into its values (numeric axis).
+    internal function array<number> point_values(array<DataPoint> points) {
+        mutable array<number> values = []
+        for point in points {
+            values = Array.append(values, point.value)
+        }
+        return values
     }
 
     # A tab strip over `panels`. `active` is the shown tab index; attach
@@ -1137,6 +1244,34 @@ namespace Solaris {
         return Dictionary.set(config, "theme", merged)
     }
 
+    # Apply a typed `Theme` (the type-safe sibling of `theme(dictionary)`). Only
+    # the fields you set — anything other than the `Color.Custom("")` sentinel —
+    # are written, so a partial `Theme` overrides just those colours. Every value
+    # is a typed `Color`, so a mistyped field or colour is a compile error.
+    function dictionary theme_of(dictionary config, Theme overrides) {
+        mutable dictionary merged = {}
+        merged = Solaris.theme_put(merged, "accent", overrides.accent)
+        merged = Solaris.theme_put(merged, "background", overrides.background)
+        merged = Solaris.theme_put(merged, "text_color", overrides.text)
+        merged = Solaris.theme_put(merged, "border", overrides.border)
+        merged = Solaris.theme_put(merged, "success", overrides.positive)
+        merged = Solaris.theme_put(merged, "warning", overrides.warning)
+        merged = Solaris.theme_put(merged, "error", overrides.danger)
+        merged = Solaris.theme_put(merged, "text_muted", overrides.muted)
+        return Solaris.theme(config, merged)
+    }
+
+    # Add a themed colour to the override dictionary, skipping the unset sentinel
+    # (`Color.Custom("")` resolves to the empty string) so untouched Theme fields
+    # never overwrite a default.
+    internal function dictionary theme_put(dictionary overrides, string key, Color chosen) {
+        string value = Solaris.color_value(chosen)
+        if String.length(value) > 0 {
+            return Dictionary.set(overrides, key, value)
+        }
+        return overrides
+    }
+
     # Set the accent colour used across the app (buttons, focus rings, ...).
     function dictionary accent(dictionary config, string color) {
         return Solaris.theme(config, {"accent": color})
@@ -1247,6 +1382,76 @@ namespace Solaris {
     # Send `msg` when `key` is pressed (e.g. "Enter", "Escape", "ArrowUp").
     function any on_key_press(string id, string key, any msg) {
         return GraphicalUi.on_key(id, key, (string _pressed) -> msg)
+    }
+
+    # ── TYPED KEYBOARD SHORTCUTS ──
+
+    # Start a `Shortcut` from a `Key` (no modifiers). Layer modifiers with the
+    # fluent `|> Solaris.ctrl()` / `shift()` / `alt()` / `meta()` builders.
+    function Shortcut shortcut(Key key) {
+        return Shortcut { key = key }
+    }
+
+    # Require the Ctrl modifier (Control on macOS — use `meta` for Command).
+    function Shortcut ctrl(Shortcut base) {
+        return base with { ctrl = true }
+    }
+
+    # Require the Shift modifier.
+    function Shortcut shift(Shortcut base) {
+        return base with { shift = true }
+    }
+
+    # Require the Alt / Option modifier.
+    function Shortcut alt(Shortcut base) {
+        return base with { alt = true }
+    }
+
+    # Require the Meta modifier (Command on macOS, Windows key on Windows).
+    function Shortcut meta(Shortcut base) {
+        return base with { meta = true }
+    }
+
+    # Send `msg` when `sc` is pressed — the typed sibling of `on_key_press`. A
+    # mistyped key is now a compile error, and the shortcut is autocompleted.
+    function any on_key_press_of(string id, Shortcut sc, any msg) {
+        return GraphicalUi.on_key(id, Solaris.shortcut_string(sc), (string _pressed) -> msg)
+    }
+
+    # Lower a `Shortcut` to the engine's key-filter string (modifier prefixes in
+    # Ctrl→Shift→Alt→Meta order, then the key name), matching the format the
+    # keyboard subscription builds for each keypress.
+    internal function string shortcut_string(Shortcut sc) {
+        mutable string prefix = ""
+        if sc.ctrl { prefix = prefix + "Ctrl+" }
+        if sc.shift { prefix = prefix + "Shift+" }
+        if sc.alt { prefix = prefix + "Alt+" }
+        if sc.meta { prefix = prefix + "Meta+" }
+        return prefix + Solaris.key_name(sc.key)
+    }
+
+    # Map a `Key` to its DOM `KeyboardEvent.key` name (arrows become "ArrowUp"
+    # etc.; Space is a literal " "; a function key F<n> becomes "F<n>").
+    internal function string key_name(Key key) {
+        return match key {
+            case Key.Character(value) { value }
+            case Key.Function(n)      { "F${n}" }
+            case Key.Enter            { "Enter" }
+            case Key.Escape           { "Escape" }
+            case Key.Tab              { "Tab" }
+            case Key.Backspace        { "Backspace" }
+            case Key.Space            { " " }
+            case Key.Up               { "ArrowUp" }
+            case Key.Down             { "ArrowDown" }
+            case Key.Left             { "ArrowLeft" }
+            case Key.Right            { "ArrowRight" }
+            case Key.Home             { "Home" }
+            case Key.End              { "End" }
+            case Key.PageUp           { "PageUp" }
+            case Key.PageDown         { "PageDown" }
+            case Key.Insert           { "Insert" }
+            case Key.Delete           { "Delete" }
+        }
     }
 
     # Map a Scheme to the engine's theme-mode string.

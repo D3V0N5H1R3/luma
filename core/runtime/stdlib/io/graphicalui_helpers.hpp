@@ -66,6 +66,16 @@ void check_dev_asset_reload(AppState& state);
 void render_error(AppState& state, const std::string& error_message);
 void on_gui_event(const char* id, const char* req, void* arg);
 
+// Convert a mouse-event payload dictionary (x, y, button, ctrl, shift, alt) into
+// a typed GraphicalUi.MouseEvent record — the payload GraphicalUi.on_mouse_typed
+// delivers to its callback.  Exposed for unit testing.
+[[nodiscard]] Value build_mouse_event_record(const DictionaryValue& payload);
+
+// Convert a scroll-event payload dictionary (x, y) into a typed
+// GraphicalUi.ScrollPosition record — the payload GraphicalUi.on_scroll_typed
+// delivers to its callback.  Exposed for unit testing.
+[[nodiscard]] Value build_scroll_position_record(const DictionaryValue& payload);
+
 // graphicalui_widgets*.cpp
 void register_graphicalui_widgets(const EnvPtr& env);
 void register_basic_widgets(const EnvPtr& env);
@@ -160,6 +170,56 @@ make_command_dict(std::string_view command_type) {
     }
 
     return Value{make_dict()};
+}
+
+// Map a GraphicalUi.Severity choice value to its lowercase string key
+// ("info" / "warning" / "error" / "success") — the representation the alert /
+// toast widgets and the GraphicalUi.INFO/WARNING/ERROR/SUCCESS constants use.
+// Anything that is not a recognised Severity variant defaults to "info", keeping
+// the bridge total.
+[[nodiscard]] inline std::string severity_to_lower(const Value& v) {
+    if (v.is_choice()) {
+        const auto& variant = v.as_choice()->variant;
+
+        if (variant == "Warning") {
+            return "warning";
+        }
+
+        if (variant == "Error") {
+            return "error";
+        }
+
+        if (variant == "Success") {
+            return "success";
+        }
+    }
+
+    return "info";
+}
+
+// Map a GraphicalUi.ButtonVariant choice value to its lowercase style key
+// ("primary" / "secondary" / "ghost" / "danger") — the value the button widget's
+// `variant` key carries and the GraphicalUi.PRIMARY/SECONDARY/GHOST/DANGER
+// constants hold.  Anything that is not a recognised variant defaults to
+// "primary", keeping the bridge total.
+[[nodiscard]] inline std::string button_variant_to_lower(const Value& v) {
+    if (v.is_choice()) {
+        const auto& variant = v.as_choice()->variant;
+
+        if (variant == "Secondary") {
+            return "secondary";
+        }
+
+        if (variant == "Ghost") {
+            return "ghost";
+        }
+
+        if (variant == "Danger") {
+            return "danger";
+        }
+    }
+
+    return "primary";
 }
 
 // Partition a trailing style/options dictionary into recognised widget-option

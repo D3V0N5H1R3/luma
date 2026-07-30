@@ -70,10 +70,11 @@ struct SubscriptionConfig {
     std::int64_t interval{0};    // timer interval (ms)
     std::string filter;          // keyboard filter or mouse event type
     std::int64_t throttle_ms{0}; // mouse throttle (ms)
+    bool typed{false};           // deliver a typed record payload (on_mouse_typed)
 
     [[nodiscard]] bool operator==(const SubscriptionConfig& other) const {
         return sub_type == other.sub_type && interval == other.interval && filter == other.filter &&
-               throttle_ms == other.throttle_ms;
+               throttle_ms == other.throttle_ms && typed == other.typed;
     }
 };
 

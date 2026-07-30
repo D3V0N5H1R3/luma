@@ -217,6 +217,24 @@ Solaris.bar_chart(["Mon", "Tue", "Wed"], [12, 19, 7])
 Because the values can be plain whole numbers like `[12, 19, 7]`, a beginner
 never has to think about the `integer`-versus-`number` distinction here.
 
+Each chart also has a typed `_of` variant that takes a single `array<DataPoint>`
+instead of two parallel arrays, so a label and its value can never fall out of
+sync. A `DataPoint` is a record `{ string label, number value }`:
+
+```luma
+Solaris.line_chart_of([
+    DataPoint { label = "Mon", value = 12.0 },
+    DataPoint { label = "Tue", value = 19.0 },
+    DataPoint { label = "Wed", value = 7.0 }
+])
+```
+
+| Component | Signature | Purpose |
+|---|---|---|
+| Line chart (typed) | `Solaris.line_chart_of(array<DataPoint> points)` | Line chart from one typed series. |
+| Bar chart (typed) | `Solaris.bar_chart_of(array<DataPoint> points)` | Bar chart from one typed series. |
+| Pie chart (typed) | `Solaris.pie_chart_of(array<DataPoint> points)` | Pie chart from one typed series. |
+
 ### Navigation and overlays
 
 | Component | Signature | Purpose |
@@ -389,6 +407,32 @@ function array<any> subscriptions(Model _model) {
 |---|---|
 | `Solaris.every(string id, integer ms, msg)` | Send `msg` on a repeating timer. |
 | `Solaris.on_key_press(string id, string key, msg)` | Send `msg` on a global key press. |
+| `Solaris.on_key_press_of(string id, Shortcut sc, msg)` | Typed sibling of `on_key_press` — send `msg` on a typed `Shortcut`. |
+
+#### Typed keyboard shortcuts
+
+`Solaris.on_key_press` takes the shortcut as a raw string like `"Ctrl+S"`, where a
+typo (`"Ctlr+S"`) is a silent no-op. `Solaris.on_key_press_of` takes a typed
+`Shortcut` instead, built from a `Key` choice and the fluent modifier builders,
+so a mistyped key is a compile error and every key is autocompleted:
+
+```luma
+Solaris.on_key_press_of("save", Solaris.shortcut(Key.Character("s")) |> Solaris.ctrl(), Msg.Save)
+```
+
+`Key` is a top-level choice mirroring the terminal `Terminal.Key` (minus its
+`Unknown` fallback): `Character(string value)`, `Function(integer n)`, `Enter`,
+`Escape`, `Tab`, `Backspace`, `Space`, `Up`, `Down`, `Left`, `Right`, `Home`,
+`End`, `PageUp`, `PageDown`, `Insert`, `Delete`. `Shortcut` is a top-level record
+`{ Key key, boolean ctrl, boolean shift, boolean alt, boolean meta }`.
+
+| Shortcut builder | Effect |
+|---|---|
+| `Solaris.shortcut(Key key)` | Start a `Shortcut` from a key (no modifiers). |
+| `Solaris.ctrl(Shortcut sc)` | Require the Ctrl modifier. |
+| `Solaris.shift(Shortcut sc)` | Require the Shift modifier. |
+| `Solaris.alt(Shortcut sc)` | Require the Alt / Option modifier. |
+| `Solaris.meta(Shortcut sc)` | Require the Meta (Command / Windows) modifier. |
 
 ### Startup
 
@@ -413,9 +457,28 @@ takes the configuration as its first argument, so they chain with `|>`.
 | Modifier | Effect |
 |---|---|
 | `Solaris.accent(string color)` | The accent colour (a CSS colour, e.g. `"#6C4CF1"`). |
+| `Solaris.accent_color(Color chosen)` | The accent colour from a typed `Color`. |
 | `Solaris.font(string family)` | The UI font family. |
 | `Solaris.color_scheme(Scheme scheme)` | Pin `Light`/`Dark`, or follow the OS with `Auto`. |
-| `Solaris.theme(dictionary overrides)` | Advanced: override individual theme tokens. |
+| `Solaris.theme_of(Theme overrides)` | Typed theme override — a `Theme` record of `Color` fields. |
+| `Solaris.theme(dictionary overrides)` | Advanced: override individual theme tokens by string key. |
+
+`Solaris.theme_of` is the type-safe way to override several theme colours at
+once. `Theme` is a top-level record whose fields are all `Color` and all default
+to an "unset" sentinel, so a partial `Theme` only overrides the colours it names:
+
+```luma
+Solaris.app("Notes", Model {}, update, view)
+    |> Solaris.theme_of(Theme {
+        accent = Solaris.hex("#6C4CF1"),
+        danger = Color.Danger,
+        muted  = Color.Muted
+    })
+```
+
+`Theme` fields: `accent`, `background`, `text`, `border`, `positive` (the success
+colour — `success` is a reserved Luma keyword), `warning`, `danger`, `muted` —
+each a `Color` (a semantic token or `Solaris.hex("#...")`).
 
 Dark mode is free: with `Scheme.Auto` (the default behaviour) the app follows the
 operating system, and every component already has accessible light and dark

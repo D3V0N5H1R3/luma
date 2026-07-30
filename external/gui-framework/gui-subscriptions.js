@@ -79,6 +79,7 @@
                 if (e.ctrlKey) { key += "Ctrl+"; }
                 if (e.shiftKey) { key += "Shift+"; }
                 if (e.altKey) { key += "Alt+"; }
+                if (e.metaKey) { key += "Meta+"; }
                 key += e.key;
                 if (filter === "*" || key === filter || e.key === filter) {
                     e.preventDefault();
@@ -178,6 +179,23 @@
             };
             target.addEventListener(domEvt, handler);
             return () => target.removeEventListener(domEvt, handler);
+        });
+    };
+
+    /** Register a window scroll subscription reporting the scroll position. */
+    window.__gui_setup_scroll = (id) => {
+        register(id, "scroll", () => {
+            const pushCoalesced = makeCoalescedEmitter(16);
+            const handler = () => {
+                pushCoalesced({
+                    type: "scroll_event",
+                    id,
+                    x: window.scrollX,
+                    y: window.scrollY,
+                });
+            };
+            window.addEventListener("scroll", handler, { passive: true });
+            return () => window.removeEventListener("scroll", handler);
         });
     };
 

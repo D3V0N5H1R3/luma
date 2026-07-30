@@ -503,6 +503,26 @@ namespace named {
     return ReturnTypeDesc::named("MouseEvent");
 }
 
+// GraphicalUi.classify_device_typed returns this record (bare name, like
+// mouse_event()/input_event() — records resolve by their short name).
+[[nodiscard]] inline ReturnTypeDesc gui_device_info() {
+    return ReturnTypeDesc::named("DeviceInfo");
+}
+
+// GraphicalUi.Severity — the typed alert/toast severity accepted by
+// GraphicalUi.alert_of / toast_of / severity_to_string.  Needs a matching branch
+// in stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc gui_severity() {
+    return ReturnTypeDesc::named("GraphicalUi.Severity");
+}
+
+// GraphicalUi.ButtonVariant — the typed button-hierarchy style accepted by
+// GraphicalUi.button_of / button_variant_to_string.  Needs a matching branch in
+// stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc gui_button_variant() {
+    return ReturnTypeDesc::named("GraphicalUi.ButtonVariant");
+}
+
 // Terminal.parse_key returns this choice directly, so — like json_value() and
 // file_kind() — it uses the fully-qualified name (choices resolve qualified;
 // records such as input_event()/mouse_event() resolve by bare name).

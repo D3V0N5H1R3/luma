@@ -458,3 +458,114 @@ function void test_no_border_modifier_emits_no_border() {
     assert(Dictionary.get_or(token_style("plain"), "border", "") == "")
 }
 
+
+
+# ═══════════════════════════════════════════════════════════
+# Typed keyboard shortcuts (Key / Shortcut)
+# ═══════════════════════════════════════════════════════════
+
+# The engine key-filter string a Shortcut lowers to (Ctrl/Shift/Alt/Meta order,
+# then the DOM key name) is stored under a subscription's "filter" key.
+function string shortcut_filter(Shortcut sc) {
+    return Dictionary.get_or(Solaris.on_key_press_of("k", sc, 0), "filter", "")
+}
+
+@test
+function void test_shortcut_bare_key_has_no_modifier_prefix() {
+    assert(shortcut_filter(Solaris.shortcut(Key.Enter)) == "Enter")
+    assert(shortcut_filter(Solaris.shortcut(Key.Escape)) == "Escape")
+    assert(shortcut_filter(Solaris.shortcut(Key.Character("a")) ) == "a")
+}
+
+@test
+function void test_shortcut_modifiers_prefix_in_canonical_order() {
+    Shortcut save = Solaris.shortcut(Key.Character("s")) |> Solaris.ctrl()
+    assert(shortcut_filter(save) == "Ctrl+s")
+
+    Shortcut all = Solaris.shortcut(Key.Up)
+        |> Solaris.ctrl() |> Solaris.shift() |> Solaris.alt() |> Solaris.meta()
+    assert(shortcut_filter(all) == "Ctrl+Shift+Alt+Meta+ArrowUp")
+}
+
+@test
+function void test_shortcut_key_names_match_dom_keys() {
+    assert(shortcut_filter(Solaris.shortcut(Key.Down)) == "ArrowDown")
+    assert(shortcut_filter(Solaris.shortcut(Key.Left)) == "ArrowLeft")
+    assert(shortcut_filter(Solaris.shortcut(Key.Right)) == "ArrowRight")
+    assert(shortcut_filter(Solaris.shortcut(Key.PageUp)) == "PageUp")
+    assert(shortcut_filter(Solaris.shortcut(Key.Space)) == " ")
+    assert(shortcut_filter(Solaris.shortcut(Key.Function(5))) == "F5")
+}
+
+@test
+function void test_on_key_press_of_is_a_keyboard_subscription() {
+    dictionary sub = Solaris.on_key_press_of("save", Solaris.shortcut(Key.Character("s")) |> Solaris.ctrl(), "SaveMsg")
+    assert(Dictionary.get_or(sub, "_sub_type", "") == "keyboard")
+}
+
+# ═══════════════════════════════════════════════════════════
+# Typed theme overrides (Theme)
+# ═══════════════════════════════════════════════════════════
+
+function dictionary theme_overrides(Theme t) {
+    dictionary base = Solaris.app("T", 0, (any m, any _msg) -> m, (any _m) -> Solaris.text("x"))
+    return Dictionary.get_or(Solaris.theme_of(base, t), "theme", {})
+}
+
+@test
+function void test_theme_of_writes_only_set_fields() {
+    dictionary t = theme_overrides(Theme { accent = Solaris.hex("#0af"), danger = Color.Danger })
+    assert(Dictionary.get_or(t, "accent", "") == "#0af")
+    assert(Dictionary.get_or(t, "error", "") == GraphicalUi.VAR_ERROR)
+    # Unset fields (the Color.Custom("") sentinel) are not written.
+    assert(Dictionary.get_or(t, "background", "UNSET") == "UNSET")
+    assert(Dictionary.get_or(t, "text_color", "UNSET") == "UNSET")
+    assert(Dictionary.get_or(t, "success", "UNSET") == "UNSET")
+}
+
+@test
+function void test_theme_of_maps_fields_to_engine_keys() {
+    dictionary t = theme_overrides(Theme {
+        background = Solaris.hex("#111"),
+        text = Solaris.hex("#eee"),
+        positive = Color.Success,
+        muted = Color.Muted
+    })
+    assert(Dictionary.get_or(t, "background", "") == "#111")
+    assert(Dictionary.get_or(t, "text_color", "") == "#eee")
+    assert(Dictionary.get_or(t, "success", "") == GraphicalUi.VAR_SUCCESS)
+    assert(Dictionary.get_or(t, "text_muted", "") == GraphicalUi.VAR_TEXT_MUTED)
+}
+
+# ═══════════════════════════════════════════════════════════
+# Typed chart series (DataPoint)
+# ═══════════════════════════════════════════════════════════
+
+function array<DataPoint> sample_points() {
+    return [
+        DataPoint { label = "Jan", value = 10.0 },
+        DataPoint { label = "Feb", value = 25.0 },
+        DataPoint { label = "Mar", value = 18.0 }
+    ]
+}
+
+@test
+function void test_line_chart_of_unzips_points() {
+    View chart = Solaris.line_chart_of(sample_points())
+    assert(chart.kind == "line_chart")
+    assert(Array.length(chart.options) == 3)
+    assert(chart.options[0] == "Jan")
+    assert(chart.options[2] == "Mar")
+    assert(Array.length(chart.values) == 3)
+    assert(Math.approximately_equal(chart.values[1], 25.0, 0.001))
+}
+
+@test
+function void test_bar_and_pie_chart_of_share_the_datapoint_shape() {
+    assert(Solaris.bar_chart_of(sample_points()).kind == "bar_chart")
+    assert(Solaris.pie_chart_of(sample_points()).kind == "pie_chart")
+    # An empty series is still valid — no labels, no values.
+    View empty = Solaris.line_chart_of([])
+    assert(Array.length(empty.options) == 0)
+    assert(Array.length(empty.values) == 0)
+}

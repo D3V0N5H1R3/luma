@@ -201,6 +201,10 @@ namespace key {
 inline constexpr const char* command_type = "_command_type";
 inline constexpr const char* sub_type = "_sub_type";
 inline constexpr const char* callback = "_callback";
+// Marks a subscription whose callback expects a typed record payload (e.g.
+// GraphicalUi.on_mouse_typed → GraphicalUi.MouseEvent) rather than the raw
+// dictionary the untyped subscription delivers.
+inline constexpr const char* typed = "_typed";
 inline constexpr const char* callback_id = "_callback_id";
 inline constexpr const char* deferred_callback = "_deferred_callback";
 inline constexpr const char* deferred_close_callback = "_deferred_close_callback";

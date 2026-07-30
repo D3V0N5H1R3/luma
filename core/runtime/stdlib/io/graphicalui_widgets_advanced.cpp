@@ -479,7 +479,38 @@ static void register_display_widgets(const EnvPtr& env) {
             return finalize_widget(std::move(w));
         });
 
-    // GraphicalUi.toast_region(toasts, options?) -> widget
+    // GraphicalUi.toast_of(message, severity, duration?, action_label?, on_action?, style?)
+    //   -> widget
+    // Typed companion to toast: takes a GraphicalUi.Severity choice instead of a
+    // severity string, then reuses the same trailing arguments as toast (an
+    // optional integer duration, an optional action_label + on_action pair, and
+    // an optional trailing style dictionary).
+    define_native(
+        env, "GraphicalUi.toast_of", [](std::span<const Value> args, SourceLocation loc) -> Value {
+            expect_min_args("GraphicalUi.toast_of", args, 2, loc);
+            auto w = make_widget(wtype::toast);
+            w->set("message", args[0]);
+            w->set("severity", Value{severity_to_lower(args[1])});
+
+            std::size_t next = 2;
+
+            if (args.size() > next && args[next].is_integer()) {
+                w->set("duration", args[next]);
+                ++next;
+            } else {
+                w->set("duration", Value{std::int64_t{3000}});
+            }
+
+            if (args.size() > next + 1 && args[next].is_string() && args[next + 1].is_callable()) {
+                w->set("action_label", args[next]);
+                w->set(key::deferred_action_callback, args[next + 1]);
+                next += 2;
+            }
+
+            w->set("style", get_style_arg(args, next));
+            return finalize_widget(std::move(w));
+        });
+
     //
     // A fixed-position stacking region for transient notifications. Compose the
     // stack from GraphicalUi.toast(...) widgets and pass them as `toasts`; the
