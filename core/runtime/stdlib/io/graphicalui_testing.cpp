@@ -418,6 +418,229 @@ event_id_fields(const std::string& event) {
     return state.model;
 }
 
+// Drive the application's storage subscriptions for a localStorage key change:
+// call subscribe, then fire every storage subscription whose key filter is empty
+// or equals `key`, threading the model through each.  Mirrors the live dispatch
+// (handle_storage -> dispatch_event) without a window: a typed
+// (on_storage_change_typed) subscription receives a GraphicalUi.StorageEvent
+// record; a plain on_storage_change one gets the bare new-value string.  The
+// `old_value` / `new_value` optionals are passed as Value (a null Value means
+// none — key added or cleared).  Throws when no storage subscription matches.
+[[nodiscard]] Value drive_storage(AppState& state, const Value& model, const std::string& key,
+                                  const Value& old_value, const Value& new_value,
+                                  SourceLocation loc) {
+    state.model = model;
+
+    if (state.subscribe_fn.is_null() || !state.subscribe_fn.is_callable()) {
+        throw RuntimeError{
+            error_msg("GraphicalUi", "test_storage",
+                      "config has no 'subscribe' function to receive storage events"),
+            loc,
+            "add a \"subscribe\" entry returning GraphicalUi.on_storage_change(...) or "
+            "on_storage_change_typed(...)"};
+    }
+
+    std::vector<Value> sub_args{state.model};
+    const auto subs_value = invoke_callable(state.subscribe_fn, sub_args, loc);
+    const auto subscriptions = unwrap_array_arg(subs_value);
+
+    bool fired = false;
+
+    if (subscriptions.is_array()) {
+        for (const auto& sub : *subscriptions.as_array()->elements) {
+            if (!sub.is_dictionary()) {
+                continue;
+            }
+
+            const auto& sub_dict = *sub.as_dictionary();
+
+            if (dict_string(sub_dict, key::sub_type) != sub::storage) {
+                continue;
+            }
+
+            const auto filter = dict_string(sub_dict, "key", "");
+
+            if (!filter.empty() && filter != key) {
+                continue;
+            }
+
+            const auto* callback = sub_dict.find(key::callback);
+
+            if (callback == nullptr || !callback->is_callable()) {
+                continue;
+            }
+
+            // Reconstruct the payload the browser storage listener emits (omitting
+            // an absent old/new value so a typed StorageEvent maps it to none),
+            // then deliver a typed record for on_storage_change_typed or the raw
+            // new-value string for on_storage_change — mirroring handle_storage.
+            auto payload = make_dict();
+            payload->set("key", Value{key});
+
+            if (old_value.is_string()) {
+                payload->set("oldValue", old_value);
+            }
+
+            if (new_value.is_string()) {
+                payload->set("newValue", new_value);
+            }
+
+            std::vector<Value> callback_args;
+
+            if (dict_bool(sub_dict, key::typed)) {
+                callback_args.push_back(build_storage_event_record(*payload));
+            } else {
+                callback_args.push_back(Value{dict_string(*payload, "newValue", "")});
+            }
+
+            auto result = invoke_callable(*callback, callback_args, loc);
+            apply_event_result(state, std::move(result));
+            fired = true;
+        }
+    }
+
+    if (!fired) {
+        throw RuntimeError{
+            error_msg("GraphicalUi", "test_storage",
+                      "no storage subscription matches key '" + key + "'"),
+            loc,
+            "ensure subscribe returns GraphicalUi.on_storage_change/on_storage_change_typed "
+            "with an empty key filter or \"" +
+                key + "\""};
+    }
+
+    return state.model;
+}
+
+// Drive the application's wheel subscriptions (on_wheel_typed): call subscribe,
+// then fire every wheel subscription with a GraphicalUi.WheelDelta record built
+// from `delta_x` / `delta_y`, threading the model through each.  Mirrors the live
+// dispatch (handle_wheel -> dispatch_event) without a window.  Throws when no
+// wheel subscription matches.
+[[nodiscard]] Value drive_wheel(AppState& state, const Value& model, double delta_x, double delta_y,
+                                SourceLocation loc) {
+    state.model = model;
+
+    if (state.subscribe_fn.is_null() || !state.subscribe_fn.is_callable()) {
+        throw RuntimeError{error_msg("GraphicalUi", "test_wheel",
+                                     "config has no 'subscribe' function to receive wheel events"),
+                           loc,
+                           "add a \"subscribe\" entry returning GraphicalUi.on_wheel_typed(...)"};
+    }
+
+    std::vector<Value> sub_args{state.model};
+    const auto subs_value = invoke_callable(state.subscribe_fn, sub_args, loc);
+    const auto subscriptions = unwrap_array_arg(subs_value);
+
+    bool fired = false;
+
+    if (subscriptions.is_array()) {
+        for (const auto& sub : *subscriptions.as_array()->elements) {
+            if (!sub.is_dictionary()) {
+                continue;
+            }
+
+            const auto& sub_dict = *sub.as_dictionary();
+
+            if (dict_string(sub_dict, key::sub_type) != sub::wheel) {
+                continue;
+            }
+
+            const auto* callback = sub_dict.find(key::callback);
+
+            if (callback == nullptr || !callback->is_callable()) {
+                continue;
+            }
+
+            auto payload = make_dict();
+            payload->set("deltaX", Value{delta_x});
+            payload->set("deltaY", Value{delta_y});
+
+            std::vector<Value> callback_args{build_wheel_delta_record(*payload)};
+            auto result = invoke_callable(*callback, callback_args, loc);
+            apply_event_result(state, std::move(result));
+            fired = true;
+        }
+    }
+
+    if (!fired) {
+        throw RuntimeError{error_msg("GraphicalUi", "test_wheel", "no wheel subscription found"),
+                           loc, "ensure subscribe returns GraphicalUi.on_wheel_typed(...)"};
+    }
+
+    return state.model;
+}
+
+// Drive the application's visibility subscriptions for a `visible` state: call
+// subscribe, then fire every visibility subscription, threading the model through
+// each.  Mirrors the live dispatch (handle_visibility_change -> dispatch_event)
+// without a window: a typed (on_visibility_change_typed) subscription receives a
+// GraphicalUi.VisibilityState choice; a plain on_visibility_change one gets the
+// bare boolean.  Throws when no visibility subscription matches.
+[[nodiscard]] Value drive_visibility(AppState& state, const Value& model, bool visible,
+                                     SourceLocation loc) {
+    state.model = model;
+
+    if (state.subscribe_fn.is_null() || !state.subscribe_fn.is_callable()) {
+        throw RuntimeError{
+            error_msg("GraphicalUi", "test_visibility",
+                      "config has no 'subscribe' function to receive visibility events"),
+            loc,
+            "add a \"subscribe\" entry returning GraphicalUi.on_visibility_change(...) or "
+            "on_visibility_change_typed(...)"};
+    }
+
+    std::vector<Value> sub_args{state.model};
+    const auto subs_value = invoke_callable(state.subscribe_fn, sub_args, loc);
+    const auto subscriptions = unwrap_array_arg(subs_value);
+
+    bool fired = false;
+
+    if (subscriptions.is_array()) {
+        for (const auto& sub : *subscriptions.as_array()->elements) {
+            if (!sub.is_dictionary()) {
+                continue;
+            }
+
+            const auto& sub_dict = *sub.as_dictionary();
+
+            if (dict_string(sub_dict, key::sub_type) != sub::visibility) {
+                continue;
+            }
+
+            const auto* callback = sub_dict.find(key::callback);
+
+            if (callback == nullptr || !callback->is_callable()) {
+                continue;
+            }
+
+            std::vector<Value> callback_args;
+
+            if (dict_bool(sub_dict, key::typed)) {
+                auto choice = std::make_shared<ChoiceValue>();
+                choice->type_name = "VisibilityState";
+                choice->variant = visibility_state_from_visible(visible);
+                callback_args.push_back(Value{std::move(choice)});
+            } else {
+                callback_args.push_back(Value{visible});
+            }
+
+            auto result = invoke_callable(*callback, callback_args, loc);
+            apply_event_result(state, std::move(result));
+            fired = true;
+        }
+    }
+
+    if (!fired) {
+        throw RuntimeError{
+            error_msg("GraphicalUi", "test_visibility", "no visibility subscription found"), loc,
+            "ensure subscribe returns "
+            "GraphicalUi.on_visibility_change/on_visibility_change_typed"};
+    }
+
+    return state.model;
+}
+
 } // namespace
 
 // Register the GraphicalUi.test_* interaction-testing functions.
@@ -607,6 +830,53 @@ void register_graphicalui_testing(const EnvPtr& env) {
                           args.size() > 3 && args[3].is_string() ? args[3].as_string() : "";
                       HeadlessApp app{config, loc};
                       return drive_drag(app.state, args[1], phase, data, loc);
+                  });
+
+    // GraphicalUi.test_storage(config, model, key, old_value?, new_value?) -> any
+    // Deliver a cross-tab storage change for `key` (with optional old/new values;
+    // omit or pass none for an added/cleared key) to the application's storage
+    // subscriptions (on_storage_change / on_storage_change_typed) and return the
+    // new model — the headless mirror of the live storage dispatch.
+    define_native(
+        env, "GraphicalUi.test_storage",
+        [](std::span<const Value> args, SourceLocation loc) -> Value {
+            expect_min_args("GraphicalUi.test_storage", args, 3, loc);
+            const auto& config = *expect_dict(args[0], "GraphicalUi.test_storage", loc);
+            const auto& storage_key = expect_string(args[2], "GraphicalUi.test_storage", loc);
+            const Value old_value = args.size() > 3 ? args[3] : Value{};
+            const Value new_value = args.size() > 4 ? args[4] : Value{};
+            HeadlessApp app{config, loc};
+            return drive_storage(app.state, args[1], storage_key, old_value, new_value, loc);
+        });
+
+    // GraphicalUi.test_wheel(config, model, delta_x, delta_y) -> any
+    // Deliver a scroll-wheel delta to the application's wheel subscriptions
+    // (on_wheel_typed) and return the new model — the headless mirror of the live
+    // wheel dispatch.
+    define_native(env, "GraphicalUi.test_wheel",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.test_wheel", args, 4, loc);
+                      const auto& config = *expect_dict(args[0], "GraphicalUi.test_wheel", loc);
+                      const double delta_x = expect_numeric(args[2], "GraphicalUi.test_wheel", loc);
+                      const double delta_y = expect_numeric(args[3], "GraphicalUi.test_wheel", loc);
+                      HeadlessApp app{config, loc};
+                      return drive_wheel(app.state, args[1], delta_x, delta_y, loc);
+                  });
+
+    // GraphicalUi.test_visibility(config, model, visible) -> any
+    // Deliver a document visibility change (visible=true / hidden=false) to the
+    // application's visibility subscriptions (on_visibility_change /
+    // on_visibility_change_typed) and return the new model — the headless mirror
+    // of the live visibility dispatch.
+    define_native(env, "GraphicalUi.test_visibility",
+                  [](std::span<const Value> args, SourceLocation loc) -> Value {
+                      expect_args("GraphicalUi.test_visibility", args, 3, loc);
+                      const auto& config =
+                          *expect_dict(args[0], "GraphicalUi.test_visibility", loc);
+                      const bool visible =
+                          expect_boolean(args[2], "GraphicalUi.test_visibility", loc);
+                      HeadlessApp app{config, loc};
+                      return drive_visibility(app.state, args[1], visible, loc);
                   });
 
     // GraphicalUi.test_message(config, model, message) -> any

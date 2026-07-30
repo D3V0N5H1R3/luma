@@ -30,6 +30,8 @@ namespace luma::gui_detail {
 [[nodiscard]] Value build_window_size_record(std::int64_t width, std::int64_t height);
 [[nodiscard]] Value build_drag_event_record(const DictionaryValue& payload);
 [[nodiscard]] Value build_drop_event_record(const DictionaryValue& payload);
+[[nodiscard]] Value build_storage_event_record(const DictionaryValue& payload);
+[[nodiscard]] Value build_wheel_delta_record(const DictionaryValue& payload);
 [[nodiscard]] Value
 build_http_response_record_gui(int status, std::string body,
                                const std::vector<std::pair<std::string, std::string>>& headers);
@@ -1095,6 +1097,154 @@ LUMA_TEST(drop_target_typed_flags_widget) {
     const auto& d = *v.as_dictionary();
     ASSERT_EQ(d.find("type")->as_string(), "drop_target");
     ASSERT_TRUE(d.find("_drop_typed") != nullptr && d.find("_drop_typed")->as_bool());
+}
+
+// ── G01: GraphicalUi.StorageEvent / on_storage_change_typed ─
+
+// GraphicalUi.on_storage_change_typed flags the storage subscription so the
+// runtime delivers a typed GraphicalUi.StorageEvent record, and threads the key
+// filter through unchanged.
+LUMA_TEST(on_storage_change_typed_marks_typed_storage_subscription) {
+    const auto v = eval(R"(
+        GraphicalUi.on_storage_change_typed("st1", "theme",
+            (GraphicalUi.StorageEvent e) -> e.key)
+    )");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+
+    const auto* sub_type = d.find("_sub_type");
+    ASSERT_TRUE(sub_type != nullptr && sub_type->is_string());
+    ASSERT_EQ(sub_type->as_string(), "storage");
+
+    const auto* skey = d.find("key");
+    ASSERT_TRUE(skey != nullptr && skey->is_string());
+    ASSERT_EQ(skey->as_string(), "theme");
+
+    const auto* typed = d.find("_typed");
+    ASSERT_TRUE(typed != nullptr && typed->is_bool());
+    ASSERT_TRUE(typed->as_bool());
+}
+
+// build_storage_event_record maps the payload into a key string plus optional
+// old/new values.  A present value becomes some(string); an absent one becomes
+// none (a null Value).
+LUMA_TEST(build_storage_event_record_maps_payload) {
+    auto payload = std::make_shared<DictionaryValue>();
+    payload->set("key", Value{std::string{"theme"}});
+    payload->set("oldValue", Value{std::string{"light"}});
+    payload->set("newValue", Value{std::string{"dark"}});
+
+    const auto rec_val = gui_detail::build_storage_event_record(*payload);
+    ASSERT_TRUE(rec_val.is_record());
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.type_name, "StorageEvent");
+    ASSERT_EQ(rec.find_field("key")->as_string(), "theme");
+
+    const auto* old_value = rec.find_field("old_value");
+    ASSERT_TRUE(old_value != nullptr && old_value->is_string());
+    ASSERT_EQ(old_value->as_string(), "light");
+
+    const auto* new_value = rec.find_field("new_value");
+    ASSERT_TRUE(new_value != nullptr && new_value->is_string());
+    ASSERT_EQ(new_value->as_string(), "dark");
+}
+
+// A key that was added has no old value, and a cleared key has no new value —
+// the absent field maps to none (a null Value).
+LUMA_TEST(build_storage_event_record_optional_absence) {
+    auto added = std::make_shared<DictionaryValue>();
+    added->set("key", Value{std::string{"token"}});
+    added->set("newValue", Value{std::string{"abc"}});
+
+    const auto rec_val = gui_detail::build_storage_event_record(*added);
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.find_field("key")->as_string(), "token");
+    ASSERT_TRUE(rec.find_field("old_value")->is_null());
+    ASSERT_EQ(rec.find_field("new_value")->as_string(), "abc");
+
+    // A wholly-empty payload keeps the record total: key "" and both values none.
+    auto empty = std::make_shared<DictionaryValue>();
+    const auto empty_val = gui_detail::build_storage_event_record(*empty);
+    const auto& empty_rec = *empty_val.as_record();
+    ASSERT_EQ(empty_rec.find_field("key")->as_string(), "");
+    ASSERT_TRUE(empty_rec.find_field("old_value")->is_null());
+    ASSERT_TRUE(empty_rec.find_field("new_value")->is_null());
+}
+
+// ── G07: GraphicalUi.WheelDelta / on_wheel_typed ───────────
+
+// GraphicalUi.on_wheel_typed flags the wheel subscription so the runtime delivers
+// a typed GraphicalUi.WheelDelta record.
+LUMA_TEST(on_wheel_typed_marks_typed_wheel_subscription) {
+    const auto v = eval(R"(
+        GraphicalUi.on_wheel_typed("wh1", (GraphicalUi.WheelDelta d) -> d.delta_y)
+    )");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+
+    const auto* sub_type = d.find("_sub_type");
+    ASSERT_TRUE(sub_type != nullptr && sub_type->is_string());
+    ASSERT_EQ(sub_type->as_string(), "wheel");
+
+    const auto* typed = d.find("_typed");
+    ASSERT_TRUE(typed != nullptr && typed->is_bool());
+    ASSERT_TRUE(typed->as_bool());
+}
+
+// build_wheel_delta_record maps the payload into number deltas.
+LUMA_TEST(build_wheel_delta_record_maps_payload) {
+    auto payload = std::make_shared<DictionaryValue>();
+    payload->set("deltaX", Value{-12.0});
+    payload->set("deltaY", Value{48.5});
+
+    const auto rec_val = gui_detail::build_wheel_delta_record(*payload);
+    ASSERT_TRUE(rec_val.is_record());
+    const auto& rec = *rec_val.as_record();
+    ASSERT_EQ(rec.type_name, "WheelDelta");
+    ASSERT_NEAR(rec.find_field("delta_x")->as_number(), -12.0, 1e-9);
+    ASSERT_NEAR(rec.find_field("delta_y")->as_number(), 48.5, 1e-9);
+}
+
+// A missing wheel payload defaults both deltas to 0.
+LUMA_TEST(build_wheel_delta_record_defaults_zero) {
+    auto payload = std::make_shared<DictionaryValue>();
+
+    const auto rec_val = gui_detail::build_wheel_delta_record(*payload);
+    const auto& rec = *rec_val.as_record();
+    ASSERT_NEAR(rec.find_field("delta_x")->as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(rec.find_field("delta_y")->as_number(), 0.0, 1e-9);
+}
+
+// ── G05: GraphicalUi.VisibilityState / visibility_state_to_string ─
+
+// GraphicalUi.on_visibility_change_typed flags the visibility subscription so the
+// runtime delivers a typed GraphicalUi.VisibilityState choice.
+LUMA_TEST(on_visibility_change_typed_marks_typed_visibility_subscription) {
+    const auto v = eval(R"(
+        GraphicalUi.on_visibility_change_typed("vi1",
+            (GraphicalUi.VisibilityState s) -> GraphicalUi.visibility_state_to_string(s))
+    )");
+    ASSERT_TRUE(v.is_dictionary());
+    const auto& d = *v.as_dictionary();
+
+    const auto* sub_type = d.find("_sub_type");
+    ASSERT_TRUE(sub_type != nullptr && sub_type->is_string());
+    ASSERT_EQ(sub_type->as_string(), "visibility");
+
+    const auto* typed = d.find("_typed");
+    ASSERT_TRUE(typed != nullptr && typed->is_bool());
+    ASSERT_TRUE(typed->as_bool());
+}
+
+// GraphicalUi.visibility_state_to_string bridges each variant to its lowercase
+// string.
+LUMA_TEST(visibility_state_to_string_bridges_variants) {
+    ASSERT_EQ(eval(R"(GraphicalUi.visibility_state_to_string(GraphicalUi.VisibilityState.Visible))")
+                  .as_string(),
+              "visible");
+    ASSERT_EQ(eval(R"(GraphicalUi.visibility_state_to_string(GraphicalUi.VisibilityState.Hidden))")
+                  .as_string(),
+              "hidden");
 }
 
 // ── G05: GraphicalUi.ScrollBehavior / scroll_to_of ─────────

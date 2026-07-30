@@ -551,6 +551,14 @@ namespace named {
     return ReturnTypeDesc::named("GraphicalUi.SortDirection");
 }
 
+// GraphicalUi.VisibilityState — the typed page-visibility state delivered to
+// GraphicalUi.on_visibility_change_typed and accepted by
+// GraphicalUi.visibility_state_to_string.  Needs a matching branch in
+// stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc gui_visibility_state() {
+    return ReturnTypeDesc::named("GraphicalUi.VisibilityState");
+}
+
 // Terminal.parse_key returns this choice directly, so — like json_value() and
 // file_kind() — it uses the fully-qualified name (choices resolve qualified;
 // records such as input_event()/mouse_event() resolve by bare name).

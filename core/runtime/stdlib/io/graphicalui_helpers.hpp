@@ -108,6 +108,19 @@ void on_gui_event(const char* id, const char* req, void* arg);
 build_http_response_record_gui(int status, std::string body,
                                const std::vector<std::pair<std::string, std::string>>& headers);
 
+// Convert a storage-event payload dictionary (key, oldValue, newValue) into a
+// typed GraphicalUi.StorageEvent record — the payload
+// GraphicalUi.on_storage_change_typed delivers to its callback.  `key` defaults
+// to ""; old_value / new_value are optional<string> (represented as a null Value
+// when the payload omits them, i.e. a key that was added or cleared).  Exposed
+// for unit testing.
+[[nodiscard]] Value build_storage_event_record(const DictionaryValue& payload);
+
+// Convert a wheel-event payload dictionary (deltaX, deltaY) into a typed
+// GraphicalUi.WheelDelta record — the payload GraphicalUi.on_wheel_typed delivers
+// to its callback.  A missing delta defaults to 0.  Exposed for unit testing.
+[[nodiscard]] Value build_wheel_delta_record(const DictionaryValue& payload);
+
 // graphicalui_widgets*.cpp
 void register_graphicalui_widgets(const EnvPtr& env);
 void register_basic_widgets(const EnvPtr& env);
@@ -361,6 +374,26 @@ make_command_dict(std::string_view command_type) {
     }
 
     return "asc";
+}
+
+// Map a GraphicalUi.VisibilityState choice value to its lowercase string key
+// ("visible" / "hidden").  Anything that is not the Hidden variant defaults to
+// "visible" (matching the Page Visibility API's default), keeping the bridge
+// total.  Used by GraphicalUi.visibility_state_to_string.
+[[nodiscard]] inline std::string visibility_state_to_lower(const Value& v) {
+    if (v.is_choice() && v.as_choice()->variant == "Hidden") {
+        return "hidden";
+    }
+
+    return "visible";
+}
+
+// Map the browser's !document.hidden boolean to the GraphicalUi.VisibilityState
+// choice variant name (true → "Visible", false → "Hidden") — used by
+// build_visibility_state_choice so the typed on_visibility_change_typed callback
+// receives an exhaustively-matchable state instead of a bare boolean.
+[[nodiscard]] inline std::string visibility_state_from_visible(bool visible) {
+    return visible ? "Visible" : "Hidden";
 }
 
 // Partition a trailing style/options dictionary into recognised widget-option

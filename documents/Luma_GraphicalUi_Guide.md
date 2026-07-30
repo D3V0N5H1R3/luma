@@ -1084,12 +1084,15 @@ Subscriptions react to external events not tied to a specific widget. Declare th
 | `on_focus(id, callback)`              | `(string, function)`          | `subscription` | Window focus/blur             |
 | `on_mouse(id, event_type, callback)`  | `(string, string, function)`  | `subscription` | Mouse events                  |
 | `on_visibility_change(id, callback)`  | `(string, function)`          | `subscription` | Page visibility change        |
+| `on_visibility_change_typed(id, callback)` | `(string, func(GraphicalUi.VisibilityState) -> any)` | `subscription` | Page visibility as a typed `Visible`/`Hidden` choice |
 | `on_online(id, callback)`             | `(string, function)`          | `subscription` | Network comes online          |
 | `on_offline(id, callback)`            | `(string, function)`          | `subscription` | Network goes offline          |
 | `on_media_query(id, query, callback)` | `(string, string, function)`  | `subscription` | CSS media query match         |
 | `on_scroll(id, callback)`             | `(string, function)`          | `subscription` | Document scroll position changes |
+| `on_wheel_typed(id, callback)`        | `(string, func(GraphicalUi.WheelDelta) -> any)` | `subscription` | Scroll-wheel deltas as a typed `WheelDelta` record |
 | `on_idle(id, timeout_ms, callback)`   | `(string, integer, function)` | `subscription` | User idle for `timeout_ms` milliseconds |
 | `on_storage_change(id, key, callback)`| `(string, string, function)`  | `subscription` | `localStorage` `key` changed (another tab) |
+| `on_storage_change_typed(id, key, callback)` | `(string, string, func(GraphicalUi.StorageEvent) -> any)` | `subscription` | `localStorage` `key` change as a typed `StorageEvent` record |
 | `on_animation_frame(id, callback)`    | `(string, function)`          | `subscription` | Per-frame tick (`requestAnimationFrame`) |
 | `on_drag(id, event_type, callback)`   | `(string, string, function)`  | `subscription` | Drag events; callback receives a position dictionary |
 

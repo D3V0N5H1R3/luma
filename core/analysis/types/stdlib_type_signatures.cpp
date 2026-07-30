@@ -179,6 +179,9 @@ namespace {
             if (desc.named_type == "GraphicalUi.SortDirection") {
                 return TypeInfo::make_named(K::Choice, "GraphicalUi.SortDirection");
             }
+            if (desc.named_type == "GraphicalUi.VisibilityState") {
+                return TypeInfo::make_named(K::Choice, "GraphicalUi.VisibilityState");
+            }
             if (desc.named_type == "Compression.Format") {
                 return TypeInfo::make_named(K::Choice, "Compression.Format");
             }
