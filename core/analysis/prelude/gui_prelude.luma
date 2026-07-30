@@ -254,6 +254,54 @@ choice ImageFit {
     ScaleDown
 }
 
+# What kind of text a text field holds, mapping to the HTML input `type`. Apply
+# with `Solaris.input_type` to turn a plain field into a masked `Password`, an
+# `Email` field, or a numeric/telephone/URL/search field — the browser then
+# offers the right keyboard, validation, and masking. Reshapes the raw HTML
+# `type` string enum into a typed token exactly as `ImageFit` reshaped
+# `object-fit`; an unset field stays `Text`.
+choice InputType {
+    Text,
+    Password,
+    Email,
+    Number,
+    Tel,
+    Url,
+    Search
+}
+
+# A line decoration drawn through running text, mapping to CSS `text-decoration`.
+# Apply with `Solaris.decoration`: `Strikethrough` crosses out a completed to-do
+# item, `Underline` marks a link or label, and `None` leaves the text plain. Sits
+# beside `text_align`/`weight` as another typography token.
+choice TextDecoration {
+    None,
+    Underline,
+    Strikethrough
+}
+
+# An enter/emphasis animation preset for an element, apply with `Solaris.motion`.
+# A tiny closed palette (not raw CSS timing) that maps each preset to a bundled
+# entrance animation: `Fade` eases opacity in, `SlideUp`/`SlideDown` glide it into
+# place, `Grow` scales it up, and `None` disables motion. The engine's
+# reduced-motion switch neutralises every preset automatically, so this stays
+# safe for motion-sensitive users.
+choice Motion {
+    None,
+    Fade,
+    SlideUp,
+    SlideDown,
+    Grow
+}
+
+# The axis a divider runs along. `Horizontal` is the default rule across the
+# flow; `Vertical` separates two side-by-side panels. Apply with
+# `Solaris.orientation`.
+choice Orientation {
+    Horizontal,
+    Vertical
+}
+
 # Where an overlay (a toast today, more later) is anchored on screen. `Start`/
 # `End` follow the writing direction (left/right in a left-to-right layout).
 # Apply with `Solaris.placement`.
@@ -348,6 +396,20 @@ record View {
     # Image object-fit (S07).
     ImageFit img_fit = ImageFit.Fill,
     boolean has_fit = false,
+    # Text-field input kind (T01), mapping to the HTML input `type`.
+    InputType input_type = InputType.Text,
+    boolean has_input_type = false,
+    # Text line decoration (T02), mapping to CSS `text-decoration`.
+    TextDecoration decoration = TextDecoration.None,
+    boolean has_decoration = false,
+    # Enter/emphasis animation preset (T06); wraps the widget in a bundled recipe.
+    Motion motion = Motion.None,
+    boolean has_motion = false,
+    # Axis a divider/slider runs along (T07).
+    Orientation orientation = Orientation.Horizontal,
+    boolean has_orientation = false,
+    # Resolved Lucide glyph name for a navigation entry (T03).
+    string icon_id = "",
     # Overlay anchor position (S08).
     Placement placement = Placement.Bottom,
     boolean has_placement = false,
@@ -461,6 +523,23 @@ record Series {
     string name = "",
     array<DataPoint> points = [],
     Color color = Color.Primary
+}
+
+# ── TYPED NAVIGATION ENTRIES ──
+#
+# One entry in a navigation rail: an `icon`, a display `label`, the `message`
+# routed through `update` when it is chosen, and whether it is the `active`
+# destination. Build an `array<NavItem>` and pass it to `Solaris.nav`, which lays
+# them out as a sidebar rail and paints the active entry (with `aria-current`)
+# for you — so the data (the entries) stays separate from the behaviour (the
+# message each routes), mirroring how `Option` packages structured display data.
+# An entry left without a `message` is inert (a no-op when chosen), exactly like
+# a `Solaris.button` with no `on_click`.
+record NavItem {
+    Icon icon = Icon.Circle,
+    string label = "",
+    any message = none,
+    boolean active = false
 }
 
 namespace Solaris {
@@ -863,6 +942,36 @@ namespace Solaris {
         }
     }
 
+    # A typed navigation rail (T03): one clickable entry per `NavItem`, each an
+    # icon + label that sends the item's `message` when chosen. The `active` entry
+    # is highlighted and marked `aria-current="page"` for you. Drop it into a
+    # `sidebar`/`app_shell`, or use it on its own.
+    function View nav(array<NavItem> items) {
+        mutable array<View> entries = []
+        for item in items {
+            entries = Array.append(entries, Solaris.nav_entry(item))
+        }
+        return View {
+            kind = "nav",
+            children = entries,
+            gap = Spacing.XS,
+            node_width = Length.Fill
+        }
+    }
+
+    # Turn a single NavItem into its `nav_item` View. Internal helper for `nav`.
+    internal function View nav_entry(NavItem item) {
+        return View {
+            kind = "nav_item",
+            content = item.label,
+            icon_id = Solaris.icon_name(item.icon),
+            message = item.message,
+            has_message = true,
+            checked = item.active,
+            node_width = Length.Fill
+        }
+    }
+
     # ── FLUENT MODIFIERS — chain with `|>`. Each takes the piped View first
     #    and returns a new View (the tree is immutable). ──
 
@@ -1041,6 +1150,32 @@ namespace Solaris {
     # How an image fills its box (S07), mapping to CSS `object-fit`.
     function View fit(View node, ImageFit f) {
         return node with { img_fit = f, has_fit = true }
+    }
+
+    # What kind of text a text field holds (T01), mapping to the HTML input
+    # `type` — e.g. `InputType.Password` masks the field, `InputType.Email`
+    # requests an email keyboard. Apply to a text field.
+    function View input_type(View node, InputType t) {
+        return node with { input_type = t, has_input_type = true }
+    }
+
+    # A line decoration through running text (T02): `Underline` or `Strikethrough`.
+    # Apply to a text/heading block, beside `text_align` and `weight`.
+    function View decoration(View node, TextDecoration d) {
+        return node with { decoration = d, has_decoration = true }
+    }
+
+    # An enter/emphasis animation preset (T06) applied to any element — `Fade`,
+    # `SlideUp`, `SlideDown`, or `Grow`. Honours the engine's reduced-motion
+    # switch automatically.
+    function View motion(View node, Motion m) {
+        return node with { motion = m, has_motion = true }
+    }
+
+    # The axis a divider runs along (T07): `Vertical` separates two side-by-side
+    # panels; `Horizontal` is the default rule across the flow.
+    function View orientation(View node, Orientation o) {
+        return node with { orientation = o, has_orientation = true }
     }
 
     # Anchor an overlay (a toast) on screen (S08).
@@ -1305,6 +1440,28 @@ namespace Solaris {
         }
     }
 
+    # Map an InputType token to the HTML input `type` attribute value (T01).
+    internal function string input_type_name(InputType t) {
+        return match t {
+            case InputType.Text     { "text" }
+            case InputType.Password { "password" }
+            case InputType.Email    { "email" }
+            case InputType.Number   { "number" }
+            case InputType.Tel      { "tel" }
+            case InputType.Url      { "url" }
+            case InputType.Search   { "search" }
+        }
+    }
+
+    # Map a TextDecoration token to a CSS `text-decoration` value (T02).
+    internal function string text_decoration_css(TextDecoration d) {
+        return match d {
+            case TextDecoration.None          { "none" }
+            case TextDecoration.Underline     { "underline" }
+            case TextDecoration.Strikethrough { "line-through" }
+        }
+    }
+
     # Map a Placement token to the engine's toast-region position string.
     internal function string placement_name(Placement p) {
         return match p {
@@ -1490,6 +1647,11 @@ namespace Solaris {
             style["text_align"] = Solaris.text_align_css(node.text_align)
         }
 
+        # A line decoration through the text (T02).
+        if node.has_decoration {
+            style["text_decoration"] = Solaris.text_decoration_css(node.decoration)
+        }
+
         return GraphicalUi.merge_styles(style, Solaris.common_style(node))
     }
 
@@ -1497,6 +1659,17 @@ namespace Solaris {
     internal function dictionary button_style(View node) {
         dictionary style = {"variant": Solaris.emphasis_variant(node.emphasis)}
         return GraphicalUi.merge_styles(style, Solaris.common_style(node))
+    }
+
+    # Style dictionary for a text field View. Carries the HTML input `type` (T01)
+    # under the reserved `input_type` key, which the `GraphicalUi.text_input`
+    # builder lifts onto the widget (so it never leaks as a CSS property).
+    internal function dictionary text_field_style(View node) {
+        mutable dictionary style = Solaris.common_style(node)
+        if node.has_input_type {
+            style["input_type"] = Solaris.input_type_name(node.input_type)
+        }
+        return style
     }
 
     # Style dictionary for a container View (column/row/list/grid/...).
@@ -1535,6 +1708,61 @@ namespace Solaris {
         return kids
     }
 
+    # True when a divider/slider View was flipped to the vertical axis (T07).
+    internal function boolean is_vertical(View node) {
+        if !node.has_orientation {
+            return false
+        }
+        return match node.orientation {
+            case Orientation.Vertical   { true }
+            case Orientation.Horizontal { false }
+        }
+    }
+
+    # Style dictionary for a divider View (T07). A vertical divider turns the
+    # horizontal rule into a full-height hairline down one edge.
+    internal function dictionary divider_style(View node) {
+        mutable dictionary style = Solaris.common_style(node)
+        if Solaris.is_vertical(node) {
+            style["border_top"] = "none"
+            style["border_left"] = "1px solid ${GraphicalUi.VAR_BORDER}"
+            style["width"] = "0"
+            style["height"] = "auto"
+            style["align_self"] = "stretch"
+            style["margin"] = "0 ${Solaris.spacing_px(Spacing.S)}px"
+        }
+        return style
+    }
+
+    # Style dictionary for a navigation rail (T03): a vertically spaced column
+    # marked with the ARIA navigation role.
+    internal function dictionary nav_container_style(View node) {
+        mutable dictionary style = GraphicalUi.spacing(Solaris.spacing_px(node.gap))
+        style["role"] = "navigation"
+        style["width"] = "100%"
+        return GraphicalUi.merge_styles(style, Solaris.common_style(node))
+    }
+
+    # Reconcile a single navigation entry (T03) into an icon + labelled button.
+    # The active entry uses the primary variant and carries `aria-current="page"`;
+    # the icon is decorative (`aria-hidden`). The button routes the entry's
+    # `message` through `update`, exactly like `Solaris.button`.
+    internal function widget nav_item_widget(View node) {
+        string variant = if node.checked { GraphicalUi.PRIMARY } else { GraphicalUi.GHOST }
+        mutable dictionary bstyle = {
+            "variant": variant,
+            "width": "100%",
+            "text_align": "left"
+        }
+        if node.checked {
+            bstyle["aria_current"] = "page"
+        }
+        widget btn = GraphicalUi.button(node.content, () -> node.message, bstyle)
+        widget glyph = GraphicalUi.icon(node.icon_id, 18, {"aria_hidden": "true"})
+        return GraphicalUi.row([glyph, btn],
+            {"align_items": "center", "gap": "8px", "width": "100%"})
+    }
+
     # Map an Emphasis to a toast/alert severity constant.
     internal function string emphasis_severity(Emphasis chosen) {
         return match chosen {
@@ -1568,10 +1796,53 @@ namespace Solaris {
     }
 
     # Reconcile a single View into a GraphicalUi widget, then apply cross-cutting
-    # decoration (the validation message wrapper, S02). The recursive entry point
-    # used by `child_widgets` / `stack_widget`, so every node is decorated.
+    # decoration: the validation message wrapper (S02) and an enter animation
+    # (T06). The recursive entry point used by `child_widgets` / `stack_widget`,
+    # so every node is decorated.
     internal function widget to_widget(View node) {
-        return Solaris.validation_wrap(node, Solaris.to_widget_inner(node))
+        return Solaris.motion_wrap(node, Solaris.validation_wrap(node, Solaris.to_widget_inner(node)))
+    }
+
+    # Wrap a reconciled widget in its enter-animation recipe (T06) when a motion
+    # preset is set. Built on `GraphicalUi.animate`, whose `.gui-animate` output
+    # the engine neutralises under the reduced-motion switch. `Motion.None`
+    # returns the widget untouched.
+    internal function widget motion_wrap(View node, widget child) {
+        if !node.has_motion {
+            return child
+        }
+        return match node.motion {
+            case Motion.None { child }
+            else { Solaris.animate_recipe(child, Solaris.motion_keyframes(node.motion)) }
+        }
+    }
+
+    # The keyframe pair (start -> end) for a Motion preset. Each animates opacity
+    # in; the sliding/growing presets also move or scale from an offset to rest.
+    internal function array<dictionary> motion_keyframes(Motion m) {
+        return match m {
+            case Motion.None { [{"opacity": "1"}, {"opacity": "1"}] }
+            case Motion.Fade { [{"opacity": "0"}, {"opacity": "1"}] }
+            case Motion.SlideUp {
+                [{"opacity": "0", "transform": "translateY(12px)"},
+                 {"opacity": "1", "transform": "translateY(0)"}]
+            }
+            case Motion.SlideDown {
+                [{"opacity": "0", "transform": "translateY(-12px)"},
+                 {"opacity": "1", "transform": "translateY(0)"}]
+            }
+            case Motion.Grow {
+                [{"opacity": "0", "transform": "scale(0.92)"},
+                 {"opacity": "1", "transform": "scale(1)"}]
+            }
+        }
+    }
+
+    # Wrap a widget in a short ease-out entrance animation from the given
+    # keyframes. `fill_mode: both` holds the widget at its final frame afterwards.
+    internal function widget animate_recipe(widget child, array<dictionary> frames) {
+        return GraphicalUi.animate(child, frames,
+            {"duration": "0.24s", "easing": "ease-out", "fill_mode": "both"})
     }
 
     # Reconcile a single View into a GraphicalUi widget.
@@ -1597,10 +1868,10 @@ namespace Solaris {
                 # Without `|> Solaris.on_change` the field is inert.
                 if node.has_change {
                     GraphicalUi.text_input(node.content, (string v) -> node.on_change(v),
-                        node.placeholder, Solaris.common_style(node))
+                        node.placeholder, Solaris.text_field_style(node))
                 } else {
                     GraphicalUi.text_input(node.content, (string _v) -> none,
-                        node.placeholder, Solaris.common_style(node))
+                        node.placeholder, Solaris.text_field_style(node))
                 }
             }
             case == "text_area" {
@@ -1703,7 +1974,7 @@ namespace Solaris {
                 GraphicalUi.icon(node.content, node.glyph_size, Solaris.common_style(node))
             }
             case == "divider" {
-                GraphicalUi.separator(Solaris.common_style(node))
+                GraphicalUi.separator(Solaris.divider_style(node))
             }
             case == "badge" {
                 GraphicalUi.badge(node.content, Solaris.common_style(node))
@@ -1771,6 +2042,12 @@ namespace Solaris {
             }
             case == "sidebar" {
                 GraphicalUi.column(Solaris.child_widgets(node), Solaris.container_style(node))
+            }
+            case == "nav" {
+                GraphicalUi.column(Solaris.child_widgets(node), Solaris.nav_container_style(node))
+            }
+            case == "nav_item" {
+                Solaris.nav_item_widget(node)
             }
             case == "app_shell" {
                 GraphicalUi.row(Solaris.child_widgets(node), Solaris.container_style(node))

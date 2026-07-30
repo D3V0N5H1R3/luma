@@ -49,7 +49,7 @@
         },
 
         text_input: (w, style, extraCls, aria) => {
-            return html`<input type="text" class=${extraCls || nothing} style=${style}
+            return html`<input type=${w.input_type || "text"} class=${extraCls || nothing} style=${style}
                 id=${aria.id || nothing} role=${aria.role || nothing}
                 .value=${w.value || ""} placeholder=${w.placeholder || ""}
                 @input=${boundHandler(w._callback_id, makeChangeHandler)}

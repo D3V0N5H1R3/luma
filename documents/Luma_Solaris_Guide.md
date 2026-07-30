@@ -163,7 +163,7 @@ below by role.
 | Icon | `Solaris.icon(string name)` | A named glyph; size it with `icon_size`. |
 | Icon (typed) | `Solaris.icon_of(Icon glyph)` | A glyph from the typed `Icon` palette — autocomplete-discoverable and typo-proof. |
 | Spinner | `Solaris.spinner(string label)` | An indeterminate busy indicator. |
-| Divider | `Solaris.divider()` | A horizontal rule between sections. |
+| Divider | `Solaris.divider()` | A rule between sections; horizontal by default, or vertical via `Solaris.orientation`. |
 
 `Solaris.icon_of` takes an `Icon` token (`Icon.Settings`, `Icon.Trash`, …,
 `Icon.Custom("some-lucide-name")`) instead of a bare string, so a mistyped name
@@ -204,6 +204,19 @@ Solaris.dropdown_of([
 
 Any input can be marked with a validity state via `Solaris.validation` (below),
 which shows an error message, danger styling, and `aria-invalid` for free.
+
+A text field can also declare *what kind* of text it holds with
+`Solaris.input_type`, which maps to the HTML input `type`: `InputType.Password`
+masks the characters, `InputType.Email` requests an email keyboard, and
+`InputType.Number`/`Tel`/`Url`/`Search` request the matching input mode. An
+unset field stays `Text`:
+
+```luma
+Solaris.text_field(model.password)
+    |> Solaris.placeholder("Password")
+    |> Solaris.input_type(InputType.Password)
+    |> Solaris.on_change((string v) -> Msg.SetPassword(v))
+```
 
 ### Layout containers
 
@@ -291,7 +304,22 @@ Solaris.line_chart_series([
 | Dialog | `Solaris.dialog(string title, boolean open, array<View> children)` | A modal shown when `open` is true; pair with `on_close`. |
 | Toast | `Solaris.toast(string message)` | A transient notification banner; anchor it with `placement`. |
 | Sidebar | `Solaris.sidebar(array<View> children)` | A fixed-width navigation rail. |
+| Nav (typed) | `Solaris.nav(array<NavItem> items)` | A typed navigation rail: one clickable icon+label per `NavItem`, with the active entry highlighted and marked `aria-current`. |
 | App shell | `Solaris.app_shell(View side, View content)` | A full-height sidebar-plus-content layout. |
+
+`Solaris.nav` takes an `array<NavItem>` — a record
+`{ Icon icon, string label, any message, boolean active }` — so a rail entry is
+declared as data: its glyph, its label, the message it routes through `update`
+when chosen, and whether it is the current page. Solaris paints the active entry
+and sets `aria-current="page"` for you, instead of hand-assembling a row of an
+icon, a text label, and a button and tracking the selection yourself:
+
+```luma
+Solaris.nav([
+    NavItem { icon = Icon.Home, label = "Home", message = Msg.Go("home"), active = model.page == "home" },
+    NavItem { icon = Icon.Settings, label = "Settings", message = Msg.Go("settings"), active = model.page == "settings" }
+])
+```
 
 > **Note.** `Solaris.menu` is an in-page dropdown, not a native OS menu bar,
 > and Solaris does not add a system tray icon. For an OS-level toast use the
@@ -326,6 +354,7 @@ each visual concern.
 | `Solaris.weight(Weight w)` | Sets the font weight. |
 | `Solaris.bold()` | Shorthand for bold weight. |
 | `Solaris.text_align(TextAlign a)` | Aligns the running text inside a text/heading block (`Left`/`Center`/`Right`/`Justify`). Distinct from container `align`. |
+| `Solaris.decoration(TextDecoration d)` | Draws a line through running text — `Underline` or `Strikethrough` (`None` clears it), mapping to CSS `text-decoration`. |
 
 ### Emphasis (semantic colour)
 
@@ -355,6 +384,8 @@ each visual concern.
 | `Solaris.border_color(Color c)` | Outline colour (only with a `border` weight; defaults to the theme border). |
 | `Solaris.fit(ImageFit f)` | How an image fills its box (CSS `object-fit`). |
 | `Solaris.placement(Placement p)` | Where a toast is anchored on screen. |
+| `Solaris.orientation(Orientation o)` | The axis a `divider` runs along — `Vertical` separates side-by-side panels; `Horizontal` is the default rule. |
+| `Solaris.motion(Motion m)` | An enter animation preset (`Fade`, `SlideUp`, `SlideDown`, `Grow`); honours the reduced-motion switch automatically. |
 
 ### Input state and identity
 
@@ -363,6 +394,7 @@ each visual concern.
 | `Solaris.checked(boolean state)` | The checkbox's checked state. |
 | `Solaris.placeholder(string text)` | Placeholder text for a text field or area. |
 | `Solaris.validation(Validation state)` | Marks an input valid, invalid (with a message + danger styling + `aria-invalid`), or pending. |
+| `Solaris.input_type(InputType t)` | The kind of text a text field holds (`Password`, `Email`, `Number`, …), mapping to the HTML input `type`. |
 | `Solaris.icon_size(integer size)` | The pixel size of an `icon`. |
 | `Solaris.label(string text)` | An accessible name, emitted as an ARIA label. Use it on icon-only controls. |
 | `Solaris.key(string id)` | A stable identity that keeps focus, caret, and scroll position steady when a list re-orders, and lets tests address the control. |
@@ -395,15 +427,20 @@ never `Solaris.TextScale`.
 | `Validation` | `Valid`, `Invalid(string message)`, `Pending` |
 | `Font` | `System`, `Sans`, `Serif`, `Mono`, `Custom(string family)` |
 | `TextAlign` | `Left`, `Center`, `Right`, `Justify` |
+| `TextDecoration` | `None`, `Underline`, `Strikethrough` |
 | `ImageFit` | `Fill`, `Contain`, `Cover`, `ScaleDown` |
+| `InputType` | `Text`, `Password`, `Email`, `Number`, `Tel`, `Url`, `Search` |
+| `Motion` | `None`, `Fade`, `SlideUp`, `SlideDown`, `Grow` |
+| `Orientation` | `Horizontal`, `Vertical` |
 | `Placement` | `Top`, `Bottom`, `TopStart`, `TopEnd`, `BottomStart`, `BottomEnd`, `Center` |
 
 A handful of typed **records** carry structured data alongside these tokens:
 `DataPoint { string label, number value }` and `Series { string name,
 array<DataPoint> points, Color color }` for charts, `Option { string label,
-string value }` for selects, and `Insets { Spacing top, right, bottom, left }`
-for per-side padding. Use `Solaris.font_of(config, Font)` to set the app font
-from a `Font` token (the typed sibling of `Solaris.font(string)`).
+string value }` for selects, `NavItem { Icon icon, string label, any message,
+boolean active }` for navigation rails, and `Insets { Spacing top, right, bottom,
+left }` for per-side padding. Use `Solaris.font_of(config, Font)` to set the app
+font from a `Font` token (the typed sibling of `Solaris.font(string)`).
 
 `Length.Fixed` carries a number, so a fixed width is written
 `Solaris.width(Length.Fixed(140))`. `Length.Fill` expands to fill available

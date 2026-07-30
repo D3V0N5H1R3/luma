@@ -863,12 +863,17 @@ _Effects_ below).
 | `Validation` | `Valid`, `Invalid(string message)`, `Pending` |
 | `Font` | `System`, `Sans`, `Serif`, `Mono`, `Custom(string family)` |
 | `TextAlign` | `Left`, `Center`, `Right`, `Justify` |
+| `TextDecoration` | `None`, `Underline`, `Strikethrough` |
 | `ImageFit` | `Fill`, `Contain`, `Cover`, `ScaleDown` |
+| `InputType` | `Text`, `Password`, `Email`, `Number`, `Tel`, `Url`, `Search` |
+| `Motion` | `None`, `Fade`, `SlideUp`, `SlideDown`, `Grow` |
+| `Orientation` | `Horizontal`, `Vertical` |
 | `Placement` | `Top`, `Bottom`, `TopStart`, `TopEnd`, `BottomStart`, `BottomEnd`, `Center` |
 
 Typed **records** for structured data: `DataPoint { string label, number value }`,
 `Series { string name, array<DataPoint> points, Color color }`,
-`Option { string label, string value }`, and
+`Option { string label, string value }`,
+`NavItem { Icon icon, string label, any message, boolean active }`, and
 `Insets { Spacing top, right, bottom, left }`.
 
 `View` is a global `record` describing one piece of UI; `view` returns a tree of them.
@@ -884,7 +889,7 @@ Typed **records** for structured data: `DataPoint { string label, number value }
 | `Solaris.icon_of` | `(Icon glyph) -> View` | A glyph from the typed `Icon` palette |
 | `Solaris.icon_name` | `(Icon glyph) -> string` | Resolve an `Icon` to its Lucide name |
 | `Solaris.spinner` | `(string label) -> View` | An indeterminate busy indicator |
-| `Solaris.divider` | `() -> View` | A horizontal rule |
+| `Solaris.divider` | `() -> View` | A rule (horizontal, or vertical via `orientation`) |
 | `Solaris.button` | `(string label) -> View` | A clickable action (pair with `on_click`) |
 | `Solaris.text_field` | `(string value) -> View` | Single-line input (pair with `on_change`) |
 | `Solaris.text_area` | `(string value) -> View` | Multi-line input (pair with `on_change`) |
@@ -918,6 +923,7 @@ Typed **records** for structured data: `DataPoint { string label, number value }
 | `Solaris.dialog` | `(string title, boolean open, array<View> children) -> View` | A modal (pair with `on_close`) |
 | `Solaris.toast` | `(string message) -> View` | A transient notification banner |
 | `Solaris.sidebar` | `(array<View> children) -> View` | A fixed-width navigation rail |
+| `Solaris.nav` | `(array<NavItem> items) -> View` | A typed navigation rail (icon + label per item, active entry marked `aria-current`) |
 | `Solaris.app_shell` | `(View side, View content) -> View` | Full-height sidebar-plus-content layout |
 
 **Modifiers** (take the piped `View` first, return a new `View`; chain with `|>`):
@@ -939,8 +945,12 @@ Typed **records** for structured data: `DataPoint { string label, number value }
 | `width(View, Length)` · `height(View, Length)` | Sizing |
 | `align(View, Align)` · `justify(View, Justify)` · `center(View)` | Layout alignment |
 | `text_align(View, TextAlign)` | Text alignment inside a text/heading block |
+| `decoration(View, TextDecoration)` | Underline/strikethrough on running text |
 | `rounded(View, Radius)` | Corner rounding |
 | `fit(View, ImageFit)` | Image object-fit |
+| `input_type(View, InputType)` | Text-field input kind (HTML input `type`) |
+| `motion(View, Motion)` | Enter-animation preset (reduced-motion-aware) |
+| `orientation(View, Orientation)` | Divider axis (horizontal/vertical) |
 | `placement(View, Placement)` | Toast/overlay anchor position |
 | `validation(View, Validation)` | Input validity (message + danger styling + `aria-invalid`) |
 | `checked(View, boolean)` · `placeholder(View, string)` · `icon_size(View, integer)` | Input/glyph state |
