@@ -38,6 +38,8 @@ static void test_prelude_source_contains_surface() {
     ASSERT_NE(source.find("choice Motion {"), std::string::npos);
     ASSERT_NE(source.find("choice Orientation {"), std::string::npos);
     ASSERT_NE(source.find("record NavItem {"), std::string::npos);
+    ASSERT_NE(source.find("record MenuItem {"), std::string::npos);
+    ASSERT_NE(source.find("choice Variant {"), std::string::npos);
 }
 
 // The core relocation invariant: the embedded bytes must lex and parse cleanly.

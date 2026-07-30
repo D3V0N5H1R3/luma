@@ -389,6 +389,12 @@ function View token_view(TokenModel model) {
                 |> Solaris.border(Border.Thick)
                 |> Solaris.border_color(Color.Primary)
         }
+        case == "fill_solid"   { Solaris.button("Go") |> Solaris.variant(Variant.Solid) }
+        case == "fill_ghost"   { Solaris.button("Go") |> Solaris.variant(Variant.Ghost) }
+        case == "fill_outline" {
+            Solaris.button("Go") |> Solaris.danger() |> Solaris.variant(Variant.Outline)
+        }
+        case == "fill_link"    { Solaris.button("Go") |> Solaris.variant(Variant.Link) }
         else { Solaris.column([]) }
     }
 }
@@ -397,10 +403,14 @@ function dictionary token_app() {
     return Solaris.app("Solaris Tokens", TokenModel {}, token_update, token_view)
 }
 
+# Resolve one variant to its full rendered widget dictionary.
+function dictionary token_tree(string variant) {
+    return GraphicalUi.test_render(token_app(), TokenModel { variant = variant })
+}
+
 # Resolve one variant to its rendered style dictionary.
 function dictionary token_style(string variant) {
-    dictionary tree = GraphicalUi.test_render(token_app(), TokenModel { variant = variant })
-    return Dictionary.get_or(tree, "style", {})
+    return Dictionary.get_or(token_tree(variant), "style", {})
 }
 
 # ─── Shadow: each variant maps onto the theme elevation ladder ──
@@ -456,6 +466,61 @@ function void test_border_color_tints_with_the_color_token() {
 @test
 function void test_no_border_modifier_emits_no_border() {
     assert(Dictionary.get_or(token_style("plain"), "border", "") == "")
+}
+
+
+# ─── Variant (N03): button fill style, orthogonal to emphasis ──
+
+@test
+function void test_variant_modifier_flags_the_fill() {
+    View btn = Solaris.button("Go") |> Solaris.variant(Variant.Outline)
+    assert(btn.has_fill)
+    match btn.fill {
+        case Variant.Outline { assert(true) }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_variant_solid_is_the_unchanged_default() {
+    # Solid keeps the emphasis variant and adds no fill CSS, so a solid button
+    # renders exactly like a plain one.
+    dictionary tree = token_tree("fill_solid")
+    assert(Dictionary.get_or(tree, "variant", "") == "secondary")
+    assert(Dictionary.get_or(token_style("fill_solid"), "background", "") == "")
+}
+
+@test
+function void test_variant_ghost_uses_the_engine_ghost_variant() {
+    dictionary tree = token_tree("fill_ghost")
+    assert(Dictionary.get_or(tree, "variant", "") == "ghost")
+    # No emphasis, so the accent falls back to the primary colour.
+    assert(Dictionary.get_or(token_style("fill_ghost"), "color", "") == GraphicalUi.VAR_PRIMARY)
+}
+
+@test
+function void test_variant_outline_draws_a_coloured_border() {
+    # Outline composes with `danger()`, so the accent is the error colour.
+    dictionary tree = token_tree("fill_outline")
+    assert(Dictionary.get_or(tree, "variant", "") == "ghost")
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "background", "") == "transparent")
+    assert(Dictionary.get_or(style, "border", "") == "1px solid ${GraphicalUi.VAR_ERROR}")
+    assert(Dictionary.get_or(style, "color", "") == GraphicalUi.VAR_ERROR)
+}
+
+@test
+function void test_variant_link_renders_as_underlined_text() {
+    dictionary style = token_style("fill_link")
+    assert(Dictionary.get_or(style, "text_decoration", "") == "underline")
+    assert(Dictionary.get_or(style, "border", "") == "none")
+    assert(Dictionary.get_or(style, "padding", "") == "0")
+}
+
+@test
+function void test_no_variant_modifier_leaves_a_solid_button() {
+    View btn = Solaris.button("Go")
+    assert(!btn.has_fill)
 }
 
 
@@ -670,6 +735,13 @@ function View feature_view(FeatureModel model) {
             Solaris.nav([
                 NavItem { icon = Icon.Home, label = "Home", message = FeatureMsg.Noop, active = true },
                 NavItem { icon = Icon.Settings, label = "Settings", message = FeatureMsg.Noop }
+            ])
+        }
+        case == "menu"        {
+            Solaris.menu_of("Actions", [
+                MenuItem { icon = Icon.Edit, label = "Rename", message = FeatureMsg.Pick("rename") },
+                MenuItem { icon = Icon.Trash, label = "Delete", message = FeatureMsg.Pick("delete"), disabled = true },
+                MenuItem { label = "Quiet" }
             ])
         }
         else                  { Solaris.text("none") }
@@ -1090,4 +1162,61 @@ function void test_nav_inactive_entry_is_ghost_without_aria_current() {
     dictionary btn = parts[1]
     assert(Dictionary.get_or(btn, "variant", "") == "ghost")
     assert(Dictionary.get_or(btn, "_aria_current", "") == "")
+}
+
+# ─── N02 MenuItem ──────────────────────────────────────────
+
+@test
+function void test_menu_of_builds_one_entry_per_item() {
+    View menu = Solaris.menu_of("Actions", [
+        MenuItem { icon = Icon.Edit, label = "Rename", message = FeatureMsg.Pick("rename") },
+        MenuItem { label = "Delete", disabled = true }
+    ])
+    assert(menu.kind == "menu_of")
+    assert(menu.content == "Actions")
+    assert(Array.length(menu.children) == 2)
+    View first = menu.children[0]
+    assert(first.kind == "menu_entry")
+    assert(first.content == "Rename")
+    assert(first.icon_id == "edit")
+    assert(!first.checked)
+    # The disabled flag rides on `checked`.
+    assert(menu.children[1].checked)
+}
+
+@test
+function void test_menu_of_reconciles_to_a_popover_of_actions() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "menu" })
+    assert(Dictionary.get_or(tree, "type", "") == "popover")
+    assert(Dictionary.get_or(tree, "label", "") == "Actions")
+    # The first (live) entry is a row of [icon, button].
+    assert(GraphicalUi.test_count(feature_app(), FeatureModel { which = "menu" }, "Rename") >= 1)
+    dictionary btn = GraphicalUi.test_find(feature_app(), FeatureModel { which = "menu" }, "Rename")
+    assert(Dictionary.get_or(btn, "type", "") == "button")
+    assert(Dictionary.get_or(btn, "variant", "") == "ghost")
+}
+
+@test
+function void test_menu_of_routes_the_chosen_items_message() {
+    FeatureModel next =
+        GraphicalUi.test_click(feature_app(), FeatureModel { which = "menu" }, "Rename")
+    assert(next.picked == "rename")
+}
+
+@test
+function void test_menu_of_disabled_entry_is_a_non_interactive_label() {
+    dictionary label = GraphicalUi.test_find(feature_app(), FeatureModel { which = "menu" }, "Delete")
+    # A disabled entry renders as a label (never a button), marked aria-disabled.
+    assert(Dictionary.get_or(label, "type", "") == "label")
+    dictionary style = Dictionary.get_or(label, "style", {})
+    assert(Dictionary.get_or(style, "aria_disabled", "") == "true")
+}
+
+@test
+function void test_menu_of_entry_without_a_message_is_inert() {
+    # The "Quiet" entry carries no message, so choosing it leaves the model
+    # unchanged (mirroring an on_click-less button).
+    FeatureModel next =
+        GraphicalUi.test_click(feature_app(), FeatureModel { which = "menu", picked = "start" }, "Quiet")
+    assert(next.picked == "start")
 }
