@@ -89,8 +89,7 @@ struct EventMessage {
 
     // For dict events (mouse_event, widget_event, scroll_event), extract the
     // payload fields in the same pass instead of re-parsing later.
-    if (msg.type == "mouse_event" || msg.type == "widget_event" ||
-        msg.type == "scroll_event") {
+    if (msg.type == "mouse_event" || msg.type == "widget_event" || msg.type == "scroll_event") {
         auto dict = make_dict();
 
         auto set_string = [&](const char* key) {
@@ -746,8 +745,7 @@ void handle_focus_change(AppState& state, const EventMessage& event, const std::
 // Handler for mouse and widget events (pre-parsed dict payload).
 void handle_dict_event(AppState& state, const EventMessage& event, const std::string& /*raw*/) {
     const bool is_mouse = (event.type == "mouse_event");
-    auto callback =
-        is_mouse ? state.find_sub_callback(event.id) : state.find_callback(event.id);
+    auto callback = is_mouse ? state.find_sub_callback(event.id) : state.find_callback(event.id);
 
     // Use the dict payload that was already extracted during the single parse pass.
     auto payload = event.dict_payload ? event.dict_payload : make_dict();
