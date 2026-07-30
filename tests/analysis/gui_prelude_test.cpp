@@ -32,6 +32,12 @@ static void test_prelude_source_contains_surface() {
     ASSERT_NE(source.find("choice Emphasis {"), std::string::npos);
     ASSERT_NE(source.find("record View {"), std::string::npos);
     ASSERT_NE(source.find("namespace Solaris {"), std::string::npos);
+    // Newer typed tokens/records must survive the relocation too.
+    ASSERT_NE(source.find("choice InputType {"), std::string::npos);
+    ASSERT_NE(source.find("choice TextDecoration {"), std::string::npos);
+    ASSERT_NE(source.find("choice Motion {"), std::string::npos);
+    ASSERT_NE(source.find("choice Orientation {"), std::string::npos);
+    ASSERT_NE(source.find("record NavItem {"), std::string::npos);
 }
 
 // The core relocation invariant: the embedded bytes must lex and parse cleanly.

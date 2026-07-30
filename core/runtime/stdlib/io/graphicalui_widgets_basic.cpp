@@ -186,7 +186,11 @@ void register_basic_widgets(const EnvPtr& env) {
                           }
                       }
 
-                      w->set("style", std::move(style));
+                      // Lift the reserved `input_type` key (Solaris.input_type,
+                      // T01) from the style dict onto the widget so the renderer
+                      // can emit the HTML input `type`; it never leaks as CSS.
+                      auto input_style = split_widget_options(*w, style, {"input_type"});
+                      w->set("style", Value{std::move(input_style)});
 
                       return finalize_widget(std::move(w));
                   });

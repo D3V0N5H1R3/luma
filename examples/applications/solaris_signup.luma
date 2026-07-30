@@ -8,9 +8,14 @@
 # type:
 #
 #   * Icon        — Solaris.icon_of(Icon.User) instead of a bare "user" string.
+#   * NavItem     — a typed sidebar rail; the active page is highlighted for you.
+#   * InputType   — a masked Password field and an Email field, not raw type="text".
 #   * Option      — dropdown_of shows "United Kingdom" but delivers "GB".
 #   * Validation  — one modifier adds an error message + aria-invalid to a field.
+#   * TextDecoration — strike through a satisfied requirement, underline a link.
 #   * TextAlign   — right-align a caption.
+#   * Orientation — a vertical divider between the rail and the form.
+#   * Motion      — the confirmation toast fades in.
 #   * ImageFit    — an avatar that covers its box without distortion.
 #   * Insets      — per-side padding on the 4pt scale.
 #   * Placement   — a confirmation toast anchored top-centre.
@@ -20,7 +25,10 @@
 # ─── Message ───
 
 choice SignupMsg {
+    Navigate(string page),
     SetName(string value),
+    SetPassword(string value),
+    SetEmail(string value),
     SetCountry(string value),
     Submit
 }
@@ -28,7 +36,10 @@ choice SignupMsg {
 # ─── Model ───
 
 record SignupModel {
+    string page = "signup",
     string name = "",
+    string password = "",
+    string email = "",
     string country = "GB",
     boolean submitted = false
 }
@@ -37,9 +48,12 @@ record SignupModel {
 
 function SignupModel signup_update(SignupModel model, SignupMsg msg) {
     return match msg {
-        case SignupMsg.SetName(value)    { model with { name = value, submitted = false } }
-        case SignupMsg.SetCountry(value) { model with { country = value, submitted = false } }
-        case SignupMsg.Submit            { model with { submitted = true } }
+        case SignupMsg.Navigate(page)     { model with { page = page } }
+        case SignupMsg.SetName(value)     { model with { name = value, submitted = false } }
+        case SignupMsg.SetPassword(value) { model with { password = value, submitted = false } }
+        case SignupMsg.SetEmail(value)    { model with { email = value, submitted = false } }
+        case SignupMsg.SetCountry(value)  { model with { country = value, submitted = false } }
+        case SignupMsg.Submit             { model with { submitted = true } }
     }
 }
 
@@ -51,12 +65,36 @@ function Validation name_validity(SignupModel model) {
     return Validation.Valid
 }
 
+# Whether the password meets the minimum length, shown as a checklist hint.
+function boolean password_ok(SignupModel model) {
+    return String.length(model.password) >= 8
+}
+
 function array<Option> countries() {
     return [
         Option { label = "United Kingdom", value = "GB" },
         Option { label = "France", value = "FR" },
         Option { label = "Germany", value = "DE" }
     ]
+}
+
+# The typed navigation rail down the left edge. The active entry is highlighted
+# and marked aria-current="page" by Solaris.nav.
+function View side_rail(SignupModel model) {
+    return Solaris.nav([
+        NavItem {
+            icon = Icon.User,
+            label = "Account",
+            message = SignupMsg.Navigate("signup"),
+            active = model.page == "signup"
+        },
+        NavItem {
+            icon = Icon.Settings,
+            label = "Settings",
+            message = SignupMsg.Navigate("settings"),
+            active = model.page == "settings"
+        }
+    ])
 }
 
 # A tiny two-series chart (typed points + colours) shown beneath the form.
@@ -83,9 +121,20 @@ function View activity_chart() {
     ]) |> Solaris.height(Length.Fixed(220.0))
 }
 
+# The password requirement, struck through once satisfied (TextDecoration).
+function View password_hint(SignupModel model) {
+    View hint = Solaris.text("At least 8 characters")
+        |> Solaris.size(TextScale.Caption)
+        |> Solaris.muted()
+    if password_ok(model) {
+        return hint |> Solaris.decoration(TextDecoration.Strikethrough)
+    }
+    return hint
+}
+
 # ─── View ───
 
-function View signup_view(SignupModel model) {
+function View signup_form(SignupModel model) {
     return Solaris.column([
         Solaris.row([
             Solaris.icon_of(Icon.User) |> Solaris.icon_size(28),
@@ -97,6 +146,20 @@ function View signup_view(SignupModel model) {
             |> Solaris.on_change((string v) -> SignupMsg.SetName(v))
             |> Solaris.validation(name_validity(model))
             |> Solaris.key("name"),
+
+        Solaris.text_field(model.email)
+            |> Solaris.placeholder("Email address")
+            |> Solaris.input_type(InputType.Email)
+            |> Solaris.on_change((string v) -> SignupMsg.SetEmail(v))
+            |> Solaris.key("email"),
+
+        Solaris.text_field(model.password)
+            |> Solaris.placeholder("Password")
+            |> Solaris.input_type(InputType.Password)
+            |> Solaris.on_change((string v) -> SignupMsg.SetPassword(v))
+            |> Solaris.key("password"),
+
+        password_hint(model),
 
         Solaris.dropdown_of(countries(), model.country)
             |> Solaris.on_select((string code) -> SignupMsg.SetCountry(code))
@@ -117,13 +180,23 @@ function View signup_view(SignupModel model) {
     ])
         |> Solaris.padding_each(Insets { top = Spacing.L, right = Spacing.L, bottom = Spacing.M, left = Spacing.L })
         |> Solaris.gap(Spacing.M)
+        |> Solaris.width(Length.Fill)
 }
 
-# A top-centre toast, shown only after a successful submit.
+function View signup_view(SignupModel model) {
+    return Solaris.row([
+        side_rail(model),
+        Solaris.divider() |> Solaris.orientation(Orientation.Vertical),
+        signup_form(model)
+    ]) |> Solaris.gap(Spacing.M)
+}
+
+# A top-centre toast that fades in, shown only after a successful submit.
 function View confirmation(SignupModel model) {
     if model.submitted && String.length(model.name) > 0 {
         return Solaris.toast("Welcome, ${model.name}!")
             |> Solaris.placement(Placement.Top)
+            |> Solaris.motion(Motion.Fade)
     }
     return Solaris.spacer()
 }
@@ -159,6 +232,36 @@ function void test_typing_a_name_updates_the_model() {
     SignupModel next =
         GraphicalUi.test_input(signup_app(), SignupModel {}, "name", "Ada")
     assert(next.name == "Ada")
+}
+
+@test
+function void test_password_field_is_masked() {
+    View pw = Solaris.text_field("hunter2") |> Solaris.input_type(InputType.Password)
+    assert(pw.has_input_type)
+    match pw.input_type {
+        case InputType.Password { assert(true) }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_password_hint_strikes_through_once_satisfied() {
+    View short = password_hint(SignupModel { password = "abc" })
+    assert(!short.has_decoration)
+    View ok = password_hint(SignupModel { password = "abcdefgh" })
+    assert(ok.has_decoration)
+    match ok.decoration {
+        case TextDecoration.Strikethrough { assert(true) }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_side_rail_marks_the_active_page() {
+    View rail = side_rail(SignupModel { page = "signup" })
+    assert(rail.kind == "nav")
+    assert(rail.children[0].checked)
+    assert(!rail.children[1].checked)
 }
 
 @test

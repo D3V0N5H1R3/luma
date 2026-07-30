@@ -641,12 +641,51 @@ function View feature_view(FeatureModel model) {
         }
         case == "line_series" { Solaris.line_chart_series(sample_series()) }
         case == "bar_series"  { Solaris.bar_chart_series(sample_series()) }
+        case == "password"    {
+            Solaris.text_field("secret") |> Solaris.input_type(InputType.Password)
+        }
+        case == "email"       {
+            Solaris.text_field("a@b.c") |> Solaris.input_type(InputType.Email)
+        }
+        case == "strike"      {
+            Solaris.text("done") |> Solaris.decoration(TextDecoration.Strikethrough)
+        }
+        case == "underline"   {
+            Solaris.text("link") |> Solaris.decoration(TextDecoration.Underline)
+        }
+        case == "fade"        {
+            Solaris.card([Solaris.text("hi")]) |> Solaris.motion(Motion.Fade)
+        }
+        case == "vdivider"    {
+            Solaris.divider() |> Solaris.orientation(Orientation.Vertical)
+        }
+        case == "hdivider"    {
+            Solaris.divider() |> Solaris.orientation(Orientation.Horizontal)
+        }
+        case == "picked_field" {
+            Solaris.text_field("hi")
+                |> Solaris.on_change((string v) -> FeatureMsg.Pick(v))
+        }
+        case == "nav"         {
+            Solaris.nav([
+                NavItem { icon = Icon.Home, label = "Home", message = FeatureMsg.Noop, active = true },
+                NavItem { icon = Icon.Settings, label = "Settings", message = FeatureMsg.Noop }
+            ])
+        }
         else                  { Solaris.text("none") }
     }
 }
 
 function dictionary feature_app() {
     return Solaris.app("Feature", FeatureModel {}, feature_update, feature_view)
+}
+
+# A nav rail whose "Home" entry carries no message, to prove an unconfigured
+# NavItem is inert when chosen.
+function View inert_nav_view(FeatureModel _model) {
+    return Solaris.nav([
+        NavItem { icon = Icon.Home, label = "Home" }
+    ])
 }
 
 # ─── S01 Icon ──────────────────────────────────────────────
@@ -876,4 +915,179 @@ function void test_padding_each_reconciles_to_per_side_css() {
     assert(Dictionary.get_or(style, "padding_left", "") == "16px")
     assert(Dictionary.get_or(style, "padding_right", "") == "0px")
     assert(Dictionary.get_or(style, "padding_bottom", "") == "0px")
+}
+
+# ─── T01 InputType ─────────────────────────────────────────
+
+@test
+function void test_input_type_modifier_marks_the_field() {
+    View field = Solaris.text_field("secret") |> Solaris.input_type(InputType.Password)
+    assert(field.has_input_type)
+    match field.input_type {
+        case InputType.Password { assert(true) }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_password_field_reconciles_with_input_type() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "password" })
+    assert(Dictionary.get_or(tree, "type", "") == "text_input")
+    # The reconciler lifts `input_type` onto the widget, not into its style.
+    assert(Dictionary.get_or(tree, "input_type", "") == "password")
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "input_type", "") == "")
+}
+
+@test
+function void test_email_field_reconciles_with_input_type() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "email" })
+    assert(Dictionary.get_or(tree, "input_type", "") == "email")
+}
+
+@test
+function void test_plain_field_has_no_lifted_input_type() {
+    # A text field without `input_type` set stays type="text": nothing is lifted.
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "picked_field" })
+    assert(Dictionary.get_or(tree, "type", "") == "text_input")
+    assert(Dictionary.get_or(tree, "input_type", "") == "")
+}
+
+# ─── T02 TextDecoration ────────────────────────────────────
+
+@test
+function void test_decoration_modifier_marks_the_node() {
+    View node = Solaris.text("done") |> Solaris.decoration(TextDecoration.Strikethrough)
+    assert(node.has_decoration)
+    match node.decoration {
+        case TextDecoration.Strikethrough { assert(true) }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_strikethrough_reconciles_to_css_text_decoration() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "strike" })
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "text_decoration", "") == "line-through")
+}
+
+@test
+function void test_underline_reconciles_to_css_text_decoration() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "underline" })
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "text_decoration", "") == "underline")
+}
+
+# ─── T06 Motion ────────────────────────────────────────────
+
+@test
+function void test_motion_modifier_marks_the_node() {
+    View node = Solaris.card([Solaris.text("hi")]) |> Solaris.motion(Motion.Fade)
+    assert(node.has_motion)
+    match node.motion {
+        case Motion.Fade { assert(true) }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_motion_wraps_the_widget_in_an_animate_recipe() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "fade" })
+    # The animate wrapper sits above the reconciled card.
+    assert(Dictionary.get_or(tree, "type", "") == "animate")
+    array<dictionary> frames = Dictionary.get_or(tree, "keyframes", [])
+    assert(Array.length(frames) == 2)
+    dictionary opts = Dictionary.get_or(tree, "options", {})
+    assert(Dictionary.get_or(opts, "duration", "") == "0.24s")
+    dictionary child = Dictionary.get_or(tree, "child", {})
+    assert(Dictionary.get_or(child, "type", "") == "card")
+}
+
+# ─── T07 Orientation ───────────────────────────────────────
+
+@test
+function void test_orientation_modifier_marks_the_divider() {
+    View node = Solaris.divider() |> Solaris.orientation(Orientation.Vertical)
+    assert(node.has_orientation)
+    match node.orientation {
+        case Orientation.Vertical { assert(true) }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_vertical_divider_reconciles_to_a_side_rule() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "vdivider" })
+    assert(Dictionary.get_or(tree, "type", "") == "separator")
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "border_top", "") == "none")
+    assert(String.contains(Dictionary.get_or(style, "border_left", ""), "1px solid"))
+    assert(Dictionary.get_or(style, "align_self", "") == "stretch")
+}
+
+@test
+function void test_horizontal_divider_stays_a_plain_rule() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "hdivider" })
+    assert(Dictionary.get_or(tree, "type", "") == "separator")
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "border_left", "") == "")
+}
+
+# ─── T03 NavItem ───────────────────────────────────────────
+
+@test
+function void test_nav_builds_one_entry_per_item() {
+    View rail = Solaris.nav([
+        NavItem { icon = Icon.Home, label = "Home", message = FeatureMsg.Noop, active = true },
+        NavItem { icon = Icon.Settings, label = "Settings", message = FeatureMsg.Noop }
+    ])
+    assert(rail.kind == "nav")
+    assert(Array.length(rail.children) == 2)
+    View first = rail.children[0]
+    assert(first.kind == "nav_item")
+    assert(first.content == "Home")
+    assert(first.icon_id == "home")
+    assert(first.checked)
+    assert(!rail.children[1].checked)
+}
+
+@test
+function void test_nav_item_without_a_message_is_inert() {
+    # A NavItem left without a message routes `none` when chosen, so clicking it
+    # leaves the model unchanged (mirroring an on_click-less button).
+    dictionary app = Solaris.app("Nav", FeatureModel {}, feature_update, inert_nav_view)
+    FeatureModel next =
+        GraphicalUi.test_click(app, FeatureModel { picked = "start" }, "Home")
+    assert(next.picked == "start")
+}
+
+@test
+function void test_nav_reconciles_to_a_navigation_column() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "nav" })
+    assert(Dictionary.get_or(tree, "type", "") == "column")
+    assert(Dictionary.get_or(tree, "_role", "") == "navigation")
+    array<dictionary> entries = Dictionary.get_or(tree, "children", [])
+    assert(Array.length(entries) == 2)
+    # Each entry is a row of [icon, button].
+    dictionary first = entries[0]
+    assert(Dictionary.get_or(first, "type", "") == "row")
+    array<dictionary> parts = Dictionary.get_or(first, "children", [])
+    assert(Array.length(parts) == 2)
+    assert(Dictionary.get_or(parts[0], "type", "") == "icon")
+    dictionary btn = parts[1]
+    assert(Dictionary.get_or(btn, "type", "") == "button")
+    assert(Dictionary.get_or(btn, "variant", "") == "primary")
+    assert(Dictionary.get_or(btn, "_aria_current", "") == "page")
+}
+
+@test
+function void test_nav_inactive_entry_is_ghost_without_aria_current() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "nav" })
+    array<dictionary> entries = Dictionary.get_or(tree, "children", [])
+    dictionary second = entries[1]
+    array<dictionary> parts = Dictionary.get_or(second, "children", [])
+    dictionary btn = parts[1]
+    assert(Dictionary.get_or(btn, "variant", "") == "ghost")
+    assert(Dictionary.get_or(btn, "_aria_current", "") == "")
 }
