@@ -161,8 +161,15 @@ below by role.
 | Heading | `Solaris.heading(string content)` | A prominent section title. |
 | Badge | `Solaris.badge(string text)` | A small status pill; colour it with `emphasis`. |
 | Icon | `Solaris.icon(string name)` | A named glyph; size it with `icon_size`. |
+| Icon (typed) | `Solaris.icon_of(Icon glyph)` | A glyph from the typed `Icon` palette — autocomplete-discoverable and typo-proof. |
 | Spinner | `Solaris.spinner(string label)` | An indeterminate busy indicator. |
 | Divider | `Solaris.divider()` | A horizontal rule between sections. |
+
+`Solaris.icon_of` takes an `Icon` token (`Icon.Settings`, `Icon.Trash`, …,
+`Icon.Custom("some-lucide-name")`) instead of a bare string, so a mistyped name
+is a compile error and every glyph is discoverable via autocomplete.
+`Solaris.icon_name(Icon)` resolves a token to its underlying Lucide name — the
+icon mirror of `Solaris.color_value`.
 
 ### Inputs
 
@@ -174,9 +181,29 @@ below by role.
 | Checkbox | `Solaris.checkbox(string label)` | A boolean toggle; pair with `checked` and `on_toggle`. |
 | Switch | `Solaris.switch(string label, boolean state)` | An on/off switch; pair with `on_toggle`. |
 | Radio | `Solaris.radio(array<string> options, string chosen)` | A single choice from a set; pair with `on_select`. |
+| Radio (typed) | `Solaris.radio_of(array<Option> options, string chosen)` | A radio group whose display labels differ from the delivered values. |
 | Dropdown | `Solaris.dropdown(array<string> options, string chosen)` | A compact single choice; pair with `on_select`. |
+| Dropdown (typed) | `Solaris.dropdown_of(array<Option> options, string chosen)` | A dropdown whose display labels differ from the delivered values. |
 | Slider | `Solaris.slider(number value, number min, number max)` | A numeric range control; pair with `on_slide`. |
 | Date picker | `Solaris.date_picker(string value)` | A date input (`YYYY-MM-DD`); pair with `on_change`. |
+
+`Solaris.dropdown_of` / `Solaris.radio_of` take an `array<Option>` — a record
+`{ string label, string value }` — so the shown text can differ from the value
+delivered to `on_select`. `chosen` is a *value*; the matching label is displayed,
+and `on_select` receives the option's `value`, not its label. Labels should be
+unique (the value is looked up by label). This kills the parallel
+"display list plus code list" a beginner would otherwise hand-maintain:
+
+```luma
+Solaris.dropdown_of([
+    Option { label = "United Kingdom", value = "GB" },
+    Option { label = "France", value = "FR" }
+], model.country)
+    |> Solaris.on_select((string code) -> Msg.SetCountry(code))
+```
+
+Any input can be marked with a validity state via `Solaris.validation` (below),
+which shows an error message, danger styling, and `aria-invalid` for free.
 
 ### Layout containers
 
@@ -235,6 +262,26 @@ Solaris.line_chart_of([
 | Bar chart (typed) | `Solaris.bar_chart_of(array<DataPoint> points)` | Bar chart from one typed series. |
 | Pie chart (typed) | `Solaris.pie_chart_of(array<DataPoint> points)` | Pie chart from one typed series. |
 
+To plot **several** series at once — sales versus costs, say — use the multi-series
+constructors, which take an `array<Series>`. A `Series` is a record
+`{ string name, array<DataPoint> points, Color color }`: a legend name, its typed
+points, and a colour token. Series share the category axis (labels come from the
+first series), lining up by position exactly like `line_chart_of`:
+
+```luma
+Solaris.line_chart_series([
+    Series { name = "Sales", color = Color.Primary, points = [
+        DataPoint { label = "Q1", value = 10.0 }, DataPoint { label = "Q2", value = 20.0 }] },
+    Series { name = "Costs", color = Color.Danger, points = [
+        DataPoint { label = "Q1", value = 6.0 }, DataPoint { label = "Q2", value = 9.0 }] }
+])
+```
+
+| Component | Signature | Purpose |
+|---|---|---|
+| Line chart (multi) | `Solaris.line_chart_series(array<Series> series)` | One line per named, coloured `Series`. |
+| Bar chart (multi) | `Solaris.bar_chart_series(array<Series> series)` | One bar per series at each category (bars overlap, alpha-blended). |
+
 ### Navigation and overlays
 
 | Component | Signature | Purpose |
@@ -242,7 +289,7 @@ Solaris.line_chart_of([
 | Tabs | `Solaris.tabs(array<string> labels, integer active, array<View> panels)` | Switches between panels; pair with `on_tab`. |
 | Menu | `Solaris.menu(string label, array<string> items)` | An in-page dropdown menu; pair with `on_select`. |
 | Dialog | `Solaris.dialog(string title, boolean open, array<View> children)` | A modal shown when `open` is true; pair with `on_close`. |
-| Toast | `Solaris.toast(string message)` | A transient notification banner. |
+| Toast | `Solaris.toast(string message)` | A transient notification banner; anchor it with `placement`. |
 | Sidebar | `Solaris.sidebar(array<View> children)` | A fixed-width navigation rail. |
 | App shell | `Solaris.app_shell(View side, View content)` | A full-height sidebar-plus-content layout. |
 
@@ -278,6 +325,7 @@ each visual concern.
 | `Solaris.level(integer n)` | Sets a heading level (1–6). |
 | `Solaris.weight(Weight w)` | Sets the font weight. |
 | `Solaris.bold()` | Shorthand for bold weight. |
+| `Solaris.text_align(TextAlign a)` | Aligns the running text inside a text/heading block (`Left`/`Center`/`Right`/`Justify`). Distinct from container `align`. |
 
 ### Emphasis (semantic colour)
 
@@ -295,6 +343,7 @@ each visual concern.
 |---|---|
 | `Solaris.gap(Spacing s)` | Space between a container's children. |
 | `Solaris.padding(Spacing s)` | Inner padding of a container. |
+| `Solaris.padding_each(Insets sides)` | Per-side inner padding — an `Insets` record of four `Spacing` sides. |
 | `Solaris.width(Length len)` | Sets width (see `Length` in [§5](#5--design-tokens)). |
 | `Solaris.height(Length len)` | Sets height. |
 | `Solaris.align(Align a)` | Cross-axis alignment of children. |
@@ -304,6 +353,8 @@ each visual concern.
 | `Solaris.shadow(Shadow s)` | Elevation — how much the element floats above the page. |
 | `Solaris.border(Border b)` | Outline weight (`Thin`/`Thick`); `None` removes it. |
 | `Solaris.border_color(Color c)` | Outline colour (only with a `border` weight; defaults to the theme border). |
+| `Solaris.fit(ImageFit f)` | How an image fills its box (CSS `object-fit`). |
+| `Solaris.placement(Placement p)` | Where a toast is anchored on screen. |
 
 ### Input state and identity
 
@@ -311,6 +362,7 @@ each visual concern.
 |---|---|
 | `Solaris.checked(boolean state)` | The checkbox's checked state. |
 | `Solaris.placeholder(string text)` | Placeholder text for a text field or area. |
+| `Solaris.validation(Validation state)` | Marks an input valid, invalid (with a message + danger styling + `aria-invalid`), or pending. |
 | `Solaris.icon_size(integer size)` | The pixel size of an `icon`. |
 | `Solaris.label(string text)` | An accessible name, emitted as an ARIA label. Use it on icon-only controls. |
 | `Solaris.key(string id)` | A stable identity that keeps focus, caret, and scroll position steady when a list re-orders, and lets tests address the control. |
@@ -339,6 +391,19 @@ never `Solaris.TextScale`.
 | `Shadow` | `None`, `Small`, `Medium`, `Large` |
 | `Border` | `None`, `Thin`, `Thick` |
 | `Scheme` | `Light`, `Dark`, `Auto` |
+| `Icon` | `Home`, `Search`, `Settings`, … (common Lucide glyphs), `Custom(string name)` |
+| `Validation` | `Valid`, `Invalid(string message)`, `Pending` |
+| `Font` | `System`, `Sans`, `Serif`, `Mono`, `Custom(string family)` |
+| `TextAlign` | `Left`, `Center`, `Right`, `Justify` |
+| `ImageFit` | `Fill`, `Contain`, `Cover`, `ScaleDown` |
+| `Placement` | `Top`, `Bottom`, `TopStart`, `TopEnd`, `BottomStart`, `BottomEnd`, `Center` |
+
+A handful of typed **records** carry structured data alongside these tokens:
+`DataPoint { string label, number value }` and `Series { string name,
+array<DataPoint> points, Color color }` for charts, `Option { string label,
+string value }` for selects, and `Insets { Spacing top, right, bottom, left }`
+for per-side padding. Use `Solaris.font_of(config, Font)` to set the app font
+from a `Font` token (the typed sibling of `Solaris.font(string)`).
 
 `Length.Fixed` carries a number, so a fixed width is written
 `Solaris.width(Length.Fixed(140))`. `Length.Fill` expands to fill available
@@ -459,6 +524,7 @@ takes the configuration as its first argument, so they chain with `|>`.
 | `Solaris.accent(string color)` | The accent colour (a CSS colour, e.g. `"#6C4CF1"`). |
 | `Solaris.accent_color(Color chosen)` | The accent colour from a typed `Color`. |
 | `Solaris.font(string family)` | The UI font family. |
+| `Solaris.font_of(Font family)` | The UI font from a typed `Font` (mapped to a curated CSS stack). |
 | `Solaris.color_scheme(Scheme scheme)` | Pin `Light`/`Dark`, or follow the OS with `Auto`. |
 | `Solaris.theme_of(Theme overrides)` | Typed theme override — a `Theme` record of `Color` fields. |
 | `Solaris.theme(dictionary overrides)` | Advanced: override individual theme tokens by string key. |

@@ -125,6 +125,158 @@ choice Color {
     Custom(string hex)
 }
 
+# A named icon glyph, drawn from the engine's bundled Lucide set. A small,
+# autocomplete-discoverable palette of the common glyphs plus a `Custom` escape
+# hatch for any Lucide name. Reshapes the raw `icon(string)` string — a mistyped
+# variant is now a compile error — exactly as `Color` reshaped colour strings.
+# Build an icon element with `Solaris.icon_of`, or resolve one to its Lucide
+# name with `Solaris.icon_name`.
+choice Icon {
+    Home,
+    Search,
+    Settings,
+    User,
+    Users,
+    Trash,
+    Edit,
+    Plus,
+    Minus,
+    Check,
+    Close,
+    ChevronDown,
+    ChevronUp,
+    ChevronLeft,
+    ChevronRight,
+    ArrowUp,
+    ArrowDown,
+    ArrowLeft,
+    ArrowRight,
+    Menu,
+    Heart,
+    Star,
+    Bell,
+    Mail,
+    Calendar,
+    Clock,
+    Download,
+    Upload,
+    File,
+    Folder,
+    Image,
+    Info,
+    Warning,
+    Error,
+    Success,
+    Eye,
+    EyeOff,
+    Lock,
+    Unlock,
+    LogIn,
+    LogOut,
+    Refresh,
+    Save,
+    Share,
+    Copy,
+    ExternalLink,
+    Filter,
+    MoreHorizontal,
+    MoreVertical,
+    Play,
+    Pause,
+    Camera,
+    MapPin,
+    Phone,
+    Message,
+    Send,
+    Cart,
+    CreditCard,
+    Sun,
+    Moon,
+    Cloud,
+    Wifi,
+    Battery,
+    Link,
+    Bookmark,
+    Tag,
+    Flag,
+    ThumbsUp,
+    ThumbsDown,
+    Bolt,
+    Activity,
+    TrendingUp,
+    List,
+    Sliders,
+    Help,
+    Circle,
+    Square,
+    Custom(string name)
+}
+
+# The validity state of an input, carrying its reason the way `result` failure
+# does. Pair it with `Solaris.validation` to show a field error accessibly:
+# `Invalid` renders its message, applies a danger border, and sets `aria-invalid`
+# on the field; `Pending` marks the field busy (async checks); `Valid` is clean.
+choice Validation {
+    Valid,
+    Invalid(string message),
+    Pending
+}
+
+# A typed font-family stack — four cross-platform families plus a `Custom` escape
+# hatch for any CSS family string. The typed sibling of the raw `font(string)`
+# setter (mirroring the `accent` -> `accent_color` migration): apply one with
+# `Solaris.font_of`.
+choice Font {
+    System,
+    Sans,
+    Serif,
+    Mono,
+    Custom(string family)
+}
+
+# How the running text inside a text/heading block is aligned. Deliberately
+# distinct from container `Align` (which positions the box, not its text). Apply
+# with `Solaris.text_align`.
+choice TextAlign {
+    Left,
+    Center,
+    Right,
+    Justify
+}
+
+# How an image fills its box, mapping to CSS `object-fit`. `Cover` fills the box
+# (cropping), `Contain` fits inside it (letterboxing), `Fill` stretches, and
+# `ScaleDown` shrinks only when needed. Apply with `Solaris.fit`.
+choice ImageFit {
+    Fill,
+    Contain,
+    Cover,
+    ScaleDown
+}
+
+# Where an overlay (a toast today, more later) is anchored on screen. `Start`/
+# `End` follow the writing direction (left/right in a left-to-right layout).
+# Apply with `Solaris.placement`.
+choice Placement {
+    Top,
+    Bottom,
+    TopStart,
+    TopEnd,
+    BottomStart,
+    BottomEnd,
+    Center
+}
+
+# Per-side padding on the 4pt `Spacing` scale — the typed sibling of the uniform
+# `padding(Spacing)`. Every side defaults to `Spacing.None`, so you set only the
+# sides you want. Apply with `Solaris.padding_each`.
+record Insets {
+    Spacing top = Spacing.None,
+    Spacing right = Spacing.None,
+    Spacing bottom = Spacing.None,
+    Spacing left = Spacing.None
+}
+
 # ── THE IMMUTABLE VIEW TREE ──
 #
 # A `View` is a plain value describing one piece of UI. `view` returns a tree
@@ -186,6 +338,32 @@ record View {
     boolean has_shadow = false,
     boolean has_border = false,
     boolean has_border_tint = false,
+    # Validation state (S02): an Invalid field shows its message, a danger border,
+    # and sets aria-invalid; Pending marks the field busy.
+    Validation validation = Validation.Valid,
+    boolean has_validation = false,
+    # Text alignment inside a text/heading block (S05).
+    TextAlign text_align = TextAlign.Left,
+    boolean has_text_align = false,
+    # Image object-fit (S07).
+    ImageFit img_fit = ImageFit.Fill,
+    boolean has_fit = false,
+    # Overlay anchor position (S08).
+    Placement placement = Placement.Bottom,
+    boolean has_placement = false,
+    # Per-side padding (S09); overrides the uniform `pad` when set.
+    Insets pad_each = Insets {},
+    boolean has_pad_each = false,
+    # Distinct option values for a select (S03): `options` holds the display
+    # labels, `option_values` the value delivered to `on_select`, aligned by index.
+    array<string> option_values = [],
+    boolean has_option_values = false,
+    # Multi-series chart data (S06), unzipped from `array<Series>`; `options` holds
+    # the shared category labels.
+    array<string> series_names = [],
+    array<array<number>> series_values = [],
+    array<string> series_colors = [],
+    boolean has_series = false,
     array<View> children = []
 }
 
@@ -257,6 +435,32 @@ record Theme {
 record DataPoint {
     string label = "",
     number value = 0.0
+}
+
+# ── TYPED SELECT OPTIONS ──
+#
+# One choice in a `radio`, `dropdown`, or `menu` — a display `label` paired with
+# the `value` handed to `on_select`. Build an `array<Option>` and pass it to
+# `Solaris.dropdown_of` / `Solaris.radio_of`, so the shown text and the selected
+# value can differ (show "United Kingdom", select "GB") without a hand-kept
+# lookup table. Labels should be unique — the reverse label -> value lookup keys
+# on the label.
+record Option {
+    string label = "",
+    string value = ""
+}
+
+# ── TYPED MULTI-SERIES CHART DATA ──
+#
+# One named, coloured series in a multi-series chart: a `name` (for the legend),
+# its `points` (an `array<DataPoint>`), and a `color`. Build an `array<Series>`
+# and pass it to `Solaris.line_chart_series` / `Solaris.bar_chart_series` to plot
+# several series at once (e.g. sales vs. costs). Series share the category axis;
+# their labels line up by position, as in `line_chart_of`.
+record Series {
+    string name = "",
+    array<DataPoint> points = [],
+    Color color = Color.Primary
 }
 
 namespace Solaris {
@@ -351,6 +555,32 @@ namespace Solaris {
         return View { kind = "dropdown", options = options, selected = chosen }
     }
 
+    # A dropdown whose display labels differ from the values delivered to
+    # `on_select` — the typed sibling of `dropdown(array<string>)`. `chosen` is the
+    # selected *value*; `on_select` receives the option's `value`, not its label.
+    function View dropdown_of(array<Option> options, string chosen) {
+        return View {
+            kind = "dropdown",
+            options = Solaris.option_labels(options),
+            option_values = Solaris.option_values(options),
+            has_option_values = true,
+            selected = Solaris.option_label_for_value(options, chosen)
+        }
+    }
+
+    # A radio group whose display labels differ from the values delivered to
+    # `on_select` — the typed sibling of `radio(array<string>)`. `chosen` is the
+    # selected *value*; `on_select` receives the option's `value`, not its label.
+    function View radio_of(array<Option> options, string chosen) {
+        return View {
+            kind = "radio",
+            options = Solaris.option_labels(options),
+            option_values = Solaris.option_values(options),
+            has_option_values = true,
+            selected = Solaris.option_label_for_value(options, chosen)
+        }
+    }
+
     # A slider from `min` to `max` at `value`. Attach `|> Solaris.on_slide(fn)`.
     function View slider(number value, number min, number max) {
         return View { kind = "slider", num_value = value, num_min = min, num_max = max }
@@ -364,6 +594,12 @@ namespace Solaris {
     # A single glyph by name (e.g. "star"). Size it with `|> Solaris.icon_size(n)`.
     function View icon(string name) {
         return View { kind = "icon", content = name }
+    }
+
+    # A single glyph from the typed `Icon` palette — the autocomplete-discoverable,
+    # typo-proof sibling of `icon(string)`. Size it with `|> Solaris.icon_size(n)`.
+    function View icon_of(Icon glyph) {
+        return View { kind = "icon", content = Solaris.icon_name(glyph) }
     }
 
     # A thin horizontal rule that separates content.
@@ -463,6 +699,122 @@ namespace Solaris {
             values = Array.append(values, point.value)
         }
         return values
+    }
+
+    # ── MULTI-SERIES CHARTS — plot several named, coloured `Series` at once.
+    #    Each series shares the category axis; labels line up by position across
+    #    series (the category labels are taken from the first series). ──
+
+    # A line chart with one line per `Series`.
+    function View line_chart_series(array<Series> series) {
+        return View {
+            kind = "line_chart_multi",
+            options = Solaris.series_labels(series),
+            series_names = Solaris.series_names(series),
+            series_values = Solaris.series_values(series),
+            series_colors = Solaris.series_colors(series),
+            has_series = true
+        }
+    }
+
+    # A grouped vertical bar chart with one bar cluster per category and one bar
+    # per `Series`.
+    function View bar_chart_series(array<Series> series) {
+        return View {
+            kind = "bar_chart_multi",
+            options = Solaris.series_labels(series),
+            series_names = Solaris.series_names(series),
+            series_values = Solaris.series_values(series),
+            series_colors = Solaris.series_colors(series),
+            has_series = true
+        }
+    }
+
+    # The shared category labels for a multi-series chart, taken from the first
+    # series (empty when there are no series).
+    internal function array<string> series_labels(array<Series> series) {
+        if Array.length(series) == 0 {
+            return []
+        }
+        return Solaris.point_labels(series[0].points)
+    }
+
+    # Unzip the series names (legend entries).
+    internal function array<string> series_names(array<Series> series) {
+        mutable array<string> names = []
+        for s in series {
+            names = Array.append(names, s.name)
+        }
+        return names
+    }
+
+    # Unzip each series' numeric values into a 2-D array (one row per series).
+    internal function array<array<number>> series_values(array<Series> series) {
+        mutable array<array<number>> rows = []
+        for s in series {
+            rows = Array.append(rows, Solaris.point_values(s.points))
+        }
+        return rows
+    }
+
+    # Unzip each series' colour into its resolved CSS string.
+    internal function array<string> series_colors(array<Series> series) {
+        mutable array<string> colors = []
+        for s in series {
+            colors = Array.append(colors, Solaris.color_value(s.color))
+        }
+        return colors
+    }
+
+    # ── TYPED SELECT — unzip an `array<Option>` into the parallel label/value
+    #    arrays the reconciler carries, and map a delivered label back to its
+    #    value for `on_select`. ──
+
+    # The display labels of an option list (the category axis of a select).
+    internal function array<string> option_labels(array<Option> options) {
+        mutable array<string> labels = []
+        for option in options {
+            labels = Array.append(labels, option.label)
+        }
+        return labels
+    }
+
+    # The values of an option list, aligned by index with the labels.
+    internal function array<string> option_values(array<Option> options) {
+        mutable array<string> values = []
+        for option in options {
+            values = Array.append(values, option.value)
+        }
+        return values
+    }
+
+    # The display label whose option carries `value` (empty when none matches),
+    # so a select built from values still shows the right label.
+    internal function string option_label_for_value(array<Option> options, string value) {
+        for option in options {
+            if option.value == value {
+                return option.label
+            }
+        }
+        return ""
+    }
+
+    # Map a delivered display `label` back to its option value, so `on_select`
+    # receives the value rather than the shown text. Falls back to the label when
+    # the select carries no distinct values (a plain string select) or no option
+    # matches.
+    internal function string option_value_for_label(View node, string label) {
+        if !node.has_option_values {
+            return label
+        }
+        mutable integer i = 0
+        for shown in node.options {
+            if shown == label {
+                return node.option_values[i]
+            }
+            i = i + 1
+        }
+        return label
     }
 
     # A tab strip over `panels`. `active` is the shown tab index; attach
@@ -672,6 +1024,35 @@ namespace Solaris {
         return node with { aria_label = text }
     }
 
+    # Mark an input's validity (S02). `Invalid(msg)` shows `msg`, applies a danger
+    # border, and sets aria-invalid; `Pending` marks the field busy; `Valid` is
+    # clean. Attach to a text field, text area, dropdown, radio group, checkbox,
+    # switch, or date picker.
+    function View validation(View node, Validation state) {
+        return node with { validation = state, has_validation = true }
+    }
+
+    # Align the running text inside a text/heading block (S05) — distinct from the
+    # container `align`, which positions the box rather than its text.
+    function View text_align(View node, TextAlign a) {
+        return node with { text_align = a, has_text_align = true }
+    }
+
+    # How an image fills its box (S07), mapping to CSS `object-fit`.
+    function View fit(View node, ImageFit f) {
+        return node with { img_fit = f, has_fit = true }
+    }
+
+    # Anchor an overlay (a toast) on screen (S08).
+    function View placement(View node, Placement p) {
+        return node with { placement = p, has_placement = true }
+    }
+
+    # Per-side inner padding (S09) — the typed sibling of `padding(Spacing)`.
+    function View padding_each(View node, Insets sides) {
+        return node with { pad_each = sides, has_pad_each = true }
+    }
+
     # ── RECONCILER — View tree → engine widgets. Internal; the only code that
     #    depends on the low-level GraphicalUi module. ──
 
@@ -807,6 +1188,200 @@ namespace Solaris {
         }
     }
 
+    # Map an Icon to its bundled Lucide glyph name (kebab-case). `Custom(name)`
+    # passes the name through unchanged. The mirror of `color_value` for icons.
+    function string icon_name(Icon glyph) {
+        return match glyph {
+            case Icon.Home           { "home" }
+            case Icon.Search         { "search" }
+            case Icon.Settings       { "settings" }
+            case Icon.User           { "user" }
+            case Icon.Users          { "users" }
+            case Icon.Trash          { "trash" }
+            case Icon.Edit           { "edit" }
+            case Icon.Plus           { "plus" }
+            case Icon.Minus          { "minus" }
+            case Icon.Check          { "check" }
+            case Icon.Close          { "x" }
+            case Icon.ChevronDown    { "chevron-down" }
+            case Icon.ChevronUp      { "chevron-up" }
+            case Icon.ChevronLeft    { "chevron-left" }
+            case Icon.ChevronRight   { "chevron-right" }
+            case Icon.ArrowUp        { "arrow-up" }
+            case Icon.ArrowDown      { "arrow-down" }
+            case Icon.ArrowLeft      { "arrow-left" }
+            case Icon.ArrowRight     { "arrow-right" }
+            case Icon.Menu           { "menu" }
+            case Icon.Heart          { "heart" }
+            case Icon.Star           { "star" }
+            case Icon.Bell           { "bell" }
+            case Icon.Mail           { "mail" }
+            case Icon.Calendar       { "calendar" }
+            case Icon.Clock          { "clock" }
+            case Icon.Download       { "download" }
+            case Icon.Upload         { "upload" }
+            case Icon.File           { "file" }
+            case Icon.Folder         { "folder" }
+            case Icon.Image          { "image" }
+            case Icon.Info           { "info" }
+            case Icon.Warning        { "alert-triangle" }
+            case Icon.Error          { "alert-circle" }
+            case Icon.Success        { "check-circle" }
+            case Icon.Eye            { "eye" }
+            case Icon.EyeOff         { "eye-off" }
+            case Icon.Lock           { "lock" }
+            case Icon.Unlock         { "unlock" }
+            case Icon.LogIn          { "log-in" }
+            case Icon.LogOut         { "log-out" }
+            case Icon.Refresh        { "refresh-cw" }
+            case Icon.Save           { "save" }
+            case Icon.Share          { "share" }
+            case Icon.Copy           { "copy" }
+            case Icon.ExternalLink   { "external-link" }
+            case Icon.Filter         { "filter" }
+            case Icon.MoreHorizontal { "more-horizontal" }
+            case Icon.MoreVertical   { "more-vertical" }
+            case Icon.Play           { "play" }
+            case Icon.Pause          { "pause" }
+            case Icon.Camera         { "camera" }
+            case Icon.MapPin         { "map-pin" }
+            case Icon.Phone          { "phone" }
+            case Icon.Message        { "message-circle" }
+            case Icon.Send           { "send" }
+            case Icon.Cart           { "shopping-cart" }
+            case Icon.CreditCard     { "credit-card" }
+            case Icon.Sun            { "sun" }
+            case Icon.Moon           { "moon" }
+            case Icon.Cloud          { "cloud" }
+            case Icon.Wifi           { "wifi" }
+            case Icon.Battery        { "battery" }
+            case Icon.Link           { "link" }
+            case Icon.Bookmark       { "bookmark" }
+            case Icon.Tag            { "tag" }
+            case Icon.Flag           { "flag" }
+            case Icon.ThumbsUp       { "thumbs-up" }
+            case Icon.ThumbsDown     { "thumbs-down" }
+            case Icon.Bolt           { "zap" }
+            case Icon.Activity       { "activity" }
+            case Icon.TrendingUp     { "trending-up" }
+            case Icon.List           { "list" }
+            case Icon.Sliders        { "sliders" }
+            case Icon.Help           { "help-circle" }
+            case Icon.Circle         { "circle" }
+            case Icon.Square         { "square" }
+            case Icon.Custom(name)   { name }
+        }
+    }
+
+    # Map a Font to a curated, cross-platform CSS font-family stack. `Custom`
+    # passes its family string through unchanged.
+    internal function string font_stack(Font f) {
+        return match f {
+            case Font.System        { "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }
+            case Font.Sans          { "'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }
+            case Font.Serif         { "Georgia, Cambria, 'Times New Roman', Times, serif" }
+            case Font.Mono          { "'SF Mono', 'Cascadia Code', Consolas, 'Courier New', monospace" }
+            case Font.Custom(fam)   { fam }
+        }
+    }
+
+    # Map a TextAlign token to a CSS `text-align` value.
+    internal function string text_align_css(TextAlign a) {
+        return match a {
+            case TextAlign.Left    { "left" }
+            case TextAlign.Center  { "center" }
+            case TextAlign.Right   { "right" }
+            case TextAlign.Justify { "justify" }
+        }
+    }
+
+    # Map an ImageFit token to a CSS `object-fit` value.
+    internal function string object_fit_css(ImageFit f) {
+        return match f {
+            case ImageFit.Fill      { "fill" }
+            case ImageFit.Contain   { "contain" }
+            case ImageFit.Cover     { "cover" }
+            case ImageFit.ScaleDown { "scale-down" }
+        }
+    }
+
+    # Map a Placement token to the engine's toast-region position string.
+    internal function string placement_name(Placement p) {
+        return match p {
+            case Placement.Top         { "top-center" }
+            case Placement.Bottom      { "bottom-center" }
+            case Placement.TopStart    { "top-left" }
+            case Placement.TopEnd      { "top-right" }
+            case Placement.BottomStart { "bottom-left" }
+            case Placement.BottomEnd   { "bottom-right" }
+            case Placement.Center      { "center" }
+        }
+    }
+
+    # The toast-region style dict carrying an explicit `position` (S08), or empty
+    # so the engine keeps its default corner.
+    internal function dictionary toast_region_style(View node) {
+        if node.has_placement {
+            return {"position": Solaris.placement_name(node.placement)}
+        }
+        return {}
+    }
+
+    # Add per-side padding (S09) to a style dict from an Insets record, on the 4pt
+    # Spacing scale. Zero sides are still emitted (0px) so a partial Insets clears
+    # any inherited padding on the sides it names.
+    internal function dictionary insets_style(Insets sides) {
+        mutable dictionary style = {}
+        style["padding_top"] = "${Solaris.spacing_px(sides.top)}px"
+        style["padding_right"] = "${Solaris.spacing_px(sides.right)}px"
+        style["padding_bottom"] = "${Solaris.spacing_px(sides.bottom)}px"
+        style["padding_left"] = "${Solaris.spacing_px(sides.left)}px"
+        return style
+    }
+
+    # Add validation decoration (S02) to a style dict: aria-invalid + a danger
+    # border for `Invalid`, aria-busy for `Pending`. The message itself is
+    # rendered by `validation_wrap`, not here.
+    internal function dictionary validation_style(View node, dictionary base) {
+        if !node.has_validation {
+            return base
+        }
+        return match node.validation {
+            case Validation.Invalid(_msg) {
+                mutable dictionary s = base
+                s["aria_invalid"] = "true"
+                s["border"] = "1px solid ${Solaris.color_value(Color.Danger)}"
+                s
+            }
+            case Validation.Pending {
+                mutable dictionary s = base
+                s["aria_busy"] = "true"
+                s
+            }
+            case Validation.Valid { base }
+        }
+    }
+
+    # Wrap an input widget with its validation message (S02) when `Invalid`: the
+    # message renders below the field in the danger colour. `Valid`/`Pending`
+    # return the field unchanged.
+    internal function widget validation_wrap(View node, widget field) {
+        if !node.has_validation {
+            return field
+        }
+        return match node.validation {
+            case Validation.Invalid(message) {
+                GraphicalUi.column([
+                    field,
+                    GraphicalUi.label(message, {"color": Solaris.color_value(Color.Danger),
+                        "font_size": GraphicalUi.VAR_TEXT_XS, "role": "alert"})
+                ], GraphicalUi.spacing(Solaris.spacing_px(Spacing.XS)))
+            }
+            case Validation.Pending { field }
+            case Validation.Valid { field }
+        }
+    }
+
     # Compose the full CSS `border` shorthand for a View: width/style from the
     # `Border` token, tint from the `Color` token (theme border when unset).
     internal function string border_css(View node) {
@@ -873,7 +1448,18 @@ namespace Solaris {
             style["border"] = Solaris.border_css(node)
         }
 
-        return style
+        # Per-side padding (S09) overrides the uniform `padding` shorthand.
+        if node.has_pad_each {
+            style = GraphicalUi.merge_styles(style, Solaris.insets_style(node.pad_each))
+        }
+
+        # Image object-fit (S07).
+        if node.has_fit {
+            style["object_fit"] = Solaris.object_fit_css(node.img_fit)
+        }
+
+        # Validation decoration (S02): aria-invalid / aria-busy and a danger border.
+        return Solaris.validation_style(node, style)
     }
 
     # Style dictionary for a text/heading View.
@@ -899,6 +1485,11 @@ namespace Solaris {
             style["text_align"] = "center"
         }
 
+        # An explicit text alignment (S05) overrides the centred default.
+        if node.has_text_align {
+            style["text_align"] = Solaris.text_align_css(node.text_align)
+        }
+
         return GraphicalUi.merge_styles(style, Solaris.common_style(node))
     }
 
@@ -910,9 +1501,12 @@ namespace Solaris {
 
     # Style dictionary for a container View (column/row/list/grid/...).
     internal function dictionary container_style(View node) {
-        mutable dictionary style = GraphicalUi.merge_styles(
-            GraphicalUi.spacing(Solaris.spacing_px(node.gap)),
-            GraphicalUi.padding(Solaris.spacing_px(node.pad)))
+        # Per-side padding (S09), when set, replaces the uniform padding shorthand
+        # (applied via common_style); otherwise the uniform `pad` is used.
+        mutable dictionary style = GraphicalUi.spacing(Solaris.spacing_px(node.gap))
+        if !node.has_pad_each {
+            style = GraphicalUi.merge_styles(style, GraphicalUi.padding(Solaris.spacing_px(node.pad)))
+        }
 
         # An explicit `align` modifier replaces the default cross-axis centring.
         if node.centered && !node.has_align {
@@ -973,8 +1567,15 @@ namespace Solaris {
         return acc
     }
 
-    # Reconcile a single View into a GraphicalUi widget.
+    # Reconcile a single View into a GraphicalUi widget, then apply cross-cutting
+    # decoration (the validation message wrapper, S02). The recursive entry point
+    # used by `child_widgets` / `stack_widget`, so every node is decorated.
     internal function widget to_widget(View node) {
+        return Solaris.validation_wrap(node, Solaris.to_widget_inner(node))
+    }
+
+    # Reconcile a single View into a GraphicalUi widget.
+    internal function widget to_widget_inner(View node) {
         return match node.kind {
             case == "text" {
                 GraphicalUi.label(node.content, Solaris.text_style(node))
@@ -1033,7 +1634,8 @@ namespace Solaris {
             case == "radio" {
                 if node.has_select {
                     GraphicalUi.radio_group(node.options, node.selected,
-                        (string v) -> node.on_select(v), Solaris.common_style(node))
+                        (string v) -> node.on_select(Solaris.option_value_for_label(node, v)),
+                        Solaris.common_style(node))
                 } else {
                     GraphicalUi.radio_group(node.options, node.selected,
                         (string _v) -> none, Solaris.common_style(node))
@@ -1042,7 +1644,8 @@ namespace Solaris {
             case == "dropdown" {
                 if node.has_select {
                     GraphicalUi.dropdown(node.options, node.selected,
-                        (string v) -> node.on_select(v), Solaris.common_style(node))
+                        (string v) -> node.on_select(Solaris.option_value_for_label(node, v)),
+                        Solaris.common_style(node))
                 } else {
                     GraphicalUi.dropdown(node.options, node.selected,
                         (string _v) -> none, Solaris.common_style(node))
@@ -1114,7 +1717,7 @@ namespace Solaris {
             case == "toast" {
                 GraphicalUi.toast_region([
                     GraphicalUi.toast(node.content, Solaris.emphasis_severity(node.emphasis))
-                ])
+                ], Solaris.toast_region_style(node))
             }
             case == "spacer" {
                 GraphicalUi.spacer()
@@ -1157,6 +1760,14 @@ namespace Solaris {
             }
             case == "pie_chart" {
                 GraphicalUi.pie_chart(node.options, node.values, Solaris.common_style(node))
+            }
+            case == "line_chart_multi" {
+                GraphicalUi.line_chart_multi(node.options, node.series_names,
+                    node.series_values, node.series_colors, Solaris.common_style(node))
+            }
+            case == "bar_chart_multi" {
+                GraphicalUi.vertical_bar_chart_multi(node.options, node.series_names,
+                    node.series_values, node.series_colors, Solaris.common_style(node))
             }
             case == "sidebar" {
                 GraphicalUi.column(Solaris.child_widgets(node), Solaris.container_style(node))
@@ -1286,6 +1897,13 @@ namespace Solaris {
     # Set the UI font family.
     function dictionary font(dictionary config, string family) {
         return Solaris.theme(config, {"font": family})
+    }
+
+    # Set the UI font from a typed `Font` (S04) — the typed sibling of `font`,
+    # mapping each family to a curated cross-platform CSS stack. A mistyped family
+    # is now a compile error; `Font.Custom("...")` is the escape hatch.
+    function dictionary font_of(dictionary config, Font family) {
+        return Solaris.theme(config, {"font": Solaris.font_stack(family)})
     }
 
     # Construct a custom Color from any CSS colour string (hex, rgb(), named).

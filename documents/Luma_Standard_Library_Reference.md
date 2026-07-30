@@ -859,6 +859,17 @@ _Effects_ below).
 | `Radius` | `None`, `Small`, `Medium`, `Large`, `Full` |
 | `Scheme` | `Light`, `Dark`, `Auto` |
 | `Color` | `Primary`, `Success`, `Warning`, `Danger`, `Muted`, `Custom(string hex)` |
+| `Icon` | common Lucide glyphs (`Home`, `Search`, `Settings`, …), `Custom(string name)` |
+| `Validation` | `Valid`, `Invalid(string message)`, `Pending` |
+| `Font` | `System`, `Sans`, `Serif`, `Mono`, `Custom(string family)` |
+| `TextAlign` | `Left`, `Center`, `Right`, `Justify` |
+| `ImageFit` | `Fill`, `Contain`, `Cover`, `ScaleDown` |
+| `Placement` | `Top`, `Bottom`, `TopStart`, `TopEnd`, `BottomStart`, `BottomEnd`, `Center` |
+
+Typed **records** for structured data: `DataPoint { string label, number value }`,
+`Series { string name, array<DataPoint> points, Color color }`,
+`Option { string label, string value }`, and
+`Insets { Spacing top, right, bottom, left }`.
 
 `View` is a global `record` describing one piece of UI; `view` returns a tree of them.
 
@@ -870,6 +881,8 @@ _Effects_ below).
 | `Solaris.heading` | `(string content) -> View` | A prominent section title |
 | `Solaris.badge` | `(string text) -> View` | A small status pill |
 | `Solaris.icon` | `(string name) -> View` | A named glyph (size with `icon_size`) |
+| `Solaris.icon_of` | `(Icon glyph) -> View` | A glyph from the typed `Icon` palette |
+| `Solaris.icon_name` | `(Icon glyph) -> string` | Resolve an `Icon` to its Lucide name |
 | `Solaris.spinner` | `(string label) -> View` | An indeterminate busy indicator |
 | `Solaris.divider` | `() -> View` | A horizontal rule |
 | `Solaris.button` | `(string label) -> View` | A clickable action (pair with `on_click`) |
@@ -878,7 +891,9 @@ _Effects_ below).
 | `Solaris.checkbox` | `(string label) -> View` | A boolean toggle (pair with `checked`/`on_toggle`) |
 | `Solaris.switch` | `(string label, boolean state) -> View` | An on/off switch (pair with `on_toggle`) |
 | `Solaris.radio` | `(array<string> options, string chosen) -> View` | Single choice (pair with `on_select`) |
+| `Solaris.radio_of` | `(array<Option> options, string chosen) -> View` | Single choice with distinct label/value |
 | `Solaris.dropdown` | `(array<string> options, string chosen) -> View` | Compact single choice (pair with `on_select`) |
+| `Solaris.dropdown_of` | `(array<Option> options, string chosen) -> View` | Compact single choice with distinct label/value |
 | `Solaris.slider` | `(number value, number min, number max) -> View` | Numeric range (pair with `on_slide`) |
 | `Solaris.date_picker` | `(string value) -> View` | Date input (pair with `on_change`) |
 | `Solaris.spacer` | `() -> View` | Flexible empty space |
@@ -896,6 +911,8 @@ _Effects_ below).
 | `Solaris.line_chart` | `(array<string> labels, array<number> values) -> View` | A line chart plotting `values` over `labels` |
 | `Solaris.bar_chart` | `(array<string> labels, array<number> values) -> View` | A vertical bar chart, one bar per label |
 | `Solaris.pie_chart` | `(array<string> labels, array<number> values) -> View` | A pie chart, one slice per label |
+| `Solaris.line_chart_series` | `(array<Series> series) -> View` | A multi-series line chart |
+| `Solaris.bar_chart_series` | `(array<Series> series) -> View` | A multi-series bar chart |
 | `Solaris.tabs` | `(array<string> labels, integer active, array<View> panels) -> View` | Panel switcher (pair with `on_tab`) |
 | `Solaris.menu` | `(string label, array<string> items) -> View` | In-page dropdown menu (pair with `on_select`) |
 | `Solaris.dialog` | `(string title, boolean open, array<View> children) -> View` | A modal (pair with `on_close`) |
@@ -918,9 +935,14 @@ _Effects_ below).
 | `size(View, TextScale)` · `weight(View, Weight)` · `bold(View)` | Typography |
 | `primary` · `secondary` · `danger` · `muted` · `emphasis(View, Emphasis)` | Semantic emphasis |
 | `gap(View, Spacing)` · `padding(View, Spacing)` | Container spacing |
+| `padding_each(View, Insets)` | Per-side container padding |
 | `width(View, Length)` · `height(View, Length)` | Sizing |
 | `align(View, Align)` · `justify(View, Justify)` · `center(View)` | Layout alignment |
+| `text_align(View, TextAlign)` | Text alignment inside a text/heading block |
 | `rounded(View, Radius)` | Corner rounding |
+| `fit(View, ImageFit)` | Image object-fit |
+| `placement(View, Placement)` | Toast/overlay anchor position |
+| `validation(View, Validation)` | Input validity (message + danger styling + `aria-invalid`) |
 | `checked(View, boolean)` · `placeholder(View, string)` · `icon_size(View, integer)` | Input/glyph state |
 | `key(View, string)` · `label(View, string)` | Identity (keyed reconciliation) and accessible label |
 
@@ -935,6 +957,7 @@ _Effects_ below).
 | `Solaris.resizable` | `(dictionary, boolean) -> dictionary` | Whether the window may be resized |
 | `Solaris.fullscreen` · `devtools` | `(dictionary) -> dictionary` | Start fullscreen / open the inspector |
 | `Solaris.accent` · `font` | `(dictionary, string) -> dictionary` | Accent colour / UI font |
+| `Solaris.font_of` | `(dictionary, Font) -> dictionary` | UI font from a typed `Font` |
 | `Solaris.accent_color` | `(dictionary, Color) -> dictionary` | Accent from a typed `Color` (semantic token or `Solaris.hex`) |
 | `Solaris.hex` | `(string) -> Color` | Build a `Color.Custom` from any CSS colour string |
 | `Solaris.color_value` | `(Color) -> string` | Resolve a `Color` to its CSS string (for any `theme` override) |
@@ -1317,6 +1340,8 @@ All charts are rendered as inline SVG. The `labels` array provides category name
 | `GraphicalUi.pie_chart(labels, values, style?)`                            | `(array<string>, array<number>, dictionary?)`                   | `widget`    | Pie chart with legend  |
 | `GraphicalUi.scatter_plot(x_values, y_values, x_label?, y_label?, style?)` | `(array<number>, array<number>, string?, string?, dictionary?)` | `widget`    | Scatter plot           |
 | `GraphicalUi.vertical_bar_chart(labels, values, style?)`                   | `(array<string>, array<number>, dictionary?)`                   | `widget`    | Vertical bar chart     |
+| `GraphicalUi.line_chart_multi(labels, series_names, series_values, series_colors, style?)` | `(array<string>, array<string>, array<array<number>>, array<string>, dictionary?)` | `widget` | Multi-series line chart |
+| `GraphicalUi.vertical_bar_chart_multi(labels, series_names, series_values, series_colors, style?)` | `(array<string>, array<string>, array<array<number>>, array<string>, dictionary?)` | `widget` | Multi-series bar chart |
 
 Charts show a hover tooltip by default. The trailing dictionary also accepts the
 presentation options `x_label`, `y_label`, `legend` (boolean), and `tooltip`

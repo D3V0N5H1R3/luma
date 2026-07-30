@@ -27,6 +27,7 @@ const { internals: C } = loadFramework("gui-charts.js", {
     capture: [
         "withAlpha",
         "buildValueSeries",
+        "buildMultiSeries",
         "formatNumber",
         "describeChart",
         "CHART_TYPE_LABELS",
@@ -116,6 +117,24 @@ describe("buildValueSeries", () => {
     });
 });
 
+describe("buildMultiSeries", () => {
+    it("builds a bar series with an alpha-blended fill and the given colour", () => {
+        const series = C.buildMultiSeries("vertical_bar_chart", "Sales", "#4361ee");
+        assert.equal(series.label, "Sales");
+        assert.equal(series.stroke, "#4361ee");
+        assert.equal(series.fill, "rgba(67,97,238,0.6)");
+        assert.equal(series.width, 0);
+    });
+
+    it("builds a line series in the given colour", () => {
+        const series = C.buildMultiSeries("line_chart", "Costs", "#ef4444");
+        assert.equal(series.label, "Costs");
+        assert.equal(series.stroke, "#ef4444");
+        assert.equal(series.width, 2);
+        assert.deepEqual(plain(series.points), { show: true, size: 6, fill: "#ef4444" });
+    });
+});
+
 describe("formatNumber", () => {
     it("renders integers without decimals", () => {
         assert.equal(C.formatNumber(5), "5");
@@ -202,5 +221,17 @@ describe("describeChart", () => {
 
     it("returns 'No data.' when there are no labels", () => {
         assert.equal(C.describeChart({ type: "pie_chart" }), "No data.");
+    });
+
+    it("describes a multi-series chart with each series' value per category", () => {
+        assert.equal(
+            C.describeChart({
+                type: "line_chart",
+                labels: ["Q1", "Q2"],
+                series_names: ["Sales", "Costs"],
+                series_values: [[10, 20], [6, 9]],
+            }),
+            "Q1 (Sales 10, Costs 6); Q2 (Sales 20, Costs 9).",
+        );
     });
 });

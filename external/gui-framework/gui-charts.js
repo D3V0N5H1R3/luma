@@ -270,8 +270,13 @@
             yLabel: opts.yLabel || "",
         };
 
-        // Reuse existing uPlot instance — update data only.
-        if (container.__uplot) {
+        // Reuse the existing uPlot instance only when its series count still
+        // matches this data's column count (x + one value = 2). A chart at the
+        // same tree position can switch between the single- and multi-series
+        // forms (both share one widget type); reusing a 3+-series instance here
+        // would make setData index a missing column and throw, so rebuild on a
+        // mismatch instead.
+        if (container.__uplot && container.__uplot.series.length === data.length) {
             container.__uplot.setData(data);
             return;
         }
@@ -307,7 +312,137 @@
         }
     }
 
-    // ── Pie / donut chart (canvas, responsive) ──────────
+    // Build one uPlot series descriptor for a named, coloured data series in a
+    // multi-series line or bar chart.
+    function buildMultiSeries(type, label, color) {
+        if (
+            type === "vertical_bar_chart" ||
+            type === "horizontal_bar_chart"
+        ) {
+            return {
+                label: label,
+                // Overlapping bars are alpha-blended so several series stay
+                // readable at the same category (uPlot has no native grouped-bar
+                // layout).
+                fill: withAlpha(color, 0.6),
+                stroke: color,
+                width: 0,
+                paths: uPlot.paths.bars({
+                    size: [BAR_WIDTH_FACTOR, BAR_MAX_WIDTH], gap: BAR_GAP,
+                }),
+            };
+        }
+
+        return {
+            label: label,
+            stroke: color,
+            width: LINE_STROKE_WIDTH,
+            points: {
+                show: true, size: LINE_POINT_SIZE, fill: color,
+            },
+        };
+    }
+
+    // Tooltip for multi-series charts: reports the hovered category and every
+    // series' value at that index.
+    function multiTooltipPlugin(container) {
+        return {
+            hooks: {
+                setCursor: (u) => {
+                    const meta = container.__chartMeta || {};
+                    const idx = u.cursor.idx;
+                    if (idx == null) {
+                        hideChartTooltip();
+                        return;
+                    }
+                    const lbls = meta.labels || [];
+                    const title = lbls[idx] != null
+                        ? String(lbls[idx])
+                        : String(idx);
+                    const names = meta.names || [];
+                    const parts = [];
+                    for (let s = 1; s < u.data.length; s++) {
+                        const yVal = u.data[s][idx];
+                        if (yVal != null) {
+                            parts.push(
+                                (names[s - 1] || ("Series " + s)) + ": " +
+                                formatNumber(yVal)
+                            );
+                        }
+                    }
+                    if (!parts.length) {
+                        hideChartTooltip();
+                        return;
+                    }
+                    const oRect = u.over.getBoundingClientRect();
+                    showChartTooltip(
+                        oRect.left + u.cursor.left,
+                        oRect.top + u.cursor.top,
+                        title, parts.join("  "), null,
+                    );
+                },
+            },
+        };
+    }
+
+    function renderUPlotMultiChart(
+        container, type, labels, names, valuesRows, colors, opts
+    ) {
+        const xData = [];
+        for (let i = 0; i < labels.length; i++) {
+            xData.push(i);
+        }
+        const data = [xData].concat(valuesRows);
+
+        // Live metadata for the tooltip plugin, refreshed every render.
+        container.__chartMeta = {
+            type: type,
+            labels: labels,
+            names: names,
+            multi: true,
+        };
+
+        // Reuse an existing uPlot instance only when the series count matches;
+        // otherwise the axes/series must be rebuilt.
+        if (container.__uplot &&
+            container.__uplot.series.length === valuesRows.length + 1) {
+            container.__uplot.setData(data);
+            return;
+        }
+
+        const width = container.clientWidth || DEFAULT_UPLOT_WIDTH;
+        const height = CHART_HEIGHT;
+        const textColor = getComputedStyle(container).color || "#333";
+
+        const series = [{ label: opts.xLabel || "X" }];
+        for (let i = 0; i < names.length; i++) {
+            series.push(buildMultiSeries(
+                type, names[i] || ("Series " + (i + 1)),
+                colors[i] || COLORS[i % COLORS.length]
+            ));
+        }
+
+        const uOpts = {
+            width: width,
+            height: height,
+            series: series,
+            axes: buildAxes(container, type, opts, textColor),
+            cursor: { show: true },
+            // A legend is the natural way to tell several series apart, so it is
+            // on by default for multi-series charts (opt out with legend:false).
+            legend: { show: opts.legend !== false },
+            plugins: opts.tooltip === false ? [] : [multiTooltipPlugin(container)],
+        };
+
+        container.innerHTML = "";
+        try {
+            container.__uplot = new uPlot(uOpts, data, container);
+            container.addEventListener("mouseleave", hideChartTooltip);
+        } catch (e) {
+            container.textContent =
+                "[chart error: " + e.message + "]";
+        }
+    }
 
     function drawSlices(
         ctx, centerX, centerY, outerRadius, innerRadius,
@@ -526,6 +661,17 @@
 
         const labels = w.labels || [];
         const values = w.values || [];
+        const seriesNames = w.series_names || [];
+        if (Array.isArray(seriesNames) && seriesNames.length) {
+            const pairs = labels.map((label, i) => {
+                const per = seriesNames.map((n, s) => {
+                    const row = (w.series_values || [])[s] || [];
+                    return n + " " + (row[i] != null ? row[i] : 0);
+                }).join(", ");
+                return label + " (" + per + ")";
+            });
+            return pairs.length ? pairs.join("; ") + "." : "No data.";
+        }
         const pairs = labels.map((label, i) => {
             return label + ": " + (values[i] != null ? values[i] : 0);
         });
@@ -571,7 +717,13 @@
         };
 
         if (UPLOT_TYPES.has(type)) {
-            renderUPlotChart(container, type, labels, values, baseOpts);
+            const seriesNames = w.series_names || [];
+            if (Array.isArray(seriesNames) && seriesNames.length) {
+                renderUPlotMultiChart(container, type, labels, seriesNames,
+                    w.series_values || [], w.series_colors || [], baseOpts);
+            } else {
+                renderUPlotChart(container, type, labels, values, baseOpts);
+            }
         } else if (type === "scatter_plot") {
             renderUPlotChart(container, "scatter_plot", [], [], {
                 xValues: w.x_values || [],

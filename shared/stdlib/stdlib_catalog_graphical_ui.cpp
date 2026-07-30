@@ -190,6 +190,18 @@ void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const Mod
             m.variadic_fn("line_chart", 2,
                           "(labels: array<string>, values: array<number>, style?: dictionary)",
                           named::widget(), {p.array_string, p.array_number}),
+            m.variadic_fn("line_chart_multi", 4,
+                          "(labels: array<string>, series_names: array<string>, "
+                          "series_values: array<array<number>>, series_colors: array<string>, "
+                          "style?: dictionary)",
+                          named::widget(),
+                          {p.array_string, p.array_string, p.array_any, p.array_string}),
+            m.variadic_fn("vertical_bar_chart_multi", 4,
+                          "(labels: array<string>, series_names: array<string>, "
+                          "series_values: array<array<number>>, series_colors: array<string>, "
+                          "style?: dictionary)",
+                          named::widget(),
+                          {p.array_string, p.array_string, p.array_any, p.array_string}),
             m.variadic_fn("link", 2, "(text: string, on_click_or_url: any, style?: dictionary)",
                           named::widget(), {p.string, p.any}),
             m.variadic_fn(

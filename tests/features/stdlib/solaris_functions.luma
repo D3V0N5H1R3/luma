@@ -569,3 +569,311 @@ function void test_bar_and_pie_chart_of_share_the_datapoint_shape() {
     assert(Array.length(empty.options) == 0)
     assert(Array.length(empty.values) == 0)
 }
+
+# ═══════════════════════════════════════════════════════════
+# New typed surfaces (S01–S09). A single-node feature app lets the
+# headless harness render each element so the reconciler wiring can
+# be asserted; the pure token mappers are tested directly.
+# ═══════════════════════════════════════════════════════════
+
+record FeatureModel {
+    string which = "",
+    string picked = ""
+}
+
+choice FeatureMsg {
+    Noop,
+    Pick(string value)
+}
+
+function FeatureModel feature_update(FeatureModel model, FeatureMsg msg) {
+    return match msg {
+        case FeatureMsg.Noop        { model }
+        case FeatureMsg.Pick(value) { model with { picked = value } }
+    }
+}
+
+function array<Option> country_options() {
+    return [
+        Option { label = "United Kingdom", value = "GB" },
+        Option { label = "France", value = "FR" }
+    ]
+}
+
+function array<Series> sample_series() {
+    return [
+        Series {
+            name = "Sales",
+            points = [DataPoint { label = "Q1", value = 10.0 }, DataPoint { label = "Q2", value = 20.0 }],
+            color = Color.Primary
+        },
+        Series {
+            name = "Costs",
+            points = [DataPoint { label = "Q1", value = 6.0 }, DataPoint { label = "Q2", value = 9.0 }],
+            color = Color.Danger
+        }
+    ]
+}
+
+function View feature_view(FeatureModel model) {
+    return match model.which {
+        case == "icon"        { Solaris.icon_of(Icon.Settings) }
+        case == "invalid"     {
+            Solaris.text_field("bad") |> Solaris.validation(Validation.Invalid("Required"))
+        }
+        case == "pending"     {
+            Solaris.text_field("x") |> Solaris.validation(Validation.Pending)
+        }
+        case == "valid"       {
+            Solaris.text_field("ok") |> Solaris.validation(Validation.Valid)
+        }
+        case == "select"      {
+            Solaris.dropdown_of(country_options(), model.picked)
+                |> Solaris.on_select((string v) -> FeatureMsg.Pick(v))
+                |> Solaris.key("country")
+        }
+        case == "text_right"  { Solaris.text("hi") |> Solaris.text_align(TextAlign.Right) }
+        case == "image_cover" { Solaris.image("a.png") |> Solaris.fit(ImageFit.Cover) }
+        case == "toast_top"   { Solaris.toast("Saved") |> Solaris.placement(Placement.Top) }
+        case == "insets"      {
+            Solaris.column([Solaris.text("x")])
+                |> Solaris.padding_each(Insets { top = Spacing.L, left = Spacing.M })
+        }
+        case == "line_series" { Solaris.line_chart_series(sample_series()) }
+        case == "bar_series"  { Solaris.bar_chart_series(sample_series()) }
+        else                  { Solaris.text("none") }
+    }
+}
+
+function dictionary feature_app() {
+    return Solaris.app("Feature", FeatureModel {}, feature_update, feature_view)
+}
+
+# ─── S01 Icon ──────────────────────────────────────────────
+
+@test
+function void test_icon_name_maps_semantic_glyphs_to_lucide() {
+    assert(Solaris.icon_name(Icon.Settings) == "settings")
+    assert(Solaris.icon_name(Icon.Close) == "x")
+    assert(Solaris.icon_name(Icon.Warning) == "alert-triangle")
+    assert(Solaris.icon_name(Icon.ChevronDown) == "chevron-down")
+    assert(Solaris.icon_name(Icon.Bolt) == "zap")
+}
+
+@test
+function void test_icon_custom_passes_the_name_through() {
+    assert(Solaris.icon_name(Icon.Custom("rocket")) == "rocket")
+}
+
+@test
+function void test_icon_of_builds_an_icon_view() {
+    View glyph = Solaris.icon_of(Icon.Home)
+    assert(glyph.kind == "icon")
+    assert(glyph.content == "home")
+}
+
+@test
+function void test_icon_of_reconciles_with_the_resolved_name() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "icon" })
+    assert(Dictionary.get_or(tree, "type", "") == "icon")
+    assert(Dictionary.get_or(tree, "name", "") == "settings")
+}
+
+# ─── S02 Validation ────────────────────────────────────────
+
+@test
+function void test_validation_modifier_marks_the_field() {
+    View field = Solaris.text_field("bad") |> Solaris.validation(Validation.Invalid("Required"))
+    assert(field.has_validation)
+    match field.validation {
+        case Validation.Invalid(message) { assert(message == "Required") }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_validation_invalid_wraps_a_message_and_flags_the_field() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "invalid" })
+    # The Invalid wrapper is a column of [field, message].
+    assert(Dictionary.get_or(tree, "type", "") == "column")
+    array<dictionary> kids = Dictionary.get_or(tree, "children", [])
+    assert(Array.length(kids) == 2)
+    dictionary message = kids[1]
+    assert(Dictionary.get_or(message, "type", "") == "label")
+    assert(Dictionary.get_or(message, "text", "") == "Required")
+    dictionary field = kids[0]
+    dictionary field_style = Dictionary.get_or(field, "style", {})
+    assert(Dictionary.get_or(field_style, "aria_invalid", "") == "true")
+    assert(String.contains(Dictionary.get_or(field_style, "border", ""), "1px solid"))
+}
+
+@test
+function void test_validation_pending_marks_the_field_busy() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "pending" })
+    assert(Dictionary.get_or(tree, "type", "") == "text_input")
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "aria_busy", "") == "true")
+}
+
+@test
+function void test_validation_valid_is_unadorned() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "valid" })
+    assert(Dictionary.get_or(tree, "type", "") == "text_input")
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "aria_invalid", "") == "")
+    assert(Dictionary.get_or(style, "aria_busy", "") == "")
+}
+
+# ─── S03 Option (typed select) ─────────────────────────────
+
+@test
+function void test_dropdown_of_unzips_labels_and_values() {
+    View select = Solaris.dropdown_of(country_options(), "FR")
+    assert(select.kind == "dropdown")
+    assert(select.options[0] == "United Kingdom")
+    assert(select.options[1] == "France")
+    assert(select.has_option_values)
+    assert(select.option_values[0] == "GB")
+    # `chosen` is a value; the displayed selection is its label.
+    assert(select.selected == "France")
+}
+
+@test
+function void test_radio_of_shares_the_option_shape() {
+    View group = Solaris.radio_of(country_options(), "GB")
+    assert(group.kind == "radio")
+    assert(group.selected == "United Kingdom")
+    assert(group.option_values[1] == "FR")
+}
+
+@test
+function void test_dropdown_of_delivers_the_value_to_on_select() {
+    # The harness fires the select callback with the display label; the wrapper
+    # maps it back to the option value before update sees it.
+    FeatureModel next =
+        GraphicalUi.test_input(feature_app(), FeatureModel { which = "select" }, "country", "France")
+    assert(next.picked == "FR")
+}
+
+# ─── S04 Font ──────────────────────────────────────────────
+
+@test
+function void test_font_of_maps_to_a_cross_platform_stack() {
+    dictionary config = feature_app() |> Solaris.font_of(Font.Mono)
+    dictionary theme = Dictionary.get_or(config, "theme", {})
+    assert(String.contains(Dictionary.get_or(theme, "font", ""), "monospace"))
+}
+
+@test
+function void test_font_of_custom_passes_the_family_through() {
+    dictionary config = feature_app() |> Solaris.font_of(Font.Custom("Comic Sans MS"))
+    dictionary theme = Dictionary.get_or(config, "theme", {})
+    assert(Dictionary.get_or(theme, "font", "") == "Comic Sans MS")
+}
+
+# ─── S05 TextAlign ─────────────────────────────────────────
+
+@test
+function void test_text_align_modifier_sets_the_field() {
+    View node = Solaris.text("hi") |> Solaris.text_align(TextAlign.Right)
+    assert(node.has_text_align)
+    match node.text_align {
+        case TextAlign.Right { assert(true) }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_text_align_reconciles_to_css_text_align() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "text_right" })
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "text_align", "") == "right")
+}
+
+# ─── S06 Series (multi-series charts) ──────────────────────
+
+@test
+function void test_line_chart_series_unzips_names_values_colours() {
+    View chart = Solaris.line_chart_series(sample_series())
+    assert(chart.kind == "line_chart_multi")
+    assert(chart.options[0] == "Q1")
+    assert(chart.series_names[0] == "Sales")
+    assert(chart.series_names[1] == "Costs")
+    assert(Array.length(chart.series_values) == 2)
+    assert(Math.approximately_equal(chart.series_values[0][1], 20.0, 0.001))
+    assert(chart.series_colors[0] == GraphicalUi.VAR_PRIMARY)
+    assert(chart.series_colors[1] == GraphicalUi.VAR_ERROR)
+}
+
+@test
+function void test_line_chart_series_reconciles_to_a_multi_series_widget() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "line_series" })
+    assert(Dictionary.get_or(tree, "type", "") == "line_chart")
+    array<string> names = Dictionary.get_or(tree, "series_names", [])
+    assert(Array.length(names) == 2)
+    assert(names[0] == "Sales")
+}
+
+@test
+function void test_bar_chart_series_reconciles_to_a_multi_series_widget() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "bar_series" })
+    assert(Dictionary.get_or(tree, "type", "") == "vertical_bar_chart")
+    array<array<number>> rows = Dictionary.get_or(tree, "series_values", [])
+    assert(Array.length(rows) == 2)
+}
+
+# ─── S07 ImageFit ──────────────────────────────────────────
+
+@test
+function void test_fit_modifier_sets_the_field() {
+    View node = Solaris.image("a.png") |> Solaris.fit(ImageFit.Cover)
+    assert(node.has_fit)
+    match node.img_fit {
+        case ImageFit.Cover { assert(true) }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_fit_reconciles_to_css_object_fit() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "image_cover" })
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "object_fit", "") == "cover")
+}
+
+# ─── S08 Placement ─────────────────────────────────────────
+
+@test
+function void test_placement_modifier_sets_the_field() {
+    View node = Solaris.toast("Saved") |> Solaris.placement(Placement.Top)
+    assert(node.has_placement)
+    match node.placement {
+        case Placement.Top { assert(true) }
+        else { assert(false) }
+    }
+}
+
+@test
+function void test_placement_reconciles_to_a_toast_region_position() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "toast_top" })
+    assert(Dictionary.get_or(tree, "type", "") == "toast_region")
+    assert(Dictionary.get_or(tree, "position", "") == "top-center")
+}
+
+# ─── S09 Insets (per-side padding) ─────────────────────────
+
+@test
+function void test_padding_each_sets_the_field() {
+    View node = Solaris.column([]) |> Solaris.padding_each(Insets { top = Spacing.L })
+    assert(node.has_pad_each)
+}
+
+@test
+function void test_padding_each_reconciles_to_per_side_css() {
+    dictionary tree = GraphicalUi.test_render(feature_app(), FeatureModel { which = "insets" })
+    dictionary style = Dictionary.get_or(tree, "style", {})
+    assert(Dictionary.get_or(style, "padding_top", "") == "24px")
+    assert(Dictionary.get_or(style, "padding_left", "") == "16px")
+    assert(Dictionary.get_or(style, "padding_right", "") == "0px")
+    assert(Dictionary.get_or(style, "padding_bottom", "") == "0px")
+}
