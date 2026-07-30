@@ -83,7 +83,15 @@
                 key += e.key;
                 if (filter === "*" || key === filter || e.key === filter) {
                     e.preventDefault();
-                    emit({ type: "keyboard", id, value: e.key });
+                    emit({
+                        type: "keyboard",
+                        id,
+                        value: e.key,
+                        ctrl: !!e.ctrlKey,
+                        shift: !!e.shiftKey,
+                        alt: !!e.altKey,
+                        meta: !!e.metaKey,
+                    });
                 }
             };
             document.addEventListener("keydown", handler);
@@ -196,6 +204,69 @@
             };
             window.addEventListener("scroll", handler, { passive: true });
             return () => window.removeEventListener("scroll", handler);
+        });
+    };
+
+    /**
+     * Register a drag-and-drop subscription reporting each drag phase.
+     * `eventType` is a phase name ("start", "move", "end", "enter", "leave",
+     * "drop") or "*" for every phase. Each emitted payload carries the phase, the
+     * pointer position, and — on "drop" — the dragged text/plain data (the only
+     * phase where the DataTransfer contents are readable).
+     */
+    window.__gui_setup_drag = (id, eventType) => {
+        register(id, "drag", () => {
+            const phaseMap = {
+                dragstart: "start",
+                drag: "move",
+                dragend: "end",
+                dragenter: "enter",
+                dragleave: "leave",
+                drop: "drop",
+            };
+            // Coalesce the high-frequency "move" phase onto animation frames.
+            const pushMove = makeCoalescedEmitter(16);
+            const attached = [];
+            const makeHandler = (phase) => (e) => {
+                if (eventType !== "*" && eventType !== phase) {
+                    return;
+                }
+                // A drop only fires if the preceding dragover was default-prevented.
+                if (phase === "drop") {
+                    e.preventDefault();
+                }
+                let data = "";
+                if (phase === "drop" && e.dataTransfer) {
+                    data = e.dataTransfer.getData("text/plain");
+                }
+                const payload = {
+                    type: "drag_event",
+                    id,
+                    event: phase,
+                    x: e.clientX !== undefined ? e.clientX : 0,
+                    y: e.clientY !== undefined ? e.clientY : 0,
+                    data,
+                };
+                if (phase === "move") {
+                    pushMove(payload);
+                } else {
+                    emit(payload);
+                }
+            };
+            for (const [domEvt, phase] of Object.entries(phaseMap)) {
+                const handler = makeHandler(phase);
+                document.addEventListener(domEvt, handler);
+                attached.push([domEvt, handler]);
+            }
+            // dragover must be default-prevented for a drop to fire at all.
+            const overHandler = (e) => e.preventDefault();
+            document.addEventListener("dragover", overHandler);
+            attached.push(["dragover", overHandler]);
+            return () => {
+                for (const [domEvt, handler] of attached) {
+                    document.removeEventListener(domEvt, handler);
+                }
+            };
         });
     };
 

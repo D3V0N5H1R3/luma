@@ -53,7 +53,9 @@ do_http_request_typed(const std::string& method, const std::string& url, const s
 // body without constructing interpreter objects.
 struct HttpFetchResult {
     bool ok{false};
+    int status_code{0};
     std::string body{};
+    std::vector<std::pair<std::string, std::string>> headers{};
     std::string error{};
 };
 

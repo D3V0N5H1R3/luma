@@ -1756,6 +1756,138 @@ function void test_graphicalui_on_scroll_typed_is_scroll_subscription() {
     assert(Dictionary.get_or(sub, "_sub_type", "") == "scroll")
 }
 
+# ─── Typed keyboard events (GraphicalUi.KeyEvent) ──────────
+
+# Read a GraphicalUi.KeyEvent's fields: using the record as a parameter type
+# annotation (and reading its `key` + modifier fields) doubles as a check that
+# the record is fully registered and resolvable — the typed replacement for the
+# bare key string that on_key hands out, giving structured access to modifiers.
+function string key_event_summary(GraphicalUi.KeyEvent e) {
+    mutable string out = ""
+    if e.ctrl { out = out + "Ctrl+" }
+    if e.shift { out = out + "Shift+" }
+    if e.alt { out = out + "Alt+" }
+    if e.meta { out = out + "Meta+" }
+    return out + e.key
+}
+
+@test
+function void test_graphicalui_on_key_typed_is_keyboard_subscription() {
+    # on_key_typed is an additive companion to on_key: it produces the same
+    # "keyboard" subscription with the same filter, and its callback is annotated
+    # with the typed GraphicalUi.KeyEvent record.  The lambda body reads the
+    # record's fields via key_event_summary so the whole type resolves at compile
+    # time.
+    dictionary<string> sub = GraphicalUi.on_key_typed("k1", "s",
+        (GraphicalUi.KeyEvent e) -> key_event_summary(e))
+    assert(Dictionary.get_or(sub, "_sub_type", "") == "keyboard")
+    assert(Dictionary.get_or(sub, "filter", "") == "s")
+}
+
+# ─── Typed window resize (GraphicalUi.WindowSize, N05) ─────
+
+@test
+function void test_graphicalui_on_resize_typed_is_resize_subscription() {
+    # on_resize_typed delivers a single GraphicalUi.WindowSize record; its
+    # callback body reads the record's integer fields.
+    dictionary<string> sub = GraphicalUi.on_resize_typed("r1",
+        (GraphicalUi.WindowSize s) -> s.width + s.height)
+    assert(Dictionary.get_or(sub, "_sub_type", "") == "resize")
+}
+
+# ─── Typed mouse-event kind (GraphicalUi.MouseEventType, N02) ──
+
+# Exhaustive match over every GraphicalUi.MouseEventType variant — proves the
+# choice is registered and exhaustively matchable, and doubles as the typed
+# replacement for on_mouse's open event-type string.
+function string mouse_event_type_label(GraphicalUi.MouseEventType t) {
+    return match t {
+    case GraphicalUi.MouseEventType.Click  { "click" }
+    case GraphicalUi.MouseEventType.Move   { "move" }
+    case GraphicalUi.MouseEventType.Down   { "down" }
+    case GraphicalUi.MouseEventType.Up     { "up" }
+    case GraphicalUi.MouseEventType.Scroll { "scroll" }
+    }
+}
+
+@test
+function void test_graphicalui_mouse_event_type_match() {
+    assert(mouse_event_type_label(GraphicalUi.MouseEventType.Click) == "click")
+    assert(mouse_event_type_label(GraphicalUi.MouseEventType.Scroll) == "scroll")
+}
+
+@test
+function void test_graphicalui_mouse_event_type_to_string_bridges() {
+    # The bridge lowers each variant to the string on_mouse accepts.
+    assert(GraphicalUi.mouse_event_type_to_string(GraphicalUi.MouseEventType.Down) == "down")
+    assert(GraphicalUi.mouse_event_type_to_string(GraphicalUi.MouseEventType.Move) == "move")
+}
+
+@test
+function void test_graphicalui_on_mouse_of_lowers_choice() {
+    # on_mouse_of takes the typed MouseEventType and lowers it to on_mouse's
+    # "event" key, staying an untyped (raw dictionary) mouse subscription.
+    dictionary<string> sub = GraphicalUi.on_mouse_of("m1", GraphicalUi.MouseEventType.Up,
+        (dictionary _d) -> 0)
+    assert(Dictionary.get_or(sub, "_sub_type", "") == "mouse")
+    assert(Dictionary.get_or(sub, "event", "") == "up")
+}
+
+# ─── Typed drag events (GraphicalUi.DragEvent / DragPhase, N03) ──
+
+# Exhaustive match over every GraphicalUi.DragPhase variant.
+function string drag_phase_label(GraphicalUi.DragPhase p) {
+    return match p {
+    case GraphicalUi.DragPhase.Start { "start" }
+    case GraphicalUi.DragPhase.Move  { "move" }
+    case GraphicalUi.DragPhase.End   { "end" }
+    case GraphicalUi.DragPhase.Enter { "enter" }
+    case GraphicalUi.DragPhase.Leave { "leave" }
+    case GraphicalUi.DragPhase.Drop  { "drop" }
+    }
+}
+
+@test
+function void test_graphicalui_drag_phase_match() {
+    assert(drag_phase_label(GraphicalUi.DragPhase.Start) == "start")
+    assert(drag_phase_label(GraphicalUi.DragPhase.Drop) == "drop")
+}
+
+@test
+function void test_graphicalui_on_drag_typed_is_drag_subscription() {
+    # on_drag_typed delivers a typed GraphicalUi.DragEvent record; its callback
+    # reads the record's fields (including the DragPhase choice) so the whole type
+    # resolves at compile time.
+    dictionary<string> sub = GraphicalUi.on_drag_typed("d1",
+        (GraphicalUi.DragEvent e) -> drag_phase_label(e.phase))
+    assert(Dictionary.get_or(sub, "_sub_type", "") == "drag")
+}
+
+# ─── Typed HTTP result (GraphicalUi.HttpResponse, N04) ─────
+
+# Read a GraphicalUi.HttpResponse out of the result the http_*_full callback
+# receives — proves the record resolves and its fields are typed.
+function integer http_response_status(result<GraphicalUi.HttpResponse> r) {
+    return match r {
+        success(resp) { resp.status }
+        failure(_e) { 0 }
+    }
+}
+
+@test
+function void test_graphicalui_http_get_full_is_typed_command() {
+    dictionary<string> cmd = GraphicalUi.http_get_full("http://example.test",
+        http_response_status)
+    assert(Dictionary.get_or(cmd, "_command_type", "") == "http_get_full")
+}
+
+@test
+function void test_graphicalui_http_post_full_is_typed_command() {
+    dictionary<string> cmd = GraphicalUi.http_post_full("http://example.test", "payload",
+        http_response_status)
+    assert(Dictionary.get_or(cmd, "_command_type", "") == "http_post_full")
+}
+
 # ─── Typed device classification (G02) ─────────────────────
 
 function string device_class_label(GraphicalUi.DeviceClass c) {

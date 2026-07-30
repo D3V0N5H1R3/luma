@@ -147,6 +147,10 @@ void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const Mod
                           "(url: string, on_result: func(result<string>) -> any, headers?: "
                           "dictionary, timeout?: integer)",
                           named::widget(), {p.string, p.func}),
+            m.variadic_fn("http_get_full", 2,
+                          "(url: string, on_result: func(result<GraphicalUi.HttpResponse>) -> any, "
+                          "headers?: dictionary, timeout?: integer)",
+                          named::widget(), {p.string, p.func}),
             m.variadic_fn("http_patch", 3,
                           "(url: string, body: string, on_result: func(result<string>) -> any, "
                           "headers?: dictionary, timeout?: integer)",
@@ -155,6 +159,11 @@ void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const Mod
                 "http_post", 3,
                 "(url: string, body: string, on_result: func(result<string>) -> any, headers?: "
                 "dictionary, timeout?: integer)",
+                named::widget(), {p.string, p.string, p.func}),
+            m.variadic_fn(
+                "http_post_full", 3,
+                "(url: string, body: string, on_result: func(result<GraphicalUi.HttpResponse>) -> "
+                "any, headers?: dictionary, timeout?: integer)",
                 named::widget(), {p.string, p.string, p.func}),
             m.variadic_fn("http_put", 3,
                           "(url: string, body: string, on_result: func(result<string>) -> any, "
@@ -205,11 +214,16 @@ void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const Mod
                  {p.string, p.func}),
             m.fn("on_drag", 3, "(id: string, event_type: string, on_drag: func(dictionary) -> any)",
                  named::widget(), {p.string, p.string, p.func}),
+            m.fn("on_drag_typed", 2, "(id: string, on_drag: func(GraphicalUi.DragEvent) -> any)",
+                 named::widget(), {p.string, p.func}),
             m.fn("on_focus", 2, "(id: string, on_focus: func(boolean) -> any)", named::widget(),
                  {p.string, p.func}),
             m.fn("on_idle", 3, "(id: string, timeout_ms: integer, on_idle: func() -> any)",
                  named::widget(), {p.string, p.integer, p.func}),
             m.fn("on_key", 3, "(id: string, key_filter: string, on_key: func(string) -> any)",
+                 named::widget(), {p.string, p.string, p.func}),
+            m.fn("on_key_typed", 3,
+                 "(id: string, key_filter: string, on_key: func(GraphicalUi.KeyEvent) -> any)",
                  named::widget(), {p.string, p.string, p.func}),
             m.variadic_fn("on_left", 2, "(child: widget, overlay: widget, style?: dictionary)",
                           named::widget(), {p.widget, p.widget}),
@@ -221,12 +235,19 @@ void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const Mod
             m.fn("on_mouse_typed", 3,
                  "(id: string, event_type: string, on_event: func(GraphicalUi.MouseEvent) -> any)",
                  named::widget(), {p.string, p.string, p.func}),
+            m.variadic_fn("on_mouse_of", 3,
+                          "(id: string, event_type: GraphicalUi.MouseEventType, on_event: "
+                          "func(dictionary) -> any, throttle_ms?: integer)",
+                          named::widget(), {p.string, named::gui_mouse_event_type(), p.func}),
             m.fn("on_offline", 2, "(id: string, on_offline: func() -> any)", named::widget(),
                  {p.string, p.func}),
             m.fn("on_online", 2, "(id: string, on_online: func() -> any)", named::widget(),
                  {p.string, p.func}),
             m.fn("on_resize", 2, "(id: string, on_resize: func(integer, integer) -> any)",
                  named::widget(), {p.string, p.func}),
+            m.fn("on_resize_typed", 2,
+                 "(id: string, on_resize: func(GraphicalUi.WindowSize) -> any)", named::widget(),
+                 {p.string, p.func}),
             m.variadic_fn("on_right", 2, "(child: widget, overlay: widget, style?: dictionary)",
                           named::widget(), {p.widget, p.widget}),
             m.fn("on_scroll", 2, "(id: string, on_scroll: func(dictionary) -> any)",
@@ -300,6 +321,8 @@ void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const Mod
             m.fn("set_title", 1, "(title: string)", named::widget(), {p.string}),
             m.fn("severity_to_string", 1, "(severity: GraphicalUi.Severity)", R::string_type(),
                  {named::gui_severity()}),
+            m.fn("mouse_event_type_to_string", 1, "(event_type: GraphicalUi.MouseEventType)",
+                 R::string_type(), {named::gui_mouse_event_type()}),
             m.fn("shrink", 0, "()", R::string_type()),
             m.variadic_fn("skeleton", 0, "(width?: integer, height?: integer)", named::widget()),
             m.variadic_fn(
@@ -343,6 +366,9 @@ void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const Mod
             m.variadic_fn("test_find", 3,
                           "(config: dictionary, model: any, locator: string, index?: integer)",
                           R::dict(R::any_type()), {p.dict_any, p.any, p.string}),
+            m.variadic_fn("test_drag", 3,
+                          "(config: dictionary, model: any, phase: string, data?: string)",
+                          R::any_type(), {p.dict_any, p.any, p.string}),
             m.fn("test_init", 1, "(config: dictionary)", R::any_type(), {p.dict_any}),
             m.variadic_fn(
                 "test_input", 4,

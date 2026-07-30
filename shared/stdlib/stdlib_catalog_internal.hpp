@@ -523,6 +523,13 @@ namespace named {
     return ReturnTypeDesc::named("GraphicalUi.ButtonVariant");
 }
 
+// GraphicalUi.MouseEventType — the typed pointer-event kind accepted by
+// GraphicalUi.on_mouse_of / mouse_event_type_to_string.  Needs a matching branch
+// in stdlib_type_signatures.cpp.
+[[nodiscard]] inline ReturnTypeDesc gui_mouse_event_type() {
+    return ReturnTypeDesc::named("GraphicalUi.MouseEventType");
+}
+
 // Terminal.parse_key returns this choice directly, so — like json_value() and
 // file_kind() — it uses the fully-qualified name (choices resolve qualified;
 // records such as input_event()/mouse_event() resolve by bare name).

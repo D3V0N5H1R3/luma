@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 #include "analysis/errors/error.hpp"
@@ -75,6 +76,31 @@ void on_gui_event(const char* id, const char* req, void* arg);
 // GraphicalUi.ScrollPosition record — the payload GraphicalUi.on_scroll_typed
 // delivers to its callback.  Exposed for unit testing.
 [[nodiscard]] Value build_scroll_position_record(const DictionaryValue& payload);
+
+// Convert a keyboard-event key string plus its modifier payload dictionary
+// (ctrl, shift, alt, meta) into a typed GraphicalUi.KeyEvent record — the
+// payload GraphicalUi.on_key_typed delivers to its callback.  `mods` may be
+// null (e.g. from the headless test path), in which case every modifier
+// defaults to false.  Exposed for unit testing.
+[[nodiscard]] Value build_key_event_record(const std::string& key, const DictionaryValue* mods);
+
+// Convert a window-resize width/height pair into a typed GraphicalUi.WindowSize
+// record — the payload GraphicalUi.on_resize_typed delivers to its callback.
+// Exposed for unit testing.
+[[nodiscard]] Value build_window_size_record(std::int64_t width, std::int64_t height);
+
+// Convert a drag-event payload dictionary (x, y, data, event) into a typed
+// GraphicalUi.DragEvent record — the payload GraphicalUi.on_drag_typed delivers
+// to its callback.  A missing coordinate defaults to 0, missing data to "", and
+// an unrecognised/missing phase to Start.  Exposed for unit testing.
+[[nodiscard]] Value build_drag_event_record(const DictionaryValue& payload);
+
+// Build a GraphicalUi.HttpResponse record {status, headers, body} — the payload
+// GraphicalUi.http_get_full / http_post_full deliver inside a result<...>.
+// Exposed for unit testing.
+[[nodiscard]] Value
+build_http_response_record_gui(int status, std::string body,
+                               const std::vector<std::pair<std::string, std::string>>& headers);
 
 // graphicalui_widgets*.cpp
 void register_graphicalui_widgets(const EnvPtr& env);
@@ -220,6 +246,63 @@ make_command_dict(std::string_view command_type) {
     }
 
     return "primary";
+}
+
+// Map a GraphicalUi.MouseEventType choice value to its lowercase event-type
+// string ("click" / "move" / "down" / "up" / "scroll") — the value the on_mouse
+// subscription's `event` key carries and the JS evtMap keys on.  Anything that is
+// not a recognised variant defaults to "move" (on_mouse's own default), keeping
+// the bridge total.
+[[nodiscard]] inline std::string mouse_event_type_to_lower(const Value& v) {
+    if (v.is_choice()) {
+        const auto& variant = v.as_choice()->variant;
+
+        if (variant == "Click") {
+            return "click";
+        }
+
+        if (variant == "Down") {
+            return "down";
+        }
+
+        if (variant == "Up") {
+            return "up";
+        }
+
+        if (variant == "Scroll") {
+            return "scroll";
+        }
+    }
+
+    return "move";
+}
+
+// Map a drag-event phase string (the value on_drag's `event` key carries — e.g.
+// "start" / "move" / "end" / "enter" / "leave" / "drop") to its
+// GraphicalUi.DragPhase choice variant name.  An unrecognised/missing phase
+// defaults to "Start", keeping build_drag_event_record total.
+[[nodiscard]] inline std::string drag_phase_from_string(std::string_view phase) {
+    if (phase == "move") {
+        return "Move";
+    }
+
+    if (phase == "end") {
+        return "End";
+    }
+
+    if (phase == "enter") {
+        return "Enter";
+    }
+
+    if (phase == "leave") {
+        return "Leave";
+    }
+
+    if (phase == "drop") {
+        return "Drop";
+    }
+
+    return "Start";
 }
 
 // Partition a trailing style/options dictionary into recognised widget-option

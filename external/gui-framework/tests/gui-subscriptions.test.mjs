@@ -119,6 +119,10 @@ describe("__gui_setup_keyboard", () => {
             type: "keyboard",
             id: "k1",
             value: "a",
+            ctrl: false,
+            shift: false,
+            alt: false,
+            meta: false,
         });
         assert.equal(prevented, 1);
 
@@ -139,6 +143,10 @@ describe("__gui_setup_keyboard", () => {
             type: "keyboard",
             id: "k2",
             value: "s",
+            ctrl: true,
+            shift: false,
+            alt: false,
+            meta: false,
         });
     });
 
@@ -203,7 +211,82 @@ describe("__gui_setup_mouse", () => {
     it("binds scroll subscriptions to the window target", () => {
         const { window, env } = fresh();
         window.__gui_setup_mouse("m3", "scroll", 0);
+        assert.equal(env.listenerCount("document", "scroll"), 0);
         assert.equal(env.listenerCount("window", "scroll"), 1);
+    });
+});
+
+describe("__gui_setup_drag", () => {
+    it("emits a non-move phase immediately with position and phase name", () => {
+        const { window, env } = fresh();
+        window.__gui_setup_drag("d1", "*");
+        assert.equal(env.listenerCount("document", "dragstart"), 1);
+        assert.equal(env.listenerCount("document", "dragover"), 1);
+
+        env.dispatch("document", "dragstart", { clientX: 5, clientY: 8 });
+        assert.deepEqual(plain(env.emitCalls[0]), {
+            type: "drag_event",
+            id: "d1",
+            event: "start",
+            x: 5,
+            y: 8,
+            data: "",
+        });
+
+        window.__gui_remove_sub("d1");
+        assert.equal(env.listenerCount("document", "dragstart"), 0);
+        assert.equal(env.listenerCount("document", "dragover"), 0);
+    });
+
+    it("reads the dropped text/plain data and prevents the drop default", () => {
+        const { window, env } = fresh();
+        window.__gui_setup_drag("d2", "*");
+
+        let prevented = 0;
+        env.dispatch("document", "drop", {
+            clientX: 12,
+            clientY: 3,
+            preventDefault() { prevented += 1; },
+            dataTransfer: { getData: (t) => (t === "text/plain" ? "card-9" : "") },
+        });
+        assert.equal(prevented, 1);
+        assert.deepEqual(plain(env.emitCalls[0]), {
+            type: "drag_event",
+            id: "d2",
+            event: "drop",
+            x: 12,
+            y: 3,
+            data: "card-9",
+        });
+    });
+
+    it("filters to a single phase and ignores the others", () => {
+        const { window, env } = fresh();
+        window.__gui_setup_drag("d3", "end");
+
+        env.dispatch("document", "dragstart", { clientX: 1, clientY: 1 });
+        assert.equal(env.emitCalls.length, 0);
+
+        env.dispatch("document", "dragend", { clientX: 2, clientY: 4 });
+        assert.equal(env.emitCalls.length, 1);
+        assert.equal(env.emitCalls[0].event, "end");
+    });
+
+    it("coalesces the high-frequency move phase onto a frame", () => {
+        const { window, env } = fresh();
+        window.__gui_setup_drag("d4", "*");
+
+        env.setNow(1000);
+        env.dispatch("document", "drag", { clientX: 1, clientY: 1 });
+        env.dispatch("document", "drag", { clientX: 7, clientY: 9 });
+        assert.equal(env.emitCalls.length, 0);
+        assert.equal(env.rafPending(), 1);
+
+        env.flushRaf();
+        assert.equal(env.emitCalls.length, 1);
+        assert.equal(env.emitCalls[0].event, "move");
+        assert.equal(env.emitCalls[0].x, 7);
+        assert.equal(env.emitCalls[0].y, 9);
     });
 });
 

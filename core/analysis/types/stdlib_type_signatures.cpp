@@ -166,6 +166,10 @@ namespace {
             if (desc.named_type == "GraphicalUi.ButtonVariant") {
                 return TypeInfo::make_named(K::Choice, "GraphicalUi.ButtonVariant");
             }
+
+            if (desc.named_type == "GraphicalUi.MouseEventType") {
+                return TypeInfo::make_named(K::Choice, "GraphicalUi.MouseEventType");
+            }
             if (desc.named_type == "Compression.Format") {
                 return TypeInfo::make_named(K::Choice, "Compression.Format");
             }

@@ -639,6 +639,47 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // build_scroll_position_record() in graphicalui_events.cpp.
         add_record(st, "GraphicalUi.ScrollPosition", field("number", "x"), field("number", "y"));
 
+        // Typed payload delivered to a GraphicalUi.on_key_typed callback — the
+        // record replacement for the bare key string that GraphicalUi.on_key
+        // hands out.  `key` is the pressed key's name (e.g. "s", "Enter",
+        // "ArrowUp", mirroring the DOM KeyboardEvent.key); ctrl / shift / alt /
+        // meta are booleans reflecting the modifier state the browser already
+        // computes for filter matching, so a beginner can branch on Ctrl+S
+        // without re-parsing the key text.  Constructed by build_key_event_record()
+        // in core/runtime/stdlib/io/graphicalui_events.cpp.
+        add_record(st, "GraphicalUi.KeyEvent", field("string", "key"), field("boolean", "ctrl"),
+                   field("boolean", "shift"), field("boolean", "alt"), field("boolean", "meta"));
+
+        // Typed payload delivered to a GraphicalUi.on_resize_typed callback — the
+        // aggregable record replacement for the two loose integer arguments
+        // GraphicalUi.on_resize hands out.  width / height are `integer` (discrete
+        // pixel counts); named fields remove the width/height ordering trap and let
+        // the last size be stored/passed as one value.  Constructed by
+        // build_window_size_record() in graphicalui_events.cpp.
+        add_record(st, "GraphicalUi.WindowSize", field("integer", "width"),
+                   field("integer", "height"));
+
+        // Typed HTTP result delivered (inside a result<...>) to the callback of
+        // GraphicalUi.http_get_full / http_post_full — the structured replacement
+        // for the body-only result<string> that http_get / http_post deliver, so a
+        // beginner can branch on the status code and read response headers without
+        // a second Http-module code path.  Modelled on Http.Response: `status` is
+        // an `integer` (discrete status code), `headers` a dictionary<string>, and
+        // `body` the response text.  Built by build_http_response_record_gui() in
+        // graphicalui_commands.cpp.
+        add_record(st, "GraphicalUi.HttpResponse", field("integer", "status"),
+                   field_of(dict_ann("string"), "headers"), field("string", "body"));
+
+        // Typed payload delivered to a GraphicalUi.on_drag_typed callback — the
+        // record replacement for the untyped position dictionary GraphicalUi.on_drag
+        // hands out.  x / y are `number` (device-pixel pointer coordinates,
+        // mirroring MouseEvent); `data` is the dragged payload string; `phase`
+        // carries the GraphicalUi.DragPhase choice (fully-qualified so the
+        // annotation resolves to the choice).  Constructed by
+        // build_drag_event_record() in graphicalui_events.cpp.
+        add_record(st, "GraphicalUi.DragEvent", field("number", "x"), field("number", "y"),
+                   field("string", "data"), field("GraphicalUi.DragPhase", "phase"));
+
         // ── DateTime.Weekday ────────────────────────────
         // Variant names must match k_weekday_names in
         // core/runtime/stdlib/system/datetime_module.cpp exactly (PascalCase,
@@ -1158,6 +1199,48 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             ch->variants.push_back(ChoiceVariant{.name = "Landscape", .fields = {}});
 
             st.choice_map["GraphicalUi.Orientation"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── GraphicalUi.MouseEventType ──────────────────
+        // Which pointer-event kind a GraphicalUi.on_mouse / on_mouse_of
+        // subscription listens for.  A closed, exhaustively-matchable choice
+        // replacing the open "click" / "move" / "down" / "up" / "scroll" event
+        // string on_mouse takes — a typo like "mouseup" silently never fires,
+        // whereas the choice is enforced at the type level.  Variant names/order
+        // must match mouse_event_type_to_string() in
+        // core/runtime/stdlib/io/graphicalui_helpers.hpp and the JS evtMap in
+        // external/gui-framework/gui-subscriptions.js (Click/Move/Down/Up/Scroll).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "MouseEventType");
+            ch->variants.push_back(ChoiceVariant{.name = "Click", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Move", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Down", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Up", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Scroll", .fields = {}});
+
+            st.choice_map["GraphicalUi.MouseEventType"] = ch.get();
+            st.choices.push_back(std::move(ch));
+        }
+
+        // ── GraphicalUi.DragPhase ───────────────────────
+        // Which phase of a drag gesture a GraphicalUi.DragEvent refers to.  A
+        // closed, exhaustively-matchable choice replacing the stringly-typed drag
+        // event_type filter on_drag takes.  Variant names/order must match
+        // drag_phase_from_string() in
+        // core/runtime/stdlib/io/graphicalui_helpers.hpp and the DOM drag events
+        // (Start/Move/End/Enter/Leave/Drop → dragstart/drag/dragend/dragenter/
+        // dragleave/drop).
+        {
+            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "DragPhase");
+            ch->variants.push_back(ChoiceVariant{.name = "Start", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Move", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "End", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Enter", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Leave", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Drop", .fields = {}});
+
+            st.choice_map["GraphicalUi.DragPhase"] = ch.get();
             st.choices.push_back(std::move(ch));
         }
 
