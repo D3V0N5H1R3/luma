@@ -323,6 +323,35 @@ mutable (string first, string last) = split_name(full_name)
 
 `mutable` applies to **all** bindings in the destructuring — individual elements cannot have mixed mutability.
 
+### Record Destructuring
+
+A record can be destructured by field name, binding each listed field to a
+same-named local. Field types are inferred from the record definition:
+
+```luma
+record Point { number x, number y, number z }
+
+Point p = Point { x = 1.0, y = 2.0, z = 3.0 }
+
+Point { x, y } = p          # binds x and y; z is ignored
+print(x)                    # 1.0
+print(y)                    # 2.0
+```
+
+A **subset** of fields may be listed — unlisted fields are simply not bound.
+Duplicate field names, unknown fields, and a right-hand value that is not an
+instance of the record type are compile-time errors. As with tuples, `mutable`
+applies to **all** bindings:
+
+```luma
+mutable Point { x, y, z } = p
+x = x + 10.0
+```
+
+Record destructuring reads plain data — it is distinct from record _creation_,
+which assigns each field (`Point { x = 1.0, ... }`). Records may also be
+destructured as a `match` case pattern (see [§8 — Records](#8--records)).
+
 ### Scope and Shadowing
 
 Declaring a variable that is already defined in the **same** scope is a runtime error. However, an inner block (e.g. inside `if`, `for`, or `{}`) creates a new scope, so inner declarations safely shadow outer ones:
@@ -980,6 +1009,38 @@ All fields must be provided and fields may be given in any order. Missing or ext
 print(p.x) # 3.5
 print(p.y) # -1.2
 print(p)   # Point { x = 3.5, y = -1.2 }
+```
+
+### Destructuring Fields
+
+Instead of repeating `p.x`, `p.y`, `p.z`, a record can be destructured to bind
+several fields to same-named locals at once. Field types are inferred from the
+record definition, and a subset of fields may be listed:
+
+```luma
+Point { x, y } = p       # binds x and y
+mutable Point { x, y } = p # all bindings are mutable
+```
+
+Records can also be destructured as a `match` case pattern, binding the named
+fields inside the arm. Because a record has a single shape, an unguarded record
+pattern (or an `else` arm) makes the match exhaustive:
+
+```luma
+record Shape { number width, number height }
+
+number area = match s {
+    case Shape { width, height } { width * height }
+}
+```
+
+Guards combine with record patterns, in which case an `else` arm is required:
+
+```luma
+string kind = match s {
+    case Shape { width, height } when width == height { "square" }
+    else { "rectangle" }
+}
 ```
 
 ### Equality

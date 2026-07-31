@@ -31,6 +31,7 @@ enum class StatementKind {
     If,
     Increment,
     Match,
+    RecordDestructuring,
     Return,
     Try,
     TupleDestructuring,
@@ -50,6 +51,7 @@ enum class StatementKind {
                                             "If",
                                             "Increment",
                                             "Match",
+                                            "RecordDestructuring",
                                             "Return",
                                             "Try",
                                             "TupleDestructuring",
@@ -185,6 +187,22 @@ struct TupleDestructuringStatement : Statement {
           initializer{std::move(initializer)} {}
 
     std::vector<std::pair<TypeAnnotation, std::string>> bindings;
+    bool is_mutable{false};
+    ExpressionPtr initializer;
+};
+
+struct RecordDestructuringStatement : Statement {
+    explicit RecordDestructuringStatement(SourceLocation loc, std::string type_name,
+                                          std::vector<std::string> fields, bool is_mutable,
+                                          ExpressionPtr initializer)
+        : Statement{StatementKind::RecordDestructuring, loc},
+          type_name{std::move(type_name)},
+          fields{std::move(fields)},
+          is_mutable{is_mutable},
+          initializer{std::move(initializer)} {}
+
+    std::string type_name;           // record type name (possibly namespace-qualified)
+    std::vector<std::string> fields; // field names to bind (a subset is allowed)
     bool is_mutable{false};
     ExpressionPtr initializer;
 };

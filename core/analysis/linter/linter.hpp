@@ -169,6 +169,7 @@ private:
     void visit_assignment(const AssignmentStatement& assign);
     void visit_compound_assignment(const CompoundAssignmentStatement& assign);
     void visit_tuple_destructuring(const TupleDestructuringStatement& td);
+    void visit_record_destructuring(const RecordDestructuringStatement& rd);
     void visit_increment(const IncrementStatement& inc);
     void visit_decrement(const DecrementStatement& dec);
     //

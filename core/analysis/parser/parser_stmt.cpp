@@ -38,6 +38,11 @@ StatementPtr Parser::parse_statement() {
         return parse_tuple_destructuring(false);
     }
 
+    // Record destructuring: Type { field, ... } = expr
+    if (looks_like_record_destructuring()) {
+        return parse_record_destructuring(false);
+    }
+
     // Return.
     if (check(TokenType::Return)) {
         return parse_return_statement();
@@ -124,6 +129,11 @@ StatementPtr Parser::parse_mutable_decl() {
         }
 
         return parse_variable_decl(true);
+    }
+
+    // mutable Type { field, ... } = expr  →  record destructuring
+    if (looks_like_record_destructuring()) {
+        return parse_record_destructuring(true);
     }
 
     return parse_variable_decl(true);
@@ -338,6 +348,107 @@ StatementPtr Parser::parse_tuple_destructuring(bool is_mutable) {
 
     return std::make_unique<TupleDestructuringStatement>(location, std::move(bindings), is_mutable,
                                                          std::move(initializer));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Record destructuring
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void Parser::consume_generic_args() {
+    if (!check(TokenType::Less)) {
+        return;
+    }
+
+    advance();
+    int angle_depth = 1;
+
+    while (angle_depth > 0 && !is_at_end()) {
+        if (check(TokenType::Less)) {
+            ++angle_depth;
+        } else if (check(TokenType::Greater)) {
+            --angle_depth;
+        } else if (check(TokenType::GreaterGreater)) {
+            angle_depth -= 2;
+        }
+
+        advance();
+    }
+}
+
+bool Parser::looks_like_record_destructuring() const {
+    // Must start with an uppercase (record) type name.
+    if (!check(TokenType::Identifier) || !starts_with_uppercase(current().lexeme)) {
+        return false;
+    }
+
+    // Skip the (possibly namespace-qualified, possibly generic) type name.
+    const int after_type = skip_type_at(0);
+
+    if (token_type_at(after_type) != TokenType::LeftBrace) {
+        return false;
+    }
+
+    // Find the matching '}'.
+    int offset = after_type + 1;
+    int depth = 1;
+
+    while (depth > 0 && token_pos_ + offset < token_count_) {
+        const auto type = token_type_at(offset);
+
+        if (type == TokenType::LeftBrace) {
+            ++depth;
+        } else if (type == TokenType::RightBrace) {
+            --depth;
+        }
+
+        ++offset;
+    }
+
+    // A destructuring binding is followed by '=' (not '==', which the lexer
+    // tokenises separately).  Record *creation* (`Type { field = value }`) as a
+    // statement is not followed by '=', so this reliably distinguishes them.
+    return token_type_at(offset) == TokenType::Equals;
+}
+
+StatementPtr Parser::parse_record_destructuring(bool is_mutable) {
+    const auto location = current().location;
+
+    // Parse the record type name (bare or namespace-qualified).
+    std::string type_name{expect(TokenType::Identifier).lexeme};
+
+    while (check(TokenType::Dot) && check_at(1, TokenType::Identifier)) {
+        advance(); // consume '.'
+        type_name += '.';
+        type_name += expect(TokenType::Identifier).lexeme;
+    }
+
+    // Skip optional generic arguments (`Type<...>`); field types are inferred
+    // from the record definition, so the arguments carry no binding information.
+    consume_generic_args();
+
+    expect(TokenType::LeftBrace);
+
+    std::vector<std::string> fields;
+
+    if (!check(TokenType::RightBrace)) {
+        fields.push_back(expect(TokenType::Identifier).lexeme);
+
+        while (consume_if(TokenType::Comma)) {
+            if (check(TokenType::RightBrace)) {
+                break; // trailing comma
+            }
+
+            fields.push_back(expect(TokenType::Identifier).lexeme);
+        }
+    }
+
+    recover_expect(TokenType::RightBrace);
+    expect(TokenType::Equals);
+
+    auto initializer = parse_expression();
+
+    return std::make_unique<RecordDestructuringStatement>(
+        location, std::move(type_name), std::move(fields), is_mutable, std::move(initializer));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -645,6 +756,86 @@ void Parser::parse_pattern_choice_destructure(MatchArm& arm, std::string_view ty
     arm.pattern = std::move(choice);
 }
 
+bool Parser::looks_like_record_pattern() const {
+    // A record pattern is `Type { field, ... } { body }` — a (possibly
+    // namespace-qualified) type name, a brace group, then the arm's body block.
+    if (!check(TokenType::Identifier) || !starts_with_uppercase(current().lexeme)) {
+        return false;
+    }
+
+    // Skip the (possibly namespace-qualified, possibly generic) type name via
+    // the shared helper, matching looks_like_record_destructuring.
+    const int offset = skip_type_at(0);
+
+    if (token_type_at(offset) != TokenType::LeftBrace) {
+        return false;
+    }
+
+    // Match the pattern's braces.
+    int close = offset + 1;
+    int depth = 1;
+
+    while (depth > 0 && token_pos_ + close < token_count_) {
+        const auto type = token_type_at(close);
+
+        if (type == TokenType::LeftBrace) {
+            ++depth;
+        } else if (type == TokenType::RightBrace) {
+            --depth;
+        }
+
+        ++close;
+    }
+
+    // The pattern braces are followed by the arm's body block (`{`) or an
+    // optional contextual `when` guard.  A unit/variant arm (`case X { body }`)
+    // has only a single brace group, and a bare uppercase type name is never a
+    // valid non-record arm, so this reliably discriminates a record pattern.
+    if (token_type_at(close) == TokenType::LeftBrace) {
+        return true;
+    }
+
+    const int idx = token_pos_ + close;
+
+    return idx >= 0 && idx < token_count_ && token_type_at(close) == TokenType::Identifier &&
+           tokens_[static_cast<std::size_t>(idx)].lexeme == "when";
+}
+
+void Parser::parse_pattern_record_destructure(MatchArm& arm) {
+    std::string type_name{expect(TokenType::Identifier).lexeme};
+
+    while (check(TokenType::Dot) && check_at(1, TokenType::Identifier)) {
+        advance(); // consume '.'
+        type_name += '.';
+        type_name += expect(TokenType::Identifier).lexeme;
+    }
+
+    MatchArm::RecordPatternData record;
+    record.record_type = std::move(type_name);
+
+    // Skip optional generic arguments (`Type<...>`); field types come from the
+    // record definition, so the arguments carry no binding information.
+    consume_generic_args();
+
+    expect(TokenType::LeftBrace);
+
+    if (!check(TokenType::RightBrace)) {
+        record.field_bindings.push_back(expect(TokenType::Identifier).lexeme);
+
+        while (consume_if(TokenType::Comma)) {
+            if (check(TokenType::RightBrace)) {
+                break; // trailing comma
+            }
+
+            record.field_bindings.push_back(expect(TokenType::Identifier).lexeme);
+        }
+    }
+
+    recover_expect(TokenType::RightBrace);
+
+    arm.pattern = std::move(record);
+}
+
 void Parser::parse_pattern_guard(MatchArm& arm) {
     if (check(TokenType::Identifier) && current().lexeme == "when") {
         advance(); // consume 'when'
@@ -684,6 +875,8 @@ void Parser::parse_case_pattern(MatchArm& arm) {
         parse_single_binding_pattern<MatchArm::SomePatternData>(arm);
     } else if (is_comparison_op(current().type)) {
         parse_pattern_comparison(arm.pattern);
+    } else if (looks_like_record_pattern()) {
+        parse_pattern_record_destructure(arm);
     } else if (check(TokenType::Identifier) && check_at(1, TokenType::Dot)) {
         // Enum/Choice case: [Namespace.]Type.Variant[(bindings)]
         auto [type_name, variant_name] = parse_qualified_variant_name();
@@ -706,7 +899,8 @@ void Parser::parse_case_pattern(MatchArm& arm) {
         const bool has_binding =
             (arm.kind() == MatchArm::Kind::SuccessResult ||
              arm.kind() == MatchArm::Kind::FailureResult || arm.kind() == MatchArm::Kind::SomeCase);
-        const bool has_choice = (arm.kind() == MatchArm::Kind::ChoiceCase);
+        const bool has_choice =
+            (arm.kind() == MatchArm::Kind::ChoiceCase || arm.kind() == MatchArm::Kind::RecordCase);
         if (has_binding || has_choice) {
             syntax_error("'|' alternatives cannot be used with patterns that "
                          "bind variables",

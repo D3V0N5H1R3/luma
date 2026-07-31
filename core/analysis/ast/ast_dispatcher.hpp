@@ -382,6 +382,8 @@ public:
                 self.visit_try(s);
             } else if constexpr (std::is_same_v<S, TupleDestructuringStatement>) {
                 self.visit_tuple_destructuring(s);
+            } else if constexpr (std::is_same_v<S, RecordDestructuringStatement>) {
+                self.visit_record_destructuring(s);
             } else if constexpr (std::is_same_v<S, VariableDeclStatement>) {
                 self.visit_variable_declaration(s);
             } else if constexpr (std::is_same_v<S, WhileStatement>) {
@@ -450,6 +452,10 @@ public:
     }
 
     void visit_tuple_destructuring(const TupleDestructuringStatement& s) {
+        static_cast<Derived*>(this)->visit_statement_unhandled(s);
+    }
+
+    void visit_record_destructuring(const RecordDestructuringStatement& s) {
         static_cast<Derived*>(this)->visit_statement_unhandled(s);
     }
 

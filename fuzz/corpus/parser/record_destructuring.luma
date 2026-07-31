@@ -1,0 +1,21 @@
+# Parser stress: record destructuring bindings and match patterns, including
+# edge cases (trailing comma, subset, qualified type, guard, nested).
+record Point { number x, number y, number z }
+
+namespace Geometry {
+    record Vec { number dx, number dy }
+}
+
+function void a(Point p) {
+    Point { x, y } = p
+    mutable Point { x, y, z, } = p
+    Geometry.Vec { dx, dy } = Geometry.Vec { dx = 1.0, dy = 2.0 }
+}
+
+function integer b(Point p) {
+    return match p {
+    case Point { x } { 1 }
+    case Point { x, y } when x > y { 2 }
+    else { 0 }
+    }
+}

@@ -144,6 +144,18 @@ void MatchExhaustivenessChecker::check(const std::vector<MatchArm>& arms,
         check_result_coverage(arms, loc);
     } else if (subject_type.kind == TypeInfo::Kind::Optional) {
         check_optional_coverage(arms, loc);
+    } else if (subject_type.kind == TypeInfo::Kind::Record) {
+        // A record is a single-shape product type, so an unguarded record
+        // pattern (or an 'else') irrefutably covers it.
+        const bool covered = std::ranges::any_of(arms, [](const MatchArm& arm) {
+            return !arm.has_guard() &&
+                   (arm.kind() == MatchArm::Kind::RecordCase || arm.kind() == MatchArm::Kind::Else);
+        });
+
+        if (!covered) {
+            tc_.error("match on a record must include an unguarded record pattern or an 'else' arm",
+                      loc, "add a 'case Type { ... } { ... }' arm or an 'else' arm");
+        }
     } else {
         // For other types, an else arm is required if comparison, string,
         // or integer case arms are used.
@@ -223,6 +235,15 @@ bool MatchExhaustivenessChecker::is_exhaustive(const MatchStatement& match_stmt)
                                    (bool_cov.has_true && bool_cov.has_false);
 
     if (simple_exhaustive) {
+        return true;
+    }
+
+    // An unguarded record pattern irrefutably covers a record subject.
+    const bool has_record = std::ranges::any_of(match_stmt.arms, [](const MatchArm& arm) {
+        return !arm.has_guard() && arm.kind() == MatchArm::Kind::RecordCase;
+    });
+
+    if (has_record) {
         return true;
     }
 

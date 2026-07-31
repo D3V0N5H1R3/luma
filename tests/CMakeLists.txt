@@ -447,6 +447,7 @@ set(LUMA_FEATURE_TESTS_LANGUAGE
     optional.luma
     ownership.luma
     pipe.luma
+    record_destructuring.luma
     records.luma
     reference.luma
     sandbox.luma

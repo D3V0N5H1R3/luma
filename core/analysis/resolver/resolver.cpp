@@ -361,6 +361,12 @@ void NameResolver::resolve_statement(const Statement& stmt) {
             for (const auto& [type, name] : node.bindings) {
                 (void)current_scope_->define(name, node.is_mutable);
             }
+        } else if constexpr (std::is_same_v<T, RecordDestructuringStatement>) {
+            resolve_expression(*node.initializer);
+
+            for (const auto& name : node.fields) {
+                (void)current_scope_->define(name, node.is_mutable);
+            }
         } else if constexpr (std::is_same_v<T, BlockStatement>) {
             resolve_scoped_body(node.statements);
         }

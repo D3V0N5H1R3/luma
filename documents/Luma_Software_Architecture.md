@@ -269,6 +269,7 @@ _Statements_ (perform an action, produce no value):
 - `ReturnStatement` — optional value expression.
 - `TryStatement` — try body, optional catch clause (with bound error variable), and optional finally block.
 - `TupleDestructuringStatement` — binds tuple elements to named variables.
+- `RecordDestructuringStatement` — binds a record's fields to same-named variables by field name (a subset of fields may be listed).
 - `VariableDeclaration` — type, name, mutability flag, and initialiser expression. Listed here because variable declarations appear as statements inside function bodies; at the top level, they are treated as declarations.
 - `WhileStatement` — condition expression and body block.
 

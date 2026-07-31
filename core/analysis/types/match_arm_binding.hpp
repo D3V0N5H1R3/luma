@@ -45,6 +45,18 @@ void bind_arm_names(TypeCheckingServices& tc, const MatchArm& arm, const TypeInf
 void bind_choice_fields(TypeCheckingServices& tc, const MatchArm& arm, const TypeInfo& subject_type,
                         const SourceLocation& location, bool report_unknown_variant);
 
+// Bind the fields of a record destructuring — shared by record-destructuring
+// bindings (`Point { x, y } = p`) and record match patterns
+// (`case Point { x, y }`).  Each listed field is bound in the current scope to
+// its declared type (with the record's generic type params resolved from
+// `subject_type`'s concrete arguments when present).  A subset of fields may be
+// listed.  Emits diagnostics for an unknown record type, an unknown field, or a
+// duplicated field name; unresolved bindings fall back to a permissive type so
+// later checks do not cascade.
+void bind_record_fields(TypeCheckingServices& tc, std::string_view record_type,
+                        const std::vector<std::string>& fields, const TypeInfo& subject_type,
+                        const SourceLocation& location, bool is_mutable);
+
 // Merge per-arm ownership snapshots back into the current scope: if any arm
 // consumed a previously-unconsumed unique variable, mark it consumed
 // (conservative — prevents use-after-move across arms).

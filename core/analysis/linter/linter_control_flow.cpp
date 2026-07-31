@@ -179,6 +179,10 @@ void Linter::lint_match_arms(const std::vector<MatchArm>& arms, SourceLocation m
             tracker_.track_variable(binding, match_loc, false);
         }
 
+        for (const auto& binding : arm.record_field_bindings()) {
+            tracker_.track_variable(binding, match_loc, false);
+        }
+
         // The guard is evaluated within the arm scope and may reference the
         // arm's bindings, so lint it after the bindings are tracked.
         if (arm.guard) {

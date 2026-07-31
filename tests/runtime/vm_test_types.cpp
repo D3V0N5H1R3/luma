@@ -510,6 +510,106 @@ LUMA_TEST(vm_optional_chaining_none) {
     ASSERT_EQ(result.as_integer(), -1);
 }
 
+// ─── Record destructuring tests ───
+
+LUMA_TEST(vm_record_destructuring_binding) {
+    const auto result = eval("record Point { integer x, integer y }\n"
+                             "function integer f() {\n"
+                             "    Point p = Point { x = 7, y = 9 }\n"
+                             "    Point { x, y } = p\n"
+                             "    return x * y\n"
+                             "}\n"
+                             "f()");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 63);
+}
+
+LUMA_TEST(vm_record_destructuring_subset) {
+    // A subset of fields may be listed; unlisted fields are ignored.
+    const auto result = eval("record Point { integer x, integer y, integer z }\n"
+                             "function integer f() {\n"
+                             "    Point p = Point { x = 1, y = 2, z = 3 }\n"
+                             "    Point { x, z } = p\n"
+                             "    return x + z\n"
+                             "}\n"
+                             "f()");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 4);
+}
+
+LUMA_TEST(vm_record_destructuring_mutable) {
+    const auto result = eval("record Point { integer x, integer y }\n"
+                             "function integer f() {\n"
+                             "    Point p = Point { x = 5, y = 6 }\n"
+                             "    mutable Point { x, y } = p\n"
+                             "    x = x + 100\n"
+                             "    return x + y\n"
+                             "}\n"
+                             "f()");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 111);
+}
+
+LUMA_TEST(vm_record_match_pattern) {
+    const auto result = eval("record Named { string name, integer age }\n"
+                             "function integer f() {\n"
+                             "    Named n = Named { name = \"Ada\", age = 36 }\n"
+                             "    return match n {\n"
+                             "        case Named { age } { age }\n"
+                             "    }\n"
+                             "}\n"
+                             "f()");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 36);
+}
+
+LUMA_TEST(vm_record_match_pattern_statement_with_guard) {
+    const auto result = eval("record Point { integer x, integer y }\n"
+                             "function string f(Point p) {\n"
+                             "    match p {\n"
+                             "        case Point { x, y } when x > y { return \"x-major\" }\n"
+                             "        else { return \"other\" }\n"
+                             "    }\n"
+                             "    return \"unreached\"\n"
+                             "}\n"
+                             "f(Point { x = 10, y = 2 })");
+
+    ASSERT_TRUE(result.is_string());
+    ASSERT_EQ(result.as_string(), "x-major");
+}
+
+LUMA_TEST(vm_record_destructuring_nested_field) {
+    const auto result = eval("record Inner { integer v }\n"
+                             "record Outer { Inner inner, integer k }\n"
+                             "function integer f() {\n"
+                             "    Outer o = Outer { inner = Inner { v = 40 }, k = 2 }\n"
+                             "    Outer { inner, k } = o\n"
+                             "    return inner.v + k\n"
+                             "}\n"
+                             "f()");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 42);
+}
+
+LUMA_TEST(vm_record_match_pattern_generic) {
+    const auto result = eval("record Box<T> { T value, integer tag }\n"
+                             "function integer f() {\n"
+                             "    Box<integer> b = Box<integer> { value = 40, tag = 2 }\n"
+                             "    return match b {\n"
+                             "        case Box { value, tag } { value + tag }\n"
+                             "    }\n"
+                             "}\n"
+                             "f()");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 42);
+}
+
 LUMA_TEST(vm_optional_index) {
     const auto result = eval("function integer f() {\n"
                              "    optional<array<integer>> a = some([10, 20, 30])\n"

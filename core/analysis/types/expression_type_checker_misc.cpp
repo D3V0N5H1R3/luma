@@ -240,6 +240,12 @@ TypeInfo ExpressionTypeChecker::infer_match_result(const Expression& subject,
         // Bind choice variant destructured fields.
         match_arm_binding::bind_choice_fields(tc_, arm, subject_type, location, false);
 
+        // Bind record destructured fields.
+        if (arm.kind() == MatchArm::Kind::RecordCase) {
+            match_arm_binding::bind_record_fields(
+                tc_, arm.record_type(), arm.record_field_bindings(), subject_type, location, false);
+        }
+
         // Type-check optional guard expression.
         if (arm.guard) {
             const auto guard_type = infer_expression_type(*arm.guard);

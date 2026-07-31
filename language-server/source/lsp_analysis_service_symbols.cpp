@@ -324,6 +324,10 @@ struct CallCollector {
     void operator()(const TupleDestructuringStatement& td) {
         visit_optional_expr(td.initializer);
     }
+
+    void operator()(const RecordDestructuringStatement& rd) {
+        visit_optional_expr(rd.initializer);
+    }
 };
 
 void CallCollector::visit_expr(const Expression& expr) {
@@ -633,6 +637,19 @@ void process_match_arms(const MatchStatement& ms, AnalysisResult& result,
                 }
             }
         }
+        for (const auto& rb : arm.record_field_bindings()) {
+            if (!rb.empty()) {
+                result.semantic.locals.local_variable_types[rb] = std::string{util::k_unknown_type};
+                if (!enclosing_function.empty()) {
+                    result.semantic.locals.function_locals[enclosing_function][rb] =
+                        std::string{util::k_unknown_type};
+                    result.semantic.locals.scoped_locals[enclosing_function][rb].push_back(
+                        {.type_string = std::string{util::k_unknown_type},
+                         .scope_start_line = arm_start,
+                         .scope_end_line = arm_scope_end});
+                }
+            }
+        }
         collect_local_vars_fn(arm.body, result, enclosing_function, arm_start, arm_scope_end);
     }
 }
@@ -717,6 +734,38 @@ void process_variable_decl_locals(const VariableDeclStatement& var, AnalysisResu
     register_local_variable(result, var.name, type_str, enclosing_function, scope_start, scope_end);
     if (var.is_mutable) {
         result.semantic.locals.mutable_locals.insert(var.name);
+    }
+}
+
+// Register a tuple-destructuring binding's element variables in the enclosing
+// scope, each with its annotated element type.
+void process_tuple_destructuring_locals(const TupleDestructuringStatement& td,
+                                        AnalysisResult& result,
+                                        const std::string& enclosing_function, int scope_start,
+                                        int scope_end) {
+    for (const auto& [type, name] : td.bindings) {
+        register_local_variable(result, name, annotation_to_string(type), enclosing_function,
+                                scope_start, scope_end);
+        if (td.is_mutable) {
+            result.semantic.locals.mutable_locals.insert(name);
+        }
+    }
+}
+
+// Register a record-destructuring binding's field variables in the enclosing
+// scope.  The field types are resolved elsewhere (the record definition), so
+// they are registered here with the unknown-type placeholder — mirroring the
+// record match-arm bindings in process_match_arms.
+void process_record_destructuring_locals(const RecordDestructuringStatement& rd,
+                                         AnalysisResult& result,
+                                         const std::string& enclosing_function, int scope_start,
+                                         int scope_end) {
+    for (const auto& name : rd.fields) {
+        register_local_variable(result, name, std::string{util::k_unknown_type}, enclosing_function,
+                                scope_start, scope_end);
+        if (rd.is_mutable) {
+            result.semantic.locals.mutable_locals.insert(name);
+        }
     }
 }
 
@@ -825,6 +874,16 @@ void LspAnalysisService::collect_local_vars(const std::vector<std::unique_ptr<St
             case StatementKind::VariableDeclaration:
                 process_variable_decl_locals(static_cast<const VariableDeclStatement&>(*stmt_ptr),
                                              result, enclosing_function, scope_start, scope_end);
+                break;
+            case StatementKind::TupleDestructuring:
+                process_tuple_destructuring_locals(
+                    static_cast<const TupleDestructuringStatement&>(*stmt_ptr), result,
+                    enclosing_function, scope_start, scope_end);
+                break;
+            case StatementKind::RecordDestructuring:
+                process_record_destructuring_locals(
+                    static_cast<const RecordDestructuringStatement&>(*stmt_ptr), result,
+                    enclosing_function, scope_start, scope_end);
                 break;
             case StatementKind::While:
                 process_while_locals(static_cast<const WhileStatement&>(*stmt_ptr), result,

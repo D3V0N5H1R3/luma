@@ -3,6 +3,7 @@
 #include "analysis/ast/declaration.hpp"
 #include "analysis/ast/expression.hpp"
 #include "analysis/ast/statement.hpp"
+#include "analysis/types/match_arm_binding.hpp"
 #include "analysis/types/statement_type_checker.hpp"
 #include "analysis/types/type_check_helpers.hpp"
 #include "analysis/types/type_checking_context.hpp"
@@ -108,6 +109,19 @@ void StatementTypeChecker::visit_tuple_destructuring(const TupleDestructuringSta
                                                 {.is_mutable = stmt.is_mutable});
         }
     }
+}
+
+void StatementTypeChecker::visit_record_destructuring(const RecordDestructuringStatement& stmt) {
+    TypeInfo init_type = TypeInfo::make(TypeInfo::Kind::Unknown);
+
+    if (stmt.initializer) {
+        init_type = tc_.infer_expression_type(*stmt.initializer);
+    }
+
+    // bind_record_fields validates that init_type is an instance of the record
+    // type and binds each listed field to its declared type.
+    match_arm_binding::bind_record_fields(tc_, stmt.type_name, stmt.fields, init_type,
+                                          stmt.location, stmt.is_mutable);
 }
 
 } // namespace luma

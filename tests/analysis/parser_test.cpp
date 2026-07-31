@@ -513,6 +513,68 @@ static void test_mutable_tuple_destructuring() {
     ASSERT_EQ(destr.bindings.size(), 2U);
 }
 
+static void test_record_destructuring() {
+    const auto program = parse("Point { x, y } = p");
+
+    ASSERT_EQ(program.statements.size(), 1U);
+    ASSERT_EQ(program.statements[0]->kind, StatementKind::RecordDestructuring);
+
+    const auto& destr = static_cast<const RecordDestructuringStatement&>(*program.statements[0]);
+
+    ASSERT_FALSE(destr.is_mutable);
+    ASSERT_EQ(destr.type_name, "Point");
+    ASSERT_EQ(destr.fields.size(), 2U);
+    ASSERT_EQ(destr.fields[0], "x");
+    ASSERT_EQ(destr.fields[1], "y");
+}
+
+static void test_mutable_record_destructuring() {
+    const auto program = parse("mutable Point { x, y, z } = p");
+
+    ASSERT_EQ(program.statements.size(), 1U);
+    ASSERT_EQ(program.statements[0]->kind, StatementKind::RecordDestructuring);
+
+    const auto& destr = static_cast<const RecordDestructuringStatement&>(*program.statements[0]);
+
+    ASSERT_TRUE(destr.is_mutable);
+    ASSERT_EQ(destr.fields.size(), 3U);
+}
+
+static void test_qualified_record_destructuring() {
+    const auto program = parse("Geometry.Point { x, y } = p");
+
+    ASSERT_EQ(program.statements.size(), 1U);
+    ASSERT_EQ(program.statements[0]->kind, StatementKind::RecordDestructuring);
+
+    const auto& destr = static_cast<const RecordDestructuringStatement&>(*program.statements[0]);
+
+    ASSERT_EQ(destr.type_name, "Geometry.Point");
+}
+
+static void test_record_creation_is_not_destructuring() {
+    // A bare record-creation expression statement must not be mistaken for a
+    // destructuring binding (its fields carry '=' and there is no trailing '=').
+    const auto program = parse("Point { x = 1, y = 2 }");
+
+    ASSERT_EQ(program.statements.size(), 1U);
+    ASSERT_EQ(program.statements[0]->kind, StatementKind::Expression);
+}
+
+static void test_record_match_pattern() {
+    const auto program = parse("match p {\n case Point { x, y } { print(x) }\n }");
+
+    ASSERT_EQ(program.statements.size(), 1U);
+    ASSERT_EQ(program.statements[0]->kind, StatementKind::Match);
+
+    const auto& match = static_cast<const MatchStatement&>(*program.statements[0]);
+
+    ASSERT_EQ(match.arms.size(), 1U);
+    ASSERT_EQ(match.arms[0].kind(), MatchArm::Kind::RecordCase);
+    ASSERT_EQ(match.arms[0].record_type(), "Point");
+    ASSERT_EQ(match.arms[0].record_field_bindings().size(), 2U);
+    ASSERT_EQ(match.arms[0].record_field_bindings()[0], "x");
+}
+
 static void test_tuple_literal_expression() {
     const auto program = parse("(1, 2, 3)");
 
@@ -1796,6 +1858,11 @@ int main() {
     RUN(test_include_declaration);
     RUN(test_tuple_destructuring);
     RUN(test_mutable_tuple_destructuring);
+    RUN(test_record_destructuring);
+    RUN(test_mutable_record_destructuring);
+    RUN(test_qualified_record_destructuring);
+    RUN(test_record_creation_is_not_destructuring);
+    RUN(test_record_match_pattern);
     RUN(test_tuple_literal_expression);
     RUN(test_keyword_as_variable_name);
     RUN(test_keyword_as_function_name);

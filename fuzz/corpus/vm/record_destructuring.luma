@@ -1,0 +1,58 @@
+# Record field destructuring — bindings and match patterns.
+record Point {
+    number x,
+    number y,
+    number z
+}
+
+record Named {
+    string name,
+    integer age
+}
+
+function number sum_point(Point p) {
+    Point { x, y, z } = p
+    return x + y + z
+}
+
+function integer named_age(Named n) {
+    return match n {
+    case Named { age } { age }
+    }
+}
+
+function string describe(Point p) {
+    return match p {
+    case Point { x, y } when x > y { "x-major" }
+    else { "other" }
+    }
+}
+
+function number subset(Point p) {
+    Point { x, z } = p
+    return x + z
+}
+
+function number bumped(Point p) {
+    mutable Point { x, y, z } = p
+    x = x + 1.0
+    y = y + 1.0
+    z = z + 1.0
+    return x + y + z
+}
+
+@main
+function void main() {
+    Point p = Point { x = 1.0, y = 2.0, z = 3.0 }
+    print(sum_point(p))
+    print(subset(p))
+    print(bumped(p))
+
+    Named n = Named { name = "Ada", age = 36 }
+    print(named_age(n))
+    print(describe(p))
+
+    match n {
+    case Named { name, age } { print("${name}:${age}") }
+    }
+}
