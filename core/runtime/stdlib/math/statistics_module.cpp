@@ -1,29 +1,27 @@
-// Math module — statistics: central tendency, dispersion, sum, and
-// correlation.  Registered via register_math_statistics().
+// Statistics module — descriptive and inferential statistics: central tendency,
+// dispersion, one-pass summaries, and correlation.  Registered via
+// register_statistics_ns().
+
+#include "runtime/stdlib/math/statistics_module.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
-#include <format>
 #include <iterator>
 #include <limits>
 #include <memory>
-#include <numbers>
 #include <numeric>
-#include <optional>
+#include <span>
 #include <string_view>
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
-#include "common/overflow.hpp"
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/error_messages.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
 #include "runtime/stdlib/common/numeric_helpers.hpp"
-#include "runtime/stdlib/math/math_module.hpp"
 
 namespace luma {
 
@@ -75,14 +73,14 @@ namespace {
 } // namespace
 
 // Statistics: central tendency (mean, median, mode), dispersion (variance,
-// standard_deviation, percentile), sum, and correlation.
-void register_math_statistics(const EnvPtr& env) {
-    ModuleBuilder{"Math", env}
+// standard_deviation, percentile), one-pass summaries, and correlation.
+void register_statistics_ns(const EnvPtr& env) {
+    ModuleBuilder{"Statistics", env}
         .func("mean", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& elems = *expect_array(args[0], "Math.mean", loc)->elements;
+            const auto& elems = *expect_array(args[0], "Statistics.mean", loc)->elements;
 
-            if (auto fail = check_not_empty(elems, "Math.mean")) {
+            if (auto fail = check_not_empty(elems, "Statistics.mean")) {
                 return *std::move(fail);
             }
 
@@ -96,9 +94,9 @@ void register_math_statistics(const EnvPtr& env) {
         })
         .func("median", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& elems = *expect_array(args[0], "Math.median", loc)->elements;
+            const auto& elems = *expect_array(args[0], "Statistics.median", loc)->elements;
 
-            if (auto fail = check_not_empty(elems, "Math.median")) {
+            if (auto fail = check_not_empty(elems, "Statistics.median")) {
                 return *std::move(fail);
             }
 
@@ -113,39 +111,11 @@ void register_math_statistics(const EnvPtr& env) {
 
             return make_success_value(Value{vals[n / 2]});
         })
-        .func("sum", 1)
-        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& elems = *expect_array(args[0], "Math.sum", loc)->elements;
-
-            bool all_int{true};
-            std::int64_t int_sum{0};
-            double dbl_sum{0.0};
-
-            for (const auto& elem : elems) {
-                if (elem.is_integer()) {
-                    if (all_int && would_overflow_add(int_sum, elem.as_integer())) {
-                        all_int = false;
-                    }
-                    if (all_int) {
-                        int_sum += elem.as_integer();
-                    }
-                    dbl_sum += static_cast<double>(elem.as_integer());
-                } else if (elem.is_number()) {
-                    all_int = false;
-
-                    dbl_sum += elem.as_number();
-                } else {
-                    return make_failure_value(error_msg("Math", "sum", "non-numeric element"));
-                }
-            }
-
-            return make_success_value(all_int ? Value{int_sum} : Value{dbl_sum});
-        })
         .func("mode", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& elems = *expect_array(args[0], "Math.mode", loc)->elements;
+            const auto& elems = *expect_array(args[0], "Statistics.mode", loc)->elements;
 
-            if (auto fail = check_not_empty(elems, "Math.mode")) {
+            if (auto fail = check_not_empty(elems, "Statistics.mode")) {
                 return *std::move(fail);
             }
 
@@ -180,9 +150,9 @@ void register_math_statistics(const EnvPtr& env) {
         })
         .func("variance", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& elems = *expect_array(args[0], "Math.variance", loc)->elements;
+            const auto& elems = *expect_array(args[0], "Statistics.variance", loc)->elements;
 
-            if (auto fail = check_not_empty(elems, "Math.variance")) {
+            if (auto fail = check_not_empty(elems, "Statistics.variance")) {
                 return *std::move(fail);
             }
 
@@ -190,9 +160,10 @@ void register_math_statistics(const EnvPtr& env) {
         })
         .func("standard_deviation", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& elems = *expect_array(args[0], "Math.standard_deviation", loc)->elements;
+            const auto& elems =
+                *expect_array(args[0], "Statistics.standard_deviation", loc)->elements;
 
-            if (auto fail = check_not_empty(elems, "Math.standard_deviation")) {
+            if (auto fail = check_not_empty(elems, "Statistics.standard_deviation")) {
                 return *std::move(fail);
             }
 
@@ -200,15 +171,15 @@ void register_math_statistics(const EnvPtr& env) {
         })
         .func("summarize", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& elems = *expect_array(args[0], "Math.summarize", loc)->elements;
+            const auto& elems = *expect_array(args[0], "Statistics.summarize", loc)->elements;
 
-            if (auto fail = check_not_empty(elems, "Math.summarize")) {
+            if (auto fail = check_not_empty(elems, "Statistics.summarize")) {
                 return *std::move(fail);
             }
 
             // One pass: sort once for min / max / median, then reuse the sorted
             // values for the mean.  Variance is computed over the original
-            // elements (order-independent), matching Math.standard_deviation.
+            // elements (order-independent), matching Statistics.standard_deviation.
             const auto vals = sorted_doubles(elems);
             const auto n = vals.size();
 
@@ -236,16 +207,17 @@ void register_math_statistics(const EnvPtr& env) {
         })
         .func("five_number_summary", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& elems = *expect_array(args[0], "Math.five_number_summary", loc)->elements;
+            const auto& elems =
+                *expect_array(args[0], "Statistics.five_number_summary", loc)->elements;
 
-            if (auto fail = check_not_empty(elems, "Math.five_number_summary")) {
+            if (auto fail = check_not_empty(elems, "Statistics.five_number_summary")) {
                 return *std::move(fail);
             }
 
             const auto vals = sorted_doubles(elems);
 
-            // Linear-interpolation quantile — the same method Math.percentile uses,
-            // so five_number_summary(v) agrees with percentile(v, 25/50/75).
+            // Linear-interpolation quantile — the same method Statistics.percentile
+            // uses, so five_number_summary(v) agrees with percentile(v, 25/50/75).
             const auto quantile = [&vals](double p) -> double {
                 const double rank = (p / 100.0) * static_cast<double>(vals.size() - 1);
                 const auto lower = static_cast<std::size_t>(std::floor(rank));
@@ -272,17 +244,17 @@ void register_math_statistics(const EnvPtr& env) {
         })
         .func("histogram", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& elems = *expect_array(args[0], "Math.histogram", loc)->elements;
+            const auto& elems = *expect_array(args[0], "Statistics.histogram", loc)->elements;
 
-            if (auto fail = check_not_empty(elems, "Math.histogram")) {
+            if (auto fail = check_not_empty(elems, "Statistics.histogram")) {
                 return *std::move(fail);
             }
 
-            const auto bins = expect_integer(args[1], "Math.histogram", loc);
+            const auto bins = expect_integer(args[1], "Statistics.histogram", loc);
 
             if (bins < 1) {
                 return make_failure_value(
-                    error_msg("Math", "histogram", "bins must be at least 1"));
+                    error_msg("Statistics", "histogram", "bins must be at least 1"));
             }
             const auto bin_count = static_cast<std::size_t>(bins);
 
@@ -291,7 +263,7 @@ void register_math_statistics(const EnvPtr& env) {
             // stdlib path honours (and could exhaust memory).
             if (bin_count > ResourceLimits::max_array_size) {
                 return make_failure_value(
-                    error_msg("Math", "histogram", "bins exceeds the maximum array size"));
+                    error_msg("Statistics", "histogram", "bins exceeds the maximum array size"));
             }
 
             // One pass for the data range over the finite samples only —
@@ -312,7 +284,7 @@ void register_math_statistics(const EnvPtr& env) {
 
             if (!any_finite) {
                 return make_failure_value(
-                    error_msg("Math", "histogram", "no finite values to bin"));
+                    error_msg("Statistics", "histogram", "no finite values to bin"));
             }
 
             // A zero-width range (every value equal) has no natural bin width;
@@ -374,16 +346,16 @@ void register_math_statistics(const EnvPtr& env) {
         })
         .func("percentile", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& elems = *expect_array(args[0], "Math.percentile", loc)->elements;
-            if (auto fail = check_not_empty(elems, "Math.percentile")) {
+            const auto& elems = *expect_array(args[0], "Statistics.percentile", loc)->elements;
+            if (auto fail = check_not_empty(elems, "Statistics.percentile")) {
                 return *std::move(fail);
             }
 
-            auto p = expect_numeric(args[1], "Math.percentile", loc);
+            auto p = expect_numeric(args[1], "Statistics.percentile", loc);
 
             if (!std::isfinite(p) || p < 0.0 || p > 100.0) {
                 return make_failure_value(
-                    error_msg("Math", "percentile", "p must be between 0 and 100"));
+                    error_msg("Statistics", "percentile", "p must be between 0 and 100"));
             }
 
             auto vals = sorted_doubles(elems);
@@ -402,17 +374,17 @@ void register_math_statistics(const EnvPtr& env) {
         })
         .func("correlation", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& xs = *expect_array(args[0], "Math.correlation", loc)->elements;
-            const auto& ys = *expect_array(args[1], "Math.correlation", loc)->elements;
+            const auto& xs = *expect_array(args[0], "Statistics.correlation", loc)->elements;
+            const auto& ys = *expect_array(args[1], "Statistics.correlation", loc)->elements;
 
             if (xs.size() != ys.size()) {
                 return make_failure_value(
-                    error_msg("Math", "correlation", "arrays must have equal length"));
+                    error_msg("Statistics", "correlation", "arrays must have equal length"));
             }
 
             if (xs.size() < 2) {
                 return make_failure_value(
-                    error_msg("Math", "correlation", "need at least 2 data points"));
+                    error_msg("Statistics", "correlation", "need at least 2 data points"));
             }
 
             auto n = static_cast<double>(xs.size());
@@ -451,17 +423,17 @@ void register_math_statistics(const EnvPtr& env) {
         })
         .func("linear_fit", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& xs = *expect_array(args[0], "Math.linear_fit", loc)->elements;
-            const auto& ys = *expect_array(args[1], "Math.linear_fit", loc)->elements;
+            const auto& xs = *expect_array(args[0], "Statistics.linear_fit", loc)->elements;
+            const auto& ys = *expect_array(args[1], "Statistics.linear_fit", loc)->elements;
 
             if (xs.size() != ys.size()) {
                 return make_failure_value(
-                    error_msg("Math", "linear_fit", "arrays must have equal length"));
+                    error_msg("Statistics", "linear_fit", "arrays must have equal length"));
             }
 
             if (xs.size() < 2) {
                 return make_failure_value(
-                    error_msg("Math", "linear_fit", "need at least 2 data points"));
+                    error_msg("Statistics", "linear_fit", "need at least 2 data points"));
             }
 
             const auto n = static_cast<double>(xs.size());
@@ -492,7 +464,7 @@ void register_math_statistics(const EnvPtr& env) {
             // vertical line with no ordinary least-squares slope.
             if (var_x == 0.0) {
                 return make_failure_value(error_msg(
-                    "Math", "linear_fit", "x values have zero variance (a vertical line)"));
+                    "Statistics", "linear_fit", "x values have zero variance (a vertical line)"));
             }
 
             const double slope = cov / var_x;

@@ -109,7 +109,7 @@ luma_add_stdlib_library(math
         stdlib/math/math_module.cpp
         stdlib/math/bits_module.cpp
         stdlib/math/math_analysis.cpp
-        stdlib/math/math_statistics.cpp
+        stdlib/math/statistics_module.cpp
         stdlib/math/math_transcendental.cpp
         stdlib/math/math_fraction.cpp
         stdlib/math/math_complex.cpp

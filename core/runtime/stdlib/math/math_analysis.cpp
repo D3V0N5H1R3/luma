@@ -143,7 +143,37 @@ void register_math_analysis(const EnvPtr& env) {
             return make_success_value(Value{std::fmod(args[0].to_numeric(), divisor)});
         })
         .checked_unary("tangent", [](double x) { return std::tan(x); })
-        .checked_unary_to_int("truncate", [](double x) { return std::trunc(x); });
+        .checked_unary_to_int("truncate", [](double x) { return std::trunc(x); })
+        // sum is a fundamental aggregate over a numeric array — it stays in Math
+        // (the descriptive/inferential statistics live in the Statistics module).
+        .func("sum", 1)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const auto& elems = *expect_array(args[0], "Math.sum", loc)->elements;
+
+            bool all_int{true};
+            std::int64_t int_sum{0};
+            double dbl_sum{0.0};
+
+            for (const auto& elem : elems) {
+                if (elem.is_integer()) {
+                    if (all_int && would_overflow_add(int_sum, elem.as_integer())) {
+                        all_int = false;
+                    }
+                    if (all_int) {
+                        int_sum += elem.as_integer();
+                    }
+                    dbl_sum += static_cast<double>(elem.as_integer());
+                } else if (elem.is_number()) {
+                    all_int = false;
+
+                    dbl_sum += elem.as_number();
+                } else {
+                    return make_failure_value(error_msg("Math", "sum", "non-numeric element"));
+                }
+            }
+
+            return make_success_value(all_int ? Value{int_sum} : Value{dbl_sum});
+        });
 }
 
 } // namespace luma

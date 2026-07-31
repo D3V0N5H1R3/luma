@@ -65,14 +65,14 @@ function void main() {
 
     # Statistics over a numeric array.
     array<number> data = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
-    number mean = Math.mean(data) |> Result.unwrap_or(0.0)
-    number med = Math.median(data) |> Result.unwrap_or(0.0)
-    number mode = Math.mode(data) |> Result.unwrap_or(0.0)
-    number vr = Math.variance(data) |> Result.unwrap_or(0.0)
-    number sd = Math.standard_deviation(data) |> Result.unwrap_or(0.0)
-    number pct = Math.percentile(data, 50.0) |> Result.unwrap_or(0.0)
+    number mean = Statistics.mean(data) |> Result.unwrap_or(0.0)
+    number med = Statistics.median(data) |> Result.unwrap_or(0.0)
+    number mode = Statistics.mode(data) |> Result.unwrap_or(0.0)
+    number vr = Statistics.variance(data) |> Result.unwrap_or(0.0)
+    number sd = Statistics.standard_deviation(data) |> Result.unwrap_or(0.0)
+    number pct = Statistics.percentile(data, 50.0) |> Result.unwrap_or(0.0)
     number sm = Math.sum(data) |> Result.unwrap_or(0.0)
-    number corr = Math.correlation([1.0, 2.0, 3.0], [2.0, 4.0, 6.0]) |> Result.unwrap_or(0.0)
+    number corr = Statistics.correlation([1.0, 2.0, 3.0], [2.0, 4.0, 6.0]) |> Result.unwrap_or(0.0)
 
     # Classification helpers.
     boolean isinf = Math.is_infinite(inf)

@@ -47,17 +47,17 @@ function void describe(string title, array<number> data) {
     number maximum = Result.unwrap_or(Array.max(data), 0.0)
 
     print_statistic("sum", Result.unwrap_or(Math.sum(data), 0.0))
-    print_statistic("mean", Result.unwrap_or(Math.mean(data), 0.0))
-    print_statistic("median", Result.unwrap_or(Math.median(data), 0.0))
-    print_statistic("mode", Result.unwrap_or(Math.mode(data), 0.0))
+    print_statistic("mean", Result.unwrap_or(Statistics.mean(data), 0.0))
+    print_statistic("median", Result.unwrap_or(Statistics.median(data), 0.0))
+    print_statistic("mode", Result.unwrap_or(Statistics.mode(data), 0.0))
     print_statistic("minimum", minimum)
     print_statistic("maximum", maximum)
     print_statistic("range", maximum - minimum)
-    print_statistic("variance", Result.unwrap_or(Math.variance(data), 0.0))
-    print_statistic("std deviation", Result.unwrap_or(Math.standard_deviation(data), 0.0))
-    print_statistic("25th percentile", Result.unwrap_or(Math.percentile(data, 25.0), 0.0))
-    print_statistic("75th percentile", Result.unwrap_or(Math.percentile(data, 75.0), 0.0))
-    print_statistic("90th percentile", Result.unwrap_or(Math.percentile(data, 90.0), 0.0))
+    print_statistic("variance", Result.unwrap_or(Statistics.variance(data), 0.0))
+    print_statistic("std deviation", Result.unwrap_or(Statistics.standard_deviation(data), 0.0))
+    print_statistic("25th percentile", Result.unwrap_or(Statistics.percentile(data, 25.0), 0.0))
+    print_statistic("75th percentile", Result.unwrap_or(Statistics.percentile(data, 75.0), 0.0))
+    print_statistic("90th percentile", Result.unwrap_or(Statistics.percentile(data, 90.0), 0.0))
     print("  Note: variance is squared spread; standard deviation uses the data units.")
     print("  Percentiles show the value at or below that share of the data.")
 }
@@ -81,7 +81,7 @@ function void main() {
     array<number> scores = [52.0, 60.0, 68.0, 76.0, 84.0, 92.0]
     print("  hours:  ${String.join(map_to_strings(hours), ", ")}")
     print("  scores: ${String.join(map_to_strings(scores), ", ")}")
-    number r = Result.unwrap_or(Math.correlation(hours, scores), 0.0)
+    number r = Result.unwrap_or(Statistics.correlation(hours, scores), 0.0)
     print("")
     print("  Summary statistics")
     print("  Pearson correlation: ${show_number(r)}")
@@ -98,34 +98,34 @@ function array<number> textbook_sample() {
 function void test_sum_and_mean() {
     array<number> data = textbook_sample()
     assert(numbers_close(Result.unwrap_or(Math.sum(data), 0.0), 40.0), "sum is 40")
-    assert(numbers_close(Result.unwrap_or(Math.mean(data), 0.0), 5.0), "mean is 5")
+    assert(numbers_close(Result.unwrap_or(Statistics.mean(data), 0.0), 5.0), "mean is 5")
 }
 
 @test
 function void test_median_is_midpoint_of_middle_pair() {
     array<number> data = textbook_sample()
-    assert(numbers_close(Result.unwrap_or(Math.median(data), 0.0), 4.5), "median is 4.5")
+    assert(numbers_close(Result.unwrap_or(Statistics.median(data), 0.0), 4.5), "median is 4.5")
 }
 
 @test
 function void test_mode_is_most_frequent() {
     array<number> data = textbook_sample()
-    assert(numbers_close(Result.unwrap_or(Math.mode(data), 0.0), 4.0), "mode is 4")
+    assert(numbers_close(Result.unwrap_or(Statistics.mode(data), 0.0), 4.0), "mode is 4")
 }
 
 @test
 function void test_population_variance_and_std() {
     array<number> data = textbook_sample()
-    assert(numbers_close(Result.unwrap_or(Math.variance(data), 0.0), 4.0), "variance is 4")
-    assert(numbers_close(Result.unwrap_or(Math.standard_deviation(data), 0.0), 2.0),
+    assert(numbers_close(Result.unwrap_or(Statistics.variance(data), 0.0), 4.0), "variance is 4")
+    assert(numbers_close(Result.unwrap_or(Statistics.standard_deviation(data), 0.0), 2.0),
            "standard deviation is 2")
 }
 
 @test
 function void test_std_is_root_of_variance() {
     array<number> data = textbook_sample()
-    number variance = Result.unwrap_or(Math.variance(data), 0.0)
-    number deviation = Result.unwrap_or(Math.standard_deviation(data), 0.0)
+    number variance = Result.unwrap_or(Statistics.variance(data), 0.0)
+    number deviation = Result.unwrap_or(Statistics.standard_deviation(data), 0.0)
     number squared = Result.unwrap_or(Math.power(deviation, 2.0), 0.0)
     assert(numbers_close(squared, variance), "std deviation squared returns the variance")
 }
@@ -133,9 +133,9 @@ function void test_std_is_root_of_variance() {
 @test
 function void test_percentiles_are_monotonic() {
     array<number> data = textbook_sample()
-    number p25 = Result.unwrap_or(Math.percentile(data, 25.0), 0.0)
-    number p50 = Result.unwrap_or(Math.percentile(data, 50.0), 0.0)
-    number p75 = Result.unwrap_or(Math.percentile(data, 75.0), 0.0)
+    number p25 = Result.unwrap_or(Statistics.percentile(data, 25.0), 0.0)
+    number p50 = Result.unwrap_or(Statistics.percentile(data, 50.0), 0.0)
+    number p75 = Result.unwrap_or(Statistics.percentile(data, 75.0), 0.0)
     assert(p25 <= p50 && p50 <= p75, "percentiles increase with rank")
 }
 
@@ -143,7 +143,7 @@ function void test_percentiles_are_monotonic() {
 function void test_perfect_positive_correlation() {
     array<number> xs = [1.0, 2.0, 3.0, 4.0, 5.0]
     array<number> ys = [3.0, 5.0, 7.0, 9.0, 11.0]
-    number r = Result.unwrap_or(Math.correlation(xs, ys), 0.0)
+    number r = Result.unwrap_or(Statistics.correlation(xs, ys), 0.0)
     assert(numbers_close(r, 1.0), "a perfect line correlates at 1.0")
 }
 
@@ -151,6 +151,6 @@ function void test_perfect_positive_correlation() {
 function void test_perfect_negative_correlation() {
     array<number> xs = [1.0, 2.0, 3.0, 4.0, 5.0]
     array<number> ys = [10.0, 8.0, 6.0, 4.0, 2.0]
-    number r = Result.unwrap_or(Math.correlation(xs, ys), 0.0)
+    number r = Result.unwrap_or(Statistics.correlation(xs, ys), 0.0)
     assert(numbers_close(r, -1.0), "a perfect descending line correlates at -1.0")
 }

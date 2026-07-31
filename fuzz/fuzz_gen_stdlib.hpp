@@ -309,9 +309,9 @@ template <typename Provider> [[nodiscard]] std::string generate_math_statement(P
         case 12: // Hypotenuse (direct number) — Euclidean distance.
             return "print(Math.hypot(" + na + ", " + nb + "))\n";
         case 13: // Statistics over a numeric array (result<number>).
-            return "print(Math.mean(" + arr + ") |> Result.unwrap_or(0.0))\n";
+            return "print(Statistics.mean(" + arr + ") |> Result.unwrap_or(0.0))\n";
         default: // Correlation of two equal-length arrays (result<number>).
-            return "print(Result.is_success(Math.correlation(" + arr + ", " + brr + ")))\n";
+            return "print(Result.is_success(Statistics.correlation(" + arr + ", " + brr + ")))\n";
     }
 }
 

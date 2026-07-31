@@ -25,6 +25,7 @@ target_include_directories(luma_shared PUBLIC
 luma_add_library(luma_stdlib_catalog OBJECT
     stdlib/stdlib_catalog.cpp
     stdlib/stdlib_catalog_math.cpp
+    stdlib/stdlib_catalog_statistics.cpp
     stdlib/stdlib_catalog_string.cpp
     stdlib/stdlib_catalog_array.cpp
     stdlib/stdlib_catalog_dictionary.cpp

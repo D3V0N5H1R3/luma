@@ -209,7 +209,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "FileSystem.PathParts", field("string", "parent"), field("string", "name"),
                    field("string", "stem"), field("string", "extension"));
 
-        add_record(st, "Math.Summary", field("integer", "count"), field("number", "minimum"),
+        add_record(st, "Statistics.Summary", field("integer", "count"), field("number", "minimum"),
                    field("number", "maximum"), field("number", "mean"), field("number", "median"),
                    field("number", "standard_deviation"));
 
@@ -314,25 +314,27 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // the distance-squared comparison — mirroring Math.Rect.
         add_record(st, "Math.Circle", field("Math.Vector2", "center"), field("number", "radius"));
 
-        // Math.five_number_summary() returns this box-plot record (type_name
+        // Statistics.five_number_summary() returns this box-plot record (type_name
         // "FiveNumberSummary"): the five order statistics needed to draw a box
-        // plot.  Mirrors Math.Summary; every field is a number.
-        add_record(st, "Math.FiveNumberSummary", field("number", "minimum"), field("number", "q1"),
-                   field("number", "median"), field("number", "q3"), field("number", "maximum"));
+        // plot.  Mirrors Statistics.Summary; every field is a number.
+        add_record(st, "Statistics.FiveNumberSummary", field("number", "minimum"),
+                   field("number", "q1"), field("number", "median"), field("number", "q3"),
+                   field("number", "maximum"));
 
-        // Math.linear_fit() returns this least-squares regression record (type_name
-        // "LineFit") — the trend line y = slope*x + intercept plus its r_squared
-        // goodness-of-fit.  A plain returned record, mirroring Math.Summary.
-        add_record(st, "Math.LineFit", field("number", "slope"), field("number", "intercept"),
+        // Statistics.linear_fit() returns this least-squares regression record
+        // (type_name "LineFit") — the trend line y = slope*x + intercept plus its
+        // r_squared goodness-of-fit.  A plain returned record, mirroring
+        // Statistics.Summary.
+        add_record(st, "Statistics.LineFit", field("number", "slope"), field("number", "intercept"),
                    field("number", "r_squared"));
 
-        // Math.histogram() returns this binned frequency distribution (type_name
-        // "Histogram"): counts[i] samples fall in the half-open bin
+        // Statistics.histogram() returns this binned frequency distribution
+        // (type_name "Histogram"): counts[i] samples fall in the half-open bin
         // [bin_edges[i], bin_edges[i+1]), so bin_edges has one more element than
         // counts.  Edges are measurements (number); counts are whole tallies
-        // (integer), respecting the numeric convention.  Mirrors Math.Summary — a
-        // plain returned record feeding the GraphicalUi bar chart.
-        add_record(st, "Math.Histogram", field_of(array_ann("number"), "bin_edges"),
+        // (integer), respecting the numeric convention.  Mirrors Statistics.Summary
+        // — a plain returned record feeding the GraphicalUi bar chart.
+        add_record(st, "Statistics.Histogram", field_of(array_ann("number"), "bin_edges"),
                    field_of(array_ann("integer"), "counts"), field("number", "bin_width"));
 
         add_record(st, "Socket.Address", field("string", "host"), field("integer", "port"));

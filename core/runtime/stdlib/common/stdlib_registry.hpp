@@ -33,6 +33,7 @@
 #include "runtime/stdlib/math/decimal_module.hpp"
 #include "runtime/stdlib/math/linearalgebra_module.hpp"
 #include "runtime/stdlib/math/math_module.hpp"
+#include "runtime/stdlib/math/statistics_module.hpp"
 #include "runtime/stdlib/system/compression_module.hpp"
 #include "runtime/stdlib/system/datetime_module.hpp"
 #include "runtime/stdlib/system/encoder_module.hpp"
@@ -136,6 +137,7 @@ inline constexpr ModuleEntry kModules[] = {
     {"Result", register_result_ns, nullptr, false, false},
     {"Set", register_set_ns, nullptr, false, false},
     {"Stack", register_stack_ns, nullptr, false, false},
+    {"Statistics", register_statistics_ns, nullptr, false, false},
     {"String", register_string_ns, nullptr, false, false},
     {"Task", register_task_ns, nullptr, false, false},
     {"Terminal", register_terminal_ns, nullptr, false, false},

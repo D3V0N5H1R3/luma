@@ -51,6 +51,7 @@ This reference was previously part of the [User Manual](Luma_User_Manual.md). Fo
 41. [Xml](#41--xml)
 42. [Color](#42--color)
 43. [Bits](#43--bits)
+44. [Statistics](#44--statistics)
 
 - [See Also](#see-also)
 
@@ -2122,13 +2123,11 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.complex_subtract(a, b)`         | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Difference `a - b`                                                                |
 | `Math.complex_to_polar(c)`            | `(Math.Complex)`                 | `Math.Polar`      | Convert a `Math.Complex` to a `Math.Polar` (total conversion)                    |
 | `Math.clamp(x, lo, hi)`               | `(number, number, number)`       | `result<number>`  | Clamp `x` to `[lo, hi]`; fail if `lo > hi`                                       |
-| `Math.correlation(xs, ys)`            | `(array<number>, array<number>)` | `result<number>`  | Pearson correlation coefficient; fail if arrays differ in length or < 2 elements |
 | `Math.cosine(x)`                      | `(number)`                       | `result<number>`  | Cosine; fail if result is NaN or infinite                                        |
 | `Math.cube_root(x)`                   | `(number)`                       | `number`          | Cube root of `x`                                                                 |
 | `Math.degrees(rad)`                   | `(number)`                       | `number`          | Convert radians to degrees                                                       |
 | `Math.exponential(x)`                 | `(number)`                       | `result<number>`  | e^x                                                                              |
 | `Math.factorial(n)`                   | `(integer)`                      | `result<integer>` | n!; fail if `n < 0` or `n > 20`                                                  |
-| `Math.five_number_summary(arr)`       | `(array<number>)`                | `result<Math.FiveNumberSummary>` | Box-plot quartiles (min, Q1, median, Q3, max) in one pass; fail if empty |
 | `Math.floor(x)`                       | `(number)`                       | `result<integer>` | Round down to nearest integer; fail on overflow                                  |
 | `Math.fraction(numerator, denominator)` | `(integer, integer)`           | `result<Math.Fraction>` | Exact rational in lowest terms with a positive denominator; fail if `denominator` is 0 |
 | `Math.fraction_add(a, b)`             | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact sum `a + b`; runtime error on int64 overflow                               |
@@ -2139,7 +2138,6 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.fraction_to_number(f)`          | `(Math.Fraction)`                | `number`          | Approximate `f` as a floating-point `number`                                     |
 | `Math.from_polar(p)`                  | `(Math.Polar)`                   | `Math.Vector2`    | Convert a `Math.Polar` to a `Math.Vector2` (total conversion)                     |
 | `Math.greatest_common_divisor(a, b)`  | `(integer, integer)`             | `result<integer>` | GCD of `a` and `b`                                                               |
-| `Math.histogram(values, bins)`        | `(array<number>, integer)`       | `result<Math.Histogram>` | Bin `values` into `bins` equal-width half-open bins; fail if empty or `bins < 1` |
 | `Math.hyperbolic_cosine(x)`           | `(number)`                       | `result<number>`  | Hyperbolic cosine; fail if result is infinite                                    |
 | `Math.hyperbolic_sine(x)`             | `(number)`                       | `result<number>`  | Hyperbolic sine; fail if result is infinite                                      |
 | `Math.hyperbolic_tangent(x)`          | `(number)`                       | `number`          | Hyperbolic tangent (always bounded to [−1, 1])                                   |
@@ -2152,7 +2150,6 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.is_prime(n)`                    | `(integer)`                      | `boolean`         | Whether `n` is prime                                                             |
 | `Math.least_common_multiple(a, b)`    | `(integer, integer)`             | `result<integer>` | LCM of `a` and `b`; fail on overflow                                             |
 | `Math.lerp(a, b, t)`                  | `(number, number, number)`       | `result<number>`  | Linear interpolation; fail if `t` outside [0, 1]                                 |
-| `Math.linear_fit(xs, ys)`             | `(array<number>, array<number>)` | `result<Math.LineFit>` | Ordinary least-squares line fit; fail on unequal lengths, < 2 points, or zero x-variance |
 | `Math.log(base, value)`               | `(number, number)`               | `result<number>`  | Logarithm of `value` with `base`; fail if base ≤ 0, base = 1, or value ≤ 0       |
 | `Math.log_10(x)`                      | `(number)`                       | `result<number>`  | Base-10 logarithm                                                                |
 | `Math.log_2(x)`                       | `(number)`                       | `result<number>`  | Base-2 logarithm                                                                 |
@@ -2168,11 +2165,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.digit_sum(n)`                   | `(integer)`                      | `integer`         | Sum of the decimal digits of `\|n\|`                                             |
 | `Math.digit_count(n)`                 | `(integer)`                      | `integer`         | Number of decimal digits of `n`                                                  |
 | `Math.max(a, b)`                      | `(number, number)`               | `number`          | Larger of two values                                                             |
-| `Math.mean(arr)`                      | `(array<number>)`                | `result<number>`  | Arithmetic mean; fail if empty                                                   |
-| `Math.median(arr)`                    | `(array<number>)`                | `result<number>`  | Median value; fail if empty                                                      |
 | `Math.min(a, b)`                      | `(number, number)`               | `number`          | Smaller of two values                                                            |
-| `Math.mode(arr)`                      | `(array<number>)`                | `result<number>`  | Most frequent value; fail if empty                                               |
-| `Math.percentile(arr, p)`             | `(array<number>, number)`        | `result<number>`  | p-th percentile; fail if empty or `p` outside [0, 100]                           |
 | `Math.permutations(n, k)`             | `(integer, integer)`             | `result<integer>` | Number of ordered arrangements of `k` of `n` (nPr); fail if `n < 0`, `k < 0`, `k > n`, or overflow |
 | `Math.power(base, exp)`               | `(number, number)`               | `result<number>`  | `base` raised to `exp`; fail if result is NaN or Inf                             |
 | `Math.radians(deg)`                   | `(number)`                       | `number`          | Convert degrees to radians                                                       |
@@ -2186,15 +2179,12 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.sine(x)`                        | `(number)`                       | `result<number>`  | Sine; fail if result is NaN or infinite                                          |
 | `Math.smooth_step(edge0, edge1, x)`   | `(number, number, number)`       | `result<number>`  | Smoothstep interpolation between `edge0` and `edge1`; fail if `edge0 == edge1`   |
 | `Math.square_root(x)`                 | `(number)`                       | `result<number>`  | Square root; fail if `x` is negative                                             |
-| `Math.standard_deviation(arr)`        | `(array<number>)`                | `result<number>`  | Standard deviation; fail if empty                                                |
 | `Math.sum(arr)`                       | `(array<number>)`                | `result<integer \| number>` | Sum of all elements; fail on a non-numeric element                               |
-| `Math.summarize(arr)`                 | `(array<number>)`                | `result<Math.Summary>` | Descriptive statistics (count, min, max, mean, median, std. dev.) in one pass; fail if empty |
 | `Math.tangent(x)`                     | `(number)`                       | `result<number>`  | Tangent; fail if result is NaN or infinite                                       |
 | `Math.to_degrees(angle)`              | `(Math.Angle)`                   | `number`          | The `Math.Angle` as a number of degrees                                         |
 | `Math.to_polar(v)`                    | `(Math.Vector2)`                 | `Math.Polar`      | Convert a `Math.Vector2` to a `Math.Polar` (total conversion)                     |
 | `Math.to_radians(angle)`              | `(Math.Angle)`                   | `number`          | The `Math.Angle` as a number of radians                                         |
 | `Math.truncate(x)`                    | `(number)`                       | `result<integer>` | Truncate toward zero; fail on overflow                                           |
-| `Math.variance(arr)`                  | `(array<number>)`                | `result<number>`  | Variance; fail if empty                                                          |
 | `Math.vector2(x, y)`                  | `(number, number)`               | `Math.Vector2`    | Construct a 2D vector                                                            |
 | `Math.vec2_add(a, b)`                 | `(Math.Vector2, Math.Vector2)`   | `Math.Vector2`    | Component-wise sum `a + b`                                                        |
 | `Math.vec2_sub(a, b)`                 | `(Math.Vector2, Math.Vector2)`   | `Math.Vector2`    | Component-wise difference `a - b`                                                |
@@ -2256,18 +2246,6 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.circle_contains(c, point)`      | `(Math.Circle, Math.Vector2)`    | `boolean`         | Whether `point` lies in the closed disk (the boundary is inclusive)             |
 | `Math.circle_intersects(a, b)`        | `(Math.Circle, Math.Circle)`     | `boolean`         | Whether two circles overlap or touch                                            |
 | `Math.circle_rect_intersects(c, r)`   | `(Math.Circle, Math.Rect)`       | `boolean`         | Whether a circle and a rectangle overlap                                        |
-
-`Math.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
-
-`Math.FiveNumberSummary` is the box-plot sibling of `Math.Summary` — `minimum: number`, `q1: number`, `median: number`, `q3: number`, `maximum: number` — returned by `Math.five_number_summary(arr)` (fails on an empty array). The quartiles use the same linear-interpolation method as `Math.percentile`, so `Math.five_number_summary(v)` agrees with `Math.percentile(v, 25/50/75)` — a single typed answer for the five order statistics a box plot needs.
-
-`Math.Histogram { bin_edges: array<number>, counts: array<integer>, bin_width: number }` is the binned frequency distribution behind every bar chart. `Math.histogram(values, bins)` splits the data range `[min, max]` into `bins` equal-width half-open bins and tallies how many samples fall in each — `counts[i]` is the number of values in `[bin_edges[i], bin_edges[i+1])`, so `bin_edges` always has one more element than `counts`, and the final bin is closed on the right so the maximum is counted. It fails on an empty array or `bins < 1`. When every value is identical (a zero-width range) the range is widened by half a unit on each side so the bins stay positive-width. The `integer` counts and `number` edges respect the numeric convention, and the shape feeds the GraphicalUi bar chart directly. Mirrors `Math.summarize` / `Math.five_number_summary`: pure data returned by one pipe-first `result`-typed call.
-
-```luma
-Math.Histogram h = Result.unwrap(Math.histogram([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3))
-assert(Array.length(h.bin_edges) == 4)   # one more edge than counts
-assert(Array.length(h.counts) == 3)
-```
 
 `Math.Vector2 { x: number, y: number }` and `Math.Vector3 { x: number, y: number, z: number }` are typed geometry vectors for 2D/3D work — game positions, GraphicalUi layout, physics — where named `.x` / `.y` / `.z` components are far more teachable than the index arithmetic of `LinearAlgebra`'s general `array<number>` vectors. Like `Math.Complex`, they are pure data plus a pipe-first free-function family — `vec2_*` / `vec3_*` for `add`, `sub`, `scale`, `dot`, `length`, and `normalize`, with `vec3_cross` for the 3D cross product — and no operator overloading. `normalize` returns the zero vector unchanged rather than dividing by zero. `Math.to_polar` / `Math.from_polar` bridge `Math.Vector2` to the `Math.Polar` record below.
 
@@ -2333,8 +2311,6 @@ assert(sum.numerator == 1 && sum.denominator == 2)
 Math.Polar p = Math.to_polar(Math.vector2(3.0, 4.0))   # radius: 5.0, angle: atan2(4, 3)
 Math.Vector2 v = Math.from_polar(p)                    # back to (3.0, 4.0)
 ```
-
-`Math.LineFit` is the ordinary least-squares regression result — `slope: number`, `intercept: number`, `r_squared: number` — returned by `Math.linear_fit(xs, ys)` for the trend line `y = slope · x + intercept`. It fails on mismatched array lengths, fewer than two points, or a zero x-variance (a vertical line). Mirrors `Math.Summary`: a plain returned record built by a single call.
 
 `Sign` is a **top-level** choice type (not namespaced, like `Ordering`) with three variants — `Sign.Negative`, `Sign.Zero`, `Sign.Positive` — the self-documenting answer to "which way does this number point?". `Math.sign_of(x)` returns it, so a `match` is exhaustive and autocompleted instead of comparing against the magic `-1` / `0` / `1` that `Math.sign` returns (where `-1` could be misread as an error sentinel). `Math.sign` is unchanged for callers that want the integer.
 
@@ -3594,6 +3570,44 @@ integer flags = 0
 boolean bit2_set = Bits.and(flags, 4) != 0   # true
 integer doubled  = Bits.shift_left(3, 1)     # 6
 ```
+
+---
+
+## 44 — Statistics
+
+Descriptive and inferential statistics over numeric arrays. Split out of `Math`
+so the four maths modules each cover one cohesive domain: `Math` (scalar
+arithmetic, trigonometry, number theory, geometry), `Calculus`, `LinearAlgebra`,
+and `Statistics` (whole-dataset summaries). The plain aggregate `Math.sum` stays
+in `Math`; every function here reduces or summarises a whole array.
+
+| Function                        | Parameter Types                  | Return Type                        | Description                                                                      |
+| ------------------------------- | -------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
+| `Statistics.correlation(xs, ys)`      | `(array<number>, array<number>)` | `result<number>`                   | Pearson correlation coefficient; fail if arrays differ in length or < 2 elements |
+| `Statistics.five_number_summary(arr)` | `(array<number>)`                | `result<Statistics.FiveNumberSummary>` | Box-plot quartiles (min, Q1, median, Q3, max) in one pass; fail if empty      |
+| `Statistics.histogram(values, bins)`  | `(array<number>, integer)`       | `result<Statistics.Histogram>`     | Bin `values` into `bins` equal-width half-open bins; fail if empty or `bins < 1` |
+| `Statistics.linear_fit(xs, ys)`       | `(array<number>, array<number>)` | `result<Statistics.LineFit>`       | Ordinary least-squares line fit; fail on unequal lengths, < 2 points, or zero x-variance |
+| `Statistics.mean(arr)`                | `(array<number>)`                | `result<number>`                   | Arithmetic mean; fail if empty                                                   |
+| `Statistics.median(arr)`              | `(array<number>)`                | `result<number>`                   | Median value; fail if empty                                                      |
+| `Statistics.mode(arr)`                | `(array<number>)`                | `result<number>`                   | Most frequent value; fail if empty                                               |
+| `Statistics.percentile(arr, p)`       | `(array<number>, number)`        | `result<number>`                   | p-th percentile; fail if empty or `p` outside [0, 100]                           |
+| `Statistics.standard_deviation(arr)`  | `(array<number>)`                | `result<number>`                   | Standard deviation; fail if empty                                                |
+| `Statistics.summarize(arr)`           | `(array<number>)`                | `result<Statistics.Summary>`       | Descriptive statistics (count, min, max, mean, median, std. dev.) in one pass; fail if empty |
+| `Statistics.variance(arr)`            | `(array<number>)`                | `result<number>`                   | Variance; fail if empty                                                          |
+
+`Statistics.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
+
+`Statistics.FiveNumberSummary` is the box-plot sibling of `Statistics.Summary` — `minimum: number`, `q1: number`, `median: number`, `q3: number`, `maximum: number` — returned by `Statistics.five_number_summary(arr)` (fails on an empty array). The quartiles use the same linear-interpolation method as `Statistics.percentile`, so `Statistics.five_number_summary(v)` agrees with `Statistics.percentile(v, 25/50/75)` — a single typed answer for the five order statistics a box plot needs.
+
+`Statistics.Histogram { bin_edges: array<number>, counts: array<integer>, bin_width: number }` is the binned frequency distribution behind every bar chart. `Statistics.histogram(values, bins)` splits the data range `[min, max]` into `bins` equal-width half-open bins and tallies how many samples fall in each — `counts[i]` is the number of values in `[bin_edges[i], bin_edges[i+1])`, so `bin_edges` always has one more element than `counts`, and the final bin is closed on the right so the maximum is counted. It fails on an empty array or `bins < 1`. When every value is identical (a zero-width range) the range is widened by half a unit on each side so the bins stay positive-width. The `integer` counts and `number` edges respect the numeric convention, and the shape feeds the GraphicalUi bar chart directly. Mirrors `Statistics.summarize` / `Statistics.five_number_summary`: pure data returned by one pipe-first `result`-typed call.
+
+```luma
+Statistics.Histogram h = Result.unwrap(Statistics.histogram([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3))
+assert(Array.length(h.bin_edges) == 4)   # one more edge than counts
+assert(Array.length(h.counts) == 3)
+```
+
+`Statistics.LineFit` is the ordinary least-squares regression result — `slope: number`, `intercept: number`, `r_squared: number` — returned by `Statistics.linear_fit(xs, ys)` for the trend line `y = slope · x + intercept`. It fails on mismatched array lengths, fewer than two points, or a zero x-variance (a vertical line). Mirrors `Statistics.Summary`: a plain returned record built by a single call.
 
 ---
 
