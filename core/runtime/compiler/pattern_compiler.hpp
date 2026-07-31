@@ -62,6 +62,12 @@ struct IntegerPattern {
     std::int64_t integer_value{0};
 };
 
+struct IntegerRangePattern {
+    std::int64_t lo{0};
+    std::int64_t hi{0};
+    bool inclusive{false};
+};
+
 struct NonePattern {};
 
 struct SuccessResultPattern {};
@@ -74,7 +80,8 @@ struct ElsePattern {};
 
 using PatternData =
     std::variant<ComparisonPattern, VariantPattern, StringPattern, BooleanPattern, IntegerPattern,
-                 NonePattern, SuccessResultPattern, FailureResultPattern, SomePattern, ElsePattern>;
+                 IntegerRangePattern, NonePattern, SuccessResultPattern, FailureResultPattern,
+                 SomePattern, ElsePattern>;
 
 // Parameters for a single pattern test emission (RT-21).
 // SourceLocation is shared across all pattern kinds.

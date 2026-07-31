@@ -234,12 +234,13 @@ _Expressions_ (produce a value):
     - `Comparison` — operator and value (e.g., `case >= 90`, `case == "quit"`).
     - `Else` — the fallback `else` arm.
     - `IntegerCase` — bare integer literal (e.g., `case 1`, `case 42`).
+    - `IntegerRangeCase` — integer range literal, inclusive `case 0..=9` or half-open `case 0..9`. Compiled to the same bounds test as `subject in lo..hi` (`MakeRange`/`MakeRangeInc` + `Contains`); requires an integer subject and an `else` arm.
     - `NoneCase` — `case none`.
     - `SomeCase` — `some(binding)` with a bound variable name.
     - `SuccessResult` / `FailureResult` — `success(binding)` or `failure(binding)` with a bound variable name.
     - `VariantCase` — choice variant without destructuring (e.g., `case Direction.North`).
 
-    Each arm may also carry a list of `AlternativePattern` entries for multi-pattern syntax (`case A | B`). Alternatives are limited to simple pattern kinds (boolean, integer, choice variant, string, comparison, none).
+    Each arm may also carry a list of `AlternativePattern` entries for multi-pattern syntax (`case A | B`). Alternatives are limited to simple pattern kinds (boolean, integer, integer range, choice variant, string, comparison, none).
 
 - `PipeExpression` — left-hand expression piped into right-hand function call.
 - `RangeExpression` — `a..b` (exclusive end) or `a..=b` (inclusive end) producing a range value.
@@ -1320,6 +1321,7 @@ end_label:
 | Arm Kind       | Test Opcodes                    |
 | -------------- | ------------------------------- |
 | Integer/String | `Constant(val)` + `Equal`       |
+| Integer range  | `Constant(lo)` + `Constant(hi)` + `MakeRange`/`MakeRangeInc` + `Contains` |
 | Boolean        | `True`/`False` + `Equal`        |
 | None           | `None` + `Equal`                |
 | Comparison     | `[expr]` + comparison op        |

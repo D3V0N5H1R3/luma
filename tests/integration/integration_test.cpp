@@ -93,6 +93,26 @@ static void test_match_expression() {
                     "answer");
 }
 
+static void test_match_range_pattern() {
+    const std::string classify = "function string bucket(integer x) {\n"
+                                 "    return match x {\n"
+                                 "        case 0..=9   { \"low\" }\n"
+                                 "        case 10..20  { \"mid\" }\n"
+                                 "        case 30..=39 | 40..=49 { \"alt\" }\n"
+                                 "        else         { \"high\" }\n"
+                                 "    }\n"
+                                 "}\n";
+    assert_eval_str(classify + "bucket(0)\n", "low");
+    assert_eval_str(classify + "bucket(9)\n", "low");
+    // Half-open: upper bound excluded.
+    assert_eval_str(classify + "bucket(20)\n", "high");
+    assert_eval_str(classify + "bucket(19)\n", "mid");
+    // Alternatives across two ranges.
+    assert_eval_str(classify + "bucket(35)\n", "alt");
+    assert_eval_str(classify + "bucket(45)\n", "alt");
+    assert_eval_str(classify + "bucket(100)\n", "high");
+}
+
 static void test_record_creation() {
     assert_eval_int("record Point {\n"
                     "    integer x,\n"
@@ -600,6 +620,7 @@ int main() {
     RUN(test_function_definition_and_call);
     RUN(test_array_operations);
     RUN(test_match_expression);
+    RUN(test_match_range_pattern);
     RUN(test_record_creation);
     RUN(test_for_loop);
     RUN(test_tail_call);

@@ -253,6 +253,20 @@ void StatementTypeChecker::visit_match_statement(const MatchStatement& stmt) {
 
 void StatementTypeChecker::check_match_arm_comparison(const MatchArm& arm,
                                                       const TypeInfo& subject_type) {
+    // Range arms carry no comparison value, so validate their subject type
+    // before the comparison-value early-return below.  Like integer-case arms,
+    // a range only matches an integer subject.
+    if (arm.kind() == MatchArm::Kind::IntegerRangeCase &&
+        subject_type.kind != TypeInfo::Kind::Integer &&
+        subject_type.kind != TypeInfo::Kind::StdlibAny &&
+        subject_type.kind != TypeInfo::Kind::Unknown) {
+        tc_.error(
+            std::format("match arm has range case but subject is '{}'", subject_type.to_string()),
+            arm.range_location(), "range case arms can only match integer values");
+
+        return;
+    }
+
     if (!arm.comparison_value()) {
         return;
     }

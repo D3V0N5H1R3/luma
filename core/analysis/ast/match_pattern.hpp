@@ -15,6 +15,7 @@
 
 #include "analysis/ast/ast_fwd.hpp"
 #include "analysis/lexer/token_type.hpp"
+#include "analysis/source/source_location.hpp"
 
 namespace luma {
 
@@ -31,6 +32,7 @@ struct MatchPattern {
         Else,
         FailureResult,
         IntegerCase,
+        IntegerRangeCase,
         NoneCase,
         SomeCase,
         StringCase,
@@ -66,6 +68,16 @@ struct MatchPattern {
         std::int64_t value{0};
     };
 
+    /// A `case lo..hi` / `case lo..=hi` integer range pattern.  Bounds are
+    /// compile-time integer-literal constants; `inclusive` selects `..=` (closed)
+    /// vs `..` (half-open).  Compiled to the same bounds test as `value in lo..hi`.
+    struct RangePatternData {
+        std::int64_t lo{0};
+        std::int64_t hi{0};
+        bool inclusive{false};
+        SourceLocation location{};
+    };
+
     struct NonePatternData {};
 
     struct SomePatternData {
@@ -87,8 +99,8 @@ struct MatchPattern {
 
     using PatternData =
         std::variant<BooleanPatternData, ChoicePatternData, ComparisonPatternData, ElsePatternData,
-                     FailurePatternData, IntegerPatternData, NonePatternData, SomePatternData,
-                     StringPatternData, SuccessPatternData, VariantPatternData>;
+                     FailurePatternData, IntegerPatternData, RangePatternData, NonePatternData,
+                     SomePatternData, StringPatternData, SuccessPatternData, VariantPatternData>;
 
     // ── Pattern data ──
     PatternData pattern{ComparisonPatternData{}};
@@ -159,6 +171,35 @@ struct MatchPattern {
             return p->value;
         }
         return 0;
+    }
+
+    [[nodiscard]] std::int64_t range_lo() const noexcept {
+        if (const auto* p = std::get_if<RangePatternData>(&pattern)) {
+            return p->lo;
+        }
+        return 0;
+    }
+
+    [[nodiscard]] std::int64_t range_hi() const noexcept {
+        if (const auto* p = std::get_if<RangePatternData>(&pattern)) {
+            return p->hi;
+        }
+        return 0;
+    }
+
+    [[nodiscard]] bool range_inclusive() const noexcept {
+        if (const auto* p = std::get_if<RangePatternData>(&pattern)) {
+            return p->inclusive;
+        }
+        return false;
+    }
+
+    [[nodiscard]] const SourceLocation& range_location() const noexcept {
+        if (const auto* p = std::get_if<RangePatternData>(&pattern)) {
+            return p->location;
+        }
+        static const SourceLocation empty{};
+        return empty;
     }
 
     [[nodiscard]] const std::string& binding_name() const noexcept {

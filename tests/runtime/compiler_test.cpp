@@ -199,6 +199,29 @@ static void test_compile_contains_range_operator() {
     ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::MakeRangeInc));
 }
 
+static void test_compile_match_range_pattern() {
+    // A range arm reuses the `in` bounds test: MakeRange(Inc) + Contains.
+    const auto inc = compile("integer x = 5\n"
+                             "match x {\n"
+                             "    case 0..=9 { }\n"
+                             "    else { }\n"
+                             "}");
+
+    ASSERT_TRUE(inc.success);
+    ASSERT_TRUE(has_opcode(inc.top_level.chunk(), Op::MakeRangeInc));
+    ASSERT_TRUE(has_opcode(inc.top_level.chunk(), Op::Contains));
+
+    const auto half_open = compile("integer x = 5\n"
+                                   "match x {\n"
+                                   "    case 0..9 { }\n"
+                                   "    else { }\n"
+                                   "}");
+
+    ASSERT_TRUE(half_open.success);
+    ASSERT_TRUE(has_opcode(half_open.top_level.chunk(), Op::MakeRange));
+    ASSERT_TRUE(has_opcode(half_open.top_level.chunk(), Op::Contains));
+}
+
 static void test_compile_try_catch() {
     const auto result = compile("function void f() {\n"
                                 "    try { integer x = 1 } catch(e) { integer y = 2 }\n"
@@ -512,6 +535,7 @@ int main() {
     RUN(test_compile_range);
     RUN(test_compile_contains_operator);
     RUN(test_compile_contains_range_operator);
+    RUN(test_compile_match_range_pattern);
     RUN(test_compile_try_catch);
     RUN(test_compile_return_in_finally_does_not_recurse);
     RUN(test_compile_for_in_loop);
