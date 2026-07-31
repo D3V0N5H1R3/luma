@@ -435,16 +435,23 @@ TypeInfo ExpressionTypeChecker::check_containment_binary(const BinaryExpression&
                   expr.left->location, "use a string value on the left side of 'in'");
     }
 
+    if (right.kind == TypeInfo::Kind::Range && left.kind != TypeInfo::Kind::Integer &&
+        left.kind != TypeInfo::Kind::StdlibAny && left.kind != TypeInfo::Kind::Unknown) {
+        tc_.error(std::format("'in' on a range requires an integer, got '{}'", left.to_string()),
+                  expr.left->location, "range membership tests an integer against integer bounds");
+    }
+
     if (right.kind == TypeInfo::Kind::Array || right.kind == TypeInfo::Kind::Dictionary ||
-        right.kind == TypeInfo::Kind::String || right.kind == TypeInfo::Kind::StdlibAny ||
-        right.kind == TypeInfo::Kind::Unknown) {
+        right.kind == TypeInfo::Kind::String || right.kind == TypeInfo::Kind::Range ||
+        right.kind == TypeInfo::Kind::StdlibAny || right.kind == TypeInfo::Kind::Unknown) {
         return TypeInfo::make(TypeInfo::Kind::Boolean);
     }
 
-    tc_.error(std::format("'in' operator requires array, dictionary, or "
-                          "string on the right, got '{}'",
+    tc_.error(std::format("'in' operator requires array, dictionary, "
+                          "string, or range on the right, got '{}'",
                           right.to_string()),
-              expr.right->location, "the right side of 'in' must be a collection or string");
+              expr.right->location,
+              "the right side of 'in' must be a collection, string, or range");
 
     return TypeInfo::make(TypeInfo::Kind::Boolean);
 }

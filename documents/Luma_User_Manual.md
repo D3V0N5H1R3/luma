@@ -408,6 +408,20 @@ Shift amounts must be in the range `0..63`. A shift amount outside this range th
 | `in`     | Element in array: `42 in [1, 42, 3]` → `true`    |
 | `in`     | Key in dictionary: `"alice" in scores` → `true`  |
 | `in`     | Substring in string: `"ell" in "hello"` → `true` |
+| `in`     | Integer in range: `42 in 1..=100` → `true`       |
+
+Range membership tests whether an `integer` falls within a range's bounds. It
+honours the range form: the lower bound is always inclusive, while the upper
+bound is inclusive for `a..=b` and exclusive for `a..b`. It reads more naturally
+than the two-comparison idiom it replaces:
+
+```luma
+# Instead of: score >= 1 && score <= 100
+boolean valid = score in 1..=100
+```
+
+The left operand must be an `integer` (ranges have integer bounds); any other
+type is a compile-time `TypeError`.
 
 ### Logical
 
@@ -2960,7 +2974,8 @@ Detected before execution. If any type errors are found, execution does not star
 | `bitwise NOT '~' requires an integer operand, got 'T'`                        | Invalid operand for `~`                          |
 | `'in' on dictionary requires a string key, got 'T'`                           | Non-string key in `x in dict`                    |
 | `'in' on string requires a string operand, got 'T'`                           | Non-string value in `x in str`                   |
-| `'in' operator requires array, dictionary, or string on the right, got 'T'`   | Invalid right operand for `in`                   |
+| `'in' on a range requires an integer, got 'T'`                                | Non-integer value in `x in a..=b`                |
+| `'in' operator requires array, dictionary, string, or range on the right, got 'T'` | Invalid right operand for `in`              |
 | `compound assignment 'op' requires integer type, got 'T'`                     | Bitwise compound assignment on non-integer       |
 | `compound assignment 'op' requires integer value, got 'T'`                    | Bitwise compound assignment value is non-integer |
 | `compound assignment requires numeric type, got 'T'`                          | Numeric compound assignment on non-numeric       |

@@ -334,6 +334,19 @@ void VM::handle_contains() {
 
     bool found = false;
 
+    if (container.is_range()) {
+        if (!element.is_integer()) [[unlikely]] {
+            runtime_error(vm_errors::in_range_requires_integer(element.display_type_name()));
+        }
+        const auto& range = *container.as_range();
+        const auto value = element.as_integer();
+        // Mirror the for-in range iterator bounds (iter_step_range): start is
+        // always inclusive; end is inclusive for a..=b, exclusive for a..b.
+        found = value >= range.start && (range.inclusive ? value <= range.end : value < range.end);
+        push(Value{found});
+        return;
+    }
+
     dispatch_collection(
         container,
         [&] {

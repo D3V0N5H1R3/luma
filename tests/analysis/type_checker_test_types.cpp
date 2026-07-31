@@ -200,6 +200,18 @@ static void test_in_container_passes() {
                        "boolean c = \"k\" in {\"k\": 1}\n"));
 }
 
+// `in` over a range type-checks and yields boolean, for both bound forms.
+static void test_in_range_passes() {
+    ASSERT_TRUE(passes("boolean a = 5 in 1..=100\n"
+                       "boolean b = 5 in 1..100\n"));
+}
+
+// `in` on a range requires an integer left operand.
+static void test_in_range_requires_integer() {
+    ASSERT_TRUE(fails("boolean b = \"x\" in 1..=100\n"));
+    ASSERT_TRUE(fails("boolean b = 1.5 in 1..=100\n"));
+}
+
 // ─── Record default field values. ───
 
 static void test_record_default_field_valid() {
@@ -579,6 +591,8 @@ int main() {
     RUN(test_comparison_same_type_passes);
     RUN(test_in_requires_container);
     RUN(test_in_container_passes);
+    RUN(test_in_range_passes);
+    RUN(test_in_range_requires_integer);
 
     // ─── Tuple index inference ───
 
