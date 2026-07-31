@@ -286,6 +286,13 @@ private:
 
     [[nodiscard]] bool looks_like_tuple_destructuring() const;
     [[nodiscard]] StatementPtr parse_tuple_destructuring(bool is_mutable);
+    [[nodiscard]] bool looks_like_record_destructuring() const;
+    [[nodiscard]] StatementPtr parse_record_destructuring(bool is_mutable);
+    // Consumes optional generic arguments (`<...>`) at the cursor, if present.
+    // Field/element types are inferred from the declaration, so the arguments
+    // carry no binding information — this simply advances past a balanced
+    // `<...>` (handling nested generics tokenised as '>>').
+    void consume_generic_args();
     [[nodiscard]] StatementPtr parse_return_statement();
     [[nodiscard]] StatementPtr parse_for_statement();
     [[nodiscard]] StatementPtr parse_while_statement();
@@ -310,6 +317,11 @@ private:
     template <typename PatternData> void parse_single_binding_pattern(MatchArm& arm);
     void parse_pattern_choice_destructure(MatchArm& arm, std::string_view type_name,
                                           std::string_view variant_name);
+    // Detects a `case Type { field, ... } { body }` record pattern by lookahead
+    // (a type name, then a brace group of comma-separated identifiers, then a
+    // second brace group for the arm body).
+    [[nodiscard]] bool looks_like_record_pattern() const;
+    void parse_pattern_record_destructure(MatchArm& arm);
     void parse_pattern_guard(MatchArm& arm);
     void parse_pattern_variant_into(MatchArm::AlternativePattern& alt);
 

@@ -128,7 +128,7 @@ concept StatementHandler = HandlesAll<H,
     AssignmentStatement, BlockStatement, BreakStatement,
     CompoundAssignmentStatement, ContinueStatement, DecrementStatement,
     ExpressionStatement, ForStatement, IfStatement, IncrementStatement,
-    MatchStatement, ReturnStatement, TryStatement,
+    MatchStatement, RecordDestructuringStatement, ReturnStatement, TryStatement,
     TupleDestructuringStatement, VariableDeclStatement, WhileStatement>;
 
 /// A handler for declaration dispatch — must accept every concrete
@@ -258,6 +258,8 @@ decltype(auto) dispatch_statement(const Statement& stmt, Handler&& handler) {
             return handler(static_cast<const IncrementStatement&>(stmt));
         case StatementKind::Match:
             return handler(static_cast<const MatchStatement&>(stmt));
+        case StatementKind::RecordDestructuring:
+            return handler(static_cast<const RecordDestructuringStatement&>(stmt));
         case StatementKind::Return:
             return handler(static_cast<const ReturnStatement&>(stmt));
         case StatementKind::Try:

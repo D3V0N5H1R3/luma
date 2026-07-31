@@ -97,4 +97,23 @@ function void main() {
         finish = Point { x = 3, y = 4 }
     }
     print("segment from ${describe(segment.start)} to ${describe(segment.finish)}")
+
+    # ── Field destructuring ──
+    print("")
+    print("=== Destructuring ===")
+
+    # Bind fields to same-named locals instead of repeating `segment.start...`.
+    Line { start, finish } = segment
+    print("start = ${describe(start)}, finish = ${describe(finish)}")
+
+    # A subset of fields may be listed; unlisted fields are ignored.
+    Point { x } = p
+    print("just x = ${x}")
+
+    # Records can also be destructured in a `match` case pattern.
+    string quadrant = match p {
+        case Point { x, y } when x >= 0 && y >= 0 { "upper-right" }
+        else { "elsewhere" }
+    }
+    print("p is in the ${quadrant}")
 }

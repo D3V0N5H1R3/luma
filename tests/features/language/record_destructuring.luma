@@ -1,0 +1,123 @@
+# ═══════════════════════════════════════════════════════════
+# Luma — Feature Tests — Record field destructuring
+#
+# Positional-by-name record destructuring in bindings and as a
+# match case pattern.  See Luma_User_Manual.md §3 and §8.
+# ═══════════════════════════════════════════════════════════
+
+record Point {
+    integer x,
+    integer y,
+    integer z
+}
+
+record Named {
+    string name,
+    integer age
+}
+
+record Inner {
+    integer v
+}
+
+record Outer {
+    Inner inner,
+    integer k
+}
+
+@test
+function void test_record_destructuring_binding() {
+    Point p = Point { x = 1, y = 2, z = 3 }
+    Point { x, y, z } = p
+
+    assert(x == 1)
+    assert(y == 2)
+    assert(z == 3)
+}
+
+@test
+function void test_record_destructuring_subset() {
+    Point p = Point { x = 7, y = 8, z = 9 }
+    Point { x, z } = p
+
+    assert(x == 7)
+    assert(z == 9)
+}
+
+@test
+function void test_record_destructuring_mutable() {
+    Point p = Point { x = 5, y = 6, z = 7 }
+    mutable Point { x, y, z } = p
+
+    x = x + 100
+    y = y + 10
+    z = z + 1
+
+    assert(x == 105)
+    assert(y == 16)
+    assert(z == 8)
+}
+
+@test
+function void test_record_destructuring_field_types() {
+    Named n = Named { name = "Ada", age = 36 }
+    Named { name, age } = n
+
+    assert(name == "Ada")
+    assert(age == 36)
+}
+
+@test
+function void test_record_destructuring_nested() {
+    Outer o = Outer { inner = Inner { v = 40 }, k = 2 }
+    Outer { inner, k } = o
+
+    assert(inner.v == 40)
+    assert(k == 2)
+}
+
+@test
+function void test_record_match_pattern_statement() {
+    Named n = Named { name = "Grace", age = 45 }
+
+    mutable string msg = ""
+
+    match n {
+        case Named { name, age } {
+            msg = "${name}:${age}"
+        }
+    }
+
+    assert(msg == "Grace:45")
+}
+
+@test
+function void test_record_match_pattern_expression() {
+    Named n = Named { name = "Alan", age = 41 }
+
+    integer got = match n {
+        case Named { age } { age }
+    }
+
+    assert(got == 41)
+}
+
+@test
+function void test_record_match_pattern_with_guard() {
+    Point p = Point { x = 10, y = 2, z = 0 }
+
+    string label = match p {
+        case Point { x, y } when x > y { "x-major" }
+        else { "other" }
+    }
+
+    assert(label == "x-major")
+}
+
+@test
+function void test_record_creation_still_works() {
+    # A record-creation expression (fields carry '=') is not destructuring.
+    Point p = Point { x = 1, y = 1, z = 1 }
+
+    assert(p.x == 1)
+}

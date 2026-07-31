@@ -63,6 +63,7 @@ public:
     void visit_if_statement(const IfStatement& stmt);
     void visit_match_statement(const MatchStatement& stmt);
     void visit_tuple_destructuring(const TupleDestructuringStatement& stmt);
+    void visit_record_destructuring(const RecordDestructuringStatement& stmt);
     void visit_block(const BlockStatement& stmt);
     void visit_while(const WhileStatement& stmt);
     void visit_try(const TryStatement& stmt);

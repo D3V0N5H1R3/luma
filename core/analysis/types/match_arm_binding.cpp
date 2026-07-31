@@ -10,7 +10,9 @@
 #include "analysis/ast/declaration.hpp"
 #include "analysis/ast/match_pattern.hpp"
 #include "analysis/types/generic_resolver.hpp"
+#include "analysis/types/type_check_helpers.hpp"
 #include "analysis/types/type_checking_context.hpp"
+#include "common/string_hash.hpp"
 
 namespace luma::match_arm_binding {
 
@@ -141,6 +143,80 @@ void bind_choice_fields(TypeCheckingServices& tc, const MatchArm& arm, const Typ
         const auto field_type = tc.resolve_type(variant.fields[i].type);
 
         tc.context().current_scope->define(choice_bindings[i], field_type, {});
+    }
+}
+
+void bind_record_fields(TypeCheckingServices& tc, std::string_view record_type,
+                        const std::vector<std::string>& fields, const TypeInfo& subject_type,
+                        const SourceLocation& location, bool is_mutable) {
+    const RecordDeclaration* record = tc.find_record(record_type);
+
+    if (record == nullptr) {
+        tc.error(std::format("unknown record type '{}'", record_type), location,
+                 "record destructuring requires a declared record type");
+
+        // Still bind the names so downstream references do not cascade errors.
+        for (const auto& field : fields) {
+            tc.context().current_scope->define(field, TypeInfo::make(TypeInfo::Kind::StdlibAny),
+                                               {.is_mutable = is_mutable}, location);
+        }
+
+        return;
+    }
+
+    // Validate that the value/subject being destructured is an instance of this
+    // record type.  This guards both the binding form (`Point { x } = expr`) and
+    // the match form (`case Point { x }`): the match exhaustiveness checker
+    // treats an unguarded record arm as irrefutable and the compiler emits a
+    // refutable `IsType`, so a mismatched pattern type would otherwise
+    // type-check yet never match at runtime.  A permissive/unknown subject is
+    // left alone.
+    if (subject_type.kind != TypeInfo::Kind::Unknown &&
+        subject_type.kind != TypeInfo::Kind::StdlibAny) {
+        const bool matches =
+            subject_type.kind == TypeInfo::Kind::Record &&
+            (subject_type.name == record_type || subject_type.name == record->name ||
+             tc.find_record(subject_type.name) == record);
+
+        if (!matches) {
+            tc.error(std::format("record destructuring expects '{}' but got '{}'", record_type,
+                                 subject_type.to_string()),
+                     location, "the value must be an instance of the record type");
+        }
+    }
+
+    // Resolve the record's generic type params from the subject's concrete type
+    // arguments (when the subject is that record type); a non-generic record or
+    // an unknown subject makes this a harmless no-op.  The guard restores prior
+    // bindings on every exit path.
+    const auto binding_guard =
+        type_check_helpers::bind_type_params(tc, record->type_params, subject_type.inner_types);
+
+    StringSet seen;
+
+    for (const auto& field_name : fields) {
+        if (!seen.insert(field_name).second) {
+            tc.error(std::format("duplicate field '{}' in record destructuring", field_name),
+                     location, "each field may be bound at most once");
+
+            continue;
+        }
+
+        const auto field_it = std::ranges::find(record->fields, field_name, &RecordField::name);
+
+        if (field_it == record->fields.end()) {
+            tc.error(std::format("record '{}' has no field '{}'", record_type, field_name),
+                     location, "check the record definition for available fields");
+
+            tc.context().current_scope->define(field_name,
+                                               TypeInfo::make(TypeInfo::Kind::StdlibAny),
+                                               {.is_mutable = is_mutable}, location);
+
+            continue;
+        }
+
+        tc.context().current_scope->define(field_name, tc.resolve_type(field_it->type),
+                                           {.is_mutable = is_mutable}, location);
     }
 }
 

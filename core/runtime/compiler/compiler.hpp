@@ -356,6 +356,10 @@ private:
         pattern_compiler_.compile_tuple_destructuring(stmt);
     }
 
+    void compile_record_destructuring(const RecordDestructuringStatement& stmt) {
+        pattern_compiler_.compile_record_destructuring(stmt);
+    }
+
     void compile_block(const BlockStatement& stmt);
 
     // ─── Expression compilation ───
@@ -613,6 +617,10 @@ private:
     // Destructuring
     void visit_tuple_destructuring(const TupleDestructuringStatement& s) {
         compile_tuple_destructuring(s);
+    }
+
+    void visit_record_destructuring(const RecordDestructuringStatement& s) {
+        compile_record_destructuring(s);
     }
 
     // Blocks

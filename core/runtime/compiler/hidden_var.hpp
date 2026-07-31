@@ -28,6 +28,7 @@ enum class HiddenVar {
     MatchGuardSubject, // preserved subject for a guarded match-expression arm
     Error,             // try/catch error binding
     TuplePrefix,       // tuple destructuring prefix (appended with index)
+    RecordPrefix,      // record destructuring prefix (appended with index)
 };
 
 // Map a HiddenVar to its canonical string representation.
@@ -47,6 +48,8 @@ enum class HiddenVar {
             return "__err__";
         case HiddenVar::TuplePrefix:
             return "__tuple__";
+        case HiddenVar::RecordPrefix:
+            return "__record__";
     }
     return "";
 }

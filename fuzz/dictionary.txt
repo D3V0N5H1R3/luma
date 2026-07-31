@@ -210,6 +210,8 @@
 "for x in"
 "if true"
 "match x"
+"{ x, y } ="
+"case Point { x, y }"
 "task_scope {"
 "\"\"\""
 "Calculus.derivative("

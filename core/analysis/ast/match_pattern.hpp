@@ -37,7 +37,8 @@ struct MatchPattern {
         SomeCase,
         StringCase,
         SuccessResult,
-        VariantCase
+        VariantCase,
+        RecordCase
     };
 
     // ── Pattern data types (variant alternatives) ──
@@ -97,10 +98,18 @@ struct MatchPattern {
         std::string enum_variant;
     };
 
+    /// A `case Type { field, ... }` record-destructuring pattern.  Binds each
+    /// listed field to a same-named local; a subset of fields may be listed.
+    struct RecordPatternData {
+        std::string record_type;
+        std::vector<std::string> field_bindings;
+    };
+
     using PatternData =
         std::variant<BooleanPatternData, ChoicePatternData, ComparisonPatternData, ElsePatternData,
                      FailurePatternData, IntegerPatternData, RangePatternData, NonePatternData,
-                     SomePatternData, StringPatternData, SuccessPatternData, VariantPatternData>;
+                     SomePatternData, StringPatternData, SuccessPatternData, VariantPatternData,
+                     RecordPatternData>;
 
     // ── Pattern data ──
     PatternData pattern{ComparisonPatternData{}};
@@ -226,6 +235,26 @@ struct MatchPattern {
     [[nodiscard]] const std::vector<std::string>& choice_bindings() const noexcept {
         if (const auto* p = std::get_if<ChoicePatternData>(&pattern)) {
             return p->choice_bindings;
+        }
+        static const std::vector<std::string> empty;
+        return empty;
+    }
+
+    [[nodiscard]] const std::string& record_type() const noexcept {
+        if (const auto* p = std::get_if<RecordPatternData>(&pattern)) {
+            return p->record_type;
+        }
+        static const std::string empty;
+        return empty;
+    }
+
+    [[nodiscard]] bool has_record_bindings() const noexcept {
+        return std::holds_alternative<RecordPatternData>(pattern);
+    }
+
+    [[nodiscard]] const std::vector<std::string>& record_field_bindings() const noexcept {
+        if (const auto* p = std::get_if<RecordPatternData>(&pattern)) {
+            return p->field_bindings;
         }
         static const std::vector<std::string> empty;
         return empty;

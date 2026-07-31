@@ -50,6 +50,10 @@ struct VariantPattern {
     std::string enum_variant;
 };
 
+struct RecordPattern {
+    std::string record_type;
+};
+
 struct StringPattern {
     std::string string_value;
 };
@@ -81,7 +85,7 @@ struct ElsePattern {};
 using PatternData =
     std::variant<ComparisonPattern, VariantPattern, StringPattern, BooleanPattern, IntegerPattern,
                  IntegerRangePattern, NonePattern, SuccessResultPattern, FailureResultPattern,
-                 SomePattern, ElsePattern>;
+                 SomePattern, ElsePattern, RecordPattern>;
 
 // Parameters for a single pattern test emission (RT-21).
 // SourceLocation is shared across all pattern kinds.
@@ -113,6 +117,7 @@ public:
     void compile_match_statement(const MatchStatement& stmt);
     void compile_match_statement_as_expression(const MatchStatement& stmt);
     void compile_tuple_destructuring(const TupleDestructuringStatement& stmt);
+    void compile_record_destructuring(const RecordDestructuringStatement& stmt);
 
     // Emit the pattern test for a match arm (primary + alternatives).
     // `subject_temps_below` is the number of untracked operand-stack temporaries
@@ -160,6 +165,11 @@ private:
     // number of bindings created.
     [[nodiscard]] std::size_t
     emit_choice_field_bindings(const MatchArm& arm, std::uint16_t subject_slot, SourceLocation loc);
+
+    // Emit record field bindings: load each field from the subject at the given
+    // local slot by name (GetField).  Returns the number of bindings created.
+    [[nodiscard]] std::size_t
+    emit_record_field_bindings(const MatchArm& arm, std::uint16_t subject_slot, SourceLocation loc);
 
     // Shared value-producing emitter for both match expressions and match
     // statements in expression position.  Compiles the subject, then each arm

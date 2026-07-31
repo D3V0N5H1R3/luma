@@ -61,6 +61,14 @@ void Linter::visit_tuple_destructuring(const TupleDestructuringStatement& td) {
     }
 }
 
+void Linter::visit_record_destructuring(const RecordDestructuringStatement& rd) {
+    lint_expression(*rd.initializer);
+
+    for (const auto& name : rd.fields) {
+        tracker_.track_variable(name, rd.location, false, rd.is_mutable);
+    }
+}
+
 void Linter::visit_increment(const IncrementStatement& inc) {
     lint_expression(*inc.target);
 

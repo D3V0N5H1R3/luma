@@ -81,6 +81,14 @@ struct PatternVisitor {
         api.emit_u16(Op::IsType, name_idx, loc);
     }
 
+    void operator()(const RecordPattern& p) const {
+        // A record subject always has this type (records are single-shape product
+        // types), so the IsType test is irrefutable — but emitting it keeps the
+        // arm structure uniform with every other pattern.
+        auto name_idx = api.add_name(p.record_type);
+        api.emit_u16(Op::IsType, name_idx, loc);
+    }
+
     void operator()(const ElsePattern& /*unused*/) const {
         // No-op for else/default arms.
     }
@@ -124,6 +132,8 @@ PatternTestArgs build_pattern_args_impl(const PatternSource& source, SourceLocat
             case MatchArm::Kind::ChoiceCase:
             case MatchArm::Kind::VariantCase:
                 return VariantPattern{source.enum_variant()};
+            case MatchArm::Kind::RecordCase:
+                return RecordPattern{source.record_type()};
             default:
                 return ElsePattern{};
         }
@@ -232,6 +242,24 @@ std::size_t PatternCompiler::emit_choice_field_bindings(const MatchArm& arm,
     return count;
 }
 
+std::size_t PatternCompiler::emit_record_field_bindings(const MatchArm& arm,
+                                                        std::uint16_t subject_slot,
+                                                        SourceLocation loc) {
+    std::size_t count = 0;
+
+    for (const auto& field : arm.record_field_bindings()) {
+        // Record fields are always named (the type checker rejects an unknown or
+        // duplicated field, so every binding here is a real field of the record).
+        api_.emit_u16(Op::GetLocal, subject_slot, loc);
+        const auto name_idx = api_.add_name(field);
+        api_.emit_u16(Op::GetField, name_idx, loc);
+        (void)api_.declare_local(field, false, loc);
+        ++count;
+    }
+
+    return count;
+}
+
 PatternCompiler::MatchArmBindingInfo
 PatternCompiler::compile_match_arm_bindings(const MatchArm& arm, SourceLocation loc) {
     std::size_t binding_local_count = 0;
@@ -254,6 +282,14 @@ PatternCompiler::compile_match_arm_bindings(const MatchArm& arm, SourceLocation 
         // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the local was just declared above.
         auto subject_slot = *api_.resolve_local(to_string(HiddenVar::MatchSubject));
         binding_local_count += emit_choice_field_bindings(arm, subject_slot, loc);
+    } else if (arm.has_record_bindings()) {
+        first_binding_slot = api_.current_scope().locals.size();
+        (void)api_.declare_local(to_string(HiddenVar::MatchSubject), false, loc);
+        binding_local_count = 1;
+
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the local was just declared above.
+        auto subject_slot = *api_.resolve_local(to_string(HiddenVar::MatchSubject));
+        binding_local_count += emit_record_field_bindings(arm, subject_slot, loc);
     }
 
     return {.binding_local_count = binding_local_count, .first_binding_slot = first_binding_slot};
@@ -352,7 +388,8 @@ void PatternCompiler::emit_match_arms_as_value(const Expression& subject,
 
             // The subject is on top of the stack. Pop it unless we need
             // it for pattern bindings.
-            const bool has_bindings = arm.has_binding() || arm.has_choice_bindings();
+            const bool has_bindings =
+                arm.has_binding() || arm.has_choice_bindings() || arm.has_record_bindings();
 
             if (!has_bindings) {
                 api_.emit(Op::Pop, loc); // Pop the subject.
@@ -467,6 +504,10 @@ std::size_t PatternCompiler::emit_guard_arm_bindings(const MatchArm& arm,
         return emit_choice_field_bindings(arm, subject_slot, loc);
     }
 
+    if (arm.has_record_bindings()) {
+        return emit_record_field_bindings(arm, subject_slot, loc);
+    }
+
     return 0;
 }
 
@@ -515,6 +556,12 @@ void PatternCompiler::compile_match_statement(const MatchStatement& stmt) {
             if (arm.has_choice_bindings()) {
                 auto subject_slot = *api_.resolve_local(to_string(HiddenVar::MatchStmtSubject));
                 binding_count += emit_choice_field_bindings(arm, subject_slot, stmt.location);
+            }
+
+            // Bind record destructuring fields using the shared helper.
+            if (arm.has_record_bindings()) {
+                auto subject_slot = *api_.resolve_local(to_string(HiddenVar::MatchStmtSubject));
+                binding_count += emit_record_field_bindings(arm, subject_slot, stmt.location);
             }
 
             // Compile optional guard expression.
@@ -582,6 +629,25 @@ void PatternCompiler::compile_tuple_destructuring(const TupleDestructuringStatem
     }
 
     // The hidden tuple local will be cleaned up by end_scope.
+}
+
+void PatternCompiler::compile_record_destructuring(const RecordDestructuringStatement& stmt) {
+    api_.compile_expression(*stmt.initializer);
+
+    // Register the record as a hidden local so bindings have correct slot indices.
+    auto record_name = std::format("{}{}__", to_string(HiddenVar::RecordPrefix),
+                                   api_.current_scope().locals.size());
+    auto record_slot = api_.declare_local(record_name, false, stmt.location);
+
+    // Destructure each listed field into its own local by name.
+    for (const auto& field : stmt.fields) {
+        api_.emit_u16(Op::GetLocal, record_slot, stmt.location);
+        const auto name_idx = api_.add_name(field);
+        api_.emit_u16(Op::GetField, name_idx, stmt.location);
+        (void)api_.declare_local(field, stmt.is_mutable, stmt.location);
+    }
+
+    // The hidden record local will be cleaned up by end_scope.
 }
 
 } // namespace luma

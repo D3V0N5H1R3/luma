@@ -532,6 +532,96 @@ static void test_choice_assign_wrong_choice_type() {
                       "Color c = Mood.Happy\n"));
 }
 
+// ─── Record destructuring ───
+
+static void test_record_destructuring_valid() {
+    ASSERT_TRUE(passes("record Point { integer x, integer y }\n"
+                       "Point p = Point { x = 1, y = 2 }\n"
+                       "Point { x, y } = p\n"
+                       "print(x + y)\n"));
+}
+
+static void test_record_destructuring_subset_valid() {
+    ASSERT_TRUE(passes("record Point { integer x, integer y, integer z }\n"
+                       "Point p = Point { x = 1, y = 2, z = 3 }\n"
+                       "Point { x } = p\n"
+                       "print(x)\n"));
+}
+
+static void test_record_destructuring_unknown_field_fails() {
+    ASSERT_TRUE(fails("record Point { integer x, integer y }\n"
+                      "Point p = Point { x = 1, y = 2 }\n"
+                      "Point { x, w } = p\n"));
+}
+
+static void test_record_destructuring_duplicate_field_fails() {
+    ASSERT_TRUE(fails("record Point { integer x, integer y }\n"
+                      "Point p = Point { x = 1, y = 2 }\n"
+                      "Point { x, x } = p\n"));
+}
+
+static void test_record_destructuring_unknown_type_fails() {
+    ASSERT_TRUE(fails("Nope { x } = 1\n"));
+}
+
+static void test_record_destructuring_wrong_initializer_fails() {
+    ASSERT_TRUE(fails("record Point { integer x, integer y }\n"
+                      "record Other { integer a }\n"
+                      "Other o = Other { a = 1 }\n"
+                      "Point { x } = o\n"));
+}
+
+static void test_record_destructuring_field_type_used() {
+    // The bound field keeps its declared type: a string field is not numeric.
+    ASSERT_TRUE(fails("record Named { string name }\n"
+                      "Named n = Named { name = \"Ada\" }\n"
+                      "Named { name } = n\n"
+                      "print(name + 1)\n"));
+}
+
+static void test_record_match_pattern_valid() {
+    ASSERT_TRUE(passes("record Named { string name, integer age }\n"
+                       "Named n = Named { name = \"Ada\", age = 36 }\n"
+                       "match n {\n"
+                       "    case Named { name, age } { print(name) print(age) }\n"
+                       "}\n"));
+}
+
+static void test_record_match_pattern_unknown_field_fails() {
+    ASSERT_TRUE(fails("record Named { string name, integer age }\n"
+                      "Named n = Named { name = \"Ada\", age = 36 }\n"
+                      "match n {\n"
+                      "    case Named { nope } { print(nope) }\n"
+                      "}\n"));
+}
+
+static void test_record_match_pattern_wrong_type_fails() {
+    // The arm's record type must match the subject's record type.
+    ASSERT_TRUE(fails("record Point { integer x }\n"
+                      "record Other { integer a }\n"
+                      "Point p = Point { x = 1 }\n"
+                      "match p {\n"
+                      "    case Other { a } { print(a) }\n"
+                      "}\n"));
+}
+
+static void test_record_match_pattern_on_non_record_fails() {
+    ASSERT_TRUE(fails("record Point { integer x }\n"
+                      "integer n = 5\n"
+                      "match n {\n"
+                      "    case Point { x } { print(x) }\n"
+                      "}\n"));
+}
+
+static void test_record_match_pattern_generic_valid() {
+    ASSERT_TRUE(passes("record Box<T> { T value, integer tag }\n"
+                       "Box<integer> b = Box<integer> { value = 1, tag = 2 }\n"
+                       "integer got = match b {\n"
+                       "    case Box { value, tag } { value + tag }\n"
+                       "}\n"
+                       "print(got)\n"));
+}
+
 int main() {
     // ─── Math stat return-type signatures ───
 
@@ -656,5 +746,19 @@ int main() {
     RUN(test_choice_data_variant_missing_args_as_value);
     RUN(test_choice_match_destructure_unit_variant);
     RUN(test_choice_assign_wrong_choice_type);
+
+    // ─── Record destructuring ───
+    RUN(test_record_destructuring_valid);
+    RUN(test_record_destructuring_subset_valid);
+    RUN(test_record_destructuring_unknown_field_fails);
+    RUN(test_record_destructuring_duplicate_field_fails);
+    RUN(test_record_destructuring_unknown_type_fails);
+    RUN(test_record_destructuring_wrong_initializer_fails);
+    RUN(test_record_destructuring_field_type_used);
+    RUN(test_record_match_pattern_valid);
+    RUN(test_record_match_pattern_unknown_field_fails);
+    RUN(test_record_match_pattern_wrong_type_fails);
+    RUN(test_record_match_pattern_on_non_record_fails);
+    RUN(test_record_match_pattern_generic_valid);
     return SUMMARY();
 }

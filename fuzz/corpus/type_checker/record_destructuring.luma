@@ -1,0 +1,38 @@
+# Type checker: record destructuring binds each field to its declared type.
+record Point { integer x, integer y, integer z }
+record Named { string name, integer age }
+
+record Inner { integer v }
+record Outer { Inner inner, integer k }
+
+@main
+function void main() {
+    Point p = Point { x = 1, y = 2, z = 3 }
+
+    Point { x, y } = p
+    integer sum = x + y
+
+    mutable Point { x, y, z } = p
+    x = x + 1
+
+    Named n = Named { name = "Ada", age = 36 }
+    Named { name, age } = n
+    string greeting = "${name} is ${age}"
+
+    Outer o = Outer { inner = Inner { v = 40 }, k = 2 }
+    Outer { inner, k } = o
+    integer total = inner.v + k
+
+    integer got = match n {
+    case Named { age } { age }
+    }
+
+    string label = match p {
+    case Point { x, y } when x > y { "x-major" }
+    else { "other" }
+    }
+
+    print(sum + total + got)
+    print(greeting)
+    print(label)
+}

@@ -228,6 +228,12 @@ void StatementTypeChecker::visit_match_statement(const MatchStatement& stmt) {
         match_arm_binding::bind_arm_names(tc_, arm, subject_type);
         match_arm_binding::bind_choice_fields(tc_, arm, subject_type, stmt.location, true);
 
+        if (arm.kind() == MatchArm::Kind::RecordCase) {
+            match_arm_binding::bind_record_fields(tc_, arm.record_type(),
+                                                  arm.record_field_bindings(), subject_type,
+                                                  stmt.location, false);
+        }
+
         // Type-check optional guard expression.
         if (arm.guard) {
             const auto guard_type = tc_.infer_expression_type(*arm.guard);
