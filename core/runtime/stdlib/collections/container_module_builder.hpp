@@ -7,7 +7,7 @@
 //
 // Provides reusable template functions that encapsulate the common
 // registration patterns found across container stdlib modules (Queue,
-// Stack, Set, LinkedList, HashSet).  Each module can use these helpers
+// Stack, Set).  Each module can use these helpers
 // for the boilerplate operations while still defining its own
 // container-specific operations (e.g. Queue.enqueue, Stack.push).
 //

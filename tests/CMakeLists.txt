@@ -198,10 +198,7 @@ set(LUMA_RUNTIME_TESTS
     stdlib_test_linearalgebra
     stdlib_test_decimal
     stdlib_test_binarytree
-    stdlib_test_graph
-    stdlib_test_hashset
     stdlib_test_keyvaluestore
-    stdlib_test_linkedlist
     stdlib_test_queue
     stdlib_test_reference
     stdlib_test_set
@@ -476,16 +473,13 @@ set(LUMA_FEATURE_TESTS_STDLIB
     decimal_functions.luma
     encoder_functions.luma
     filesystem_functions.luma
-    graph_functions.luma
     graphicalui_functions.luma
     graphicalui_interaction.luma
     hash_functions.luma
-    hashset_functions.luma
     http_functions.luma
     json_functions.luma
     keyvaluestore_functions.luma
     linearalgebra_functions.luma
-    linkedlist_functions.luma
     log_functions.luma
     math_functions.luma
     optional_functions.luma

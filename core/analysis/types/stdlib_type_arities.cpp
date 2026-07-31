@@ -443,21 +443,6 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // any other stdlib record returned by a module call.
         add_record(st, "Dictionary.KeyValue", field("string", "key"), field("V", "value"));
 
-        // Graph.edges emits these edge records at runtime (each a record with
-        // type_name "Edge").  A structured, deterministic enumeration of a graph's
-        // edges — the typed "list the edges" answer that otherwise means iterating
-        // vertices × neighbours and re-querying edge_weight.  Mirrors the
-        // Dictionary.KeyValue + Dictionary.to_array enumeration pattern.
-        add_record(st, "Graph.Edge", field("string", "from"), field("string", "to"),
-                   field("number", "weight"));
-
-        // Graph.shortest_path_detailed() returns this route record (type_name
-        // "Path"): the ordered vertices plus the path's total weight, so a caller
-        // gets both answers from one call instead of re-walking edge_weight.
-        // Additive sibling of Graph.Edge; vertices is array<string>, cost a number.
-        add_record(st, "Graph.Path", field_of(array_ann("string"), "vertices"),
-                   field("number", "cost"));
-
         add_record(st, "Http.Response", field("integer", "status"), field("string", "reason"),
                    field("string", "body"), field_of(dict_ann("string"), "headers"));
 

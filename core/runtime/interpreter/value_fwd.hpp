@@ -98,16 +98,11 @@ struct BinaryTreeNode;
 struct BinaryTreeValue;
 struct ChannelValue;
 struct ChoiceValue;
-struct LinkedListNode;
 struct CompiledFunction; // Compile-time bytecode (chunk.hpp).
 struct DecimalValue;
 struct DictionaryValue;
 struct FunctionValue; // Runtime closure (value_collections.hpp).
-struct GraphValue;
-
-struct HashSetValue;
 struct KeyValueStoreValue;
-struct LinkedListValue;
 struct NativeFunctionValue; // C++ stdlib binding (value_collections.hpp).
 struct QueueValue;
 struct RangeValue;
@@ -131,10 +126,7 @@ enum class CollectionKind : std::uint8_t {
     Set,
     Xml,
     KeyValueStore,
-    HashSet,
-    LinkedList,
     BinaryTree,
-    Graph,
 };
 
 // Abstract base for rarely-used collection types — one variant slot for all.
@@ -167,10 +159,7 @@ enum class ValueType : std::uint8_t {
     Set,
     Xml,
     KeyValueStore,
-    HashSet,
-    LinkedList,
     BinaryTree,
-    Graph,
     Reference,
     Decimal,
 };
@@ -184,7 +173,7 @@ enum class ValueCategory : std::uint32_t {
     None = 0,
     Numeric = 1 << 0,    // integer, number
     Callable = 1 << 1,   // function, native_function
-    Collection = 1 << 2, // array, dictionary, queue, stack, linked_list, etc.
+    Collection = 1 << 2, // array, dictionary, queue, stack, set, etc.
     Primitive = 1 << 3,  // null, bool, integer, number, string
     Iterable = 1 << 4,   // array, dictionary, string, range, queue, stack, etc.
 };
@@ -235,12 +224,8 @@ constexpr ValueCategory operator|(ValueCategory a, ValueCategory b) noexcept {
         case ValueType::Xml:
             return Collection;
         case ValueType::KeyValueStore:
-        case ValueType::HashSet:
-        case ValueType::LinkedList:
         case ValueType::BinaryTree:
             return Collection | Iterable;
-        case ValueType::Graph:
-            return Collection;
         case ValueType::Reference:
             return None;
         case ValueType::Decimal:

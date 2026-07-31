@@ -138,7 +138,7 @@
         },
         "typed_binding": {
             "comment": "Typed variable or parameter: builtin_type[<T>] name",
-            "match": "\\b(binary_tree|graph|boolean|integer|number|decimal|string|void|array|dictionary|optional|reference|result|task|channel|socket|queue|stack|widget|xml|linked_list|hash_set|key_value_store|set)(?:<[^>]*>)?\\s+([a-z_][a-zA-Z0-9_]*)",
+            "match": "\\b(binary_tree|boolean|integer|number|decimal|string|void|array|dictionary|optional|reference|result|task|channel|socket|queue|stack|widget|xml|key_value_store|set)(?:<[^>]*>)?\\s+([a-z_][a-zA-Z0-9_]*)",
             "captures": {
                 "1": { "name": "storage.type.luma" },
                 "2": { "name": "variable.other.luma" }
@@ -154,7 +154,7 @@
         },
         "type": {
             "name": "storage.type.luma",
-            "match": "\\b(binary_tree|graph|boolean|integer|number|decimal|string|void|array|dictionary|optional|reference|result|task|channel|socket|queue|stack|widget|xml|linked_list|hash_set|key_value_store|set)\\b"
+            "match": "\\b(binary_tree|boolean|integer|number|decimal|string|void|array|dictionary|optional|reference|result|task|channel|socket|queue|stack|widget|xml|key_value_store|set)\\b"
         },
         "keyword_control": {
             "name": "keyword.control.luma",

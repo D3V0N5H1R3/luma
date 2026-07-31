@@ -293,8 +293,8 @@ static void test_set_string_elements() {
 }
 
 static void test_set_composite_elements() {
-    // Unlike HashSet (primitives only), Set stores any value type and
-    // deduplicates composite elements by structural equality.
+    // Set stores any value type and deduplicates composite elements by
+    // structural equality.
     ASSERT_EQ(eval("Set.from_array([[1], [2], [1]]) |> Set.length()").as_integer(), 2);
     ASSERT_TRUE(eval("Set.from_array([[1], [2]]) |> Set.contains([2])").as_bool());
 }
@@ -309,8 +309,8 @@ static void test_set_composite_union() {
 }
 
 static void test_set_map_to_composite_succeeds() {
-    // Mapping set elements onto arrays succeeds for Set (the same map on a
-    // HashSet fails because arrays are not hashable there).
+    // Mapping set elements onto arrays succeeds for Set because elements are
+    // compared by structural equality.
     const auto v = eval("Set.map(Set.from_array([1, 2, 3]), (integer x) -> [x])");
 
     ASSERT_RESULT_SUCCESS(v);

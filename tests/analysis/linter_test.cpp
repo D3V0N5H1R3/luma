@@ -223,8 +223,8 @@ static void test_discarded_result_collection_functions() {
         has_warning_containing("Array.partition([1, 2, 3], (integer x) -> x > 1)\n", "discarded"));
     ASSERT_TRUE(has_warning_containing("Set.filter(Set.from_array([1, 2]), (integer x) -> x > 0)\n",
                                        "discarded"));
-    ASSERT_TRUE(has_warning_containing("LinkedList.map(LinkedList.from_array([1]), "
-                                       "(integer x) -> x * 2)\n",
+    ASSERT_TRUE(has_warning_containing("BinaryTree.filter(BinaryTree.from_array([1]), "
+                                       "(integer x) -> x > 0)\n",
                                        "discarded"));
 }
 

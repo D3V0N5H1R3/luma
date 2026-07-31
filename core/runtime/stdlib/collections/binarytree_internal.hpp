@@ -94,7 +94,7 @@ inline void tree_insert(BinaryTreeValue& tree, const Value& val, const SourceLoc
     tree.root = std::move(root);
 
     if (inserted) {
-        // Cap the element count like every other collection (Array, LinkedList,
+        // Cap the element count like every other collection (Array,
         // Dictionary, Queue, Stack, Set all cap at their max_*_size).  The depth
         // guard in insert_node only bounds a *degenerate* tree — a balanced tree
         // can hold ~2^max_tree_depth nodes, so without this a loop of inserts

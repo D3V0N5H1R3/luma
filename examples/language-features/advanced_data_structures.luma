@@ -1,7 +1,7 @@
 # ═══════════════════════════════════════════════════════════
 # Advanced Data Structures
 #
-# Demonstrates HashSet, LinkedList, BinaryTree, and Graph
+# Demonstrates BinaryTree, Set, Dictionary, Queue, and Stack
 # modules — immutable, functional data structures.
 # ═══════════════════════════════════════════════════════════
 
@@ -12,59 +12,10 @@ function string join_numbers(array<number> values) {
     |> String.join(", ")
 }
 
-# ── HashSet: fast membership testing ──
-
-function void demo_hash_set() {
-    print("=== HashSet ===")
-
-    number unique_count = HashSet.from_array([1, 2, 3, 2, 1, 4, 3])
-    |> HashSet.length()
-    print("Unique elements: ${unique_count}")
-
-    boolean has_three = HashSet.from_array([1, 2, 3]) |> HashSet.contains(3)
-    print("Contains 3: ${has_three}")
-
-    number union_size = HashSet.union(
-        HashSet.from_array([1, 2, 3]),
-        HashSet.from_array([3, 4, 5])
-    ) |> HashSet.length()
-    print("Union size: ${union_size}")
-
-    number intersect_size = HashSet.intersection(
-        HashSet.from_array([1, 2, 3, 4]),
-        HashSet.from_array([3, 4, 5, 6])
-    ) |> HashSet.length()
-    print("Intersection size: ${intersect_size}")
-}
-
-# ── LinkedList: efficient prepend/append ──
-
-function void demo_linked_list() {
-    print("\n=== LinkedList ===")
-
-    number len = LinkedList.new()
-    |> LinkedList.prepend(3)
-    |> LinkedList.prepend(2)
-    |> LinkedList.prepend(1)
-    |> LinkedList.length()
-    print("List length: ${len}")
-
-    linked_list numbers = LinkedList.from_array([10, 20, 30])
-    number first = numbers |> LinkedList.first() |> Result.unwrap()
-    number last = numbers |> LinkedList.last() |> Result.unwrap()
-    print("First: ${first}, Last: ${last}")
-
-    array<number> reversed = LinkedList.from_array([1, 2, 3])
-    |> LinkedList.reverse()
-    |> LinkedList.to_array()
-    string rev_str = join_numbers(reversed)
-    print("Reversed: [${rev_str}]")
-}
-
 # ── BinaryTree: sorted data with fast lookup ──
 
 function void demo_binary_tree() {
-    print("\n=== BinaryTree ===")
+    print("=== BinaryTree ===")
 
     binary_tree sample_tree = BinaryTree.from_array([50, 30, 70, 20, 40, 60, 80])
     number tree_size = sample_tree |> BinaryTree.length()
@@ -82,31 +33,6 @@ function void demo_binary_tree() {
 
     number height = sample_tree |> BinaryTree.height()
     print("Height: ${height}")
-}
-
-# ── Graph: vertices and edges ──
-
-function void demo_graph() {
-    print("\n=== Graph ===")
-
-    # Build the sample city graph once, then ask several questions of it.
-    graph cities = Graph.undirected()
-    |> Graph.add_edge("Paris", "London", 340)
-    |> Graph.add_edge("London", "Berlin", 930)
-    |> Graph.add_edge("Paris", "Berlin", 880)
-    |> Graph.add_edge("Berlin", "Vienna", 525)
-
-    number city_count = cities |> Graph.vertex_count()
-    print("Cities: ${city_count}")
-
-    number edges = cities |> Graph.edge_count()
-    print("Routes: ${edges}")
-
-    array<string> route = cities
-    |> Graph.shortest_path("Paris", "Vienna")
-    |> Result.unwrap()
-    string route_str = route |> String.join(" -> ")
-    print("Shortest Paris to Vienna: ${route_str}")
 }
 
 # ── Combining and partitioning collections ──
@@ -148,12 +74,6 @@ function void demo_combining_and_partitioning() {
     |> Result.unwrap()
     print("Passing: ${Dictionary.length(passing)}, Failing: ${Dictionary.length(failing)}")
 
-    # HashSet.partition — split by predicate
-    (hash_set evens_hs, hash_set odds_hs) = HashSet.from_array([1, 2, 3, 4, 5, 6, 7, 8])
-    |> HashSet.partition((integer x) -> x % 2 == 0)
-    |> Result.unwrap()
-    print("HashSet evens: ${HashSet.length(evens_hs)}, odds: ${HashSet.length(odds_hs)}")
-
     # BinaryTree.partition — split by predicate
     (binary_tree small_tree, binary_tree large_tree) = BinaryTree.from_array(
         [10, 5, 20, 3, 8, 15, 30]
@@ -182,19 +102,6 @@ function void demo_filtering_and_reducing() {
     |> Set.reduce(0, (number acc, number x) -> acc + x)
     |> Result.unwrap()
     print("Sum of set {1..5}: ${set_sum}")
-
-    # HashSet.filter — keep elements matching a predicate
-    number long_words = HashSet.from_array(["hi", "hello", "hey", "greetings"])
-    |> HashSet.filter((string s) -> String.length(s) > 3)
-    |> Result.unwrap()
-    |> HashSet.length()
-    print("Words longer than 3 chars: ${long_words}")
-
-    # HashSet.reduce — fold elements with accumulator
-    number hash_sum = HashSet.from_array([10, 20, 30])
-    |> HashSet.reduce(0, (number acc, number x) -> acc + x)
-    |> Result.unwrap()
-    print("Sum of hash_set {10,20,30}: ${hash_sum}")
 
     # BinaryTree.filter — keep elements matching a predicate
     binary_tree evens_tree = BinaryTree.from_array([1, 2, 3, 4, 5, 6])
@@ -238,14 +145,6 @@ function void demo_queue_and_stack() {
     |> Stack.partition((integer x) -> x < 25)
     |> Result.unwrap()
     print("Stack low (<25): ${Stack.length(low_s)}, high (>= 25): ${Stack.length(high_s)}")
-
-    # LinkedList.partition — split by predicate
-    (linked_list head_ll, linked_list tail_ll) = LinkedList.from_array([1, 2, 3, 4, 5, 6])
-    |> LinkedList.partition((integer x) -> x <= 3)
-    |> Result.unwrap()
-    integer head_count = LinkedList.length(head_ll)
-    integer tail_count = LinkedList.length(tail_ll)
-    print("LinkedList head (<=3): ${head_count}, tail (>3): ${tail_count}")
 }
 
 # ── Type keyword annotations ──
@@ -265,12 +164,9 @@ function void demo_type_keywords() {
 
 @main
 function void main() {
-    print("Shows HashSet, LinkedList, BinaryTree, Graph, Queue, Stack, and collection helpers.")
+    print("Shows BinaryTree, Set, Dictionary, Queue, Stack, and collection helpers.")
 
-    demo_hash_set()
-    demo_linked_list()
     demo_binary_tree()
-    demo_graph()
     demo_combining_and_partitioning()
     demo_filtering_and_reducing()
     demo_queue_and_stack()

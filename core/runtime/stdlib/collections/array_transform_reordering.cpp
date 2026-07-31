@@ -79,8 +79,8 @@ namespace {
         // unguarded partition uses the pivot as a sentinel and can read/write
         // past the buffer, corrupting the heap.  stable_sort's merge path only
         // ever compares elements within valid bounds, so a malformed comparator
-        // yields an unspecified-but-memory-safe order (matching Array.sort and
-        // LinkedList.sort).  Stability also preserves the original order of
+        // yields an unspecified-but-memory-safe order (matching Array.sort).
+        // Stability also preserves the original order of
         // equal-key elements, so no explicit index tie-break is required.
         std::ranges::stable_sort(key_indices, [&loc](const KeyIndex& a, const KeyIndex& b) {
             return compare_values(a.key, b.key, loc, "Array.sort_by") < 0;

@@ -69,20 +69,8 @@ namespace named {
     return ReturnTypeDesc::named("stack");
 }
 
-[[nodiscard]] inline ReturnTypeDesc linked_list() {
-    return ReturnTypeDesc::named("linked_list");
-}
-
-[[nodiscard]] inline ReturnTypeDesc hash_set() {
-    return ReturnTypeDesc::named("hash_set");
-}
-
 [[nodiscard]] inline ReturnTypeDesc binary_tree() {
     return ReturnTypeDesc::named("binary_tree");
-}
-
-[[nodiscard]] inline ReturnTypeDesc graph() {
-    return ReturnTypeDesc::named("graph");
 }
 
 [[nodiscard]] inline ReturnTypeDesc socket() {
@@ -210,16 +198,6 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc key_value() {
     return ReturnTypeDesc::named("KeyValue");
-}
-
-// Graph.edges emits an array of these edge records (bare name, like key_value()).
-[[nodiscard]] inline ReturnTypeDesc edge() {
-    return ReturnTypeDesc::named("Edge");
-}
-
-// Graph.shortest_path_detailed() returns this route+cost record (bare name).
-[[nodiscard]] inline ReturnTypeDesc path() {
-    return ReturnTypeDesc::named("Path");
 }
 
 [[nodiscard]] inline ReturnTypeDesc time_parts() {
@@ -686,7 +664,7 @@ struct ParamShorthands {
     ReturnTypeDesc result_any, optional_any, channel_any, task_any, reference_any;
     // Named types
     ReturnTypeDesc socket, matrix, log_level;
-    ReturnTypeDesc set, xml, kv_store, queue, stack, linked_list, hash_set, binary_tree, graph;
+    ReturnTypeDesc set, xml, kv_store, queue, stack, binary_tree;
     // UI types
     ReturnTypeDesc widget;
     // Exact-decimal type
@@ -737,17 +715,8 @@ void register_queue_functions(std::vector<FunctionSpec>& specs, const ModuleBuil
 void register_stack_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                               const ParamShorthands& p);
 
-void register_linked_list_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
-                                    const ParamShorthands& p);
-
-void register_hash_set_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
-                                 const ParamShorthands& p);
-
 void register_binary_tree_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                     const ParamShorthands& p);
-
-void register_graph_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
-                              const ParamShorthands& p);
 
 void register_console_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                 const ParamShorthands& p);

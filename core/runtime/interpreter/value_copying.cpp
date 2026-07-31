@@ -155,10 +155,7 @@ Value Value::deep_copy() const {
         case ValueType::Set:
         case ValueType::Xml:
         case ValueType::KeyValueStore:
-        case ValueType::HashSet:
-        case ValueType::LinkedList:
         case ValueType::BinaryTree:
-        case ValueType::Graph:
             return as_collection()->deep_copy_value();
 
         // Task handles are cloned so that each thread which receives a copy
@@ -259,52 +256,6 @@ Value KeyValueStoreValue::deep_copy_value() const {
     return Value{std::move(copy)};
 }
 
-// HashSetValue
-
-Value HashSetValue::deep_copy_value() const {
-    auto copy = std::make_shared<HashSetValue>();
-
-    for (const auto& [h, bucket] : buckets) {
-        auto& dst = copy->buckets[h];
-
-        for (const auto& elem : bucket) {
-            dst.push_back(elem.deep_copy());
-        }
-    }
-
-    copy->count_ = count_;
-
-    return Value{std::move(copy)};
-}
-
-// LinkedListValue
-
-Value LinkedListValue::deep_copy_value() const {
-    auto copy = std::make_shared<LinkedListValue>();
-    auto cur = head;
-
-    std::shared_ptr<LinkedListNode> tail;
-
-    while (cur) {
-        auto node = std::make_shared<LinkedListNode>(cur->value.deep_copy());
-
-        if (!copy->head) {
-            copy->head = node;
-        } else {
-            assert(tail && "tail must be non-null when head exists");
-            node->prev = tail;
-            tail->next = node;
-        }
-
-        tail = node;
-        cur = cur->next;
-    }
-
-    copy->count_ = count_;
-
-    return Value{std::move(copy)};
-}
-
 // BinaryTreeValue
 
 static std::shared_ptr<BinaryTreeNode>
@@ -326,12 +277,6 @@ Value BinaryTreeValue::deep_copy_value() const {
     copy->count_ = count_;
 
     return Value{std::move(copy)};
-}
-
-// GraphValue
-
-Value GraphValue::deep_copy_value() const {
-    return Value{clone()};
 }
 
 } // namespace luma

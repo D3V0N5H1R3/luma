@@ -693,12 +693,11 @@ Luma offers several collection types. Choose based on the access pattern:
 | --------------- | --------------------------------------------------------------------- |
 | `array<T>`      | Default choice. Ordered data with index-based access.                 |
 | `dictionary<V>` | Key-value lookups with string keys.                                   |
-| `set<T>`        | Unordered unique elements. Small to medium sets.                      |
-| `hashset<T>`    | Unordered unique elements with frequent `contains` checks (O(1) avg). |
+| `set<T>`        | Unordered unique elements. Membership testing.                        |
 | `queue<T>`      | FIFO semantics — producer-consumer patterns.                          |
 | `stack<T>`      | LIFO semantics — depth-first traversal, undo buffers.                 |
 
-Prefer `hashset<T>` over `set<T>` when membership testing is the primary operation. Prefer `array<T>` over `linked_list<T>` — linked lists have no performance advantage in Luma due to deep-copy semantics.
+Prefer `array<T>` for ordered, index-accessed data and `set<T>` when membership testing is the primary operation. All collections have value semantics — operations return new copies rather than mutating in place.
 
 ### Performance: Immutability Costs
 

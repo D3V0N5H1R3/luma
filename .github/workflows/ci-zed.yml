@@ -71,5 +71,23 @@ jobs:
         # and make parser generation non-reproducible.
         run: ./node_modules/.bin/tree-sitter generate
 
+      - name: Verify committed parser matches generated output
+        working-directory: extensions/zed/grammars/tree-sitter-luma
+        # Freshness gate: the committed src/ artifacts (parser.c, grammar.json,
+        # node-types.json, tree_sitter/*.h) must match what the pinned CLI emits
+        # from grammar.js.  `--intent-to-add` makes any newly generated but
+        # untracked file show up in the diff too.  Mirrors the VS Code
+        # ci-check-generated.py staleness gate for the Python-generated files.
+        # NOTE: `git add --intent-to-add` mutates this (throwaway) CI checkout's
+        # index, so keep this step immediately after "Generate parser" and do not
+        # insert any git-index-sensitive step after it.
+        run: |
+          git add --intent-to-add src
+          if ! git diff --exit-code -- src; then
+            echo "::error::Committed tree-sitter parser artifacts in extensions/zed/grammars/tree-sitter-luma/src are stale."
+            echo "Regenerate locally with: (cd extensions/zed/grammars/tree-sitter-luma && npm ci && ./node_modules/.bin/tree-sitter generate) and commit the result."
+            exit 1
+          fi
+
       - name: Parse fixture files
         run: node extensions/tests/parse_fixtures.js

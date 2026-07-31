@@ -42,7 +42,7 @@ namespace {
 
         // Canonical structural equality: every NaN compares equal to every
         // other NaN so that `number` values stay reflexive (a.equals(a) is
-        // always true) and are therefore usable as Set/HashSet/dictionary keys
+        // always true) and are therefore usable as Set/dictionary keys
         // and with Array.contains.  This intentionally differs from IEEE 754
         // `==` (where NaN != NaN); use Math.is_not_a_number(x) to test for NaN.
         // ValueHash canonicalises NaN to match (see value_hash.cpp).
@@ -229,10 +229,7 @@ bool Value::equals(const Value& other) const {
         case ValueType::Set:
         case ValueType::Xml:
         case ValueType::KeyValueStore:
-        case ValueType::HashSet:
-        case ValueType::LinkedList:
         case ValueType::BinaryTree:
-        case ValueType::Graph:
             return equals_collection(*this, other);
 
         // Opaque handles and callables — identity only (never equal).
@@ -281,67 +278,7 @@ bool SetValue::equals_to(const CollectionObject& other) const {
 // KeyValueStoreValue reports EqualsKind::by_reference — identity semantics,
 // never structurally equal.  It inherits the base equals_to() default.
 
-// HashSetValue
-// O(n · avg_bucket_size) comparison — uses hash buckets so each element
-// lookup is O(avg_bucket_size) rather than O(m).  Acceptable for typical
-// bucket sizes; degrades toward O(n·m) only under extreme hash collisions.
-bool HashSetValue::equals_to(const CollectionObject& other) const {
-    assert(other.collection_kind() == CollectionKind::HashSet);
-    const auto& b = static_cast<const HashSetValue&>(other);
-
-    if (count_ != b.count_) {
-        return false;
-    }
-
-    for (const auto& [hash, bucket] : buckets) {
-        for (const auto& elem : bucket) {
-            auto it = b.buckets.find(hash);
-
-            if (it == b.buckets.end()) {
-                return false;
-            }
-
-            const bool found =
-                std::ranges::any_of(it->second, [&](const Value& v) { return v.equals(elem); });
-
-            if (!found) {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-// LinkedListValue
-
-bool LinkedListValue::equals_to(const CollectionObject& other) const {
-    assert(other.collection_kind() == CollectionKind::LinkedList);
-    const auto& b = static_cast<const LinkedListValue&>(other);
-
-    if (count_ != b.count_) {
-        return false;
-    }
-
-    auto ca = head;
-    auto cb = b.head;
-
-    while (ca && cb) {
-        if (!ca->value.equals(cb->value)) {
-            return false;
-        }
-
-        ca = ca->next;
-        cb = cb->next;
-    }
-
-    return true;
-}
-
 // BinaryTreeValue reports EqualsKind::by_reference — structural equality is not
 // defined for trees.  It inherits the base equals_to() default (returns false).
-
-// GraphValue reports EqualsKind::by_reference — structural equality is not
-// defined for graphs.  It inherits the base equals_to() default (returns false).
 
 } // namespace luma

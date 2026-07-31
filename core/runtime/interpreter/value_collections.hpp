@@ -38,7 +38,7 @@
 //                                 equality is not meaningful for the type,
 //                                 override equals_kind() to return
 //                                 EqualsKind::by_reference (see XmlValue,
-//                                 GraphValue) and leave equals_to() to the base
+//                                 BinaryTreeValue) and leave equals_to() to the base
 //                                 default (which returns false).
 //   3. value_type.hpp           — Add is_*() and as_*() convenience methods
 //                                 to Value for the new collection kind.
@@ -82,10 +82,7 @@
 //
 //   Structure-specific names — When the data structure dictates a
 //                 specific layout that none of the above describe:
-//                   `head`      — LinkedListValue (linked nodes)
 //                   `root`      — BinaryTreeValue (tree root node)
-//                   `adjacency` — GraphValue (adjacency list)
-//                   `buckets`   — HashSetValue (hash buckets)
 //
 // Prefer the generic names when they fit.  Use a structure-specific
 // name only when the storage layout has no natural analogue above.
@@ -787,187 +784,7 @@ struct KeyValueStoreValue : CollectionObject {
     }
 };
 
-struct HashSetValue : CollectionObject {
-    HashSetValue() : CollectionObject(CollectionKind::HashSet) {}
-
-    std::unordered_map<std::size_t, std::vector<Value>> buckets;
-    std::size_t count_{0};
-
-    [[nodiscard]] std::string to_display_string() const override;
-
-    [[nodiscard]] std::string display_type_name() const override {
-        return "hash_set";
-    }
-
-    [[nodiscard]] bool equals_to(const CollectionObject& other) const override;
-    [[nodiscard]] Value deep_copy_value() const override;
-
-    [[nodiscard]] std::size_t size() const override {
-        return count_;
-    }
-};
-
-// Forward iterator over every element of a HashSetValue, walking each bucket
-// chain in turn.  Mirrors LinkedListNodeIterator so the shared iter_* helpers
-// (native_function_containers.hpp) can drive HashSet.map / filter / reduce /
-// each / partition without assuming contiguous storage.  A default-constructed
-// iterator is the past-the-end sentinel.
-struct HashSetBucketIterator {
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = Value;
-    using difference_type = std::ptrdiff_t;
-    using pointer = const Value*;
-    using reference = const Value&;
-
-    using BucketMap = std::unordered_map<std::size_t, std::vector<Value>>;
-
-    HashSetBucketIterator() = default;
-
-    HashSetBucketIterator(BucketMap::const_iterator outer, BucketMap::const_iterator outer_end)
-        : outer_{outer}, outer_end_{outer_end} {
-        advance_to_non_empty();
-    }
-
-    [[nodiscard]] reference operator*() const {
-        return *inner_;
-    }
-
-    [[nodiscard]] pointer operator->() const {
-        return &*inner_;
-    }
-
-    HashSetBucketIterator& operator++() {
-        if (++inner_ == outer_->second.end()) {
-            ++outer_;
-            advance_to_non_empty();
-        }
-        return *this;
-    }
-
-    HashSetBucketIterator operator++(int) {
-        auto tmp = *this;
-        ++(*this);
-        return tmp;
-    }
-
-    [[nodiscard]] bool operator==(const HashSetBucketIterator& other) const {
-        const bool at_end = (outer_ == outer_end_);
-        const bool other_at_end = (other.outer_ == other.outer_end_);
-
-        if (at_end || other_at_end) {
-            return at_end == other_at_end;
-        }
-
-        return outer_ == other.outer_ && inner_ == other.inner_;
-    }
-
-private:
-    // Position inner_ at the first element of the next non-empty bucket, or
-    // leave outer_ at outer_end_ once the set is exhausted.
-    void advance_to_non_empty() {
-        while (outer_ != outer_end_ && outer_->second.empty()) {
-            ++outer_;
-        }
-
-        if (outer_ != outer_end_) {
-            inner_ = outer_->second.begin();
-        }
-    }
-
-    BucketMap::const_iterator outer_{};
-    BucketMap::const_iterator outer_end_{};
-    std::vector<Value>::const_iterator inner_{};
-};
-
 // ─── Node types ─────────────────────────────────────────────────────────────
-// LinkedListNode and BinaryTreeNode share a structural pattern: both hold a
-// Value payload and use shared_ptr for forward links.  The differences are
-// intentional — LinkedListNode uses weak_ptr for back-links (cycle prevention),
-// while BinaryTreeNode has two forward links (left/right) and no back-link.
-// Consolidation into a common base is deferred until a third node type arises;
-// the current duplication is small and the types diverge in meaningful ways.
-
-struct LinkedListNode {
-    explicit LinkedListNode(Value v) : value{std::move(v)} {}
-
-    Value value;
-    std::shared_ptr<LinkedListNode> next;
-    std::weak_ptr<LinkedListNode> prev;
-};
-
-struct LinkedListValue : CollectionObject {
-    LinkedListValue() : CollectionObject(CollectionKind::LinkedList) {}
-
-    ~LinkedListValue() override {
-        // Release the node chain iteratively.  The implicit recursive
-        // shared_ptr teardown (head -> next -> next -> ...) descends one native
-        // stack frame per node and overflows the stack — uncatchably — for long
-        // lists (max_linked_list_size permits millions).  Unlinking each
-        // uniquely-owned node before it is freed keeps teardown depth constant;
-        // a node still shared with another list is left to normal reference
-        // counting so any structural sharing stays intact.
-        while (head && head.use_count() == 1) {
-            head = std::move(head->next);
-        }
-    }
-
-    std::shared_ptr<LinkedListNode> head;
-    std::size_t count_{0};
-
-    [[nodiscard]] std::string to_display_string() const override;
-
-    [[nodiscard]] std::string display_type_name() const override {
-        return "linked_list";
-    }
-
-    [[nodiscard]] bool equals_to(const CollectionObject& other) const override;
-    [[nodiscard]] Value deep_copy_value() const override;
-
-    [[nodiscard]] std::size_t size() const override {
-        return count_;
-    }
-};
-
-// Forward iterator over LinkedListNode chains.  Enables LinkedList to
-// participate in iterator-based generic container operations.
-struct LinkedListNodeIterator {
-    using iterator_category = std::forward_iterator_tag;
-    using value_type = Value;
-    using difference_type = std::ptrdiff_t;
-    using pointer = const Value*;
-    using reference = const Value&;
-
-    LinkedListNodeIterator() = default;
-
-    explicit LinkedListNodeIterator(std::shared_ptr<LinkedListNode> node)
-        : current_{std::move(node)} {}
-
-    [[nodiscard]] reference operator*() const {
-        return current_->value;
-    }
-
-    [[nodiscard]] pointer operator->() const {
-        return &current_->value;
-    }
-
-    LinkedListNodeIterator& operator++() {
-        current_ = current_->next;
-        return *this;
-    }
-
-    LinkedListNodeIterator operator++(int) {
-        auto tmp = *this;
-        ++(*this);
-        return tmp;
-    }
-
-    [[nodiscard]] bool operator==(const LinkedListNodeIterator& other) const {
-        return current_ == other.current_;
-    }
-
-private:
-    std::shared_ptr<LinkedListNode> current_;
-};
 
 struct BinaryTreeNode {
     explicit BinaryTreeNode(Value v) : value{std::move(v)} {}
@@ -997,66 +814,6 @@ struct BinaryTreeValue : CollectionObject {
 
     [[nodiscard]] std::size_t size() const override {
         return count_;
-    }
-};
-
-struct GraphEdge {
-    std::string to;
-    double weight{1.0};
-};
-
-struct GraphValue : CollectionObject {
-    GraphValue() : CollectionObject(CollectionKind::Graph) {}
-
-    StringMap<std::vector<GraphEdge>> adjacency;
-    bool directed{false};
-
-    [[nodiscard]] std::string to_display_string() const override;
-
-    [[nodiscard]] std::string display_type_name() const override {
-        return "graph";
-    }
-
-    [[nodiscard]] EqualsKind equals_kind() const noexcept override {
-        return EqualsKind::by_reference;
-    }
-
-    [[nodiscard]] Value deep_copy_value() const override;
-
-    [[nodiscard]] std::size_t size() const override {
-        return adjacency.size();
-    }
-
-    // Number of logical edges in the graph.  Every undirected edge is stored
-    // twice (once in each endpoint's adjacency list), so the raw adjacency
-    // total is halved for undirected graphs.  Single source of truth for the
-    // count reported by edge_count(), the add_edge limit check, and
-    // to_display_string().
-    [[nodiscard]] std::size_t logical_edge_count() const {
-        std::size_t total = 0;
-
-        for (const auto& [_, edges] : adjacency) {
-            total += edges.size();
-        }
-
-        if (!directed) {
-            total /= 2;
-        }
-
-        return total;
-    }
-
-    // Copy-on-write clone: a new graph with the same directedness and
-    // adjacency lists.  deep_copy_value() delegates here, and the stdlib
-    // mutators (add_vertex, add_edge, remove_edge) use it as their
-    // "clone then mutate the copy" prologue so every GraphValue field is
-    // copied in exactly one place.
-    [[nodiscard]] std::shared_ptr<GraphValue> clone() const {
-        auto copy = std::make_shared<GraphValue>();
-        copy->directed = directed;
-        copy->adjacency = adjacency;
-
-        return copy;
     }
 };
 

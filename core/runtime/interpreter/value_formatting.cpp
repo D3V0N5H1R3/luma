@@ -231,47 +231,10 @@ std::string KeyValueStoreValue::to_display_string() const {
     return std::format("<key_value_store:{} entries>", entries.size());
 }
 
-// HashSetValue
-
-std::string HashSetValue::to_display_string() const {
-    // Flatten all bucket elements into a single view for formatting.
-    std::vector<std::reference_wrapper<const Value>> all_elements;
-    all_elements.reserve(count_);
-
-    for (const auto& [h, bucket] : buckets) {
-        for (const auto& elem : bucket) {
-            all_elements.emplace_back(elem);
-        }
-    }
-
-    return format_container(all_elements, "hash_set[", "]",
-                            [](const auto& elem, std::string& r) { r += elem.get().to_string(); });
-}
-
-// LinkedListValue
-
-std::string LinkedListValue::to_display_string() const {
-    // Collect node values into a temporary vector for format_container.
-    std::vector<std::reference_wrapper<const Value>> values;
-    values.reserve(count_);
-    for (auto cur = head; cur; cur = cur->next) {
-        values.emplace_back(cur->value);
-    }
-
-    return format_container(values, "linked_list[", "]",
-                            [](const auto& elem, std::string& r) { r += elem.get().to_string(); });
-}
-
 // BinaryTreeValue
 
 std::string BinaryTreeValue::to_display_string() const {
     return std::format("<binary_tree:{} nodes>", count_);
-}
-
-// GraphValue
-
-std::string GraphValue::to_display_string() const {
-    return std::format("<graph:{} vertices, {} edges>", adjacency.size(), logical_edge_count());
 }
 
 } // namespace luma

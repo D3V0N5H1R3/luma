@@ -368,8 +368,8 @@ function void test_set_map_deduplicates() {
 
 @test
 function void test_set_composite_elements() {
-    # Unlike HashSet (hashable primitives only), Set stores any value type and
-    # deduplicates composite elements by structural equality.
+    # Set stores any value type and deduplicates composite elements by
+    # structural equality.
     set s = Set.from_array([[1], [2], [1]])
 
     assert(Set.length(s) == 2)
@@ -380,8 +380,8 @@ function void test_set_composite_elements() {
 
 @test
 function void test_set_map_to_composite() {
-    # Mapping integers onto arrays succeeds for Set (the same map on a HashSet
-    # would fail because arrays are not hashable there).
+    # Mapping integers onto arrays succeeds for Set because elements are
+    # compared by structural equality.
     set wrapped = Result.unwrap(Set.map(Set.from_array([1, 2, 3]), (integer x) -> [x]))
 
     assert(Set.length(wrapped) == 3)

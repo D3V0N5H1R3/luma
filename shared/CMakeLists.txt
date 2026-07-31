@@ -30,7 +30,7 @@ luma_add_library(luma_stdlib_catalog OBJECT
     stdlib/stdlib_catalog_array.cpp
     stdlib/stdlib_catalog_dictionary.cpp
     stdlib/stdlib_catalog_containers.cpp
-    stdlib/stdlib_catalog_graph.cpp
+
     stdlib/stdlib_catalog_io.cpp
     stdlib/stdlib_catalog_serialization.cpp
     stdlib/stdlib_catalog_encoding.cpp

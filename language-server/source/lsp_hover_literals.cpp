@@ -46,11 +46,7 @@ const std::unordered_map<std::string_view, std::string_view>& get_builtin_type_n
          "```luma\nbinary_tree\n```\n\nImmutable binary search tree with unique elements."},
         {"channel",
          "```luma\nchannel<T>\n```\n\nA typed message channel for communicating between tasks."},
-        {"graph", "```luma\ngraph\n```\n\nDirected or undirected graph of named "
-                  "vertices with weighted edges."},
-        {"hash_set", "```luma\nhash_set\n```\n\nUnordered set with O(1) lookup."},
         {"key_value_store", "```luma\nkey_value_store\n```\n\nPersistent key-value store."},
-        {"linked_list", "```luma\nlinked_list\n```\n\nImmutable singly-linked list."},
         {"queue", "```luma\nqueue\n```\n\nImmutable FIFO queue."},
         {"reference", "```luma\nreference<T>\n```\n\nA shared reference to a value of type `T`."},
         {"set", "```luma\nset\n```\n\nImmutable ordered set with unique elements."},

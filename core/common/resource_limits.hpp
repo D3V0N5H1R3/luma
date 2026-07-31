@@ -116,23 +116,8 @@ struct ResourceLimits {
     // Maximum number of elements in a single stack.
     static inline std::size_t max_stack_size = 10'000'000;
 
-    // Maximum number of elements in a single linked list.
-    static inline std::size_t max_linked_list_size = 10'000'000;
-
-    // Maximum number of elements in a single hash set.
-    static inline std::size_t max_hash_set_size = 10'000'000;
-
     // Maximum number of elements in a single set.
     static inline std::size_t max_set_size = 10'000'000;
-
-    // ── Graph limits ──
-
-    // Maximum number of vertices in a single graph.
-    // 10× smaller than general container limits to prevent O(V²) memory in adjacency matrices.
-    static inline std::size_t max_graph_vertices = 1'000'000;
-
-    // Maximum number of edges in a single graph.
-    static inline std::size_t max_graph_edges = 10'000'000;
 
     // ── String limits ──
 
@@ -260,12 +245,7 @@ struct ResourceLimits {
     X(std::size_t,   max_dictionary_size)                     \
     X(std::size_t,   max_queue_size)                          \
     X(std::size_t,   max_stack_size)                          \
-    X(std::size_t,   max_linked_list_size)                    \
-    X(std::size_t,   max_hash_set_size)                       \
     X(std::size_t,   max_set_size)                            \
-    /* Graph limits */                                        \
-    X(std::size_t,   max_graph_vertices)                      \
-    X(std::size_t,   max_graph_edges)                         \
     /* String limits */                                       \
     X(std::size_t,   max_string_size)                         \
     X(std::int64_t,  max_string_repeat)                       \
@@ -335,11 +315,7 @@ struct RuntimeConstraints {
         c.max_dictionary_size = 100'000;
         c.max_queue_size = 100'000;
         c.max_stack_size = 100'000;
-        c.max_linked_list_size = 100'000;
-        c.max_hash_set_size = 100'000;
         c.max_set_size = 100'000;
-        c.max_graph_vertices = 10'000;
-        c.max_graph_edges = 100'000;
         c.max_string_size = std::size_t{1024} * 1024; // 1 MB
         c.max_string_repeat = 100'000;
         c.max_pad_width = 100'000;

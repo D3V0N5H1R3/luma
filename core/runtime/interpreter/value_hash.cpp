@@ -170,9 +170,9 @@ std::size_t hash_value_structural(const Value& v, int depth) noexcept {
         return h;
     }
 
-    // Remaining structured types — collection subtypes (Set/HashSet/Queue/Stack/
-    // LinkedList and the by-reference Xml/KeyValueStore/BinaryTree/Graph), plus
-    // functions, channels, tasks, sockets, and references.  These are rarely used
+    // Remaining structured types — collection subtypes (Set/Queue/Stack and the
+    // by-reference Xml/KeyValueStore/BinaryTree), plus functions, channels, tasks,
+    // sockets, and references.  These are rarely used
     // as Set elements or dictionary keys; return the type tag to place all values
     // of the same type in one bucket, and let ValueEqual distinguish them through
     // structural (or identity) comparison.
