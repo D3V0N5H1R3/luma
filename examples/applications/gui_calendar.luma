@@ -238,8 +238,8 @@ function dictionary calendar_config() {
     config["model"] = calendar_initial()
     config["view"] = view_calendar
     config["update"] = (dictionary model, string msg) -> match msg {
-        case == "prev" { announce_month(prev_month(model)) }
-        case == "next" { announce_month(next_month(model)) }
+        case "prev" { announce_month(prev_month(model)) }
+        case "next" { announce_month(next_month(model)) }
         else { model }
     }
     return config

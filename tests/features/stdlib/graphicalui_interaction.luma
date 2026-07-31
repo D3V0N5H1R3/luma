@@ -42,7 +42,7 @@ function dictionary counter_app() {
     mutable dictionary config = make_gui_config(7, counter_view)
     config["title"] = "Counter"
     config["update"] = (number model, string msg) -> match msg {
-        case == "double" { model * 2 }
+        case "double" { model * 2 }
         else { model }
     }
     return config
@@ -186,8 +186,8 @@ function widget message_counter_view(integer count) {
 function dictionary message_counter_app() {
     mutable dictionary config = make_gui_config(0, message_counter_view)
     config["update"] = (integer model, string msg) -> match msg {
-        case == "inc" { model + 1 }
-        case == "dec" { model - 1 }
+        case "inc" { model + 1 }
+        case "dec" { model - 1 }
         else { model }
     }
     return config
@@ -281,8 +281,8 @@ function dictionary multi_app() {
     mutable dictionary config = make_gui_config(0, multi_view)
     config["title"] = "Multi"
     config["update"] = (integer model, string msg) -> match msg {
-        case == "inc" { model + 1 }
-        case == "dec" { model - 1 }
+        case "inc" { model + 1 }
+        case "dec" { model - 1 }
         else { model }
     }
     return config
@@ -293,8 +293,8 @@ function dictionary multi_app() {
 function array<dictionary<string>> multi_subscriptions(integer _count) {
     return [
         GraphicalUi.on_key("keys", "*", (string key) -> match key {
-            case == "ArrowUp" { "inc" }
-            case == "ArrowDown" { "dec" }
+            case "ArrowUp" { "inc" }
+            case "ArrowDown" { "dec" }
             else { "" }
         })
     ]
@@ -304,8 +304,8 @@ function dictionary key_app() {
     mutable dictionary config = make_gui_config(0, multi_view)
     config["title"] = "Keys"
     config["update"] = (integer model, string msg) -> match msg {
-        case == "inc" { model + 1 }
-        case == "dec" { model - 1 }
+        case "inc" { model + 1 }
+        case "dec" { model - 1 }
         else { model }
     }
     config["subscribe"] = multi_subscriptions
@@ -318,8 +318,8 @@ function dictionary key_app() {
 function array<dictionary<string>> typed_key_subscriptions(integer _count) {
     return [
         GraphicalUi.on_key_typed("keys", "*", (GraphicalUi.KeyEvent e) -> match e.key {
-            case == "ArrowUp" { "inc" }
-            case == "ArrowDown" { "dec" }
+            case "ArrowUp" { "inc" }
+            case "ArrowDown" { "dec" }
             else { "" }
         })
     ]
@@ -329,8 +329,8 @@ function dictionary typed_key_app() {
     mutable dictionary config = make_gui_config(0, multi_view)
     config["title"] = "TypedKeys"
     config["update"] = (integer model, string msg) -> match msg {
-        case == "inc" { model + 1 }
-        case == "dec" { model - 1 }
+        case "inc" { model + 1 }
+        case "dec" { model - 1 }
         else { model }
     }
     config["subscribe"] = typed_key_subscriptions
@@ -354,7 +354,7 @@ function dictionary typed_drag_app() {
     mutable dictionary config = make_gui_config("idle", multi_view)
     config["title"] = "TypedDrag"
     config["update"] = (string model, string msg) -> match msg {
-        case == "" { model }
+        case "" { model }
         else { msg }
     }
     config["subscribe"] = typed_drag_subscriptions
@@ -374,7 +374,7 @@ function dictionary raw_drag_app() {
     mutable dictionary config = make_gui_config("idle", multi_view)
     config["title"] = "RawDrag"
     config["update"] = (string model, string msg) -> match msg {
-        case == "" { model }
+        case "" { model }
         else { msg }
     }
     config["subscribe"] = raw_drag_subscriptions
@@ -401,7 +401,7 @@ function dictionary typed_storage_app() {
     mutable dictionary config = make_gui_config("idle", multi_view)
     config["title"] = "TypedStorage"
     config["update"] = (string model, string msg) -> match msg {
-        case == "" { model }
+        case "" { model }
         else { msg }
     }
     config["subscribe"] = typed_storage_subscriptions
@@ -419,7 +419,7 @@ function dictionary raw_storage_app() {
     mutable dictionary config = make_gui_config("idle", multi_view)
     config["title"] = "RawStorage"
     config["update"] = (string model, string msg) -> match msg {
-        case == "" { model }
+        case "" { model }
         else { msg }
     }
     config["subscribe"] = raw_storage_subscriptions
@@ -441,7 +441,7 @@ function dictionary typed_wheel_app() {
     mutable dictionary config = make_gui_config("idle", multi_view)
     config["title"] = "TypedWheel"
     config["update"] = (string model, string msg) -> match msg {
-        case == "" { model }
+        case "" { model }
         else { msg }
     }
     config["subscribe"] = typed_wheel_subscriptions
@@ -462,7 +462,7 @@ function dictionary typed_visibility_app() {
     mutable dictionary config = make_gui_config("idle", multi_view)
     config["title"] = "TypedVisibility"
     config["update"] = (string model, string msg) -> match msg {
-        case == "" { model }
+        case "" { model }
         else { msg }
     }
     config["subscribe"] = typed_visibility_subscriptions
@@ -483,7 +483,7 @@ function dictionary raw_visibility_app() {
     mutable dictionary config = make_gui_config("idle", multi_view)
     config["title"] = "RawVisibility"
     config["update"] = (string model, string msg) -> match msg {
-        case == "" { model }
+        case "" { model }
         else { msg }
     }
     config["subscribe"] = raw_visibility_subscriptions
@@ -686,8 +686,8 @@ function dictionary dismiss_app() {
     mutable dictionary config = make_gui_config(0, dismiss_view)
     config["title"] = "Dismiss"
     config["update"] = (integer model, string msg) -> match msg {
-        case == "closed" { model + 1 }
-        case == "cleared" { model + 10 }
+        case "closed" { model + 1 }
+        case "cleared" { model + 10 }
         else { model }
     }
     return config
@@ -869,7 +869,7 @@ function dictionary toast_action_app() {
     mutable dictionary config = make_gui_config(0, toast_view)
     config["title"] = "Toast"
     config["update"] = (integer model, string msg) -> match msg {
-        case == "undone" { model + 5 }
+        case "undone" { model + 5 }
         else { model }
     }
     return config
@@ -916,8 +916,8 @@ function dictionary confirm_app() {
     mutable dictionary config = make_gui_config(0, confirm_view)
     config["title"] = "Confirm"
     config["update"] = (integer model, string msg) -> match msg {
-        case == "confirmed" { model + 1 }
-        case == "cancelled" { model + 10 }
+        case "confirmed" { model + 1 }
+        case "cancelled" { model + 10 }
         else { model }
     }
     return config
@@ -969,7 +969,7 @@ function dictionary field_app() {
     mutable dictionary config = make_gui_config(0, field_view)
     config["title"] = "Field"
     config["update"] = (integer model, string msg) -> match msg {
-        case == "clicked" { model + 1 }
+        case "clicked" { model + 1 }
         else { model }
     }
     return config

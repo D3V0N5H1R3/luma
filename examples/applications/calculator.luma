@@ -119,23 +119,23 @@ function result<array<Token>> tokenize(string input) {
 
 function result<number> resolve_name(string name) {
     return match name {
-    case == "pi"  { success(Math.pi) }
-    case == "e"   { success(Math.e) }
-    case == "tau" { success(Math.tau) }
+    case "pi"  { success(Math.pi) }
+    case "e"   { success(Math.e) }
+    case "tau" { success(Math.tau) }
     else           { failure("unknown name: '${name}'") }
     }
 }
 
 function result<number> apply_unary(string name, number operand) {
     return match name {
-    case == "sqrt"  { Math.square_root(operand) }
-    case == "abs"   { Math.absolute(operand) }
-    case == "sin"   { Math.sine(operand) }
-    case == "cos"   { Math.cosine(operand) }
-    case == "tan"   { Math.tangent(operand) }
-    case == "log"   { Math.log_e(operand) }
-    case == "ceil"  { Math.ceil(operand) }
-    case == "floor" { Math.floor(operand) }
+    case "sqrt"  { Math.square_root(operand) }
+    case "abs"   { Math.absolute(operand) }
+    case "sin"   { Math.sine(operand) }
+    case "cos"   { Math.cosine(operand) }
+    case "tan"   { Math.tangent(operand) }
+    case "log"   { Math.log_e(operand) }
+    case "ceil"  { Math.ceil(operand) }
+    case "floor" { Math.floor(operand) }
     else             { failure("unknown function: '${name}'") }
     }
 }

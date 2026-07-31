@@ -131,12 +131,6 @@ void Compiler::compile_unary(const UnaryExpression& expr) {
             emit(lit.boolean_value() ? Op::False : Op::True, expr.location);
             return;
         }
-
-        if (expr.op == TokenType::Tilde &&
-            lit.literal_type() == LiteralExpression::LiteralType::Integer) {
-            (void)emit_constant(Value{~lit.integer_value()}, expr.location);
-            return;
-        }
     }
 
     compile_expression(*expr.operand);
@@ -147,9 +141,6 @@ void Compiler::compile_unary(const UnaryExpression& expr) {
             break;
         case TokenType::Bang:
             emit(Op::Not, expr.location);
-            break;
-        case TokenType::Tilde:
-            emit(Op::BitwiseNot, expr.location);
             break;
         case TokenType::QuestionMark: {
             // The ? operator: unwrap success/some, or return early with failure/none.

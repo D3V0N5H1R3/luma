@@ -134,6 +134,6 @@ Follow the detailed instructions in `instructions/`:
 - String interpolation: `"value is ${expr}"`.
 - Pipe operator: `value |> Module.function()`.
 - Structured concurrency: `task_scope { }` blocks with cooperative cancellation; `Task.cancel(t)`, `Task.is_cancelled(t)`.
-- Standard library modules: `String`, `Array`, `Dictionary`, `Math`, `Result`, `Converter`, `DateTime`, `Decimal`, `Console`, `FileSystem`, `RegularExpression`, `Process`, `Random`, `Encoder`, `Resource`, `Set`, `Channel`, `Task`, `Terminal`, `GraphicalUi`, `Socket`, `Optional`, `Reference`, `Queue`, `Stack`, `Log`, `Json`, `Csv`, `Xml`, `LinearAlgebra`, `Calculus`, `Statistics`, `Hash`, `Compression`, `Http`, `KeyValueStore`, `HashSet`, `LinkedList`, `BinaryTree`, `Graph`.
+- Standard library modules: `String`, `Array`, `Dictionary`, `Math`, `Bits`, `Result`, `Converter`, `DateTime`, `Decimal`, `Console`, `FileSystem`, `RegularExpression`, `Process`, `Random`, `Encoder`, `Resource`, `Set`, `Channel`, `Task`, `Terminal`, `GraphicalUi`, `Socket`, `Optional`, `Reference`, `Queue`, `Stack`, `Log`, `Json`, `Csv`, `Xml`, `LinearAlgebra`, `Calculus`, `Statistics`, `Hash`, `Compression`, `Http`, `KeyValueStore`, `HashSet`, `LinkedList`, `BinaryTree`, `Graph`.
 
 > **Note for AI assistants:** This file serves as the single source of truth for project context. See [instructions/learnings.instructions.md](../instructions/learnings.instructions.md) for accumulated development learnings and pitfalls (auto-loaded for all files).

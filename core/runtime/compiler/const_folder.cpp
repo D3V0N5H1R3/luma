@@ -73,24 +73,6 @@ namespace {
     return l / r;
 }
 
-/// Attempts to fold a left shift, returning nullopt on invalid shift amount.
-[[nodiscard]] std::optional<std::int64_t> try_fold_shift_left(std::int64_t l,
-                                                              std::int64_t r) noexcept {
-    if (r < 0 || r >= CompilerLimits::k_int64_bits) {
-        return std::nullopt;
-    }
-    return l << r;
-}
-
-/// Attempts to fold a right shift, returning nullopt on invalid shift amount.
-[[nodiscard]] std::optional<std::int64_t> try_fold_shift_right(std::int64_t l,
-                                                               std::int64_t r) noexcept {
-    if (r < 0 || r >= CompilerLimits::k_int64_bits) {
-        return std::nullopt;
-    }
-    return l >> r;
-}
-
 } // anonymous namespace
 
 // ─── try_fold_with ────────────────────────────────────────────────────────────
@@ -151,29 +133,6 @@ bool ConstantFolder::try_fold_integer_arithmetic(std::int64_t l, std::int64_t r,
         }
         case TokenType::SlashSlash: {
             if (auto result = try_fold_int_divide(l, r)) {
-                api_.emit_constant(Value{*result}, loc);
-                return true;
-            }
-            return false;
-        }
-        case TokenType::Ampersand:
-            api_.emit_constant(Value{l & r}, loc);
-            return true;
-        case TokenType::Pipe:
-            api_.emit_constant(Value{l | r}, loc);
-            return true;
-        case TokenType::Caret:
-            api_.emit_constant(Value{l ^ r}, loc);
-            return true;
-        case TokenType::LessLess: {
-            if (auto result = try_fold_shift_left(l, r)) {
-                api_.emit_constant(Value{*result}, loc);
-                return true;
-            }
-            return false;
-        }
-        case TokenType::GreaterGreater: {
-            if (auto result = try_fold_shift_right(l, r)) {
                 api_.emit_constant(Value{*result}, loc);
                 return true;
             }

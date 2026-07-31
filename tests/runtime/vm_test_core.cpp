@@ -244,14 +244,14 @@ LUMA_TEST(vm_constant_folding_result) {
 }
 
 LUMA_TEST(vm_bitwise_and) {
-    const auto result = eval("0b1100 & 0b1010");
+    const auto result = eval("Bits.and(0b1100, 0b1010)");
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), 0b1000);
 }
 
 LUMA_TEST(vm_bitwise_or) {
-    const auto result = eval("0b1100 | 0b1010");
+    const auto result = eval("Bits.or(0b1100, 0b1010)");
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), 0b1110);
@@ -379,36 +379,36 @@ LUMA_TEST(vm_negative_array_index) {
 }
 
 LUMA_TEST(vm_bitwise_xor) {
-    const auto result = eval("5 ^ 3"); // 101 ^ 011 = 110
+    const auto result = eval("Bits.xor(5, 3)"); // 101 ^ 011 = 110
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), 6);
 }
 
 LUMA_TEST(vm_bitwise_not) {
-    const auto result = eval("~0");
+    const auto result = eval("Bits.not(0)");
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), -1);
 }
 
 LUMA_TEST(vm_shift_left) {
-    const auto result = eval("1 << 4");
+    const auto result = eval("Bits.shift_left(1, 4)");
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), 16);
 }
 
 LUMA_TEST(vm_shift_right) {
-    const auto result = eval("16 >> 2");
+    const auto result = eval("Bits.shift_right(16, 2)");
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), 4);
 }
 
 LUMA_TEST(vm_shift_out_of_range) {
-    ASSERT_TRUE(throws_runtime("integer x = 1\ninteger y = 64\nx << y"));
-    ASSERT_TRUE(throws_runtime("integer x = 1\ninteger y = -1\nx << y"));
+    ASSERT_TRUE(throws_runtime("integer x = 1\ninteger y = 64\nBits.shift_left(x, y)"));
+    ASSERT_TRUE(throws_runtime("integer x = 1\ninteger y = -1\nBits.shift_left(x, y)"));
 }
 
 LUMA_TEST(vm_integer_division_truncates) {

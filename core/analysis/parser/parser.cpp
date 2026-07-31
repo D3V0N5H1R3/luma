@@ -120,7 +120,6 @@ bool Parser::can_start_expression(TokenType type) {
         // Prefix unary operators
         case TokenType::Bang:
         case TokenType::Minus:
-        case TokenType::Tilde:
         // Keyword expressions
         case TokenType::If:
         case TokenType::Match:

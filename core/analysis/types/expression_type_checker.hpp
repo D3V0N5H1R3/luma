@@ -199,8 +199,6 @@ private:
     // Per-operator-family type checking.
     [[nodiscard]] TypeInfo check_arithmetic_binary(const BinaryExpression& expr,
                                                    const TypeInfo& left, const TypeInfo& right);
-    [[nodiscard]] TypeInfo check_bitwise_binary(const BinaryExpression& expr, const TypeInfo& left,
-                                                const TypeInfo& right);
     [[nodiscard]] TypeInfo check_equality_binary(const BinaryExpression& expr, const TypeInfo& left,
                                                  const TypeInfo& right);
     [[nodiscard]] TypeInfo check_comparison_binary(const BinaryExpression& expr,

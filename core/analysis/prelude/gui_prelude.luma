@@ -2002,13 +2002,13 @@ namespace Solaris {
     # Reconcile a single View into a GraphicalUi widget.
     internal function widget to_widget_inner(View node) {
         return match node.kind {
-            case == "text" {
+            case "text" {
                 GraphicalUi.label(node.content, Solaris.text_style(node))
             }
-            case == "heading" {
+            case "heading" {
                 GraphicalUi.heading(node.content, node.level, Solaris.text_style(node))
             }
-            case == "button" {
+            case "button" {
                 # The callback returns the typed `choice` message; the engine
                 # routes it through update(model, message). A button with no
                 # `|> Solaris.on_click` is inert (returns `none`, a no-op).
@@ -2018,7 +2018,7 @@ namespace Solaris {
                     GraphicalUi.button(node.content, () -> none, Solaris.button_style(node))
                 }
             }
-            case == "text_field" {
+            case "text_field" {
                 # Without `|> Solaris.on_change` the field is inert.
                 if node.has_change {
                     GraphicalUi.text_input(node.content, (string v) -> node.on_change(v),
@@ -2028,7 +2028,7 @@ namespace Solaris {
                         node.placeholder, Solaris.text_field_style(node))
                 }
             }
-            case == "text_area" {
+            case "text_area" {
                 if node.has_change {
                     GraphicalUi.text_area(node.content, (string v) -> node.on_change(v),
                         node.placeholder, Solaris.common_style(node))
@@ -2037,7 +2037,7 @@ namespace Solaris {
                         node.placeholder, Solaris.common_style(node))
                 }
             }
-            case == "checkbox" {
+            case "checkbox" {
                 # Without `|> Solaris.on_toggle` the checkbox is inert.
                 if node.has_toggle {
                     GraphicalUi.checkbox(node.content, node.checked, (boolean b) -> node.on_toggle(b),
@@ -2047,7 +2047,7 @@ namespace Solaris {
                         Solaris.common_style(node))
                 }
             }
-            case == "switch" {
+            case "switch" {
                 if node.has_toggle {
                     GraphicalUi.switch(node.content, node.checked, (boolean b) -> node.on_toggle(b),
                         Solaris.common_style(node))
@@ -2056,7 +2056,7 @@ namespace Solaris {
                         Solaris.common_style(node))
                 }
             }
-            case == "radio" {
+            case "radio" {
                 if node.has_select {
                     GraphicalUi.radio_group(node.options, node.selected,
                         (string v) -> node.on_select(Solaris.option_value_for_label(node, v)),
@@ -2066,7 +2066,7 @@ namespace Solaris {
                         (string _v) -> none, Solaris.common_style(node))
                 }
             }
-            case == "dropdown" {
+            case "dropdown" {
                 if node.has_select {
                     GraphicalUi.dropdown(node.options, node.selected,
                         (string v) -> node.on_select(Solaris.option_value_for_label(node, v)),
@@ -2076,7 +2076,7 @@ namespace Solaris {
                         (string _v) -> none, Solaris.common_style(node))
                 }
             }
-            case == "menu" {
+            case "menu" {
                 if node.has_select {
                     GraphicalUi.menu(node.content, node.options,
                         (string v) -> node.on_select(v), Solaris.common_style(node))
@@ -2085,7 +2085,7 @@ namespace Solaris {
                         (string _v) -> none, Solaris.common_style(node))
                 }
             }
-            case == "slider" {
+            case "slider" {
                 if node.has_slide {
                     GraphicalUi.slider(node.num_value, node.num_min, node.num_max,
                         (number v) -> node.on_slide(v), Solaris.common_style(node))
@@ -2094,7 +2094,7 @@ namespace Solaris {
                         (number _v) -> none, Solaris.common_style(node))
                 }
             }
-            case == "date_picker" {
+            case "date_picker" {
                 if node.has_change {
                     GraphicalUi.date_picker(node.content, (string v) -> node.on_change(v),
                         Solaris.common_style(node))
@@ -2103,7 +2103,7 @@ namespace Solaris {
                         Solaris.common_style(node))
                 }
             }
-            case == "tabs" {
+            case "tabs" {
                 if node.has_tab {
                     GraphicalUi.tabs(node.options, node.active, (integer i) -> node.on_tab(i),
                         Solaris.child_widgets(node), Solaris.common_style(node))
@@ -2112,7 +2112,7 @@ namespace Solaris {
                         Solaris.child_widgets(node), Solaris.common_style(node))
                 }
             }
-            case == "dialog" {
+            case "dialog" {
                 if node.has_message {
                     GraphicalUi.dialog(node.content, Solaris.child_widgets(node), node.checked,
                         () -> node.message, Solaris.common_style(node))
@@ -2121,98 +2121,98 @@ namespace Solaris {
                         () -> none, Solaris.common_style(node))
                 }
             }
-            case == "image" {
+            case "image" {
                 GraphicalUi.image(node.src, Solaris.common_style(node))
             }
-            case == "icon" {
+            case "icon" {
                 GraphicalUi.icon(node.content, node.glyph_size, Solaris.common_style(node))
             }
-            case == "divider" {
+            case "divider" {
                 GraphicalUi.separator(Solaris.divider_style(node))
             }
-            case == "badge" {
+            case "badge" {
                 GraphicalUi.badge(node.content, Solaris.common_style(node))
             }
-            case == "spinner" {
+            case "spinner" {
                 GraphicalUi.spinner(node.content, Solaris.common_style(node))
             }
-            case == "progress" {
+            case "progress" {
                 GraphicalUi.progress(node.num_value, node.num_max, Solaris.common_style(node))
             }
-            case == "toast" {
+            case "toast" {
                 GraphicalUi.toast_region([
                     GraphicalUi.toast(node.content, Solaris.emphasis_severity(node.emphasis))
                 ], Solaris.toast_region_style(node))
             }
-            case == "spacer" {
+            case "spacer" {
                 GraphicalUi.spacer()
             }
-            case == "card" {
+            case "card" {
                 GraphicalUi.card(Solaris.child_widgets(node), Solaris.container_style(node))
             }
-            case == "panel" {
+            case "panel" {
                 GraphicalUi.panel(node.content, Solaris.child_widgets(node),
                     Solaris.container_style(node))
             }
-            case == "column" {
+            case "column" {
                 GraphicalUi.column(Solaris.child_widgets(node), Solaris.container_style(node))
             }
-            case == "row" {
+            case "row" {
                 GraphicalUi.row(Solaris.child_widgets(node), Solaris.container_style(node))
             }
-            case == "list" {
+            case "list" {
                 GraphicalUi.column(Solaris.child_widgets(node), Solaris.container_style(node))
             }
-            case == "grid" {
+            case "grid" {
                 GraphicalUi.grid(node.columns, Solaris.child_widgets(node),
                     Solaris.container_style(node))
             }
-            case == "scroll" {
+            case "scroll" {
                 GraphicalUi.scroll_column(Solaris.child_widgets(node), Solaris.container_style(node))
             }
-            case == "stack" {
+            case "stack" {
                 Solaris.stack_widget(node)
             }
-            case == "table" {
+            case "table" {
                 GraphicalUi.table(node.headers, node.rows)
             }
-            case == "line_chart" {
+            case "line_chart" {
                 GraphicalUi.line_chart(node.options, node.values, Solaris.common_style(node))
             }
-            case == "bar_chart" {
+            case "bar_chart" {
                 GraphicalUi.vertical_bar_chart(node.options, node.values,
                     Solaris.common_style(node))
             }
-            case == "pie_chart" {
+            case "pie_chart" {
                 GraphicalUi.pie_chart(node.options, node.values, Solaris.common_style(node))
             }
-            case == "line_chart_multi" {
+            case "line_chart_multi" {
                 GraphicalUi.line_chart_multi(node.options, node.series_names,
                     node.series_values, node.series_colors, Solaris.common_style(node))
             }
-            case == "bar_chart_multi" {
+            case "bar_chart_multi" {
                 GraphicalUi.vertical_bar_chart_multi(node.options, node.series_names,
                     node.series_values, node.series_colors, Solaris.common_style(node))
             }
-            case == "sidebar" {
+            case "sidebar" {
                 GraphicalUi.column(Solaris.child_widgets(node), Solaris.container_style(node))
             }
-            case == "nav" {
+            case "nav" {
                 GraphicalUi.column(Solaris.child_widgets(node), Solaris.nav_container_style(node))
             }
-            case == "nav_item" {
+            case "nav_item" {
                 Solaris.nav_item_widget(node)
             }
-            case == "menu_of" {
+            case "menu_of" {
                 GraphicalUi.popover(node.content,
                     GraphicalUi.column(Solaris.child_widgets(node),
                         {"gap": "2px", "min_width": "160px", "role": "menu"}),
                     Solaris.common_style(node))
             }
-            case == "menu_entry" {
+            case "menu_entry" {
                 Solaris.menu_entry_widget(node)
             }
-            case == "app_shell" {
+            case "app_shell" {
                 GraphicalUi.row(Solaris.child_widgets(node), Solaris.container_style(node))
             }
             else {

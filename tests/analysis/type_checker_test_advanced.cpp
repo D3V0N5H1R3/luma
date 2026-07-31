@@ -501,7 +501,7 @@ static void test_any_warn_match() {
     ASSERT_TRUE(fails("function void foo() {\n"
                       "    any x = true\n"
                       "    match x {\n"
-                      "        case == true  { print(\"yes\") }\n"
+                      "        case true  { print(\"yes\") }\n"
                       "        else          { print(\"no\") }\n"
                       "    }\n"
                       "}\n"));

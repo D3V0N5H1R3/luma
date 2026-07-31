@@ -273,18 +273,6 @@ total /= 4.0
 total %= 3.0
 ```
 
-Bitwise compound assignments are available for `integer` variables:
-
-```luma
-mutable integer flags = 0
-
-flags |= 4  # set bit
-flags &= ~4 # clear bit
-flags ^= 2  # toggle bit
-flags <<= 1 # shift left
-flags >>= 1 # shift right
-```
-
 Integer division compound assignment:
 
 ```luma
@@ -405,22 +393,23 @@ The `//` operator always returns an `integer` and requires both operands to be `
 
 Use `//` when you explicitly need an integer quotient and want to document that intent.
 
-### Bitwise
+### Bit Manipulation
 
-Bitwise operators require `integer` operands and return `integer`.
+Luma has no bitwise operators. Bit manipulation lives in the **`Bits`** standard-library
+module — pipe-first free functions over `integer` values:
 
-| Operator | Description              | Example         |
-| -------- | ------------------------ | --------------- |
-| `&`      | Bitwise AND              | `12 & 10` → `8` |
-| `\       | `                        | Bitwise OR      |
-| `^`      | Bitwise XOR              | `15 ^ 9` → `6`  |
-| `~`      | Bitwise NOT (unary)      | `~0` → `-1`     |
-| `<<`     | Left shift               | `1 << 3` → `8`  |
-| `>>`     | Right shift (arithmetic) | `16 >> 2` → `4` |
+| Function                     | Description              | Example                      |
+| ---------------------------- | ------------------------ | ---------------------------- |
+| `Bits.and(a, b)`             | Bitwise AND              | `Bits.and(12, 10)` → `8`     |
+| `Bits.or(a, b)`              | Bitwise OR               | `Bits.or(8, 4)` → `12`       |
+| `Bits.xor(a, b)`             | Bitwise XOR              | `Bits.xor(15, 9)` → `6`      |
+| `Bits.not(a)`                | Bitwise NOT              | `Bits.not(0)` → `-1`         |
+| `Bits.shift_left(v, n)`      | Left shift               | `Bits.shift_left(1, 3)` → `8`  |
+| `Bits.shift_right(v, n)`     | Right shift (arithmetic) | `Bits.shift_right(16, 2)` → `4` |
 
-Shift amounts must be in the range `0..63`. A shift amount outside this range throws a `RuntimeError`.
-
-`~x` is the bitwise complement of `x` in two's-complement 64-bit representation, so `~0 == -1` and `~(-1) == 0`.
+Shift amounts must be in the range `0..63`; a shift amount outside this range throws a
+`RuntimeError`. `Bits.not(x)` is the two's-complement 64-bit complement, so
+`Bits.not(0) == -1` and `Bits.not(-1) == 0`.
 
 ### Comparison
 
@@ -482,19 +471,15 @@ integer num = parsed ?? 0            # 42
 | Precedence  | Operators                              | Description                                |
 | ----------- | -------------------------------------- | ------------------------------------------ |
 | 1 (highest) | `()` `[]` `.` `?.` `?[` `..` `..=` `?` | Call, subscript, field, range, propagation |
-| 2           | `!` `-` `~` (prefix)                   | Unary NOT, negate, bitwise NOT             |
+| 2           | `!` `-` (prefix)                       | Unary NOT, negate                          |
 | 3           | `*` `/` `//` `%`                       | Multiplicative                             |
 | 4           | `+` `-`                                | Additive                                   |
-| 5           | `<<` `>>`                              | Bit-shifts                                 |
-| 6           | `&`                                    | Bitwise AND                                |
-| 7           | `^`                                    | Bitwise XOR                                |
-| 8           | `\                                     | `                                          |
-| 9           | `<` `>` `<=` `>=` `in`                 | Comparison                                 |
-| 10          | `==` `!=`                              | Equality                                   |
-| 11          | `&&`                                   | Logical AND                                |
-| 12          | `\                                     | \                                          |
-| 13          | `??`                                   | Optional / Result unwrapping               |
-| 14 (lowest) | `\                                     | >` `!>`                                    |
+| 5           | `<` `>` `<=` `>=` `in`                 | Comparison                                 |
+| 6           | `==` `!=`                              | Equality                                   |
+| 7           | `&&`                                   | Logical AND                                |
+| 8           | `\                                     | \                                          |
+| 9           | `??`                                   | Optional / Result unwrapping               |
+| 10 (lowest) | `\                                     | >` `!>`                                    |
 
 ### Optional Chaining `?.` and `?[`
 
@@ -1772,22 +1757,22 @@ Match dispatches on the value of an expression. Arms are evaluated in declaratio
 
 ### Comparison Arms
 
-All six comparison operators are supported. Comparison matches require an `else` arm (or a `case !=` arm, which acts as a catch-all for the type checker):
+All six comparison operators are supported. Comparison matches require an `else` arm (or a `case !=` arm, which acts as a catch-all for the type checker). The `==` operator compares the subject against a **non-literal** expression; to match a literal by value, use the bare-literal form below rather than `case == <literal>`:
 
 ```luma
 match score {
-    case >= 90 { print("A") }
-    case >= 80 { print("B") }
-    case >= 70 { print("C") }
-    case == 0  { print("absent") }
-    case != 50 { print("not fifty") }
-    else       { print("F") }
+    case >= 90    { print("A") }
+    case >= 80    { print("B") }
+    case 0        { print("absent") }    # bare literal — not `case == 0`
+    case != 50    { print("not fifty") }
+    case == cutoff { print("at cutoff") } # `==` against a variable is allowed
+    else          { print("F") }
 }
 ```
 
 ### Matching Strings
 
-String arms can be written with the explicit equality operator or as a bare string literal — both forms are equivalent:
+String arms are written as a bare string literal:
 
 ```luma
 match command {
@@ -1797,21 +1782,13 @@ match command {
 }
 ```
 
-The `== "…"` form is also accepted for consistency with other comparison arms:
-
-```luma
-match command {
-    case == "quit" { stop() }
-    case == "help" { show_help() }
-    else           { print("unknown: ${command}") }
-}
-```
+Writing `case == "quit"` is a **syntax error** — a string literal has one obvious spelling, the bare form. (The `==` operator is still valid against a non-literal expression, such as another `string` variable.)
 
 String match arms always require an `else` arm.
 
 ### Matching Integers
 
-Integer arms can be written as bare literals — the equality check is implicit:
+Integer arms are written as bare literals — the equality check is implicit:
 
 ```luma
 match day_of_week {
@@ -1822,15 +1799,7 @@ match day_of_week {
 }
 ```
 
-The `== n` form is also accepted for consistency with other comparison arms:
-
-```luma
-match day_of_week {
-    case == 1 { "Monday" }
-    case == 2 { "Tuesday" }
-    else      { "other" }
-}
-```
+Writing `case == 1` is a **syntax error**: match integer literals by value with the bare `case 1` form. (A `number` literal such as `case == 3.14` has no bare form and remains a valid comparison arm, as does `case == n` against a non-literal.)
 
 Integer match arms always require an `else` arm.
 
@@ -1944,7 +1913,7 @@ match code {
 }
 
 match score {
-    case == 0 | == 1 { print("very low") }
+    case 0 | 1 { print("very low") }
     case >= 90       { print("high") }
     else             { print("other") }
 }
@@ -2021,7 +1990,7 @@ Multi-statement arm bodies are also supported:
 
 ```luma
 number result = match x {
-    case == 0 {
+    case 0 {
         print("zero case")
 
         0
@@ -2921,25 +2890,28 @@ When a type mismatch occurs, the type checker provides a hint suggesting how to 
 
 ## 28 — Reserved Keywords
 
-All 60 identifiers below are reserved and cannot be used as variable, function, record, choice type, or namespace names:
+All 46 identifiers below are reserved and cannot be used as variable, function, record, choice type, or namespace names:
 
-| Keyword           | Keyword       | Keyword       | Keyword            |
-| ----------------- | ------------- | ------------- | ------------------ |
-| `array`           | `await`       | `binary_tree` | `boolean`          |
-| `borrow`          | `break`       | `case`        | `catch`            |
-| `channel`         | `choice`      | `continue`    | `dictionary`       |
-| `downcast`        | `else`        | `failure`     | `false`            |
-| `finally`         | `for`         | `function`    | `graph`            |
-| `hash_set`        | `if`          | `in`          | `include`          |
-| `integer`         | `interface`   | `internal`    | `is`               |
-| `key_value_store` | `linked_list` | `match`       | `mutable`          |
-| `namespace`       | `none`        | `number`      | `optional`         |
-| `queue`           | `record`      | `reference`   | `result`           |
-| `return`          | `set`         | `socket`      | `some`             |
-| `spawn`           | `stack`       | `string`      | `success`          |
-| `task`            | `task_scope`  | `true`        | `trusted_downcast` |
-| `try`             | `type`        | `unique`      | `use`              |
-| `while`           | `widget`      | `with`        | `xml`              |
+| Keyword      | Keyword        | Keyword       | Keyword            |
+| ------------ | -------------- | ------------- | ------------------ |
+| `array`      | `await`        | `boolean`     | `borrow`           |
+| `break`      | `case`         | `catch`       | `choice`           |
+| `continue`   | `dictionary`   | `downcast`    | `else`             |
+| `failure`    | `false`        | `finally`     | `for`              |
+| `function`   | `if`           | `in`          | `include`          |
+| `integer`    | `interface`    | `internal`    | `is`               |
+| `match`      | `mutable`      | `namespace`   | `none`             |
+| `number`     | `optional`     | `record`      | `result`           |
+| `return`     | `some`         | `spawn`       | `string`           |
+| `success`    | `task_scope`   | `true`        | `trusted_downcast` |
+| `try`        | `type`         | `unique`      | `use`              |
+| `while`      | `with`         |               |                    |
+
+The container and handle types — `binary_tree`, `channel`, `graph`, `hash_set`,
+`key_value_store`, `linked_list`, `queue`, `reference`, `set`, `socket`, `stack`,
+`task`, `widget`, and `xml` — are **not** reserved words. They are ordinary
+identifiers that name built-in generic types, so `queue<integer> q = …` still
+declares a typed variable while `integer queue = …` is also allowed.
 
 ---
 
@@ -3574,13 +3546,15 @@ base_type       = primitive_type
                 | function_type
                 | qualified_type ;
 
-primitive_type  = "boolean" | "integer" | "number" | "string"
-                | "none" | "socket" | "widget" | "xml"
-                | "optional" | "reference"
-                | "binary_tree" | "queue" | "stack" ;
+primitive_type  = "boolean" | "integer" | "number" | "decimal" | "string"
+                | "none" | "optional" ;
+                (* container/handle type names — queue, stack, set, task,
+                   channel, socket, xml, reference, binary_tree, linked_list,
+                   hash_set, graph, key_value_store, widget — are ordinary
+                   IDENTIFIERs resolved as built-in types via generic_type /
+                   qualified_type, not reserved primitive keywords. *)
 
-generic_type    = ( "array" | "dictionary" | "result" | "task" | "channel"
-                  | IDENTIFIER )
+generic_type    = ( "array" | "dictionary" | "result" | "optional" | IDENTIFIER )
                   "<" type_annotation { "," type_annotation } ">" ;
 
 tuple_type      = "(" type_annotation "," type_annotation
@@ -3686,8 +3660,7 @@ expression_stmt     = expression
                       | "--"
                       | (* empty — bare expression *) ) ;
 
-compound_op         = "+=" | "-=" | "*=" | "/=" | "//=" | "%="
-                    | "&=" | "|=" | "^=" | "<<=" | ">>=" ;
+compound_op         = "+=" | "-=" | "*=" | "/=" | "//=" | "%=" ;
 ```
 
 ### 32.6 Match Arms
@@ -3708,14 +3681,16 @@ case_pattern    = BOOLEAN
                 | NONE
                 | "some" "(" IDENTIFIER ")"
                 | STRING
-                | comparison_op bitwise_xor_expr
+                | comparison_op addition_expr
                 | variant_pattern ;
+                (* a bare literal after "==" (e.g. `case == 1`) is rejected —
+                   match literals by value with the bare form `case 1`. *)
 
 alt_pattern     = BOOLEAN
                 | INTEGER
                 | NONE
                 | STRING
-                | comparison_op bitwise_xor_expr
+                | comparison_op addition_expr
                 | [ IDENTIFIER "." ] IDENTIFIER "." IDENTIFIER ;
 
 variant_pattern = [ IDENTIFIER "." ] IDENTIFIER "." IDENTIFIER
@@ -3744,22 +3719,14 @@ and_expr             = equality_expr { "&&" equality_expr } ;
 
 equality_expr        = comparison_expr { ( "==" | "!=" ) comparison_expr } ;
 
-comparison_expr      = bitwise_or_expr
-                       { ( "<" | ">" | "<=" | ">=" | "in" ) bitwise_or_expr } ;
-
-bitwise_or_expr      = bitwise_xor_expr { "|" bitwise_xor_expr } ;
-
-bitwise_xor_expr     = bitwise_and_expr { "^" bitwise_and_expr } ;
-
-bitwise_and_expr     = shift_expr { "&" shift_expr } ;
-
-shift_expr           = addition_expr { ( "<<" | ">>" ) addition_expr } ;
+comparison_expr      = addition_expr
+                       { ( "<" | ">" | "<=" | ">=" | "in" ) addition_expr } ;
 
 addition_expr        = multiplication_expr { ( "+" | "-" ) multiplication_expr } ;
 
 multiplication_expr  = unary_expr { ( "*" | "/" | "//" | "%" ) unary_expr } ;
 
-unary_expr           = ( "!" | "-" | "~" ) unary_expr
+unary_expr           = ( "!" | "-" ) unary_expr
                      | postfix_expr ;
 
 postfix_expr         = primary_expr
@@ -3853,14 +3820,10 @@ From lowest to highest:
 | 5     | `&&` (logical and)                        | Left           |
 | 6     | `==` `!=`                                 | Left           |
 | 7     | `<` `>` `<=` `>=` `in`                    | Left           |
-| 8     | `\                                        | ` (bitwise or) |
-| 9     | `^` (bitwise xor)                         | Left           |
-| 10    | `&` (bitwise and)                         | Left           |
-| 11    | `<<` `>>` (bit shift)                     | Left           |
-| 12    | `+` `-`                                   | Left           |
-| 13    | `*` `/` `//` `%`                          | Left           |
-| 14    | `!` `-` `~` (unary prefix)                | Right          |
-| 15    | `.` `?.` `[…]` `?[…]` `()` `..` `..=` `?` | Left           |
+| 8     | `+` `-`                                   | Left           |
+| 9     | `*` `/` `//` `%`                          | Left           |
+| 10    | `!` `-` (unary prefix)                    | Right          |
+| 11    | `.` `?.` `[…]` `?[…]` `()` `..` `..=` `?` | Left           |
 
 ---
 

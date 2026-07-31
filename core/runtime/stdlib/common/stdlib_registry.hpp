@@ -28,6 +28,7 @@
 #include "runtime/stdlib/io/http_module.hpp"
 #include "runtime/stdlib/io/socket_module.hpp"
 #include "runtime/stdlib/io/terminal_module.hpp"
+#include "runtime/stdlib/math/bits_module.hpp"
 #include "runtime/stdlib/math/calculus_module.hpp"
 #include "runtime/stdlib/math/decimal_module.hpp"
 #include "runtime/stdlib/math/linearalgebra_module.hpp"
@@ -107,6 +108,7 @@ inline constexpr ModuleEntry kModules[] = {
     // ── Always-available modules ──
     {"Array", register_array_ns, nullptr, false, false},
     {"BinaryTree", register_binarytree_ns, nullptr, false, false},
+    {"Bits", register_bits_ns, nullptr, false, false},
     {"Calculus", register_calculus_ns, nullptr, false, false},
     {"Channel", register_channel_ns, nullptr, false, false},
     {"Color", register_color_ns, nullptr, false, false},

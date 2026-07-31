@@ -191,8 +191,8 @@ template <typename Provider>
             return "success(" + generate_expression(fdp, depth + 1) + ") !> " +
                    std::string{pick(fdp, pipe_stages)};
         default: // Match expression with a literal arm.
-            return "match " + generate_expression(fdp, depth + 1) +
-                   " { case == " + generate_literal(fdp) + " { " +
+            return "match " + generate_expression(fdp, depth + 1) + " { case " +
+                   generate_int_literal(fdp, 0, 1000) + " { " +
                    generate_expression(fdp, depth + 1) + " } else { " +
                    generate_expression(fdp, depth + 1) + " } }";
     }

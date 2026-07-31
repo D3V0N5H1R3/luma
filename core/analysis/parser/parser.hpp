@@ -382,12 +382,8 @@ private:
     [[nodiscard]] ExpressionPtr parse_or();
     [[nodiscard]] ExpressionPtr parse_null_coalescing();
     [[nodiscard]] ExpressionPtr parse_and();
-    [[nodiscard]] ExpressionPtr parse_bitwise_or();
-    [[nodiscard]] ExpressionPtr parse_bitwise_xor();
-    [[nodiscard]] ExpressionPtr parse_bitwise_and();
     [[nodiscard]] ExpressionPtr parse_equality();
     [[nodiscard]] ExpressionPtr parse_comparison();
-    [[nodiscard]] ExpressionPtr parse_shift();
     [[nodiscard]] ExpressionPtr parse_addition();
     [[nodiscard]] ExpressionPtr parse_multiplication();
     [[nodiscard]] ExpressionPtr parse_unary();

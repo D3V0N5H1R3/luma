@@ -336,9 +336,9 @@ function dictionary quiz_config() {
     config["model"] = quiz_initial()
     config["view"] = view_quiz
     config["update"] = (dictionary model, string msg) -> match msg {
-        case == "submit" { do_submit(model) }
-        case == "next" { do_next(model) }
-        case == "restart" { quiz_initial() }
+        case "submit" { do_submit(model) }
+        case "next" { do_next(model) }
+        case "restart" { quiz_initial() }
         else { model }
     }
     return config
