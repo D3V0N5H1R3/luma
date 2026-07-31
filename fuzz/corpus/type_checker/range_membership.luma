@@ -1,0 +1,14 @@
+# Type checker: range membership with the `in` operator
+function boolean is_valid_percent(integer value) {
+    return value in 0..=100
+}
+
+function boolean in_half_open(integer value) {
+    return value in 1..100
+}
+
+function boolean check(integer score, integer low, integer high) {
+    boolean inclusive = score in low..=high
+    boolean exclusive = score in low..high
+    return inclusive && exclusive
+}

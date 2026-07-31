@@ -212,6 +212,10 @@ constexpr std::string_view unwrap_failed_none{"unwrap failed: value is none"};
     return std::format("'in' on string requires a string element, got '{}'", type);
 }
 
+[[nodiscard]] inline std::string in_range_requires_integer(std::string_view type) {
+    return std::format("'in' on a range requires an integer, got '{}'", type);
+}
+
 [[nodiscard]] inline std::string range_start_must_be_integer(std::string_view type) {
     return std::format("range start must be an integer, got '{}'", type);
 }

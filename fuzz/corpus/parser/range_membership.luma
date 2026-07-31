@@ -1,0 +1,8 @@
+# Parser: range membership expressions
+boolean a = 5 in 1..=100
+boolean b = x in 1..100
+boolean c = (score + 1) in low..=high
+boolean d = !(n in 0..10)
+if value in 1..=6 {
+    print("in range")
+}

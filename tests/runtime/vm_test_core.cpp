@@ -552,6 +552,37 @@ LUMA_TEST(vm_not_contains) {
     ASSERT_FALSE(result.as_bool());
 }
 
+LUMA_TEST(vm_contains_range_inclusive) {
+    ASSERT_TRUE(eval("1 in 1..=100").as_bool());
+    ASSERT_TRUE(eval("100 in 1..=100").as_bool());
+    ASSERT_TRUE(eval("50 in 1..=100").as_bool());
+    ASSERT_FALSE(eval("0 in 1..=100").as_bool());
+    ASSERT_FALSE(eval("101 in 1..=100").as_bool());
+}
+
+LUMA_TEST(vm_contains_range_exclusive) {
+    ASSERT_TRUE(eval("1 in 1..100").as_bool());
+    ASSERT_TRUE(eval("99 in 1..100").as_bool());
+    ASSERT_FALSE(eval("100 in 1..100").as_bool());
+    ASSERT_FALSE(eval("0 in 1..100").as_bool());
+}
+
+LUMA_TEST(vm_contains_range_empty) {
+    // start == end exclusive, and start > end, are both empty.
+    ASSERT_FALSE(eval("5 in 5..5").as_bool());
+    ASSERT_FALSE(eval("5 in 10..1").as_bool());
+    ASSERT_TRUE(eval("5 in 5..=5").as_bool());
+}
+
+// The type checker rejects a non-integer left operand of `in <range>`, but a
+// mistyped value can still reach the VM through dynamic paths (e.g. an
+// `any`-typed value). The unchecked eval() path reproduces that: the VM must
+// surface a clean RuntimeError rather than crash on an unchecked as_integer().
+LUMA_TEST(vm_contains_range_non_integer_throws) {
+    ASSERT_THROWS_WITH_MESSAGE(eval("\"x\" in 1..=100"), "'in' on a range requires an integer");
+    ASSERT_THROWS_WITH_MESSAGE(eval("1.5 in 1..100"), "'in' on a range requires an integer");
+}
+
 // ─── Runtime error tests ───
 
 LUMA_TEST(vm_recursion_depth_limit) {

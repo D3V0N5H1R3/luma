@@ -36,6 +36,27 @@ function void test_string_containment_operator() {
 }
 
 @test
+function void test_range_containment_operator() {
+    # in operator for integer range membership
+    assert(1 in 1..=100)
+    assert(100 in 1..=100)
+    assert(50 in 1..=100)
+    assert(!(0 in 1..=100))
+    assert(!(101 in 1..=100))
+
+    # Exclusive upper bound excludes the end value.
+    assert(99 in 1..100)
+    assert(!(100 in 1..100))
+
+    # Works with variables and negative bounds.
+    integer score = 87
+    assert(score in 1..=100)
+    integer low = -10
+    assert(-5 in low..=0)
+    assert(!(-11 in low..=0))
+}
+
+@test
 function void test_comparison_operators() {
     assert(1 == 1)
     assert(1 != 2)

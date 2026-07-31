@@ -349,6 +349,12 @@ static void test_contains_operator() {
     assert_eval_bool("3 in [1, 2, 3, 4, 5]\n", true);
 }
 
+static void test_contains_range_operator() {
+    assert_eval_bool("50 in 1..=100\n", true);
+    assert_eval_bool("100 in 1..100\n", false);
+    assert_eval_bool("0 in 1..=100\n", false);
+}
+
 // ═══════════════════════════════════════════════════════════
 // Named arguments (runtime)
 // ═══════════════════════════════════════════════════════════
@@ -620,6 +626,7 @@ int main() {
     RUN(test_recursive_fibonacci);
     RUN(test_higher_order_function);
     RUN(test_contains_operator);
+    RUN(test_contains_range_operator);
 
     // Named arguments.
     RUN(test_named_arguments_all);

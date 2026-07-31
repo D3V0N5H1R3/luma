@@ -216,7 +216,7 @@ _Expressions_ (produce a value):
 
 - `ArrayLiteralExpression` — array literal with element expressions.
 - `AwaitExpression` — `await task` producing `T`.
-- `BinaryExpression` — two operands and an operator (`+`, `-`, `*`, `/`, `//`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `??`, `&`, `|`, `^`, `<<`, `>>`, `in`). The `in` operator checks membership: element in array, key in dictionary, or substring in string. The result type is `boolean`.
+- `BinaryExpression` — two operands and an operator (`+`, `-`, `*`, `/`, `//`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `??`, `&`, `|`, `^`, `<<`, `>>`, `in`). The `in` operator checks membership: element in array, key in dictionary, substring in string, or integer in range. The result type is `boolean`.
 - `CallExpression` — function or lambda invocation with positional and named arguments.
 - `DictionaryLiteralExpression` — dictionary literal with key-value pairs.
 - `DowncastExpression` — `downcast<T>(expr)` keyword expression producing `result<T>`. Parsed as a dedicated AST node, not as a function call.

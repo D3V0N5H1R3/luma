@@ -191,6 +191,14 @@ static void test_compile_contains_operator() {
     ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::Contains));
 }
 
+static void test_compile_contains_range_operator() {
+    const auto result = compile("5 in 1..=100");
+
+    ASSERT_TRUE(result.success);
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::Contains));
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::MakeRangeInc));
+}
+
 static void test_compile_try_catch() {
     const auto result = compile("function void f() {\n"
                                 "    try { integer x = 1 } catch(e) { integer y = 2 }\n"
@@ -503,6 +511,7 @@ int main() {
     RUN(test_compile_tuple_literal);
     RUN(test_compile_range);
     RUN(test_compile_contains_operator);
+    RUN(test_compile_contains_range_operator);
     RUN(test_compile_try_catch);
     RUN(test_compile_return_in_finally_does_not_recurse);
     RUN(test_compile_for_in_loop);

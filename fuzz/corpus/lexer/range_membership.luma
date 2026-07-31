@@ -1,0 +1,4 @@
+# Lexer: `in` operator with range tokens
+x in 1..=100
+y in 1..100
+score in low..=high
