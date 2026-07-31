@@ -17,7 +17,6 @@
 namespace luma {
 
 // Import shared numeric conversion helpers.
-using luma::numeric::from_mat;
 using luma::numeric::from_vec;
 using luma::numeric::to_vec;
 
@@ -72,9 +71,8 @@ constexpr std::int64_t k_max_integration_steps = 1000000;
 // iteration) and the iteration cap before giving up on convergence.
 constexpr double k_limit_initial_step = 0.1;
 constexpr int k_limit_max_iterations = 30;
-// Taylor coefficient count bounds; the finite-difference stencil stays usable
-// within this inclusive range of terms.
-constexpr std::int64_t k_taylor_min_terms = 1;
+// Upper bound on the finite-difference derivative order; the stencil stays
+// usable within this inclusive limit.
 constexpr std::int64_t k_taylor_max_terms = 20;
 // Upper bound on the number of terms sum_series evaluates, bounding callback
 // work for adversarial counts.
@@ -532,57 +530,6 @@ static void register_calculus_analysis(const EnvPtr& env) {
 
             return Value{central_diff_partial(args[2], point, ui, h, loc)};
         })
-        .func("hessian", 2)
-        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto point = to_vec(args[0], "Calculus.hessian", loc);
-            const auto n = point.size();
-
-            if (n == 0) {
-                return Value{std::make_shared<ArrayValue>()};
-            }
-
-            // The Hessian is an n×n matrix built with 4·n² callback evaluations;
-            // guard the element count so an untrusted point length cannot drive
-            // an unbounded allocation / quadratic blow-up (matches the matrix
-            // constructors in the LinearAlgebra module).
-            if (n > ResourceLimits::max_array_size / n) {
-                throw RuntimeError{
-                    error_msg("Calculus", "hessian",
-                              std::format("size {} exceeds maximum matrix element count ({})", n,
-                                          ResourceLimits::max_array_size)),
-                    loc, "reduce the number of point components"};
-            }
-
-            constexpr double h = k_default_second_deriv_step;
-
-            std::vector<std::vector<double>> result(n, std::vector<double>(n));
-
-            for (std::size_t i = 0; i < n; ++i) {
-                for (std::size_t j = 0; j < n; ++j) {
-                    auto pp = point;
-                    pp[i] += h;
-                    pp[j] += h;
-                    auto pm = point;
-                    pm[i] += h;
-                    pm[j] -= h;
-                    auto mp = point;
-                    mp[i] -= h;
-                    mp[j] += h;
-                    auto mm = point;
-                    mm[i] -= h;
-                    mm[j] -= h;
-
-                    const auto fpp = call_multi_fn(args[1], pp, loc);
-                    const auto fpm = call_multi_fn(args[1], pm, loc);
-                    const auto fmp = call_multi_fn(args[1], mp, loc);
-                    const auto fmm = call_multi_fn(args[1], mm, loc);
-
-                    result[i][j] = (fpp - fpm - fmp + fmm) / (4.0 * h * h);
-                }
-            }
-
-            return from_mat(result);
-        })
         .func("divergence", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto& point_arr = expect_array(args[0], "Calculus.divergence", loc);
@@ -625,40 +572,6 @@ static void register_calculus_analysis(const EnvPtr& env) {
                                              pd(1, 0) - pd(0, 1)};
 
             return make_success_value(from_vec(result));
-        })
-        .func("jacobian", 2)
-        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& point_arr = expect_array(args[0], "Calculus.jacobian", loc);
-            const auto& fields_arr = expect_array(args[1], "Calculus.jacobian", loc);
-
-            const auto rows = fields_arr->elements->size();
-            const auto cols = point_arr->elements->size();
-
-            if (rows == 0 || cols == 0) {
-                return make_failure_value("Calculus.jacobian: point and fields must be non-empty");
-            }
-
-            // Guard the element count so an untrusted size cannot drive an
-            // unbounded allocation (matches the hessian guard).
-            if (rows > ResourceLimits::max_array_size / cols) {
-                return make_failure_value(
-                    "Calculus.jacobian: matrix exceeds the maximum element count");
-            }
-
-            const auto point = to_vec(args[0], "Calculus.jacobian", loc);
-
-            constexpr double h = k_default_step_size;
-            std::vector<std::vector<double>> result(rows, std::vector<double>(cols));
-
-            for (std::size_t i = 0; i < rows; ++i) {
-                for (std::size_t j = 0; j < cols; ++j) {
-                    // Entry (i, j) = ∂fields[i]/∂x[j] at point.
-                    result[i][j] =
-                        central_diff_partial((*fields_arr->elements)[i], point, j, h, loc);
-                }
-            }
-
-            return make_success_value(from_mat(result));
         })
         .func("laplacian", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -730,40 +643,6 @@ static void register_calculus_analysis(const EnvPtr& env) {
                 a, b, k_default_integration_steps);
 
             return Value{result};
-        })
-        .func("taylor", 3)
-        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto center = args[0].to_numeric();
-
-            const auto n_terms = expect_integer(args[1], "Calculus.taylor", loc);
-
-            if (n_terms < k_taylor_min_terms || n_terms > k_taylor_max_terms) {
-                throw RuntimeError{
-                    error_msg("Calculus", "taylor",
-                              std::format("terms must be between {} and {}, got {}",
-                                          k_taylor_min_terms, k_taylor_max_terms, n_terms)),
-                    loc,
-                    std::format("pass an integer between {} and {} as the number of terms",
-                                k_taylor_min_terms, k_taylor_max_terms)};
-            }
-
-            auto coeffs = std::make_shared<ArrayValue>();
-
-            const auto h = k_default_second_deriv_step;
-
-            double factorial{1.0};
-
-            for (std::int64_t k{0}; k < n_terms; ++k) {
-                if (k > 0) {
-                    factorial *= static_cast<double>(k);
-                }
-
-                const auto dk = nth_derivative(args[2], center, k, h, loc);
-
-                coeffs->elements->emplace_back(dk / factorial);
-            }
-
-            return Value{std::move(coeffs)};
         });
 }
 

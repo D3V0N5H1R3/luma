@@ -165,49 +165,6 @@ function void test_color_from_cmyk_roundtrip() {
     assert(back.blue == 255, "blue round-trips blue 255")
 }
 
-# ─── Color.Stop / Color.Gradient (N06) ───
-
-@test
-function void test_color_stop_construct() {
-    Color.Color red = Result.unwrap(Color.rgb(255, 0, 0))
-    Color.Stop s = Color.stop(red, 0.25)
-
-    assert(s.color.red == 255, "the stop wraps the given colour")
-    assert(Math.approximately_equal(s.position, 0.25, 0.001))
-}
-
-@test
-function void test_color_gradient_to_css() {
-    Color.Color red = Result.unwrap(Color.rgb(255, 0, 0))
-    Color.Color blue = Result.unwrap(Color.rgb(0, 0, 255))
-    array<Color.Stop> stops = [Color.stop(red, 0.0), Color.stop(blue, 1.0)]
-    Color.Gradient g = Color.gradient(90.0, stops)
-
-    assert(Color.gradient_to_css(g) ==
-           "linear-gradient(90.0deg, rgb(255, 0, 0) 0.0%, rgb(0, 0, 255) 100.0%)")
-}
-
-@test
-function void test_color_gradient_at_interpolates() {
-    Color.Color red = Result.unwrap(Color.rgb(255, 0, 0))
-    Color.Color blue = Result.unwrap(Color.rgb(0, 0, 255))
-    Color.Gradient g = Color.gradient(0.0, [Color.stop(red, 0.0), Color.stop(blue, 1.0)])
-
-    # Halfway is (128, 0, 128).
-    Color.Color mid = Color.gradient_at(g, 0.5)
-    assert(mid.red == 128, "red channel interpolates to the midpoint")
-    assert(mid.green == 0)
-    assert(mid.blue == 128, "blue channel interpolates to the midpoint")
-
-    # Sampling at or past an endpoint clamps to that stop's colour.
-    Color.Color start = Color.gradient_at(g, 0.0)
-    assert(start.red == 255, "position 0 is the first stop")
-    Color.Color finish = Color.gradient_at(g, 1.0)
-    assert(finish.blue == 255, "position 1 is the last stop")
-}
-
-
-
 # ─── Analysis / accessibility helpers ───
 
 @test

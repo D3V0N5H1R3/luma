@@ -280,11 +280,6 @@ void register_math_ns(const EnvPtr& env) {
     // Largest finite and smallest positive normal double, mirroring max_/min_integer.
     env->define("Math.max_number", Value{std::numeric_limits<double>::max()}, false);
     env->define("Math.min_number", Value{std::numeric_limits<double>::min()}, false);
-    // Mathematical constants sourced from <numbers>, exactly as pi/e above.
-    env->define("Math.sqrt2", Value{std::numbers::sqrt2}, false);
-    env->define("Math.golden_ratio", Value{std::numbers::phi}, false);
-    env->define("Math.ln2", Value{std::numbers::ln2}, false);
-    env->define("Math.ln10", Value{std::numbers::ln10}, false);
 
     ModuleBuilder{"Math", env}
         .checked_unary_to_int("floor", [](double x) { return std::floor(x); })

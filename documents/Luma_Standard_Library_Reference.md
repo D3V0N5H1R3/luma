@@ -195,10 +195,8 @@ Numerical calculus operations. Functions accept callable values (native function
 | `Calculus.differentiate(fn)`                    | `(function(number) -> number)`                                                     | `function(number) -> number` | The derivative as a first-class function (`g(x) ≈ fn'(x)`)      |
 | `Calculus.divergence(point, fields)`            | `(array<number>, array<function(array<number>) -> number>)`                        | `number`                | Divergence of a vector field at `point`                              |
 | `Calculus.gradient(point, fn)`                  | `(array<number>, function(array<number>) -> number)`                               | `array<number>`         | Numerical partial derivatives at a point                             |
-| `Calculus.hessian(point, fn)`                   | `(array<number>, function(array<number>) -> number)`                               | `array<array<number>>`  | Hessian matrix of second partial derivatives at `point`              |
 | `Calculus.integrate(a, b, fn)`                  | `(number, number, function(number) -> number)`                                     | `number`                | Definite integral (Simpson's rule)                                   |
 | `Calculus.integrate_with(a, b, n, fn)`          | `(number, number, integer, function(number) -> number)`                            | `number`                | Definite integral with `n` subdivisions                              |
-| `Calculus.jacobian(point, fields)`              | `(array<number>, array<function(array<number>) -> number>)`                        | `result<array<array<number>>>` | Jacobian matrix; entry `(i, j)` = `∂fields[i]/∂x[j]` at `point` |
 | `Calculus.laplacian(point, fn)`                 | `(array<number>, function(array<number>) -> number)`                               | `number`                | Sum of unmixed second partials `∇²f` (trace of the Hessian)         |
 | `Calculus.limit(x, fn)`                         | `(number, function(number) -> number)`                                             | `result<number>`        | Numerical limit (Richardson extrapolation)                           |
 | `Calculus.maximize(a, b, fn)`                   | `(number, number, function(number) -> number)`                                     | `(number, number)`      | Maximise over `[a, b]`; returns `(x_max, f(x_max))`                  |
@@ -210,7 +208,6 @@ Numerical calculus operations. Functions accept callable values (native function
 | `Calculus.root(a, b, fn)`                       | `(number, number, function(number) -> number)`                                     | `result<number>`        | Root finding (bisection method)                                     |
 | `Calculus.second_derivative(x, fn)`             | `(number, function(number) -> number)`                                             | `number`                | Numerical second derivative at `x`                                   |
 | `Calculus.sum_series(start, n, fn)`             | `(integer, integer, function(number) -> number)`                                   | `number`                | Sum `fn(start)` + ... + `fn(start + n - 1)`                          |
-| `Calculus.taylor(centre, n, fn)`                | `(number, integer, function(number) -> number)`                                    | `array<number>`         | Taylor series coefficients (1–20 terms)                              |
 
 Callbacks that return `result<number>` (such as `Math.sine`) are automatically unwrapped.
 
@@ -2079,14 +2076,6 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.mat4_multiply(a, b)`            | `(Math.Matrix4, Math.Matrix4)`   | `Math.Matrix4`    | Matrix product `a · b`                                                           |
 | `Math.mat4_determinant(m)`            | `(Math.Matrix4)`                 | `number`          | Determinant of a 4×4 matrix                                                      |
 | `Math.mat4_transform(m, v)`           | `(Math.Matrix4, Math.Vector4)`   | `Math.Vector4`    | Apply the transform `m · v` to a 4D vector                                       |
-| `Math.mat4_transform_point(m, v)`     | `(Math.Matrix4, Math.Vector3)`   | `Math.Vector3`    | Transform a 3D point as homogeneous `(x, y, z, 1)`, dividing by the result `w`   |
-| `Math.mat4_perspective(fov_y, aspect, near, far)` | `(number, number, number, number)` | `Math.Matrix4` | Right-handed perspective projection (`fov_y` in radians)                |
-| `Math.mat4_look_at(eye, center, up)`  | `(Math.Vector3, Math.Vector3, Math.Vector3)` | `Math.Matrix4` | Right-handed look-at view matrix                                    |
-| `Math.quaternion(w, x, y, z)`         | `(number, number, number, number)` | `Math.Quaternion` | Construct a quaternion from its components                                     |
-| `Math.quat_from_axis_angle(axis, angle)` | `(Math.Vector3, number)`      | `Math.Quaternion` | Unit rotation quaternion about `axis` by `angle` radians (axis is normalised)   |
-| `Math.quat_multiply(a, b)`            | `(Math.Quaternion, Math.Quaternion)` | `Math.Quaternion` | Compose two rotations (Hamilton product `a · b`)                            |
-| `Math.quat_normalize(q)`              | `(Math.Quaternion)`              | `Math.Quaternion` | Unit quaternion (the zero quaternion is returned unchanged)                     |
-| `Math.quat_rotate_vector(q, v)`       | `(Math.Quaternion, Math.Vector3)` | `Math.Vector3`   | Rotate `v` by `q` (`q` is normalised first)                                     |
 | `Math.interval(min, max)`             | `(number, number)`               | `result<Math.Interval>` | Build a closed numeric interval; fail if `max < min`                      |
 | `Math.interval_contains(iv, x)`       | `(Math.Interval, number)`        | `boolean`         | Whether `x` lies within the closed interval                                     |
 | `Math.interval_clamp(iv, x)`          | `(Math.Interval, number)`        | `number`          | Clamp `x` into `[min, max]`                                                      |
@@ -2110,23 +2099,12 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 
 `Math.Matrix2 { m00, m01, m10, m11 }` and `Math.Matrix3 { m00 … m22 }` (all `number`, row-major) are the typed transform-matrix companions to the vectors, for the 2×2/3×3 linear transforms that `LinearAlgebra`'s general `array<array<number>>` expresses only through index arithmetic. Build them with `Math.matrix2` / `Math.matrix3` or the ready-made `Math.mat2_identity` / `Math.mat3_identity`; `mat*_multiply` composes transforms, `mat*_determinant` reports the scale factor, and `mat2_transform` / `mat3_transform` apply a matrix to a `Math.Vector2` / `Math.Vector3`. Data plus free functions, no operator overloading — the same philosophy as the vectors. `LinearAlgebra` remains for general N-dimensional work.
 
-`Math.Matrix4 { m00 … m33 }` (all `number`, row-major) is the 4×4 homogeneous-transform companion — the full model / view / projection matrix of 3D graphics that the smaller matrices cannot express. Build one with `Math.matrix4`, the ready-made `Math.mat4_identity`, or the two camera constructors: `Math.mat4_perspective(fov_y, aspect, near, far)` (a right-handed perspective projection, `fov_y` in radians, OpenGL clip-space convention) and `Math.mat4_look_at(eye, center, up)` (a right-handed view matrix, all three arguments `Math.Vector3`). `Math.mat4_multiply(a, b)` composes transforms (`a · b`, so the rightmost is applied first) and `Math.mat4_determinant(m)` reports the scale factor. Apply a matrix with either `Math.mat4_transform(m, v)` — the direct `m · v` on a `Math.Vector4` — or `Math.mat4_transform_point(m, v)`, which transforms a `Math.Vector3` point as `(x, y, z, 1.0)` and divides the result by its `w` so a perspective matrix yields the projected point. Degenerate inputs (a zero `w`, `near == far`, an `eye == center` look-at) fail safe — the divide is skipped or the identity is returned — rather than producing `NaN`. Data plus pipe-first free functions, the same philosophy as `Math.Matrix3`.
+`Math.Matrix4 { m00 … m33 }` (all `number`, row-major) is the 4×4 homogeneous-transform companion — the full model / view / projection matrix of 3D graphics that the smaller matrices cannot express. Build one with `Math.matrix4` or the ready-made `Math.mat4_identity`. `Math.mat4_multiply(a, b)` composes transforms (`a · b`, so the rightmost is applied first) and `Math.mat4_determinant(m)` reports the scale factor. Apply a matrix with `Math.mat4_transform(m, v)` — the direct `m · v` on a `Math.Vector4`. Data plus pipe-first free functions, the same philosophy as `Math.Matrix3`.
 
 ```luma
-# Project a world-space point through a camera.
-Math.Matrix4 view = Math.mat4_look_at(Math.vector3(0.0, 0.0, 5.0), Math.vector3(0.0, 0.0, 0.0), Math.vector3(0.0, 1.0, 0.0))
-Math.Matrix4 projection = Math.mat4_perspective(Math.pi / 2.0, 1.0, 1.0, 100.0)
-Math.Matrix4 view_projection = Math.mat4_multiply(projection, view)
-Math.Vector3 screen = Math.mat4_transform_point(view_projection, Math.vector3(0.0, 0.0, 0.0))
-```
-
-`Math.Quaternion { w, x, y, z }` (all `number`) is the gimbal-lock-free 3D-rotation companion to the vectors and matrices, for composing and applying rotations without hand-building rotation matrices. `Math.quaternion(w, x, y, z)` builds one from raw components, but the everyday constructor is `Math.quat_from_axis_angle(axis, angle)`, which produces a unit rotation of `angle` radians about `axis` (a `Math.Vector3`, normalised for you). `Math.quat_multiply(a, b)` composes two rotations (the Hamilton product — order matters), `Math.quat_normalize(q)` renormalises a drifted quaternion (a zero quaternion is returned unchanged, mirroring `vec3_normalize`), and `Math.quat_rotate_vector(q, v)` rotates a `Math.Vector3` by `q` (normalising `q` first, so a slightly denormalised rotation still behaves). Data plus pipe-first free functions, the same philosophy as `Math.Vector3` / `Math.Matrix3`.
-
-```luma
-# Rotate the unit-x vector 90° about the Z axis → the unit-y vector.
-Math.Quaternion spin = Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 1.0), Math.pi / 2.0)
-Math.Vector3 rotated = Math.quat_rotate_vector(spin, Math.vector3(1.0, 0.0, 0.0))
-assert(Math.approximately_equal(rotated.y, 1.0, 0.001))
+# Scale a homogeneous vector through a diagonal transform.
+Math.Matrix4 scale = Math.matrix4(2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0, 1.0)
+Math.Vector4 scaled = Math.mat4_transform(scale, Math.vector4(1.0, 1.0, 1.0, 1.0))
 ```
 
 `Math.Interval { min: number, max: number }` is a closed numeric range — the general-purpose sibling of `DateTime.Interval`. `Math.interval(min, max)` is a validating constructor that fails when `max < min`, so an `Interval` is always well-formed. It replaces hand-rolled `x >= lo && x <= hi` with the teachable `Math.interval_contains` (closed, so both endpoints count), and adds `Math.interval_clamp` (bound `x` into the range), `Math.interval_length` (`max - min`), and `Math.intervals_overlap` (closed, so touching endpoints count).
@@ -2195,10 +2173,6 @@ case Sign.Positive { "rising" }
 | `Math.min_integer` | `integer` | −9223372036854775808 (−2⁶³) |
 | `Math.max_number` | `number` | 1.7976931348623157e308 (largest finite `number`) |
 | `Math.min_number` | `number` | 2.2250738585072014e-308 (smallest positive normal `number`; the most-negative `number` is `-Math.max_number`) |
-| `Math.sqrt2`    | `number`  | 1.4142135623730951 (√2)    |
-| `Math.golden_ratio` | `number` | 1.618033988749895 (φ) |
-| `Math.ln2`      | `number`  | 0.6931471805599453 (natural log of 2) |
-| `Math.ln10`     | `number`  | 2.302585092994046 (natural log of 10) |
 
 ## 23 — Optional
 
@@ -2789,12 +2763,11 @@ Cross-platform TCP and UDP networking.
 | `Socket.set_timeout(s, ms)`            | `(socket, integer)`                 | `result<boolean>`          | Set send/recv timeout (does not affect connect)              |
 | `Socket.udp_bind(s, host, port)`       | `(socket, string, integer)`         | `result<boolean>`          | Bind UDP socket to address                                   |
 | `Socket.udp_create()`                  | `()`                                | `result<socket>`           | Create UDP socket                                            |
-| `Socket.udp_receive(s, max)`           | `(socket, integer)`                 | `result<Socket.UdpPacket>` | Receive UDP packet; record has `data`, `host`, `port` fields |
 | `Socket.udp_send(s, data, host, port)` | `(socket, string, string, integer)` | `result<integer>`          | Send UDP datagram                                            |
 
 > **Resource limit** — A program may hold only a bounded number of open sockets at the same time (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_OPEN_SOCKETS`). Attempting to create more returns `failure("socket limit reached — too many open sockets")`. Close sockets that are no longer needed to stay within the limit.
 
-`Socket.Address` record fields: `host: string`, `port: integer`. Returned by `Socket.local_address_parts` and `Socket.remote_address_parts` so the caller reads the host and port directly instead of splitting a `"host:port"` string (which is fragile for IPv6). Mirrors the `host`/`port` fields of `Socket.UdpPacket`.
+`Socket.Address` record fields: `host: string`, `port: integer`. Returned by `Socket.local_address_parts` and `Socket.remote_address_parts` so the caller reads the host and port directly instead of splitting a `"host:port"` string (which is fragile for IPv6).
 
 `Socket.IpAddress` is a choice type with two payload-carrying variants — `Socket.IpAddress.V4(address: string)` and `Socket.IpAddress.V6(address: string)` — so the IPv4/IPv6 distinction is `match`-exhaustive and autocompleted, unlike the unvalidated `host` string in `Socket.Address`. `Socket.parse_ip(text)` validates a literal purely in memory (no DNS, no OS call) and returns `failure` on malformed input; IPv4 is canonicalised (leading zeros stripped) and IPv6 lowercased. `Socket.ip_to_string(ip)` renders either variant back to its canonical text.
 
@@ -3345,9 +3318,6 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
 | `Color.from_hsv(h)`             | `(Color.Hsv)`                               | `Color.Color`        | Convert an HSV (HSB) colour to RGBA (alpha 1.0)                          |
 | `Color.from_name(name)`         | `(Color.Name)`                              | `Color.Color`        | Build an opaque colour from a curated named colour (`Color.Name`)       |
-| `Color.gradient(angle, stops)`  | `(number, array<Color.Stop>)`               | `Color.Gradient`     | Build a multi-stop linear gradient at `angle` degrees                   |
-| `Color.gradient_at(g, position)` | `(Color.Gradient, number)`                 | `Color.Color`        | Sample the interpolated colour at `position` (0–1, clamped)             |
-| `Color.gradient_to_css(g)`      | `(Color.Gradient)`                          | `string`             | Serialise to a CSS `linear-gradient(...)` string                        |
 | `Color.grayscale(c)`            | `(Color.Color)`                             | `Color.Color`        | Fully desaturate (saturation 0), preserving lightness and alpha         |
 | `Color.invert(c)`               | `(Color.Color)`                             | `Color.Color`        | Per-channel inversion (`255 − channel`); alpha unchanged                |
 | `Color.is_dark(c)`              | `(Color.Color)`                             | `boolean`            | `true` when WCAG relative luminance ≤ 0.5                                |
@@ -3360,7 +3330,6 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.rgba(r, g, b, a)`        | `(integer, integer, integer, number)`       | `result<Color.Color>` | Construct with alpha; fail if a channel is out of range or `a` ∉ [0, 1] |
 | `Color.rotate_hue(c, degrees)`  | `(Color.Color, number)`                     | `Color.Color`        | Rotate the hue by `degrees`, preserving saturation, lightness, and alpha |
 | `Color.saturate(c, amount)`     | `(Color.Color, number)`                     | `Color.Color`        | Increase HSL saturation by `amount` (clamped to [0, 1])                  |
-| `Color.stop(color, position)`   | `(Color.Color, number)`                     | `Color.Stop`         | Build a gradient colour stop at `position` (0–1, clamped)               |
 | `Color.to_cmyk(c)`              | `(Color.Color)`                             | `Color.Cmyk`         | Convert an RGBA colour to CMYK (alpha dropped)                           |
 | `Color.to_css(c)`               | `(Color.Color)`                             | `string`             | CSS string: `rgb(r, g, b)`, or `rgba(...)` when not fully opaque         |
 | `Color.to_hex(c)`               | `(Color.Color)`                             | `string`             | `#rrggbb`, or `#rrggbbaa` when the colour is not fully opaque            |
@@ -3380,16 +3349,6 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 **`Color.Cmyk`** is the cyan/magenta/yellow/**key** (black) sibling of `Color.Color` — `cyan: number`, `magenta: number`, `yellow: number`, and `key: number` (all 0–1 ratios). It is the subtractive model used by print production, so `Color.to_cmyk` / `Color.from_cmyk` are the natural pair for previewing how an on-screen colour will separate to ink. Like HSL/HSV it drops alpha (`from_cmyk` produces an opaque colour), and it serialises through the same RGBA `to_css` path.
 
 **`Color.Name`** is a curated palette of common named colours as an exhaustive choice — `Black`, `White`, `Red`, `Green`, `Lime`, `Blue`, `Yellow`, `Cyan`, `Magenta`, `Gray`, `Silver`, `Orange`, `Purple`, `Pink`, `Brown` (a subset of the CSS named colours, not all 140). `Color.from_name(name)` maps a variant to its opaque `Color.Color`, giving beginners a typo-proof, autocompleted alternative to remembering hex strings — a misspelled colour is a compile error, not a runtime surprise. The values are CSS-canonical, so `Color.Name.Green` is `0,128,0` and `Color.Name.Lime` is `0,255,0` (matching the web platform). It parallels the exhaustive `Terminal.Color` palette; for any colour outside the curated set, `Color.rgb` / `Color.from_hex` remain.
-
-**`Color.Stop`** (`color: Color.Color`, `position: number`) and **`Color.Gradient`** (`angle: number`, `stops: array<Color.Stop>`) add a multi-stop linear gradient built from the existing `Color.Color` record. `Color.stop(color, position)` pairs a colour with its 0–1 position along the gradient axis (position clamped to [0, 1]), and `Color.gradient(angle, stops)` assembles them at an `angle` in degrees. `Color.gradient_to_css(g)` serialises to a CSS `linear-gradient(...)` string the GraphicalUi web-view already draws — so a gradient background, chart fill, or header can be _computed_ instead of hand-written — and `Color.gradient_at(g, position)` samples the interpolated colour at any 0–1 position (clamping to the first/last stop outside their range, and linearly interpolating each channel and alpha between the two surrounding stops). Pure data plus free functions, reusing `Color.Color` and its CSS-serialisation convention.
-
-```luma
-Color.Color red = Result.unwrap(Color.rgb(255, 0, 0))
-Color.Color blue = Result.unwrap(Color.rgb(0, 0, 255))
-Color.Gradient g = Color.gradient(90.0, [Color.stop(red, 0.0), Color.stop(blue, 1.0)])
-string css = Color.gradient_to_css(g)   # "linear-gradient(90.0deg, rgb(255, 0, 0) 0.0%, rgb(0, 0, 255) 100.0%)"
-Color.Color mid = Color.gradient_at(g, 0.5)   # rgb(128, 0, 128)
-```
 
 ```luma
 Color.Color base = Result.unwrap(Color.from_hex("#0172ad"))

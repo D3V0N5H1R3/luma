@@ -47,11 +47,9 @@ LUMA_TEST(calculus_module) {
     ASSERT_TRUE(env->has("Calculus.limit"));
     ASSERT_TRUE(env->has("Calculus.sum_series"));
     ASSERT_TRUE(env->has("Calculus.partial_derivative"));
-    ASSERT_TRUE(env->has("Calculus.hessian"));
     ASSERT_TRUE(env->has("Calculus.divergence"));
     ASSERT_TRUE(env->has("Calculus.curl"));
     ASSERT_TRUE(env->has("Calculus.convolution"));
-    ASSERT_TRUE(env->has("Calculus.taylor"));
 }
 
 LUMA_TEST(calculus_root) {
@@ -107,23 +105,6 @@ LUMA_TEST(calculus_partial_derivative_y) {
 
     ASSERT_TRUE(v.is_number());
     ASSERT_TRUE(v.as_number() > 7.9 && v.as_number() < 8.1);
-}
-
-LUMA_TEST(calculus_hessian) {
-    // f(x,y) = x^2 + 3*y^2 → H = [[2, 0], [0, 6]]
-    const auto v = eval("Calculus.hessian([1.0, 1.0], "
-                        "(array<number> p) -> p[0] * p[0] + 3.0 * p[1] * p[1])");
-
-    ASSERT_TRUE(v.is_array());
-    ASSERT_EQ(v.as_array()->elements->size(), 2U);
-
-    // H[0][0] ≈ 2
-    const auto& row0 = (*v.as_array()->elements)[0].as_array();
-    ASSERT_TRUE((*row0->elements)[0].as_number() > 1.9 && (*row0->elements)[0].as_number() < 2.1);
-
-    // H[1][1] ≈ 6
-    const auto& row1 = (*v.as_array()->elements)[1].as_array();
-    ASSERT_TRUE((*row1->elements)[1].as_number() > 5.9 && (*row1->elements)[1].as_number() < 6.1);
 }
 
 LUMA_TEST(calculus_divergence) {
@@ -248,18 +229,6 @@ LUMA_TEST(calculus_maximize) {
     ASSERT_TRUE(fx > -0.01 && fx < 0.01);
 }
 
-LUMA_TEST(calculus_taylor) {
-    // Taylor coefficients of x^2 at 0: c0 ≈ 0, c1 ≈ 0, c2 ≈ 1.
-    const auto v = eval("Calculus.taylor(0.0, 3, (number x) -> x * x)");
-
-    ASSERT_TRUE(v.is_array());
-    ASSERT_EQ(v.as_array()->elements->size(), 3U);
-
-    const auto c2 = (*v.as_array()->elements)[2].as_number();
-
-    ASSERT_TRUE(c2 > 0.9 && c2 < 1.1);
-}
-
 LUMA_TEST(calculus_root_no_sign_change) {
     // f(x) = x^2 + 1 is positive on [2, 3]: no bracketed root → failure result.
     ASSERT_EVAL_FAILURE("Calculus.root(2.0, 3.0, (number x) -> x * x + 1.0)");
@@ -327,25 +296,9 @@ LUMA_TEST(calculus_convolution_invalid_bounds) {
                        "1.0, 1.0, 0.0)"));
 }
 
-LUMA_TEST(calculus_taylor_out_of_range) {
-    ASSERT_THROWS(eval("Calculus.taylor(0.0, 0, (number x) -> x * x)"));
-    ASSERT_THROWS(eval("Calculus.taylor(0.0, 21, (number x) -> x * x)"));
-}
-
 LUMA_TEST(calculus_callback_failure) {
     // A callback that yields a failure result must surface as a runtime error.
     ASSERT_THROWS(eval("Calculus.derivative(1.0, (number _x) -> failure(\"boom\"))"));
-}
-
-LUMA_TEST(calculus_hessian_caps_matrix_size) {
-    // Regression: hessian allocated an n×n matrix and ran 4·n² callback calls
-    // from the untrusted point length with no resource guard.  Lower the array
-    // size limit so a small point trips the cap before the quadratic work.
-    const LimitGuard guard{ResourceLimits::max_array_size, static_cast<std::size_t>(9)};
-
-    // A 4-component point needs a 4×4 = 16-element matrix, exceeding the cap.
-    ASSERT_THROWS(eval("Calculus.hessian([1.0, 2.0, 3.0, 4.0], "
-                       "(array<number> p) -> p[0] * p[0])"));
 }
 
 int main() {

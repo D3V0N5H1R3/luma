@@ -44,7 +44,6 @@ static void test_socket_module() {
     ASSERT_TRUE(env->has("Socket.udp_create"));
     ASSERT_TRUE(env->has("Socket.udp_bind"));
     ASSERT_TRUE(env->has("Socket.udp_send"));
-    ASSERT_TRUE(env->has("Socket.udp_receive"));
 }
 
 static void test_socket_type_of() {
@@ -189,34 +188,6 @@ static void test_socket_close_is_idempotent() {
     ASSERT_FALSE(v.as_bool());
 }
 
-static void test_socket_udp_send_receive_roundtrip() {
-    // Two bound UDP sockets exchange a datagram over loopback; the payload
-    // arrives intact in the returned UdpPacket record. Wrapped in a function so
-    // that `pkt` is a local — field access on a top-level REPL global would be
-    // miscompiled as a qualified module lookup.
-    const auto v = eval(
-        "function string udp_echo() {\n"
-        "    socket sender = Result.unwrap(Socket.udp_create())\n"
-        "    result<boolean> _sb = Socket.udp_bind(sender, \"127.0.0.1\", 0)\n"
-        "    socket receiver = Result.unwrap(Socket.udp_create())\n"
-        "    result<boolean> _rb = Socket.udp_bind(receiver, \"127.0.0.1\", 0)\n"
-        "    array<string> parts = String.split(Result.unwrap(Socket.local_address(receiver)), "
-        "\":\")\n"
-        "    integer port = Result.unwrap(Converter.to_integer(parts[1]))\n"
-        "    result<boolean> _t = Socket.set_timeout(receiver, 2000)\n"
-        "    result<integer> _s = Socket.udp_send(sender, \"ping\", parts[0], port)\n"
-        "    Socket.UdpPacket pkt = Result.unwrap(Socket.udp_receive(receiver, 1024))\n"
-        "    string data = pkt.data\n"
-        "    Socket.close(sender)\n"
-        "    Socket.close(receiver)\n"
-        "    return data\n"
-        "}\n"
-        "udp_echo()\n");
-
-    ASSERT_TRUE(v.is_string());
-    ASSERT_EQ(v.as_string(), "ping");
-}
-
 static void test_socket_tcp_send_receive_roundtrip() {
     // Single-threaded TCP loopback exchange. connect() completes the handshake
     // in-kernel and queues the peer, so accept() returns it without a second
@@ -273,7 +244,6 @@ static void test_socket_operations_reject_non_socket() {
     ASSERT_THROWS(eval("Socket.remote_address(42)"));
     ASSERT_THROWS(eval("Socket.udp_bind(42, \"127.0.0.1\", 0)"));
     ASSERT_THROWS(eval("Socket.udp_send(42, \"d\", \"127.0.0.1\", 80)"));
-    ASSERT_THROWS(eval("Socket.udp_receive(42, 10)"));
 }
 
 static void test_socket_connect_rejects_non_string_host() {
@@ -310,11 +280,6 @@ static void test_socket_receive_on_closed_fails() {
 static void test_socket_receive_rejects_non_positive_max_bytes() {
     ASSERT_EVAL_FAILURE("socket s = Result.unwrap(Socket.udp_create())\n"
                         "Socket.receive(s, 0)\n");
-}
-
-static void test_socket_udp_receive_rejects_non_positive_max_bytes() {
-    ASSERT_EVAL_FAILURE("socket s = Result.unwrap(Socket.udp_create())\n"
-                        "Socket.udp_receive(s, -1)\n");
 }
 
 static void test_socket_set_timeout_rejects_negative() {
@@ -627,8 +592,6 @@ int main() {
     RUN(test_socket_udp_bind);
     RUN(test_socket_udp_bind_rejects_invalid_port);
     RUN(test_socket_udp_create);
-    RUN(test_socket_udp_receive_rejects_non_positive_max_bytes);
-    RUN(test_socket_udp_send_receive_roundtrip);
     RUN(test_socket_udp_send_rejects_invalid_port);
     RUN(test_socket_udp_send_rejects_non_string_data);
 

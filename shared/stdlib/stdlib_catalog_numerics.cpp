@@ -120,16 +120,11 @@ void register_calculus_functions(std::vector<FunctionSpec>& specs, const ModuleB
                  R::number_type(), {p.array_number, p.array_any}),
             m.fn("gradient", 2, "(point: array<number>, f: func(array<number>) -> number)",
                  R::array(R::number_type()), {p.array_number, p.func}),
-            m.fn("hessian", 2, "(point: array<number>, f: func(array<number>) -> number)",
-                 R::array(R::array(R::number_type())), {p.array_number, p.func}),
             m.fn("integrate", 3, "(a: number, b: number, f: func(number) -> number)",
                  R::number_type(), {p.number, p.number, p.func}),
             m.fn("integrate_with", 4,
                  "(a: number, b: number, n: integer, f: func(number) -> number)", R::number_type(),
                  {p.number, p.number, p.integer, p.func}),
-            m.fn("jacobian", 2,
-                 "(point: array<number>, fields: array<func(array<number>) -> number>)",
-                 R::result(R::array(R::array(R::number_type()))), {p.array_number, p.array_any}),
             m.fn("laplacian", 2, "(point: array<number>, f: func(array<number>) -> number)",
                  R::number_type(), {p.array_number, p.func}),
             m.fn("limit", 2, "(x: number, f: func(number) -> number)", R::result_number(),
@@ -153,8 +148,6 @@ void register_calculus_functions(std::vector<FunctionSpec>& specs, const ModuleB
                  {p.number, p.func}),
             m.fn("sum_series", 3, "(start: integer, end: integer, f: func(integer) -> number)",
                  R::number_type(), {p.integer, p.integer, p.func}),
-            m.fn("taylor", 3, "(center: number, degree: integer, f: func(number) -> number)",
-                 R::array(R::number_type()), {p.number, p.integer, p.func}),
         });
 }
 
