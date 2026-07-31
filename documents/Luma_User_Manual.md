@@ -1773,6 +1773,33 @@ match day_of_week {
 
 Integer match arms always require an `else` arm.
 
+### Matching Integer Ranges
+
+An arm can match a whole **integer range** using the same range syntax as loops and range membership. `lo..=hi` is inclusive of both bounds; `lo..hi` is half-open (excludes the upper bound):
+
+```luma
+string grade = match score {
+    case 90..=100 { "A" }
+    case 80..=89  { "B" }
+    case 70..=79  { "C" }
+    else          { "F" }
+}
+```
+
+A range arm matches when the subject satisfies the same bounds test as `subject in lo..hi` — that is, `subject >= lo && (inclusive ? subject <= hi : subject < hi)`. The bounds must be integer literals, and the match subject must be an `integer`.
+
+Range arms combine with `|` alternatives, and can be mixed with plain integer arms:
+
+```luma
+match code {
+    case 0..=9 | 20..=29 { "special" }
+    case 10 | 11..=19    { "teens-ish" }
+    else                 { "other" }
+}
+```
+
+Like plain integer arms, range arms are open-ended, so a match using them always requires an `else` arm.
+
 ### Matching Booleans
 
 ```luma
@@ -1840,7 +1867,7 @@ match c {
 }
 ```
 
-Multiple patterns work with booleans, choice variants, string literals, integer literals, comparison operators, and `none`:
+Multiple patterns work with booleans, choice variants, string literals, integer literals, integer ranges, comparison operators, and `none`:
 
 ```luma
 match command {
@@ -1859,6 +1886,12 @@ match score {
     case == 0 | == 1 { print("very low") }
     case >= 90       { print("high") }
     else             { print("other") }
+}
+
+match score {
+    case 0..=59  | 60..=69 { print("failing-ish") }
+    case 70..=100          { print("passing") }
+    else                   { print("out of range") }
 }
 ```
 

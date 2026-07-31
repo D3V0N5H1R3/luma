@@ -158,6 +158,45 @@ static void test_match_integer_literal_with_else() {
                        "}\n"));
 }
 
+static void test_match_range_needs_else() {
+    ASSERT_TRUE(fails("function string foo(integer x) {\n"
+                      "    return match x {\n"
+                      "        case 0..=9   { \"low\" }\n"
+                      "        case 10..=19 { \"mid\" }\n"
+                      "    }\n"
+                      "}\n"));
+}
+
+static void test_match_range_with_else() {
+    ASSERT_TRUE(passes("function string foo(integer x) {\n"
+                       "    return match x {\n"
+                       "        case 0..=9   { \"low\" }\n"
+                       "        case 10..20  { \"mid\" }\n"
+                       "        else         { \"high\" }\n"
+                       "    }\n"
+                       "}\n"));
+}
+
+static void test_match_range_alternatives_pass() {
+    ASSERT_TRUE(passes("function string foo(integer x) {\n"
+                       "    return match x {\n"
+                       "        case 0..=9 | 20..=29 { \"a\" }\n"
+                       "        else                 { \"b\" }\n"
+                       "    }\n"
+                       "}\n"));
+}
+
+static void test_match_range_non_integer_subject_fails() {
+    // Range-case subject validation runs on statement-form matches (mirroring
+    // integer-case validation), so use a statement-form match here.
+    ASSERT_TRUE(fails("function void foo(string s) {\n"
+                      "    match s {\n"
+                      "        case 0..=9 { }\n"
+                      "        else       { }\n"
+                      "    }\n"
+                      "}\n"));
+}
+
 static void test_match_comparison_needs_else() {
     ASSERT_TRUE(fails("function string foo(integer x) {\n"
                       "    return match x {\n"
@@ -767,6 +806,10 @@ int main() {
     RUN(test_match_boolean_non_exhaustive);
     RUN(test_match_integer_literal_needs_else);
     RUN(test_match_integer_literal_with_else);
+    RUN(test_match_range_needs_else);
+    RUN(test_match_range_with_else);
+    RUN(test_match_range_alternatives_pass);
+    RUN(test_match_range_non_integer_subject_fails);
     RUN(test_match_comparison_needs_else);
     RUN(test_match_comparison_with_else);
     RUN(test_match_enum_exhaustive);

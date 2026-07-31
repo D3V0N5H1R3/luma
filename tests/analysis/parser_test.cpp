@@ -717,6 +717,47 @@ static void test_match_integer_literal() {
     ASSERT_EQ(match_stmt.arms[2].kind(), MatchArm::Kind::Else);
 }
 
+static void test_match_range_pattern() {
+    const auto program = parse("integer x = 1\n"
+                               "match x {\n"
+                               "    case 0..=9 { }\n"
+                               "    case 10..20 { }\n"
+                               "    case 30..=39 | 40..=49 { }\n"
+                               "    else { }\n"
+                               "}\n");
+
+    ASSERT_EQ(program.statements.size(), 2U);
+    ASSERT_EQ(program.statements[1]->kind, StatementKind::Match);
+
+    const auto& match_stmt = static_cast<const MatchStatement&>(*program.statements[1]);
+
+    ASSERT_EQ(match_stmt.arms.size(), 4U);
+
+    // case 0..=9 — inclusive
+    ASSERT_EQ(match_stmt.arms[0].kind(), MatchArm::Kind::IntegerRangeCase);
+    ASSERT_EQ(match_stmt.arms[0].range_lo(), 0);
+    ASSERT_EQ(match_stmt.arms[0].range_hi(), 9);
+    ASSERT_TRUE(match_stmt.arms[0].range_inclusive());
+
+    // case 10..20 — half-open
+    ASSERT_EQ(match_stmt.arms[1].kind(), MatchArm::Kind::IntegerRangeCase);
+    ASSERT_EQ(match_stmt.arms[1].range_lo(), 10);
+    ASSERT_EQ(match_stmt.arms[1].range_hi(), 20);
+    ASSERT_FALSE(match_stmt.arms[1].range_inclusive());
+
+    // case 30..=39 | 40..=49 — range in both primary and alternative
+    ASSERT_EQ(match_stmt.arms[2].kind(), MatchArm::Kind::IntegerRangeCase);
+    ASSERT_EQ(match_stmt.arms[2].range_lo(), 30);
+    ASSERT_EQ(match_stmt.arms[2].range_hi(), 39);
+    ASSERT_EQ(match_stmt.arms[2].alternatives.size(), 1U);
+    ASSERT_EQ(match_stmt.arms[2].alternatives[0].kind(), MatchArm::Kind::IntegerRangeCase);
+    ASSERT_EQ(match_stmt.arms[2].alternatives[0].range_lo(), 40);
+    ASSERT_EQ(match_stmt.arms[2].alternatives[0].range_hi(), 49);
+    ASSERT_TRUE(match_stmt.arms[2].alternatives[0].range_inclusive());
+
+    ASSERT_EQ(match_stmt.arms[3].kind(), MatchArm::Kind::Else);
+}
+
 static void test_match_multi_pattern() {
     const auto program = parse("choice Color { Red, Green, Blue }\n"
                                "@main\n"
@@ -1770,6 +1811,7 @@ int main() {
     RUN(test_positional_argument_after_named_error);
     RUN(test_bounded_generic_declaration);
     RUN(test_match_integer_literal);
+    RUN(test_match_range_pattern);
     RUN(test_match_multi_pattern);
     RUN(test_match_guard_parsed);
     RUN(test_match_guard_on_some_binding);

@@ -12,3 +12,14 @@ function boolean check(integer score, integer low, integer high) {
     boolean exclusive = score in low..high
     return inclusive && exclusive
 }
+
+# Range patterns as match arms (integer/range arms still require an else).
+function string bucket(integer x) {
+    return match x {
+    case 0..=9 { "low" }
+    case 10..20 { "mid" }
+    case 30..=39 | 40..=49 { "alt" }
+    else { "high" }
+    }
+}
+

@@ -335,6 +335,86 @@ function void test_match_multi_pattern_integer_else() {
     assert(label == "other")
 }
 
+# ─── Integer range match arms ────────────────────────────
+
+@test
+function void test_match_range_inclusive_arm() {
+    integer score = 85
+
+    string grade = match score {
+    case 90..=100 { "A" }
+    case 80..=89  { "B" }
+    case 70..=79  { "C" }
+    else          { "F" }
+    }
+
+    assert(grade == "B")
+}
+
+@test
+function void test_match_range_inclusive_boundaries() {
+    string low = match 0 {
+    case 0..=9 { "single" }
+    else       { "other" }
+    }
+    assert(low == "single", "lower bound is inclusive")
+
+    string high = match 9 {
+    case 0..=9 { "single" }
+    else       { "other" }
+    }
+    assert(high == "single", "upper bound is inclusive for ..=")
+}
+
+@test
+function void test_match_range_half_open_excludes_upper() {
+    string at_upper = match 10 {
+    case 0..10 { "in" }
+    else       { "out" }
+    }
+    assert(at_upper == "out", "half-open range excludes its upper bound")
+
+    string below_upper = match 9 {
+    case 0..10 { "in" }
+    else       { "out" }
+    }
+    assert(below_upper == "in")
+}
+
+@test
+function void test_match_range_alternatives() {
+    integer code = 25
+
+    string category = match code {
+    case 0..=9 | 20..=29 { "special" }
+    case 10..=19         { "teens" }
+    else                 { "other" }
+    }
+
+    assert(category == "special")
+}
+
+@test
+function void test_match_range_mixed_with_literal_alternative() {
+    string label = match 5 {
+    case 0 | 1..=9 { "small" }
+    else           { "big" }
+    }
+
+    assert(label == "small", "range combines with a plain integer alternative")
+}
+
+@test
+function void test_match_range_falls_through_to_else() {
+    string label = match 100 {
+    case 0..=9   { "low" }
+    case 10..=99 { "mid" }
+    else         { "high" }
+    }
+
+    assert(label == "high")
+}
+
 # ═══════════════════════════════════════════════════════════
 # Negative / edge-case tests — match expression
 # ═══════════════════════════════════════════════════════════

@@ -28,6 +28,18 @@ struct PatternVisitor {
         api.emit(Op::Equal, loc);
     }
 
+    void operator()(const IntegerRangePattern& p) const {
+        // Build the range and reuse the `in` containment test, so a range arm
+        // shares the exact runtime bounds check as `subject in lo..hi`:
+        //   subject >= lo && (inclusive ? subject <= hi : subject < hi).
+        // The duplicated subject is already on the stack (the Contains element);
+        // pushing the range above it makes it the Contains container.
+        api.emit_constant(Value{p.lo}, loc);
+        api.emit_constant(Value{p.hi}, loc);
+        api.emit(p.inclusive ? Op::MakeRangeInc : Op::MakeRange, loc);
+        api.emit(Op::Contains, loc);
+    }
+
     void operator()(const StringPattern& p) const {
         api.emit_constant(Value{p.string_value}, loc);
         api.emit(Op::Equal, loc);
@@ -94,6 +106,9 @@ PatternTestArgs build_pattern_args_impl(const PatternSource& source, SourceLocat
                 return ComparisonPattern{source.comparison_op(), source.comparison_value().get()};
             case MatchArm::Kind::IntegerCase:
                 return IntegerPattern{source.integer_value()};
+            case MatchArm::Kind::IntegerRangeCase:
+                return IntegerRangePattern{source.range_lo(), source.range_hi(),
+                                           source.range_inclusive()};
             case MatchArm::Kind::StringCase:
                 return StringPattern{source.string_value()};
             case MatchArm::Kind::BooleanCase:

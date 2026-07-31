@@ -154,7 +154,8 @@ void MatchExhaustivenessChecker::check(const std::vector<MatchArm>& arms,
         for (const auto& arm : arms) {
             if (arm.kind() == MatchArm::Kind::Comparison ||
                 arm.kind() == MatchArm::Kind::StringCase ||
-                arm.kind() == MatchArm::Kind::IntegerCase) {
+                arm.kind() == MatchArm::Kind::IntegerCase ||
+                arm.kind() == MatchArm::Kind::IntegerRangeCase) {
                 has_comparison = true;
 
                 // A != arm acts as a catch-all, but only when it is unguarded —

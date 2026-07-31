@@ -576,10 +576,27 @@ void Parser::parse_pattern_literal(MatchPattern::PatternData& pattern) {
 
         advance();
     } else if (check(TokenType::IntegerLiteral)) {
+        const auto location = current().location;
         // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the lexer always sets the payload.
-        pattern = MatchArm::IntegerPatternData{std::get<std::int64_t>(*current().literal)};
+        const auto lo = std::get<std::int64_t>(*current().literal);
 
         advance();
+
+        // A range pattern: `case lo..hi` (half-open) or `case lo..=hi` (closed).
+        if (check(TokenType::DotDot) || check(TokenType::DotDotEquals)) {
+            const bool inclusive = current().type == TokenType::DotDotEquals;
+
+            advance();
+
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the lexer always sets the payload.
+            const auto hi =
+                std::get<std::int64_t>(expect(TokenType::IntegerLiteral).literal.value());
+
+            pattern = MatchArm::RangePatternData{
+                .lo = lo, .hi = hi, .inclusive = inclusive, .location = location};
+        } else {
+            pattern = MatchArm::IntegerPatternData{lo};
+        }
     } else if (check(TokenType::NoneLiteral)) {
         pattern = MatchArm::NonePatternData{};
 
