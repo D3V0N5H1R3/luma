@@ -193,6 +193,7 @@ set(LUMA_RUNTIME_TESTS
     stdlib_test_array
     stdlib_test_dictionary
     stdlib_test_math
+    stdlib_test_statistics
     stdlib_test_calculus
     stdlib_test_linearalgebra
     stdlib_test_decimal
@@ -500,6 +501,7 @@ set(LUMA_FEATURE_TESTS_STDLIB
     socket_functions.luma
     solaris_functions.luma
     stack_functions.luma
+    statistics_functions.luma
     string_functions.luma
     task_functions.luma
     terminal_functions.luma

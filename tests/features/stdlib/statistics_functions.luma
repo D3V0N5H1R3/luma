@@ -1,0 +1,182 @@
+# ═══════════════════════════════════════════════════════════
+# Luma v1.0 — Feature Tests — Statistics Functions
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+#
+# Descriptive and inferential statistics over numeric arrays,
+# extracted from the Math module into the Statistics module.
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_statistics_mean() {
+    assert(Math.approximately_equal(Result.unwrap(Statistics.mean([1, 2, 3, 4, 5])), 3.0))
+    assert(Result.is_failure(Statistics.mean([])))
+}
+
+@test
+function void test_statistics_median() {
+    assert(Math.approximately_equal(Result.unwrap(Statistics.median([1, 2, 3, 4, 5])), 3.0))
+    assert(Math.approximately_equal(Result.unwrap(Statistics.median([1, 2, 3, 4])), 2.5))
+    assert(Result.is_failure(Statistics.median([])))
+
+    # A NaN element must not trigger undefined behaviour in the internal sort.
+    # NaN is ordered last, so the statistic stays deterministic: sorting
+    # [nan, 1, 2, 3] yields [1, 2, 3, nan] and the even-length median is the
+    # mean of the two middle values, 2 and 3.
+    number nan = Math.infinity - Math.infinity
+    assert(Math.approximately_equal(Result.unwrap(Statistics.median([nan, 1.0, 2.0, 3.0])), 2.5))
+}
+
+@test
+function void test_statistics_mode() {
+    assert(Math.approximately_equal(Result.unwrap(Statistics.mode([1, 2, 2, 3, 3, 3])), 3.0))
+    assert(Math.approximately_equal(Result.unwrap(Statistics.mode([5])), 5.0))
+    assert(Result.is_failure(Statistics.mode([])))
+}
+
+@test
+function void test_statistics_variance() {
+    number variance_result = Result.unwrap(Statistics.variance([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]))
+
+    assert(variance_result > 3.9)
+    assert(variance_result < 4.1)
+    assert(Result.is_failure(Statistics.variance([])))
+}
+
+@test
+function void test_statistics_standard_deviation() {
+    number std_dev_result = Result.unwrap(
+        Statistics.standard_deviation([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])
+    )
+
+    assert(std_dev_result > 1.9)
+    assert(std_dev_result < 2.1)
+    assert(Result.is_failure(Statistics.standard_deviation([])))
+}
+
+@test
+function void test_statistics_percentile() {
+    assert(Math.approximately_equal(Result.unwrap(Statistics.percentile([1, 2, 3, 4, 5], 0.0)), 1.0))
+    assert(Math.approximately_equal(Result.unwrap(Statistics.percentile([1, 2, 3, 4, 5], 100.0)), 5.0))
+    assert(Math.approximately_equal(Result.unwrap(Statistics.percentile([1, 2, 3, 4, 5], 50.0)), 3.0))
+    assert(Result.is_failure(Statistics.percentile([], 50.0)))
+    assert(Result.is_failure(Statistics.percentile([1, 2, 3], 101.0)))
+}
+
+@test
+function void test_statistics_correlation() {
+    # Perfect positive correlation.
+    number correlation_result = Result.unwrap(Statistics.correlation([1, 2, 3, 4, 5], [2, 4, 6, 8, 10]))
+
+    assert(correlation_result > 0.99)
+    assert(correlation_result < 1.01)
+}
+
+@test
+function void test_statistics_correlation_failures() {
+    # Unequal lengths and fewer than two points are both errors.
+    assert(Result.is_failure(Statistics.correlation([1, 2], [1, 2, 3])), "unequal lengths should fail")
+    assert(Result.is_failure(Statistics.correlation([1], [1])), "fewer than two points should fail")
+}
+
+@test
+function void test_statistics_summarize() {
+    result<Statistics.Summary> r = Statistics.summarize([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])
+
+    assert(Result.is_success(r), "summarize of non-empty array should succeed")
+
+    Statistics.Summary s = Result.unwrap(r)
+
+    assert(s.count == 8, "count should be 8")
+    assert(Math.approximately_equal(s.minimum, 2.0), "minimum should be 2.0")
+    assert(Math.approximately_equal(s.maximum, 9.0), "maximum should be 9.0")
+    assert(Math.approximately_equal(s.mean, 5.0), "mean should be 5.0")
+    assert(Math.approximately_equal(s.median, 4.5), "median should be 4.5")
+    assert(s.standard_deviation > 1.9, "standard_deviation should exceed 1.9")
+    assert(s.standard_deviation < 2.1, "standard_deviation should be under 2.1")
+}
+
+@test
+function void test_statistics_summarize_empty() {
+    result<Statistics.Summary> r = Statistics.summarize([])
+
+    assert(Result.is_failure(r), "summarize of an empty array should fail")
+}
+
+# ─── LineFit (Statistics.linear_fit) ───
+
+@test
+function void test_statistics_linear_fit() {
+    result<Statistics.LineFit> fit = Statistics.linear_fit([1.0, 2.0, 3.0, 4.0], [2.0, 4.0, 6.0, 8.0])
+
+    assert(Result.is_success(fit), "fitting a perfect line should succeed")
+
+    Statistics.LineFit line = Result.unwrap(fit)
+    assert(Math.approximately_equal(line.slope, 2.0), "slope of y = 2x is 2")
+    assert(Math.approximately_equal(line.intercept, 0.0), "intercept of y = 2x is 0")
+    assert(Math.approximately_equal(line.r_squared, 1.0), "a perfect line has R² = 1")
+}
+
+@test
+function void test_statistics_linear_fit_failures() {
+    assert(Result.is_failure(Statistics.linear_fit([1.0, 2.0], [1.0])), "unequal lengths should fail")
+    assert(Result.is_failure(Statistics.linear_fit([1.0], [1.0])), "fewer than 2 points should fail")
+    assert(Result.is_failure(Statistics.linear_fit([5.0, 5.0, 5.0], [1.0, 2.0, 3.0])),
+        "zero x-variance should fail")
+}
+
+# ─── Histogram (Statistics.histogram) ───
+
+@test
+function void test_statistics_histogram() {
+    array<number> data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+    Statistics.Histogram h = Result.unwrap(Statistics.histogram(data, 5))
+
+    assert(Array.length(h.bin_edges) == 6, "five bins have six edges")
+    assert(Array.length(h.counts) == 5, "five bins have five counts")
+    assert(Math.approximately_equal(h.bin_edges[0], 0.0, 0.001), "first edge is the minimum")
+    assert(Math.approximately_equal(h.bin_edges[5], 9.0, 0.001), "last edge is the maximum")
+    assert(Math.approximately_equal(h.bin_width, 1.8, 0.001), "bin width is range / bins")
+
+    # Ten evenly spaced samples split two-per-bin, the maximum in the closed last bin.
+    assert(h.counts[0] == 2, "bin 0 holds two samples")
+    assert(h.counts[4] == 2, "the final bin holds the maximum")
+}
+
+@test
+function void test_statistics_histogram_equal_values() {
+    Statistics.Histogram h = Result.unwrap(Statistics.histogram([5.0, 5.0, 5.0], 3))
+
+    assert(h.bin_width > 0.0, "a zero-width range widens to a positive bin width")
+    assert(h.counts[1] == 3, "all equal values land in the middle bin")
+}
+
+@test
+function void test_statistics_histogram_invalid_fails() {
+    assert(Result.is_failure(Statistics.histogram([], 5)), "an empty array has no histogram")
+    assert(Result.is_failure(Statistics.histogram([1.0, 2.0, 3.0], 0)), "fewer than one bin should fail")
+    assert(Result.is_failure(Statistics.histogram([Math.infinity], 3)),
+        "an array with no finite values has no histogram")
+}
+
+# ─── Five-number summary (Statistics.FiveNumberSummary) ───
+
+@test
+function void test_statistics_five_number_summary() {
+    array<number> data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+    Statistics.FiveNumberSummary s = Result.unwrap(Statistics.five_number_summary(data))
+
+    assert(Math.approximately_equal(s.minimum, 1.0, 0.001), "minimum")
+    assert(Math.approximately_equal(s.q1, 3.0, 0.001), "first quartile")
+    assert(Math.approximately_equal(s.median, 5.0, 0.001), "median")
+    assert(Math.approximately_equal(s.q3, 7.0, 0.001), "third quartile")
+    assert(Math.approximately_equal(s.maximum, 9.0, 0.001), "maximum")
+}
+
+@test
+function void test_statistics_five_number_summary_empty_fails() {
+    result<Statistics.FiveNumberSummary> r = Statistics.five_number_summary([])
+
+    assert(Result.is_failure(r), "an empty array has no five-number summary")
+}

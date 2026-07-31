@@ -356,17 +356,17 @@ namespace named {
     return ReturnTypeDesc::named("Quaternion");
 }
 
-// Math.five_number_summary() returns this box-plot record (bare short name).
+// Statistics.five_number_summary() returns this box-plot record (bare short name).
 [[nodiscard]] inline ReturnTypeDesc five_number_summary() {
     return ReturnTypeDesc::named("FiveNumberSummary");
 }
 
-// Math.linear_fit() returns this least-squares regression record.
+// Statistics.linear_fit() returns this least-squares regression record.
 [[nodiscard]] inline ReturnTypeDesc line_fit() {
     return ReturnTypeDesc::named("LineFit");
 }
 
-// Math.histogram() returns this binned frequency-distribution record.
+// Statistics.histogram() returns this binned frequency-distribution record.
 [[nodiscard]] inline ReturnTypeDesc histogram() {
     return ReturnTypeDesc::named("Histogram");
 }

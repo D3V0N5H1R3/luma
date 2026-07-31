@@ -1,34 +1,34 @@
-// Type checker unit tests — type system features: math stat, optional, literals,
+// Type checker unit tests — type system features: statistics, optional, literals,
 // interface fields, interpolation, dictionary, unary, tuple index, bitwise,
 // record defaults, match string, unused result, trusted_downcast, internal, error-pipe, ADTs.
 
 #include "type_checker_test_helpers.hpp"
 
-// ─── Math stat return-type signatures ───
+// ─── Statistics return-type signatures ───
 
-// Math stat functions all return result<number>, not bare number.
+// Statistics functions all return result<number>, not bare number.
 // The type checker must expose result<number> so callers can use Result.unwrap().
-static void test_math_mean_returns_result_number() {
+static void test_statistics_mean_returns_result_number() {
     ASSERT_TRUE(passes("result<number> r = Statistics.mean([1, 2, 3])\n"));
 }
 
-static void test_math_median_returns_result_number() {
+static void test_statistics_median_returns_result_number() {
     ASSERT_TRUE(passes("result<number> r = Statistics.median([1, 2, 3])\n"));
 }
 
-static void test_math_mode_returns_result_number() {
+static void test_statistics_mode_returns_result_number() {
     ASSERT_TRUE(passes("result<number> r = Statistics.mode([1, 2, 2])\n"));
 }
 
-static void test_math_variance_returns_result_number() {
+static void test_statistics_variance_returns_result_number() {
     ASSERT_TRUE(passes("result<number> r = Statistics.variance([1.0, 2.0, 3.0])\n"));
 }
 
-static void test_math_standard_deviation_returns_result_number() {
+static void test_statistics_standard_deviation_returns_result_number() {
     ASSERT_TRUE(passes("result<number> r = Statistics.standard_deviation([1.0, 2.0, 3.0])\n"));
 }
 
-static void test_math_percentile_returns_result_number() {
+static void test_statistics_percentile_returns_result_number() {
     ASSERT_TRUE(passes("result<number> r = Statistics.percentile([1, 2, 3], 50.0)\n"));
 }
 
@@ -599,14 +599,14 @@ static void test_record_match_pattern_generic_valid() {
 }
 
 int main() {
-    // ─── Math stat return-type signatures ───
+    // ─── Statistics return-type signatures ───
 
-    RUN(test_math_mean_returns_result_number);
-    RUN(test_math_median_returns_result_number);
-    RUN(test_math_mode_returns_result_number);
-    RUN(test_math_variance_returns_result_number);
-    RUN(test_math_standard_deviation_returns_result_number);
-    RUN(test_math_percentile_returns_result_number);
+    RUN(test_statistics_mean_returns_result_number);
+    RUN(test_statistics_median_returns_result_number);
+    RUN(test_statistics_mode_returns_result_number);
+    RUN(test_statistics_variance_returns_result_number);
+    RUN(test_statistics_standard_deviation_returns_result_number);
+    RUN(test_statistics_percentile_returns_result_number);
 
     // ─── None/Optional type ───
 

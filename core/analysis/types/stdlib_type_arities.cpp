@@ -325,8 +325,8 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // (type_name "LineFit") — the trend line y = slope*x + intercept plus its
         // r_squared goodness-of-fit.  A plain returned record, mirroring
         // Statistics.Summary.
-        add_record(st, "Statistics.LineFit", field("number", "slope"),
-                   field("number", "intercept"), field("number", "r_squared"));
+        add_record(st, "Statistics.LineFit", field("number", "slope"), field("number", "intercept"),
+                   field("number", "r_squared"));
 
         // Statistics.histogram() returns this binned frequency distribution
         // (type_name "Histogram"): counts[i] samples fall in the half-open bin
