@@ -588,9 +588,9 @@ void Parser::parse_pattern_literal(MatchPattern::PatternData& pattern) {
 
             advance();
 
+            const auto& hi_token = expect(TokenType::IntegerLiteral);
             // NOLINTNEXTLINE(bugprone-unchecked-optional-access): the lexer always sets the payload.
-            const auto hi =
-                std::get<std::int64_t>(expect(TokenType::IntegerLiteral).literal.value());
+            const auto hi = std::get<std::int64_t>(*hi_token.literal);
 
             pattern = MatchArm::RangePatternData{
                 .lo = lo, .hi = hi, .inclusive = inclusive, .location = location};
