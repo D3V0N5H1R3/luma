@@ -94,9 +94,9 @@ function void demo_statistics() {
     array<number> data = [4, 8, 15, 16, 23, 42]
 
     print("data = ${data}")
-    print("mean   = ${Result.unwrap(Math.mean(data))}")
-    print("median = ${Result.unwrap(Math.median(data))}")
-    print("stddev = ${String.format_number(Result.unwrap(Math.standard_deviation(data)), 4)}")
+    print("mean   = ${Result.unwrap(Statistics.mean(data))}")
+    print("median = ${Result.unwrap(Statistics.median(data))}")
+    print("stddev = ${String.format_number(Result.unwrap(Statistics.standard_deviation(data)), 4)}")
 }
 
 # ── Combinatorics and primes ──

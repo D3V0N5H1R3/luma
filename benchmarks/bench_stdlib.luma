@@ -22,9 +22,9 @@ function BenchResult run_stdlib_benchmarks(BenchResult state) {
     # 3-5 element inline threshold the suite keeps in place elsewhere).
     array<number> stat_data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
     st = time_it(st, "Math statistical (10 elem)", 1000, () -> {
-        result<number> _mean = Math.mean(stat_data)
-        result<number> _med = Math.median(stat_data)
-        result<number> _std = Math.standard_deviation(stat_data)
+        result<number> _mean = Statistics.mean(stat_data)
+        result<number> _med = Statistics.median(stat_data)
+        result<number> _std = Statistics.standard_deviation(stat_data)
     })
 
     st = time_it(st, "Math integer functions", 10000, () -> {

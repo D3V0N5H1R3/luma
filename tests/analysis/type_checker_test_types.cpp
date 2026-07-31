@@ -9,27 +9,27 @@
 // Math stat functions all return result<number>, not bare number.
 // The type checker must expose result<number> so callers can use Result.unwrap().
 static void test_math_mean_returns_result_number() {
-    ASSERT_TRUE(passes("result<number> r = Math.mean([1, 2, 3])\n"));
+    ASSERT_TRUE(passes("result<number> r = Statistics.mean([1, 2, 3])\n"));
 }
 
 static void test_math_median_returns_result_number() {
-    ASSERT_TRUE(passes("result<number> r = Math.median([1, 2, 3])\n"));
+    ASSERT_TRUE(passes("result<number> r = Statistics.median([1, 2, 3])\n"));
 }
 
 static void test_math_mode_returns_result_number() {
-    ASSERT_TRUE(passes("result<number> r = Math.mode([1, 2, 2])\n"));
+    ASSERT_TRUE(passes("result<number> r = Statistics.mode([1, 2, 2])\n"));
 }
 
 static void test_math_variance_returns_result_number() {
-    ASSERT_TRUE(passes("result<number> r = Math.variance([1.0, 2.0, 3.0])\n"));
+    ASSERT_TRUE(passes("result<number> r = Statistics.variance([1.0, 2.0, 3.0])\n"));
 }
 
 static void test_math_standard_deviation_returns_result_number() {
-    ASSERT_TRUE(passes("result<number> r = Math.standard_deviation([1.0, 2.0, 3.0])\n"));
+    ASSERT_TRUE(passes("result<number> r = Statistics.standard_deviation([1.0, 2.0, 3.0])\n"));
 }
 
 static void test_math_percentile_returns_result_number() {
-    ASSERT_TRUE(passes("result<number> r = Math.percentile([1, 2, 3], 50.0)\n"));
+    ASSERT_TRUE(passes("result<number> r = Statistics.percentile([1, 2, 3], 50.0)\n"));
 }
 
 // ─── None type ───

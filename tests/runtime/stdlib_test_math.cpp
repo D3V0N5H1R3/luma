@@ -72,14 +72,14 @@ LUMA_TEST(math_constants) {
 }
 
 LUMA_TEST(math_correlation) {
-    const auto ok = eval("Math.correlation([1.0, 2.0, 3.0], [2.0, 4.0, 6.0])");
+    const auto ok = eval("Statistics.correlation([1.0, 2.0, 3.0], [2.0, 4.0, 6.0])");
 
     ASSERT_RESULT_SUCCESS(ok);
     ASSERT_TRUE(ok.as_result()->owned_inner->as_number() > 0.99);
 
-    ASSERT_EVAL_FAILURE("Math.correlation([1.0, 2.0], [1.0, 2.0, 3.0])");
+    ASSERT_EVAL_FAILURE("Statistics.correlation([1.0, 2.0], [1.0, 2.0, 3.0])");
 
-    ASSERT_EVAL_FAILURE("Math.correlation([1.0], [1.0])");
+    ASSERT_EVAL_FAILURE("Statistics.correlation([1.0], [1.0])");
 }
 
 LUMA_TEST(math_factorial) {
@@ -216,7 +216,7 @@ LUMA_TEST(math_lerp) {
 }
 
 LUMA_TEST(math_mean) {
-    const auto v = eval("Math.mean([2.0, 4.0, 6.0])");
+    const auto v = eval("Statistics.mean([2.0, 4.0, 6.0])");
 
     ASSERT_RESULT_SUCCESS(v);
 
@@ -226,11 +226,11 @@ LUMA_TEST(math_mean) {
 }
 
 LUMA_TEST(math_mean_empty) {
-    ASSERT_EVAL_FAILURE("Math.mean([])");
+    ASSERT_EVAL_FAILURE("Statistics.mean([])");
 }
 
 LUMA_TEST(math_median) {
-    const auto v = eval("Math.median([1.0, 3.0, 2.0])");
+    const auto v = eval("Statistics.median([1.0, 3.0, 2.0])");
 
     ASSERT_RESULT_SUCCESS(v);
 
@@ -240,15 +240,15 @@ LUMA_TEST(math_median) {
 }
 
 LUMA_TEST(math_median_empty) {
-    ASSERT_EVAL_FAILURE("Math.median([])");
+    ASSERT_EVAL_FAILURE("Statistics.median([])");
 }
 
 LUMA_TEST(math_mode) {
-    ASSERT_EVAL_NUM("Math.mode([1.0, 2.0, 2.0, 3.0])", 2.0);
+    ASSERT_EVAL_NUM("Statistics.mode([1.0, 2.0, 2.0, 3.0])", 2.0);
 }
 
 LUMA_TEST(math_mode_empty) {
-    ASSERT_EVAL_FAILURE("Math.mode([])");
+    ASSERT_EVAL_FAILURE("Statistics.mode([])");
 }
 
 LUMA_TEST(math_module) {
@@ -260,22 +260,22 @@ LUMA_TEST(math_module) {
 }
 
 LUMA_TEST(math_percentile) {
-    ASSERT_EVAL_NUM("Math.percentile([1.0, 2.0, 3.0, 4.0, 5.0], 50.0)", 3.0);
+    ASSERT_EVAL_NUM("Statistics.percentile([1.0, 2.0, 3.0, 4.0, 5.0], 50.0)", 3.0);
 }
 
 LUMA_TEST(math_percentile_empty) {
-    ASSERT_EVAL_FAILURE("Math.percentile([], 50.0)");
+    ASSERT_EVAL_FAILURE("Statistics.percentile([], 50.0)");
 }
 
 LUMA_TEST(math_percentile_out_of_range) {
-    ASSERT_EVAL_FAILURE("Math.percentile([1.0, 2.0, 3.0], 101.0)");
+    ASSERT_EVAL_FAILURE("Statistics.percentile([1.0, 2.0, 3.0], 101.0)");
 }
 
 LUMA_TEST(math_percentile_not_a_number) {
     // Regression: a NaN percentile passed the [0,100] range check (every NaN
     // comparison is false), then a NaN-derived rank was cast to size_t (UB) and
     // used to subscript the values.  Non-finite p is now rejected cleanly.
-    ASSERT_EVAL_FAILURE("Math.percentile([1.0, 2.0, 3.0], Math.infinity - Math.infinity)");
+    ASSERT_EVAL_FAILURE("Statistics.percentile([1.0, 2.0, 3.0], Math.infinity - Math.infinity)");
 }
 
 LUMA_TEST(math_power) {
@@ -353,7 +353,7 @@ LUMA_TEST(math_square_root) {
 }
 
 LUMA_TEST(math_standard_deviation) {
-    const auto v = eval("Math.standard_deviation([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])");
+    const auto v = eval("Statistics.standard_deviation([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])");
 
     ASSERT_RESULT_SUCCESS(v);
     ASSERT_TRUE(v.as_result()->owned_inner->as_number() > 1.9);
@@ -361,11 +361,11 @@ LUMA_TEST(math_standard_deviation) {
 }
 
 LUMA_TEST(math_standard_deviation_empty) {
-    ASSERT_EVAL_FAILURE("Math.standard_deviation([])");
+    ASSERT_EVAL_FAILURE("Statistics.standard_deviation([])");
 }
 
 LUMA_TEST(math_summarize) {
-    const auto v = eval("Math.summarize([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])");
+    const auto v = eval("Statistics.summarize([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])");
 
     ASSERT_RESULT_SUCCESS(v);
 
@@ -381,7 +381,7 @@ LUMA_TEST(math_summarize) {
 }
 
 LUMA_TEST(math_summarize_single) {
-    const auto v = eval("Math.summarize([42.0])");
+    const auto v = eval("Statistics.summarize([42.0])");
 
     ASSERT_RESULT_SUCCESS(v);
 
@@ -395,7 +395,7 @@ LUMA_TEST(math_summarize_single) {
 }
 
 LUMA_TEST(math_summarize_empty) {
-    ASSERT_EVAL_FAILURE("Math.summarize([])");
+    ASSERT_EVAL_FAILURE("Statistics.summarize([])");
 }
 
 LUMA_TEST(math_fraction_construct_reduces) {
@@ -585,7 +585,7 @@ LUMA_TEST(math_complex_polar_bridges) {
 
 LUMA_TEST(math_linear_fit) {
     // Perfect line y = 2x.
-    const auto v = eval("Math.linear_fit([1.0, 2.0, 3.0, 4.0], [2.0, 4.0, 6.0, 8.0])");
+    const auto v = eval("Statistics.linear_fit([1.0, 2.0, 3.0, 4.0], [2.0, 4.0, 6.0, 8.0])");
     ASSERT_RESULT_SUCCESS(v);
 
     const auto& rec = v.as_result()->owned_inner->as_record();
@@ -597,9 +597,9 @@ LUMA_TEST(math_linear_fit) {
 
 LUMA_TEST(math_linear_fit_failures) {
     // Length mismatch, too few points, and zero x-variance all fail.
-    ASSERT_EVAL_FAILURE("Math.linear_fit([1.0, 2.0], [1.0])");
-    ASSERT_EVAL_FAILURE("Math.linear_fit([1.0], [1.0])");
-    ASSERT_EVAL_FAILURE("Math.linear_fit([5.0, 5.0, 5.0], [1.0, 2.0, 3.0])");
+    ASSERT_EVAL_FAILURE("Statistics.linear_fit([1.0, 2.0], [1.0])");
+    ASSERT_EVAL_FAILURE("Statistics.linear_fit([1.0], [1.0])");
+    ASSERT_EVAL_FAILURE("Statistics.linear_fit([5.0, 5.0, 5.0], [1.0, 2.0, 3.0])");
 }
 
 LUMA_TEST(math_sum) {
@@ -613,7 +613,7 @@ LUMA_TEST(math_sum) {
 }
 
 LUMA_TEST(math_variance) {
-    const auto v = eval("Math.variance([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])");
+    const auto v = eval("Statistics.variance([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])");
 
     ASSERT_RESULT_SUCCESS(v);
     ASSERT_TRUE(v.as_result()->owned_inner->as_number() > 3.9);
@@ -621,7 +621,7 @@ LUMA_TEST(math_variance) {
 }
 
 LUMA_TEST(math_variance_empty) {
-    ASSERT_EVAL_FAILURE("Math.variance([])");
+    ASSERT_EVAL_FAILURE("Statistics.variance([])");
 }
 
 LUMA_TEST(math_clamp_inverted_range) {
@@ -976,10 +976,10 @@ LUMA_TEST(math_to_polar_and_from_polar) {
     ASSERT_NEAR(origin.as_record()->find_field("angle")->as_number(), 0.0, 1e-9);
 }
 
-// --- Math.FiveNumberSummary (N06) ---
+// --- Statistics.FiveNumberSummary (N06) ---
 
 LUMA_TEST(math_five_number_summary) {
-    const auto v = eval("Math.five_number_summary([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])");
+    const auto v = eval("Statistics.five_number_summary([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])");
     ASSERT_RESULT_SUCCESS(v);
 
     const auto& rec = v.as_result()->owned_inner->as_record();
@@ -992,14 +992,14 @@ LUMA_TEST(math_five_number_summary) {
 }
 
 LUMA_TEST(math_five_number_summary_empty_fails) {
-    ASSERT_EVAL_FAILURE("Math.five_number_summary([])");
+    ASSERT_EVAL_FAILURE("Statistics.five_number_summary([])");
 }
 
-// --- Math.Histogram (N01) ---
+// --- Statistics.Histogram (N01) ---
 
 LUMA_TEST(math_histogram_basic) {
     // Ten values in [0, 10) across five equal-width bins of width 2.
-    const auto v = eval("Math.histogram([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], 5)");
+    const auto v = eval("Statistics.histogram([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], 5)");
     ASSERT_RESULT_SUCCESS(v);
 
     const auto& rec = v.as_result()->owned_inner->as_record();
@@ -1026,7 +1026,7 @@ LUMA_TEST(math_histogram_basic) {
 
 LUMA_TEST(math_histogram_equal_values) {
     // A zero-width range widens so every equal value falls in one bin.
-    const auto v = eval("Math.histogram([5.0, 5.0, 5.0], 3)");
+    const auto v = eval("Statistics.histogram([5.0, 5.0, 5.0], 3)");
     ASSERT_RESULT_SUCCESS(v);
 
     const auto& rec = v.as_result()->owned_inner->as_record();
@@ -1042,7 +1042,7 @@ LUMA_TEST(math_histogram_equal_values) {
 }
 
 LUMA_TEST(math_histogram_single_bin) {
-    const auto v = eval("Math.histogram([1.0, 2.0, 3.0, 4.0], 1)");
+    const auto v = eval("Statistics.histogram([1.0, 2.0, 3.0, 4.0], 1)");
     ASSERT_RESULT_SUCCESS(v);
 
     const auto& rec = v.as_result()->owned_inner->as_record();
@@ -1054,17 +1054,17 @@ LUMA_TEST(math_histogram_single_bin) {
 }
 
 LUMA_TEST(math_histogram_empty_fails) {
-    ASSERT_EVAL_FAILURE("Math.histogram([], 5)");
+    ASSERT_EVAL_FAILURE("Statistics.histogram([], 5)");
 }
 
 LUMA_TEST(math_histogram_zero_bins_fails) {
-    ASSERT_EVAL_FAILURE("Math.histogram([1.0, 2.0, 3.0], 0)");
+    ASSERT_EVAL_FAILURE("Statistics.histogram([1.0, 2.0, 3.0], 0)");
 }
 
 LUMA_TEST(math_histogram_skips_non_finite) {
     // Non-finite samples are excluded from the range and the tally rather than
     // poisoning bin_width / bin positions.
-    const auto v = eval("Math.histogram([1.0, 2.0, 3.0, Math.infinity, Math.infinity * -1.0], 2)");
+    const auto v = eval("Statistics.histogram([1.0, 2.0, 3.0, Math.infinity, Math.infinity * -1.0], 2)");
     ASSERT_RESULT_SUCCESS(v);
 
     const auto& rec = v.as_result()->owned_inner->as_record();
@@ -1083,12 +1083,12 @@ LUMA_TEST(math_histogram_skips_non_finite) {
 }
 
 LUMA_TEST(math_histogram_all_non_finite_fails) {
-    ASSERT_EVAL_FAILURE("Math.histogram([Math.infinity, Math.infinity * -1.0], 3)");
+    ASSERT_EVAL_FAILURE("Statistics.histogram([Math.infinity, Math.infinity * -1.0], 3)");
 }
 
 LUMA_TEST(math_histogram_excessive_bins_fails) {
     // A bin count past the array-size contract fails instead of allocating.
-    ASSERT_EVAL_FAILURE("Math.histogram([1.0, 2.0, 3.0], 2000000000)");
+    ASSERT_EVAL_FAILURE("Statistics.histogram([1.0, 2.0, 3.0], 2000000000)");
 }
 
 // --- Math.Interval (T02) ---
