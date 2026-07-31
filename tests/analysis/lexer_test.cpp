@@ -111,7 +111,9 @@ TEST_F(LexerTestFixture, test_identifiers) {
 }
 
 TEST_F(LexerTestFixture, test_operators) {
-    const auto tokens = fixture.lex("+ - * / // % == != < > <= >= = && || ! & | ^ ~ << >>");
+    // Bitwise operators (& ^ ~ << >>) were removed from the language (R06);
+    // `|` remains only as the match-alternative separator.
+    const auto tokens = fixture.lex("+ - * / // % == != < > <= >= = && || ! |");
 
     ASSERT_EQ(tokens[0].type, TokenType::Plus);
     ASSERT_EQ(tokens[1].type, TokenType::Minus);
@@ -129,16 +131,13 @@ TEST_F(LexerTestFixture, test_operators) {
     ASSERT_EQ(tokens[13].type, TokenType::AmpersandAmpersand);
     ASSERT_EQ(tokens[14].type, TokenType::PipePipe);
     ASSERT_EQ(tokens[15].type, TokenType::Bang);
-    ASSERT_EQ(tokens[16].type, TokenType::Ampersand);
-    ASSERT_EQ(tokens[17].type, TokenType::Pipe);
-    ASSERT_EQ(tokens[18].type, TokenType::Caret);
-    ASSERT_EQ(tokens[19].type, TokenType::Tilde);
-    ASSERT_EQ(tokens[20].type, TokenType::LessLess);
-    ASSERT_EQ(tokens[21].type, TokenType::GreaterGreater);
+    ASSERT_EQ(tokens[16].type, TokenType::Pipe);
 }
 
 TEST_F(LexerTestFixture, test_compound_assignment_operators) {
-    const auto tokens = fixture.lex("+= -= *= /= //= %= &= |= ^= <<= >>=");
+    // Bitwise compound assignments (&= |= ^= <<= >>=) were removed with the
+    // bitwise operators (R06).
+    const auto tokens = fixture.lex("+= -= *= /= //= %=");
 
     ASSERT_EQ(tokens[0].type, TokenType::PlusEquals);
     ASSERT_EQ(tokens[1].type, TokenType::MinusEquals);
@@ -146,11 +145,32 @@ TEST_F(LexerTestFixture, test_compound_assignment_operators) {
     ASSERT_EQ(tokens[3].type, TokenType::SlashEquals);
     ASSERT_EQ(tokens[4].type, TokenType::SlashSlashEquals);
     ASSERT_EQ(tokens[5].type, TokenType::PercentEquals);
-    ASSERT_EQ(tokens[6].type, TokenType::AmpersandEquals);
-    ASSERT_EQ(tokens[7].type, TokenType::PipeEquals);
-    ASSERT_EQ(tokens[8].type, TokenType::CaretEquals);
-    ASSERT_EQ(tokens[9].type, TokenType::LessLessEquals);
-    ASSERT_EQ(tokens[10].type, TokenType::GreaterGreaterEquals);
+}
+
+TEST_F(LexerTestFixture, test_removed_bitwise_operators_report_bits) {
+    // The removed bitwise operators (`&`, `^`, `~`, `<<`) each emit an Error
+    // token and a diagnostic that points to the Bits module — uniform migration
+    // guidance rather than a generic "unexpected character" message (R06).
+    for (const auto* op : {"&", "^", "~", "<<"}) {
+        const auto tokens = fixture.lex(op);
+
+        ASSERT_TRUE(fixture.had_error());
+        ASSERT_EQ(tokens[0].type, TokenType::Error);
+
+        bool mentions_bits = false;
+        for (const auto& d : fixture.collector.diagnostics()) {
+            if (d.message.find("Bits") != std::string::npos ||
+                (d.hint && d.hint->find("Bits") != std::string::npos)) {
+                mentions_bits = true;
+            }
+        }
+        ASSERT_TRUE(mentions_bits);
+    }
+
+    // `&&` remains logical AND — the single-`&` diagnostic must not fire for it.
+    const auto and_tokens = fixture.lex("&&");
+    ASSERT_FALSE(fixture.had_error());
+    ASSERT_EQ(and_tokens[0].type, TokenType::AmpersandAmpersand);
 }
 
 TEST_F(LexerTestFixture, test_punctuation) {
@@ -269,13 +289,16 @@ TEST_F(LexerTestFixture, test_additional_keywords) {
 }
 
 TEST_F(LexerTestFixture, test_additional_type_keywords) {
+    // `dictionary` and `result` remain reserved type keywords; the demoted
+    // container/handle types (task, channel, socket, ...) now lex as ordinary
+    // identifiers (R02).
     const auto tokens = fixture.lex("dictionary result task channel socket");
 
     ASSERT_EQ(tokens[0].type, TokenType::DictionaryType);
     ASSERT_EQ(tokens[1].type, TokenType::ResultType);
-    ASSERT_EQ(tokens[2].type, TokenType::TaskType);
-    ASSERT_EQ(tokens[3].type, TokenType::ChannelType);
-    ASSERT_EQ(tokens[4].type, TokenType::SocketType);
+    ASSERT_EQ(tokens[2].type, TokenType::Identifier);
+    ASSERT_EQ(tokens[3].type, TokenType::Identifier);
+    ASSERT_EQ(tokens[4].type, TokenType::Identifier);
 }
 
 TEST_F(LexerTestFixture, test_increment_decrement_operators) {
@@ -901,6 +924,7 @@ int main() {
     RUN(test_identifiers);
     RUN(test_operators);
     RUN(test_compound_assignment_operators);
+    RUN(test_removed_bitwise_operators_report_bits);
     RUN(test_punctuation);
     RUN(test_pipe_and_arrow);
     RUN(test_comments_are_skipped);

@@ -79,6 +79,12 @@ private:
     void emit_question_op();
     void emit_dot_op();
 
+    // Emits a uniform "operator removed — use the Bits module" diagnostic for a
+    // bitwise operator lexeme that R06 removed from the language, and appends an
+    // Error token so recovery can continue.
+    void emit_removed_bitwise_op(std::string_view lexeme, std::string_view suggestion,
+                                 const SourceLocation& location);
+
     // ASCII-only digit check (0–9).  Unicode digits (e.g. Arabic-Indic)
     // are intentionally excluded — Luma numeric literals use ASCII only.
     [[nodiscard]] static constexpr bool is_digit(char character) noexcept {

@@ -50,6 +50,7 @@ This reference was previously part of the [User Manual](Luma_User_Manual.md). Fo
 40. [Terminal](#40--terminal)
 41. [Xml](#41--xml)
 42. [Color](#42--color)
+43. [Bits](#43--bits)
 
 - [See Also](#see-also)
 
@@ -3563,6 +3564,35 @@ string css = base |> Color.darken(0.1) |> Color.to_css()   # "rgb(1, 102, 155)"
 
 # Pick a readable text colour against a background.
 number ratio = Color.contrast_ratio(base, Result.unwrap(Color.rgb(255, 255, 255)))
+```
+
+---
+
+## 43 — Bits
+
+Integer bit manipulation as pipe-first free functions. `Bits` replaces the former
+`& | ^ ~ << >>` operators, which were removed from the language surface — bit
+twiddling is an advanced task better served by named functions than by infix
+operators. All functions take and return `integer`.
+
+| Function                   | Parameter Types      | Return Type | Description                                        |
+| -------------------------- | -------------------- | ----------- | -------------------------------------------------- |
+| `Bits.and(a, b)`           | `(integer, integer)` | `integer`   | Bitwise AND                                        |
+| `Bits.or(a, b)`            | `(integer, integer)` | `integer`   | Bitwise OR                                         |
+| `Bits.xor(a, b)`           | `(integer, integer)` | `integer`   | Bitwise XOR                                        |
+| `Bits.not(a)`              | `(integer)`          | `integer`   | Bitwise NOT (two's-complement complement)          |
+| `Bits.shift_left(v, n)`    | `(integer, integer)` | `integer`   | Logical left shift; `n` in `0..63`                 |
+| `Bits.shift_right(v, n)`   | `(integer, integer)` | `integer`   | Arithmetic (sign-preserving) right shift; `n` in `0..63` |
+
+A shift amount outside `0..63` raises a `RuntimeError`. `Bits.not(0) == -1`.
+
+```luma
+integer flags = 0
+    |> Bits.or(4)   # set bit 2
+    |> Bits.or(1)   # set bit 0
+
+boolean bit2_set = Bits.and(flags, 4) != 0   # true
+integer doubled  = Bits.shift_left(3, 1)     # 6
 ```
 
 ---

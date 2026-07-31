@@ -110,7 +110,7 @@ LUMA_TEST(app_persist_saves_final_model_on_exit) {
                      path + R"(",
             "model": {"count": 1},
             "update": (dictionary<integer> model, string msg) -> match msg {
-                case == "inc" { Dictionary.set(model, "count", model["count"] + 1) }
+                case "inc" { Dictionary.set(model, "count", model["count"] + 1) }
                 else { model }
             },
             "view": (dictionary<integer> _model) -> GraphicalUi.label("n")
@@ -155,7 +155,7 @@ LUMA_TEST(app_persist_restores_saved_model) {
                      path + R"(",
             "model": {"count": 1},
             "update": (dictionary<integer> model, string msg) -> match msg {
-                case == "inc" { Dictionary.set(model, "count", model["count"] + 1) }
+                case "inc" { Dictionary.set(model, "count", model["count"] + 1) }
                 else { model }
             },
             "view": (dictionary<integer> _model) -> GraphicalUi.label("n")
@@ -271,7 +271,7 @@ LUMA_TEST(callback_string_routes_through_update) {
                 GraphicalUi.button("Up", () -> "inc")
             ]),
             "update": (integer model, string msg) -> match msg {
-                case == "inc" { model + 1 }
+                case "inc" { model + 1 }
                 else { model }
             }
         }, 7, "Up")
@@ -336,8 +336,8 @@ LUMA_TEST(interaction_count_and_indexed_click) {
             GraphicalUi.button("Step", () -> "dec", {"id": "step-b"})
         ]),
         "update": (integer m, string msg) -> match msg {
-            case == "inc" { m + 1 }
-            case == "dec" { m - 1 }
+            case "inc" { m + 1 }
+            case "dec" { m - 1 }
             else { m }
         }
     })";
@@ -423,14 +423,14 @@ LUMA_TEST(interaction_key_drives_subscription) {
         "_": "gui_config", "model": 0,
         "view": (integer _c) -> GraphicalUi.label("k"),
         "update": (integer m, string msg) -> match msg {
-            case == "inc" { m + 1 }
-            case == "dec" { m - 1 }
+            case "inc" { m + 1 }
+            case "dec" { m - 1 }
             else { m }
         },
         "subscribe": (integer _c) -> [
             GraphicalUi.on_key("keys", "*", (string key) -> match key {
-                case == "ArrowUp" { "inc" }
-                case == "ArrowDown" { "dec" }
+                case "ArrowUp" { "inc" }
+                case "ArrowDown" { "dec" }
                 else { "" }
             })
         ]
@@ -450,7 +450,7 @@ LUMA_TEST(interaction_key_drives_subscription) {
             "_": "gui_config", "model": 0,
             "view": (integer _c) -> GraphicalUi.label("k"),
             "update": (integer m, string msg) -> match msg {
-                case == "save" { m + 7 }
+                case "save" { m + 7 }
                 else { m }
             },
             "subscribe": (integer _c) -> [

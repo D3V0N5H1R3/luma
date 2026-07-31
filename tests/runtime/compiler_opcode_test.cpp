@@ -284,44 +284,9 @@ static void test_compile_range_inclusive() {
     ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::MakeRangeInc));
 }
 
-// ═══════════════════════════════════════════════════════════
-// Bitwise operators (complete set)
-// ═══════════════════════════════════════════════════════════
-
-static void test_compile_bitwise_or() {
-    const auto result = compile("mutable integer a = 5\nmutable integer b = 3\na | b");
-
-    ASSERT_TRUE(result.success);
-    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::BitwiseOr));
-}
-
-static void test_compile_bitwise_xor() {
-    const auto result = compile("mutable integer a = 5\nmutable integer b = 3\na ^ b");
-
-    ASSERT_TRUE(result.success);
-    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::BitwiseXor));
-}
-
-static void test_compile_bitwise_not() {
-    const auto result = compile("mutable integer a = 5\n~a");
-
-    ASSERT_TRUE(result.success);
-    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::BitwiseNot));
-}
-
-static void test_compile_shift_left() {
-    const auto result = compile("mutable integer a = 1\na << 3");
-
-    ASSERT_TRUE(result.success);
-    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::ShiftLeft));
-}
-
-static void test_compile_shift_right() {
-    const auto result = compile("mutable integer a = 8\na >> 1");
-
-    ASSERT_TRUE(result.success);
-    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::ShiftRight));
-}
+// (Bitwise operators were removed from the language surface — R06. Bit
+// manipulation now lives in the Bits stdlib module, exercised by
+// tests/features/stdlib/bits_functions.luma.)
 
 // ═══════════════════════════════════════════════════════════
 // Comparison operators (complete set)
@@ -942,13 +907,6 @@ int main() {
 
     // Range inclusive.
     RUN(test_compile_range_inclusive);
-
-    // Bitwise operators.
-    RUN(test_compile_bitwise_or);
-    RUN(test_compile_bitwise_xor);
-    RUN(test_compile_bitwise_not);
-    RUN(test_compile_shift_left);
-    RUN(test_compile_shift_right);
 
     // Comparison operators.
     RUN(test_compile_less_equal);

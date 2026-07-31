@@ -1,6 +1,7 @@
 #ifndef LUMA_LEXER_TOKEN_TYPE_HPP
 #define LUMA_LEXER_TOKEN_TYPE_HPP
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <format>
@@ -63,41 +64,26 @@ enum class TokenType {
     While,
     With,
 
-    // Type keywords
+    // Type keywords.  Only the primitives and the types with literal/inference
+    // sugar remain reserved words; the container/handle types (queue, stack,
+    // set, task, channel, socket, xml, …) are ordinary identifiers that the
+    // parser recognises as type names via is_builtin_type_identifier().
     ArrayType,
-    BinaryTreeType,
     BooleanType,
-    ChannelType,
     DecimalType,
     DictionaryType,
-    GraphType,
-    HashSetType,
     IntegerType,
-    KeyValueStoreType,
-    LinkedListType,
     NumberType,
     OptionalType,
-    QueueType,
-    ReferenceType,
     ResultType,
-    SetType,
-    SocketType,
-    StackType,
     StringType,
-    TaskType,
-    WidgetType,
-    XmlType,
 
     // Operators
-    Ampersand,
     AmpersandAmpersand,
-    AmpersandEquals,
     Arrow,
     Bang,
     BangEquals,
     BangGreater,
-    Caret,
-    CaretEquals,
     DotDot,
     DotDotEquals,
     Equals,
@@ -105,18 +91,14 @@ enum class TokenType {
     Greater,
     GreaterEquals,
     GreaterGreater,
-    GreaterGreaterEquals,
     Less,
     LessEquals,
-    LessLess,
-    LessLessEquals,
     Minus,
     MinusEquals,
     MinusMinus,
     Percent,
     PercentEquals,
     Pipe,
-    PipeEquals,
     PipeGreater,
     PipePipe,
     Plus,
@@ -132,7 +114,6 @@ enum class TokenType {
     SlashSlashEquals,
     Star,
     StarEquals,
-    Tilde,
 
     // Punctuation
     Colon,
@@ -214,40 +195,22 @@ inline constexpr auto k_token_type_names = std::to_array<std::string_view>({
     "with",             // With
 
     // Type keywords
-    "array",           // ArrayType
-    "binary_tree",     // BinaryTreeType
-    "boolean",         // BooleanType
-    "channel",         // ChannelType
-    "decimal",         // DecimalType
-    "dictionary",      // DictionaryType
-    "graph",           // GraphType
-    "hash_set",        // HashSetType
-    "integer",         // IntegerType
-    "key_value_store", // KeyValueStoreType
-    "linked_list",     // LinkedListType
-    "number",          // NumberType
-    "optional",        // OptionalType
-    "queue",           // QueueType
-    "reference",       // ReferenceType
-    "result",          // ResultType
-    "set",             // SetType
-    "socket",          // SocketType
-    "stack",           // StackType
-    "string",          // StringType
-    "task",            // TaskType
-    "widget",          // WidgetType
-    "xml",             // XmlType
+    "array",      // ArrayType
+    "boolean",    // BooleanType
+    "decimal",    // DecimalType
+    "dictionary", // DictionaryType
+    "integer",    // IntegerType
+    "number",     // NumberType
+    "optional",   // OptionalType
+    "result",     // ResultType
+    "string",     // StringType
 
     // Operators
-    "&",   // Ampersand
     "&&",  // AmpersandAmpersand
-    "&=",  // AmpersandEquals
     "->",  // Arrow
     "!",   // Bang
     "!=",  // BangEquals
     "!>",  // BangGreater
-    "^",   // Caret
-    "^=",  // CaretEquals
     "..",  // DotDot
     "..=", // DotDotEquals
     "=",   // Equals
@@ -255,18 +218,14 @@ inline constexpr auto k_token_type_names = std::to_array<std::string_view>({
     ">",   // Greater
     ">=",  // GreaterEquals
     ">>",  // GreaterGreater
-    ">>=", // GreaterGreaterEquals
     "<",   // Less
     "<=",  // LessEquals
-    "<<",  // LessLess
-    "<<=", // LessLessEquals
     "-",   // Minus
     "-=",  // MinusEquals
     "--",  // MinusMinus
     "%",   // Percent
     "%=",  // PercentEquals
     "|",   // Pipe
-    "|=",  // PipeEquals
     "|>",  // PipeGreater
     "||",  // PipePipe
     "+",   // Plus
@@ -282,7 +241,6 @@ inline constexpr auto k_token_type_names = std::to_array<std::string_view>({
     "//=", // SlashSlashEquals
     "*",   // Star
     "*=",  // StarEquals
-    "~",   // Tilde
 
     // Punctuation
     ":",  // Colon
@@ -347,13 +305,11 @@ struct KeywordSpelling {
 inline constexpr auto k_keywords = std::to_array<KeywordSpelling>({
     {"array", TokenType::ArrayType, KeywordKind::BuiltinType},
     {"await", TokenType::Await, KeywordKind::Word},
-    {"binary_tree", TokenType::BinaryTreeType, KeywordKind::BuiltinType},
     {"boolean", TokenType::BooleanType, KeywordKind::BuiltinType},
     {"borrow", TokenType::Borrow, KeywordKind::Word},
     {"break", TokenType::Break, KeywordKind::Word},
     {"case", TokenType::Case, KeywordKind::Word},
     {"catch", TokenType::Catch, KeywordKind::Word},
-    {"channel", TokenType::ChannelType, KeywordKind::BuiltinType},
     {"choice", TokenType::Choice, KeywordKind::Word},
     {"continue", TokenType::Continue, KeywordKind::Word},
     {"decimal", TokenType::DecimalType, KeywordKind::BuiltinType},
@@ -365,8 +321,6 @@ inline constexpr auto k_keywords = std::to_array<KeywordSpelling>({
     {"finally", TokenType::Finally, KeywordKind::Word},
     {"for", TokenType::For, KeywordKind::Word},
     {"function", TokenType::Function, KeywordKind::TypeWord},
-    {"graph", TokenType::GraphType, KeywordKind::BuiltinType},
-    {"hash_set", TokenType::HashSetType, KeywordKind::BuiltinType},
     {"if", TokenType::If, KeywordKind::Word},
     {"in", TokenType::In, KeywordKind::Word},
     {"include", TokenType::Include, KeywordKind::Word},
@@ -374,27 +328,19 @@ inline constexpr auto k_keywords = std::to_array<KeywordSpelling>({
     {"interface", TokenType::Interface, KeywordKind::Word},
     {"internal", TokenType::Internal, KeywordKind::Word},
     {"is", TokenType::Is, KeywordKind::Word},
-    {"key_value_store", TokenType::KeyValueStoreType, KeywordKind::BuiltinType},
-    {"linked_list", TokenType::LinkedListType, KeywordKind::BuiltinType},
     {"match", TokenType::Match, KeywordKind::Word},
     {"mutable", TokenType::Mutable, KeywordKind::Word},
     {"namespace", TokenType::Namespace, KeywordKind::Word},
     {"none", TokenType::NoneLiteral, KeywordKind::TypeWord},
     {"number", TokenType::NumberType, KeywordKind::BuiltinType},
     {"optional", TokenType::OptionalType, KeywordKind::BuiltinType},
-    {"queue", TokenType::QueueType, KeywordKind::BuiltinType},
     {"record", TokenType::Record, KeywordKind::Word},
-    {"reference", TokenType::ReferenceType, KeywordKind::BuiltinType},
     {"result", TokenType::ResultType, KeywordKind::BuiltinType},
     {"return", TokenType::Return, KeywordKind::Word},
-    {"set", TokenType::SetType, KeywordKind::BuiltinType},
-    {"socket", TokenType::SocketType, KeywordKind::BuiltinType},
     {"some", TokenType::Some, KeywordKind::Word},
     {"spawn", TokenType::Spawn, KeywordKind::Word},
-    {"stack", TokenType::StackType, KeywordKind::BuiltinType},
     {"string", TokenType::StringType, KeywordKind::BuiltinType},
     {"success", TokenType::Success, KeywordKind::Word},
-    {"task", TokenType::TaskType, KeywordKind::BuiltinType},
     {"task_scope", TokenType::TaskScope, KeywordKind::Word},
     {"true", TokenType::BooleanLiteral, KeywordKind::Word},
     {"trusted_downcast", TokenType::TrustedDowncast, KeywordKind::Word},
@@ -403,9 +349,7 @@ inline constexpr auto k_keywords = std::to_array<KeywordSpelling>({
     {"unique", TokenType::Unique, KeywordKind::Word},
     {"use", TokenType::Use, KeywordKind::Word},
     {"while", TokenType::While, KeywordKind::Word},
-    {"widget", TokenType::WidgetType, KeywordKind::BuiltinType},
     {"with", TokenType::With, KeywordKind::Word},
-    {"xml", TokenType::XmlType, KeywordKind::BuiltinType},
 });
 
 // keyword_type() binary-searches k_keywords, so it must stay sorted by spelling
@@ -478,6 +422,37 @@ inline constexpr auto k_keyword_classifications = build_keyword_classifications(
     const auto index = static_cast<std::size_t>(type);
     return index < k_keyword_classifications.size() &&
            k_keyword_classifications[index].is_type_keyword;
+}
+
+// The container/handle type names that were demoted from reserved keywords to
+// ordinary identifiers.  They are no longer reserved (a program may use them as
+// variable or field names), but the parser still recognises them as the head of
+// a type annotation in declaration position via is_builtin_type_identifier().
+// Kept sorted for the binary search below.
+inline constexpr auto k_builtin_type_identifiers = std::to_array<std::string_view>({
+    "binary_tree",
+    "channel",
+    "graph",
+    "hash_set",
+    "key_value_store",
+    "linked_list",
+    "queue",
+    "reference",
+    "set",
+    "socket",
+    "stack",
+    "task",
+    "widget",
+    "xml",
+});
+
+// Returns true if `name` is one of the demoted built-in container/handle type
+// identifiers (queue, stack, set, task, channel, socket, xml, …).  Unlike the
+// reserved type keywords, these lex as ordinary identifiers, so the parser uses
+// this predicate to treat `queue<T> x = …` as a variable declaration.
+[[nodiscard]] constexpr bool is_builtin_type_identifier(std::string_view name) noexcept {
+    return std::binary_search(k_builtin_type_identifiers.begin(), k_builtin_type_identifiers.end(),
+                              name);
 }
 
 // Returns true if the token type is a comparison operator

@@ -15,10 +15,10 @@ function integer eval(Expr e) {
 
 function string describe(integer x) {
     return match x {
-    case == 0 { "zero" }
-    case == 1 { "small" }
-    case == 2 { "small" }
-    case == 3 { "small" }
+    case 0 { "zero" }
+    case 1 { "small" }
+    case 2 { "small" }
+    case 3 { "small" }
     else { "big" }
     }
 }
@@ -77,12 +77,12 @@ function string flags(boolean b, string s, integer n) {
     case false { out = "F" }
     }
     string label = match s {
-    case == "a" { "alpha" }
-    case == "b" { "beta" }
+    case "a" { "alpha" }
+    case "b" { "beta" }
     else { "other" }
     }
     string parity = match n {
-    case == 0 { "zero" }
+    case 0 { "zero" }
     case != 0 { "nonzero" }
     }
     return "${out}${label}${parity}"

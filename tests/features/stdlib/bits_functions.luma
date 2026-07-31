@@ -1,0 +1,70 @@
+# ═══════════════════════════════════════════════════════════
+# Luma — Feature Tests — Bits Functions
+#
+# The Bits module replaces the former `& | ^ ~ << >>` operators
+# (removed from the language surface, R06).
+# ═══════════════════════════════════════════════════════════
+
+@test
+function void test_bits_and() {
+    assert(Bits.and(12, 10) == 8)
+    assert(Bits.and(0, 255) == 0)
+    assert(Bits.and(-1, 42) == 42)
+}
+
+@test
+function void test_bits_or() {
+    assert(Bits.or(12, 10) == 14)
+    assert(Bits.or(0, 0) == 0)
+    assert(Bits.or(1, 2) == 3)
+}
+
+@test
+function void test_bits_xor() {
+    assert(Bits.xor(15, 9) == 6)
+    assert(Bits.xor(5, 5) == 0)
+}
+
+@test
+function void test_bits_not() {
+    assert(Bits.not(0) == -1)
+    assert(Bits.not(-1) == 0)
+}
+
+@test
+function void test_bits_shift_left() {
+    assert(Bits.shift_left(1, 3) == 8)
+    assert(Bits.shift_left(3, 0) == 3)
+    assert(Bits.shift_left(1, 4) == 16)
+}
+
+@test
+function void test_bits_shift_right() {
+    assert(Bits.shift_right(16, 2) == 4)
+    assert(Bits.shift_right(-8, 1) == -4)
+    assert(Bits.shift_right(255, 8) == 0)
+}
+
+@test
+function void test_bits_shift_out_of_range_throws() {
+    mutable boolean caught = false
+
+    try {
+        integer _ = Bits.shift_left(1, 64)
+    } catch(_err) {
+        caught = true
+    }
+
+    assert(caught, "shift amount above 63 must raise a runtime error")
+}
+
+@test
+function void test_bits_pipe_composition() {
+    # Pipe-first: the piped value becomes the first argument.
+    integer flags = 0
+        |> Bits.or(4)
+        |> Bits.or(1)
+
+    assert(flags == 5)
+    assert(Bits.and(flags, 4) == 4)
+}

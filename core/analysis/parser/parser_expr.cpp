@@ -107,31 +107,14 @@ ExpressionPtr Parser::parse_and() {
     return parse_binary_level(&Parser::parse_equality, TokenType::AmpersandAmpersand);
 }
 
-ExpressionPtr Parser::parse_bitwise_or() {
-    return parse_binary_level(&Parser::parse_bitwise_xor, TokenType::Pipe);
-}
-
-ExpressionPtr Parser::parse_bitwise_xor() {
-    return parse_binary_level(&Parser::parse_bitwise_and, TokenType::Caret);
-}
-
-ExpressionPtr Parser::parse_bitwise_and() {
-    return parse_binary_level(&Parser::parse_shift, TokenType::Ampersand);
-}
-
 ExpressionPtr Parser::parse_equality() {
     return parse_binary_level(&Parser::parse_comparison, TokenType::EqualsEquals,
                               TokenType::BangEquals);
 }
 
 ExpressionPtr Parser::parse_comparison() {
-    return parse_binary_level(&Parser::parse_bitwise_or, TokenType::Less, TokenType::Greater,
+    return parse_binary_level(&Parser::parse_addition, TokenType::Less, TokenType::Greater,
                               TokenType::LessEquals, TokenType::GreaterEquals, TokenType::In);
-}
-
-ExpressionPtr Parser::parse_shift() {
-    return parse_binary_level(&Parser::parse_addition, TokenType::LessLess,
-                              TokenType::GreaterGreater);
 }
 
 ExpressionPtr Parser::parse_addition() {

@@ -704,6 +704,9 @@ using ModuleRegisterFn = void (*)(std::vector<FunctionSpec>&, const ModuleBuilde
 void register_math_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                              const ParamShorthands& p);
 
+void register_bits_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                             const ParamShorthands& p);
+
 void register_converter_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                   const ParamShorthands& p);
 

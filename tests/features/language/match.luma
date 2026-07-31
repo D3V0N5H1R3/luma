@@ -30,8 +30,8 @@ function void test_match_equality() {
     string command = "help"
 
     string output = match command {
-    case == "quit" { "quitting" }
-    case == "help" { "showing help" }
+    case "quit" { "quitting" }
+    case "help" { "showing help" }
     else           { "unknown" }
     }
 
@@ -67,7 +67,7 @@ function void test_match_as_expression() {
     integer score = 42
 
     string label = match score {
-    case == 0  { "zero" }
+    case 0  { "zero" }
     case >= 10 { "big" }
     else       { "small" }
     }
@@ -101,7 +101,7 @@ function void test_match_not_equal() {
     integer input_value = 7
 
     string output = match input_value {
-    case == 5  { "five" }
+    case 5  { "five" }
     case != 5  { "not five" }
     }
 
@@ -113,7 +113,7 @@ function void test_match_multi_statement_arm() {
     integer input_value = 3
 
     integer computed_result = match input_value {
-    case == 0 {
+    case 0 {
         integer zero_value = 0
 
         zero_value
@@ -247,7 +247,7 @@ function void test_match_multi_pattern_comparison() {
     integer score = 1
 
     string grade = match score {
-    case == 0 | == 1 { "very low" }
+    case 0 | 1 { "very low" }
     case >= 90       { "high" }
     else             { "other" }
     }
@@ -893,18 +893,18 @@ function void test_match_statement_comparison_value_with_inner_local() {
 # continued and the next arm's pattern test ran against the ELSE BODY'S
 # RESULT (the subject had already been popped and replaced). If a later
 # arm's pattern matched that result, the WRONG arm's body executed:
-# `match x { else { 2 } case == 2 { 99 } }` yielded 99 instead of 2.
+# `match x { else { 2 } case 2 { 99 } }` yielded 99 instead of 2.
 # ═══════════════════════════════════════════════════════════
 
 @test
 function void test_match_else_before_matching_arm_expression() {
     integer x = 7
 
-    # else wins for any subject; the following `case == 2` must NOT run
+    # else wins for any subject; the following `case 2` must NOT run
     # even though the else body's value (2) would satisfy `== 2`.
     integer r = match x {
     else      { 2 }
-    case == 2 { 99 }
+    case 2 { 99 }
     }
 
     assert(r == 2, "else before a later matching arm must win, not fall through")
@@ -933,7 +933,7 @@ function void test_match_else_before_arm_statement_form() {
     # Statement form already emits the merge jump; lock in the correct behaviour.
     match x {
     else      { out = "default" }
-    case == 2 { out = "specific" }
+    case 2 { out = "specific" }
     }
 
     assert(out == "default", "statement-form else before a later arm must win")

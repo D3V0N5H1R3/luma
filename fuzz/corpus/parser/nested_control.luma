@@ -19,15 +19,15 @@ function integer complex_flow(integer n) {
 
 function string nested_match(integer x, integer y) {
     return match x {
-    case == 0 {
+    case 0 {
         match y {
-        case == 0 { "both zero" }
+        case 0 { "both zero" }
         else { "x zero" }
         }
     }
 else {
     match y {
-    case == 0 { "y zero" }
+    case 0 { "y zero" }
     else { "neither zero" }
     }
 }

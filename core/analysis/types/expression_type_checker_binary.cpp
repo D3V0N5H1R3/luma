@@ -110,16 +110,6 @@ void ExpressionTypeChecker::check_binary_constant_folding(const BinaryExpression
         }
     }
 
-    // Shift amount out of range: detect when shift amount is a literal
-    // outside [0, 63].
-    if ((expr.op == TokenType::LessLess || expr.op == TokenType::GreaterGreater) && right_int) {
-        const auto msg = compile_time_arithmetic::check_shift_amount(*right_int);
-        if (msg) {
-            emit_err(*msg, expr.location, "shift amount must be between 0 and 63",
-                     DiagnosticCode::ShiftOutOfRange);
-        }
-    }
-
     // String repeat: detect negative or excessive literal repeat count.
     if (expr.op == TokenType::Star && left_type.kind == TypeInfo::Kind::String && right_int) {
         const auto msg = compile_time_arithmetic::check_string_repeat(
@@ -214,43 +204,6 @@ TypeInfo ExpressionTypeChecker::check_arithmetic_binary(const BinaryExpression& 
               expr.location,
               "convert the operand to a number using Converter.to_integer() or "
               "Converter.to_number()",
-              DiagnosticCode::InvalidOperand);
-
-    return TypeInfo::make(TypeInfo::Kind::Unknown);
-}
-
-// ── Bitwise: &, |, ^, <<, >> ────────────────────────────────────────────────
-TypeInfo ExpressionTypeChecker::check_bitwise_binary(const BinaryExpression& expr,
-                                                     const TypeInfo& left, const TypeInfo& right) {
-    const auto op_str = [&]() -> std::string_view {
-        switch (expr.op) {
-            case TokenType::Ampersand:
-                return "&";
-            case TokenType::Pipe:
-                return "|";
-            case TokenType::Caret:
-                return "^";
-            case TokenType::LessLess:
-                return "<<";
-            case TokenType::GreaterGreater:
-                return ">>";
-            default:
-                return "?";
-        }
-    }();
-
-    if (left.kind == TypeInfo::Kind::Integer && right.kind == TypeInfo::Kind::Integer) {
-        return TypeInfo::make(TypeInfo::Kind::Integer);
-    }
-
-    if (is_error_or_unknown(left, right)) {
-        return TypeInfo::make(TypeInfo::Kind::StdlibAny);
-    }
-
-    tc_.error(std::format("operator '{}' requires integer operands, "
-                          "got '{}' and '{}'",
-                          op_str, left.to_string(), right.to_string()),
-              expr.location, "bitwise operators only work with integer values",
               DiagnosticCode::InvalidOperand);
 
     return TypeInfo::make(TypeInfo::Kind::Unknown);
@@ -473,14 +426,6 @@ TypeInfo ExpressionTypeChecker::visit_binary(const BinaryExpression& expr) {
         case TokenType::Percent:
         case TokenType::SlashSlash:
             return check_arithmetic_binary(expr, left_type, right_type);
-
-        // Bitwise operators.
-        case TokenType::Ampersand:
-        case TokenType::Pipe:
-        case TokenType::Caret:
-        case TokenType::LessLess:
-        case TokenType::GreaterGreater:
-            return check_bitwise_binary(expr, left_type, right_type);
 
         // Equality operators.
         case TokenType::EqualsEquals:

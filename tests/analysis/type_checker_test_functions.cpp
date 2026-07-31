@@ -200,8 +200,8 @@ static void test_match_range_non_integer_subject_fails() {
 static void test_match_comparison_needs_else() {
     ASSERT_TRUE(fails("function string foo(integer x) {\n"
                       "    return match x {\n"
-                      "        case == 1 { \"one\" }\n"
-                      "        case == 2 { \"two\" }\n"
+                      "        case 1 { \"one\" }\n"
+                      "        case 2 { \"two\" }\n"
                       "    }\n"
                       "}\n"));
 }
@@ -209,8 +209,8 @@ static void test_match_comparison_needs_else() {
 static void test_match_comparison_with_else() {
     ASSERT_TRUE(passes("function string foo(integer x) {\n"
                        "    return match x {\n"
-                       "        case == 1 { \"one\" }\n"
-                       "        case == 2 { \"two\" }\n"
+                       "        case 1 { \"one\" }\n"
+                       "        case 2 { \"two\" }\n"
                        "        else      { \"other\" }\n"
                        "    }\n"
                        "}\n"));
@@ -671,7 +671,7 @@ static void test_match_arm_type_mismatch_fails() {
     ASSERT_TRUE(fails("function void foo() {\n"
                       "    integer y = 3\n"
                       "    integer r = match y {\n"
-                      "        case == 1 { 10 }\n"
+                      "        case 1 { 10 }\n"
                       "        else { \"no\" }\n"
                       "    }\n"
                       "}\n"));

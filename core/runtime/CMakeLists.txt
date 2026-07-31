@@ -107,6 +107,7 @@ luma_add_stdlib_library(math
     INCLUDES ${PROJECT_SOURCE_DIR}/external/mbedtls/include
     SOURCES
         stdlib/math/math_module.cpp
+        stdlib/math/bits_module.cpp
         stdlib/math/math_analysis.cpp
         stdlib/math/math_statistics.cpp
         stdlib/math/math_transcendental.cpp

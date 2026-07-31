@@ -148,33 +148,9 @@ static void test_integer_division_returns_integer() {
     ASSERT_TRUE(passes("integer x = 10 // 3\n"));
 }
 
-static void test_bitwise_and_requires_integer() {
-    ASSERT_TRUE(fails("integer x = 3.0 & 1\n"));
-}
-
-static void test_bitwise_or_requires_integer() {
-    ASSERT_TRUE(fails("integer x = 3 | 1.5\n"));
-}
-
-static void test_bitwise_xor_requires_integer() {
-    ASSERT_TRUE(fails("integer x = 3 ^ true\n"));
-}
-
-static void test_bitwise_shift_requires_integer() {
-    ASSERT_TRUE(fails("integer x = 1 << 2.0\n"));
-}
-
-static void test_bitwise_not_requires_integer() {
-    ASSERT_TRUE(fails("integer x = ~3.0\n"));
-}
-
-static void test_bitwise_ops_return_integer() {
-    ASSERT_TRUE(passes("integer x = 5 & 3\ninteger y = 5 | 3\ninteger z = 5 ^ 3\n"));
-}
-
-static void test_bitwise_shifts_return_integer() {
-    ASSERT_TRUE(passes("integer x = 1 << 4\ninteger y = 16 >> 2\n"));
-}
+// (Bitwise operators were removed from the language surface — R06. Bit
+// manipulation now lives in the Bits stdlib module; its type signatures are
+// exercised by the catalog conformance test and bits_functions.luma.)
 
 // ─── Comparison and membership operators. ───
 
@@ -667,13 +643,6 @@ int main() {
 
     RUN(test_integer_division_requires_integer);
     RUN(test_integer_division_returns_integer);
-    RUN(test_bitwise_and_requires_integer);
-    RUN(test_bitwise_or_requires_integer);
-    RUN(test_bitwise_xor_requires_integer);
-    RUN(test_bitwise_shift_requires_integer);
-    RUN(test_bitwise_not_requires_integer);
-    RUN(test_bitwise_ops_return_integer);
-    RUN(test_bitwise_shifts_return_integer);
 
     // ─── Comparison and membership operators ───
 

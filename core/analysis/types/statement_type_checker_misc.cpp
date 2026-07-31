@@ -212,15 +212,6 @@ void StatementTypeChecker::check_compound_literal_folding(const CompoundAssignme
                           "the divisor is always zero — this will crash at runtime",
                           DiagnosticCode::DivisionByZero);
             }
-
-            if ((stmt.op == TokenType::LessLessEquals ||
-                 stmt.op == TokenType::GreaterGreaterEquals) &&
-                (*int_val < 0 || *int_val >= compile_time_arithmetic::k_max_shift_bits)) {
-                tc_.error("shift amount out of range", stmt.location,
-                          std::format("shift amount must be between 0 and {}",
-                                      compile_time_arithmetic::k_max_shift_bits - 1),
-                          DiagnosticCode::ShiftOutOfRange);
-            }
         }
 
         if (is_number_literal(*stmt.value) &&
@@ -237,10 +228,7 @@ void StatementTypeChecker::check_compound_operand_types(const CompoundAssignment
                                                         const TypeInfo& target_type,
                                                         const TypeInfo& value_type) {
     // Integer-only compound operators.
-    const bool is_integer_only_op =
-        stmt.op == TokenType::SlashSlashEquals || stmt.op == TokenType::AmpersandEquals ||
-        stmt.op == TokenType::PipeEquals || stmt.op == TokenType::CaretEquals ||
-        stmt.op == TokenType::LessLessEquals || stmt.op == TokenType::GreaterGreaterEquals;
+    const bool is_integer_only_op = stmt.op == TokenType::SlashSlashEquals;
 
     if (is_integer_only_op) {
         if (target_type.kind != TypeInfo::Kind::Integer &&
