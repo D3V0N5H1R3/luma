@@ -693,18 +693,10 @@ struct Refiner {
         return c.static_type;
     });
 
-    // ── Set / HashSet / Reference / Resource ──
+    // ── Set / Reference / Resource ──
     add({"Set.to_array"}, true, [](const RefineContext& c) -> TypeInfo {
         if (c.elem.kind != K::StdlibAny) {
             return TypeInfo::make_array(c.elem);
-        }
-
-        return c.static_type;
-    });
-
-    add({"HashSet.reduce"}, true, [](const RefineContext& c) -> TypeInfo {
-        if (c.arg_types.size() >= 2) {
-            return TypeInfo::make_result(c.arg_types[1]);
         }
 
         return c.static_type;

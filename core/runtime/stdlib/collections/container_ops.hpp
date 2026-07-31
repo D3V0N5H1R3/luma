@@ -8,8 +8,8 @@
 // Registers a standard set of operations (length, is_empty, to_array,
 // map, filter, reduce, each, partition, concat) for any container type
 // that stores its elements in a `std::vector<Value>`.  This eliminates
-// the near-identical implementations across Queue, Stack, Set,
-// LinkedList, and HashSet modules.
+// the near-identical implementations across the Queue, Stack, and Set
+// modules.
 //
 // Usage:
 //

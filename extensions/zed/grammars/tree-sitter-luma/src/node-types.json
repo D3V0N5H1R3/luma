@@ -5634,11 +5634,16 @@
   },
   {
     "type": "comment",
-    "named": true
+    "named": true,
+    "extra": true
   },
   {
     "type": "continue_statement",
     "named": true
+  },
+  {
+    "type": "decimal",
+    "named": false
   },
   {
     "type": "dictionary",
@@ -5674,14 +5679,6 @@
   },
   {
     "type": "function",
-    "named": false
-  },
-  {
-    "type": "graph",
-    "named": false
-  },
-  {
-    "type": "hash_set",
     "named": false
   },
   {
@@ -5726,10 +5723,6 @@
   },
   {
     "type": "key_value_store",
-    "named": false
-  },
-  {
-    "type": "linked_list",
     "named": false
   },
   {

@@ -58,7 +58,7 @@ Each helper handles arity checking, numeric extraction, domain validation, and r
 
 ### ContainerModuleBuilder — collection types
 
-Use `ContainerModuleBuilder` for modules that wrap a homogeneous container value type (`QueueValue`, `StackValue`, `SetValue`, `LinkedListValue`, `HashSetValue`). It registers the common boilerplate operations — `new`, `from_array`, `length`, `is_empty`, `to_array`, `map`, `filter`, `reduce`, `each`, `partition`, `concat` — in a single call, leaving only the container-specific operations to be written by hand.
+Use `ContainerModuleBuilder` for modules that wrap a homogeneous container value type (`QueueValue`, `StackValue`, `SetValue`). It registers the common boilerplate operations — `new`, `from_array`, `length`, `is_empty`, `to_array`, `map`, `filter`, `reduce`, `each`, `partition`, `concat` — in a single call, leaving only the container-specific operations to be written by hand.
 
 ```cpp
 #include "runtime/stdlib/collections/container_module_builder.hpp"

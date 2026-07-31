@@ -21,37 +21,34 @@ This reference was previously part of the [User Manual](Luma_User_Manual.md). Fo
 11. [Dictionary](#11--dictionary)
 12. [Encoder](#12--encoder)
 13. [FileSystem](#13--filesystem)
-14. [Graph](#14--graph)
-15. [Solaris and GraphicalUi](#15--solaris-and-graphicalui)
-16. [Hash](#16--hash)
-17. [HashSet](#17--hashset)
-18. [Http](#18--http)
-19. [Console](#19--console)
-20. [Json](#20--json)
-21. [KeyValueStore](#21--keyvaluestore)
-22. [LinearAlgebra](#22--linearalgebra)
-23. [LinkedList](#23--linkedlist)
-24. [Log](#24--log)
-25. [Math](#25--math)
-26. [Optional](#26--optional)
-27. [Order](#27--order)
-28. [Process](#28--process)
-29. [Queue](#29--queue)
-30. [Random](#30--random)
-31. [Reference](#31--reference)
-32. [RegularExpression](#32--regularexpression)
-33. [Resource](#33--resource)
-34. [Result](#34--result)
-35. [Set](#35--set)
-36. [Socket](#36--socket)
-37. [Stack](#37--stack)
-38. [String](#38--string)
-39. [Task](#39--task)
-40. [Terminal](#40--terminal)
-41. [Xml](#41--xml)
-42. [Color](#42--color)
-43. [Bits](#43--bits)
-44. [Statistics](#44--statistics)
+14. [Solaris and GraphicalUi](#14--solaris-and-graphicalui)
+15. [Hash](#15--hash)
+16. [Http](#16--http)
+17. [Console](#17--console)
+18. [Json](#18--json)
+19. [KeyValueStore](#19--keyvaluestore)
+20. [LinearAlgebra](#20--linearalgebra)
+21. [Log](#21--log)
+22. [Math](#22--math)
+23. [Optional](#23--optional)
+24. [Order](#24--order)
+25. [Process](#25--process)
+26. [Queue](#26--queue)
+27. [Random](#27--random)
+28. [Reference](#28--reference)
+29. [RegularExpression](#29--regularexpression)
+30. [Resource](#30--resource)
+31. [Result](#31--result)
+32. [Set](#32--set)
+33. [Socket](#33--socket)
+34. [Stack](#34--stack)
+35. [String](#35--string)
+36. [Task](#36--task)
+37. [Terminal](#37--terminal)
+38. [Xml](#38--xml)
+39. [Color](#39--color)
+40. [Bits](#40--bits)
+41. [Statistics](#41--statistics)
 
 - [See Also](#see-also)
 
@@ -147,7 +144,7 @@ A binary search tree (BST) with O(log n) average-case insert, remove, and lookup
 
 > **Ordering invariant.** For every node, all values in the left subtree are strictly less than the node's value, and all values in the right subtree are strictly greater. Integers and numbers are compared numerically; strings are compared lexicographically. Duplicate values are not stored — inserting an existing value is a no-op.
 >
-> **Balance.** The tree is **not** self-balancing. Inserting values in sorted order produces a degenerate linear tree with O(n) height. For predictable performance on large inputs, shuffle the data before inserting, or prefer `HashSet` for membership-only queries.
+> **Balance.** The tree is **not** self-balancing. Inserting values in sorted order produces a degenerate linear tree with O(n) height. For predictable performance on large inputs, shuffle the data before inserting, or prefer `Set` for membership-only queries.
 
 | Function                            | Parameter Types                         | Return Type                          | Description                                                    |
 | ----------------------------------- | --------------------------------------- | ------------------------------------ | -------------------------------------------------------------- |
@@ -768,63 +765,7 @@ failure(_other) { print("could not read config") }
 
 > **Security note** — `append_file`, `read_bytes`, `read_file`, `read_lines`, `write_bytes`, `write_file`, and `write_lines` validate that the resolved path stays within the current working directory, which blocks cross-directory symlink traversal (e.g. a symlink pointing to `/etc/passwd` is rejected). However, a symbolic link that points to another file **within** the working directory is followed transparently. If your program accepts a user-supplied file path, validate that the resolved path refers to the expected file before reading or writing.
 
-## 14 — Graph
-
-A weighted graph supporting directed and undirected edges. Vertices are identified by strings. All operations are immutable.
-
-| Function                                 | Parameter Types                   | Return Type                              | Description                                                 |
-| ---------------------------------------- | --------------------------------- | ---------------------------------------- | ----------------------------------------------------------- |
-| `Graph.add_edge(g, from, to)`            | `(graph, string, string)`         | `graph`                                  | Add an edge with weight 1                                   |
-| `Graph.add_edge(g, from, to, w)`         | `(graph, string, string, number)` | `graph`                                  | Add a weighted edge                                         |
-| `Graph.add_vertex(g, v)`                 | `(graph, string)`                 | `graph`                                  | Add a vertex                                                |
-| `Graph.all_pairs_shortest_paths(g)`      | `(graph)`                         | `result<dictionary<dictionary<number>>>` | Shortest-path distance between every pair of vertices       |
-| `Graph.breadth_first_search(g, start)`   | `(graph, string)`                 | `result<array<string>>`                  | BFS traversal from start vertex                             |
-| `Graph.connected_components(g)`          | `(graph)`                         | `result<array<array<string>>>`           | Connected components; undirected only                       |
-| `Graph.degree(g, v)`                     | `(graph, string)`                 | `result<integer>`                        | Degree of vertex; fail if not found                         |
-| `Graph.density(g)`                       | `(graph)`                         | `number`                                 | Ratio of actual to maximum possible edges; `0` for fewer than two vertices |
-| `Graph.depth_first_search(g, start)`     | `(graph, string)`                 | `result<array<string>>`                  | DFS traversal from start vertex                             |
-| `Graph.directed()`                       | `()`                              | `graph`                                  | Create an empty directed graph                              |
-| `Graph.edge_count(g)`                    | `(graph)`                         | `integer`                                | Number of edges                                             |
-| `Graph.edge_weight(g, from, to)`         | `(graph, string, string)`         | `result<number>`                         | Weight of edge; fail if not found                           |
-| `Graph.edges(g)`                         | `(graph)`                         | `array<Graph.Edge>`                      | Every edge as a typed `Graph.Edge` record, in deterministic order |
-| `Graph.from_adjacency_list(adj, directed)` | `(dictionary<array<string>>, boolean)` | `graph`                        | Build a graph from an adjacency list (inverse of `to_adjacency_list`) |
-| `Graph.from_edges(edges, directed)`      | `(array<Graph.Edge>, boolean)`    | `graph`                                  | Build a graph from `Graph.Edge` records, adding endpoints as vertices |
-| `Graph.has_cycle(g)`                     | `(graph)`                         | `boolean`                                | Whether the graph contains a cycle                          |
-| `Graph.has_edge(g, from, to)`            | `(graph, string, string)`         | `boolean`                                | Whether edge exists                                         |
-| `Graph.has_path(g, from, to)`            | `(graph, string, string)`         | `result<boolean>`                        | Whether `to` is reachable from `from` (BFS, direction-aware, weight-agnostic); fail if a vertex is missing |
-| `Graph.has_vertex(g, v)`                 | `(graph, string)`                 | `boolean`                                | Whether vertex exists                                       |
-| `Graph.in_degree(g, v)`                  | `(graph, string)`                 | `result<integer>`                        | Number of edges pointing into the vertex; fail if not found |
-| `Graph.is_bipartite(g)`                  | `(graph)`                         | `result<boolean>`                        | Whether the graph is 2-colourable (BFS colouring)          |
-| `Graph.is_connected(g)`                  | `(graph)`                         | `result<boolean>`                        | Whether all vertices form one component (directed = weakly connected) |
-| `Graph.is_directed(g)`                   | `(graph)`                         | `boolean`                                | Whether the graph is directed                               |
-| `Graph.is_tree(g)`                       | `(graph)`                         | `result<boolean>`                        | Whether the graph is connected and acyclic (`edge_count == vertex_count - 1`) |
-| `Graph.minimum_spanning_tree(g)`         | `(graph)`                         | `result<graph>`                          | Minimum spanning tree; undirected graphs only               |
-| `Graph.neighbors(g, v)`                  | `(graph, string)`                 | `result<array<string>>`                  | Adjacent vertices; fail if not found                        |
-| `Graph.out_degree(g, v)`                 | `(graph, string)`                 | `result<integer>`                        | Number of edges leaving the vertex; fail if not found       |
-| `Graph.predecessors(g, v)`               | `(graph, string)`                 | `result<array<string>>`                  | Vertices with an edge into `v` (reverse of `neighbors`); fail if not found |
-| `Graph.remove_edge(g, from, to)`         | `(graph, string, string)`         | `graph`                                  | Remove edge                                                 |
-| `Graph.remove_vertex(g, v)`              | `(graph, string)`                 | `graph`                                  | Remove vertex and its edges                                 |
-| `Graph.reverse(g)`                       | `(graph)`                         | `graph`                                  | Transpose a directed graph (flip every edge); equivalent copy for undirected |
-| `Graph.shortest_path(g, from, to)`       | `(graph, string, string)`         | `result<array<string>>`                  | Shortest path between vertices                              |
-| `Graph.shortest_path_detailed(g, from, to)` | `(graph, string, string)`      | `result<Graph.Path>`                     | Shortest path as a `{ vertices, cost }` record             |
-| `Graph.strongly_connected_components(g)` | `(graph)`                         | `result<array<array<string>>>`           | Groups of mutually reachable vertices; directed graphs only |
-| `Graph.to_adjacency_list(g)`             | `(graph)`                         | `dictionary<array<string>>`              | Convert to adjacency list                                   |
-| `Graph.topological_sort(g)`              | `(graph)`                         | `result<array<string>>`                  | Topological ordering; directed only; fail if cycle          |
-| `Graph.undirected()`                     | `()`                              | `graph`                                  | Create an empty undirected graph                            |
-| `Graph.vertex_count(g)`                  | `(graph)`                         | `integer`                                | Number of vertices                                          |
-| `Graph.vertices(g)`                      | `(graph)`                         | `array<string>`                          | All vertex labels                                           |
-
-`Graph.Edge` record fields: `from` (`string`), `to` (`string`), `weight` (`number`). `Graph.edges(g)` returns every edge as one of these records so you can enumerate a graph's structure directly instead of iterating vertices, calling `Graph.neighbors`, and re-querying `Graph.edge_weight` for each pair. The order is deterministic: vertices are visited in sorted order, then each vertex's out-edges in sorted order. An undirected edge is emitted once, oriented so `from <= to`, so `Array.length(Graph.edges(g)) == Graph.edge_count(g)`.
-
-```luma
-for edge in Graph.edges(g) {
-    print("${edge.from} -> ${edge.to} (${edge.weight})")
-}
-```
-
-`Graph.Path` record fields: `vertices` (`array<string>`), `cost` (`number`). `Graph.shortest_path_detailed(g, from, to)` returns both the route and its total weight in one call, so you no longer have to re-walk a `Graph.shortest_path` result calling `Graph.edge_weight` for each consecutive pair. It is additive — `Graph.shortest_path` is unchanged — and fails (like `shortest_path`) on a missing vertex, a negative edge weight, or when no path exists.
-
-## 15 — Solaris and GraphicalUi
+## 14 — Solaris and GraphicalUi
 
 Luma's GUI story is two layers under one section:
 
@@ -1633,7 +1574,7 @@ Accessibility functions add ARIA attributes, manage focus, and provide screen re
 
 The `attributes` dictionary accepts `"role"` and any key starting with `"aria_"` (underscores are converted to hyphens in the rendered HTML).
 
-## 16 — Hash
+## 15 — Hash
 
 Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 
@@ -1675,43 +1616,7 @@ print(d.hex)                                              # the 64-char hex stri
 match d.algorithm { case Hash.Algorithm.Sha256 { print("sha-256") } else { print("other") } }
 ```
 
-## 17 — HashSet
-
-A hash-based set providing O(1) average-case membership testing. Supports hashable primitive types (boolean, integer, number, string). All operations are immutable — they return a new hash set.
-
-> **HashSet vs Set** — `HashSet` uses hashing for **O(1)** average-case lookups but only supports **primitive types** (`boolean`, `integer`, `number`, `string`). Elements are **unordered**. If you need ordered elements or non-primitive value types (records, tuples, etc.), use `Set` instead — it stores elements in an array with O(n) membership tests but preserves insertion order and accepts any type.
-
-| Function                                  | Parameter Types                      | Return Type                    | Description                                                    |
-| ----------------------------------------- | ------------------------------------ | ------------------------------ | -------------------------------------------------------------- |
-| `HashSet.add(hs, v)`                      | `(hash_set, T)`                      | `hash_set`                     | Set with `v` added                                             |
-| `HashSet.all(hs, fn)`                     | `(hash_set, function(T) -> boolean)` | `result<boolean>`              | Whether every element satisfies `fn` (short-circuits); fail if predicate throws |
-| `HashSet.any(hs, fn)`                     | `(hash_set, function(T) -> boolean)` | `result<boolean>`              | Whether any element satisfies `fn` (short-circuits); fail if predicate throws |
-| `HashSet.contains(hs, v)`                 | `(hash_set, T)`                      | `boolean`                      | Whether `v` is in the set                                      |
-| `HashSet.count(hs, fn)`                   | `(hash_set, function(T) -> boolean)` | `result<integer>`              | Number of elements satisfying `fn`; fail if predicate throws   |
-| `HashSet.difference(hs, other)`           | `(hash_set, hash_set)`               | `hash_set`                     | Elements in `hs` but not `other`                               |
-| `HashSet.each(hs, fn)`                    | `(hash_set, function(T) -> none)`    | `result<none>`                 | Apply `fn` to each element; fail if callback throws            |
-| `HashSet.equals(hs, other)`               | `(hash_set, hash_set)`               | `boolean`                      | Whether the sets contain the same elements                     |
-| `HashSet.filter(hs, fn)`                  | `(hash_set, function(T) -> boolean)` | `result<hash_set>`             | Elements for which `fn` returns true; fail if predicate throws |
-| `HashSet.find(hs, fn)`                    | `(hash_set, function(T) -> boolean)` | `result<T>`                    | An arbitrary element satisfying `fn` (the set is unordered); fail if none match or predicate throws |
-| `HashSet.from_array(arr)`                 | `(array<T>)`                         | `hash_set`                     | Create from array (deduplicates)                               |
-| `HashSet.from_set(s)`                     | `(set)`                              | `hash_set`                     | Convert from `Set`                                             |
-| `HashSet.intersection(hs, other)`         | `(hash_set, hash_set)`               | `hash_set`                     | Intersection of two sets                                       |
-| `HashSet.is_disjoint(hs, other)`          | `(hash_set, hash_set)`               | `boolean`                      | Whether the sets share no elements                             |
-| `HashSet.is_empty(hs)`                    | `(hash_set)`                         | `boolean`                      | Whether the set is empty                                       |
-| `HashSet.is_subset(hs, other)`            | `(hash_set, hash_set)`               | `boolean`                      | Whether `hs` ⊆ `other`                                         |
-| `HashSet.is_superset(hs, other)`          | `(hash_set, hash_set)`               | `boolean`                      | Whether `hs` ⊇ `other`                                         |
-| `HashSet.length(hs)`                      | `(hash_set)`                         | `integer`                      | Number of elements                                             |
-| `HashSet.map(hs, fn)`                     | `(hash_set, function(T) -> U)`       | `result<hash_set>`             | Transform each element into a new set; fail if callback throws |
-| `HashSet.new()`                           | `()`                                 | `hash_set`                     | Empty hash set                                                 |
-| `HashSet.partition(hs, fn)`               | `(hash_set, function(T) -> boolean)` | `result<(hash_set, hash_set)>` | Split into `(matches, rest)`; fail if predicate throws         |
-| `HashSet.reduce(hs, initial, fn)`         | `(hash_set, U, function(U, T) -> U)` | `result<U>`                    | Fold elements with accumulator; fail if `fn` throws            |
-| `HashSet.remove(hs, v)`                   | `(hash_set, T)`                      | `hash_set`                     | Set with `v` removed                                           |
-| `HashSet.symmetric_difference(hs, other)` | `(hash_set, hash_set)`               | `hash_set`                     | Elements in one but not both                                   |
-| `HashSet.to_array(hs)`                    | `(hash_set)`                         | `array<T>`                     | Convert to array                                               |
-| `HashSet.to_set(hs)`                      | `(hash_set)`                         | `set`                          | Convert to `Set`                                               |
-| `HashSet.union(hs, other)`                | `(hash_set, hash_set)`               | `hash_set`                     | Union of two sets                                              |
-
-## 18 — Http
+## 16 — Http
 
 Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https://` URLs return an error result.
 
@@ -1819,7 +1724,7 @@ result<Http.Response> r = Http.get_with(
 > **Security note** — HTTP header names and values are validated to reject carriage-return (`\r`) and line-feed (`\n`) characters. Supplying headers that contain these characters returns a `failure` result to prevent CRLF header injection.
 > **Proxy support** — When the `HTTPS_PROXY`, `HTTP_PROXY`, or `ALL_PROXY` environment variables are set (lower-case variants are also honoured), requests are routed through the named HTTP proxy: `https` URLs use a `CONNECT` tunnel (TLS remains end-to-end with the origin server, so certificate verification is unaffected), and plain `http` URLs are forwarded with an absolute-form request line. `NO_PROXY` (comma-separated host or domain suffixes) bypasses the proxy for matching hosts. Proxy credentials supplied in the proxy URL's userinfo are sent via `Proxy-Authorization`. SSRF protection still applies to the request target: requests resolving to private, loopback, or otherwise reserved addresses are rejected even when a proxy is configured.
 
-## 19 — Console
+## 17 — Console
 
 | Function                       | Parameter Types | Return Type       | Description                                                               |
 | ------------------------------ | --------------- | ----------------- | ------------------------------------------------------------------------- |
@@ -1841,7 +1746,7 @@ result<Http.Response> r = Http.get_with(
 
 > **Console vs FileSystem:** `Console` handles console I/O — reading from stdin and writing to stdout/stderr. `FileSystem` handles file content — reading, writing, and appending data — as well as file metadata and paths (checking existence, querying size, listing directories, copying, renaming, and manipulating path components). Use `Console` for interactive console I/O; use `FileSystem` to read, write, and manage files and directories.
 
-## 20 — Json
+## 18 — Json
 
 Serialise and deserialise Luma values as JSON.
 
@@ -1938,7 +1843,7 @@ match Json.parse_detailed(user_input) {
 }
 ```
 
-## 21 — KeyValueStore
+## 19 — KeyValueStore
 
 Persistent file-backed key-value store. Keys and values are strings. The store uses a tab-separated format with proper escaping. Mutation functions (`set`, `remove`, `set_many`, `clear`) return `result<key_value_store>` — `success` with a new copy of the store, or `failure` if the store is read-only.
 
@@ -1966,7 +1871,7 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.update(s, key, fn)`          | `(key_value_store, string, function(optional<string>) -> string)` | `result<key_value_store>` | Set key to `fn(current-or-none)`; fail if read-only |
 | `KeyValueStore.values(s)`                   | `(key_value_store)`                     | `array<string>`           | All values                                        |
 
-## 22 — LinearAlgebra
+## 20 — LinearAlgebra
 
 Vector and matrix operations using arrays of numbers.
 
@@ -2025,55 +1930,7 @@ Vector and matrix operations using arrays of numbers.
 | `LinearAlgebra.transpose(m)`          | `(array<array<number>>)`                       | `array<array<number>>`         | Transpose matrix                |
 | `LinearAlgebra.zero_matrix(r, c)`     | `(integer, integer)`                           | `array<array<number>>`         | r×c zero matrix                 |
 
-## 23 — LinkedList
-
-A doubly-linked list with O(1) prepend/append and O(n) indexed access. All operations are immutable — they return a new linked list.
-
-| Function                          | Parameter Types                            | Return Type                          | Description                                                                  |
-| --------------------------------- | ------------------------------------------ | ------------------------------------ | ---------------------------------------------------------------------------- |
-| `LinkedList.append(ll, v)`        | `(linked_list, T)`                         | `linked_list`                        | Add to back                                                                  |
-| `LinkedList.at(ll, i)`            | `(linked_list, integer)`                   | `result<T>`                          | Element at index; fail if out of bounds                                      |
-| `LinkedList.concat(a, b)`         | `(linked_list, linked_list)`               | `linked_list`                        | Concatenate two lists                                                        |
-| `LinkedList.contains(ll, v)`      | `(linked_list, T)`                         | `boolean`                            | Whether `v` is in the list                                                   |
-| `LinkedList.each(ll, fn)`         | `(linked_list, function(T) -> none)`       | `result<none>`                       | Iterate for side effects; fail if callback throws                            |
-| `LinkedList.filter(ll, fn)`       | `(linked_list, function(T) -> boolean)`    | `result<linked_list>`                | Keep matching elements; fail if callback throws                              |
-| `LinkedList.find(ll, fn)`         | `(linked_list, function(T) -> boolean)`    | `result<T>`                          | First matching element; fail if not found                                    |
-| `LinkedList.first(ll)`            | `(linked_list)`                            | `result<T>`                          | First element; fail if empty                                                 |
-| `LinkedList.from_array(arr)`      | `(array<T>)`                               | `linked_list`                        | Create from array                                                            |
-| `LinkedList.insert_at(ll, i, v)`  | `(linked_list, integer, T)`                | `result<linked_list>`                | Insert at index; fail if out of bounds                                       |
-| `LinkedList.is_empty(ll)`         | `(linked_list)`                            | `boolean`                            | Whether the list is empty                                                    |
-| `LinkedList.last(ll)`             | `(linked_list)`                            | `result<T>`                          | Last element; fail if empty                                                  |
-| `LinkedList.length(ll)`           | `(linked_list)`                            | `integer`                            | Number of elements                                                           |
-| `LinkedList.map(ll, fn)`          | `(linked_list, function(T) -> U)`          | `result<linked_list>`                | Transform each element; fail if callback throws                              |
-| `LinkedList.new()`                | `()`                                       | `linked_list`                        | Empty linked list                                                            |
-| `LinkedList.partition(ll, fn)`    | `(linked_list, function(T) -> boolean)`    | `result<(linked_list, linked_list)>` | Split into `(matches, rest)`; fail if predicate throws                       |
-| `LinkedList.prepend(ll, v)`       | `(linked_list, T)`                         | `linked_list`                        | Add to front                                                                 |
-| `LinkedList.push(ll, v)`          | `(linked_list, T)`                         | `linked_list`                        | Add to back (alias for `append`)                                             |
-| `LinkedList.reduce(ll, init, fn)` | `(linked_list, U, function(U, T) -> U)`    | `result<U>`                          | Fold elements; fail if callback throws                                       |
-| `LinkedList.remove_at(ll, i)`     | `(linked_list, integer)`                   | `result<linked_list>`                | Remove at index; fail if out of bounds                                       |
-| `LinkedList.remove_first(ll)`     | `(linked_list)`                            | `result<linked_list>`                | Remove first element; fail if empty                                          |
-| `LinkedList.remove_last(ll)`      | `(linked_list)`                            | `result<linked_list>`                | Remove last element; fail if empty                                           |
-| `LinkedList.reverse(ll)`          | `(linked_list)`                            | `linked_list`                        | Reversed copy                                                                |
-| `LinkedList.sort(ll, fn)`         | `(linked_list, function(T, T) -> boolean)` | `result<linked_list>`                | Sort by comparator (`true` = first arg comes first); fail if callback throws |
-| `LinkedList.to_array(ll)`         | `(linked_list)`                            | `array<T>`                           | Convert to array                                                             |
-| `LinkedList.unique(ll)`           | `(linked_list)`                            | `linked_list`                        | Remove duplicate elements                                                    |
-| `LinkedList.zip(a, b)`            | `(linked_list, linked_list)`               | `linked_list`                        | Pair elements into tuples; truncate to shorter list                          |
-| `LinkedList.any(ll, fn)`          | `(linked_list, function(T) -> boolean)`    | `result<boolean>`                    | Whether any element matches; fail if callback throws                         |
-| `LinkedList.all(ll, fn)`          | `(linked_list, function(T) -> boolean)`    | `result<boolean>`                    | Whether all elements match; fail if callback throws                          |
-| `LinkedList.count(ll, fn)`        | `(linked_list, function(T) -> boolean)`    | `result<integer>`                    | Number of matching elements; fail if callback throws                         |
-| `LinkedList.take(ll, n)`          | `(linked_list, integer)`                   | `linked_list`                        | First `n` elements (`n` clamped to `[0, length]`)                            |
-| `LinkedList.drop(ll, n)`          | `(linked_list, integer)`                   | `linked_list`                        | All but the first `n` elements (`n` clamped)                                 |
-| `LinkedList.take_while(ll, fn)`   | `(linked_list, function(T) -> boolean)`    | `result<linked_list>`                | Leading run satisfying the predicate; fail if callback throws                |
-| `LinkedList.drop_while(ll, fn)`   | `(linked_list, function(T) -> boolean)`    | `result<linked_list>`                | Drop the leading satisfying run; fail if callback throws                     |
-| `LinkedList.min(ll)`              | `(linked_list)`                            | `result<T>`                          | Smallest element; fail if empty or incomparable                              |
-| `LinkedList.max(ll)`              | `(linked_list)`                            | `result<T>`                          | Largest element; fail if empty or incomparable                              |
-| `LinkedList.sum(ll)`              | `(linked_list)`                            | `result<integer \| number>`          | Sum of elements; fail on a non-numeric element                               |
-| `LinkedList.tail(ll)`             | `(linked_list)`                            | `result<linked_list>`                | The list without its head; fail if empty                                     |
-| `LinkedList.uncons(ll)`           | `(linked_list)`                            | `result<(T, linked_list)>`           | `(head, tail)` decomposition; fail if empty                                  |
-
-> **Performance note:** LinkedList operations (`prepend`, `append`, `remove_at`, etc.) create a full deep copy of the list, making each mutation O(n). For performance-critical workloads with frequent mutations, consider using `Array` instead, which offers O(1) amortized `push` and `pop`.
-
-## 24 — Log
+## 21 — Log
 
 Structured logging with configurable levels. Messages are written to stderr by default.
 
@@ -2099,7 +1956,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 
 `Log.set_output` also accepts a `Log.Output` choice in place of the string, mirroring how `Log.set_level` accepts `Log.Level`. The choice has three variants: `Log.Output.Stderr`, `Log.Output.Stdout`, and `Log.Output.File(path: string)`. The typed form removes the ambiguity of the string overload — where a mistyped stream name such as `"stdrr"` is silently treated as a file path — because a stream and a file path are now distinct variants: `Log.set_output(Log.Output.File("app.log"))` can only mean a file.
 
-## 25 — Math
+## 22 — Math
 
 | Function                              | Parameter Types                  | Return Type       | Description                                                                      |
 | ------------------------------------- | -------------------------------- | ----------------- | -------------------------------------------------------------------------------- |
@@ -2343,7 +2200,7 @@ case Sign.Positive { "rising" }
 | `Math.ln2`      | `number`  | 0.6931471805599453 (natural log of 2) |
 | `Math.ln10`     | `number`  | 2.302585092994046 (natural log of 10) |
 
-## 26 — Optional
+## 23 — Optional
 
 Functions for working with `optional<T>` values. All functions are available as `Optional.function_name(...)` without a `use` declaration.
 
@@ -2400,7 +2257,7 @@ string label = some(42)
 print(label) # "positive: 42"
 ```
 
-## 27 — Order
+## 24 — Order
 
 Comparison utilities built around the `Ordering` choice type, a self-documenting
 alternative to raw `-1` / `0` / `1` comparison numbers. All functions are available
@@ -2464,7 +2321,7 @@ array<Person> sorted = Result.unwrap(
 The existing numeric comparator convention (a `function(T, T) -> number` returning a
 negative, zero, or positive value) still works unchanged; `Order` is purely additive.
 
-## 28 — Process
+## 25 — Process
 
 | Function                                        | Parameter Types    | Return Type                     | Description                                                              |
 | ----------------------------------------------- | ------------------ | ------------------------------- | ------------------------------------------------------------------------ |
@@ -2563,7 +2420,7 @@ failure(_e)  { print("could not signal that process") }
 }
 ```
 
-## 29 — Queue
+## 26 — Queue
 
 Immutable FIFO (first-in, first-out) queue. All mutating operations return a new queue, leaving the original unchanged.
 
@@ -2590,7 +2447,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Queue.reverse(q)`          | `(queue)`                         | `queue`                  | New queue with the element order reversed              |
 | `Queue.to_array(q)`         | `(queue)`                         | `array<T>`               | Convert to array                                       |
 
-## 30 — Random
+## 27 — Random
 
 | Function                          | Parameter Types       | Return Type        | Description                                                                     |
 | --------------------------------- | --------------------- | ------------------ | ------------------------------------------------------------------------------- |
@@ -2646,7 +2503,7 @@ Random.Uuid id = Random.uuid_typed()
 result<Random.Uuid> parsed = Random.parse_uuid("550e8400-e29b-41d4-a716-446655440000")
 ```
 
-## 31 — Reference
+## 28 — Reference
 
 Mutable reference cells — shared mutable containers that preserve identity across closure capture boundaries. All functions are available as `Reference.function_name(...)` without a `use` declaration.
 
@@ -2703,7 +2560,7 @@ integer value = Reference.new(42) |> Reference.get()       # 42
 string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 ```
 
-## 32 — RegularExpression
+## 29 — RegularExpression
 
 | Function                                          | Parameter Types            | Return Type                              | Description                                                   |
 | ------------------------------------------------- | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
@@ -2806,7 +2663,7 @@ result<boolean> spans =
 
 The ReDoS guard and pattern-size limit apply to the `*_with` variants exactly as they do to the flagless functions.
 
-## 33 — Resource
+## 30 — Resource
 
 `Resource.with` guarantees that a cleanup function is called after a body function runs, regardless of whether the body throws a runtime error. It is the Luma equivalent of a `finally`-based cleanup block, expressed as a library function.
 
@@ -2859,15 +2716,15 @@ string content = Resource.using(
 )
 ```
 
-## 34 — Result
+## 31 — Result
 
 See the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--result-and-optional).
 
-## 35 — Set
+## 32 — Set
 
 `Set` values are a distinct type (not arrays). Use `Set.from_array` to create a set and `Set.to_array` to convert back.
 
-> **Set vs HashSet** — `Set` stores elements in an ordered array using linear scans, so it works with **any value type** (records, tuples, etc.) but membership tests are **O(n)**. Choose `Set` when you need ordering guarantees or non-primitive elements. For large collections of primitive values (`boolean`, `integer`, `number`, `string`) where fast lookups matter, use `HashSet` instead — it provides **O(1)** average-case membership testing via hashing.
+> **Element types** — `Set` stores elements in an ordered array and compares them by structural equality, so it works with **any value type** (records, tuples, etc.). Membership tests are **O(n)**, so `Set` is best suited to small and medium collections.
 
 | Function                             | Parameter Types                 | Return Type          | Description                                                    |
 | ------------------------------------ | ------------------------------- | -------------------- | -------------------------------------------------------------- |
@@ -2898,7 +2755,7 @@ See the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--resul
 | `Set.to_array(s)`                    | `(set)`                         | `array<T>`           | Convert to array                                               |
 | `Set.union(s, other)`                | `(set, set)`                    | `set`                | Elements in `s` or `other`                                     |
 
-## 36 — Socket
+## 33 — Socket
 
 Cross-platform TCP and UDP networking.
 
@@ -2967,7 +2824,7 @@ match Socket.connect_typed("127.0.0.1", 8080) {
 
 ---
 
-## 37 — Stack
+## 34 — Stack
 
 Immutable LIFO (last-in, first-out) stack. All mutating operations return a new stack.
 
@@ -2995,7 +2852,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `Stack.reverse(s)`          | `(stack)`                         | `stack`                  | Reverse element order (top becomes bottom)                      |
 | `Stack.to_array(s)`         | `(stack)`                         | `array<T>`               | Convert to array                                                |
 
-## 38 — String
+## 35 — String
 
 | Function                            | Parameter Types                | Return Type       | Description                                                                     |
 | ----------------------------------- | ------------------------------ | ----------------- | ------------------------------------------------------------------------------- |
@@ -3101,7 +2958,7 @@ string letter = Result.unwrap(Random.choice(letters))
 boolean is_punct = String.contains(String.punctuation, "!")
 ```
 
-## 39 — Task
+## 36 — Task
 
 Concurrency combinators for `spawn`/`await` tasks.
 
@@ -3171,7 +3028,7 @@ Using `spawn` outside a `task_scope` still works (fire-and-forget) but produces 
 
 > **Resource limit** — The internal task queue holds a bounded number of pending tasks (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`). Spawning beyond this limit throws a runtime error (`task queue is full — too many pending tasks`). Design your program to await tasks before spawning more to stay within this limit.
 
-## 40 — Terminal
+## 37 — Terminal
 
 Terminal UI control — cursor movement, colors, styling, screen management, and mouse input.
 
@@ -3388,7 +3245,7 @@ function void test_counter_responds_to_keys() {
 
 The same machinery is reachable without Luma code via the `LUMA_TERMINAL_INPUT` environment variable (one key per line), which the example runner (`scripts/run_examples.py`) uses to drive the raw-mode example programs unattended.
 
-## 41 — Xml
+## 38 — Xml
 
 Parse, build, query, and serialise XML documents. XML nodes are opaque `xml` values; decode one into a typed `Xml.Node` choice with `Xml.to_node` when you need to `match` over its structure.
 
@@ -3467,7 +3324,7 @@ case Xml.Node.CData(content)            { print(content) }
 
 ---
 
-## 42 — Color
+## 39 — Color
 
 A typed RGBA colour value with validating constructors and derivations. Every value serialises to a CSS string the GraphicalUi web-view already accepts, so `Solaris` themes can be _computed_ rather than hand-written. Like `Decimal` and `Math.Fraction`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
 
@@ -3544,7 +3401,7 @@ number ratio = Color.contrast_ratio(base, Result.unwrap(Color.rgb(255, 255, 255)
 
 ---
 
-## 43 — Bits
+## 40 — Bits
 
 Integer bit manipulation as pipe-first free functions. `Bits` replaces the former
 `& | ^ ~ << >>` operators, which were removed from the language surface — bit
@@ -3573,7 +3430,7 @@ integer doubled  = Bits.shift_left(3, 1)     # 6
 
 ---
 
-## 44 — Statistics
+## 41 — Statistics
 
 Descriptive and inferential statistics over numeric arrays. Split out of `Math`
 so the four maths modules each cover one cohesive domain: `Math` (scalar

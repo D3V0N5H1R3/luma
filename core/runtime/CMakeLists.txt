@@ -41,16 +41,9 @@ luma_add_stdlib_library(collections
         stdlib/collections/set_module.cpp
         stdlib/collections/queue_module.cpp
         stdlib/collections/stack_module.cpp
-        stdlib/collections/linkedlist_module.cpp
-        stdlib/collections/hashset_module.cpp
         stdlib/collections/binarytree_module.cpp
         stdlib/collections/binarytree_core.cpp
         stdlib/collections/binarytree_advanced.cpp
-        stdlib/collections/graph_module.cpp
-        stdlib/collections/graph_algorithms.cpp
-        stdlib/collections/graph_traversal.cpp
-        stdlib/collections/graph_paths.cpp
-        stdlib/collections/graph_ordering.cpp
 )
 
 luma_platform_source_pair(_platform_process stdlib/system/platform_process)

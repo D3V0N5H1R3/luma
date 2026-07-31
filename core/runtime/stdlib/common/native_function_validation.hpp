@@ -178,30 +178,6 @@ expect_tree(const Value& v, std::string_view name, const SourceLocation& loc) {
     return v.as_binary_tree();
 }
 
-[[nodiscard]] inline std::shared_ptr<GraphValue> expect_graph(const Value& v, std::string_view name,
-                                                              const SourceLocation& loc) {
-    validate_type(
-        v, [](const Value& val) { return val.is_graph(); }, "graph", name, loc,
-        "create a graph with Graph.new() or Graph.directed() first");
-    return v.as_graph();
-}
-
-[[nodiscard]] inline std::shared_ptr<LinkedListValue>
-expect_list(const Value& v, std::string_view name, const SourceLocation& loc) {
-    validate_type(
-        v, [](const Value& val) { return val.is_linked_list(); }, "linked_list", name, loc,
-        "create a linked list with LinkedList.new() first");
-    return v.as_linked_list();
-}
-
-[[nodiscard]] inline std::shared_ptr<HashSetValue>
-expect_hash_set(const Value& v, std::string_view name, const SourceLocation& loc) {
-    validate_type(
-        v, [](const Value& val) { return val.is_hash_set(); }, "hash_set", name, loc,
-        "create a hash set with HashSet.new() or HashSet.from_array() first");
-    return v.as_hash_set();
-}
-
 [[nodiscard]] inline std::shared_ptr<XmlValue> expect_xml(const Value& v, std::string_view name,
                                                           const SourceLocation& loc) {
     validate_type(

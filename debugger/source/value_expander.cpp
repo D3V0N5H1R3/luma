@@ -106,14 +106,8 @@ std::vector<Variable> ValueExpander::get_value_variables(const Value& val, int v
             return get_indexed_variables(val.as_stack()->elements, start, count, child_depth);
         case ValueKind::Set:
             return get_indexed_variables(val.as_set()->elements, start, count, child_depth);
-        case ValueKind::HashSet:
-            return get_hash_set_variables(val, start, count, child_depth);
-        case ValueKind::LinkedList:
-            return get_linked_list_variables(val, start, count, child_depth);
         case ValueKind::BinaryTree:
             return get_binary_tree_variables(val, start, count, child_depth);
-        case ValueKind::Graph:
-            return get_graph_variables(val);
         case ValueKind::KeyValueStore:
             return get_key_value_store_variables(val);
         case ValueKind::Xml:
@@ -218,32 +212,6 @@ std::vector<Variable> ValueExpander::get_indexed_variables(const std::vector<Val
     return result;
 }
 
-std::vector<Variable> ValueExpander::get_hash_set_variables(const Value& val, int start, int count,
-                                                            int child_depth) const {
-    std::vector<Value> elements;
-    elements.reserve(val.as_hash_set()->size());
-
-    for (const auto& [hash, bucket] : val.as_hash_set()->buckets) {
-        for (const auto& element : bucket) {
-            elements.push_back(element);
-        }
-    }
-
-    return get_indexed_variables(elements, start, count, child_depth);
-}
-
-std::vector<Variable> ValueExpander::get_linked_list_variables(const Value& val, int start,
-                                                               int count, int child_depth) const {
-    std::vector<Value> elements;
-    elements.reserve(val.as_linked_list()->size());
-
-    for (auto node = val.as_linked_list()->head; node; node = node->next) {
-        elements.push_back(node->value);
-    }
-
-    return get_indexed_variables(elements, start, count, child_depth);
-}
-
 std::vector<Variable> ValueExpander::get_binary_tree_variables(const Value& val, int start,
                                                                int count, int child_depth) const {
     // Iterative in-order traversal yields the BST's elements in sorted order
@@ -267,27 +235,6 @@ std::vector<Variable> ValueExpander::get_binary_tree_variables(const Value& val,
     }
 
     return get_indexed_variables(elements, start, count, child_depth);
-}
-
-std::vector<Variable> ValueExpander::get_graph_variables(const Value& val) const {
-    std::vector<Variable> result;
-    const auto& graph = *val.as_graph();
-
-    for (const auto& [vertex, edges] : graph.adjacency) {
-        std::string neighbours;
-
-        for (const auto& edge : edges) {
-            if (!neighbours.empty()) {
-                neighbours += ", ";
-            }
-            neighbours += std::format("{}({})", edge.to, edge.weight);
-        }
-
-        result.push_back(make_leaf_variable(vertex, std::format("[{}]", neighbours),
-                                            graph.directed ? "vertex (directed)" : "vertex"));
-    }
-
-    return result;
 }
 
 std::vector<Variable> ValueExpander::get_key_value_store_variables(const Value& val) const {

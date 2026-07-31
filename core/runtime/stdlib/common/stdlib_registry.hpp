@@ -10,10 +10,7 @@
 #include "runtime/stdlib/collections/array_module.hpp"
 #include "runtime/stdlib/collections/binarytree_module.hpp"
 #include "runtime/stdlib/collections/dictionary_module.hpp"
-#include "runtime/stdlib/collections/graph_module.hpp"
-#include "runtime/stdlib/collections/hashset_module.hpp"
 #include "runtime/stdlib/collections/keyvaluestore_module.hpp"
-#include "runtime/stdlib/collections/linkedlist_module.hpp"
 #include "runtime/stdlib/collections/queue_module.hpp"
 #include "runtime/stdlib/collections/set_module.hpp"
 #include "runtime/stdlib/collections/stack_module.hpp"
@@ -117,15 +114,12 @@ inline constexpr ModuleEntry kModules[] = {
     {"Decimal", register_decimal_ns, nullptr, false, false},
     {"Dictionary", register_dictionary_ns, nullptr, false, false},
     {"Encoder", register_encoder_ns, nullptr, false, false},
-    {"Graph", register_graph_ns, nullptr, false, false},
-    // ^ Uses define_native directly instead of ModuleBuilder — see graphicalui_module.hpp.
     // Registered under the "GraphicalUi" name: this is the low-level web-view engine
-    // that the built-in Solaris prelude (gui_prelude) reconciles onto.
+    // that the built-in Solaris prelude (gui_prelude) reconciles onto.  Uses
+    // define_native directly instead of ModuleBuilder — see graphicalui_module.hpp.
     {"GraphicalUi", register_graphicalui_ns, nullptr, false, false},
-    {"HashSet", register_hashset_ns, nullptr, false, false},
     {"Json", register_json_ns, nullptr, false, false},
     {"LinearAlgebra", register_linearalgebra_ns, nullptr, false, false},
-    {"LinkedList", register_linkedlist_ns, nullptr, false, false},
     {"Math", register_math_ns, nullptr, false, false},
     {"Optional", register_optional_ns, nullptr, false, false},
     {"Order", register_order_ns, nullptr, false, false},

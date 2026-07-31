@@ -471,8 +471,8 @@ void test_get_variables_array_paging() {
     ASSERT_EQ(head[2].name, "[2]");
 }
 
-// ─── Collection expansion (queue, set, hash_set, linked_list, binary_tree, ───
-// ─── graph, key_value_store, range, reference) ───────────────────────────────
+// ─── Collection expansion (queue, set, binary_tree, key_value_store, ─────────
+// ─── range, reference) ───────────────────────────────────────────────────────
 
 void test_get_variables_queue() {
     VariableInspector inspector;
@@ -513,51 +513,6 @@ void test_get_variables_set() {
     ASSERT_EQ(children[1].value, "8");
 }
 
-void test_get_variables_hash_set() {
-    VariableInspector inspector;
-
-    auto hash_set = std::make_shared<luma::HashSetValue>();
-    hash_set->buckets[1].push_back(luma::Value{static_cast<std::int64_t>(100)});
-    hash_set->buckets[2].push_back(luma::Value{static_cast<std::int64_t>(200)});
-    hash_set->count_ = 2;
-    luma::Value hash_set_value{hash_set};
-
-    auto var = inspector.make_variable("hs", hash_set_value, false, 0);
-    ASSERT_EQ(var.indexed_variables, 2);
-
-    const VariableInspector::ThreadResolver resolver{};
-    auto children = inspector.get_variables(var.variables_reference, 0, 0, "", resolver);
-    ASSERT_EQ(children.size(), 2U);
-
-    // Bucket iteration order is unspecified; assert on the set of values.
-    std::set<std::string> values;
-    for (const auto& child : children) {
-        values.insert(child.value);
-    }
-    ASSERT_TRUE(values.contains("100"));
-    ASSERT_TRUE(values.contains("200"));
-}
-
-void test_get_variables_linked_list() {
-    VariableInspector inspector;
-
-    auto list = std::make_shared<luma::LinkedListValue>();
-    list->head = std::make_shared<luma::LinkedListNode>(luma::Value{static_cast<std::int64_t>(1)});
-    list->head->next =
-        std::make_shared<luma::LinkedListNode>(luma::Value{static_cast<std::int64_t>(2)});
-    list->count_ = 2;
-    luma::Value list_value{list};
-
-    auto var = inspector.make_variable("ll", list_value, false, 0);
-    ASSERT_EQ(var.indexed_variables, 2);
-
-    const VariableInspector::ThreadResolver resolver{};
-    auto children = inspector.get_variables(var.variables_reference, 0, 0, "", resolver);
-    ASSERT_EQ(children.size(), 2U);
-    ASSERT_EQ(children[0].value, "1"); // head first
-    ASSERT_EQ(children[1].value, "2");
-}
-
 void test_get_variables_binary_tree() {
     VariableInspector inspector;
 
@@ -580,31 +535,6 @@ void test_get_variables_binary_tree() {
     ASSERT_EQ(children[0].value, "1");
     ASSERT_EQ(children[1].value, "2");
     ASSERT_EQ(children[2].value, "3");
-}
-
-void test_get_variables_graph() {
-    VariableInspector inspector;
-
-    auto graph = std::make_shared<luma::GraphValue>();
-    graph->directed = true;
-    graph->adjacency["a"].push_back(luma::GraphEdge{.to = "b", .weight = 1.0});
-    graph->adjacency["b"] = {};
-    luma::Value graph_value{graph};
-
-    auto var = inspector.make_variable("g", graph_value, false, 0);
-    ASSERT_EQ(var.named_variables, 2);
-
-    const VariableInspector::ThreadResolver resolver{};
-    auto children = inspector.get_variables(var.variables_reference, 0, 0, "", resolver);
-    ASSERT_EQ(children.size(), 2U);
-
-    // Adjacency iteration order is unspecified; assert on the set of vertices.
-    std::set<std::string> names;
-    for (const auto& child : children) {
-        names.insert(child.name);
-    }
-    ASSERT_TRUE(names.contains("a"));
-    ASSERT_TRUE(names.contains("b"));
 }
 
 void test_get_variables_key_value_store() {
@@ -753,10 +683,7 @@ int main() {
     // Collection expansion for the remaining structured value kinds.
     RUN(test_get_variables_queue);
     RUN(test_get_variables_set);
-    RUN(test_get_variables_hash_set);
-    RUN(test_get_variables_linked_list);
     RUN(test_get_variables_binary_tree);
-    RUN(test_get_variables_graph);
     RUN(test_get_variables_key_value_store);
     RUN(test_get_variables_xml);
     RUN(test_get_variables_range);

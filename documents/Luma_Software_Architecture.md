@@ -493,7 +493,7 @@ _Note:_ The Type Checker operates on the merged AST produced by the Include Reso
 
 ### 4.11 Standard Library
 
-**Responsibility:** Provide all built-in functions and constants organised into 39 namespaces defined by the language (String, Array, Dictionary, Math, Result, Converter, DateTime, Decimal, Console, FileSystem, RegularExpression, Process, Random, Encoder, Resource, Set, Channel, Task, Terminal, GraphicalUi, Socket, Optional, Reference, Queue, Stack, Log, Json, Csv, Xml, LinearAlgebra, Calculus, Hash, Compression, Http, KeyValueStore, HashSet, LinkedList, BinaryTree, Graph) plus the core built-ins (`print`, `assert`, `type_of`) — 40 registration units in total. Note: `success` and `failure` are language keywords parsed into dedicated AST nodes (`SuccessExpression`, `FailureExpression`), not runtime functions.
+**Responsibility:** Provide all built-in functions and constants organised into 36 namespaces defined by the language (String, Array, Dictionary, Math, Result, Converter, DateTime, Decimal, Console, FileSystem, RegularExpression, Process, Random, Encoder, Resource, Set, Channel, Task, Terminal, GraphicalUi, Socket, Optional, Reference, Queue, Stack, Log, Json, Csv, Xml, LinearAlgebra, Calculus, Hash, Compression, Http, KeyValueStore, BinaryTree) plus the core built-ins (`print`, `assert`, `type_of`) — 37 registration units in total. Note: `success` and `failure` are language keywords parsed into dedicated AST nodes (`SuccessExpression`, `FailureExpression`), not runtime functions.
 
 **Interface:**
 
@@ -918,10 +918,7 @@ Value = variant {
     ChoiceValue         : shared_ptr<Choice>         # Choice = { type_name, variant_name, fields }
     DictionaryValue     : shared_ptr<Dictionary>     # Dictionary = { vector<pair<string, Value>>, hash index }
     FunctionValue       : shared_ptr<Function>       # Function = { name, parameters, body, closure }
-    GraphValue          : shared_ptr<Graph>          # Graph = { adjacency list }
-    HashSetValue        : shared_ptr<HashSet>        # HashSet = { hash-based set }
     KeyValueStoreValue  : shared_ptr<KeyValueStore>  # KeyValueStore = { path, entries }
-    LinkedListValue     : shared_ptr<LinkedList>     # LinkedList = { doubly-linked nodes }
     NativeFunctionValue : shared_ptr<NativeFunction> # NativeFunction = { name, callable }
     QueueValue          : shared_ptr<Queue>          # Queue = { deque<Value> }
     RangeValue          : shared_ptr<Range>          # Range = { start, end, inclusive }
@@ -941,7 +938,7 @@ Value = variant {
 
 - Primitive values (`none`, `boolean`, `integer`, `number`) are stored inline — no heap allocation.
 - Strings are stored inline as `std::string` — no heap indirection beyond the string's own internal buffer.
-- Compound values (`array`, `binary_tree`, `channel`, `choice`, `dictionary`, `function`, `graph`, `hash_set`, `key_value_store`, `linked_list`, `queue`, `range`, `record`, `reference`, `result`, `set`, `socket`, `stack`, `task`, `tuple`, `xml`) use `std::shared_ptr` for shared ownership within the interpreter (e.g., closures capturing outer variables, channels shared between tasks).
+- Compound values (`array`, `binary_tree`, `channel`, `choice`, `dictionary`, `function`, `key_value_store`, `queue`, `range`, `record`, `reference`, `result`, `set`, `socket`, `stack`, `task`, `tuple`, `xml`) use `std::shared_ptr` for shared ownership within the interpreter (e.g., closures capturing outer variables, channels shared between tasks).
 
 ### 5.5 Bytecode Data Structures
 
@@ -1851,7 +1848,7 @@ The interpreter uses C++ RAII and smart pointers for fully automatic memory mana
 | Lambdas/closures | `std::shared_ptr` | Closures own a deep-copied environment snapshot that must outlive them.                                                          |
 | Records          | `std::shared_ptr` | Records can be passed by reference to functions.                                                                                 |
 | Results          | `std::shared_ptr` | Results flow through pipelines and match arms.                                                                                   |
-| Stdlib values    | `std::shared_ptr` | Queue, Stack, Set, HashSet, LinkedList, BinaryTree, Graph, KeyValueStore, Xml, Reference — all use shared pointers.              |
+| Stdlib values    | `std::shared_ptr` | Queue, Stack, Set, BinaryTree, KeyValueStore, Xml, Reference — all use shared pointers.              |
 | Tasks            | `std::shared_ptr` | Tasks are shared between the spawning scope and the thread pool.                                                                 |
 | Tuples           | `std::shared_ptr` | Same as arrays.                                                                                                                  |
 
@@ -1928,15 +1925,12 @@ Standard Library
 ├── Dictionary module        — Dictionary.get, Dictionary.set, Dictionary.keys, ...
 ├── Encoder module           — Encoder.encode_base64, Encoder.decode_base64, Encoder.encode_base64url, Encoder.encode_url, ...
 ├── FileSystem module        — FileSystem.list_directories, FileSystem.create_directory, FileSystem.delete_directory, FileSystem.rename_directory, ...
-├── Graph module             — Graph.directed, Graph.undirected, Graph.add_vertex, Graph.add_edge, Graph.breadth_first_search, Graph.shortest_path, ...
 ├── Hash module              — Hash.md5, Hash.sha256, Hash.sha512, Hash.hmac_sha256, Hash.verify, ...
-├── HashSet module           — HashSet.new, HashSet.from_array, HashSet.contains, HashSet.union, ...
 ├── Http module              — Http.get, Http.post, Http.parse_url, Http.download, ...
 ├── Console module          — Console.prompt, Console.read_from_stdin, Console.write_to_stdout, ...
 ├── Json module              — Json.serialize, Json.deserialize, Json.is_valid, ...
 ├── KeyValueStore module     — KeyValueStore.open, KeyValueStore.get, KeyValueStore.set, KeyValueStore.save, ...
 ├── LinearAlgebra module     — LinearAlgebra.add, LinearAlgebra.dot, LinearAlgebra.solve, ...
-├── LinkedList module        — LinkedList.new, LinkedList.prepend, LinkedList.append, LinkedList.first, ...
 ├── Log module               — Log.info, Log.warn, Log.error, Log.set_level, ...
 ├── Math module              — Math.floor, Math.square_root, Math.pi, ...
 ├── Optional module          — Optional.is_some, Optional.is_none, Optional.unwrap, Optional.unwrap_or, ...
@@ -2017,7 +2011,7 @@ When the interpreter is started with `--box` (or `-b`), the `register_all` funct
 - `Socket` — TCP and UDP networking
 - `Xml` — XML file I/O
 
-All other modules (`Array`, `BinaryTree`, `Calculus`, `Channel`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `Graph`, `Hash`, `HashSet`, `Json`, `LinearAlgebra`, `LinkedList`, `Log`, `Math`, `Optional`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, and `Hash.sha512_file`. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
+All other modules (`Array`, `BinaryTree`, `Calculus`, `Channel`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `Hash`, `Json`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, and `Hash.sha512_file`. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
 
 Attempting to call a function from a sandbox-blocked module produces a clear error message (`'Module.function' is not available in sandbox mode (--box)`) instead of the generic "undefined variable" error. The `Environment` class maintains a set of blocked module prefixes that is checked during variable lookup.
 

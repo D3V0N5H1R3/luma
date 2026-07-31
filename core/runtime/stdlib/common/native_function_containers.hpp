@@ -802,8 +802,8 @@ template <typename Range, typename Emit> void dedup_in_order(const Range& elemen
 }
 
 // ─── Iterator-based container operation helpers ───
-// These work with any forward iterator over Values (e.g. LinkedListNodeIterator),
-// decoupling functional operations from vector storage assumptions.
+// These work with any forward iterator over Values, decoupling functional
+// operations from vector storage assumptions.
 
 // Map elements from [begin, end) through a callable, collecting results via
 // an emitter function.  EmitFn signature: void(Value&&).  Returns result<T>

@@ -13,12 +13,6 @@ function void main() {
     array<integer> _distinct = Set.from_array([1, 2, 3, 2, 1]) |> Set.to_array()
     boolean _contains = Set.contains(Set.from_array([1, 2, 3, 2, 1]), 2)
 
-    hash_set hs = HashSet.from_array([1, 2, 3, 2, 1])
-    boolean _hs_contains = HashSet.contains(hs, 2)
-    integer _hs_union = HashSet.union(hs, HashSet.from_array([3, 4, 5])) |> HashSet.length()
-    integer _hs_inter = HashSet.intersection(hs, HashSet.from_array([2, 3])) |> HashSet.length()
-    hash_set _hs_mapped = HashSet.map(hs, (integer x) -> x + 1) |> Result.unwrap_or(HashSet.new())
-
     stack<integer> st = Stack.from_array([1, 2, 3, 4, 5])
     stack<integer> _st_pushed = Stack.push(st, 6)
     boolean _st_can_pop = Stack.pop(st) |> Result.is_success()

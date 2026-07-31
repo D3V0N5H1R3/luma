@@ -432,10 +432,7 @@ inline constexpr auto k_keyword_classifications = build_keyword_classifications(
 inline constexpr auto k_builtin_type_identifiers = std::to_array<std::string_view>({
     "binary_tree",
     "channel",
-    "graph",
-    "hash_set",
     "key_value_store",
-    "linked_list",
     "queue",
     "reference",
     "set",

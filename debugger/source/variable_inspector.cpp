@@ -50,17 +50,8 @@ namespace luma::dap {
     if (val.is_set()) {
         return {ValueKind::Set, ChildVariableKind::Indexed};
     }
-    if (val.is_hash_set()) {
-        return {ValueKind::HashSet, ChildVariableKind::Indexed};
-    }
-    if (val.is_linked_list()) {
-        return {ValueKind::LinkedList, ChildVariableKind::Indexed};
-    }
     if (val.is_binary_tree()) {
         return {ValueKind::BinaryTree, ChildVariableKind::Indexed};
-    }
-    if (val.is_graph()) {
-        return {ValueKind::Graph, ChildVariableKind::Named};
     }
     if (val.is_key_value_store()) {
         return {ValueKind::KeyValueStore, ChildVariableKind::Named};
@@ -127,17 +118,8 @@ VariableCounts count_child_variables(const Value& val) {
         case ValueKind::Set:
             child_count = clamp_to_int(val.as_set()->elements.size());
             break;
-        case ValueKind::HashSet:
-            child_count = clamp_to_int(val.as_hash_set()->size());
-            break;
-        case ValueKind::LinkedList:
-            child_count = clamp_to_int(val.as_linked_list()->size());
-            break;
         case ValueKind::BinaryTree:
             child_count = clamp_to_int(val.as_binary_tree()->size());
-            break;
-        case ValueKind::Graph:
-            child_count = clamp_to_int(val.as_graph()->adjacency.size());
             break;
         case ValueKind::KeyValueStore:
             child_count = clamp_to_int(val.as_key_value_store()->size());

@@ -91,10 +91,7 @@ LUMA_VALUE_TYPE_FOR(StackValue,          Stack);
 LUMA_VALUE_TYPE_FOR(SetValue,            Set);
 LUMA_VALUE_TYPE_FOR(XmlValue,            Xml);
 LUMA_VALUE_TYPE_FOR(KeyValueStoreValue,  KeyValueStore);
-LUMA_VALUE_TYPE_FOR(HashSetValue,        HashSet);
-LUMA_VALUE_TYPE_FOR(LinkedListValue,     LinkedList);
 LUMA_VALUE_TYPE_FOR(BinaryTreeValue,     BinaryTree);
-LUMA_VALUE_TYPE_FOR(GraphValue,          Graph);
 // clang-format on
 
 #undef LUMA_VALUE_TYPE_FOR
@@ -324,20 +321,8 @@ public:
         return type_ == ValueType::KeyValueStore;
     }
 
-    [[nodiscard]] bool is_hash_set() const {
-        return type_ == ValueType::HashSet;
-    }
-
-    [[nodiscard]] bool is_linked_list() const {
-        return type_ == ValueType::LinkedList;
-    }
-
     [[nodiscard]] bool is_binary_tree() const {
         return type_ == ValueType::BinaryTree;
-    }
-
-    [[nodiscard]] bool is_graph() const {
-        return type_ == ValueType::Graph;
     }
 
     [[nodiscard]] bool is_reference() const {
@@ -464,23 +449,8 @@ public:
             std::get<std::shared_ptr<CollectionObject>>(data_));
     }
 
-    [[nodiscard]] std::shared_ptr<HashSetValue> as_hash_set() const {
-        return std::static_pointer_cast<HashSetValue>(
-            std::get<std::shared_ptr<CollectionObject>>(data_));
-    }
-
-    [[nodiscard]] std::shared_ptr<LinkedListValue> as_linked_list() const {
-        return std::static_pointer_cast<LinkedListValue>(
-            std::get<std::shared_ptr<CollectionObject>>(data_));
-    }
-
     [[nodiscard]] std::shared_ptr<BinaryTreeValue> as_binary_tree() const {
         return std::static_pointer_cast<BinaryTreeValue>(
-            std::get<std::shared_ptr<CollectionObject>>(data_));
-    }
-
-    [[nodiscard]] std::shared_ptr<GraphValue> as_graph() const {
-        return std::static_pointer_cast<GraphValue>(
             std::get<std::shared_ptr<CollectionObject>>(data_));
     }
 
@@ -584,7 +554,7 @@ public:
 };
 
 // Hash and equality functors for Value — enable use as keys in unordered
-// containers (e.g. DictionaryValue, HashSetValue).
+// containers (e.g. DictionaryValue, SetValue).
 //
 // ValueHash implements structural (content-based) hashing:
 //

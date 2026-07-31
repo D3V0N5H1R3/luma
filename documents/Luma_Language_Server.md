@@ -213,7 +213,7 @@ The type checker's `stdlib_signatures_` registry contains 700+ function entries 
 - **Hover:** showing the return type of a stdlib call.
 - **Completion:** listing all functions within a module when the user types `Module.`.
 
-The 41 standard library modules (`Array`, `BinaryTree`, `Bits`, `Calculus`, `Channel`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `Graph`, `GraphicalUi`, `Hash`, `HashSet`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `LinkedList`, `Log`, `Math`, `Optional`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, `Xml`) are covered by this registry.
+The 38 standard library modules (`Array`, `BinaryTree`, `Bits`, `Calculus`, `Channel`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `GraphicalUi`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, `Xml`) are covered by this registry.
 
 ---
 
@@ -425,7 +425,6 @@ shared/
 │   ├── stdlib_catalog_dictionary.cpp # Dictionary module metadata
 │   ├── stdlib_catalog_encoding.cpp # Encoder, Hash, Compression metadata
 │   ├── stdlib_catalog_error_handling.cpp # Result, Optional, Reference, Resource metadata
-│   ├── stdlib_catalog_graph.cpp  # Graph module metadata
 │   ├── stdlib_catalog_graphical_ui.cpp # GraphicalUi module metadata
 │   ├── stdlib_catalog_internal.hpp # Internal catalog helpers
 │   ├── stdlib_catalog_io.cpp     # I/O module metadata

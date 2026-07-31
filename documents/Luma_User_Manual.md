@@ -2647,16 +2647,13 @@ string t = format_title("hello")
 - `Dictionary`
 - `Encoder`
 - `FileSystem`
-- `Graph`
 - `GraphicalUi`
 - `Hash`
-- `HashSet`
 - `Http`
 - `Console`
 - `Json`
 - `KeyValueStore`
 - `LinearAlgebra`
-- `LinkedList`
 - `Log`
 - `Math`
 - `Optional`
@@ -2907,8 +2904,8 @@ All 46 identifiers below are reserved and cannot be used as variable, function, 
 | `try`        | `type`         | `unique`      | `use`              |
 | `while`      | `with`         |               |                    |
 
-The container and handle types — `binary_tree`, `channel`, `graph`, `hash_set`,
-`key_value_store`, `linked_list`, `queue`, `reference`, `set`, `socket`, `stack`,
+The container and handle types — `binary_tree`, `channel`,
+`key_value_store`, `queue`, `reference`, `set`, `socket`, `stack`,
 `task`, `widget`, and `xml` — are **not** reserved words. They are ordinary
 identifiers that name built-in generic types, so `queue<integer> q = …` still
 declares a typed variable while `integer queue = …` is also allowed.
@@ -3549,8 +3546,8 @@ base_type       = primitive_type
 primitive_type  = "boolean" | "integer" | "number" | "decimal" | "string"
                 | "none" | "optional" ;
                 (* container/handle type names — queue, stack, set, task,
-                   channel, socket, xml, reference, binary_tree, linked_list,
-                   hash_set, graph, key_value_store, widget — are ordinary
+                   channel, socket, xml, reference, binary_tree,
+                   key_value_store, widget — are ordinary
                    IDENTIFIERs resolved as built-in types via generic_type /
                    qualified_type, not reserved primitive keywords. *)
 

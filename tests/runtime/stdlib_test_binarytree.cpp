@@ -330,7 +330,7 @@ static void test_binarytree_union_incomparable_throws() {
 
 static void test_binarytree_insert_caps_size() {
     // Regression: BinaryTree.insert grew count_ with no size cap, while every
-    // other collection (Array, LinkedList, Dictionary, Queue, Stack, Set) caps
+    // other collection (Array, Dictionary, Queue, Stack, Set) caps
     // at its max_*_size. The depth guard in insert_node only bounds a
     // degenerate tree — a balanced tree can hold ~2^max_tree_depth nodes — so a
     // loop of inserts could grow the tree until memory is exhausted. Lower the

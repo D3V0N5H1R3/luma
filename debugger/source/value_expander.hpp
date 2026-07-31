@@ -55,13 +55,8 @@ private:
     [[nodiscard]] std::vector<Variable> get_indexed_variables(const std::vector<Value>& elements,
                                                               int start, int count,
                                                               int child_depth) const;
-    [[nodiscard]] std::vector<Variable> get_hash_set_variables(const Value& val, int start,
-                                                               int count, int child_depth) const;
-    [[nodiscard]] std::vector<Variable> get_linked_list_variables(const Value& val, int start,
-                                                                  int count, int child_depth) const;
     [[nodiscard]] std::vector<Variable> get_binary_tree_variables(const Value& val, int start,
                                                                   int count, int child_depth) const;
-    [[nodiscard]] std::vector<Variable> get_graph_variables(const Value& val) const;
     [[nodiscard]] std::vector<Variable> get_key_value_store_variables(const Value& val) const;
     [[nodiscard]] std::vector<Variable> get_xml_variables(const Value& val, int child_depth) const;
     [[nodiscard]] std::vector<Variable> get_range_variables(const Value& val) const;

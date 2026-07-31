@@ -2947,6 +2947,10 @@
         },
         {
           "type": "STRING",
+          "value": "decimal"
+        },
+        {
+          "type": "STRING",
           "value": "string"
         },
         {
@@ -2996,18 +3000,6 @@
         {
           "type": "STRING",
           "value": "binary_tree"
-        },
-        {
-          "type": "STRING",
-          "value": "graph"
-        },
-        {
-          "type": "STRING",
-          "value": "linked_list"
-        },
-        {
-          "type": "STRING",
-          "value": "hash_set"
         },
         {
           "type": "STRING",
@@ -3622,5 +3614,6 @@
   "precedences": [],
   "externals": [],
   "inline": [],
-  "supertypes": []
+  "supertypes": [],
+  "reserved": {}
 }

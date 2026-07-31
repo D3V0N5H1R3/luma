@@ -19,33 +19,31 @@ This guide covers performance characteristics of Luma's runtime and standard lib
 
 ## 1 — Immutability and Deep Copies
 
-Luma values are **immutable by default**. Operations on collections (arrays, dictionaries, sets, linked lists) return new copies rather than modifying in place. This design ensures safety — no accidental shared-state bugs — but has a cost: each mutation creates a new copy of the collection.
+Luma values are **immutable by default**. Operations on collections (arrays, dictionaries, sets) return new copies rather than modifying in place. This design ensures safety — no accidental shared-state bugs — but has a cost: each mutation creates a new copy of the collection.
 
 **What this means in practice:**
 
 - `Array.push(arr, value)` returns a new array (O(n) copy).
-- `LinkedList.prepend(list, value)` returns a new linked list (O(n) deep clone).
+- `Set.add(s, value)` returns a new set (O(n) copy).
 - `Dictionary.set(dict, key, value)` returns a new dictionary (O(n) copy).
 
 **Recommendation:** Build collections in a single pass rather than appending one element at a time in a loop. Use `Array.map`, `Array.filter`, or `Array.reduce` to transform collections efficiently.
 
 ## 2 — Collection Performance Comparison
 
-| Operation            | Array     | LinkedList | Set       | HashSet   | Queue     | Stack     |
-| -------------------- | --------- | ---------- | --------- | --------- | --------- | --------- |
-| Access by index      | O(1)      | O(n)       | O(n)      | —         | —         | —         |
-| Contains             | O(n)      | O(n)       | O(n)      | O(1) avg  | O(n)      | O(n)      |
-| Push / Append        | O(n) copy | O(n) copy  | O(n) copy | O(n) copy | O(n) copy | O(n) copy |
-| Map / Filter         | O(n)      | O(n)       | O(n)      | O(n)      | O(n)      | O(n)      |
-| Union / Intersection | —         | —          | O(n + m)  | O(n + m)  | —         | —         |
-| Length               | O(1)      | O(1)       | O(1)      | O(1)      | O(1)      | O(1)      |
+| Operation            | Array     | Set       | Queue     | Stack     |
+| -------------------- | --------- | --------- | --------- | --------- |
+| Access by index      | O(1)      | O(n)      | —         | —         |
+| Contains             | O(n)      | O(n)      | O(n)      | O(n)      |
+| Push / Append        | O(n) copy | O(n) copy | O(n) copy | O(n) copy |
+| Map / Filter         | O(n)      | O(n)      | O(n)      | O(n)      |
+| Union / Intersection | —         | O(n + m)  | —         | —         |
+| Length               | O(1)      | O(1)      | O(1)      | O(1)      |
 
 ### When to Use Each Collection
 
 - **Array**: Default choice. Best for ordered data with index-based access.
-- **LinkedList**: Niche use cases. No performance advantage in Luma due to deep-copy semantics. Prefer Array.
-- **Set**: Unordered unique elements. Good for small to medium sets.
-- **HashSet**: Unordered unique elements with O(1) membership tests. Prefer over Set when `contains` is called frequently. Only supports hashable primitives (integer, number, string, boolean).
+- **Set**: Unordered unique elements. Membership testing and set algebra (union, intersection, difference).
 - **Queue**: FIFO semantics. Use for producer-consumer patterns.
 - **Stack**: LIFO semantics. Use for depth-first traversal or undo buffers.
 - **Dictionary**: Key-value storage with ordered keys. Use for structured data and lookups.
