@@ -310,8 +310,12 @@ static void test_repl_completions_derive_from_keyword_table() {
     ASSERT_TRUE(contains(completions, "use"));
     ASSERT_TRUE(contains(completions, "in"));
     ASSERT_TRUE(contains(completions, "type"));
-    ASSERT_TRUE(contains(completions, "queue"));
-    ASSERT_TRUE(contains(completions, "channel"));
+
+    // Container/handle type names (queue, channel, …) were demoted from reserved
+    // keywords to ordinary identifiers (R02), so they are no longer offered as
+    // keyword completions.
+    ASSERT_FALSE(contains(completions, "queue"));
+    ASSERT_FALSE(contains(completions, "channel"));
 
     // "import" is not a Luma keyword (absent from k_keywords), so it must not be
     // offered even though the old hand-maintained list included it.

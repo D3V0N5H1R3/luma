@@ -373,12 +373,48 @@ static void test_collection_type_alias_declaration() {
 static void test_match_statement() {
     const auto program = parse("integer x = 1\n"
                                "match x {\n"
-                               "    case == 1 { }\n"
+                               "    case 1 { }\n"
                                "    else { }\n"
                                "}\n");
 
     ASSERT_EQ(program.statements.size(), 2U);
     ASSERT_EQ(program.statements[1]->kind, StatementKind::Match);
+}
+
+static void test_match_equals_literal_rejected() {
+    // The redundant `case == <literal>` form is a syntax error: literals must be
+    // matched by value with the bare form (`case 1`). The `==` operator remains
+    // valid against a non-literal expression.
+    const auto errors = parse_errors("integer x = 1\n"
+                                     "match x {\n"
+                                     "    case == 1 { }\n"
+                                     "    else { }\n"
+                                     "}\n");
+
+    ASSERT_FALSE(errors.empty());
+    ASSERT_TRUE(errors[0].message.find("== <literal>") != std::string::npos);
+}
+
+static void test_match_equals_string_literal_rejected() {
+    const auto errors = parse_errors("string s = \"hi\"\n"
+                                     "match s {\n"
+                                     "    case == \"hi\" { }\n"
+                                     "    else { }\n"
+                                     "}\n");
+
+    ASSERT_FALSE(errors.empty());
+}
+
+static void test_match_equals_nonliteral_allowed() {
+    // `case == <non-literal>` has no bare form and must still parse.
+    const auto program = parse("integer x = 1\n"
+                               "integer target = 2\n"
+                               "match x {\n"
+                               "    case == target { }\n"
+                               "    else { }\n"
+                               "}\n");
+
+    ASSERT_EQ(program.statements.back()->kind, StatementKind::Match);
 }
 
 static void test_lambda_expression() {
@@ -1425,11 +1461,11 @@ static void test_moderate_nesting_still_parses() {
 }
 
 static void test_deep_unary_nesting_rejected() {
-    // Stacked prefix unary operators (~~~…, !!!…, ---…) recurse through
-    // parse_unary() without re-entering parse_expression().  Without a guard on
-    // that path this overflows the stack on deep enough input (a defect first
-    // surfaced by the fuzzers).  The input nests far beyond the lowered limit.
-    const auto errors = parse_errors_capped(std::string(64, '~') + "1", 16);
+    // Stacked prefix unary operators (!!!…, ---…) recurse through parse_unary()
+    // without re-entering parse_expression().  Without a guard on that path this
+    // overflows the stack on deep enough input (a defect first surfaced by the
+    // fuzzers).  The input nests far beyond the lowered limit.
+    const auto errors = parse_errors_capped(std::string(64, '!') + "1", 16);
 
     ASSERT_FALSE(errors.empty());
     ASSERT_TRUE(has_depth_error(errors));
@@ -1476,7 +1512,7 @@ static void test_moderate_unary_nesting_still_parses() {
     const int saved = ResourceLimits::max_parse_depth;
     ResourceLimits::max_parse_depth = 16;
 
-    const auto program = parse("integer x = " + std::string(8, '~') + "1");
+    const auto program = parse("boolean x = " + std::string(8, '!') + "true");
 
     ResourceLimits::max_parse_depth = saved;
 
@@ -1642,49 +1678,6 @@ static void test_precedence_multiplicative_same_level_left_associative() {
     ASSERT_EQ(as_binary(*root.left).op, TokenType::Percent);
 }
 
-// `1 + 2 << 3`  ⇒  `(1 + 2) << 3` — shift is below additive.
-static void test_precedence_shift_below_additive() {
-    const auto program = parse("integer x = 1 + 2 << 3");
-    const auto& root = as_binary(first_initializer(program));
-
-    ASSERT_EQ(root.op, TokenType::LessLess);
-    ASSERT_EQ(root.left->kind, ExpressionKind::Binary);
-    ASSERT_EQ(as_binary(*root.left).op, TokenType::Plus);
-}
-
-// `4 & 1 << 2`  ⇒  `4 & (1 << 2)` — bitwise AND is below shift.
-static void test_precedence_bitwise_and_below_shift() {
-    const auto program = parse("integer x = 4 & 1 << 2");
-    const auto& root = as_binary(first_initializer(program));
-
-    ASSERT_EQ(root.op, TokenType::Ampersand);
-    ASSERT_EQ(root.right->kind, ExpressionKind::Binary);
-    ASSERT_EQ(as_binary(*root.right).op, TokenType::LessLess);
-}
-
-// `1 | 2 ^ 3 & 4`  ⇒  `1 | (2 ^ (3 & 4))` — precedence `&` > `^` > `|`.
-static void test_precedence_bitwise_or_xor_and_ordering() {
-    const auto program = parse("integer x = 1 | 2 ^ 3 & 4");
-    const auto& root = as_binary(first_initializer(program));
-
-    ASSERT_EQ(root.op, TokenType::Pipe);
-
-    const auto& xor_node = as_binary(*root.right);
-    ASSERT_EQ(xor_node.op, TokenType::Caret);
-    ASSERT_EQ(xor_node.right->kind, ExpressionKind::Binary);
-    ASSERT_EQ(as_binary(*xor_node.right).op, TokenType::Ampersand);
-}
-
-// `1 | 2 < 3`  ⇒  `(1 | 2) < 3` — bitwise binds tighter than comparison.
-static void test_precedence_comparison_below_bitwise_or() {
-    const auto program = parse("boolean x = 1 | 2 < 3");
-    const auto& root = as_binary(first_initializer(program));
-
-    ASSERT_EQ(root.op, TokenType::Less);
-    ASSERT_EQ(root.left->kind, ExpressionKind::Binary);
-    ASSERT_EQ(as_binary(*root.left).op, TokenType::Pipe);
-}
-
 // `1 < 2 == 3`  ⇒  `(1 < 2) == 3` — equality is below comparison.
 static void test_precedence_equality_below_comparison() {
     const auto program = parse("boolean x = 1 < 2 == 3");
@@ -1733,16 +1726,6 @@ static void test_precedence_unary_binds_tighter_than_multiplicative() {
     ASSERT_EQ(root.op, TokenType::Star);
     ASSERT_EQ(root.left->kind, ExpressionKind::Unary);
     ASSERT_EQ(as_unary(*root.left).op, TokenType::Minus);
-}
-
-// `~1 & 2`  ⇒  `(~1) & 2` — bitwise NOT binds tighter than bitwise AND.
-static void test_precedence_bitwise_not_binds_tighter_than_and() {
-    const auto program = parse("integer x = ~1 & 2");
-    const auto& root = as_binary(first_initializer(program));
-
-    ASSERT_EQ(root.op, TokenType::Ampersand);
-    ASSERT_EQ(root.left->kind, ExpressionKind::Unary);
-    ASSERT_EQ(as_unary(*root.left).op, TokenType::Tilde);
 }
 
 // `1 + 2 |> f()`  ⇒  `(1 + 2) |> f()` — the pipe is the lowest-precedence binary.
@@ -1846,6 +1829,9 @@ int main() {
     RUN(test_function_type_alias_declaration);
     RUN(test_collection_type_alias_declaration);
     RUN(test_match_statement);
+    RUN(test_match_equals_literal_rejected);
+    RUN(test_match_equals_string_literal_rejected);
+    RUN(test_match_equals_nonliteral_allowed);
     RUN(test_lambda_expression);
     RUN(test_lambda_no_params);
     RUN(test_lambda_multiple_params);
@@ -1949,16 +1935,11 @@ int main() {
     RUN(test_precedence_multiplicative_over_additive);
     RUN(test_precedence_additive_left_associative);
     RUN(test_precedence_multiplicative_same_level_left_associative);
-    RUN(test_precedence_shift_below_additive);
-    RUN(test_precedence_bitwise_and_below_shift);
-    RUN(test_precedence_bitwise_or_xor_and_ordering);
-    RUN(test_precedence_comparison_below_bitwise_or);
     RUN(test_precedence_equality_below_comparison);
     RUN(test_precedence_logical_and_below_equality);
     RUN(test_precedence_logical_or_below_and);
     RUN(test_precedence_null_coalescing_below_or);
     RUN(test_precedence_unary_binds_tighter_than_multiplicative);
-    RUN(test_precedence_bitwise_not_binds_tighter_than_and);
     RUN(test_precedence_pipe_below_arithmetic);
     RUN(test_pipe_builds_pipe_expression);
     RUN(test_error_pipe_builds_error_pipe_expression);

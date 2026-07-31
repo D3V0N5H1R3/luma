@@ -301,8 +301,11 @@ bool Parser::looks_like_variable_decl() const {
     }
 
     // Uppercase identifier could be a record/enum type, possibly generic
-    // (e.g. Box<integer> b = ...) or namespace-qualified.
-    if (check(TokenType::Identifier) && starts_with_uppercase(current().lexeme)) {
+    // (e.g. Box<integer> b = ...) or namespace-qualified.  A lowercase
+    // identifier that names a demoted built-in container type (queue, set,
+    // task, ...) also begins a type annotation here.
+    if (check(TokenType::Identifier) &&
+        (starts_with_uppercase(current().lexeme) || is_builtin_type_identifier(current().lexeme))) {
         const int after_type = skip_type_at(0);
 
         return name_followed_by_equals(after_type);
@@ -722,8 +725,29 @@ void Parser::parse_pattern_comparison(MatchPattern::PatternData& pattern) {
 
     advance();
 
-    pattern = MatchArm::ComparisonPatternData{.comparison_op = op,
-                                              .comparison_value = parse_bitwise_xor()};
+    auto value = parse_addition();
+
+    // Reject the redundant `case == <literal>` form for literals that have an
+    // exact bare-literal spelling: integers (`case 1`), strings (`case "quit"`),
+    // booleans (`case true`), and `none`.  There must be one obvious way to
+    // write these, so `case == <literal>` is a syntax error.  The `==` operator
+    // stays valid for comparing against a non-literal expression, and the other
+    // comparison operators (`!=`, `<`, `>`, `<=`, `>=`) have no bare form and are
+    // unaffected.  A `number` (float) literal has no bare pattern form, and a
+    // negated literal such as `-1` parses to a Unary node rather than a Literal,
+    // so `case == 3.14` and `case == -1` are both preserved.
+    if (op == TokenType::EqualsEquals) {
+        if (const auto* literal = try_cast<LiteralExpression>(*value);
+            literal != nullptr &&
+            literal->literal_type() != LiteralExpression::LiteralType::Number) {
+            syntax_error("redundant '== <literal>' in a match arm", value->location,
+                         "match literals by value with the bare form: write 'case <literal>' "
+                         "instead of 'case == <literal>'");
+        }
+    }
+
+    pattern =
+        MatchArm::ComparisonPatternData{.comparison_op = op, .comparison_value = std::move(value)};
 }
 
 template <typename PatternData> void Parser::parse_single_binding_pattern(MatchArm& arm) {

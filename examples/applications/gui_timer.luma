@@ -192,10 +192,10 @@ function dictionary timer_config() {
     config["model"] = timer_initial()
     config["view"] = view_timer
     config["update"] = (dictionary model, string msg) -> match msg {
-        case == "start" { do_start(model) }
-        case == "pause" { set_running(model, false) }
-        case == "reset" { do_reset(model) }
-        case == "tick" { do_tick(model) }
+        case "start" { do_start(model) }
+        case "pause" { set_running(model, false) }
+        case "reset" { do_reset(model) }
+        case "tick" { do_tick(model) }
         else { model }
     }
     config["subscribe"] = timer_subscriptions

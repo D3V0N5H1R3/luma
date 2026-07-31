@@ -29,11 +29,6 @@ inline constexpr auto k_binary_op_table = [] {
     table[static_cast<std::size_t>(TokenType::LessEquals)] = Op::LessEqual;
     table[static_cast<std::size_t>(TokenType::Greater)] = Op::Greater;
     table[static_cast<std::size_t>(TokenType::GreaterEquals)] = Op::GreaterEqual;
-    table[static_cast<std::size_t>(TokenType::Ampersand)] = Op::BitwiseAnd;
-    table[static_cast<std::size_t>(TokenType::Pipe)] = Op::BitwiseOr;
-    table[static_cast<std::size_t>(TokenType::Caret)] = Op::BitwiseXor;
-    table[static_cast<std::size_t>(TokenType::LessLess)] = Op::ShiftLeft;
-    table[static_cast<std::size_t>(TokenType::GreaterGreater)] = Op::ShiftRight;
     table[static_cast<std::size_t>(TokenType::In)] = Op::Contains;
     table[static_cast<std::size_t>(TokenType::PlusPlus)] = Op::Concatenate;
     return table;
@@ -47,11 +42,6 @@ inline constexpr auto k_compound_op_table = [] {
     table[static_cast<std::size_t>(TokenType::SlashEquals)] = Op::Divide;
     table[static_cast<std::size_t>(TokenType::PercentEquals)] = Op::Modulo;
     table[static_cast<std::size_t>(TokenType::SlashSlashEquals)] = Op::IntDivide;
-    table[static_cast<std::size_t>(TokenType::AmpersandEquals)] = Op::BitwiseAnd;
-    table[static_cast<std::size_t>(TokenType::PipeEquals)] = Op::BitwiseOr;
-    table[static_cast<std::size_t>(TokenType::CaretEquals)] = Op::BitwiseXor;
-    table[static_cast<std::size_t>(TokenType::LessLessEquals)] = Op::ShiftLeft;
-    table[static_cast<std::size_t>(TokenType::GreaterGreaterEquals)] = Op::ShiftRight;
     return table;
 }();
 

@@ -341,10 +341,10 @@ function widget view_2048(dictionary model) {
 function array<dictionary<string>> g2048_subscriptions(dictionary _model) {
     return [
         GraphicalUi.on_key("arrows", "*", (string key) -> match key {
-            case == "ArrowLeft" { "left" }
-            case == "ArrowRight" { "right" }
-            case == "ArrowUp" { "up" }
-            case == "ArrowDown" { "down" }
+            case "ArrowLeft" { "left" }
+            case "ArrowRight" { "right" }
+            case "ArrowUp" { "up" }
+            case "ArrowDown" { "down" }
             else { "" }
         })
     ]
@@ -365,10 +365,10 @@ function dictionary g2048_config() {
     config["model"] = new_2048()
     config["view"] = view_2048
     config["update"] = (dictionary model, string msg) -> match msg {
-        case == "left" { move(model, "left") }
-        case == "right" { move(model, "right") }
-        case == "up" { move(model, "up") }
-        case == "down" { move(model, "down") }
+        case "left" { move(model, "left") }
+        case "right" { move(model, "right") }
+        case "up" { move(model, "up") }
+        case "down" { move(model, "down") }
         else { model }
     }
     config["subscribe"] = g2048_subscriptions

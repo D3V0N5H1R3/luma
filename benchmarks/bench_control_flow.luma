@@ -11,9 +11,9 @@ function BenchResult run_control_flow_benchmarks(BenchResult state) {
     st = time_it(st, "match expression (4 arms)", 10000, () -> {
         integer x = 3
         string _result = match x {
-        case == 1 { "one" }
-        case == 2 { "two" }
-        case == 3 { "three" }
+        case 1 { "one" }
+        case 2 { "two" }
+        case 3 { "three" }
         else { "other" }
         }
     })

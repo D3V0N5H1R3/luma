@@ -657,8 +657,8 @@ Align match arms for readability. Place the opening brace on the same line as th
 
 ```luma
 match command {
-    case == "quit" { stop() }
-    case == "help" { show_help() }
+    case "quit" { stop() }
+    case "help" { show_help() }
     else           { print("unknown: ${command}") }
 }
 ```

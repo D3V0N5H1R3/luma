@@ -31,24 +31,24 @@ function void demo_bitwise_operators() {
 
     print("a        = ${a}")
     print("b        = ${b}")
-    print("a & b    = ${a & b}")       # AND → 0b1000 = 8
-    print("a | b    = ${a | b}")       # OR  → 0b1110 = 14
-    print("a ^ b    = ${a ^ b}")       # XOR → 0b0110 = 6
-    print("~0       = ${~0}")          # NOT → -1
-    print("1 << 3   = ${1 << 3}")      # left shift  → 8
-    print("16 >> 2  = ${16 >> 2}")     # right shift → 4
+    print("a & b    = ${Bits.and(a, b)}")       # AND → 0b1000 = 8
+    print("a | b    = ${Bits.or(a, b)}")        # OR  → 0b1110 = 14
+    print("a ^ b    = ${Bits.xor(a, b)}")       # XOR → 0b0110 = 6
+    print("~0       = ${Bits.not(0)}")          # NOT → -1
+    print("1 << 3   = ${Bits.shift_left(1, 3)}")  # left shift  → 8
+    print("16 >> 2  = ${Bits.shift_right(16, 2)}") # right shift → 4
 
     # Practical example: using bits as flags
-    integer read_flag    = 1 << 0   # 1
-    integer write_flag   = 1 << 1   # 2
-    integer execute_flag = 1 << 2   # 4
+    integer read_flag    = Bits.shift_left(1, 0)   # 1
+    integer write_flag   = Bits.shift_left(1, 1)   # 2
+    integer execute_flag = Bits.shift_left(1, 2)   # 4
 
-    integer permissions = read_flag | write_flag
+    integer permissions = Bits.or(read_flag, write_flag)
     print("")
     print("permissions after granting read+write: ${permissions}")
 
-    boolean can_read = (permissions & read_flag) != 0
-    boolean can_exec = (permissions & execute_flag) != 0
+    boolean can_read = Bits.and(permissions, read_flag) != 0
+    boolean can_exec = Bits.and(permissions, execute_flag) != 0
     print("can read: ${can_read}, can execute: ${can_exec}")
 }
 
@@ -75,16 +75,16 @@ function void demo_compound_assignment() {
     print("   %= 2  → ${n}")
 
     mutable integer flags = 0
-    flags |= 4
-    print("flags |= 4  → ${flags}")
-    flags &= ~4
-    print("flags &= ~4 → ${flags}")
-    flags ^= 2
-    print("flags ^= 2  → ${flags}")
-    flags <<= 1
-    print("flags <<= 1 → ${flags}")
-    flags >>= 1
-    print("flags >>= 1 → ${flags}")
+    flags = Bits.or(flags, 4)
+    print("flags | 4          → ${flags}")
+    flags = Bits.and(flags, Bits.not(4))
+    print("flags & ~4         → ${flags}")
+    flags = Bits.xor(flags, 2)
+    print("flags ^ 2          → ${flags}")
+    flags = Bits.shift_left(flags, 1)
+    print("flags << 1         → ${flags}")
+    flags = Bits.shift_right(flags, 1)
+    print("flags >> 1         → ${flags}")
 
     mutable string msg = "hello"
     msg += ", world"

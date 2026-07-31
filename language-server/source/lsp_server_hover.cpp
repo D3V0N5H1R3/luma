@@ -60,6 +60,13 @@ namespace {
         return kw_it->second;
     }
 
+    // Container/handle types demoted to identifiers (R02) are matched by lexeme.
+    const auto& type_name_map = get_builtin_type_name_hover_map();
+    auto type_it = type_name_map.find(token.lexeme);
+    if (type_it != type_name_map.end()) {
+        return std::string(type_it->second);
+    }
+
     return {};
 }
 

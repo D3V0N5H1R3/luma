@@ -394,13 +394,6 @@ static void test_compile_not() {
     ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::Not));
 }
 
-static void test_compile_bitwise_and() {
-    const auto result = compile("mutable integer a = 5\nmutable integer b = 3\na & b");
-
-    ASSERT_TRUE(result.success);
-    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::BitwiseAnd));
-}
-
 static void test_compile_concatenate() {
     const auto result = compile("mutable string a = \"hello\"\na + \" world\"");
 
@@ -546,7 +539,6 @@ int main() {
     RUN(test_compile_lambda_too_many_upvalues_fails_cleanly);
     RUN(test_compile_negate);
     RUN(test_compile_not);
-    RUN(test_compile_bitwise_and);
     RUN(test_compile_concatenate);
     RUN(test_compile_index_get);
     RUN(test_compile_logical_or_short_circuit);

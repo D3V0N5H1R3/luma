@@ -1580,8 +1580,8 @@ function dictionary counter_config() {
     config["model"] = 0
     config["view"] = view_counter
     config["update"] = (integer model, string msg) -> match msg {
-        case == "inc" { model + 1 }
-        case == "dec" { model - 1 }
+        case "inc" { model + 1 }
+        case "dec" { model - 1 }
         else { model }
     }
     return config

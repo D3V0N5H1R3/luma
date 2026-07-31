@@ -251,9 +251,9 @@ function View chart_view(ChartModel model) {
     array<string> labels = ["Jan", "Feb", "Mar"]
     array<number> values = [10, 25, 18]
     return match model.kind {
-        case == "line" { Solaris.line_chart(labels, values) }
-        case == "pie"  { Solaris.pie_chart(labels, values) }
-        case == "tall" {
+        case "line" { Solaris.line_chart(labels, values) }
+        case "pie"  { Solaris.pie_chart(labels, values) }
+        case "tall" {
             Solaris.bar_chart(labels, values) |> Solaris.height(Length.Fixed(300.0))
         }
         else { Solaris.bar_chart(labels, values) }
@@ -377,24 +377,24 @@ function TokenModel token_update(TokenModel model, integer _msg) {
 
 function View token_view(TokenModel model) {
     return match model.variant {
-        case == "shadow_none"   { Solaris.column([]) |> Solaris.shadow(Shadow.None) }
-        case == "shadow_small"  { Solaris.column([]) |> Solaris.shadow(Shadow.Small) }
-        case == "shadow_medium" { Solaris.column([]) |> Solaris.shadow(Shadow.Medium) }
-        case == "shadow_large"  { Solaris.column([]) |> Solaris.shadow(Shadow.Large) }
-        case == "border_none"   { Solaris.column([]) |> Solaris.border(Border.None) }
-        case == "border_thin"   { Solaris.column([]) |> Solaris.border(Border.Thin) }
-        case == "border_thick"  { Solaris.column([]) |> Solaris.border(Border.Thick) }
-        case == "border_tinted" {
+        case "shadow_none"   { Solaris.column([]) |> Solaris.shadow(Shadow.None) }
+        case "shadow_small"  { Solaris.column([]) |> Solaris.shadow(Shadow.Small) }
+        case "shadow_medium" { Solaris.column([]) |> Solaris.shadow(Shadow.Medium) }
+        case "shadow_large"  { Solaris.column([]) |> Solaris.shadow(Shadow.Large) }
+        case "border_none"   { Solaris.column([]) |> Solaris.border(Border.None) }
+        case "border_thin"   { Solaris.column([]) |> Solaris.border(Border.Thin) }
+        case "border_thick"  { Solaris.column([]) |> Solaris.border(Border.Thick) }
+        case "border_tinted" {
             Solaris.column([])
                 |> Solaris.border(Border.Thick)
                 |> Solaris.border_color(Color.Primary)
         }
-        case == "fill_solid"   { Solaris.button("Go") |> Solaris.variant(Variant.Solid) }
-        case == "fill_ghost"   { Solaris.button("Go") |> Solaris.variant(Variant.Ghost) }
-        case == "fill_outline" {
+        case "fill_solid"   { Solaris.button("Go") |> Solaris.variant(Variant.Solid) }
+        case "fill_ghost"   { Solaris.button("Go") |> Solaris.variant(Variant.Ghost) }
+        case "fill_outline" {
             Solaris.button("Go") |> Solaris.danger() |> Solaris.variant(Variant.Outline)
         }
-        case == "fill_link"    { Solaris.button("Go") |> Solaris.variant(Variant.Link) }
+        case "fill_link"    { Solaris.button("Go") |> Solaris.variant(Variant.Link) }
         else { Solaris.column([]) }
     }
 }
@@ -682,62 +682,62 @@ function array<Series> sample_series() {
 
 function View feature_view(FeatureModel model) {
     return match model.which {
-        case == "icon"        { Solaris.icon_of(Icon.Settings) }
-        case == "invalid"     {
+        case "icon"        { Solaris.icon_of(Icon.Settings) }
+        case "invalid"     {
             Solaris.text_field("bad") |> Solaris.validation(Validation.Invalid("Required"))
         }
-        case == "pending"     {
+        case "pending"     {
             Solaris.text_field("x") |> Solaris.validation(Validation.Pending)
         }
-        case == "valid"       {
+        case "valid"       {
             Solaris.text_field("ok") |> Solaris.validation(Validation.Valid)
         }
-        case == "select"      {
+        case "select"      {
             Solaris.dropdown_of(country_options(), model.picked)
                 |> Solaris.on_select((string v) -> FeatureMsg.Pick(v))
                 |> Solaris.key("country")
         }
-        case == "text_right"  { Solaris.text("hi") |> Solaris.text_align(TextAlign.Right) }
-        case == "image_cover" { Solaris.image("a.png") |> Solaris.fit(ImageFit.Cover) }
-        case == "toast_top"   { Solaris.toast("Saved") |> Solaris.placement(Placement.Top) }
-        case == "insets"      {
+        case "text_right"  { Solaris.text("hi") |> Solaris.text_align(TextAlign.Right) }
+        case "image_cover" { Solaris.image("a.png") |> Solaris.fit(ImageFit.Cover) }
+        case "toast_top"   { Solaris.toast("Saved") |> Solaris.placement(Placement.Top) }
+        case "insets"      {
             Solaris.column([Solaris.text("x")])
                 |> Solaris.padding_each(Insets { top = Spacing.L, left = Spacing.M })
         }
-        case == "line_series" { Solaris.line_chart_series(sample_series()) }
-        case == "bar_series"  { Solaris.bar_chart_series(sample_series()) }
-        case == "password"    {
+        case "line_series" { Solaris.line_chart_series(sample_series()) }
+        case "bar_series"  { Solaris.bar_chart_series(sample_series()) }
+        case "password"    {
             Solaris.text_field("secret") |> Solaris.input_type(InputType.Password)
         }
-        case == "email"       {
+        case "email"       {
             Solaris.text_field("a@b.c") |> Solaris.input_type(InputType.Email)
         }
-        case == "strike"      {
+        case "strike"      {
             Solaris.text("done") |> Solaris.decoration(TextDecoration.Strikethrough)
         }
-        case == "underline"   {
+        case "underline"   {
             Solaris.text("link") |> Solaris.decoration(TextDecoration.Underline)
         }
-        case == "fade"        {
+        case "fade"        {
             Solaris.card([Solaris.text("hi")]) |> Solaris.motion(Motion.Fade)
         }
-        case == "vdivider"    {
+        case "vdivider"    {
             Solaris.divider() |> Solaris.orientation(Orientation.Vertical)
         }
-        case == "hdivider"    {
+        case "hdivider"    {
             Solaris.divider() |> Solaris.orientation(Orientation.Horizontal)
         }
-        case == "picked_field" {
+        case "picked_field" {
             Solaris.text_field("hi")
                 |> Solaris.on_change((string v) -> FeatureMsg.Pick(v))
         }
-        case == "nav"         {
+        case "nav"         {
             Solaris.nav([
                 NavItem { icon = Icon.Home, label = "Home", message = FeatureMsg.Noop, active = true },
                 NavItem { icon = Icon.Settings, label = "Settings", message = FeatureMsg.Noop }
             ])
         }
-        case == "menu"        {
+        case "menu"        {
             Solaris.menu_of("Actions", [
                 MenuItem { icon = Icon.Edit, label = "Rename", message = FeatureMsg.Pick("rename") },
                 MenuItem { icon = Icon.Trash, label = "Delete", message = FeatureMsg.Pick("delete"), disabled = true },

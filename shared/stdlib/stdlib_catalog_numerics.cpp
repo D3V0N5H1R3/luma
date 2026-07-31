@@ -2,6 +2,22 @@
 
 namespace luma::stdlib::detail {
 
+void register_bits_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
+                             const ParamShorthands& p) {
+    append_specs(
+        specs,
+        {
+            m.fn("and", 2, "(a: integer, b: integer)", R::integer_type(), {p.integer, p.integer}),
+            m.fn("not", 1, "(a: integer)", R::integer_type(), {p.integer}),
+            m.fn("or", 2, "(a: integer, b: integer)", R::integer_type(), {p.integer, p.integer}),
+            m.fn("shift_left", 2, "(value: integer, amount: integer)", R::integer_type(),
+                 {p.integer, p.integer}),
+            m.fn("shift_right", 2, "(value: integer, amount: integer)", R::integer_type(),
+                 {p.integer, p.integer}),
+            m.fn("xor", 2, "(a: integer, b: integer)", R::integer_type(), {p.integer, p.integer}),
+        });
+}
+
 void register_linear_algebra_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                        const ParamShorthands& p) {
     append_specs(

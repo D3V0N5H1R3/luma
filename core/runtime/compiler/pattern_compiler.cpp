@@ -375,7 +375,7 @@ void PatternCompiler::emit_match_arms_as_value(const Expression& subject,
             // a following arm's pattern test (emit_arm_pattern_tests, which Dups the
             // stack top) would run against the else BODY'S RESULT — the subject was
             // just popped and replaced — and, on a spurious match, execute the wrong
-            // arm (`match x { else { 2 } case == 2 { 99 } }` yielded 99, not 2). The
+            // arm (`match x { else { 2 } case 2 { 99 } }` yielded 99, not 2). The
             // statement form already jumps here (compile_match_statement); mirror it.
             // Placing else last leaves a harmless zero-distance forward jump.
             end_jumps.push_back(api_.emit_jump(Op::Jump, loc));

@@ -43,19 +43,6 @@ TypeInfo ExpressionTypeChecker::visit_unary(const UnaryExpression& expr) {
         return operand_type;
     }
 
-    if (expr.op == TokenType::Tilde) {
-        if (operand_type.kind != TypeInfo::Kind::Integer &&
-            operand_type.kind != TypeInfo::Kind::StdlibAny &&
-            operand_type.kind != TypeInfo::Kind::Unknown) {
-            tc_.error(std::format("bitwise NOT '~' requires an integer operand, got '{}'",
-                                  operand_type.to_string()),
-                      expr.operand->location, "bitwise operators only work with integer values",
-                      DiagnosticCode::InvalidOperand);
-        }
-
-        return TypeInfo::make(TypeInfo::Kind::Integer);
-    }
-
     // Postfix ? — error/none propagation on result and optional types.
     if (expr.op == TokenType::QuestionMark) {
         // '?' requires the enclosing function to return result<T> or optional<T>,

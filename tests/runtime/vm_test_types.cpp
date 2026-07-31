@@ -225,8 +225,8 @@ LUMA_TEST(vm_generic_recursive_list) {
 LUMA_TEST(vm_match_integer) {
     const auto result = eval("function string describe(integer n) {\n"
                              "    return match n {\n"
-                             "        case == 1 { \"one\" }\n"
-                             "        case == 2 { \"two\" }\n"
+                             "        case 1 { \"one\" }\n"
+                             "        case 2 { \"two\" }\n"
                              "        else { \"other\" }\n"
                              "    }\n"
                              "}\n"
@@ -239,7 +239,7 @@ LUMA_TEST(vm_match_integer) {
 LUMA_TEST(vm_match_default) {
     const auto result = eval("function string describe(integer n) {\n"
                              "    return match n {\n"
-                             "        case == 1 { \"one\" }\n"
+                             "        case 1 { \"one\" }\n"
                              "        else { \"unknown\" }\n"
                              "    }\n"
                              "}\n"
@@ -323,7 +323,7 @@ LUMA_TEST(vm_match_not_equal_catch_all) {
     // `!=` acts as an exhaustive catch-all without an else arm.
     const auto result = eval("function string f(integer n) {\n"
                              "    return match n {\n"
-                             "        case == 0 { \"zero\" }\n"
+                             "        case 0 { \"zero\" }\n"
                              "        case != 0 { \"nonzero\" }\n"
                              "    }\n"
                              "}\n"
@@ -352,8 +352,8 @@ LUMA_TEST(vm_match_string_runtime) {
     // Matching on string equality.
     const auto result = eval("function string f(string s) {\n"
                              "    return match s {\n"
-                             "        case == \"hi\" { \"greeting\" }\n"
-                             "        case == \"bye\" { \"farewell\" }\n"
+                             "        case \"hi\" { \"greeting\" }\n"
+                             "        case \"bye\" { \"farewell\" }\n"
                              "        else { \"other\" }\n"
                              "    }\n"
                              "}\n"

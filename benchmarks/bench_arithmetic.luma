@@ -26,12 +26,12 @@ function BenchResult run_arithmetic_benchmarks(BenchResult state) {
 
     st = time_it(st, "bitwise and shift", 50000, () -> {
         mutable integer x = 0xFF
-        x &= 0x0F
-        x |= 0x30
-        x ^= 0x05
-        x <<= 2
-        x >>= 1
-        x = ~x
+        x = Bits.and(x, 0x0F)
+        x = Bits.or(x, 0x30)
+        x = Bits.xor(x, 0x05)
+        x = Bits.shift_left(x, 2)
+        x = Bits.shift_right(x, 1)
+        x = Bits.not(x)
     })
 
     st = time_it(st, "comparison operators", 50000, () -> {

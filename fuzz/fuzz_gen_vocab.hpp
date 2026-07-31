@@ -31,10 +31,15 @@ inline constexpr std::array identifiers = {"x",    "y",      "z",     "n",     "
                                            "item", "result", "value", "count", "total",
                                            "flag", "temp",   "data",  "list",  "idx"};
 
-inline constexpr std::array binops = {"+",  "-",  "*", "/", "//", "%",  "==", "!=", "<", ">",
-                                      "<=", ">=", "&", "|", "^",  "<<", ">>", "&&", "||"};
+// Binary operators the language accepts. The bitwise operators (`& | ^ << >>`)
+// were removed (R06) — bit manipulation moved to the Bits module — so they are
+// intentionally absent here to keep generated programs valid past the parser.
+inline constexpr std::array binops = {
+    "+", "-", "*", "/", "//", "%", "==", "!=", "<", ">", "<=", ">=", "&&", "||"};
 
-inline constexpr std::array unary_ops = {"-", "!", "~"};
+// Prefix unary operators. `~` (bitwise not) was removed with the other bitwise
+// operators (R06).
+inline constexpr std::array unary_ops = {"-", "!"};
 
 inline constexpr std::array variant_names = {"Alpha", "Beta", "Gamma", "Delta"};
 

@@ -70,11 +70,6 @@ bool Lexer::try_scan_compound_assign(char character) {
                          .single_lex = "=",
                          .compound = TokenType::EqualsEquals,
                          .compound_lex = "=="},
-        CompoundAssignOp{.ch = '^',
-                         .single = TokenType::Caret,
-                         .single_lex = "^",
-                         .compound = TokenType::CaretEquals,
-                         .compound_lex = "^="},
     };
 
     for (const auto& entry : compound_assign_ops) {
@@ -118,14 +113,6 @@ bool Lexer::try_scan_double_or_assign(char character) {
                          .doubled_lex = "!>",
                          .assign = TokenType::BangEquals,
                          .assign_lex = "!="},
-        DoubleOrAssignOp{.ch = '&',
-                         .second_char = '&',
-                         .single = TokenType::Ampersand,
-                         .single_lex = "&",
-                         .doubled = TokenType::AmpersandAmpersand,
-                         .doubled_lex = "&&",
-                         .assign = TokenType::AmpersandEquals,
-                         .assign_lex = "&="},
     };
 
     for (const auto& entry : double_or_assign_ops) {
@@ -138,6 +125,16 @@ bool Lexer::try_scan_double_or_assign(char character) {
     }
 
     return false;
+}
+
+void Lexer::emit_removed_bitwise_op(std::string_view lexeme, std::string_view suggestion,
+                                    const SourceLocation& location) {
+    emit_syntax_error(std::format("bitwise '{}' is not an operator; use {}", lexeme, suggestion),
+                      location,
+                      "the bitwise operators moved to the Bits module (Bits.and/or/xor/not/"
+                      "shift_left/shift_right)",
+                      DiagnosticCode::UnexpectedToken);
+    add_token(TokenType::Error, lexeme);
 }
 
 void Lexer::scan_operator(char character, SourceLocation location) {
@@ -165,22 +162,45 @@ void Lexer::scan_operator(char character, SourceLocation location) {
             }
             break;
 
-        // ── Shift and relational (complex multi-character lookahead) ──
+        // ── Relational (`<`, `<=`); `<<` was a removed shift operator ──
+        // `<<` never appears in valid generics (nested `<` are separated by a
+        // type name, e.g. `array<array<T>>`), so an adjacent `<<` is always the
+        // removed shift operator and is diagnosed as such.
         case '<':
-            emit_less_op();
+            if (match('<')) {
+                emit_removed_bitwise_op("<<", "Bits.shift_left(v, n)", location);
+            } else {
+                emit_less_op();
+            }
             break;
 
         case '>':
+            // `>>` is retained by emit_greater_op() for closing nested generics;
+            // used as a shift it surfaces as a downstream parse error.
             emit_greater_op();
             break;
 
-        // ── Bitwise and logical ──
-        case '|':
-            emit_pipe_op();
+        // ── Logical AND (`&&`); bare `&` is a removed bitwise operator (R06) ──
+        case '&':
+            if (match('&')) {
+                add_token(TokenType::AmpersandAmpersand, "&&");
+            } else {
+                emit_removed_bitwise_op("&", "Bits.and(a, b)", location);
+            }
+            break;
+
+        // ── Removed bitwise operators (R06): `^` (xor), `~` (not) ──
+        case '^':
+            emit_removed_bitwise_op("^", "Bits.xor(a, b)", location);
             break;
 
         case '~':
-            add_token(TokenType::Tilde, "~");
+            emit_removed_bitwise_op("~", "Bits.not(a)", location);
+            break;
+
+        // ── Pipe (`|>`), logical OR (`||`), match alternative (`|`) ──
+        case '|':
+            emit_pipe_op();
             break;
 
         // ── Optional chaining and null coalescing (?., ??, ?[) ──
@@ -255,17 +275,18 @@ void Lexer::emit_minus_op() {
 }
 
 void Lexer::emit_less_op() {
-    if (match('<')) {
-        emit_compound_assign(TokenType::LessLess, "<<", TokenType::LessLessEquals, "<<=");
-    } else {
-        emit_compound_assign(TokenType::Less, "<", TokenType::LessEquals, "<=");
-    }
+    // Emits `<` or `<=`. An adjacent `<<` (the removed shift operator) is caught
+    // by the caller in scan_operator before this runs, so a `<` reaching here is
+    // always a comparison or the opening bracket of a generic type argument list.
+    emit_compound_assign(TokenType::Less, "<", TokenType::LessEquals, "<=");
 }
 
 void Lexer::emit_greater_op() {
+    // `>>` is retained only for closing nested generics (array<array<T>>), where
+    // the parser splits it into two `>`; it is no longer a shift operator, so it
+    // carries no `>>=` compound form.
     if (match('>')) {
-        emit_compound_assign(TokenType::GreaterGreater, ">>", TokenType::GreaterGreaterEquals,
-                             ">>=");
+        add_token(TokenType::GreaterGreater, ">>");
     } else {
         emit_compound_assign(TokenType::Greater, ">", TokenType::GreaterEquals, ">=");
     }
@@ -274,9 +295,11 @@ void Lexer::emit_greater_op() {
 void Lexer::emit_pipe_op() {
     if (match('>')) {
         add_token(TokenType::PipeGreater, "|>");
+    } else if (match('|')) {
+        add_token(TokenType::PipePipe, "||");
     } else {
-        emit_double_then_compound('|', TokenType::Pipe, "|", TokenType::PipePipe, "||",
-                                  TokenType::PipeEquals, "|=");
+        // A bare `|` remains a valid token — the `match` alternative separator.
+        add_token(TokenType::Pipe, "|");
     }
 }
 

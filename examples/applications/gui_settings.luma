@@ -264,8 +264,8 @@ function dictionary settings_config() {
     }
     config["update"] = (dictionary model, string msg) -> {
         return match msg {
-            case == "save" { save_settings(model) }
-            case == "dismiss_saved" { Dictionary.set(model, "saved", false) }
+            case "save" { save_settings(model) }
+            case "dismiss_saved" { Dictionary.set(model, "saved", false) }
             else { model }
         }
     }

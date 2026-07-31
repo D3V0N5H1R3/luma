@@ -86,8 +86,8 @@ function widget view_counter(number count) {
 function array<dictionary<string>> counter_subscriptions(number _count) {
     return [
         GraphicalUi.on_key("keys", "*", (string key) -> match key {
-            case == "ArrowUp" { "inc" }
-            case == "ArrowDown" { "dec" }
+            case "ArrowUp" { "inc" }
+            case "ArrowDown" { "dec" }
             else { "" }
         })
     ]
@@ -116,8 +116,8 @@ function dictionary counter_config() {
                 (number n) -> Result.unwrap_or(Converter.to_integer(n), 0)))
     }
     config["update"] = (number model, string msg) -> match msg {
-        case == "inc" { model + 1 }
-        case == "dec" { model - 1 }
+        case "inc" { model + 1 }
+        case "dec" { model - 1 }
         else { model }
     }
     config["subscribe"] = counter_subscriptions

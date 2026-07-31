@@ -463,6 +463,7 @@ set(LUMA_FEATURE_TESTS_LANGUAGE
 set(LUMA_FEATURE_TESTS_STDLIB
     array_functions.luma
     binarytree_functions.luma
+    bits_functions.luma
     calculus_functions.luma
     channel_functions.luma
     color_functions.luma

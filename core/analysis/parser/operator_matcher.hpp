@@ -27,17 +27,13 @@ namespace luma {
 // Higher numeric values bind more tightly.
 enum class Precedence : int {
     None = 0,
-    NullCoalescing = 1,  // ??
-    LogicalOr = 2,       // ||
-    LogicalAnd = 3,      // &&
-    Equality = 4,        // ==  !=
-    Comparison = 5,      // <  >  <=  >=  in
-    BitwiseOr = 6,       // |
-    BitwiseXor = 7,      // ^
-    BitwiseAnd = 8,      // &
-    Shift = 9,           // <<  >>
-    Additive = 10,       // +  -
-    Multiplicative = 11, // *  /  //  %
+    NullCoalescing = 1, // ??
+    LogicalOr = 2,      // ||
+    LogicalAnd = 3,     // &&
+    Equality = 4,       // ==  !=
+    Comparison = 5,     // <  >  <=  >=  in
+    Additive = 6,       // +  -
+    Multiplicative = 7, // *  /  //  %
 };
 
 // Category of operator for semantic classification.
@@ -45,7 +41,6 @@ enum class OperatorCategory {
     Arithmetic,
     Comparison,
     Logical,
-    Bitwise,
     NullCoalescing,
     Membership,
 };
@@ -77,19 +72,6 @@ binary_operator_precedence(TokenType type) noexcept {
         case TokenType::In:
             return Precedence::Comparison;
 
-        case TokenType::Pipe:
-            return Precedence::BitwiseOr;
-
-        case TokenType::Caret:
-            return Precedence::BitwiseXor;
-
-        case TokenType::Ampersand:
-            return Precedence::BitwiseAnd;
-
-        case TokenType::LessLess:
-        case TokenType::GreaterGreater:
-            return Precedence::Shift;
-
         case TokenType::Plus:
         case TokenType::Minus:
             return Precedence::Additive;
@@ -112,12 +94,11 @@ binary_operator_precedence(TokenType type) noexcept {
 
 // ──────────── Unary operator queries ────────────
 
-// Returns true if the token type is a prefix unary operator (!, -, ~).
+// Returns true if the token type is a prefix unary operator (!, -).
 [[nodiscard]] constexpr bool is_prefix_unary_operator(TokenType type) noexcept {
     switch (type) {
         case TokenType::Bang:
         case TokenType::Minus:
-        case TokenType::Tilde:
             return true;
         default:
             return false;
@@ -132,7 +113,7 @@ binary_operator_precedence(TokenType type) noexcept {
 // ──────────── Compound assignment queries ────────────
 
 // Returns true if the token type is a compound assignment operator
-// (+=, -=, *=, /=, //=, %=, &=, |=, ^=, <<=, >>=).
+// (+=, -=, *=, /=, //=, %=).
 [[nodiscard]] constexpr bool is_compound_assignment_operator(TokenType type) noexcept {
     switch (type) {
         case TokenType::PlusEquals:
@@ -141,11 +122,6 @@ binary_operator_precedence(TokenType type) noexcept {
         case TokenType::SlashEquals:
         case TokenType::SlashSlashEquals:
         case TokenType::PercentEquals:
-        case TokenType::AmpersandEquals:
-        case TokenType::PipeEquals:
-        case TokenType::CaretEquals:
-        case TokenType::LessLessEquals:
-        case TokenType::GreaterGreaterEquals:
             return true;
         default:
             return false;
@@ -170,16 +146,6 @@ compound_assignment_base_operator(TokenType type) noexcept {
             return TokenType::SlashSlash;
         case TokenType::PercentEquals:
             return TokenType::Percent;
-        case TokenType::AmpersandEquals:
-            return TokenType::Ampersand;
-        case TokenType::PipeEquals:
-            return TokenType::Pipe;
-        case TokenType::CaretEquals:
-            return TokenType::Caret;
-        case TokenType::LessLessEquals:
-            return TokenType::LessLess;
-        case TokenType::GreaterGreaterEquals:
-            return TokenType::GreaterGreater;
         default:
             return std::nullopt;
     }
@@ -212,13 +178,6 @@ binary_operator_category(TokenType type) noexcept {
         case TokenType::AmpersandAmpersand:
             return OperatorCategory::Logical;
 
-        case TokenType::Ampersand:
-        case TokenType::Pipe:
-        case TokenType::Caret:
-        case TokenType::LessLess:
-        case TokenType::GreaterGreater:
-            return OperatorCategory::Bitwise;
-
         case TokenType::QuestionQuestion:
             return OperatorCategory::NullCoalescing;
 
@@ -238,10 +197,6 @@ binary_operator_category(TokenType type) noexcept {
 
 [[nodiscard]] constexpr bool is_logical_operator(TokenType type) noexcept {
     return binary_operator_category(type) == OperatorCategory::Logical;
-}
-
-[[nodiscard]] constexpr bool is_bitwise_operator(TokenType type) noexcept {
-    return binary_operator_category(type) == OperatorCategory::Bitwise;
 }
 
 } // namespace luma

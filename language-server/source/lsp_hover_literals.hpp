@@ -26,6 +26,12 @@ struct TokenTypeHash {
 [[nodiscard]] const std::unordered_map<TokenType, std::string_view, TokenTypeHash>&
 get_literal_hover_map();
 
+// Hover documentation for the container/handle type names that were demoted
+// from reserved keywords to ordinary identifiers (R02). Keyed by lexeme, since
+// they lex as identifiers rather than distinct type-keyword tokens.
+[[nodiscard]] const std::unordered_map<std::string_view, std::string_view>&
+get_builtin_type_name_hover_map();
+
 } // namespace luma::lsp
 
 #endif // LUMA_LSP_HOVER_LITERALS_HPP

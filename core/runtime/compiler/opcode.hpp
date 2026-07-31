@@ -59,12 +59,19 @@ enum class Op : std::uint8_t {
     Or,  // a || b (short-circuit)
 
     // ─── Bitwise ───
-    BitwiseAnd, // a & b
-    BitwiseOr,  // a | b
-    BitwiseXor, // a ^ b
-    BitwiseNot, // ~a
-    ShiftLeft,  // a << b
-    ShiftRight, // a >> b
+    // TODO(cleanup): the `& | ^ ~ << >>` operators were removed from the language
+    // (R06 — bit manipulation moved to the Bits stdlib module), so the compiler no
+    // longer emits these opcodes. They are retained (here, in `opcode_table` + its
+    // static_asserts, the VM handlers in `vm_dispatch_table.cpp`, and
+    // `optimizer_constant_fold.cpp`) only to avoid renumbering the opcode enum,
+    // which would change the persisted `.lumc` bytecode format. Remove them in a
+    // dedicated follow-up that also bumps `k_bytecode_format_version`.
+    BitwiseAnd, // a & b  (unemitted — see TODO above)
+    BitwiseOr,  // a | b  (unemitted)
+    BitwiseXor, // a ^ b  (unemitted)
+    BitwiseNot, // ~a     (unemitted)
+    ShiftLeft,  // a << b (unemitted)
+    ShiftRight, // a >> b (unemitted)
 
     // ─── Strings ───
     Concatenate, // string + string
