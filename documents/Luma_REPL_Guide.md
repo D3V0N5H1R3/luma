@@ -332,4 +332,4 @@ Error: 'break' used outside of a loop
 - [User Manual](Luma_User_Manual.md) — complete language reference
 - [Standard Library Reference](Luma_Standard_Library_Reference.md) — all built-in modules and functions
 - [Error Handling](Luma_Error_Handling.md) — error conventions and recovery
-- [Development Environment Setup](Luma_Setup.md) — installing and building the REPL
+- [Contributing](../CONTRIBUTING.md) — installing and building the REPL

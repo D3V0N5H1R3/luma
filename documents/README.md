@@ -1,6 +1,6 @@
 # Luma Documentation
 
-Index of the design, reference, and guide documents for the Luma programming language. New to programming? Start with the [Tutorial](Luma_Tutorial.md). Looking for a complete reference? See the [User Manual](Luma_User_Manual.md). Want to contribute? Start with the [Development Environment Setup](Luma_Setup.md).
+Index of the design, reference, and guide documents for the Luma programming language. New to programming? Start with the [Tutorial](Luma_Tutorial.md). Looking for a complete reference? See the [User Manual](Luma_User_Manual.md). Want to contribute? Start with the [Contributing guide](../CONTRIBUTING.md).
 
 ## Table of Contents
 
@@ -43,7 +43,6 @@ Index of the design, reference, and guide documents for the Luma programming lan
 
 | Document                                           | Description                                                           |
 | -------------------------------------------------- | --------------------------------------------------------------------- |
-| [Development Environment Setup](Luma_Setup.md)     | Cloning, building, running, testing, and editor integration.          |
 | [Debugger](Luma_Debugger.md)                       | Debug Adapter Protocol (DAP) debug adapter design and implementation. |
 | [Language Server](Luma_Language_Server.md)         | Language Server Protocol (LSP) server design and implementation.      |
 | [Syntax Highlighting](Luma_Syntax_Highlighting.md) | Editor grammars and the Visual Studio Code and Zed extensions.        |

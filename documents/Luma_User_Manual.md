@@ -3467,7 +3467,7 @@ Luma includes a Debug Adapter Protocol (DAP) server — `luma_dap` — that enab
 
 The editor spawns `luma_dap` as a child process and communicates over standard input/output using Content-Length framed JSON messages. You do not run `luma_dap` directly — your editor launches it automatically when you start a debug session.
 
-For VS Code, add a `launch.json` entry as shown in the [Setup guide](Luma_Setup.md#8--editor-integration); `luma_dap` is launched automatically when you start a debug session.
+For VS Code, add a `launch.json` entry as shown in [CONTRIBUTING.md](../CONTRIBUTING.md#editor-integration); `luma_dap` is launched automatically when you start a debug session.
 
 ---
 

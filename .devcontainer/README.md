@@ -78,6 +78,6 @@ so opening a Codespace skips the initial compile.
 
 ## See Also
 
-- [Development Environment Setup](../documents/Luma_Setup.md)
+- [Contributing](../CONTRIBUTING.md)
 - [Build presets and options](../instructions/build.instructions.md)
 - [Vendored dependencies](../external/README.md)

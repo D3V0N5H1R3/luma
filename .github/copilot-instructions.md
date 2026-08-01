@@ -6,7 +6,7 @@ Luma is an interpreted, statically typed, expression-oriented programming langua
 
 Read these before making significant changes:
 
-- [Documentation Index](../documents/README.md) — Catalogue of every design, reference, and guide document (including the Setup, REPL, Solaris, GraphicalUi, and Concurrent Debugging guides not listed below)
+- [Documentation Index](../documents/README.md) — Catalogue of every design, reference, and guide document (including the REPL, Solaris, GraphicalUi, and Concurrent Debugging guides not listed below)
 - [Luma_Initial_Concept.md](../documents/Luma_Initial_Concept.md) — Language design goals and motivation
 - [Luma_Software_Architecture.md](../documents/Luma_Software_Architecture.md) — Interpreter architecture and module design
 - [Luma_User_Manual.md](../documents/Luma_User_Manual.md) — Complete language reference

@@ -84,7 +84,7 @@ Also verify:
 - [Luma_Performance_Guide.md](../../documents/Luma_Performance_Guide.md) reflects current performance characteristics and optimisation advice.
 - [Luma_GraphicalUi_Guide.md](../../documents/Luma_GraphicalUi_Guide.md) documents the current `GraphicalUi` module — widgets, layout containers, overlays, charts, commands, subscriptions, and styling helpers match the runtime (`core/runtime/stdlib/io/graphicalui_*`) and the embedded GUI framework (`external/gui-framework/`); [Luma_Solaris_Guide.md](../../documents/Luma_Solaris_Guide.md) documents the beginner-first `Solaris` MVU surface.
 - [Luma_REPL_Guide.md](../../documents/Luma_REPL_Guide.md) reflects the current REPL behaviour — commands (`:quit`, `:help`, `:clear`, `:file`), multi-line input, tab completion, and history.
-- The setup guide ([Luma_Setup.md](../../documents/Luma_Setup.md)) references valid paths, extension versions, and configuration for all supported editors.
+- The contributing guide ([CONTRIBUTING.md](../../CONTRIBUTING.md)) references valid paths, extension versions, and configuration for all supported editors.
 - The documentation index ([documents/README.md](../../documents/README.md)) lists every document in `documents/` — a newly added, removed, or renamed document is reflected in the index's table of contents, and every link in the index resolves to an existing file.
 - The root [README.md](../../README.md) is up to date with recent changes.
 - The root [CONTRIBUTING.md](../../CONTRIBUTING.md) and [SECURITY.md](../../SECURITY.md) reference valid build commands, paths, workflow names, and supported-version information.

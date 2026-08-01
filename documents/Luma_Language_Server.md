@@ -1205,7 +1205,7 @@ This handling belongs to the shared stdio transport (`shared/protocol/`) and app
 
 ## See Also
 
-- [Development Environment Setup](Luma_Setup.md) — configuring editors to launch the server
+- [Contributing](../CONTRIBUTING.md) — configuring editors to launch the server
 - [Syntax Highlighting](Luma_Syntax_Highlighting.md) — TextMate and Tree-sitter grammars
 - [Debugger](Luma_Debugger.md) — the companion DAP debug adapter
 - [Software Architecture](Luma_Software_Architecture.md) — how the language server fits into the interpreter
