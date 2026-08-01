@@ -23,9 +23,9 @@ Luma values are **immutable by default**. Operations on collections (arrays, dic
 
 **What this means in practice:**
 
-- `Array.push(arr, value)` returns a new array (O(n) copy).
+- `Array.push(array, value)` returns a new array (O(n) copy).
 - `Set.add(s, value)` returns a new set (O(n) copy).
-- `Dictionary.set(dict, key, value)` returns a new dictionary (O(n) copy).
+- `Dictionary.set(dictionary, key, value)` returns a new dictionary (O(n) copy).
 
 **Recommendation:** Build collections in a single pass rather than appending one element at a time in a loop. Use `Array.map`, `Array.filter`, or `Array.reduce` to transform collections efficiently.
 

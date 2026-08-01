@@ -59,7 +59,7 @@ LUMA_TEST(color_rgba) {
 
 LUMA_TEST(color_from_hex) {
     // #rrggbb
-    const auto v = eval(R"(Color.from_hex("#0172ad"))");
+    const auto v = eval(R"(Color.from_hexadecimal("#0172ad"))");
     ASSERT_RESULT_SUCCESS(v);
     const auto& rec = v.as_result()->owned_inner->as_record();
     ASSERT_EQ(rec->find_field("red")->as_integer(), static_cast<std::int64_t>(1));
@@ -67,7 +67,7 @@ LUMA_TEST(color_from_hex) {
     ASSERT_EQ(rec->find_field("blue")->as_integer(), static_cast<std::int64_t>(173));
 
     // #rgb shorthand expands each nibble (f0a → ff00aa).
-    const auto s = eval(R"(Color.from_hex("f0a"))");
+    const auto s = eval(R"(Color.from_hexadecimal("f0a"))");
     ASSERT_RESULT_SUCCESS(s);
     const auto& srec = s.as_result()->owned_inner->as_record();
     ASSERT_EQ(srec->find_field("red")->as_integer(), static_cast<std::int64_t>(255));
@@ -75,16 +75,16 @@ LUMA_TEST(color_from_hex) {
     ASSERT_EQ(srec->find_field("blue")->as_integer(), static_cast<std::int64_t>(170));
 
     // #rrggbbaa carries alpha (0x80 → 128/255).
-    const auto a = eval(R"(Color.from_hex("#00000080"))");
+    const auto a = eval(R"(Color.from_hexadecimal("#00000080"))");
     ASSERT_RESULT_SUCCESS(a);
     ASSERT_NEAR(a.as_result()->owned_inner->as_record()->find_field("alpha")->as_number(),
                 128.0 / 255.0, 1e-9);
 }
 
 LUMA_TEST(color_from_hex_invalid_fails) {
-    ASSERT_EVAL_FAILURE(R"(Color.from_hex("#0172a"))");  // 5 digits
-    ASSERT_EVAL_FAILURE(R"(Color.from_hex("#zzzzzz"))"); // non-hex
-    ASSERT_EVAL_FAILURE(R"(Color.from_hex(""))");        // empty
+    ASSERT_EVAL_FAILURE(R"(Color.from_hexadecimal("#0172a"))");  // 5 digits
+    ASSERT_EVAL_FAILURE(R"(Color.from_hexadecimal("#zzzzzz"))"); // non-hex
+    ASSERT_EVAL_FAILURE(R"(Color.from_hexadecimal(""))");        // empty
 }
 
 LUMA_TEST(color_to_hex) {
@@ -137,7 +137,7 @@ LUMA_TEST(color_module) {
 
     ASSERT_TRUE(env->has("Color.rgb"));
     ASSERT_TRUE(env->has("Color.rgba"));
-    ASSERT_TRUE(env->has("Color.from_hex"));
+    ASSERT_TRUE(env->has("Color.from_hexadecimal"));
     ASSERT_TRUE(env->has("Color.to_hex"));
     ASSERT_TRUE(env->has("Color.to_css"));
     ASSERT_TRUE(env->has("Color.lighten"));

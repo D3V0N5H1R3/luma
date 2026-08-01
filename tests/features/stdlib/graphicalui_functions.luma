@@ -1764,7 +1764,7 @@ function void test_graphicalui_on_scroll_typed_is_scroll_subscription() {
 # bare key string that on_key hands out, giving structured access to modifiers.
 function string key_event_summary(GraphicalUi.KeyEvent e) {
     mutable string out = ""
-    if e.ctrl { out = out + "Ctrl+" }
+    if e.control { out = out + "Ctrl+" }
     if e.shift { out = out + "Shift+" }
     if e.alt { out = out + "Alt+" }
     if e.meta { out = out + "Meta+" }
@@ -1922,7 +1922,7 @@ function void test_graphicalui_classify_device_typed() {
 
 @test
 function void test_graphicalui_severity_to_string() {
-    assert(GraphicalUi.severity_to_string(GraphicalUi.Severity.Info) == "info")
+    assert(GraphicalUi.severity_to_string(GraphicalUi.Severity.Information) == "info")
     assert(GraphicalUi.severity_to_string(GraphicalUi.Severity.Warning) == GraphicalUi.WARNING)
     assert(GraphicalUi.severity_to_string(GraphicalUi.Severity.Error) == GraphicalUi.ERROR)
     assert(GraphicalUi.severity_to_string(GraphicalUi.Severity.Success) == GraphicalUi.SUCCESS)
@@ -1942,21 +1942,21 @@ function string theme_mode_label(GraphicalUi.ThemeMode m) {
     return match m {
     case GraphicalUi.ThemeMode.Light { "light" }
     case GraphicalUi.ThemeMode.Dark  { "dark" }
-    case GraphicalUi.ThemeMode.Auto  { "auto" }
+    case GraphicalUi.ThemeMode.Automatic  { "auto" }
     }
 }
 
 @test
 function void test_graphicalui_theme_mode_match() {
     assert(theme_mode_label(GraphicalUi.ThemeMode.Light) == "light")
-    assert(theme_mode_label(GraphicalUi.ThemeMode.Auto) == "auto")
+    assert(theme_mode_label(GraphicalUi.ThemeMode.Automatic) == "auto")
 }
 
 @test
 function void test_graphicalui_theme_mode_to_string() {
     assert(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Light) == "light")
     assert(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Dark) == "dark")
-    assert(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Auto) == "auto")
+    assert(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Automatic) == "auto")
 }
 
 @test
@@ -1991,7 +1991,7 @@ function string scroll_behavior_label(GraphicalUi.ScrollBehavior b) {
     return match b {
     case GraphicalUi.ScrollBehavior.Smooth  { "smooth" }
     case GraphicalUi.ScrollBehavior.Instant { "instant" }
-    case GraphicalUi.ScrollBehavior.Auto    { "auto" }
+    case GraphicalUi.ScrollBehavior.Automatic    { "auto" }
     }
 }
 

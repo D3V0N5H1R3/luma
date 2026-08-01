@@ -244,9 +244,9 @@ void register_filesystem_content(const EnvPtr& env) {
                                                             });
                                    });
         })
-        .func("is_symlink", 1)
+        .func("is_symbolic_link", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            return fs_validated_string_op("FileSystem.is_symlink", args[0], loc, false,
+            return fs_validated_string_op("FileSystem.is_symbolic_link", args[0], loc, false,
                                           [](const std::filesystem::path& safe_path) -> Value {
                                               return make_success_value(
                                                   Value{std::filesystem::is_symlink(safe_path)});
@@ -322,7 +322,7 @@ void register_filesystem_content(const EnvPtr& env) {
                     rec->fields.emplace_back("modified_time", Value{modified_seconds});
                     rec->fields.emplace_back("is_directory", Value{directory});
                     rec->fields.emplace_back("is_file", Value{regular_file});
-                    rec->fields.emplace_back("is_symlink", Value{symlink});
+                    rec->fields.emplace_back("is_symbolic_link", Value{symlink});
                     const auto kind = file_kind_variant(symlink, directory, regular_file);
                     rec->fields.emplace_back("kind", make_file_kind_choice(kind));
 

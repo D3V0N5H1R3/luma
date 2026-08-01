@@ -220,7 +220,7 @@ static void test_filesystem_metadata_file() {
     ASSERT_EQ(rec.find_field("size")->as_integer(), 5);
     ASSERT_TRUE(rec.find_field("is_file")->as_bool());
     ASSERT_FALSE(rec.find_field("is_directory")->as_bool());
-    ASSERT_FALSE(rec.find_field("is_symlink")->as_bool());
+    ASSERT_FALSE(rec.find_field("is_symbolic_link")->as_bool());
     // The kind field mirrors the booleans as a single, match-able choice.
     ASSERT_TRUE(rec.find_field("kind")->is_choice());
     ASSERT_EQ(rec.find_field("kind")->as_choice()->type_name, "FileKind");
@@ -425,7 +425,7 @@ static void test_sandbox_gates_file_io_in_safe_modules() {
     ASSERT_FALSE(env->has("Hash.sha512_file"));
 
     // Non-file functions in those modules remain available.
-    ASSERT_TRUE(env->has("Log.info"));
+    ASSERT_TRUE(env->has("Log.information"));
     ASSERT_TRUE(env->has("Log.set_level"));
     ASSERT_TRUE(env->has("Compression.deflate"));
     ASSERT_TRUE(env->has("Compression.inflate"));
@@ -532,7 +532,7 @@ static void test_sandbox_violation_clear_message() {
 
 static void test_filesystem_new_functions_registered() {
     const auto env = luma::test::make_std_env();
-    ASSERT_TRUE(env->has("FileSystem.is_symlink"));
+    ASSERT_TRUE(env->has("FileSystem.is_symbolic_link"));
     ASSERT_TRUE(env->has("FileSystem.get_modified_time"));
     ASSERT_TRUE(env->has("FileSystem.list_recursively"));
     ASSERT_TRUE(env->has("FileSystem.read_bytes"));
@@ -544,7 +544,7 @@ static void test_filesystem_new_functions_registered() {
 static void test_filesystem_is_symlink_regular_file() {
     const LumaTempFile file{"_test_symlink_check.txt", "x"};
 
-    ASSERT_EVAL_BOOL("FileSystem.is_symlink(\"_test_symlink_check.txt\")", false);
+    ASSERT_EVAL_BOOL("FileSystem.is_symbolic_link(\"_test_symlink_check.txt\")", false);
 }
 
 static void test_filesystem_get_modified_time() {

@@ -307,7 +307,7 @@ template <typename Provider> [[nodiscard]] std::string generate_math_statement(P
         case 11: // Rounding family (result<integer>) — out-of-range guard.
             return "print(Result.is_success(Math.floor(" + na + ")))\n";
         case 12: // Hypotenuse (direct number) — Euclidean distance.
-            return "print(Math.hypot(" + na + ", " + nb + "))\n";
+            return "print(Math.hypotenuse(" + na + ", " + nb + "))\n";
         case 13: // Statistics over a numeric array (result<number>).
             return "print(Statistics.mean(" + arr + ") |> Result.unwrap_or(0.0))\n";
         default: // Correlation of two equal-length arrays (result<number>).

@@ -22,8 +22,8 @@ function void main() {
     number pw = Math.power(2.0, 10.0) |> Result.unwrap_or(0.0)
     number sq = Math.square_root(144.0) |> Result.unwrap_or(0.0)
     integer sg = Math.sign(-42)
-    number mx = Math.max(3.0, 7.0)
-    number mn = Math.min(3.0, 7.0)
+    number mx = Math.maximum(3.0, 7.0)
+    number mn = Math.minimum(3.0, 7.0)
 
     # Logarithms (result<number>).
     number le = Math.log_e(e) |> Result.unwrap_or(0.0)
@@ -44,13 +44,13 @@ function void main() {
     number asn = Math.arc_sine(1.0) |> Result.unwrap_or(0.0)
     number acs = Math.arc_cosine(0.0) |> Result.unwrap_or(0.0)
     number atn = Math.arc_tangent(1.0) |> Result.unwrap_or(0.0)
-    number a2 = Math.atan2(1.0, 1.0) |> Result.unwrap_or(0.0)
+    number a2 = Math.arc_tangent2(1.0, 1.0) |> Result.unwrap_or(0.0)
     number deg = Math.degrees(pi)
     number rad = Math.radians(180.0)
 
     # Transcendental and hyperbolic.
     number ex = Math.exponential(1.0) |> Result.unwrap_or(0.0)
-    number hy = Math.hypot(3.0, 4.0)
+    number hy = Math.hypotenuse(3.0, 4.0)
     number cr = Math.cube_root(27.0)
     number hs = Math.hyperbolic_sine(0.0) |> Result.unwrap_or(0.0)
     number hc = Math.hyperbolic_cosine(0.0) |> Result.unwrap_or(0.0)
@@ -58,7 +58,7 @@ function void main() {
 
     # Interpolation and ranges.
     number cl = Math.clamp(15.0, 0.0, 10.0) |> Result.unwrap_or(0.0)
-    number lp = Math.lerp(0.0, 100.0, 0.42) |> Result.unwrap_or(0.0)
+    number lp = Math.linear_interpolation(0.0, 100.0, 0.42) |> Result.unwrap_or(0.0)
     number rm = Math.remap(5.0, 0.0, 10.0, 0.0, 100.0) |> Result.unwrap_or(0.0)
     number ssp = Math.smooth_step(0.0, 1.0, 0.5) |> Result.unwrap_or(0.0)
     number rem = Math.remainder(7.0, 3.0) |> Result.unwrap_or(0.0)

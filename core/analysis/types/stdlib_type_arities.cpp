@@ -193,7 +193,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
 
         add_record(st, "FileSystem.FileInfo", field("integer", "size"),
                    field("number", "modified_time"), field("boolean", "is_directory"),
-                   field("boolean", "is_file"), field("boolean", "is_symlink"),
+                   field("boolean", "is_file"), field("boolean", "is_symbolic_link"),
                    field("FileSystem.FileKind", "kind"));
 
         // FileSystem.permissions() constructs these access-right records (type_name
@@ -224,24 +224,24 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // constructor guarantees max >= min so contains/clamp/length/overlap take one
         // well-formed range.  Mirrors DateTime.Interval (which shares the short
         // "Interval" type_name — harmless, like the shared "ParseError" records).
-        add_record(st, "Math.Interval", field("number", "min"), field("number", "max"));
+        add_record(st, "Math.Interval", field("number", "minimum"), field("number", "maximum"));
 
-        // Math.rect() constructs these axis-aligned 2D rectangle records (type_name
-        // "Rect").  x/y are the top-left corner and width/height the extent — all
-        // measurements, so `number`.  Named .x/.y/.width/.height make layout,
-        // hit-testing, collision, and cropping far more teachable than four loose
-        // numbers and hand-written overlap arithmetic (the 2D analogue of
+        // Math.rectangle() constructs these axis-aligned 2D rectangle records
+        // (type_name "Rectangle").  x/y are the top-left corner and width/height the
+        // extent — all measurements, so `number`.  Named .x/.y/.width/.height make
+        // layout, hit-testing, collision, and cropping far more teachable than four
+        // loose numbers and hand-written overlap arithmetic (the 2D analogue of
         // Math.Interval).  Data + free functions, mirroring Math.Vector2; the one
-        // fallible operation (rect_intersection) returns optional<Math.Rect>.
-        add_record(st, "Math.Rect", field("number", "x"), field("number", "y"),
+        // fallible operation (rectangle_intersection) returns optional<Math.Rectangle>.
+        add_record(st, "Math.Rectangle", field("number", "x"), field("number", "y"),
                    field("number", "width"), field("number", "height"));
 
         // Math.circle() constructs these 2D circle records (type_name "Circle"):
         // a Math.Vector2 centre plus a non-negative radius.  Data reusing
         // Math.Vector2, with total boolean predicates (contains / intersects /
-        // circle_rect_intersects) so a beginner writing a simple game gets the
+        // circle_rectangle_intersects) so a beginner writing a simple game gets the
         // second-most-common collision test after rectangles without hand-writing
-        // the distance-squared comparison — mirroring Math.Rect.
+        // the distance-squared comparison — mirroring Math.Rectangle.
         add_record(st, "Math.Circle", field("Math.Vector2", "center"), field("number", "radius"));
 
         add_record(st, "Socket.Address", field("string", "host"), field("integer", "port"));
@@ -481,7 +481,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("integer", "column"));
 
         add_record(st, "Terminal.InputEvent", field("string", "key"), field("boolean", "shift"),
-                   field("boolean", "ctrl"), field("boolean", "alt"));
+                   field("boolean", "control"), field("boolean", "alt"));
 
         // Typed decode of a "mouse:<kind>:<row>:<col>" event string (as produced
         // by Terminal.get_input / read_key in mouse mode), returned by
@@ -514,7 +514,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // the three modifier flags are booleans.  Constructed by
         // build_mouse_event_record() in core/runtime/stdlib/io/graphicalui_events.cpp.
         add_record(st, "GraphicalUi.MouseEvent", field("number", "x"), field("number", "y"),
-                   field("GraphicalUi.MouseButton", "button"), field("boolean", "ctrl"),
+                   field("GraphicalUi.MouseButton", "button"), field("boolean", "control"),
                    field("boolean", "shift"), field("boolean", "alt"));
 
         // Typed payload delivered to a GraphicalUi.on_scroll_typed callback — the
@@ -532,7 +532,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // computes for filter matching, so a beginner can branch on Ctrl+S
         // without re-parsing the key text.  Constructed by build_key_event_record()
         // in core/runtime/stdlib/io/graphicalui_events.cpp.
-        add_record(st, "GraphicalUi.KeyEvent", field("string", "key"), field("boolean", "ctrl"),
+        add_record(st, "GraphicalUi.KeyEvent", field("string", "key"), field("boolean", "control"),
                    field("boolean", "shift"), field("boolean", "alt"), field("boolean", "meta"));
 
         // Typed payload delivered to a GraphicalUi.on_resize_typed callback — the
@@ -662,8 +662,8 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         {
             auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Level");
             ch->variants.push_back(ChoiceVariant{.name = "Debug", .fields = {}});
-            ch->variants.push_back(ChoiceVariant{.name = "Info", .fields = {}});
-            ch->variants.push_back(ChoiceVariant{.name = "Warn", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Information", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Warning", .fields = {}});
             ch->variants.push_back(ChoiceVariant{.name = "Error", .fields = {}});
             ch->variants.push_back(ChoiceVariant{.name = "Off", .fields = {}});
 
@@ -1057,10 +1057,11 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // the type checker can enforce, replacing the open severity string (and
         // the GraphicalUi.INFO/WARNING/ERROR/SUCCESS constants, which stay).
         // Variant names must match severity_to_lower() in
-        // core/runtime/stdlib/io/graphicalui_helpers.hpp (Info → "info", etc.).
+        // core/runtime/stdlib/io/graphicalui_helpers.hpp (Warning → "warning", etc.;
+        // Information maps to the default "info").
         {
             auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Severity");
-            ch->variants.push_back(ChoiceVariant{.name = "Info", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Information", .fields = {}});
             ch->variants.push_back(ChoiceVariant{.name = "Warning", .fields = {}});
             ch->variants.push_back(ChoiceVariant{.name = "Error", .fields = {}});
             ch->variants.push_back(ChoiceVariant{.name = "Success", .fields = {}});
@@ -1189,7 +1190,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "ThemeMode");
             ch->variants.push_back(ChoiceVariant{.name = "Light", .fields = {}});
             ch->variants.push_back(ChoiceVariant{.name = "Dark", .fields = {}});
-            ch->variants.push_back(ChoiceVariant{.name = "Auto", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Automatic", .fields = {}});
 
             st.choice_map["GraphicalUi.ThemeMode"] = ch.get();
             st.choices.push_back(std::move(ch));
@@ -1205,7 +1206,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "ScrollBehavior");
             ch->variants.push_back(ChoiceVariant{.name = "Smooth", .fields = {}});
             ch->variants.push_back(ChoiceVariant{.name = "Instant", .fields = {}});
-            ch->variants.push_back(ChoiceVariant{.name = "Auto", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "Automatic", .fields = {}});
 
             st.choice_map["GraphicalUi.ScrollBehavior"] = ch.get();
             st.choices.push_back(std::move(ch));
@@ -1347,7 +1348,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "FileKind");
             ch->variants.push_back(ChoiceVariant{.name = "File", .fields = {}});
             ch->variants.push_back(ChoiceVariant{.name = "Directory", .fields = {}});
-            ch->variants.push_back(ChoiceVariant{.name = "Symlink", .fields = {}});
+            ch->variants.push_back(ChoiceVariant{.name = "SymbolicLink", .fields = {}});
             ch->variants.push_back(ChoiceVariant{.name = "Other", .fields = {}});
 
             st.choice_map["FileSystem.FileKind"] = ch.get();
@@ -1395,7 +1396,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // radians-vs-degrees distinction explicit at the call site, so mixing the
         // two becomes a visible choice rather than a silent bug.  Both payloads
         // are a `number` measurement.  Consumed by Math.to_radians /
-        // Math.to_degrees / Math.sin_of; the existing number-radians trig APIs
+        // Math.to_degrees / Math.sine_of; the existing number-radians trig APIs
         // stay primary, so this is a convenience, not a replacement.  Variant
         // names must match angle_to_radians() in
         // core/runtime/stdlib/math/math_module.cpp exactly (Radians / Degrees).
@@ -1484,7 +1485,8 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // an MD5 digest are no longer the same (bare-string) type and cannot be
         // compared across algorithms by accident.  The `algorithm` field is the
         // existing Hash.Algorithm choice; `hex` is the lowercase hex digest.
-        add_record(st, "Hash.Digest", field("Hash.Algorithm", "algorithm"), field("string", "hex"));
+        add_record(st, "Hash.Digest", field("Hash.Algorithm", "algorithm"),
+                   field("string", "hexadecimal"));
 
         // ── Compression.Format ──────────────────────────
         // Selects the compression algorithm for the generic Compression.compress /
@@ -1592,11 +1594,11 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
             // Parameter is move-only (holds a default_value unique_ptr), so build
             // each payload variant by moving the Parameter into the fields vector.
             auto v4 = ChoiceVariant{};
-            v4.name = "V4";
+            v4.name = "Version4";
             v4.fields.push_back(Parameter{.type = ann("string"), .name = "address"});
 
             auto v6 = ChoiceVariant{};
-            v6.name = "V6";
+            v6.name = "Version6";
             v6.fields.push_back(Parameter{.type = ann("string"), .name = "address"});
 
             ch->variants.push_back(std::move(v4));

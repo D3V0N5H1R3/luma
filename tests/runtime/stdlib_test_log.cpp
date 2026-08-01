@@ -62,8 +62,8 @@ static void test_log_module() {
     const auto env = luma::test::make_std_env();
 
     ASSERT_TRUE(env->has("Log.debug"));
-    ASSERT_TRUE(env->has("Log.info"));
-    ASSERT_TRUE(env->has("Log.warn"));
+    ASSERT_TRUE(env->has("Log.information"));
+    ASSERT_TRUE(env->has("Log.warning"));
     ASSERT_TRUE(env->has("Log.error"));
     ASSERT_TRUE(env->has("Log.set_level"));
     ASSERT_TRUE(env->has("Log.get_level"));
@@ -80,7 +80,7 @@ static void test_log_set_output_disabled_in_sandbox() {
     const auto env = luma::test::make_std_env(/*sandbox=*/true);
 
     ASSERT_FALSE(env->has("Log.set_output"));
-    ASSERT_TRUE(env->has("Log.info"));
+    ASSERT_TRUE(env->has("Log.information"));
     ASSERT_TRUE(env->has("Log.set_level"));
 }
 
@@ -91,12 +91,12 @@ static void test_log_debug() {
 }
 
 static void test_log_info() {
-    // Log.info just prints — no throw means success.
-    eval("Log.info(\"test message\")");
+    // Log.information just prints — no throw means success.
+    eval("Log.information(\"test message\")");
 }
 
 static void test_log_warn() {
-    eval("Log.warn(\"test warning\")");
+    eval("Log.warning(\"test warning\")");
 }
 
 static void test_log_error() {
@@ -116,7 +116,7 @@ static void test_log_get_level_returns_level_choice() {
 
     ASSERT_TRUE(v.is_choice());
     ASSERT_EQ(v.as_choice()->type_name, "Level");
-    ASSERT_EQ(v.as_choice()->variant, "Info"); // reset() restores Info
+    ASSERT_EQ(v.as_choice()->variant, "Information"); // reset() restores Information
 }
 
 static void test_log_set_level() {
@@ -128,7 +128,7 @@ static void test_log_set_level() {
 
     ASSERT_TRUE(result.is_choice());
     ASSERT_EQ(result.as_choice()->type_name, "Level");
-    ASSERT_EQ(result.as_choice()->variant, "Warn");
+    ASSERT_EQ(result.as_choice()->variant, "Warning");
 
     // Test with choice argument.
     result = eval(R"(
@@ -141,7 +141,7 @@ static void test_log_set_level() {
 }
 
 static void test_log_set_level_all_choice_variants() {
-    for (const auto* variant : {"Debug", "Info", "Warn", "Error", "Off"}) {
+    for (const auto* variant : {"Debug", "Information", "Warning", "Error", "Off"}) {
         const auto v = level_roundtrip(std::string{"Log.set_level(Log.Level."} + variant + ")");
 
         ASSERT_TRUE(v.is_choice());
@@ -152,7 +152,8 @@ static void test_log_set_level_all_choice_variants() {
 static void test_log_set_level_string_variants() {
     // The runtime also accepts lowercase string level names.
     const std::pair<const char*, const char*> cases[] = {
-        {"debug", "Debug"}, {"info", "Info"}, {"warn", "Warn"}, {"error", "Error"}, {"off", "Off"},
+        {"debug", "Debug"}, {"info", "Information"}, {"warn", "Warning"},
+        {"error", "Error"}, {"off", "Off"},
     };
 
     for (const auto& [arg, expected] : cases) {
@@ -164,11 +165,11 @@ static void test_log_set_level_string_variants() {
 }
 
 static void test_log_set_level_unknown_string_defaults_to_info() {
-    // An unrecognised level name falls back to Info rather than throwing.
+    // An unrecognised level name falls back to Information rather than throwing.
     const auto v = level_roundtrip(R"(Log.set_level("verbose"))");
 
     ASSERT_TRUE(v.is_choice());
-    ASSERT_EQ(v.as_choice()->variant, "Info");
+    ASSERT_EQ(v.as_choice()->variant, "Information");
 }
 
 // ─── Formatting ───
@@ -176,7 +177,7 @@ static void test_log_set_level_unknown_string_defaults_to_info() {
 static void test_log_format_substitutes_level_and_message() {
     const auto out = capture_log_output(R"LUMA(Log.set_format("\${level}::\${message}")
 Log.set_level(Log.Level.Debug)
-Log.info("hello world"))LUMA");
+Log.information("hello world"))LUMA");
 
     ASSERT_EQ(out, "INFO::hello world\n");
 }
@@ -184,7 +185,7 @@ Log.info("hello world"))LUMA");
 static void test_log_format_substitutes_timestamp() {
     const auto out = capture_log_output(R"LUMA(Log.set_format("\${timestamp}")
 Log.set_level(Log.Level.Debug)
-Log.info("ignored"))LUMA");
+Log.information("ignored"))LUMA");
 
     // The ${timestamp} placeholder is replaced by an ISO-8601 UTC stamp.
     ASSERT_TRUE(out.find("${timestamp}") == std::string::npos);
@@ -198,7 +199,7 @@ static void test_log_format_preserves_unknown_placeholder() {
     // ${foo} is not a recognised field, so it is emitted verbatim.
     const auto out = capture_log_output(R"LUMA(Log.set_format("\${foo}")
 Log.set_level(Log.Level.Debug)
-Log.info("ignored"))LUMA");
+Log.information("ignored"))LUMA");
 
     ASSERT_EQ(out, "${foo}\n");
 }
@@ -208,7 +209,7 @@ static void test_log_format_literal_prefix() {
     // text is not appended unless ${message} appears.
     const auto out = capture_log_output(R"LUMA(Log.set_format("[APP] ")
 Log.set_level(Log.Level.Debug)
-Log.warn("dropped"))LUMA");
+Log.warning("dropped"))LUMA");
 
     ASSERT_EQ(out, "[APP] \n");
 }
@@ -216,7 +217,7 @@ Log.warn("dropped"))LUMA");
 static void test_log_default_format_after_reset() {
     // With the default format restored by the capture prologue, an info line
     // carries the [LEVEL] tag, the message, and an ISO-8601 timestamp.
-    const auto out = capture_log_output(R"LUMA(Log.info("ready"))LUMA");
+    const auto out = capture_log_output(R"LUMA(Log.information("ready"))LUMA");
 
     ASSERT_TRUE(out.find("[INFO] ready") != std::string::npos);
     ASSERT_TRUE(out.find('Z') != std::string::npos);
@@ -230,7 +231,7 @@ static void test_log_set_output_typed_file_writes() {
     const auto out = capture_log_output_via(
         R"LUMA(Log.set_output(Log.Output.File("_test_log_capture.log")))LUMA",
         R"LUMA(Log.set_format("\${level}::\${message}")
-Log.info("typed"))LUMA");
+Log.information("typed"))LUMA");
 
     ASSERT_EQ(out, "INFO::typed\n");
 }
@@ -253,8 +254,8 @@ static void test_log_level_filtering_suppresses_below_threshold() {
     const auto out = capture_log_output(R"LUMA(Log.set_format("\${message}")
 Log.set_level(Log.Level.Error)
 Log.debug("d")
-Log.info("i")
-Log.warn("w")
+Log.information("i")
+Log.warning("w")
 Log.error("kept"))LUMA");
 
     ASSERT_EQ(out, "kept\n");
@@ -264,8 +265,8 @@ static void test_log_level_off_suppresses_everything() {
     const auto out = capture_log_output(R"LUMA(Log.set_format("\${message}")
 Log.set_level(Log.Level.Off)
 Log.debug("d")
-Log.info("i")
-Log.warn("w")
+Log.information("i")
+Log.warning("w")
 Log.error("e"))LUMA");
 
     ASSERT_EQ(out, "");
@@ -275,8 +276,8 @@ static void test_log_level_debug_emits_every_level() {
     const auto out = capture_log_output(R"LUMA(Log.set_format("\${message}")
 Log.set_level(Log.Level.Debug)
 Log.debug("a")
-Log.info("b")
-Log.warn("c")
+Log.information("b")
+Log.warning("c")
 Log.error("d"))LUMA");
 
     ASSERT_EQ(out, "a\nb\nc\nd\n");
@@ -292,7 +293,7 @@ static void test_log_context_appended_to_output() {
     const auto out = capture_log_output(R"LUMA(Log.set_format("\${message}")
 Log.set_level(Log.Level.Debug)
 Log.set_context("k", "v")
-Log.info("m"))LUMA");
+Log.information("m"))LUMA");
 
     ASSERT_EQ(out, "m | k=v\n");
 }
@@ -302,7 +303,7 @@ static void test_log_context_multiple_pairs_preserve_order() {
 Log.set_level(Log.Level.Debug)
 Log.set_context("k1", "v1")
 Log.set_context("k2", "v2")
-Log.info("m"))LUMA");
+Log.information("m"))LUMA");
 
     ASSERT_EQ(out, "m | k1=v1 k2=v2\n");
 }
@@ -312,7 +313,7 @@ static void test_log_set_context_updates_existing_key() {
 Log.set_level(Log.Level.Debug)
 Log.set_context("k", "v1")
 Log.set_context("k", "v2")
-Log.info("m"))LUMA");
+Log.information("m"))LUMA");
 
     ASSERT_EQ(out, "m | k=v2\n");
 }
@@ -322,7 +323,7 @@ static void test_log_clear_context_removes_pairs() {
 Log.set_level(Log.Level.Debug)
 Log.set_context("k", "v")
 Log.clear_context()
-Log.info("m"))LUMA");
+Log.information("m"))LUMA");
 
     ASSERT_EQ(out, "m\n");
 }
@@ -348,7 +349,7 @@ static void test_log_reset_restores_info_level() {
     )");
 
     ASSERT_TRUE(v.is_choice());
-    ASSERT_EQ(v.as_choice()->variant, "Info");
+    ASSERT_EQ(v.as_choice()->variant, "Information");
 }
 
 static void test_log_reset_clears_context_and_format() {
@@ -361,7 +362,7 @@ static void test_log_reset_clears_context_and_format() {
         Log.reset()
     )");
 
-    const auto out = capture_log_output(R"LUMA(Log.info("fresh"))LUMA");
+    const auto out = capture_log_output(R"LUMA(Log.information("fresh"))LUMA");
 
     ASSERT_TRUE(out.find("stale") == std::string::npos);
     ASSERT_TRUE(out.find("should_not_appear") == std::string::npos);
@@ -375,11 +376,11 @@ static void test_log_debug_rejects_non_string() {
 }
 
 static void test_log_info_rejects_non_string() {
-    ASSERT_THROWS(eval("Log.info(true)"));
+    ASSERT_THROWS(eval("Log.information(true)"));
 }
 
 static void test_log_warn_rejects_non_string() {
-    ASSERT_THROWS(eval("Log.warn(3.14)"));
+    ASSERT_THROWS(eval("Log.warning(3.14)"));
 }
 
 static void test_log_error_rejects_non_string() {

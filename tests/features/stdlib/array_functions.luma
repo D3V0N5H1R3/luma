@@ -253,15 +253,15 @@ function void test_array_is_sorted_by() {
 function void test_array_min_max() {
     array<integer> values = [3, 1, 4, 1, 5, 9]
 
-    assert(Result.unwrap(Array.min(values)) == 1)
-    assert(Result.unwrap(Array.max(values)) == 9)
+    assert(Result.unwrap(Array.minimum(values)) == 1)
+    assert(Result.unwrap(Array.maximum(values)) == 9)
 }
 
 @test
 function void test_array_min_max_empty() {
     array<integer> empty_arr = []
-    result<integer> min_result = Array.min(empty_arr)
-    result<integer> max_result = Array.max(empty_arr)
+    result<integer> min_result = Array.minimum(empty_arr)
+    result<integer> max_result = Array.maximum(empty_arr)
 
     assert(Result.is_failure(min_result))
     assert(Result.is_failure(max_result))
@@ -439,34 +439,34 @@ function void test_array_group_by() {
     assert(Array.length(Result.unwrap(Dictionary.get(groups, "2"))) == 2)
 }
 
-# ─── Array.max_by / Array.min_by ──────────────────────────
+# ─── Array.maximum_by / Array.minimum_by ──────────────────────────
 
 @test
 function void test_array_max_by() {
-    optional<string> longest = Array.max_by(["a", "ccc", "bb"], (string s) -> String.length(s))
+    optional<string> longest = Array.maximum_by(["a", "ccc", "bb"], (string s) -> String.length(s))
 
     assert(Optional.unwrap(longest) == "ccc")
 
     # The first element wins ties, so the result is stable.
-    optional<string> tie = Array.max_by(["ab", "cd", "e"], (string s) -> String.length(s))
+    optional<string> tie = Array.maximum_by(["ab", "cd", "e"], (string s) -> String.length(s))
 
     assert(Optional.unwrap(tie) == "ab")
 
     # An empty array yields none.
-    assert(Optional.is_none(Array.max_by([], (integer x) -> x)))
+    assert(Optional.is_none(Array.maximum_by([], (integer x) -> x)))
 }
 
 @test
 function void test_array_min_by() {
-    optional<string> shortest = Array.min_by(["aaa", "c", "bb"], (string s) -> String.length(s))
+    optional<string> shortest = Array.minimum_by(["aaa", "c", "bb"], (string s) -> String.length(s))
 
     assert(Optional.unwrap(shortest) == "c")
 
-    optional<string> tie = Array.min_by(["a", "b", "cc"], (string s) -> String.length(s))
+    optional<string> tie = Array.minimum_by(["a", "b", "cc"], (string s) -> String.length(s))
 
     assert(Optional.unwrap(tie) == "a")
 
-    assert(Optional.is_none(Array.min_by([], (integer x) -> x)))
+    assert(Optional.is_none(Array.minimum_by([], (integer x) -> x)))
 }
 
 # ─── Array.count_by ───────────────────────────────────────
@@ -1169,8 +1169,8 @@ function void test_array_min_max_numbers() {
     # min and max operate on number arrays, not just integers.
     array<number> values = [3.5, 1.5, 2.5]
 
-    assert(Math.approximately_equal(Result.unwrap(Array.min(values)), 1.5))
-    assert(Math.approximately_equal(Result.unwrap(Array.max(values)), 3.5))
+    assert(Math.approximately_equal(Result.unwrap(Array.minimum(values)), 1.5))
+    assert(Math.approximately_equal(Result.unwrap(Array.maximum(values)), 3.5))
 }
 
 @test

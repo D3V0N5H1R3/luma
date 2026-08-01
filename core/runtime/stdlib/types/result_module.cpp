@@ -328,9 +328,9 @@ void register_result_ns(const EnvPtr& env) {
         })
         // bimap, fold, error_code and source_function are appended after the
         // alphabetical block, mirroring the catalog (they were added later).
-        .func("bimap", 3)
+        .func("map_both", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& r = expect_result(args[0], "Result.bimap", loc);
+            const auto& r = expect_result(args[0], "Result.map_both", loc);
 
             if (r->is_success) {
                 return make_success_value(invoke_on_inner(args[1], r, loc));

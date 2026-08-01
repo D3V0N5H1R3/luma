@@ -360,8 +360,8 @@ function void test_socket_parse_ip() {
     Socket.IpAddress ip = Result.unwrap(Socket.parse_ip("192.168.0.1"))
 
     string label = match ip {
-        case Socket.IpAddress.V4(addr) { addr }
-        case Socket.IpAddress.V6(_addr) { "v6" }
+        case Socket.IpAddress.Version4(addr) { addr }
+        case Socket.IpAddress.Version6(_addr) { "v6" }
     }
 
     assert(label == "192.168.0.1", "classified as V4 with the address text")
@@ -370,8 +370,8 @@ function void test_socket_parse_ip() {
     Socket.IpAddress ip6 = Result.unwrap(Socket.parse_ip("2001:DB8::1"))
 
     string label6 = match ip6 {
-        case Socket.IpAddress.V4(_addr) { "v4" }
-        case Socket.IpAddress.V6(addr) { addr }
+        case Socket.IpAddress.Version4(_addr) { "v4" }
+        case Socket.IpAddress.Version6(addr) { addr }
     }
 
     assert(label6 == "2001:db8::1", "classified as V6, lowercased")

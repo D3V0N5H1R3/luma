@@ -315,13 +315,14 @@ void register_linearalgebra_vectors(const EnvPtr& env) {
 
             return make_success_value(from_vec(result));
         })
-        .func("lerp", 3)
+        .func("linear_interpolation", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            auto a = to_vec(args[0], "LinearAlgebra.lerp", loc);
-            auto b = to_vec(args[1], "LinearAlgebra.lerp", loc);
-            const auto t = expect_numeric(args[2], "LinearAlgebra.lerp", loc);
+            auto a = to_vec(args[0], "LinearAlgebra.linear_interpolation", loc);
+            auto b = to_vec(args[1], "LinearAlgebra.linear_interpolation", loc);
+            const auto t = expect_numeric(args[2], "LinearAlgebra.linear_interpolation", loc);
 
-            if (auto mismatch = require_same_dimension(a, b, "LinearAlgebra.lerp")) {
+            if (auto mismatch =
+                    require_same_dimension(a, b, "LinearAlgebra.linear_interpolation")) {
                 return *mismatch;
             }
 

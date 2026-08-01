@@ -318,12 +318,12 @@ function void test_result_zip_second_failure() {
     assert(Result.is_failure(r))
 }
 
-# ─── Result.bimap ─────────────────────────────────────────
+# ─── Result.map_both ─────────────────────────────────────────
 
 @test
 function void test_result_bimap_success() {
     result<integer> r = success(5)
-    result<string> mapped = Result.bimap(r, (integer v) -> Converter.to_string(v), (string e) -> "err: ${e}")
+    result<string> mapped = Result.map_both(r, (integer v) -> Converter.to_string(v), (string e) -> "err: ${e}")
 
     assert(mapped == success("5"))
 }
@@ -331,7 +331,7 @@ function void test_result_bimap_success() {
 @test
 function void test_result_bimap_failure() {
     result<integer> r = failure("bad")
-    result<string> mapped = Result.bimap(r, (integer v) -> Converter.to_string(v), (string e) -> "err: ${e}")
+    result<string> mapped = Result.map_both(r, (integer v) -> Converter.to_string(v), (string e) -> "err: ${e}")
 
     assert(mapped == failure("err: bad"))
 }

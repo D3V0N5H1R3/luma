@@ -62,7 +62,7 @@ static void test_socket_parse_ipv4() {
     const auto& inner = *v.as_result()->owned_inner;
     ASSERT_TRUE(inner.is_choice());
     ASSERT_EQ(inner.as_choice()->type_name, std::string{"IpAddress"});
-    ASSERT_EQ(inner.as_choice()->variant, std::string{"V4"});
+    ASSERT_EQ(inner.as_choice()->variant, std::string{"Version4"});
     ASSERT_EQ(inner.as_choice()->fields.at(0).as_string(), "192.168.0.1");
 
     // Leading zeros are canonicalised away.
@@ -76,7 +76,7 @@ static void test_socket_parse_ipv6() {
 
     const auto& inner = *v.as_result()->owned_inner;
     ASSERT_TRUE(inner.is_choice());
-    ASSERT_EQ(inner.as_choice()->variant, std::string{"V6"});
+    ASSERT_EQ(inner.as_choice()->variant, std::string{"Version6"});
     // Rendered lowercased.
     ASSERT_EQ(inner.as_choice()->fields.at(0).as_string(), "2001:db8::1");
 

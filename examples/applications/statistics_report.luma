@@ -43,8 +43,8 @@ function void describe(string title, array<number> data) {
     print("  ${String.join(map_to_strings(data), ", ")}")
     print("")
     print("  Summary statistics")
-    number minimum = Result.unwrap_or(Array.min(data), 0.0)
-    number maximum = Result.unwrap_or(Array.max(data), 0.0)
+    number minimum = Result.unwrap_or(Array.minimum(data), 0.0)
+    number maximum = Result.unwrap_or(Array.maximum(data), 0.0)
 
     print_statistic("sum", Result.unwrap_or(Math.sum(data), 0.0))
     print_statistic("mean", Result.unwrap_or(Statistics.mean(data), 0.0))

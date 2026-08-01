@@ -134,13 +134,13 @@ static void test_array_map_returns_result() {
 
 static void test_array_min_max() {
     // Non-empty: returns success(value)
-    ASSERT_EVAL_INT("Array.min([3, 1, 2])", 1);
+    ASSERT_EVAL_INT("Array.minimum([3, 1, 2])", 1);
 
-    ASSERT_EVAL_INT("Array.max([3, 1, 2])", 3);
+    ASSERT_EVAL_INT("Array.maximum([3, 1, 2])", 3);
 
     // Empty: returns fail
-    ASSERT_EVAL_FAILURE("Array.min([])");
-    ASSERT_EVAL_FAILURE("Array.max([])");
+    ASSERT_EVAL_FAILURE("Array.minimum([])");
+    ASSERT_EVAL_FAILURE("Array.maximum([])");
 }
 
 static void test_array_module() {
@@ -317,8 +317,8 @@ static void test_array_min_max_non_numeric() {
     // A non-numeric element must surface as a result failure, not an uncaught
     // RuntimeError. eval() runs unchecked, so these heterogeneous arrays reach
     // the runtime (the type checker would otherwise reject them).
-    ASSERT_EVAL_FAILURE("Array.min([1, \"bad\", 3])");
-    ASSERT_EVAL_FAILURE("Array.max([1, \"bad\", 3])");
+    ASSERT_EVAL_FAILURE("Array.minimum([1, \"bad\", 3])");
+    ASSERT_EVAL_FAILURE("Array.maximum([1, \"bad\", 3])");
 }
 
 static void test_array_unique() {
@@ -867,41 +867,45 @@ static void test_array_unique_preserves_order() {
 
 static void test_array_min_max_numbers() {
     // min/max operate on number (double) arrays, not just integers.
-    ASSERT_EVAL_NUM("Array.min([3.5, 1.5, 2.5])", 1.5);
+    ASSERT_EVAL_NUM("Array.minimum([3.5, 1.5, 2.5])", 1.5);
 
-    ASSERT_EVAL_NUM("Array.max([3.5, 1.5, 2.5])", 3.5);
+    ASSERT_EVAL_NUM("Array.maximum([3.5, 1.5, 2.5])", 3.5);
 
     // Mixed integer/number arrays compare numerically (the catalog type is
     // array<integer | number>), matching the previous to_numeric() ordering.
-    ASSERT_EVAL_NUM("Array.min([3, 1.5, 2])", 1.5);
+    ASSERT_EVAL_NUM("Array.minimum([3, 1.5, 2])", 1.5);
 
-    ASSERT_EVAL_NUM("Array.max([1, 3.5, 2])", 3.5);
+    ASSERT_EVAL_NUM("Array.maximum([1, 3.5, 2])", 3.5);
 }
 
 static void test_array_max_by() {
     // Returns the element with the greatest key (some), not the key itself.
-    const auto v = eval("Array.max_by([\"a\", \"ccc\", \"bb\"], (string s) -> String.length(s))");
+    const auto v =
+        eval("Array.maximum_by([\"a\", \"ccc\", \"bb\"], (string s) -> String.length(s))");
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), std::string("ccc"));
 
     // First element wins ties (stable).
-    const auto tie = eval("Array.max_by([\"ab\", \"cd\", \"e\"], (string s) -> String.length(s))");
+    const auto tie =
+        eval("Array.maximum_by([\"ab\", \"cd\", \"e\"], (string s) -> String.length(s))");
     ASSERT_EQ(tie.as_string(), std::string("ab"));
 
     // Empty array -> none.
-    ASSERT_TRUE(eval("Array.max_by([], (integer x) -> x)").is_null());
+    ASSERT_TRUE(eval("Array.maximum_by([], (integer x) -> x)").is_null());
 }
 
 static void test_array_min_by() {
-    const auto v = eval("Array.min_by([\"aaa\", \"c\", \"bb\"], (string s) -> String.length(s))");
+    const auto v =
+        eval("Array.minimum_by([\"aaa\", \"c\", \"bb\"], (string s) -> String.length(s))");
     ASSERT_TRUE(v.is_string());
     ASSERT_EQ(v.as_string(), std::string("c"));
 
     // First minimum wins ties.
-    const auto tie = eval("Array.min_by([\"a\", \"b\", \"cc\"], (string s) -> String.length(s))");
+    const auto tie =
+        eval("Array.minimum_by([\"a\", \"b\", \"cc\"], (string s) -> String.length(s))");
     ASSERT_EQ(tie.as_string(), std::string("a"));
 
-    ASSERT_TRUE(eval("Array.min_by([], (integer x) -> x)").is_null());
+    ASSERT_TRUE(eval("Array.minimum_by([], (integer x) -> x)").is_null());
 }
 
 static void test_array_count_by() {

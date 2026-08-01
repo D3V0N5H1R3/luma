@@ -18,7 +18,7 @@ namespace luma {
 // register the same type definitions, so that Luma programmers can:
 //   - use the type names in annotations (e.g. Http.Response)
 //   - create record literals (e.g. Http.Response { ... })
-//   - pattern-match on choice variants (e.g. Log.Level.Info)
+//   - pattern-match on choice variants (e.g. Log.Level.Information)
 
 // Returns all synthetic record declarations keyed by their qualified
 // name (e.g. "DateTime.TimeParts", "Http.Response").

@@ -346,12 +346,12 @@ static void test_result_map_boolean_success() {
 }
 
 static void test_result_bimap_success() {
-    ASSERT_EVAL_INT("Result.bimap(success(5), (integer v) -> v * 2, (string e) -> 0)", 10);
+    ASSERT_EVAL_INT("Result.map_both(success(5), (integer v) -> v * 2, (string e) -> 0)", 10);
 }
 
 static void test_result_bimap_failure() {
     // bimap maps the error branch but the result stays a failure.
-    const auto v = eval("Result.bimap(failure(\"bad\"), (integer v) -> v, (string e) -> 99)");
+    const auto v = eval("Result.map_both(failure(\"bad\"), (integer v) -> v, (string e) -> 99)");
 
     ASSERT_RESULT_FAILURE(v);
     ASSERT_EQ(v.as_result()->owned_inner->as_integer(), 99);

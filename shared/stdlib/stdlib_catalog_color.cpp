@@ -20,7 +20,7 @@ void register_color_functions(std::vector<FunctionSpec>& specs, const ModuleBuil
             m.fn("fade", 2, "(color: Color, amount: number)", named::color(),
                  {named::color(), p.number}),
             m.fn("from_cmyk", 1, "(cmyk: Color.Cmyk)", named::color(), {named::cmyk()}),
-            m.fn("from_hex", 1, "(hex: string)", R::result(named::color()), {p.string}),
+            m.fn("from_hexadecimal", 1, "(value: string)", R::result(named::color()), {p.string}),
             m.fn("from_hsl", 1, "(hsl: Color.Hsl)", named::color(), {named::hsl()}),
             m.fn("from_hsv", 1, "(hsv: Color.Hsv)", named::color(), {named::hsv()}),
             m.fn("from_name", 1, "(name: Color.Name)", named::color(), {named::color_name()}),

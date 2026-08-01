@@ -1,6 +1,6 @@
 # VM: tuples — construction, field/index access, destructuring, equality, nesting
 function (integer, integer) min_max(array<integer> xs) {
-    return (Result.unwrap(Array.min(xs)), Result.unwrap(Array.max(xs)))
+    return (Result.unwrap(Array.minimum(xs)), Result.unwrap(Array.maximum(xs)))
 }
 
 @main

@@ -332,10 +332,10 @@ function void test_decimal_power() {
 
 @test
 function void test_decimal_min_max() {
-    assert(Decimal.equals(Decimal.min(dec("1.5"), dec("2.5")), dec("1.5")))
-    assert(Decimal.equals(Decimal.max(dec("1.5"), dec("2.5")), dec("2.5")))
+    assert(Decimal.equals(Decimal.minimum(dec("1.5"), dec("2.5")), dec("1.5")))
+    assert(Decimal.equals(Decimal.maximum(dec("1.5"), dec("2.5")), dec("2.5")))
     # scale-insensitive tie
-    assert(Decimal.equals(Decimal.min(dec("1.50"), dec("1.5")), dec("1.5")))
+    assert(Decimal.equals(Decimal.minimum(dec("1.50"), dec("1.5")), dec("1.5")))
 }
 
 # ─── sign family ───

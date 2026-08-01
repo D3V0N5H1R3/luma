@@ -26,24 +26,25 @@ namespace luma {
 
 // Transcendental functions (atan2, hypot, log, roots, tanh) and interpolation.
 void register_math_transcendental(const EnvPtr& env) {
-    ModuleBuilder{"Math", env} // Math.atan2(y, x) -> result<number>
-        .func("atan2", 2)
+    ModuleBuilder{"Math", env} // Math.arc_tangent2(y, x) -> result<number>
+        .func("arc_tangent2", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto y = expect_numeric(args[0], "Math.atan2", loc);
-            const auto x = expect_numeric(args[1], "Math.atan2", loc);
+            const auto y = expect_numeric(args[0], "Math.arc_tangent2", loc);
+            const auto x = expect_numeric(args[1], "Math.arc_tangent2", loc);
             const auto result = std::atan2(y, x);
 
             if (!stdlib::is_valid_numeric(result)) {
-                return make_failure_value(error_msg("Math", "atan2", "result is not a number"));
+                return make_failure_value(
+                    error_msg("Math", "arc_tangent2", "result is not a number"));
             }
 
             return make_success_value(Value{result});
         })
-        // Math.hypot(x, y) -> number
-        .func("hypot", 2)
+        // Math.hypotenuse(x, y) -> number
+        .func("hypotenuse", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto x = expect_numeric(args[0], "Math.hypot", loc);
-            const auto y = expect_numeric(args[1], "Math.hypot", loc);
+            const auto x = expect_numeric(args[0], "Math.hypotenuse", loc);
+            const auto y = expect_numeric(args[1], "Math.hypotenuse", loc);
 
             return Value{std::hypot(x, y)};
         })
@@ -88,7 +89,7 @@ void register_math_transcendental(const EnvPtr& env) {
 
             return Value{std::tanh(value)};
         })
-        // Math.remap(value, in_min, in_max, out_min, out_max) -> result<number>
+        // Math.remap(value, in_minimum, in_maximum, out_minimum, out_maximum) -> result<number>
         .func("remap", 5)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto value = expect_numeric(args[0], "Math.remap", loc);
@@ -180,7 +181,7 @@ void register_math_transcendental(const EnvPtr& env) {
 
             return make_success_value(Value{result});
         })
-        // Math.wrap(x, lo, hi) -> number
+        // Math.wrap(x, low, high) -> number
         .func("wrap", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const auto x = expect_numeric(args[0], "Math.wrap", loc);
@@ -257,10 +258,10 @@ void register_math_transcendental(const EnvPtr& env) {
 
             return make_success_value(Value{result});
         })
-        // Math.erf(x) -> number
-        .func("erf", 1)
+        // Math.error_function(x) -> number
+        .func("error_function", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto x = expect_numeric(args[0], "Math.erf", loc);
+            const auto x = expect_numeric(args[0], "Math.error_function", loc);
 
             return Value{std::erf(x)};
         });

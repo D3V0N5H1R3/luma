@@ -55,7 +55,7 @@ function void test_tuple_mutable_destructuring() {
 }
 
 function (integer, integer) find_min_max(array<integer> numbers) {
-    return (Result.unwrap(Array.min(numbers)), Result.unwrap(Array.max(numbers)))
+    return (Result.unwrap(Array.minimum(numbers)), Result.unwrap(Array.maximum(numbers)))
 }
 
 @test

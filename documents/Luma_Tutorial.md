@@ -1246,7 +1246,7 @@ Prefer pipes when you have three or more chained steps; they turn tangled nestin
 
 ## 20 — A Tour of the Standard Library
 
-You don't have to build everything from scratch. Luma ships with a large **standard library**: ready-made functions grouped into **modules** such as `String`, `Math`, and `Array`. You call a function by naming its module, a dot, and the function: `Math.max(3.0, 9.0)`. You've been doing this all along.
+You don't have to build everything from scratch. Luma ships with a large **standard library**: ready-made functions grouped into **modules** such as `String`, `Math`, and `Array`. You call a function by naming its module, a dot, and the function: `Math.maximum(3.0, 9.0)`. You've been doing this all along.
 
 A recurring pattern to remember: **many library functions return a `result`** (because they can fail), so you unwrap them with `?? fallback`, exactly as in [chapter 18](#18--handling-absence-and-failure). The tables below note which functions do.
 
@@ -1279,8 +1279,8 @@ The `Math` module offers constants and functions. **Constants** are accessed *wi
 
 ```luma
 print(Math.pi)                          # 3.141592653589793  (a constant)
-print(Math.max(3.0, 9.0))               # 9.0                (plain number)
-print(Math.min(3.0, 9.0))               # 3.0
+print(Math.maximum(3.0, 9.0))               # 9.0                (plain number)
+print(Math.minimum(3.0, 9.0))               # 3.0
 print(Math.square_root(144.0) ?? 0.0)   # 12.0               (result → unwrap)
 print(Math.power(2.0, 10.0) ?? 0.0)     # 1024.0
 print(Math.absolute(-7.0) ?? 0.0)       # 7.0
@@ -1435,7 +1435,7 @@ function void test_is_even() {
 
 ## 23 — Organising Code with Namespaces
 
-As a program grows, it collects more and more functions and types, and their names start to compete for space. A **namespace** groups related declarations together under a shared name — the way a folder groups related files. You have been using namespaces since [chapter 4](#4--printing-and-comments): every standard-library module you have called, from `String` to `Math` to `Array`, *is* a namespace. That's why you write `String.trim` and `Math.max`. Now you'll build your own.
+As a program grows, it collects more and more functions and types, and their names start to compete for space. A **namespace** groups related declarations together under a shared name — the way a folder groups related files. You have been using namespaces since [chapter 4](#4--printing-and-comments): every standard-library module you have called, from `String` to `Math` to `Array`, *is* a namespace. That's why you write `String.trim` and `Math.maximum`. Now you'll build your own.
 
 ### Declaring a Namespace
 

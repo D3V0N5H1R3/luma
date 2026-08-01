@@ -19,18 +19,18 @@ function void show_log_levels() {
     print("Minimum log level is Debug, so debug and higher messages appear.")
 
     Log.debug("application starting")
-    Log.info("server listening on port 8080")
-    Log.warn("config file not found, using defaults")
+    Log.information("server listening on port 8080")
+    Log.warning("config file not found, using defaults")
     Log.error("failed to connect to database")
 
     # Raise the level — only warn and above get through.
-    Log.set_level(Log.Level.Warn)
+    Log.set_level(Log.Level.Warning)
 
     print("\nLevel raised to Warn:")
 
     Log.debug("this is suppressed")
-    Log.info("this is suppressed")
-    Log.warn("low disk space")
+    Log.information("this is suppressed")
+    Log.warning("low disk space")
     Log.error("write failed")
 
     # Turn logging off completely.
@@ -51,12 +51,12 @@ function void show_structured_context() {
     Log.set_context("module", "auth")
     Log.set_context("request_id", "req-4821")
 
-    Log.info("user login attempt")
-    Log.warn("invalid password, attempt 2 of 3")
-    Log.info("login successful")
+    Log.information("user login attempt")
+    Log.warning("invalid password, attempt 2 of 3")
+    Log.information("login successful")
 
     Log.clear_context()
-    Log.info("context cleared — no extra fields")
+    Log.information("context cleared — no extra fields")
 }
 
 # Route log output to a named stream, reporting any failure.
@@ -66,7 +66,7 @@ function void show_output_routing() {
     result<void> ok = Log.set_output("stderr")
 
     match ok {
-        success(_) { Log.info("routed to stderr") }
+        success(_) { Log.information("routed to stderr") }
         failure(e) { print("Could not set output: ${e}") }
     }
 }
@@ -75,20 +75,20 @@ function void show_output_routing() {
 function void show_application_lifecycle() {
     print("\n=== Application Lifecycle ===")
 
-    Log.set_level(Log.Level.Info)
+    Log.set_level(Log.Level.Information)
     Log.set_context("app", "demo")
 
-    Log.info("initialising modules")
-    Log.info("loading configuration")
-    Log.warn("optional feature X unavailable")
-    Log.info("startup complete")
+    Log.information("initialising modules")
+    Log.information("loading configuration")
+    Log.warning("optional feature X unavailable")
+    Log.information("startup complete")
 
     Log.set_context("user", "alice")
-    Log.info("processing request")
-    Log.info("request complete")
+    Log.information("processing request")
+    Log.information("request complete")
     Log.clear_context()
 
-    Log.info("shutting down")
+    Log.information("shutting down")
 
     Log.set_level(Log.Level.Debug)
 }
@@ -101,8 +101,8 @@ function void show_custom_line_prefix() {
     print("\n=== Custom Line Prefix ===")
 
     Log.set_format("[MYAPP] ")
-    Log.info("this line carries the [MYAPP] prefix on stderr")
-    Log.warn("cache miss rate high")
+    Log.information("this line carries the [MYAPP] prefix on stderr")
+    Log.warning("cache miss rate high")
 }
 
 @main

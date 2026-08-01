@@ -244,8 +244,8 @@ function void test_hash_sha256_typed_tags_algorithm() {
     }
 
     assert(algo == "sha256", "sha256_typed tags the Sha256 algorithm")
-    assert(d.hex == Hash.sha256("abc"), "the hex matches the plain digest")
-    assert(String.length(d.hex) == 64, "a SHA-256 hex digest is 64 characters")
+    assert(d.hexadecimal == Hash.sha256("abc"), "the hex matches the plain digest")
+    assert(String.length(d.hexadecimal) == 64, "a SHA-256 hex digest is 64 characters")
 }
 
 @test

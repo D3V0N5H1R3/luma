@@ -413,7 +413,7 @@ void register_json_value(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
             return Value{json_variant_is(args[0], "JsonNumber")};
         })
-        .func("is_bool", 1)
+        .func("is_boolean", 1)
         .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {
             return Value{json_variant_is(args[0], "JsonBool")};
         })

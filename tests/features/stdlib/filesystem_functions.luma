@@ -473,7 +473,7 @@ function void test_filesystem_get_modified_time() {
 function void test_filesystem_is_symlink() {
     assert(Result.is_success(FileSystem.write_file("_test_symlink.txt", "data")))
 
-    assert(!Result.unwrap(FileSystem.is_symlink("_test_symlink.txt")))
+    assert(!Result.unwrap(FileSystem.is_symbolic_link("_test_symlink.txt")))
 
     boolean _ = Result.unwrap_or(FileSystem.delete("_test_symlink.txt"), false)
 }
@@ -634,7 +634,7 @@ function void test_filesystem_metadata_file() {
     assert(info.size == 5, "size is 5 bytes")
     assert(info.is_file, "is a file")
     assert(!info.is_directory, "not a directory")
-    assert(!info.is_symlink, "not a symlink")
+    assert(!info.is_symbolic_link, "not a symlink")
     assert(info.modified_time > 1577836800.0, "modified after 2020")
 
     boolean _ = Result.unwrap_or(FileSystem.delete("_test_meta.txt"), false)
@@ -669,7 +669,7 @@ function string file_kind_label(FileSystem.FileKind k) {
     return match k {
     case FileSystem.FileKind.File      { "file" }
     case FileSystem.FileKind.Directory { "directory" }
-    case FileSystem.FileKind.Symlink   { "symlink" }
+    case FileSystem.FileKind.SymbolicLink   { "symlink" }
     case FileSystem.FileKind.Other     { "other" }
     }
 }

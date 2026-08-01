@@ -162,8 +162,8 @@ function BenchResult run_error_handling_benchmarks(BenchResult state) {
         result<(integer, integer)> _r = Result.zip(success(1), success(2))
     })
 
-    st = time_it(st, "Result.bimap (success)", 10000, () -> {
-        result<integer> _r = Result.bimap(success(5), (integer v) -> v * 2, (string _e) -> 0)
+    st = time_it(st, "Result.map_both (success)", 10000, () -> {
+        result<integer> _r = Result.map_both(success(5), (integer v) -> v * 2, (string _e) -> 0)
     })
 
     st = time_it(st, "Result.map_number (typed)", 10000, () -> {

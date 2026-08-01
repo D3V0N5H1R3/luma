@@ -368,16 +368,16 @@ void register_decimal_ns(const EnvPtr& env) {
             const auto& rhs = arg_decimal(args[1], "Decimal.greater_or_equal", loc);
             return Value{lhs.compare(rhs) >= 0};
         })
-        .func("min", 2)
+        .func("minimum", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& lhs = arg_decimal(args[0], "Decimal.min", loc);
-            const auto& rhs = arg_decimal(args[1], "Decimal.min", loc);
+            const auto& lhs = arg_decimal(args[0], "Decimal.minimum", loc);
+            const auto& rhs = arg_decimal(args[1], "Decimal.minimum", loc);
             return make_decimal(lhs.compare(rhs) <= 0 ? lhs : rhs);
         })
-        .func("max", 2)
+        .func("maximum", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& lhs = arg_decimal(args[0], "Decimal.max", loc);
-            const auto& rhs = arg_decimal(args[1], "Decimal.max", loc);
+            const auto& lhs = arg_decimal(args[0], "Decimal.maximum", loc);
+            const auto& rhs = arg_decimal(args[1], "Decimal.maximum", loc);
             return make_decimal(lhs.compare(rhs) >= 0 ? lhs : rhs);
         })
         // ─── Predicates & sign ───

@@ -31,13 +31,13 @@ function void test_color_rgba() {
 
 @test
 function void test_color_from_hex() {
-    Color.Color c = Result.unwrap(Color.from_hex("#0172ad"))
+    Color.Color c = Result.unwrap(Color.from_hexadecimal("#0172ad"))
     assert(c.red == 1)
     assert(c.green == 114)
     assert(c.blue == 173)
 
     # #rgb shorthand doubles each nibble.
-    Color.Color s = Result.unwrap(Color.from_hex("f0a"))
+    Color.Color s = Result.unwrap(Color.from_hexadecimal("f0a"))
     assert(s.red == 255)
     assert(s.green == 0)
     assert(s.blue == 170)
@@ -45,9 +45,9 @@ function void test_color_from_hex() {
 
 @test
 function void test_color_from_hex_invalid() {
-    assert(Result.is_failure(Color.from_hex("#0172a")))
-    assert(Result.is_failure(Color.from_hex("#zzzzzz")))
-    assert(Result.is_failure(Color.from_hex("")))
+    assert(Result.is_failure(Color.from_hexadecimal("#0172a")))
+    assert(Result.is_failure(Color.from_hexadecimal("#zzzzzz")))
+    assert(Result.is_failure(Color.from_hexadecimal("")))
 }
 
 @test

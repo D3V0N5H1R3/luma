@@ -365,7 +365,7 @@ static void test_hash_sha256_typed_tags_algorithm_and_hex() {
     ASSERT_EQ(algorithm->as_choice()->type_name, "Algorithm");
     ASSERT_EQ(algorithm->as_choice()->variant, "Sha256");
 
-    const auto* hex = v.as_record()->find_field("hex");
+    const auto* hex = v.as_record()->find_field("hexadecimal");
     ASSERT_TRUE(hex != nullptr && hex->is_string());
     ASSERT_EQ(hex->as_string(), eval(R"(Hash.sha256("abc"))").as_string());
 }

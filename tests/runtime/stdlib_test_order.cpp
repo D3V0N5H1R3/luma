@@ -106,7 +106,7 @@ static void test_order_number_roundtrip() {
 static void test_order_accessors_reject_non_ordering() {
     // The Ordering-consuming helpers reject a non-choice and a foreign choice.
     ASSERT_TRUE(luma::test::eval_throws("Order.reverse(5)"));
-    ASSERT_TRUE(luma::test::eval_throws("Order.to_number(Log.Level.Info)"));
+    ASSERT_TRUE(luma::test::eval_throws("Order.to_number(Log.Level.Information)"));
     ASSERT_TRUE(luma::test::eval_throws("Order.then(Ordering.Less, 0)"));
     ASSERT_TRUE(luma::test::eval_throws(R"(Order.from_number("x"))"));
 }

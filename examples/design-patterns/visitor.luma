@@ -57,8 +57,8 @@ function number count_ops(Expr expr) {
 function number depth(Expr expr) {
     return match expr {
     case Expr.Literal(_value) { 0 }
-    case Expr.Add(left, right) { 1 + Math.max(depth(left), depth(right)) }
-    case Expr.Mul(left, right) { 1 + Math.max(depth(left), depth(right)) }
+    case Expr.Add(left, right) { 1 + Math.maximum(depth(left), depth(right)) }
+    case Expr.Mul(left, right) { 1 + Math.maximum(depth(left), depth(right)) }
     case Expr.Negate(operand) { 1 + depth(operand) }
     }
 }

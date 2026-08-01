@@ -97,7 +97,7 @@ using AddrInfoPtr = std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)>;
         return AddrInfoPtr{nullptr, freeaddrinfo};
     }
 
-    struct addrinfo hints {};
+    struct addrinfo hints{};
 
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = socktype;
@@ -682,7 +682,7 @@ void register_socket_ns(const EnvPtr& env) {
                 return make_failure_value("socket is not a server socket");
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1202,7 +1202,7 @@ void register_socket_ns(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1225,7 +1225,7 @@ void register_socket_ns(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1249,7 +1249,7 @@ void register_socket_ns(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1270,7 +1270,7 @@ void register_socket_ns(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1392,11 +1392,11 @@ void register_socket_ns(const EnvPtr& env) {
             const auto& text = expect_string(args[0], "Socket.parse_ip", loc);
 
             if (auto v4 = parse_ipv4(text)) {
-                return make_success_value(make_ip_address("V4", *std::move(v4)));
+                return make_success_value(make_ip_address("Version4", *std::move(v4)));
             }
 
             if (auto v6 = parse_ipv6(text)) {
-                return make_success_value(make_ip_address("V6", *std::move(v6)));
+                return make_success_value(make_ip_address("Version6", *std::move(v6)));
             }
 
             return make_failure_value(std::format("not a valid IP address: '{}'", text));

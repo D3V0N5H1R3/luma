@@ -242,7 +242,7 @@ void leave_raw_mode() {
     rec->type_name = "InputEvent";
     rec->fields.emplace_back("key", Value{std::string{remaining}});
     rec->fields.emplace_back("shift", Value{shift});
-    rec->fields.emplace_back("ctrl", Value{ctrl});
+    rec->fields.emplace_back("control", Value{ctrl});
     rec->fields.emplace_back("alt", Value{alt});
 
     return Value{std::move(rec)};

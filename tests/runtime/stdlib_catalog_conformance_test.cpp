@@ -40,7 +40,7 @@ static void test_all_registered_functions_are_in_catalog() {
     const auto& cat = stdlib::catalog();
 
     // Stdlib choice variants are registered as globals but are not catalog
-    // function entries: unit variants (e.g. "Log.Level.Info") as field-less
+    // function entries: unit variants (e.g. "Log.Level.Information") as field-less
     // choice values, and payload-bearing variants (e.g. "Log.Output.File",
     // "Json.Value.JsonString") as native constructor functions.  Collect every
     // variant's fully-qualified name so both forms are skipped by name rather

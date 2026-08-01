@@ -183,7 +183,7 @@ constexpr std::size_t kModuleCount = std::size(kModules);
 // Shared by both eager and lazy registration paths.
 inline void register_stdlib_postamble(const EnvPtr& env, bool sandbox) {
     // Register stdlib-provided choice variants so they are accessible
-    // at runtime.  Unit variants (e.g. Log.Level.Info) become ready-made
+    // at runtime.  Unit variants (e.g. Log.Level.Information) become ready-made
     // field-less choice values; payload-bearing variants (e.g. Log.Output.File
     // or Json.Value.JsonString) become native constructor functions, mirroring
     // the MakeChoiceConstructor opcode emitted for user-defined choices, so
