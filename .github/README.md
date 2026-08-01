@@ -40,9 +40,9 @@ Dependabot configuration for automated dependency updates:
 
 All ecosystems use grouped PRs (one PR per ecosystem batch) to reduce noise.
 
-### [`linux-distros.json`](linux-distros.json)
+### [`linux-distros.json`](workflows/linux-distros.json)
 
-Matrix definition consumed by the CI multi-distro build job. Lists container images (Debian trixie, Kali, Fedora, Arch Linux) with their compiler and install commands. The workflow reads this file dynamically so adding a distro requires no workflow edits.
+Matrix definition consumed by the CI multi-distro build job. Lists container images (Debian trixie, Kali, Fedora, Arch Linux) with their compiler and install commands. The workflow reads this file dynamically so adding a distro requires no workflow edits. Lives inside `workflows/` because it is exclusively a workflow implementation detail.
 
 ### [`plan-template.md`](plan-template.md)
 

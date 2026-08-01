@@ -103,7 +103,7 @@ Internal `workflow_call` components — never triggered directly, only invoked b
 
 ```text
 ci.yml
-├── resolve-distro-matrix.yml      reads .github/linux-distros.json → matrix
+├── resolve-distro-matrix.yml      reads .github/workflows/linux-distros.json → matrix
 ├── reusable-linux-build.yml       one job per distro in the matrix
 └── build-raspberry-pi.yml
     └── reusable-linux-build.yml   Raspberry Pi OS (ARM64), native runner
@@ -163,7 +163,7 @@ For reference, the checks each pull-request-triggered workflow reports:
 - [github-actions-recipes.instructions.md](../../instructions/github-actions-recipes.instructions.md) — copy-paste workflow recipes and debugging guidance.
 - [build.instructions.md](../../instructions/build.instructions.md) — the CMake presets, sanitizers, and coverage the build and test jobs drive.
 - [../actions](../actions) — the composite actions these workflows call (`apt-install`, `cmake-build`, `package-binaries`, `build-vscode-extension`, `build-zed-extension`).
-- [linux-distros.json](../linux-distros.json) — the distribution matrix [`resolve-distro-matrix.yml`](resolve-distro-matrix.yml) loads.
+- [linux-distros.json](linux-distros.json) — the distribution matrix [`resolve-distro-matrix.yml`](resolve-distro-matrix.yml) loads.
 - [stale-path-denylist.txt](../stale-path-denylist.txt) — the patterns [`docs.yml`](docs.yml) rejects.
 - [prompts/README.md](../prompts/README.md) and [hooks/README.md](../hooks/README.md) — the sibling `.github/` indexes.
 

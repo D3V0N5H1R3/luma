@@ -106,7 +106,7 @@ jobs:
       artifact-name: luma-linux-aarch64
 
   # ── Validate release on additional Linux distributions ──
-  # The distro list lives in .github/linux-distros.json so it is defined once
+  # The distro list lives in .github/workflows/linux-distros.json so it is defined once
   # and shared with the CI workflow. resolve-distro-matrix.yml loads it into a
   # matrix that the validation job consumes via fromJSON.
   setup-linux-matrix:

@@ -19,7 +19,7 @@ on:
       - ".clang-format"
       - ".clang-tidy"
       - ".github/actions/**"
-      - ".github/linux-distros.json"
+      - ".github/workflows/linux-distros.json"
       - ".github/workflows/build-raspberry-pi.yml"
       - ".github/workflows/ci.yml"
       - ".github/workflows/resolve-distro-matrix.yml"
@@ -503,7 +503,7 @@ jobs:
         run: ctest --output-on-failure
 
   # ── Linux distribution builds (broad distro coverage via containers) ──
-  # The distro list lives in .github/linux-distros.json so it is defined once
+  # The distro list lives in .github/workflows/linux-distros.json so it is defined once
   # and shared with the release workflow. resolve-distro-matrix.yml loads it
   # into a matrix that the build job consumes via fromJSON.
   setup-linux-matrix:
