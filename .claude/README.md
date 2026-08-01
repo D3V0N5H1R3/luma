@@ -72,7 +72,7 @@ Launch a subagent with the Task tool, or manage them with `/agents`.
 
 ## Slash commands (`commands/`)
 
-One thin wrapper per `.github/prompts/*.prompt.md` (28 in total). Each wrapper
+One thin wrapper per `.github/prompts/*.prompt.md` (27 in total). Each wrapper
 carries the source prompt's `description` and `argument-hint` verbatim, then
 instructs the agent to read and follow that prompt file with `$ARGUMENTS`
 substituted in. The workflow itself is never duplicated — it stays defined once

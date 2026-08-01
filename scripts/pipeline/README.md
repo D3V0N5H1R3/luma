@@ -241,7 +241,6 @@ fix runner, which runs the mutating column.
 | 7 | `07-ux-audit`               | → | `ux-improve`              | UX, usability, and visual-design fixes.                  |
 | 8 | `08-refactor-audit`         | → | `refactor`                | Structural improvements.                                 |
 | 9 | `09-performance-audit`      | → | `optimize`                | Hotspots and algorithmic wins.                           |
-|   |                             |   | `source-code-cleanup`     | Dead code, comment/format hygiene.                       |
 |   |                             |   | `iterative-improvement`   | Convergence loop (capped); re-runs consistency + review internally. |
 |   |                             |   | `release-verification`    | Clean-room build/test/lint gate.                         |
 |   |                             |   | `update-learnings`        | Captures new pitfalls into `instructions/learnings.instructions.md`, last. |
@@ -251,7 +250,7 @@ design.** They are audits whose findings are resolved *through* the executor
 prompts (`bug-fix`, `refactor`, `optimize`) and the `iterative-improvement`
 loop, which itself re-runs consistency and code-review passes. UX is the
 exception: its `07-ux-audit` report feeds the dedicated `ux-improve` executor,
-which runs in the polish band (after `optimize`, before `source-code-cleanup`)
+which runs in the polish band (after `optimize`, before `iterative-improvement`)
 rather than in audit-number order. This mirrors the prompt pairing in the
 project's own prompt set: discovery prompts produce reports, execute prompts
 consume them.

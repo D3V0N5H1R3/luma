@@ -74,7 +74,6 @@ Every prompt runs in agent mode. A `—` in the **Argument** column means the pr
 | [code-review](code-review.prompt.md)                 | file or directory | Review for bugs, security, performance, and style violations.        |
 | [consistency-check](consistency-check.prompt.md)     | optional focus    | Find drift between code, build, docs, tests, and tooling.            |
 | [lint-and-format](lint-and-format.prompt.md)         | —                 | Run every language's linter and formatter across the repository.     |
-| [source-code-cleanup](source-code-cleanup.prompt.md) | —                 | Apply the project's style and convention rules across all languages. |
 | [ux-audit](ux-audit.prompt.md)                       | file or directory | Audit an app's UX, usability, and visual design — esp. GraphicalUi.  |
 | [ux-improve](ux-improve.prompt.md)                   | file or directory | Apply the UX audit's findings to an app or example.                  |
 

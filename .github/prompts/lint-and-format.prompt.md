@@ -5,7 +5,7 @@ agent: "agent"
 
 # Lint and Format
 
-Lint and format every first-party language in the repository. Run the sections for the file types you changed, or run all of them to sweep the whole tree. Each language's tooling, pinned versions, and configuration mirror the matching CI workflow in `.github/workflows/`, so a clean local pass should reproduce the CI gate. For a broader pass that also reshapes code to the project's style conventions — naming, immutability, single responsibility — beyond what the formatters enforce, use [source-code-cleanup.prompt.md](source-code-cleanup.prompt.md).
+Lint and format every first-party language in the repository. Run the sections for the file types you changed, or run all of them to sweep the whole tree. Each language's tooling, pinned versions, and configuration mirror the matching CI workflow in `.github/workflows/`, so a clean local pass should reproduce the CI gate. For a broader pass that also reshapes code to the project's style conventions — naming, immutability, single responsibility — beyond what the formatters enforce, add the **Deep Clean** addendum at the end of this prompt.
 
 > **Order matters — lint before format.** A linter run with `--fix` (clang-tidy,
 > Ruff, ESLint, …) rewrites code, and its edits are not guaranteed to match the
@@ -236,3 +236,82 @@ After applying fixes, confirm nothing regressed — most important where you use
 - **TypeScript:** the extension's unit tests are not part of CTest, so they are run separately via `npm run test:unit` (already covered in the TypeScript section above).
 
 - **Other languages:** Rust, CSS, PowerShell, Shell, CMake, and Markdown have no test suite in their CI gate — the lint and format commands in their sections are the full check. (The Zed crate does have `cargo test`; CI does not run it, but run it manually for extra confidence after a Rust autofix.)
+
+---
+
+## Deep Clean (Addendum)
+
+When invoked for a deep clean, go beyond the mechanical tool runs above and
+review every touched file against the project's **general style rules** and
+the per-language conventions in [instructions/](../../instructions/). All
+changes must be **behaviour-preserving**: do not alter public APIs or
+observable behaviour, and keep each diff minimal and reviewable.
+
+### Scope
+
+- **Include** first-party sources under `core/`, `shared/`, `language-server/`,
+  `debugger/`, `tests/`, `fuzz/`, `scripts/`, `examples/`, `benchmarks/`,
+  `extensions/`, `cmake/`, `documents/`, `instructions/`, and the repository root.
+  One file inside an otherwise-excluded tree is first-party and *is* in scope:
+  the GraphicalUi override stylesheet `external/gui-framework/gui-overrides.css`
+  (project-authored; linted by `ci-css.yml`).
+- **Exclude** vendored, generated, and fixture code: `external/`, `build/`,
+  `build-*/` (e.g. `build-fuzz/`), `node_modules/`, `target/` (Rust build output
+  under `extensions/zed/`), and `fuzz/corpus/` (intentionally malformed fuzzer
+  seeds — never lint or format these), plus any other build, output, or
+  vendored-dependency directory.
+- **Do not modify** tool configuration files (e.g. `.clang-format`, `.clang-tidy`,
+  `.cmakelintrc`, `ruff.toml`, `stylelint.config.mjs`,
+  `.markdownlint-cli2.jsonc`, `PSScriptAnalyzerSettings.psd1`, and the
+  `extensions/vscode` / `extensions/zed` configs).
+
+### General Rules
+
+Apply these in addition to the per-language conventions (the linked
+`*.instructions.md` files):
+
+**Naming & identifiers:**
+
+- Follow the language's naming conventions.
+- Use meaningful, self-documenting identifiers.
+- Avoid abbreviations unless they are universally understood in the domain.
+
+**Types & immutability:**
+
+- Use explicit type annotations.
+- Keep variables, parameters, attributes, and members immutable whenever possible.
+- Prefer strong types over primitive types to encode meaning.
+
+**Functions & structure:**
+
+- Keep functions/methods small and focused on one thing.
+- Give each class/struct/record/enumeration/trait/interface/module table/choice
+  type a single, well-defined responsibility.
+- Avoid deep nesting; prefer early returns and guard clauses.
+- Prefer range-based loops over index-based loops.
+- Write the simplest code that solves the problem correctly; do not over-abstract.
+
+**Layout:**
+
+- Use braces on all control structures.
+- Group related logic with blank lines and use consistent spacing.
+
+**Encapsulation & modularity:**
+
+- Default to private visibility; expose only what consumers need.
+- Hide internal state; expose behaviour through a controlled interface.
+- Divide the system into distinct sections, each addressing a separate concern.
+- Maximise cohesion (everything in a module is closely related) and minimise
+  coupling (depend on other modules as little as possible, through the narrowest
+  possible interface).
+
+**Comments:**
+
+- Comment *why*, not *what*.
+- Remove redundant or stale comments.
+
+**Errors & safety:**
+
+- Detect errors as early as possible and surface them immediately.
+- Prevent undefined behaviour and accidental misuse through disciplined
+  initialization.

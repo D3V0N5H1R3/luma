@@ -90,7 +90,7 @@ Run the [full-test-sweep](full-test-sweep.prompt.md) prompt. All categories must
 
 ## Phase 5 — Lint and Format
 
-Run the [lint-and-format](lint-and-format.prompt.md) prompt (C++ and Markdown) and the [source-code-cleanup](source-code-cleanup.prompt.md) prompt (every other language), applying each language's formatter and linter:
+Run the [lint-and-format](lint-and-format.prompt.md) prompt (including its Deep Clean addendum) on the full project, applying each language's formatter and linter:
 
 - `clang-tidy` fixes for bugs, security, and performance, then `clang-format` on all C++ source files.
 - Ruff (`ruff check` and `ruff format`) on Python.

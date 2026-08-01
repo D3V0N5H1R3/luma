@@ -129,7 +129,6 @@ bug-fix-editor-extension|Bug fix (editor extensions)|bug-fix-editor-extension.pr
 refactor|Refactor|refactor.prompt.md|08-refactor-audit.md|1|1|0
 optimize|Optimize|optimize.prompt.md|09-performance-audit.md|1|1|0
 ux-improve|UX improvement|ux-improve.prompt.md|07-ux-audit.md|1|1|0
-source-code-cleanup|Source-code cleanup|source-code-cleanup.prompt.md||1|1|0
 iterative-improvement|Iterative improvement (loop)|iterative-improvement.prompt.md||0|1|1
 release-verification|Release verification (gate)|release-verification.prompt.md||0|0|1
 update-learnings|Update learnings|update-learnings.prompt.md||0|1|0
