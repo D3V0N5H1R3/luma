@@ -62,11 +62,13 @@ Adding a simple choice type `Http.Method` with unit variants `Get`, `Post`, `Put
 2. Rely on `core/runtime/stdlib/common/stdlib_registry.hpp` to auto-register the unit variants at runtime as `Http.Method.Get`, `Http.Method.Post`, `Http.Method.Put`, and `Http.Method.Delete` — no custom constructor body is needed for unit variants.
 3. When adding related APIs (for example `Http.request(method, url)`), return or accept the type via `R::named("Http.Method")` in the catalog metadata.
 4. Add a feature test:
-```luma
-@test
-function void test_http_method_choice_variants() {
-    assert(Http.Method.Get == Http.Method.Get)
-    assert(Http.Method.Post != Http.Method.Get)
-}
-```
+
+    ```luma
+    @test
+    function void test_http_method_choice_variants() {
+        assert(Http.Method.Get == Http.Method.Get)
+        assert(Http.Method.Post != Http.Method.Get)
+    }
+    ```
+
 5. Document the new type and its variants in `Luma_Standard_Library_Reference.md`.

@@ -64,8 +64,8 @@ A language feature touches every pipeline phase. Verify incrementally rather tha
 | After… | Run | Why |
 |---------|-----|-----|
 | Each pipeline phase (step 6) | `cmake --build --preset default` (compile only) | Catches signature errors before the next phase builds on them |
-| Lexer + Parser + Type Checker done | `ctest -R "lexer_test|parser_test|type_checker_test"` | Confirms front-end accepts/rejects correctly before wiring bytecode |
-| Compiler + VM done | `ctest -R "compiler_test|vm_test|integration_test"` | Confirms end-to-end runtime behaviour |
+| Lexer + Parser + Type Checker done | `ctest -R "lexer_test\|parser_test\|type_checker_test"` | Confirms front-end accepts/rejects correctly before wiring bytecode |
+| Compiler + VM done | `ctest -R "compiler_test\|vm_test\|integration_test"` | Confirms end-to-end runtime behaviour |
 | All C++ tests pass | `build/Release/luma --strict --test tests/features/language/<feature>.luma` | Validates the user-facing semantics and catches lint warnings |
 | Feature tests pass | [full-test-sweep.prompt.md](full-test-sweep.prompt.md) | Exercises fuzz seeds, benchmarks, and examples |
 
@@ -80,6 +80,7 @@ Adding a `unless` statement (sugar for `if not`):
 3. **Type checker**: No changes — reuses `IfStatement` validation.
 4. **Compiler**: No changes — reuses `IfStatement` compilation.
 5. **Tests**: Add lexer test for `unless` token, parser test for AST shape, feature test in `tests/features/language/`:
+
 ```luma
 @test
 function void test_unless_basic() {

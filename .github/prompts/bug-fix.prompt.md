@@ -53,10 +53,12 @@ Bug: `"hello" |> String.slice(1, 3)` returns `"hel"` instead of `"el"`.
 2. **Isolate**: The lexer, parser, type checker, and compiler are not involved (this is a runtime stdlib function). Check `string_module.cpp`.
 3. **Root cause**: `String.slice` uses `substr(start, end)` but `std::string::substr` takes `(pos, count)`, not `(start, end)`. Fix: `substr(start, end - start)`.
 4. **Regression test**: Add to `tests/features/stdlib/string_functions.luma`:
-```luma
-@test
-function void test_string_slice_range() {
-    assert("hello" |> String.slice(1, 3) == "el")
-}
-```
+
+    ```luma
+    @test
+    function void test_string_slice_range() {
+        assert("hello" |> String.slice(1, 3) == "el")
+    }
+    ```
+
 5. **Build and verify**: `cmake --build --preset default && ctest --preset default`.
