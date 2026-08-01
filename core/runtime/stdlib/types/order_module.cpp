@@ -82,7 +82,7 @@ void register_order_ns(const EnvPtr& env) {
     ModuleBuilder builder{"Order", env};
 
     // Order.of(a, b) — compare two comparable primitives, returning an Ordering.
-    // Reuses the shared comparator that Array.sort and BinaryTree use, so the
+    // Reuses the shared comparator that Array.sort uses, so the
     // choice and numeric worlds agree on ordering (and on which types compare).
     builder.func("of", 2).raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
         const int sign = compare_values(args[0], args[1], loc, "Order.of");

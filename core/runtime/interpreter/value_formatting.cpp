@@ -231,10 +231,4 @@ std::string KeyValueStoreValue::to_display_string() const {
     return std::format("<key_value_store:{} entries>", entries.size());
 }
 
-// BinaryTreeValue
-
-std::string BinaryTreeValue::to_display_string() const {
-    return std::format("<binary_tree:{} nodes>", count_);
-}
-
 } // namespace luma

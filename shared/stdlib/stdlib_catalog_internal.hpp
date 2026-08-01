@@ -69,10 +69,6 @@ namespace named {
     return ReturnTypeDesc::named("stack");
 }
 
-[[nodiscard]] inline ReturnTypeDesc binary_tree() {
-    return ReturnTypeDesc::named("binary_tree");
-}
-
 [[nodiscard]] inline ReturnTypeDesc socket() {
     return ReturnTypeDesc::named("socket");
 }
@@ -273,74 +269,15 @@ namespace named {
     return ReturnTypeDesc::named("PathParts");
 }
 
-[[nodiscard]] inline ReturnTypeDesc summary() {
-    return ReturnTypeDesc::named("Summary");
-}
-
-// Math.fraction() / fraction_* take and return these exact-rational records
-// (bare name, resolved as a record — mirrors summary() / interval()).
-[[nodiscard]] inline ReturnTypeDesc fraction() {
-    return ReturnTypeDesc::named("Fraction");
-}
-
-// Math.complex() / complex_* take and return these complex-number records.
-[[nodiscard]] inline ReturnTypeDesc complex() {
-    return ReturnTypeDesc::named("Complex");
-}
-
-// Math.to_polar() / Math.from_polar() convert between these polar-coordinate
-// records and Math.Vector2 (bare short name, like complex()).
-[[nodiscard]] inline ReturnTypeDesc polar() {
-    return ReturnTypeDesc::named("Polar");
-}
-
-// Math.vector2() / vec2_* and Math.vector3() / vec3_* take and return these
-// geometry records (bare short names, like complex()).
+// Math.Vector2 records — still used by circle and rect_center functions.
 [[nodiscard]] inline ReturnTypeDesc vector2() {
     return ReturnTypeDesc::named("Vector2");
-}
-
-[[nodiscard]] inline ReturnTypeDesc vector3() {
-    return ReturnTypeDesc::named("Vector3");
-}
-
-[[nodiscard]] inline ReturnTypeDesc vector4() {
-    return ReturnTypeDesc::named("Vector4");
-}
-
-// Math.matrix2() / mat2_* and Math.matrix3() / mat3_* take and return these
-// typed transform-matrix records (bare short names, like vector2()).
-[[nodiscard]] inline ReturnTypeDesc matrix2() {
-    return ReturnTypeDesc::named("Matrix2");
-}
-
-[[nodiscard]] inline ReturnTypeDesc matrix3() {
-    return ReturnTypeDesc::named("Matrix3");
-}
-
-[[nodiscard]] inline ReturnTypeDesc matrix4() {
-    return ReturnTypeDesc::named("Matrix4");
 }
 
 // Math.to_radians / to_degrees / sin_of consume this optional unit-safe angle
 // choice (qualified "Math.Angle", a payload-carrying choice like Terminal.Key).
 [[nodiscard]] inline ReturnTypeDesc angle() {
     return ReturnTypeDesc::named("Math.Angle");
-}
-
-// Statistics.five_number_summary() returns this box-plot record (bare short name).
-[[nodiscard]] inline ReturnTypeDesc five_number_summary() {
-    return ReturnTypeDesc::named("FiveNumberSummary");
-}
-
-// Statistics.linear_fit() returns this least-squares regression record.
-[[nodiscard]] inline ReturnTypeDesc line_fit() {
-    return ReturnTypeDesc::named("LineFit");
-}
-
-// Statistics.histogram() returns this binned frequency-distribution record.
-[[nodiscard]] inline ReturnTypeDesc histogram() {
-    return ReturnTypeDesc::named("Histogram");
 }
 
 // Json.parse_detailed() surfaces this located parse-failure record as its
@@ -642,7 +579,7 @@ struct ParamShorthands {
     ReturnTypeDesc result_any, optional_any, channel_any, task_any, reference_any;
     // Named types
     ReturnTypeDesc socket, matrix, log_level;
-    ReturnTypeDesc set, xml, kv_store, queue, stack, binary_tree;
+    ReturnTypeDesc set, xml, kv_store, queue, stack;
     // UI types
     ReturnTypeDesc widget;
     // Exact-decimal type
@@ -692,9 +629,6 @@ void register_queue_functions(std::vector<FunctionSpec>& specs, const ModuleBuil
 
 void register_stack_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                               const ParamShorthands& p);
-
-void register_binary_tree_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
-                                    const ParamShorthands& p);
 
 void register_console_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                 const ParamShorthands& p);

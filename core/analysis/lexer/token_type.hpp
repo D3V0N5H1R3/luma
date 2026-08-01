@@ -430,7 +430,6 @@ inline constexpr auto k_keyword_classifications = build_keyword_classifications(
 // a type annotation in declaration position via is_builtin_type_identifier().
 // Kept sorted for the binary search below.
 inline constexpr auto k_builtin_type_identifiers = std::to_array<std::string_view>({
-    "binary_tree",
     "channel",
     "key_value_store",
     "queue",

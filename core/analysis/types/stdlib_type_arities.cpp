@@ -209,75 +209,9 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "FileSystem.PathParts", field("string", "parent"), field("string", "name"),
                    field("string", "stem"), field("string", "extension"));
 
-        add_record(st, "Statistics.Summary", field("integer", "count"), field("number", "minimum"),
-                   field("number", "maximum"), field("number", "mean"), field("number", "median"),
-                   field("number", "standard_deviation"));
-
-        // Math.fraction() constructs these exact-rational records (type_name
-        // "Fraction").  Always stored in lowest terms with a positive denominator,
-        // so 1/3 + 1/6 is exactly 1/2 — no floating-point loss.  The numerator and
-        // denominator are integers (exact whole values), matching Decimal's exact
-        // arithmetic sibling.
-        add_record(st, "Math.Fraction", field("integer", "numerator"),
-                   field("integer", "denominator"));
-
-        // Math.complex() constructs these complex-number records (type_name
-        // "Complex").  Real and imaginary parts are measurements, so both are
-        // `number`.  Data + free functions with no operator overloading, mirroring
-        // Decimal and Math.Fraction.
-        add_record(st, "Math.Complex", field("number", "real"), field("number", "imaginary"));
-
-        // Math.to_polar() constructs these polar-coordinate records (type_name
-        // "Polar"), the polar counterpart of Math.Vector2/Math.Complex.  radius is
-        // the distance from the origin (always >= 0 for a well-formed value) and
-        // angle is in radians — both measurements, so both are `number`.
-        // Math.to_polar()/Math.from_polar() are total conversions (no error case):
-        // every Math.Vector2 has a polar form and every Polar has a Cartesian one.
-        add_record(st, "Math.Polar", field("number", "radius"), field("number", "angle"));
-
-        // Math.vector2() / vec2_* take and return these 2D geometry records
-        // (type_name "Vector2").  Named .x/.y components — measurements, so both
-        // number — make 2D work far more teachable than array<number> index
-        // arithmetic.  Data + free functions, mirroring Math.Complex.
+        // Math.Vector2 records — still used by circle and rect_center functions.
+        // Named .x/.y components are measurements, so both are `number`.
         add_record(st, "Math.Vector2", field("number", "x"), field("number", "y"));
-
-        // Math.vector3() / vec3_* take and return these 3D geometry records
-        // (type_name "Vector3").
-        add_record(st, "Math.Vector3", field("number", "x"), field("number", "y"),
-                   field("number", "z"));
-
-        // Math.vector4() / vec4_* take and return these 4D geometry records
-        // (type_name "Vector4").  The extra w component carries homogeneous
-        // coordinates for full 3D transforms (Math.Matrix4), completing the
-        // fixed-size vector ladder beside Math.Vector2/Math.Vector3.
-        add_record(st, "Math.Vector4", field("number", "x"), field("number", "y"),
-                   field("number", "z"), field("number", "w"));
-
-        // Math.matrix2() / mat2_* take and return these 2×2 transform matrices
-        // (type_name "Matrix2").  Named .m00/.m01/.m10/.m11 components make small
-        // linear transforms teachable, mirroring Math.Vector2 over LinearAlgebra's
-        // array<array<number>>.  Every entry is a measurement, so `number`.
-        add_record(st, "Math.Matrix2", field("number", "m00"), field("number", "m01"),
-                   field("number", "m10"), field("number", "m11"));
-
-        // Math.matrix3() / mat3_* take and return these 3×3 transform matrices
-        // (type_name "Matrix3").  Row-major named components m00..m22.
-        add_record(st, "Math.Matrix3", field("number", "m00"), field("number", "m01"),
-                   field("number", "m02"), field("number", "m10"), field("number", "m11"),
-                   field("number", "m12"), field("number", "m20"), field("number", "m21"),
-                   field("number", "m22"));
-
-        // Math.matrix4() / mat4_* take and return these 4×4 transform matrices
-        // (type_name "Matrix4").  Row-major named components m00..m33 — the
-        // homogeneous 3D transform companion to Math.Matrix3, built by
-        // Math.matrix4 / Math.mat4_identity and applied to a Math.Vector4 with
-        // Math.mat4_transform.
-        add_record(st, "Math.Matrix4", field("number", "m00"), field("number", "m01"),
-                   field("number", "m02"), field("number", "m03"), field("number", "m10"),
-                   field("number", "m11"), field("number", "m12"), field("number", "m13"),
-                   field("number", "m20"), field("number", "m21"), field("number", "m22"),
-                   field("number", "m23"), field("number", "m30"), field("number", "m31"),
-                   field("number", "m32"), field("number", "m33"));
 
         // A unit-rotation record (type_name "Quaternion").  w is the scalar part
         // and x/y/z the vector part — all measurements, so `number`.  Retained as
@@ -309,29 +243,6 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // second-most-common collision test after rectangles without hand-writing
         // the distance-squared comparison — mirroring Math.Rect.
         add_record(st, "Math.Circle", field("Math.Vector2", "center"), field("number", "radius"));
-
-        // Statistics.five_number_summary() returns this box-plot record (type_name
-        // "FiveNumberSummary"): the five order statistics needed to draw a box
-        // plot.  Mirrors Statistics.Summary; every field is a number.
-        add_record(st, "Statistics.FiveNumberSummary", field("number", "minimum"),
-                   field("number", "q1"), field("number", "median"), field("number", "q3"),
-                   field("number", "maximum"));
-
-        // Statistics.linear_fit() returns this least-squares regression record
-        // (type_name "LineFit") — the trend line y = slope*x + intercept plus its
-        // r_squared goodness-of-fit.  A plain returned record, mirroring
-        // Statistics.Summary.
-        add_record(st, "Statistics.LineFit", field("number", "slope"), field("number", "intercept"),
-                   field("number", "r_squared"));
-
-        // Statistics.histogram() returns this binned frequency distribution
-        // (type_name "Histogram"): counts[i] samples fall in the half-open bin
-        // [bin_edges[i], bin_edges[i+1]), so bin_edges has one more element than
-        // counts.  Edges are measurements (number); counts are whole tallies
-        // (integer), respecting the numeric convention.  Mirrors Statistics.Summary
-        // — a plain returned record feeding the GraphicalUi bar chart.
-        add_record(st, "Statistics.Histogram", field_of(array_ann("number"), "bin_edges"),
-                   field_of(array_ann("integer"), "counts"), field("number", "bin_width"));
 
         add_record(st, "Socket.Address", field("string", "host"), field("integer", "port"));
 

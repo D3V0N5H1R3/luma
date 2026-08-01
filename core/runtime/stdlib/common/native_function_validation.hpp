@@ -170,14 +170,6 @@ expect_channel(const Value& v, std::string_view name, const SourceLocation& loc)
     return v.as_channel();
 }
 
-[[nodiscard]] inline std::shared_ptr<BinaryTreeValue>
-expect_tree(const Value& v, std::string_view name, const SourceLocation& loc) {
-    validate_type(
-        v, [](const Value& val) { return val.is_binary_tree(); }, "binary_tree", name, loc,
-        "create a binary tree with BinaryTree.new() first");
-    return v.as_binary_tree();
-}
-
 [[nodiscard]] inline std::shared_ptr<XmlValue> expect_xml(const Value& v, std::string_view name,
                                                           const SourceLocation& loc) {
     validate_type(

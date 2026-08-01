@@ -50,9 +50,6 @@ namespace luma::dap {
     if (val.is_set()) {
         return {ValueKind::Set, ChildVariableKind::Indexed};
     }
-    if (val.is_binary_tree()) {
-        return {ValueKind::BinaryTree, ChildVariableKind::Indexed};
-    }
     if (val.is_key_value_store()) {
         return {ValueKind::KeyValueStore, ChildVariableKind::Named};
     }
@@ -117,9 +114,6 @@ VariableCounts count_child_variables(const Value& val) {
             break;
         case ValueKind::Set:
             child_count = clamp_to_int(val.as_set()->elements.size());
-            break;
-        case ValueKind::BinaryTree:
-            child_count = clamp_to_int(val.as_binary_tree()->size());
             break;
         case ValueKind::KeyValueStore:
             child_count = clamp_to_int(val.as_key_value_store()->size());

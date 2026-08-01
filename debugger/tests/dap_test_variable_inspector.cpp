@@ -471,7 +471,7 @@ void test_get_variables_array_paging() {
     ASSERT_EQ(head[2].name, "[2]");
 }
 
-// ─── Collection expansion (queue, set, binary_tree, key_value_store, ─────────
+// ─── Collection expansion (queue, set, key_value_store, ─────────
 // ─── range, reference) ───────────────────────────────────────────────────────
 
 void test_get_variables_queue() {
@@ -511,30 +511,6 @@ void test_get_variables_set() {
     ASSERT_EQ(children.size(), 2U);
     ASSERT_EQ(children[0].value, "7");
     ASSERT_EQ(children[1].value, "8");
-}
-
-void test_get_variables_binary_tree() {
-    VariableInspector inspector;
-
-    // BST with root 2, left 1, right 3 → in-order traversal yields 1, 2, 3.
-    auto tree = std::make_shared<luma::BinaryTreeValue>();
-    tree->root = std::make_shared<luma::BinaryTreeNode>(luma::Value{static_cast<std::int64_t>(2)});
-    tree->root->left =
-        std::make_shared<luma::BinaryTreeNode>(luma::Value{static_cast<std::int64_t>(1)});
-    tree->root->right =
-        std::make_shared<luma::BinaryTreeNode>(luma::Value{static_cast<std::int64_t>(3)});
-    tree->count_ = 3;
-    luma::Value tree_value{tree};
-
-    auto var = inspector.make_variable("bt", tree_value, false, 0);
-    ASSERT_EQ(var.indexed_variables, 3);
-
-    const VariableInspector::ThreadResolver resolver{};
-    auto children = inspector.get_variables(var.variables_reference, 0, 0, "", resolver);
-    ASSERT_EQ(children.size(), 3U);
-    ASSERT_EQ(children[0].value, "1");
-    ASSERT_EQ(children[1].value, "2");
-    ASSERT_EQ(children[2].value, "3");
 }
 
 void test_get_variables_key_value_store() {
@@ -683,7 +659,6 @@ int main() {
     // Collection expansion for the remaining structured value kinds.
     RUN(test_get_variables_queue);
     RUN(test_get_variables_set);
-    RUN(test_get_variables_binary_tree);
     RUN(test_get_variables_key_value_store);
     RUN(test_get_variables_xml);
     RUN(test_get_variables_range);

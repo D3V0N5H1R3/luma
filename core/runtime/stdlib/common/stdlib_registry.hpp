@@ -8,7 +8,6 @@
 #include "analysis/types/stdlib_types.hpp"
 #include "runtime/interpreter/environment.hpp"
 #include "runtime/stdlib/collections/array_module.hpp"
-#include "runtime/stdlib/collections/binarytree_module.hpp"
 #include "runtime/stdlib/collections/dictionary_module.hpp"
 #include "runtime/stdlib/collections/keyvaluestore_module.hpp"
 #include "runtime/stdlib/collections/queue_module.hpp"
@@ -104,7 +103,6 @@ struct ModuleEntry {
 inline constexpr ModuleEntry kModules[] = {
     // ── Always-available modules ──
     {"Array", register_array_ns, nullptr, false, false},
-    {"BinaryTree", register_binarytree_ns, nullptr, false, false},
     {"Bits", register_bits_ns, nullptr, false, false},
     {"Calculus", register_calculus_ns, nullptr, false, false},
     {"Channel", register_channel_ns, nullptr, false, false},

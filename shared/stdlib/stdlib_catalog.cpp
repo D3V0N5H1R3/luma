@@ -48,7 +48,6 @@ using detail::ParamShorthands;
         .kv_store = named::key_value_store(),
         .queue = named::queue(),
         .stack = named::stack(),
-        .binary_tree = named::binary_tree(),
         .widget = named::widget(),
         .decimal = named::decimal(),
     };
@@ -102,9 +101,6 @@ using detail::ParamShorthands;
         {.module_name = "Stack",
          .cap = Capability::None,
          .register_fn = detail::register_stack_functions},
-        {.module_name = "BinaryTree",
-         .cap = Capability::None,
-         .register_fn = detail::register_binary_tree_functions},
         {.module_name = "Console",
          .cap = Capability::Console,
          .register_fn = detail::register_console_functions},

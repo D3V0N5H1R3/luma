@@ -372,25 +372,6 @@ function void test_multiline_string_preserves_lines() {
 # ─── Collection Type Keywords ────────────────────────────
 
 @test
-function void test_binary_tree_type_keyword() {
-    binary_tree t = BinaryTree.from_array([3, 1, 2])
-
-    assert(BinaryTree.length(t) == 3)
-    assert(type_of(t) == "binary_tree")
-}
-
-function integer tree_size(binary_tree tree) {
-    return BinaryTree.length(tree)
-}
-
-@test
-function void test_binary_tree_type_in_function_signature() {
-    binary_tree t = BinaryTree.from_array([10, 20, 30])
-
-    assert(tree_size(t) == 3)
-}
-
-@test
 function void test_queue_type_keyword() {
     queue<integer> q = Queue.new()
     queue<integer> q2 = Queue.enqueue(q, 42)
@@ -437,13 +418,11 @@ function void test_stack_type_in_function_signature() {
 
 @test
 function void test_collection_type_keywords_in_tuple() {
-    binary_tree t = BinaryTree.from_array([1, 2])
     queue<integer> q = Queue.new() |> Queue.enqueue(3)
     stack<integer> s = Stack.new() |> Stack.push(4)
 
-    (binary_tree tree_val, queue<integer> queue_val, stack<integer> stack_val) = (t, q, s)
+    (queue<integer> queue_val, stack<integer> stack_val) = (q, s)
 
-    assert(BinaryTree.length(tree_val) == 2)
     assert(Queue.length(queue_val) == 1)
     assert(Stack.length(stack_val) == 1)
 }

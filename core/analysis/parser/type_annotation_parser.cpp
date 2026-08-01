@@ -148,7 +148,7 @@ TypeAnnotation TypeAnnotationParser::parse_named_type(Parser& parser, TypeOwners
 
         if ((name == "array" || name == "optional" || name == "reference" || name == "queue" ||
              name == "stack" || name == "channel" || name == "task" || name == "set" ||
-             name == "binary_tree" || name == "key_value_store") &&
+             name == "key_value_store") &&
             count != 1) {
             parser.syntax_error(
                 std::format("type '{}' expects 1 type argument, got {}", name, count),
