@@ -228,7 +228,6 @@ string  str = s ?? "default" # "default"
 | Type       | Declaration syntax     | Description                                              |
 | ---------- | ---------------------- | -------------------------------------------------------- |
 | Array      | `array<T>`             | Ordered, homogeneous sequence                            |
-| BinaryTree | `binary_tree`          | Sorted binary search tree                                |
 | Channel    | `channel<T>`           | Typed message-passing channel                            |
 | Choice     | _TypeName_             | User-defined closed variant set (declared with `choice`) |
 | Decimal    | `decimal`              | Exact base-10 decimal number (see the `Decimal` module)  |
@@ -2636,10 +2635,12 @@ string t = format_title("hello")
 ### Standard Library Namespaces
 
 - `Array`
-- `BinaryTree`
+- `Bits`
 - `Calculus`
 - `Channel`
+- `Color`
 - `Compression`
+- `Console`
 - `Converter`
 - `Csv`
 - `DateTime`
@@ -2650,13 +2651,13 @@ string t = format_title("hello")
 - `GraphicalUi`
 - `Hash`
 - `Http`
-- `Console`
 - `Json`
 - `KeyValueStore`
 - `LinearAlgebra`
 - `Log`
 - `Math`
 - `Optional`
+- `Order`
 - `Process`
 - `Queue`
 - `Random`
@@ -2667,6 +2668,7 @@ string t = format_title("hello")
 - `Set`
 - `Socket`
 - `Stack`
+- `Statistics`
 - `String`
 - `Task`
 - `Terminal`
@@ -2887,24 +2889,24 @@ When a type mismatch occurs, the type checker provides a hint suggesting how to 
 
 ## 28 — Reserved Keywords
 
-All 46 identifiers below are reserved and cannot be used as variable, function, record, choice type, or namespace names:
+All 47 identifiers below are reserved and cannot be used as variable, function, record, choice type, or namespace names:
 
 | Keyword      | Keyword        | Keyword       | Keyword            |
 | ------------ | -------------- | ------------- | ------------------ |
 | `array`      | `await`        | `boolean`     | `borrow`           |
 | `break`      | `case`         | `catch`       | `choice`           |
-| `continue`   | `dictionary`   | `downcast`    | `else`             |
-| `failure`    | `false`        | `finally`     | `for`              |
-| `function`   | `if`           | `in`          | `include`          |
-| `integer`    | `interface`    | `internal`    | `is`               |
-| `match`      | `mutable`      | `namespace`   | `none`             |
-| `number`     | `optional`     | `record`      | `result`           |
-| `return`     | `some`         | `spawn`       | `string`           |
-| `success`    | `task_scope`   | `true`        | `trusted_downcast` |
-| `try`        | `type`         | `unique`      | `use`              |
-| `while`      | `with`         |               |                    |
+| `continue`   | `decimal`      | `dictionary`  | `downcast`         |
+| `else`       | `failure`      | `false`       | `finally`          |
+| `for`        | `function`     | `if`          | `in`               |
+| `include`    | `integer`      | `interface`   | `internal`         |
+| `is`         | `match`        | `mutable`     | `namespace`        |
+| `none`       | `number`       | `optional`    | `record`           |
+| `result`     | `return`       | `some`        | `spawn`            |
+| `string`     | `success`      | `task_scope`  | `true`             |
+| `trusted_downcast` | `try`    | `type`        | `unique`           |
+| `use`        | `while`        | `with`        |                    |
 
-The container and handle types — `binary_tree`, `channel`,
+The container and handle types — `channel`,
 `key_value_store`, `queue`, `reference`, `set`, `socket`, `stack`,
 `task`, `widget`, and `xml` — are **not** reserved words. They are ordinary
 identifiers that name built-in generic types, so `queue<integer> q = …` still
@@ -3546,7 +3548,7 @@ base_type       = primitive_type
 primitive_type  = "boolean" | "integer" | "number" | "decimal" | "string"
                 | "none" | "optional" ;
                 (* container/handle type names — queue, stack, set, task,
-                   channel, socket, xml, reference, binary_tree,
+                   channel, socket, xml, reference, decimal,
                    key_value_store, widget — are ordinary
                    IDENTIFIERs resolved as built-in types via generic_type /
                    qualified_type, not reserved primitive keywords. *)
