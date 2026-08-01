@@ -24,10 +24,16 @@ export default [
                 Event: "readonly",
                 fetch: "readonly",
                 URL: "readonly",
+                CSS: "readonly",
+                getComputedStyle: "readonly",
                 performance: "readonly",
 
                 // GraphicalUi C++ bridge
                 __gui_event: "readonly",
+
+                // Lucide icon data injected into the renderer at build time
+                // (const __lucide_icons = …, see scripts/generate_gui_assets.mjs)
+                __lucide_icons: "readonly",
 
                 // Shared tables populated by renderer fragments
                 WIDGET_RENDERERS: "writable",

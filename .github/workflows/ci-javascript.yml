@@ -6,6 +6,14 @@
 # that touches those files or the lint configuration. These files
 # are the GraphicalUi web-view renderer — project-authored despite
 # living under external/.
+#
+# The renderers/*.js fragments are spliced into gui-renderer.js at
+# build time (scripts/generate_gui_assets.mjs), so they share the
+# renderer IIFE's module-private helpers. Linting them standalone
+# would report every shared helper as no-undef, so this workflow
+# reproduces the splice and lints the assembled bundle instead.
+# gui-charts.js and gui-subscriptions.js are separate runtime
+# assets and are linted on their own.
 # ─────────────────────────────────────────────────────────────
 
 name: CI — JavaScript
@@ -52,14 +60,33 @@ jobs:
           npm install --no-save --no-audit --no-fund \
             eslint@9 @eslint/js
 
+      - name: Assemble renderer bundle
+        working-directory: external/gui-framework
+        # Splice the renderers/*.js fragments into gui-renderer.js at its
+        # marker, mirroring scripts/generate_gui_assets.mjs, so ESLint sees
+        # the fragments in the renderer IIFE scope they run in.
+        run: |
+          node --input-type=module -e '
+            import { readFileSync, writeFileSync } from "node:fs";
+            const MARKER = "// __GUI_WIDGET_RENDERER_FRAGMENTS__";
+            const fragments = [
+              "renderers/basic.js",
+              "renderers/layout.js",
+              "renderers/advanced.js",
+              "renderers/interaction.js",
+            ].map((f) => readFileSync(f, "utf8")).join("\n");
+            const renderer = readFileSync("gui-renderer.js", "utf8");
+            if (!renderer.includes(MARKER)) {
+              console.error("renderer fragment marker not found in gui-renderer.js");
+              process.exit(1);
+            }
+            writeFileSync(".lint-renderer.bundle.js", renderer.replace(MARKER, () => fragments));
+          '
+
       - name: Run ESLint
         working-directory: external/gui-framework
         run: |
           npx eslint \
-            gui-renderer.js \
+            .lint-renderer.bundle.js \
             gui-charts.js \
-            gui-subscriptions.js \
-            renderers/basic.js \
-            renderers/layout.js \
-            renderers/advanced.js \
-            renderers/interaction.js
+            gui-subscriptions.js
