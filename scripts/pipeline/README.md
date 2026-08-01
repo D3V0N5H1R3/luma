@@ -20,7 +20,7 @@ A convenience wrapper —
 [`Invoke-LumaAll.ps1`](Invoke-LumaAll.ps1) /
 [`luma-all.sh`](luma-all.sh) — runs the audit and then the
 fix in a single command, defaulting to the **Copilot CLI** driving **Claude Opus
-4.8** at **max** reasoning effort, and can optionally chain the conformance pass
+4.8** at **medium** reasoning effort, and can optionally chain the conformance pass
 as a third stage (`-IncludeConformance` / `--include-conformance`). See
 [Both stages in one command](#both-stages-in-one-command).
 
@@ -44,7 +44,7 @@ PowerShell, Python, Rust, Shell, TypeScript) and runs **one agent session per
 file** to make that file conform to its language's guides under `instructions/`
 (and `documents/` for Luma), fixing every issue found. It shares the same helper
 module, agent selection, dry-run path, and safety model as the fix runner and
-defaults to the **Copilot CLI** driving **Claude Opus 4.8** at **max** effort.
+defaults to the **Copilot CLI** driving **Claude Opus 4.6** at **medium** effort.
 See [Per-file conformance](#per-file-conformance).
 
 A fourth set of runners —
@@ -174,7 +174,7 @@ touching anything.
 ### Both stages in one command
 
 To chain the audit and the fix in one invocation — using the **Copilot CLI** with
-**Claude Opus 4.8** at **max** reasoning effort (the built-in defaults) — use the
+**Claude Opus 4.6** at **medium** reasoning effort (the built-in defaults) — use the
 combined runner. It runs the audit first, then the fix, forwarding the agent flags
 to both stages and skipping the fix if the audit exits non-zero:
 
@@ -182,7 +182,7 @@ to both stages and skipping the fix if the audit exits non-zero:
 # Preview first — nothing invoked, built, or committed.
 pwsh -File scripts/pipeline/Invoke-LumaAll.ps1 -DryRun
 
-# Run for real: audit → fix, Copilot CLI + Claude Opus 4.8 + max effort.
+# Run for real: audit → fix, Copilot CLI + Claude Opus 4.6 + max effort.
 pwsh -File scripts/pipeline/Invoke-LumaAll.ps1
 ```
 
@@ -194,8 +194,8 @@ bash scripts/pipeline/luma-all.sh --dry-run
 bash scripts/pipeline/luma-all.sh
 ```
 
-The three agent knobs default to `-Agent copilot`, `-Model claude-opus-4.8`, and
-`-Effort max`; override any of them per run (e.g. `-Model gpt-5.4`, `-Effort high`,
+The three agent knobs default to `-Agent copilot`, `-Model claude-opus-4.6`, and
+`-Effort medium`; override any of them per run (e.g. `-Model gpt-5.4`, `-Effort high`,
 or `-Agent claude`). Run only one stage with `-SkipFix` / `--skip-fix` or
 `-SkipAudit` / `--skip-audit`, and forward extra flags to a specific stage with
 `-AuditArgs` / `--audit-arg` and `-FixArgs` / `--fix-arg` (for example
@@ -349,7 +349,7 @@ pwsh -File scripts/pipeline/Invoke-LumaConformance.ps1 -Target cpp -ListFiles
 # Preview the agent / cmake / ctest / git commands for one file.
 pwsh -File scripts/pipeline/Invoke-LumaConformance.ps1 -Target markdown -MaxFiles 1 -DryRun
 
-# Run for real over one target (Copilot CLI + Claude Opus 4.8 + max effort).
+# Run for real over one target (Copilot CLI + Claude Opus 4.6 + max effort).
 pwsh -File scripts/pipeline/Invoke-LumaConformance.ps1 -Target shell
 ```
 
@@ -507,7 +507,7 @@ as in the fix runner, and the runner exits non-zero on any non-`ok` candidate.
 
 Because evolve implements whole features and modules — the pipeline's heaviest
 work — it defaults, like the conformance runner, to the **Copilot CLI** driving
-**Claude Opus 4.8** at **max** effort; override with `-Agent` / `-Model` /
+**Claude Opus 4.6** at **medium** effort; override with `-Agent` / `-Model` /
 `-Effort` (pass `-Model ''` / `-Effort ''` to defer to the agent's own default).
 Because evolve needs a human-seeded goal, it is **not** part of
 `Invoke-LumaAll.ps1` / `luma-all.sh`.
@@ -558,16 +558,16 @@ options in `--kebab-case` form (`-Phase` → `--phase`, `-DryRun` → `--dry-run
 
 Runs `Invoke-LumaAudit.ps1` and then `Invoke-LumaFix.ps1` in sequence, forwarding
 the agent flags to both, and optionally `Invoke-LumaConformance.ps1` as a third
-stage. Defaults to the Copilot CLI driving **Claude Opus 4.8** (`claude-opus-4.8`)
-at **max** effort. Skips the remaining stages if the audit exits non-zero, skips
+stage. Defaults to the Copilot CLI driving **Claude Opus 4.6** (`claude-opus-4.6`)
+at **medium** effort. Skips the remaining stages if the audit exits non-zero, skips
 the conformance stage if the fix stage fails, and exits with the last stage's exit
 code.
 
 | Flag                      | Purpose                                                                          |
 | ------------------------- | ------------------------------------------------------------------------------- |
 | `-Agent <name>`           | Backend forwarded to every stage: `copilot` (default) or `claude`.              |
-| `-Model <name>`           | Model for every stage (default `claude-opus-4.8`; pass `''` to let the agent choose). |
-| `-Effort <lvl>`           | Reasoning effort for every stage (default `max`; pass `''` to omit).            |
+| `-Model <name>`           | Model for every stage (default `claude-opus-4.6`; pass `''` to let the agent choose). |
+| `-Effort <lvl>`           | Reasoning effort for every stage (default `medium`; pass `''` to omit).            |
 | `-DryRun`                 | Preview every stage; invoke nothing.                                            |
 | `-SkipAudit`              | Skip the audit stage.                                                           |
 | `-SkipFix`                | Skip the fix stage.                                                             |
@@ -584,8 +584,8 @@ after a literal `--` to every stage.
 
 ### `Invoke-LumaConformance.ps1`
 
-Defaults to the Copilot CLI driving **Claude Opus 4.8** (`claude-opus-4.8`) at
-**max** effort. Omit `-Target` to run every target in order.
+Defaults to the Copilot CLI driving **Claude Opus 4.6** (`claude-opus-4.6`) at
+**medium** effort. Omit `-Target` to run every target in order.
 
 | Flag                       | Purpose                                                                     |
 | -------------------------- | --------------------------------------------------------------------------- |
@@ -606,7 +606,7 @@ Defaults to the Copilot CLI driving **Claude Opus 4.8** (`claude-opus-4.8`) at
 | `-ContinueOnFailure`       | Keep going past a failed file or gate instead of stopping.                 |
 | `-RevertOnFailure`         | Hard-reset tracked changes on failure (to HEAD per file; to the target's start commit on a failed per-target gate). |
 | `-Agent <name>`            | Agent CLI backend: `copilot` (default) or `claude`.                        |
-| `-Model` / `-Effort`       | Agent model/effort overrides (defaults `claude-opus-4.8` / `max`).         |
+| `-Model` / `-Effort`       | Agent model/effort overrides (defaults `claude-opus-4.6` / `medium`).         |
 
 The shell counterpart `luma-conformance.sh` takes the same options in
 `--kebab-case` (`--target`, `--path`, `--max-files`, `--gate-mode`,
@@ -629,8 +629,8 @@ agent chooses unless you pass `-Model` / `-Effort`).
 
 ### `Invoke-LumaEvolve.ps1`
 
-Mutating and gated; defaults to the Copilot CLI driving **Claude Opus 4.8**
-(`claude-opus-4.8`) at **max** effort. Requires either `-Goal` + `-Kind` or
+Mutating and gated; defaults to the Copilot CLI driving **Claude Opus 4.6**
+(`claude-opus-4.6`) at **medium** effort. Requires either `-Goal` + `-Kind` or
 `-GoalsFile` (mutually exclusive).
 
 | Flag                       | Purpose                                                                     |
@@ -651,7 +651,7 @@ Mutating and gated; defaults to the Copilot CLI driving **Claude Opus 4.8**
 | `-ContinueOnFailure`       | Keep going past a red gate instead of stopping.                            |
 | `-RevertOnFailure`         | Hard-reset tracked changes to the last checkpoint on a red gate.           |
 | `-Agent <name>`            | Agent CLI backend: `copilot` (default) or `claude`.                        |
-| `-Model` / `-Effort`       | Agent model/effort overrides (defaults `claude-opus-4.8` / `max`; pass `''` to defer to the agent). |
+| `-Model` / `-Effort`       | Agent model/effort overrides (defaults `claude-opus-4.6` / `medium`; pass `''` to defer to the agent). |
 
 The shell counterparts `luma-discover.sh` and `luma-evolve.sh` take the same
 options in `--kebab-case` (`--focus`, `--goal`, `--kind`, `--goals-file`,

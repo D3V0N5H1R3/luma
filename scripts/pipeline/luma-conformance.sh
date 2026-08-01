@@ -56,9 +56,9 @@ Options:
   --preset <name>         CMake preset for the gate (default: default).
   --agent <name>          Agent CLI backend: copilot (default) or claude.
   --model <name>          Value for the agent's model flag
-                          (default: claude-opus-4.8; pass '' for the agent's own).
+                          (default: claude-opus-4.6; pass '' for the agent's own).
   --effort <level>        Value for the agent's effort flag (low, medium, high,
-                          xhigh, max; default: max; pass '' to omit).
+                          xhigh, max; default: medium; pass '' to omit).
   --gate-mode <mode>      When the cmake + ctest gate runs for build-affecting
                           targets (C++, CMake): per-target (default), per-file,
                           or off.
@@ -248,8 +248,8 @@ max_files=0
 artifact_root=''
 preset='default'
 agent='copilot'
-model='claude-opus-4.8'
-effort='max'
+model='claude-opus-4.6'
+effort='medium'
 gate_mode='per-target'
 allow_dirty=false
 skip_baseline=false

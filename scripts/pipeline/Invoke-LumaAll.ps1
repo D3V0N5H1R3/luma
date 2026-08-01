@@ -4,7 +4,7 @@
 .SYNOPSIS
     Run the Luma audit and then the fix pipeline back-to-back through one agent
     CLI - and, optionally, the per-file conformance pass afterwards - defaulting
-    to the GitHub Copilot CLI driving Claude Opus 4.8 at max reasoning effort.
+    to the GitHub Copilot CLI driving Claude Opus 4.6 at medium reasoning effort.
 
 .DESCRIPTION
     A thin orchestrator that invokes the pipeline entry points in order:
@@ -31,19 +31,19 @@
     build-affecting targets, no push).
 
     The three agent knobs default to the requested configuration - the Copilot
-    CLI backend, the 'claude-opus-4.8' model (Claude Opus 4.8, selectable through
-    the Copilot CLI), and 'max' reasoning effort - and are forwarded to every
+    CLI backend, the 'claude-opus-4.6' model (Claude Opus 4.6, selectable through
+    the Copilot CLI), and 'medium' reasoning effort - and are forwarded to every
     runner. Preview everything first with -DryRun.
 
 .PARAMETER Agent
     Agent CLI backend forwarded to both runners: 'copilot' (default) or 'claude'.
 
 .PARAMETER Model
-    Model passed to the agent's --model flag. Defaults to 'claude-opus-4.8'.
+    Model passed to the agent's --model flag. Defaults to 'claude-opus-4.6'.
     Pass an empty string to let the agent choose its own default.
 
 .PARAMETER Effort
-    Reasoning effort passed to the agent's --effort flag. Defaults to 'max'. For
+    Reasoning effort passed to the agent's --effort flag. Defaults to 'medium'. For
     the copilot backend each runner validates this against
     low|medium|high|xhigh|max; pass an empty string to omit it.
 
@@ -95,9 +95,9 @@ param(
     [ValidateSet('copilot', 'claude')]
     [string]$Agent = 'copilot',
 
-    [string]$Model = 'claude-opus-4.8',
+    [string]$Model = 'claude-opus-4.6',
 
-    [string]$Effort = 'max',
+    [string]$Effort = 'medium',
 
     [switch]$SkipAudit,
 

@@ -58,13 +58,13 @@
     Agent CLI backend: 'copilot' (default) or 'claude'.
 
 .PARAMETER Model
-    Model for the chosen agent. Defaults to 'claude-opus-4.8' (Claude Opus 4.8,
+    Model for the chosen agent. Defaults to 'claude-opus-4.6' (Claude Opus 4.6,
     selectable through the Copilot CLI) because implementing a whole feature or
     module is the pipeline's heaviest work. Pass an empty string to let the
     agent choose its own default.
 
 .PARAMETER Effort
-    Reasoning effort. Defaults to 'max'. For the copilot agent this is validated
+    Reasoning effort. Defaults to 'medium'. For the copilot agent this is validated
     against low|medium|high|xhigh|max; for claude the value is passed through and
     validated by the CLI itself. Pass an empty string to omit it.
 
@@ -134,9 +134,9 @@ param(
     [ValidateSet('copilot', 'claude')]
     [string]$Agent = 'copilot',
 
-    [string]$Model = 'claude-opus-4.8',
+    [string]$Model = 'claude-opus-4.6',
 
-    [string]$Effort = 'max',
+    [string]$Effort = 'medium',
 
     [switch]$AllowDirty,
 

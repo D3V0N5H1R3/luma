@@ -10,7 +10,7 @@
 #      only when --include-conformance is given.
 #
 # Defaults to the requested configuration: the GitHub Copilot CLI backend
-# driving Claude Opus 4.8 (model 'claude-opus-4.8') at 'max' reasoning effort.
+# driving Claude Opus 4.6 (model 'claude-opus-4.6') at 'medium' reasoning effort.
 # Every knob is forwarded to each runner. The audit runs first; if it exits
 # non-zero the remaining phases are skipped. The conformance phase is opt-in
 # (--include-conformance): it walks every tracked file of each selected type and
@@ -29,13 +29,13 @@ Usage: luma-all.sh [options] [-- passthrough-args...]
 
 Run the read-only audit and then the mutating fix pipeline in sequence through
 one agent CLI, and optionally the per-file conformance pass afterwards. Defaults
-to the Copilot CLI driving Claude Opus 4.8 at max effort.
+to the Copilot CLI driving Claude Opus 4.6 at medium effort.
 
 Options:
   --agent <name>          Agent CLI backend: copilot (default) or claude.
-  --model <name>          Model for the agent's --model flag (default: claude-opus-4.8).
+  --model <name>          Model for the agent's --model flag (default: claude-opus-4.6).
                           Pass an empty string to let the agent choose.
-  --effort <level>        Reasoning effort (default: max). One of low, medium, high,
+  --effort <level>        Reasoning effort (default: medium). One of low, medium, high,
                           xhigh, max for copilot; pass an empty string to omit.
   --skip-audit            Skip the audit phase.
   --skip-fix              Skip the fix phase.
@@ -67,8 +67,8 @@ need_value() {
 }
 
 agent='copilot'
-model='claude-opus-4.8'
-effort='max'
+model='claude-opus-4.6'
+effort='medium'
 skip_audit=false
 skip_fix=false
 include_conformance=false

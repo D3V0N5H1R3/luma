@@ -56,9 +56,9 @@ Options:
   --preset <name>            CMake preset for the gate (default: default).
   --agent <name>             Agent CLI backend: copilot (default) or claude.
   --model <name>             Value for the agent's model flag
-                             (default: claude-opus-4.8; '' lets the agent choose).
+                             (default: claude-opus-4.6; '' lets the agent choose).
   --effort <level>           Value for the agent's effort flag (low, medium,
-                             high, xhigh, max; default: max; '' omits it).
+                             high, xhigh, max; default: medium; '' omits it).
   --allow-dirty              Do not require a clean working tree before starting.
   --skip-baseline            Skip the initial green build + test baseline.
   --skip-build               Skip the build step of every gate (test only).
@@ -134,8 +134,8 @@ goals_file=''
 artifact_root=''
 preset='default'
 agent='copilot'
-model='claude-opus-4.8'
-effort='max'
+model='claude-opus-4.6'
+effort='medium'
 allow_dirty=false
 skip_baseline=false
 skip_build=false
