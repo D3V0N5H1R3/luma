@@ -204,10 +204,13 @@ luma_invoke_agent_phase() {
     else
         args=(-p "$instruction" --allow-all-tools --no-ask-user --no-color)
         if [[ "$mode" == plan ]]; then
-            # Defence-in-depth for the read-only audit: --plan is already the
-            # read-only mode, but denying the file-write tool guarantees no edits
-            # even though --allow-all-tools is required for non-interactive runs
-            # (deny rules beat --allow-all-tools).
+            # Read-only audit. Do NOT use Copilot's interactive `--plan` mode
+            # here: in a non-interactive `-p` run it delivers its result through
+            # the exit_plan_mode tool / a plan.md file rather than stdout, so it
+            # emits an empty report (the agent exits 0 having written nothing to
+            # stdout). Instead restrict the model to the read/search tools with
+            # an allow-list, which guarantees it cannot modify, create, or run
+            # anything, and still lets it write its report as the final message.
             #
             # Emit the structured JSONL event stream (--output-format=json), not
             # text. In text mode Copilot streams every intermediate assistant
@@ -216,7 +219,7 @@ luma_invoke_agent_phase() {
             # output - so a plain stdout capture is not a clean report. (--silent
             # only drops the stats footer, it does not suppress the narration.)
             # The caller reduces the JSONL to the agent's final message.
-            args+=(--plan --output-format=json --deny-tool="write")
+            args+=(--output-format=json --available-tools="view,grep,glob")
         else
             args+=(--deny-tool="shell(git push)")
         fi
@@ -255,19 +258,46 @@ luma_invoke_agent_phase() {
             # Copilot plan mode streams JSONL events; capture them, then reduce
             # to the final report. Preserve the agent's own exit code - a missing
             # parser or empty extraction must not mask a successful or failed run.
-            local raw
+            # stderr is captured separately so a diagnostic (e.g. an auth error)
+            # is not lost, and can be surfaced when the agent produces no report.
+            local raw err
             raw="$(mktemp "${TMPDIR:-/tmp}/luma-report.XXXXXX")"
-            if ( cd -- "$repo_root" && "$exe" "${args[@]}" ) >"$raw"; then
+            err="$(mktemp "${TMPDIR:-/tmp}/luma-report-err.XXXXXX")"
+            if ( cd -- "$repo_root" && "$exe" "${args[@]}" ) >"$raw" 2>"$err"; then
                 exit_code=0
             else
                 exit_code=$?
             fi
             luma_extract_agent_report "$raw" >"$sink" || true
             if [[ ! -s "$sink" ]]; then
-                luma_warn "could not extract a final report from Copilot output; keeping the raw JSONL transcript."
-                cat "$raw" >"$sink"
+                if [[ -s "$raw" ]]; then
+                    # The agent produced output but no extractable final message;
+                    # keep the raw transcript so nothing is silently dropped.
+                    luma_warn "could not extract a final report from Copilot output; keeping the raw JSONL transcript."
+                    cat "$raw" >"$sink"
+                else
+                    # The agent wrote nothing to stdout: this phase did no work.
+                    # Surface the captured stderr in the report and force a
+                    # failure so the pipeline never reports a hollow success.
+                    luma_warn "the agent produced no report for this phase (empty output); see the captured error in the report."
+                    {
+                        printf '# Phase produced no report\n\n'
+                        printf 'The agent exited with code %d and wrote nothing to standard output, so no report could be produced.\n\n' "$exit_code"
+                        printf 'Captured standard error:\n\n'
+                        printf '```\n'
+                        if [[ -s "$err" ]]; then
+                            cat "$err"
+                        else
+                            printf '(none)\n'
+                        fi
+                        printf '```\n'
+                    } >"$sink"
+                    if [[ "$exit_code" -eq 0 ]]; then
+                        exit_code=1
+                    fi
+                fi
             fi
-            rm -f "$raw"
+            rm -f "$raw" "$err"
         else
             # Claude's headless -p text mode already prints only the final
             # message, so a direct stdout capture is the clean report.

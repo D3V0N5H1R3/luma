@@ -292,7 +292,14 @@ function Build-CopilotArgumentList {
     $Arguments.Add('--no-ask-user')
     $Arguments.Add('--no-color')
     if ($Mode -eq 'plan') {
-        $Arguments.Add('--plan')
+        # Read-only audit. Do NOT use Copilot's interactive `--plan` mode here:
+        # in a non-interactive `-p` run it delivers its result through the
+        # exit_plan_mode tool / a plan.md file rather than stdout, so it emits an
+        # empty report (the agent exits 0 having written nothing to stdout).
+        # Instead restrict the model to the read/search tools with an allow-list,
+        # which guarantees it cannot modify, create, or run anything, and still
+        # lets it write its report as the final message.
+        #
         # Emit the structured JSONL event stream instead of text. In text
         # mode Copilot streams every intermediate assistant message to stdout
         # - and, when a prompt fans out to parallel background sub-agents,
@@ -302,10 +309,7 @@ function Build-CopilotArgumentList {
         # JSONL to the agent's final message.
         $Arguments.Add('--output-format')
         $Arguments.Add('json')
-        # Defence-in-depth: --plan is already the read-only mode, but denying
-        # the file-write tool guarantees no edits even though --allow-all-tools
-        # is required for non-interactive runs (deny rules beat it).
-        $Arguments.Add('--deny-tool=write')
+        $Arguments.Add('--available-tools=view,grep,glob')
     }
     else {
         # Belt-and-suspenders: the phase must never publish to a remote.
@@ -327,13 +331,14 @@ function Invoke-AgentPhase {
         mode or mutating 'agent' mode.
     .DESCRIPTION
         In 'plan' mode the agent's final report is captured to OutputFile while
-        the agent is held read-only. Copilot runs with --plan --output-format
-        json and its JSONL event stream is reduced to the final message - a plain
-        text capture would also save intermediate narration and, when a prompt
-        fans out to parallel sub-agents, interleaved output. Claude runs with
-        --permission-mode plan and its -p text output is already only the final
-        message. In 'agent' mode the run streams to the console and is teed to
-        LogFile, with `git push` denied so nothing can leave the machine.
+        the agent is held read-only. Copilot runs with --output-format json and a
+        read-only tool allow-list (--available-tools=view,grep,glob); its JSONL
+        event stream is reduced to the final message - a plain text capture would
+        also save intermediate narration and, when a prompt fans out to parallel
+        sub-agents, interleaved output. Claude runs with --permission-mode plan
+        and its -p text output is already only the final message. In 'agent' mode
+        the run streams to the console and is teed to LogFile, with `git push`
+        denied so nothing can leave the machine.
     #>
     [CmdletBinding()]
     [OutputType([pscustomobject])]
@@ -395,21 +400,54 @@ function Invoke-AgentPhase {
             if ($Agent -eq 'copilot') {
                 # Copilot streams JSONL events (see the arg construction above);
                 # collect them, then reduce to the agent's final message. The
-                # agent's own exit code stands regardless of extraction.
-                $RawOutput = & $Executable @Arguments
-                $ExitCode = $LASTEXITCODE
-                $Report = Get-AgentReportFromJsonl -JsonlLines @($RawOutput)
-                if ([string]::IsNullOrWhiteSpace($Report)) {
-                    Write-Warning 'Could not extract a final report from Copilot output; keeping the raw JSONL transcript.'
-                    Set-Content -LiteralPath $OutputFile -Value (@($RawOutput) -join "`n") -NoNewline -Encoding utf8
+                # agent's own exit code stands regardless of extraction. stderr is
+                # captured separately so a diagnostic (e.g. an auth error) is not
+                # lost, and can be surfaced when the agent produces no report.
+                $ErrFile = [System.IO.Path]::GetTempFileName()
+                try {
+                    $RawOutput = & $Executable @Arguments 2> $ErrFile
+                    $ExitCode = $LASTEXITCODE
+                    $Report = Get-AgentReportFromJsonl -JsonlLines @($RawOutput)
+                    if (-not [string]::IsNullOrWhiteSpace($Report)) {
+                        # Normalise to exactly one trailing newline to match the
+                        # bash runner, where command substitution strips trailing
+                        # newlines and printf re-adds a single one, so both emit
+                        # byte-identical report files.
+                        $Report = $Report.TrimEnd("`r", "`n") + "`n"
+                        Set-Content -LiteralPath $OutputFile -Value $Report -NoNewline -Encoding utf8
+                    }
+                    elseif (@($RawOutput).Where({ -not [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+                        # Output but no extractable final message: keep the raw
+                        # transcript so nothing is silently dropped.
+                        Write-Warning 'Could not extract a final report from Copilot output; keeping the raw JSONL transcript.'
+                        Set-Content -LiteralPath $OutputFile -Value (@($RawOutput) -join "`n") -NoNewline -Encoding utf8
+                    }
+                    else {
+                        # The agent wrote nothing to stdout: this phase did no
+                        # work. Surface the captured stderr in the report and
+                        # force a failure so the pipeline never reports a hollow
+                        # success.
+                        Write-Warning 'The agent produced no report for this phase (empty output); see the captured error in the report.'
+                        $ErrText = (Get-Content -LiteralPath $ErrFile -Raw -ErrorAction SilentlyContinue)
+                        if ([string]::IsNullOrWhiteSpace($ErrText)) { $ErrText = '(none)' }
+                        $Fence = '```'
+                        $Body = @(
+                            '# Phase produced no report'
+                            ''
+                            "The agent exited with code $ExitCode and wrote nothing to standard output, so no report could be produced."
+                            ''
+                            'Captured standard error:'
+                            ''
+                            $Fence
+                            $ErrText.TrimEnd("`r", "`n")
+                            $Fence
+                        ) -join "`n"
+                        Set-Content -LiteralPath $OutputFile -Value ($Body + "`n") -NoNewline -Encoding utf8
+                        if ($ExitCode -eq 0) { $ExitCode = 1 }
+                    }
                 }
-                else {
-                    # Normalise to exactly one trailing newline to match the bash
-                    # runner, where command substitution strips trailing newlines
-                    # and printf re-adds a single one, so both emit byte-identical
-                    # report files.
-                    $Report = $Report.TrimEnd("`r", "`n") + "`n"
-                    Set-Content -LiteralPath $OutputFile -Value $Report -NoNewline -Encoding utf8
+                finally {
+                    Remove-Item -LiteralPath $ErrFile -Force -ErrorAction SilentlyContinue
                 }
             }
             else {
