@@ -25,14 +25,15 @@ Compile and exercise the interpreter itself.
 
 Static checks for every non-C++ language in the repository; each runs only when files of its kind change.
 
-| Workflow                                 | Trigger             | Purpose                                             |
-| ---------------------------------------- | ------------------- | --------------------------------------------------- |
-| [`ci-cmake.yml`](ci-cmake.yml)           | Push / PR to `main` | cmakelint over the first-party CMake files.         |
-| [`ci-css.yml`](ci-css.yml)               | Push / PR to `main` | Stylelint over the first-party CSS.                 |
-| [`ci-markdown.yml`](ci-markdown.yml)     | Push / PR to `main` | markdownlint-cli2 over every Markdown file.         |
-| [`ci-powershell.yml`](ci-powershell.yml) | Push / PR to `main` | PSScriptAnalyzer over the PowerShell scripts.       |
-| [`ci-python.yml`](ci-python.yml)         | Push / PR to `main` | Ruff lint and format check over the Python tooling. |
-| [`ci-shell.yml`](ci-shell.yml)           | Push / PR to `main` | ShellCheck over the shell scripts.                  |
+| Workflow                                 | Trigger             | Purpose                                                      |
+| ---------------------------------------- | ------------------- | ------------------------------------------------------------ |
+| [`ci-cmake.yml`](ci-cmake.yml)           | Push / PR to `main` | cmakelint over the first-party CMake files.                  |
+| [`ci-css.yml`](ci-css.yml)               | Push / PR to `main` | Stylelint over the first-party CSS.                          |
+| [`ci-javascript.yml`](ci-javascript.yml) | Push / PR to `main` | ESLint over the GraphicalUi renderer JS.                     |
+| [`ci-markdown.yml`](ci-markdown.yml)     | Push / PR to `main` | markdownlint-cli2 over every Markdown file.                  |
+| [`ci-powershell.yml`](ci-powershell.yml) | Push / PR to `main` | PSScriptAnalyzer over the PowerShell scripts.                |
+| [`ci-python.yml`](ci-python.yml)         | Push / PR to `main` | Ruff lint and format check over the Python tooling.          |
+| [`ci-shell.yml`](ci-shell.yml)           | Push / PR to `main` | ShellCheck over the shell scripts.                           |
 
 ---
 
@@ -143,6 +144,7 @@ For reference, the checks each pull-request-triggered workflow reports:
 | [`docs.yml`](docs.yml)                         | `Documentation Consistency`                                                                                                                                                                                                                                                                                                                                                                                              |
 | [`ci-cmake.yml`](ci-cmake.yml)                 | `cmakelint`                                                                                                                                                                                                                                                                                                                                                                                                              |
 | [`ci-css.yml`](ci-css.yml)                     | `stylelint`                                                                                                                                                                                                                                                                                                                                                                                                              |
+| [`ci-javascript.yml`](ci-javascript.yml)       | `ESLint`                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | [`ci-markdown.yml`](ci-markdown.yml)           | `markdownlint`                                                                                                                                                                                                                                                                                                                                                                                                           |
 | [`ci-powershell.yml`](ci-powershell.yml)       | `PSScriptAnalyzer`                                                                                                                                                                                                                                                                                                                                                                                                       |
 | [`ci-python.yml`](ci-python.yml)               | `ruff`                                                                                                                                                                                                                                                                                                                                                                                                                   |
