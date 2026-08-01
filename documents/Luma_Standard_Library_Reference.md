@@ -10,44 +10,44 @@ This reference was previously part of the [User Manual](Luma_User_Manual.md). Fo
 
 1. [Core Built-Ins](#1--core-built-ins)
 2. [Array](#2--array)
-3. [Calculus](#3--calculus)
-4. [Channel](#4--channel)
-5. [Compression](#5--compression)
-6. [Converter](#6--converter)
-7. [Csv](#7--csv)
-8. [DateTime](#8--datetime)
-9. [Decimal](#9--decimal)
-10. [Dictionary](#10--dictionary)
-11. [Encoder](#11--encoder)
-12. [FileSystem](#12--filesystem)
-13. [Solaris and GraphicalUi](#13--solaris-and-graphicalui)
-14. [Hash](#14--hash)
-15. [Http](#15--http)
-16. [Console](#16--console)
-17. [Json](#17--json)
-18. [KeyValueStore](#18--keyvaluestore)
-19. [LinearAlgebra](#19--linearalgebra)
-20. [Log](#20--log)
-21. [Math](#21--math)
-22. [Optional](#22--optional)
-23. [Order](#23--order)
-24. [Process](#24--process)
-25. [Queue](#25--queue)
-26. [Random](#26--random)
-27. [Reference](#27--reference)
-28. [RegularExpression](#28--regularexpression)
-29. [Resource](#29--resource)
-30. [Result](#30--result)
-31. [Set](#31--set)
-32. [Socket](#32--socket)
-33. [Stack](#33--stack)
-34. [String](#34--string)
-35. [Task](#35--task)
-36. [Terminal](#36--terminal)
-37. [Xml](#37--xml)
-38. [Color](#38--color)
-39. [Bits](#39--bits)
-40. [Statistics](#40--statistics)
+3. [Bits](#3--bits)
+4. [Calculus](#4--calculus)
+5. [Channel](#5--channel)
+6. [Color](#6--color)
+7. [Compression](#7--compression)
+8. [Console](#8--console)
+9. [Converter](#9--converter)
+10. [Csv](#10--csv)
+11. [DateTime](#11--datetime)
+12. [Decimal](#12--decimal)
+13. [Dictionary](#13--dictionary)
+14. [Encoder](#14--encoder)
+15. [FileSystem](#15--filesystem)
+16. [Solaris and GraphicalUi](#16--solaris-and-graphicalui)
+17. [Hash](#17--hash)
+18. [Http](#18--http)
+19. [Json](#19--json)
+20. [KeyValueStore](#20--keyvaluestore)
+21. [LinearAlgebra](#21--linearalgebra)
+22. [Log](#22--log)
+23. [Math](#23--math)
+24. [Optional](#24--optional)
+25. [Order](#25--order)
+26. [Process](#26--process)
+27. [Queue](#27--queue)
+28. [Random](#28--random)
+29. [Reference](#29--reference)
+30. [RegularExpression](#30--regularexpression)
+31. [Resource](#31--resource)
+32. [Result](#32--result)
+33. [Set](#33--set)
+34. [Socket](#34--socket)
+35. [Stack](#35--stack)
+36. [Statistics](#36--statistics)
+37. [String](#37--string)
+38. [Task](#38--task)
+39. [Terminal](#39--terminal)
+40. [Xml](#40--xml)
 
 - [See Also](#see-also)
 
@@ -137,7 +137,36 @@ These require no namespace prefix:
 
 > **Sorting.** The `Array.sort` comparator must return a number: negative puts `a` before `b`, zero treats them as equal, and positive puts `b` before `a`. `Array.sort_by` accepts any function that returns a comparable string or number key — elements are sorted in ascending order by that key.
 
-## 3 — Calculus
+## 3 — Bits
+
+Integer bit manipulation as pipe-first free functions. `Bits` replaces the former
+`& | ^ ~ << >>` operators, which were removed from the language surface — bit
+twiddling is an advanced task better served by named functions than by infix
+operators. All functions take and return `integer`.
+
+| Function                   | Parameter Types      | Return Type | Description                                        |
+| -------------------------- | -------------------- | ----------- | -------------------------------------------------- |
+| `Bits.and(a, b)`           | `(integer, integer)` | `integer`   | Bitwise AND                                        |
+| `Bits.or(a, b)`            | `(integer, integer)` | `integer`   | Bitwise OR                                         |
+| `Bits.xor(a, b)`           | `(integer, integer)` | `integer`   | Bitwise XOR                                        |
+| `Bits.not(a)`              | `(integer)`          | `integer`   | Bitwise NOT (two's-complement complement)          |
+| `Bits.shift_left(v, n)`    | `(integer, integer)` | `integer`   | Logical left shift; `n` in `0..63`                 |
+| `Bits.shift_right(v, n)`   | `(integer, integer)` | `integer`   | Arithmetic (sign-preserving) right shift; `n` in `0..63` |
+
+A shift amount outside `0..63` raises a `RuntimeError`. `Bits.not(0) == -1`.
+
+```luma
+integer flags = 0
+    |> Bits.or(4)   # set bit 2
+    |> Bits.or(1)   # set bit 0
+
+boolean bit2_set = Bits.and(flags, 4) != 0   # true
+integer doubled  = Bits.shift_left(3, 1)     # 6
+```
+
+---
+
+## 4 — Calculus
 
 Numerical calculus operations. Functions accept callable values (native functions like `Math.sine` or user-defined lambdas).
 
@@ -167,7 +196,7 @@ Numerical calculus operations. Functions accept callable values (native function
 
 Callbacks that return `result<number>` (such as `Math.sine`) are automatically unwrapped.
 
-## 4 — Channel
+## 5 — Channel
 
 Thread-safe FIFO queues for passing values between tasks.
 
@@ -207,7 +236,70 @@ Channel operations use typed exceptions instead of result types for error condit
 
 These are runtime errors catchable with `try`/`catch`. Use `Channel.is_closed(ch)` to check channel state without throwing.
 
-## 5 — Compression
+## 6 — Color
+
+A typed RGBA colour value with validating constructors and derivations. Every value serialises to a CSS string the GraphicalUi web-view already accepts, so `Solaris` themes can be _computed_ rather than hand-written. Like `Decimal` and `Math.Fraction`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
+
+> **Color vs Terminal.Color** — `Color` is a general RGBA value for GUI/CSS work. `Terminal.Color` is a fixed choice of 16 named ANSI terminal colours, used only by the `Terminal` module.
+
+| Function                        | Parameter Types                             | Return Type          | Description                                                              |
+| ------------------------------- | ------------------------------------------- | -------------------- | ------------------------------------------------------------------------ |
+| `Color.analogous(c)`            | `(Color.Color)`                             | `array<Color.Color>` | `[base, hue −30°, hue +30°]` — an analogous colour scheme               |
+| `Color.brightness(c)`           | `(Color.Color)`                             | `number`             | Perceived brightness in [0, 1] (`0.299R + 0.587G + 0.114B`, normalised) |
+| `Color.complement(c)`           | `(Color.Color)`                             | `Color.Color`        | The opposite hue (equivalent to `rotate_hue(c, 180)`)                    |
+| `Color.complementary(c)`        | `(Color.Color)`                             | `array<Color.Color>` | `[base, complement]` (base plus its +180° hue)                          |
+| `Color.contrast_ratio(a, b)`    | `(Color.Color, Color.Color)`                | `number`             | WCAG contrast ratio (1:1 to 21:1)                                        |
+| `Color.darken(c, amount)`       | `(Color.Color, number)`                     | `Color.Color`        | Blend toward black by `amount` (clamped to [0, 1])                       |
+| `Color.desaturate(c, amount)`   | `(Color.Color, number)`                     | `Color.Color`        | Decrease HSL saturation by `amount` (clamped to [0, 1])                  |
+| `Color.fade(c, amount)`         | `(Color.Color, number)`                     | `Color.Color`        | Reduce alpha by `amount` (result clamped to [0, 1])                      |
+| `Color.from_cmyk(c)`            | `(Color.Cmyk)`                              | `Color.Color`        | Convert a CMYK colour to RGBA (alpha 1.0)                                |
+| `Color.from_hex(hex)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
+| `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
+| `Color.from_hsv(h)`             | `(Color.Hsv)`                               | `Color.Color`        | Convert an HSV (HSB) colour to RGBA (alpha 1.0)                          |
+| `Color.from_name(name)`         | `(Color.Name)`                              | `Color.Color`        | Build an opaque colour from a curated named colour (`Color.Name`)       |
+| `Color.grayscale(c)`            | `(Color.Color)`                             | `Color.Color`        | Fully desaturate (saturation 0), preserving lightness and alpha         |
+| `Color.invert(c)`               | `(Color.Color)`                             | `Color.Color`        | Per-channel inversion (`255 − channel`); alpha unchanged                |
+| `Color.is_dark(c)`              | `(Color.Color)`                             | `boolean`            | `true` when WCAG relative luminance ≤ 0.5                                |
+| `Color.is_light(c)`             | `(Color.Color)`                             | `boolean`            | `true` when WCAG relative luminance > 0.5                                |
+| `Color.lighten(c, amount)`      | `(Color.Color, number)`                     | `Color.Color`        | Blend toward white by `amount` (clamped to [0, 1])                       |
+| `Color.luminance(c)`            | `(Color.Color)`                             | `number`             | WCAG relative luminance in [0, 1] (alpha ignored)                       |
+| `Color.mix(a, b, t)`            | `(Color.Color, Color.Color, number)`        | `Color.Color`        | Linear blend of `a` and `b` at `t` (clamped to [0, 1])                   |
+| `Color.readable_text_color(bg)` | `(Color.Color)`                             | `Color.Color`        | Black or white — whichever has higher contrast against `bg`             |
+| `Color.rgb(r, g, b)`            | `(integer, integer, integer)`               | `result<Color.Color>` | Construct an opaque colour; fail if a channel is outside 0–255         |
+| `Color.rgba(r, g, b, a)`        | `(integer, integer, integer, number)`       | `result<Color.Color>` | Construct with alpha; fail if a channel is out of range or `a` ∉ [0, 1] |
+| `Color.rotate_hue(c, degrees)`  | `(Color.Color, number)`                     | `Color.Color`        | Rotate the hue by `degrees`, preserving saturation, lightness, and alpha |
+| `Color.saturate(c, amount)`     | `(Color.Color, number)`                     | `Color.Color`        | Increase HSL saturation by `amount` (clamped to [0, 1])                  |
+| `Color.to_cmyk(c)`              | `(Color.Color)`                             | `Color.Cmyk`         | Convert an RGBA colour to CMYK (alpha dropped)                           |
+| `Color.to_css(c)`               | `(Color.Color)`                             | `string`             | CSS string: `rgb(r, g, b)`, or `rgba(...)` when not fully opaque         |
+| `Color.to_hex(c)`               | `(Color.Color)`                             | `string`             | `#rrggbb`, or `#rrggbbaa` when the colour is not fully opaque            |
+| `Color.to_hsl(c)`               | `(Color.Color)`                             | `Color.Hsl`          | Convert an RGBA colour to HSL (alpha dropped)                            |
+| `Color.to_hsv(c)`               | `(Color.Color)`                             | `Color.Hsv`          | Convert an RGBA colour to HSV/HSB (alpha dropped)                        |
+| `Color.triadic(c)`              | `(Color.Color)`                             | `array<Color.Color>` | `[base, hue +120°, hue +240°]` — a triadic colour scheme                |
+| `Color.with_alpha(c, alpha)`    | `(Color.Color, number)`                     | `Color.Color`        | Set alpha to `alpha` (clamped to [0, 1])                                 |
+
+`rgb` / `rgba` / `from_hex` are validating constructors returning `result<Color.Color>`; the derivations (`lighten` / `darken` / `mix`) take already-validated colours and clamp their `amount` / `t` argument, so they return a `Color.Color` directly. `contrast_ratio` computes the WCAG 2.x relative-luminance ratio (alpha ignored) — black on white is 21:1, a colour against itself is 1:1 — feeding accessibility checks. The `to_css` output drops straight into the theme and per-widget style dictionaries the webview already consumes.
+
+**Analysis, accessibility, and scheme helpers.** `Color.luminance` exposes the same WCAG relative luminance `contrast_ratio` uses internally, and `Color.brightness` gives the simpler perceived-brightness weighting (`0.299R + 0.587G + 0.114B`) — both normalised to [0, 1]. `Color.is_light` / `Color.is_dark` threshold the relative luminance at 0.5, and `Color.readable_text_color(bg)` returns black or white — whichever has the higher contrast against `bg` — the one-call way to keep label text legible on a computed background. `Color.saturate` / `Color.desaturate` nudge HSL saturation by an amount (clamped to [0, 1]) and `Color.grayscale` drops it to zero while preserving lightness; all three keep the original alpha. `Color.with_alpha` sets the alpha channel outright while `Color.fade` reduces it by an amount (both clamped to [0, 1]), and `Color.invert` flips each RGB channel (leaving alpha untouched). For palettes, `Color.complement` returns the opposite hue, while `Color.complementary` (`[base, +180°]`), `Color.triadic` (`[base, +120°, +240°]`), and `Color.analogous` (`[base, −30°, +30°]`) return ready-made colour schemes as arrays — the hue maths that is awkward in RGB, done for you.
+
+**`Color.Hsl`** is the hue/saturation/lightness sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `lightness: number` (0–1 ratios). `Color.to_hsl` / `Color.from_hsl` convert between the two spaces, and `Color.rotate_hue(c, degrees)` shifts the hue (wrapping at 360°) while preserving saturation, lightness, and the original alpha — the natural way to build a rainbow, pastel, or complementary colour that is awkward in RGB. HSL drops alpha (so `to_hsl` discards it and `from_hsl` produces an opaque colour); everything still serialises through the same RGBA `to_css` path the webview consumes.
+
+**`Color.Hsv`** is the hue/saturation/**value** (HSB) sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `value: number` (0–1 ratios). It is the model most colour pickers and palette generators use, so `Color.to_hsv` / `Color.from_hsv` are the natural pair for building tints and shades by "value". Like HSL it drops alpha (`from_hsv` produces an opaque colour), and both spaces serialise through the same RGBA `to_css` path.
+
+**`Color.Cmyk`** is the cyan/magenta/yellow/**key** (black) sibling of `Color.Color` — `cyan: number`, `magenta: number`, `yellow: number`, and `key: number` (all 0–1 ratios). It is the subtractive model used by print production, so `Color.to_cmyk` / `Color.from_cmyk` are the natural pair for previewing how an on-screen colour will separate to ink. Like HSL/HSV it drops alpha (`from_cmyk` produces an opaque colour), and it serialises through the same RGBA `to_css` path.
+
+**`Color.Name`** is a curated palette of common named colours as an exhaustive choice — `Black`, `White`, `Red`, `Green`, `Lime`, `Blue`, `Yellow`, `Cyan`, `Magenta`, `Gray`, `Silver`, `Orange`, `Purple`, `Pink`, `Brown` (a subset of the CSS named colours, not all 140). `Color.from_name(name)` maps a variant to its opaque `Color.Color`, giving beginners a typo-proof, autocompleted alternative to remembering hex strings — a misspelled colour is a compile error, not a runtime surprise. The values are CSS-canonical, so `Color.Name.Green` is `0,128,0` and `Color.Name.Lime` is `0,255,0` (matching the web platform). It parallels the exhaustive `Terminal.Color` palette; for any colour outside the curated set, `Color.rgb` / `Color.from_hex` remain.
+
+```luma
+Color.Color base = Result.unwrap(Color.from_hex("#0172ad"))
+string css = base |> Color.darken(0.1) |> Color.to_css()   # "rgb(1, 102, 155)"
+
+# Pick a readable text colour against a background.
+number ratio = Color.contrast_ratio(base, Result.unwrap(Color.rgb(255, 255, 255)))
+```
+
+---
+
+## 7 — Compression
 
 Compress and decompress data using Deflate (RFC 1951), Gzip (RFC 1952), and run-length encoding.
 
@@ -256,7 +348,29 @@ match decoded {
 }
 ```
 
-## 6 — Converter
+## 8 — Console
+
+| Function                       | Parameter Types | Return Type       | Description                                                               |
+| ------------------------------ | --------------- | ----------------- | ------------------------------------------------------------------------- |
+| `Console.confirm(msg)`         | `(string)`      | `result<boolean>` | Prompt for yes/no (`y`/`yes`/`n`/`no`, case-insensitive); fail on other input or EOF |
+| `Console.flush()`              | `()`            | `result<boolean>` | Flush buffered stdout (so a newline-less prompt appears before a blocking read) |
+| `Console.is_interactive()`     | `()`            | `boolean`         | Whether stdin is an interactive terminal (TTY)                           |
+| `Console.is_tty()`             | `()`            | `boolean`         | Whether stdout is an interactive terminal (TTY)                          |
+| `Console.prompt(msg)`          | `(string)`      | `result<string>`  | Print prompt, read line from stdin; fail on EOF or if it exceeds the maximum string size |
+| `Console.prompt_integer(msg)`  | `(string)`      | `result<integer>` | Print prompt, read and parse a whole number; fail on invalid input or EOF |
+| `Console.prompt_number(msg)`   | `(string)`      | `result<number>`  | Print prompt, read and parse a number; fail on invalid input or EOF      |
+| `Console.prompt_with_default(msg, default)` | `(string, string)` | `result<string>` | Print prompt, read a line; return `default` on an empty line; fail on EOF |
+| `Console.read_from_stdin()`    | `()`            | `result<string>`  | Read all of stdin; fail if it exceeds the maximum string size            |
+| `Console.read_line()`          | `()`            | `result<string>`  | Read one line from stdin (newline stripped); fail on EOF or if it exceeds the maximum string size |
+| `Console.read_lines()`         | `()`            | `result<array<string>>` | Read all of stdin split into lines; fail if it exceeds the maximum string size |
+| `Console.write_to_stderr(msg)` | `(string)`      | `result<boolean>` | Write to stderr                                                           |
+| `Console.write_to_stdout(msg)` | `(string)`      | `result<boolean>` | Write to stdout                                                           |
+
+> **Resource limit** — Console input is bounded by the maximum string size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_STRING_SIZE`). `Console.prompt` and `Console.read_from_stdin` return `failure` if the input would exceed it.
+
+> **Console vs FileSystem:** `Console` handles console I/O — reading from stdin and writing to stdout/stderr. `FileSystem` handles file content — reading, writing, and appending data — as well as file metadata and paths (checking existence, querying size, listing directories, copying, renaming, and manipulating path components). Use `Console` for interactive console I/O; use `FileSystem` to read, write, and manage files and directories.
+
+## 9 — Converter
 
 Convert values between different types (e.g. string → integer, integer → string).
 
@@ -281,7 +395,7 @@ Convert values between different types (e.g. string → integer, integer → str
 | `Converter.to_roman(n)`                | `(integer)`     | `result<string>`  | Roman numeral; fail if value outside [1, 3999]               |
 | `Converter.to_string(v)`               | `(T)`           | `string`          | String representation of any value                           |
 
-## 7 — Csv
+## 10 — Csv
 
 Parse and serialise comma-separated values.
 
@@ -324,7 +438,7 @@ character).
 1-based) — so a program parsing a malformed CSV can point at the row/column that broke rather than
 surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 
-## 8 — DateTime
+## 11 — DateTime
 
 | Function                                   | Parameter Types                                          | Return Type                  | Description                                                              |
 | ------------------------------------------ | -------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------ |
@@ -467,7 +581,7 @@ failure(_other)                             { print("that isn't a valid ISO-8601
 }
 ```
 
-## 9 — Decimal
+## 12 — Decimal
 
 Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where `0.1 + 0.2` is not exactly `0.3`), a `decimal` stores its value in base 10, so money and other decimal maths behave the way people expect. `decimal` is a distinct opaque type built on an arbitrary-precision coefficient, so it never silently loses precision the way `number` does.
 
@@ -556,7 +670,7 @@ function void main() {
 }
 ```
 
-## 10 — Dictionary
+## 13 — Dictionary
 
 Dictionaries preserve insertion order. All reads and writes use string keys.
 
@@ -599,7 +713,7 @@ Dictionaries preserve insertion order. All reads and writes use string keys.
 
 `Dictionary.KeyValue` record fields: `key: string`, `value` (the dictionary's value type `V`). It is the element type of `Dictionary.to_array`, so a program can annotate the result as `array<Dictionary.KeyValue>` and read `.key`/`.value` directly. Use `Dictionary.to_entries` instead when you want `(key, value)` tuples rather than records.
 
-## 11 — Encoder
+## 14 — Encoder
 
 Transform the representation of a string without changing its type (e.g. Base64, URL percent-encoding).
 
@@ -630,7 +744,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 
 `Encoder.Error` is a choice type with four variants — `InvalidBase64`, `InvalidPercentEncoding`, `InvalidUtf8`, `InvalidAscii` — that categorises _why_ a decode failed, so a program validating user-supplied encoded input can branch on the cause instead of substring-matching an opaque message. It is surfaced by the opt-in `*_typed` companions — `Encoder.decode_base64_typed`, `Encoder.decode_url_typed`, and `Encoder.decode_text_typed` — which return `result<string, Encoder.Error>`: a bad Base64 alphabet or padding is `InvalidBase64`; a malformed percent-escape is `InvalidPercentEncoding`; bytes that are not valid UTF-8 (or outside the byte domain) under `Utf8`/`Latin1` are `InvalidUtf8`; and bytes outside the ASCII range under `Ascii` are `InvalidAscii`. This is additive (mirroring `DateTime.from_iso_string_typed` / `DateTime.ParseError`): the plain `decode_base64`, `decode_url`, and `decode_text` keep their string-error `result<string>`.
 
-## 12 — FileSystem
+## 15 — FileSystem
 
 | Function                                  | Parameter Types           | Return Type             | Description                                           |
 | ----------------------------------------- | ------------------------- | ----------------------- | ----------------------------------------------------- |
@@ -718,7 +832,7 @@ failure(_other) { print("could not read config") }
 
 > **Security note** — `append_file`, `read_bytes`, `read_file`, `read_lines`, `write_bytes`, `write_file`, and `write_lines` validate that the resolved path stays within the current working directory, which blocks cross-directory symlink traversal (e.g. a symlink pointing to `/etc/passwd` is rejected). However, a symbolic link that points to another file **within** the working directory is followed transparently. If your program accepts a user-supplied file path, validate that the resolved path refers to the expected file before reading or writing.
 
-## 13 — Solaris and GraphicalUi
+## 16 — Solaris and GraphicalUi
 
 Luma's GUI story is two layers under one section:
 
@@ -1527,7 +1641,7 @@ Accessibility functions add ARIA attributes, manage focus, and provide screen re
 
 The `attributes` dictionary accepts `"role"` and any key starting with `"aria_"` (underscores are converted to hyphens in the rendered HTML).
 
-## 14 — Hash
+## 17 — Hash
 
 Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 
@@ -1569,7 +1683,7 @@ print(d.hex)                                              # the 64-char hex stri
 match d.algorithm { case Hash.Algorithm.Sha256 { print("sha-256") } else { print("other") } }
 ```
 
-## 15 — Http
+## 18 — Http
 
 Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https://` URLs return an error result.
 
@@ -1677,29 +1791,7 @@ result<Http.Response> r = Http.get_with(
 > **Security note** — HTTP header names and values are validated to reject carriage-return (`\r`) and line-feed (`\n`) characters. Supplying headers that contain these characters returns a `failure` result to prevent CRLF header injection.
 > **Proxy support** — When the `HTTPS_PROXY`, `HTTP_PROXY`, or `ALL_PROXY` environment variables are set (lower-case variants are also honoured), requests are routed through the named HTTP proxy: `https` URLs use a `CONNECT` tunnel (TLS remains end-to-end with the origin server, so certificate verification is unaffected), and plain `http` URLs are forwarded with an absolute-form request line. `NO_PROXY` (comma-separated host or domain suffixes) bypasses the proxy for matching hosts. Proxy credentials supplied in the proxy URL's userinfo are sent via `Proxy-Authorization`. SSRF protection still applies to the request target: requests resolving to private, loopback, or otherwise reserved addresses are rejected even when a proxy is configured.
 
-## 16 — Console
-
-| Function                       | Parameter Types | Return Type       | Description                                                               |
-| ------------------------------ | --------------- | ----------------- | ------------------------------------------------------------------------- |
-| `Console.confirm(msg)`         | `(string)`      | `result<boolean>` | Prompt for yes/no (`y`/`yes`/`n`/`no`, case-insensitive); fail on other input or EOF |
-| `Console.flush()`              | `()`            | `result<boolean>` | Flush buffered stdout (so a newline-less prompt appears before a blocking read) |
-| `Console.is_interactive()`     | `()`            | `boolean`         | Whether stdin is an interactive terminal (TTY)                           |
-| `Console.is_tty()`             | `()`            | `boolean`         | Whether stdout is an interactive terminal (TTY)                          |
-| `Console.prompt(msg)`          | `(string)`      | `result<string>`  | Print prompt, read line from stdin; fail on EOF or if it exceeds the maximum string size |
-| `Console.prompt_integer(msg)`  | `(string)`      | `result<integer>` | Print prompt, read and parse a whole number; fail on invalid input or EOF |
-| `Console.prompt_number(msg)`   | `(string)`      | `result<number>`  | Print prompt, read and parse a number; fail on invalid input or EOF      |
-| `Console.prompt_with_default(msg, default)` | `(string, string)` | `result<string>` | Print prompt, read a line; return `default` on an empty line; fail on EOF |
-| `Console.read_from_stdin()`    | `()`            | `result<string>`  | Read all of stdin; fail if it exceeds the maximum string size            |
-| `Console.read_line()`          | `()`            | `result<string>`  | Read one line from stdin (newline stripped); fail on EOF or if it exceeds the maximum string size |
-| `Console.read_lines()`         | `()`            | `result<array<string>>` | Read all of stdin split into lines; fail if it exceeds the maximum string size |
-| `Console.write_to_stderr(msg)` | `(string)`      | `result<boolean>` | Write to stderr                                                           |
-| `Console.write_to_stdout(msg)` | `(string)`      | `result<boolean>` | Write to stdout                                                           |
-
-> **Resource limit** — Console input is bounded by the maximum string size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_STRING_SIZE`). `Console.prompt` and `Console.read_from_stdin` return `failure` if the input would exceed it.
-
-> **Console vs FileSystem:** `Console` handles console I/O — reading from stdin and writing to stdout/stderr. `FileSystem` handles file content — reading, writing, and appending data — as well as file metadata and paths (checking existence, querying size, listing directories, copying, renaming, and manipulating path components). Use `Console` for interactive console I/O; use `FileSystem` to read, write, and manage files and directories.
-
-## 17 — Json
+## 19 — Json
 
 Serialise and deserialise Luma values as JSON.
 
@@ -1796,7 +1888,7 @@ match Json.parse_detailed(user_input) {
 }
 ```
 
-## 18 — KeyValueStore
+## 20 — KeyValueStore
 
 Persistent file-backed key-value store. Keys and values are strings. The store uses a tab-separated format with proper escaping. Mutation functions (`set`, `remove`, `set_many`, `clear`) return `result<key_value_store>` — `success` with a new copy of the store, or `failure` if the store is read-only.
 
@@ -1824,7 +1916,7 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.update(s, key, fn)`          | `(key_value_store, string, function(optional<string>) -> string)` | `result<key_value_store>` | Set key to `fn(current-or-none)`; fail if read-only |
 | `KeyValueStore.values(s)`                   | `(key_value_store)`                     | `array<string>`           | All values                                        |
 
-## 19 — LinearAlgebra
+## 21 — LinearAlgebra
 
 Vector and matrix operations using arrays of numbers.
 
@@ -1883,7 +1975,7 @@ Vector and matrix operations using arrays of numbers.
 | `LinearAlgebra.transpose(m)`          | `(array<array<number>>)`                       | `array<array<number>>`         | Transpose matrix                |
 | `LinearAlgebra.zero_matrix(r, c)`     | `(integer, integer)`                           | `array<array<number>>`         | r×c zero matrix                 |
 
-## 20 — Log
+## 22 — Log
 
 Structured logging with configurable levels. Messages are written to stderr by default.
 
@@ -1909,7 +2001,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 
 `Log.set_output` also accepts a `Log.Output` choice in place of the string, mirroring how `Log.set_level` accepts `Log.Level`. The choice has three variants: `Log.Output.Stderr`, `Log.Output.Stdout`, and `Log.Output.File(path: string)`. The typed form removes the ambiguity of the string overload — where a mistyped stream name such as `"stdrr"` is silently treated as a file path — because a stream and a file path are now distinct variants: `Log.set_output(Log.Output.File("app.log"))` can only mean a file.
 
-## 21 — Math
+## 23 — Math
 
 | Function                              | Parameter Types                  | Return Type       | Description                                                                      |
 | ------------------------------------- | -------------------------------- | ----------------- | -------------------------------------------------------------------------------- |
@@ -2130,7 +2222,7 @@ case Sign.Positive { "rising" }
 | `Math.max_number` | `number` | 1.7976931348623157e308 (largest finite `number`) |
 | `Math.min_number` | `number` | 2.2250738585072014e-308 (smallest positive normal `number`; the most-negative `number` is `-Math.max_number`) |
 
-## 22 — Optional
+## 24 — Optional
 
 Functions for working with `optional<T>` values. All functions are available as `Optional.function_name(...)` without a `use` declaration.
 
@@ -2187,7 +2279,7 @@ string label = some(42)
 print(label) # "positive: 42"
 ```
 
-## 23 — Order
+## 25 — Order
 
 Comparison utilities built around the `Ordering` choice type, a self-documenting
 alternative to raw `-1` / `0` / `1` comparison numbers. All functions are available
@@ -2251,7 +2343,7 @@ array<Person> sorted = Result.unwrap(
 The existing numeric comparator convention (a `function(T, T) -> number` returning a
 negative, zero, or positive value) still works unchanged; `Order` is purely additive.
 
-## 24 — Process
+## 26 — Process
 
 | Function                                        | Parameter Types    | Return Type                     | Description                                                              |
 | ----------------------------------------------- | ------------------ | ------------------------------- | ------------------------------------------------------------------------ |
@@ -2350,7 +2442,7 @@ failure(_e)  { print("could not signal that process") }
 }
 ```
 
-## 25 — Queue
+## 27 — Queue
 
 Immutable FIFO (first-in, first-out) queue. All mutating operations return a new queue, leaving the original unchanged.
 
@@ -2377,7 +2469,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Queue.reverse(q)`          | `(queue)`                         | `queue`                  | New queue with the element order reversed              |
 | `Queue.to_array(q)`         | `(queue)`                         | `array<T>`               | Convert to array                                       |
 
-## 26 — Random
+## 28 — Random
 
 | Function                          | Parameter Types       | Return Type        | Description                                                                     |
 | --------------------------------- | --------------------- | ------------------ | ------------------------------------------------------------------------------- |
@@ -2433,7 +2525,7 @@ Random.Uuid id = Random.uuid_typed()
 result<Random.Uuid> parsed = Random.parse_uuid("550e8400-e29b-41d4-a716-446655440000")
 ```
 
-## 27 — Reference
+## 29 — Reference
 
 Mutable reference cells — shared mutable containers that preserve identity across closure capture boundaries. All functions are available as `Reference.function_name(...)` without a `use` declaration.
 
@@ -2490,7 +2582,7 @@ integer value = Reference.new(42) |> Reference.get()       # 42
 string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 ```
 
-## 28 — RegularExpression
+## 30 — RegularExpression
 
 | Function                                          | Parameter Types            | Return Type                              | Description                                                   |
 | ------------------------------------------------- | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
@@ -2593,7 +2685,7 @@ result<boolean> spans =
 
 The ReDoS guard and pattern-size limit apply to the `*_with` variants exactly as they do to the flagless functions.
 
-## 29 — Resource
+## 31 — Resource
 
 `Resource.with` guarantees that a cleanup function is called after a body function runs, regardless of whether the body throws a runtime error. It is the Luma equivalent of a `finally`-based cleanup block, expressed as a library function.
 
@@ -2646,7 +2738,7 @@ string content = Resource.using(
 )
 ```
 
-## 30 — Result
+## 32 — Result
 
 Combinators for transforming and inspecting `result<T>` values without explicit `match`. For the `result<T>` type itself (creation via `success()`/`failure()`, pattern matching, propagation with `?`, and the `??`/`!>` operators), see the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--result-and-optional).
 
@@ -2679,7 +2771,7 @@ Combinators for transforming and inspecting `result<T>` values without explicit 
 | `Result.unwrap_or(r, default)` | `(result<T>, T)`                                    | `T`            | Extract success value or use `default`                                   |
 | `Result.zip(r1, r2)`           | `(result<T>, result<U>)`                            | `result<(T, U)>` | Combine two successes into a tuple; short-circuit on first failure      |
 
-## 31 — Set
+## 33 — Set
 
 `Set` values are a distinct type (not arrays). Use `Set.from_array` to create a set and `Set.to_array` to convert back.
 
@@ -2714,7 +2806,7 @@ Combinators for transforming and inspecting `result<T>` values without explicit 
 | `Set.to_array(s)`                    | `(set)`                         | `array<T>`           | Convert to array                                               |
 | `Set.union(s, other)`                | `(set, set)`                    | `set`                | Elements in `s` or `other`                                     |
 
-## 32 — Socket
+## 34 — Socket
 
 Cross-platform TCP and UDP networking.
 
@@ -2782,7 +2874,7 @@ match Socket.connect_typed("127.0.0.1", 8080) {
 
 ---
 
-## 33 — Stack
+## 35 — Stack
 
 Immutable LIFO (last-in, first-out) stack. All mutating operations return a new stack.
 
@@ -2810,7 +2902,56 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `Stack.reverse(s)`          | `(stack)`                         | `stack`                  | Reverse element order (top becomes bottom)                      |
 | `Stack.to_array(s)`         | `(stack)`                         | `array<T>`               | Convert to array                                                |
 
-## 34 — String
+## 36 — Statistics
+
+Descriptive and inferential statistics over numeric arrays. Split out of `Math`
+so the four maths modules each cover one cohesive domain: `Math` (scalar
+arithmetic, trigonometry, number theory, geometry), `Calculus`, `LinearAlgebra`,
+and `Statistics` (whole-dataset summaries). The plain aggregate `Math.sum` stays
+in `Math`; every function here reduces or summarises a whole array.
+
+| Function                        | Parameter Types                  | Return Type                        | Description                                                                      |
+| ------------------------------- | -------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
+| `Statistics.correlation(xs, ys)`      | `(array<number>, array<number>)` | `result<number>`                   | Pearson correlation coefficient; fail if arrays differ in length or < 2 elements |
+| `Statistics.five_number_summary(arr)` | `(array<number>)`                | `result<Statistics.FiveNumberSummary>` | Box-plot quartiles (min, Q1, median, Q3, max) in one pass; fail if empty      |
+| `Statistics.histogram(values, bins)`  | `(array<number>, integer)`       | `result<Statistics.Histogram>`     | Bin `values` into `bins` equal-width half-open bins; fail if empty or `bins < 1` |
+| `Statistics.linear_fit(xs, ys)`       | `(array<number>, array<number>)` | `result<Statistics.LineFit>`       | Ordinary least-squares line fit; fail on unequal lengths, < 2 points, or zero x-variance |
+| `Statistics.mean(arr)`                | `(array<number>)`                | `result<number>`                   | Arithmetic mean; fail if empty                                                   |
+| `Statistics.median(arr)`              | `(array<number>)`                | `result<number>`                   | Median value; fail if empty                                                      |
+| `Statistics.mode(arr)`                | `(array<number>)`                | `result<number>`                   | Most frequent value; fail if empty                                               |
+| `Statistics.percentile(arr, p)`       | `(array<number>, number)`        | `result<number>`                   | p-th percentile; fail if empty or `p` outside [0, 100]                           |
+| `Statistics.standard_deviation(arr)`  | `(array<number>)`                | `result<number>`                   | Standard deviation; fail if empty                                                |
+| `Statistics.summarize(arr)`           | `(array<number>)`                | `result<Statistics.Summary>`       | Descriptive statistics (count, min, max, mean, median, std. dev.) in one pass; fail if empty |
+| `Statistics.variance(arr)`            | `(array<number>)`                | `result<number>`                   | Variance; fail if empty                                                          |
+
+`Statistics.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
+
+`Statistics.FiveNumberSummary` is the box-plot sibling of `Statistics.Summary` — `minimum: number`, `q1: number`, `median: number`, `q3: number`, `maximum: number` — returned by `Statistics.five_number_summary(arr)` (fails on an empty array). The quartiles use the same linear-interpolation method as `Statistics.percentile`, so `Statistics.five_number_summary(v)` agrees with `Statistics.percentile(v, 25/50/75)` — a single typed answer for the five order statistics a box plot needs.
+
+`Statistics.Histogram { bin_edges: array<number>, counts: array<integer>, bin_width: number }` is the binned frequency distribution behind every bar chart. `Statistics.histogram(values, bins)` splits the data range `[min, max]` into `bins` equal-width half-open bins and tallies how many samples fall in each — `counts[i]` is the number of values in `[bin_edges[i], bin_edges[i+1])`, so `bin_edges` always has one more element than `counts`, and the final bin is closed on the right so the maximum is counted. It fails on an empty array or `bins < 1`. When every value is identical (a zero-width range) the range is widened by half a unit on each side so the bins stay positive-width. The `integer` counts and `number` edges respect the numeric convention, and the shape feeds the GraphicalUi bar chart directly. Mirrors `Statistics.summarize` / `Statistics.five_number_summary`: pure data returned by one pipe-first `result`-typed call.
+
+```luma
+Statistics.Histogram h = Result.unwrap(Statistics.histogram([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3))
+assert(Array.length(h.bin_edges) == 4)   # one more edge than counts
+assert(Array.length(h.counts) == 3)
+```
+
+`Statistics.LineFit` is the ordinary least-squares regression result — `slope: number`, `intercept: number`, `r_squared: number` — returned by `Statistics.linear_fit(xs, ys)` for the trend line `y = slope · x + intercept`. It fails on mismatched array lengths, fewer than two points, or a zero x-variance (a vertical line). Mirrors `Statistics.Summary`: a plain returned record built by a single call.
+
+---
+
+## See Also
+
+- [Tutorial](Luma_Tutorial.md) — a beginner-friendly introduction that uses these modules step by step
+- [User Manual](Luma_User_Manual.md) — language syntax and semantics
+- [Error Handling](Luma_Error_Handling.md) — `result` / `optional` conventions used throughout the library
+- [Solaris Guide](Luma_Solaris_Guide.md) — the beginner-first `Solaris` GUI surface
+- [GraphicalUi Guide](Luma_GraphicalUi_Guide.md) — the low-level webview engine beneath the surface
+- [Performance Guide](Luma_Performance_Guide.md) — runtime costs of standard library operations
+- [Coding Guidelines](Luma_Coding_Guidelines.md) — idiomatic use of the standard library
+- [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) — debugging tasks and channels that use these modules
+- [REPL Guide](Luma_REPL_Guide.md) — explore these functions interactively
+## 37 — String
 
 | Function                            | Parameter Types                | Return Type       | Description                                                                     |
 | ----------------------------------- | ------------------------------ | ----------------- | ------------------------------------------------------------------------------- |
@@ -2916,7 +3057,7 @@ string letter = Result.unwrap(Random.choice(letters))
 boolean is_punct = String.contains(String.punctuation, "!")
 ```
 
-## 35 — Task
+## 38 — Task
 
 Concurrency combinators for `spawn`/`await` tasks.
 
@@ -2986,7 +3127,7 @@ Using `spawn` outside a `task_scope` still works (fire-and-forget) but produces 
 
 > **Resource limit** — The internal task queue holds a bounded number of pending tasks (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`). Spawning beyond this limit throws a runtime error (`task queue is full — too many pending tasks`). Design your program to await tasks before spawning more to stay within this limit.
 
-## 36 — Terminal
+## 39 — Terminal
 
 Terminal UI control — cursor movement, colors, styling, screen management, and mouse input.
 
@@ -3203,7 +3344,7 @@ function void test_counter_responds_to_keys() {
 
 The same machinery is reachable without Luma code via the `LUMA_TERMINAL_INPUT` environment variable (one key per line), which the example runner (`scripts/run_examples.py`) uses to drive the raw-mode example programs unattended.
 
-## 37 — Xml
+## 40 — Xml
 
 Parse, build, query, and serialise XML documents. XML nodes are opaque `xml` values; decode one into a typed `Xml.Node` choice with `Xml.to_node` when you need to `match` over its structure.
 
@@ -3282,144 +3423,3 @@ case Xml.Node.CData(content)            { print(content) }
 
 ---
 
-## 38 — Color
-
-A typed RGBA colour value with validating constructors and derivations. Every value serialises to a CSS string the GraphicalUi web-view already accepts, so `Solaris` themes can be _computed_ rather than hand-written. Like `Decimal` and `Math.Fraction`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
-
-> **Color vs Terminal.Color** — `Color` is a general RGBA value for GUI/CSS work. `Terminal.Color` is a fixed choice of 16 named ANSI terminal colours, used only by the `Terminal` module.
-
-| Function                        | Parameter Types                             | Return Type          | Description                                                              |
-| ------------------------------- | ------------------------------------------- | -------------------- | ------------------------------------------------------------------------ |
-| `Color.analogous(c)`            | `(Color.Color)`                             | `array<Color.Color>` | `[base, hue −30°, hue +30°]` — an analogous colour scheme               |
-| `Color.brightness(c)`           | `(Color.Color)`                             | `number`             | Perceived brightness in [0, 1] (`0.299R + 0.587G + 0.114B`, normalised) |
-| `Color.complement(c)`           | `(Color.Color)`                             | `Color.Color`        | The opposite hue (equivalent to `rotate_hue(c, 180)`)                    |
-| `Color.complementary(c)`        | `(Color.Color)`                             | `array<Color.Color>` | `[base, complement]` (base plus its +180° hue)                          |
-| `Color.contrast_ratio(a, b)`    | `(Color.Color, Color.Color)`                | `number`             | WCAG contrast ratio (1:1 to 21:1)                                        |
-| `Color.darken(c, amount)`       | `(Color.Color, number)`                     | `Color.Color`        | Blend toward black by `amount` (clamped to [0, 1])                       |
-| `Color.desaturate(c, amount)`   | `(Color.Color, number)`                     | `Color.Color`        | Decrease HSL saturation by `amount` (clamped to [0, 1])                  |
-| `Color.fade(c, amount)`         | `(Color.Color, number)`                     | `Color.Color`        | Reduce alpha by `amount` (result clamped to [0, 1])                      |
-| `Color.from_cmyk(c)`            | `(Color.Cmyk)`                              | `Color.Color`        | Convert a CMYK colour to RGBA (alpha 1.0)                                |
-| `Color.from_hex(hex)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
-| `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
-| `Color.from_hsv(h)`             | `(Color.Hsv)`                               | `Color.Color`        | Convert an HSV (HSB) colour to RGBA (alpha 1.0)                          |
-| `Color.from_name(name)`         | `(Color.Name)`                              | `Color.Color`        | Build an opaque colour from a curated named colour (`Color.Name`)       |
-| `Color.grayscale(c)`            | `(Color.Color)`                             | `Color.Color`        | Fully desaturate (saturation 0), preserving lightness and alpha         |
-| `Color.invert(c)`               | `(Color.Color)`                             | `Color.Color`        | Per-channel inversion (`255 − channel`); alpha unchanged                |
-| `Color.is_dark(c)`              | `(Color.Color)`                             | `boolean`            | `true` when WCAG relative luminance ≤ 0.5                                |
-| `Color.is_light(c)`             | `(Color.Color)`                             | `boolean`            | `true` when WCAG relative luminance > 0.5                                |
-| `Color.lighten(c, amount)`      | `(Color.Color, number)`                     | `Color.Color`        | Blend toward white by `amount` (clamped to [0, 1])                       |
-| `Color.luminance(c)`            | `(Color.Color)`                             | `number`             | WCAG relative luminance in [0, 1] (alpha ignored)                       |
-| `Color.mix(a, b, t)`            | `(Color.Color, Color.Color, number)`        | `Color.Color`        | Linear blend of `a` and `b` at `t` (clamped to [0, 1])                   |
-| `Color.readable_text_color(bg)` | `(Color.Color)`                             | `Color.Color`        | Black or white — whichever has higher contrast against `bg`             |
-| `Color.rgb(r, g, b)`            | `(integer, integer, integer)`               | `result<Color.Color>` | Construct an opaque colour; fail if a channel is outside 0–255         |
-| `Color.rgba(r, g, b, a)`        | `(integer, integer, integer, number)`       | `result<Color.Color>` | Construct with alpha; fail if a channel is out of range or `a` ∉ [0, 1] |
-| `Color.rotate_hue(c, degrees)`  | `(Color.Color, number)`                     | `Color.Color`        | Rotate the hue by `degrees`, preserving saturation, lightness, and alpha |
-| `Color.saturate(c, amount)`     | `(Color.Color, number)`                     | `Color.Color`        | Increase HSL saturation by `amount` (clamped to [0, 1])                  |
-| `Color.to_cmyk(c)`              | `(Color.Color)`                             | `Color.Cmyk`         | Convert an RGBA colour to CMYK (alpha dropped)                           |
-| `Color.to_css(c)`               | `(Color.Color)`                             | `string`             | CSS string: `rgb(r, g, b)`, or `rgba(...)` when not fully opaque         |
-| `Color.to_hex(c)`               | `(Color.Color)`                             | `string`             | `#rrggbb`, or `#rrggbbaa` when the colour is not fully opaque            |
-| `Color.to_hsl(c)`               | `(Color.Color)`                             | `Color.Hsl`          | Convert an RGBA colour to HSL (alpha dropped)                            |
-| `Color.to_hsv(c)`               | `(Color.Color)`                             | `Color.Hsv`          | Convert an RGBA colour to HSV/HSB (alpha dropped)                        |
-| `Color.triadic(c)`              | `(Color.Color)`                             | `array<Color.Color>` | `[base, hue +120°, hue +240°]` — a triadic colour scheme                |
-| `Color.with_alpha(c, alpha)`    | `(Color.Color, number)`                     | `Color.Color`        | Set alpha to `alpha` (clamped to [0, 1])                                 |
-
-`rgb` / `rgba` / `from_hex` are validating constructors returning `result<Color.Color>`; the derivations (`lighten` / `darken` / `mix`) take already-validated colours and clamp their `amount` / `t` argument, so they return a `Color.Color` directly. `contrast_ratio` computes the WCAG 2.x relative-luminance ratio (alpha ignored) — black on white is 21:1, a colour against itself is 1:1 — feeding accessibility checks. The `to_css` output drops straight into the theme and per-widget style dictionaries the webview already consumes.
-
-**Analysis, accessibility, and scheme helpers.** `Color.luminance` exposes the same WCAG relative luminance `contrast_ratio` uses internally, and `Color.brightness` gives the simpler perceived-brightness weighting (`0.299R + 0.587G + 0.114B`) — both normalised to [0, 1]. `Color.is_light` / `Color.is_dark` threshold the relative luminance at 0.5, and `Color.readable_text_color(bg)` returns black or white — whichever has the higher contrast against `bg` — the one-call way to keep label text legible on a computed background. `Color.saturate` / `Color.desaturate` nudge HSL saturation by an amount (clamped to [0, 1]) and `Color.grayscale` drops it to zero while preserving lightness; all three keep the original alpha. `Color.with_alpha` sets the alpha channel outright while `Color.fade` reduces it by an amount (both clamped to [0, 1]), and `Color.invert` flips each RGB channel (leaving alpha untouched). For palettes, `Color.complement` returns the opposite hue, while `Color.complementary` (`[base, +180°]`), `Color.triadic` (`[base, +120°, +240°]`), and `Color.analogous` (`[base, −30°, +30°]`) return ready-made colour schemes as arrays — the hue maths that is awkward in RGB, done for you.
-
-**`Color.Hsl`** is the hue/saturation/lightness sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `lightness: number` (0–1 ratios). `Color.to_hsl` / `Color.from_hsl` convert between the two spaces, and `Color.rotate_hue(c, degrees)` shifts the hue (wrapping at 360°) while preserving saturation, lightness, and the original alpha — the natural way to build a rainbow, pastel, or complementary colour that is awkward in RGB. HSL drops alpha (so `to_hsl` discards it and `from_hsl` produces an opaque colour); everything still serialises through the same RGBA `to_css` path the webview consumes.
-
-**`Color.Hsv`** is the hue/saturation/**value** (HSB) sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `value: number` (0–1 ratios). It is the model most colour pickers and palette generators use, so `Color.to_hsv` / `Color.from_hsv` are the natural pair for building tints and shades by "value". Like HSL it drops alpha (`from_hsv` produces an opaque colour), and both spaces serialise through the same RGBA `to_css` path.
-
-**`Color.Cmyk`** is the cyan/magenta/yellow/**key** (black) sibling of `Color.Color` — `cyan: number`, `magenta: number`, `yellow: number`, and `key: number` (all 0–1 ratios). It is the subtractive model used by print production, so `Color.to_cmyk` / `Color.from_cmyk` are the natural pair for previewing how an on-screen colour will separate to ink. Like HSL/HSV it drops alpha (`from_cmyk` produces an opaque colour), and it serialises through the same RGBA `to_css` path.
-
-**`Color.Name`** is a curated palette of common named colours as an exhaustive choice — `Black`, `White`, `Red`, `Green`, `Lime`, `Blue`, `Yellow`, `Cyan`, `Magenta`, `Gray`, `Silver`, `Orange`, `Purple`, `Pink`, `Brown` (a subset of the CSS named colours, not all 140). `Color.from_name(name)` maps a variant to its opaque `Color.Color`, giving beginners a typo-proof, autocompleted alternative to remembering hex strings — a misspelled colour is a compile error, not a runtime surprise. The values are CSS-canonical, so `Color.Name.Green` is `0,128,0` and `Color.Name.Lime` is `0,255,0` (matching the web platform). It parallels the exhaustive `Terminal.Color` palette; for any colour outside the curated set, `Color.rgb` / `Color.from_hex` remain.
-
-```luma
-Color.Color base = Result.unwrap(Color.from_hex("#0172ad"))
-string css = base |> Color.darken(0.1) |> Color.to_css()   # "rgb(1, 102, 155)"
-
-# Pick a readable text colour against a background.
-number ratio = Color.contrast_ratio(base, Result.unwrap(Color.rgb(255, 255, 255)))
-```
-
----
-
-## 39 — Bits
-
-Integer bit manipulation as pipe-first free functions. `Bits` replaces the former
-`& | ^ ~ << >>` operators, which were removed from the language surface — bit
-twiddling is an advanced task better served by named functions than by infix
-operators. All functions take and return `integer`.
-
-| Function                   | Parameter Types      | Return Type | Description                                        |
-| -------------------------- | -------------------- | ----------- | -------------------------------------------------- |
-| `Bits.and(a, b)`           | `(integer, integer)` | `integer`   | Bitwise AND                                        |
-| `Bits.or(a, b)`            | `(integer, integer)` | `integer`   | Bitwise OR                                         |
-| `Bits.xor(a, b)`           | `(integer, integer)` | `integer`   | Bitwise XOR                                        |
-| `Bits.not(a)`              | `(integer)`          | `integer`   | Bitwise NOT (two's-complement complement)          |
-| `Bits.shift_left(v, n)`    | `(integer, integer)` | `integer`   | Logical left shift; `n` in `0..63`                 |
-| `Bits.shift_right(v, n)`   | `(integer, integer)` | `integer`   | Arithmetic (sign-preserving) right shift; `n` in `0..63` |
-
-A shift amount outside `0..63` raises a `RuntimeError`. `Bits.not(0) == -1`.
-
-```luma
-integer flags = 0
-    |> Bits.or(4)   # set bit 2
-    |> Bits.or(1)   # set bit 0
-
-boolean bit2_set = Bits.and(flags, 4) != 0   # true
-integer doubled  = Bits.shift_left(3, 1)     # 6
-```
-
----
-
-## 40 — Statistics
-
-Descriptive and inferential statistics over numeric arrays. Split out of `Math`
-so the four maths modules each cover one cohesive domain: `Math` (scalar
-arithmetic, trigonometry, number theory, geometry), `Calculus`, `LinearAlgebra`,
-and `Statistics` (whole-dataset summaries). The plain aggregate `Math.sum` stays
-in `Math`; every function here reduces or summarises a whole array.
-
-| Function                        | Parameter Types                  | Return Type                        | Description                                                                      |
-| ------------------------------- | -------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
-| `Statistics.correlation(xs, ys)`      | `(array<number>, array<number>)` | `result<number>`                   | Pearson correlation coefficient; fail if arrays differ in length or < 2 elements |
-| `Statistics.five_number_summary(arr)` | `(array<number>)`                | `result<Statistics.FiveNumberSummary>` | Box-plot quartiles (min, Q1, median, Q3, max) in one pass; fail if empty      |
-| `Statistics.histogram(values, bins)`  | `(array<number>, integer)`       | `result<Statistics.Histogram>`     | Bin `values` into `bins` equal-width half-open bins; fail if empty or `bins < 1` |
-| `Statistics.linear_fit(xs, ys)`       | `(array<number>, array<number>)` | `result<Statistics.LineFit>`       | Ordinary least-squares line fit; fail on unequal lengths, < 2 points, or zero x-variance |
-| `Statistics.mean(arr)`                | `(array<number>)`                | `result<number>`                   | Arithmetic mean; fail if empty                                                   |
-| `Statistics.median(arr)`              | `(array<number>)`                | `result<number>`                   | Median value; fail if empty                                                      |
-| `Statistics.mode(arr)`                | `(array<number>)`                | `result<number>`                   | Most frequent value; fail if empty                                               |
-| `Statistics.percentile(arr, p)`       | `(array<number>, number)`        | `result<number>`                   | p-th percentile; fail if empty or `p` outside [0, 100]                           |
-| `Statistics.standard_deviation(arr)`  | `(array<number>)`                | `result<number>`                   | Standard deviation; fail if empty                                                |
-| `Statistics.summarize(arr)`           | `(array<number>)`                | `result<Statistics.Summary>`       | Descriptive statistics (count, min, max, mean, median, std. dev.) in one pass; fail if empty |
-| `Statistics.variance(arr)`            | `(array<number>)`                | `result<number>`                   | Variance; fail if empty                                                          |
-
-`Statistics.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
-
-`Statistics.FiveNumberSummary` is the box-plot sibling of `Statistics.Summary` — `minimum: number`, `q1: number`, `median: number`, `q3: number`, `maximum: number` — returned by `Statistics.five_number_summary(arr)` (fails on an empty array). The quartiles use the same linear-interpolation method as `Statistics.percentile`, so `Statistics.five_number_summary(v)` agrees with `Statistics.percentile(v, 25/50/75)` — a single typed answer for the five order statistics a box plot needs.
-
-`Statistics.Histogram { bin_edges: array<number>, counts: array<integer>, bin_width: number }` is the binned frequency distribution behind every bar chart. `Statistics.histogram(values, bins)` splits the data range `[min, max]` into `bins` equal-width half-open bins and tallies how many samples fall in each — `counts[i]` is the number of values in `[bin_edges[i], bin_edges[i+1])`, so `bin_edges` always has one more element than `counts`, and the final bin is closed on the right so the maximum is counted. It fails on an empty array or `bins < 1`. When every value is identical (a zero-width range) the range is widened by half a unit on each side so the bins stay positive-width. The `integer` counts and `number` edges respect the numeric convention, and the shape feeds the GraphicalUi bar chart directly. Mirrors `Statistics.summarize` / `Statistics.five_number_summary`: pure data returned by one pipe-first `result`-typed call.
-
-```luma
-Statistics.Histogram h = Result.unwrap(Statistics.histogram([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3))
-assert(Array.length(h.bin_edges) == 4)   # one more edge than counts
-assert(Array.length(h.counts) == 3)
-```
-
-`Statistics.LineFit` is the ordinary least-squares regression result — `slope: number`, `intercept: number`, `r_squared: number` — returned by `Statistics.linear_fit(xs, ys)` for the trend line `y = slope · x + intercept`. It fails on mismatched array lengths, fewer than two points, or a zero x-variance (a vertical line). Mirrors `Statistics.Summary`: a plain returned record built by a single call.
-
----
-
-## See Also
-
-- [Tutorial](Luma_Tutorial.md) — a beginner-friendly introduction that uses these modules step by step
-- [User Manual](Luma_User_Manual.md) — language syntax and semantics
-- [Error Handling](Luma_Error_Handling.md) — `result` / `optional` conventions used throughout the library
-- [Solaris Guide](Luma_Solaris_Guide.md) — the beginner-first `Solaris` GUI surface
-- [GraphicalUi Guide](Luma_GraphicalUi_Guide.md) — the low-level webview engine beneath the surface
-- [Performance Guide](Luma_Performance_Guide.md) — runtime costs of standard library operations
-- [Coding Guidelines](Luma_Coding_Guidelines.md) — idiomatic use of the standard library
-- [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) — debugging tasks and channels that use these modules
-- [REPL Guide](Luma_REPL_Guide.md) — explore these functions interactively
