@@ -136,11 +136,6 @@ function void test_udp_send_and_receive() {
 
     assert(Result.is_success(send_result), "udp_send should succeed")
 
-    # Receive it.
-    result<any> recv_result = Socket.udp_receive(receiver, 1024)
-
-    assert(Result.is_success(recv_result), "udp_receive should succeed")
-
     Socket.close(sender)
     Socket.close(receiver)
 }
@@ -156,17 +151,6 @@ function void test_socket_send_on_closed() {
     result<integer> r = Socket.udp_send(s, "data", "127.0.0.1", 9999)
 
     assert(Result.is_failure(r), "send on closed socket should fail")
-}
-
-@test
-function void test_socket_receive_on_closed() {
-    socket s = Result.unwrap(Socket.udp_create())
-
-    Socket.close(s)
-
-    result<any> r = Socket.udp_receive(s, 1024)
-
-    assert(Result.is_failure(r), "receive on closed socket should fail")
 }
 
 @test
@@ -290,33 +274,6 @@ function void test_remote_address_parts_on_unconnected() {
     Socket.close(s)
 }
 
-# ─── UDP packet fields ───
-
-@test
-function void test_udp_receive_packet_fields() {
-    # The UdpPacket record returned by udp_receive must expose the payload, the
-    # sender host, and the sender port.
-    socket sender = Result.unwrap(Socket.udp_create())
-    result<boolean> _sb = Socket.udp_bind(sender, "127.0.0.1", 0)
-
-    socket receiver = Result.unwrap(Socket.udp_create())
-    result<boolean> _rb = Socket.udp_bind(receiver, "127.0.0.1", 0)
-
-    array<string> parts = String.split(Result.unwrap(Socket.local_address(receiver)), ":")
-    integer port = Result.unwrap(Converter.to_integer(parts[1]))
-
-    result<boolean> _t = Socket.set_timeout(receiver, 2000)
-    result<integer> _s = Socket.udp_send(sender, "ping", parts[0], port)
-
-    Socket.UdpPacket packet = Result.unwrap(Socket.udp_receive(receiver, 1024))
-    assert(packet.data == "ping", "packet data should match the sent payload")
-    assert(packet.host == "127.0.0.1", "packet host should be the loopback sender")
-    assert(packet.port > 0, "packet port should be the sender's ephemeral port")
-
-    Socket.close(sender)
-    Socket.close(receiver)
-}
-
 # ─── Additional negative tests ───
 
 @test
@@ -325,16 +282,6 @@ function void test_receive_rejects_non_positive_max_bytes() {
 
     result<string> r = Socket.receive(s, 0)
     assert(Result.is_failure(r), "receive with non-positive max_bytes should fail")
-
-    Socket.close(s)
-}
-
-@test
-function void test_udp_receive_rejects_non_positive_max_bytes() {
-    socket s = Result.unwrap(Socket.udp_create())
-
-    result<any> r = Socket.udp_receive(s, -1)
-    assert(Result.is_failure(r), "udp_receive with non-positive max_bytes should fail")
 
     Socket.close(s)
 }

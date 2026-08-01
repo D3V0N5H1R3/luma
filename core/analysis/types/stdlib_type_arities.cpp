@@ -270,9 +270,8 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // Math.matrix4() / mat4_* take and return these 4×4 transform matrices
         // (type_name "Matrix4").  Row-major named components m00..m33 — the
         // homogeneous 3D transform companion to Math.Matrix3, built by
-        // Math.matrix4 / Math.mat4_identity / Math.mat4_perspective /
-        // Math.mat4_look_at and applied to a Math.Vector3 point with
-        // Math.mat4_transform_point.
+        // Math.matrix4 / Math.mat4_identity and applied to a Math.Vector4 with
+        // Math.mat4_transform.
         add_record(st, "Math.Matrix4", field("number", "m00"), field("number", "m01"),
                    field("number", "m02"), field("number", "m03"), field("number", "m10"),
                    field("number", "m11"), field("number", "m12"), field("number", "m13"),
@@ -280,12 +279,9 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("number", "m23"), field("number", "m30"), field("number", "m31"),
                    field("number", "m32"), field("number", "m33"));
 
-        // Math.quaternion() / quat_* take and return these unit-rotation records
-        // (type_name "Quaternion").  w is the scalar part and x/y/z the vector
-        // part — all measurements, so `number`.  A gimbal-lock-free 3D rotation
-        // primitive beside Math.Vector3/Math.Matrix3; built by Math.quaternion or
-        // Math.quat_from_axis_angle, composed with Math.quat_multiply, and applied
-        // to a Math.Vector3 with Math.quat_rotate_vector.
+        // A unit-rotation record (type_name "Quaternion").  w is the scalar part
+        // and x/y/z the vector part — all measurements, so `number`.  Retained as
+        // a type for annotations; the constructor/operator functions were removed.
         add_record(st, "Math.Quaternion", field("number", "w"), field("number", "x"),
                    field("number", "y"), field("number", "z"));
 
@@ -400,21 +396,6 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Color.Cmyk", field("number", "cyan"), field("number", "magenta"),
                    field("number", "yellow"), field("number", "key"));
 
-        // Color.stop() builds these gradient colour-stop records (type_name
-        // "Stop"): a Color.Color paired with its 0–1 position along the gradient
-        // axis.  color is the existing Color.Color record; position is a 0–1 ratio
-        // (a measurement, so number).
-        add_record(st, "Color.Stop", field("Color.Color", "color"), field("number", "position"));
-
-        // Color.gradient() builds these multi-stop linear-gradient records
-        // (type_name "Gradient"): an angle in degrees plus an ordered array of
-        // Color.Stop.  Serialises to a CSS linear-gradient the GraphicalUi
-        // web-view already draws (Color.gradient_to_css), and Color.gradient_at
-        // samples the interpolated colour at any position.  Pure data + free
-        // functions, reusing Color.Color and its CSS-serialisation convention.
-        add_record(st, "Color.Gradient", field("number", "angle"),
-                   field_of(array_ann("Color.Stop"), "stops"));
-
         // ── Color.Name ──────────────────────────────────
         // A curated palette of common named colours (a subset of the CSS named
         // colours, not all 140), giving beginners a typo-proof, autocompleted
@@ -475,9 +456,6 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
                    field("boolean", "secure"), field("boolean", "http_only"));
 
         add_record(st, "Terminal.Size", field("integer", "columns"), field("integer", "rows"));
-
-        add_record(st, "Socket.UdpPacket", field("string", "data"), field("string", "host"),
-                   field("integer", "port"));
 
         // A single named capture group, e.g. the "year" in (?<year>\d{4}) or
         // (?P<year>\d{4}); an unmatched-but-named group (an optional branch of

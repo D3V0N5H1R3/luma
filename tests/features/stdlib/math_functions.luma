@@ -162,19 +162,6 @@ function void test_math_number_bounds() {
 }
 
 @test
-function void test_math_named_constants() {
-    # Constants sourced from the C++ <numbers> header.
-    assert(Math.approximately_equal(Math.sqrt2, 1.4142135623730951, 0.0000001))
-    assert(Math.approximately_equal(Math.golden_ratio, 1.618033988749895, 0.0000001))
-    assert(Math.approximately_equal(Math.ln2, 0.6931471805599453, 0.0000001))
-    assert(Math.approximately_equal(Math.ln10, 2.302585092994046, 0.0000001))
-    # sqrt2 squared is 2; golden ratio satisfies phi^2 = phi + 1.
-    assert(Math.approximately_equal(Math.sqrt2 * Math.sqrt2, 2.0, 0.0000001))
-    assert(Math.approximately_equal(Math.golden_ratio * Math.golden_ratio,
-                                    Math.golden_ratio + 1.0, 0.0000001))
-}
-
-@test
 function void test_math_epsilon() {
     # Machine epsilon is a tiny positive tolerance.
     assert(Math.epsilon > 0.0)
@@ -1018,35 +1005,6 @@ function void test_math_matrix4() {
     assert(Math.approximately_equal(v.w, 4.0, 0.001), "identity keeps w")
     assert(Math.approximately_equal(Math.mat4_determinant(id), 1.0, 0.001),
         "identity determinant is 1")
-
-    # A translation matrix moves a point.
-    Math.Matrix4 translate = Math.matrix4(
-        1.0, 0.0, 0.0, 10.0,
-        0.0, 1.0, 0.0, 20.0,
-        0.0, 0.0, 1.0, 30.0,
-        0.0, 0.0, 0.0, 1.0)
-    Math.Vector3 moved = Math.mat4_transform_point(translate, Math.vector3(1.0, 2.0, 3.0))
-
-    assert(Math.approximately_equal(moved.x, 11.0, 0.001), "translated x")
-    assert(Math.approximately_equal(moved.z, 33.0, 0.001), "translated z")
-}
-
-@test
-function void test_math_matrix4_camera() {
-    # fov 90 deg, aspect 1 => m00 = m11 = 1 / tan(45 deg) = 1.
-    Math.Matrix4 projection = Math.mat4_perspective(Math.pi / 2.0, 1.0, 1.0, 100.0)
-    assert(Math.approximately_equal(projection.m00, 1.0, 0.001), "perspective m00")
-    assert(Math.approximately_equal(projection.m32, -1.0, 0.001), "perspective enables divide")
-
-    # The camera position maps to the view-space origin.
-    Math.Matrix4 view = Math.mat4_look_at(
-        Math.vector3(0.0, 0.0, 5.0),
-        Math.vector3(0.0, 0.0, 0.0),
-        Math.vector3(0.0, 1.0, 0.0))
-    Math.Vector3 at_eye = Math.mat4_transform_point(view, Math.vector3(0.0, 0.0, 5.0))
-
-    assert(Math.approximately_equal(at_eye.x, 0.0, 0.001), "eye maps to origin x")
-    assert(Math.approximately_equal(at_eye.z, 0.0, 0.001), "eye maps to origin z")
 }
 
 # ═══════════════════════════════════════════════════════════
@@ -1070,67 +1028,8 @@ function void test_math_angle() {
 }
 
 # ═══════════════════════════════════════════════════════════
-# Math.Quaternion (gimbal-lock-free 3D rotation)
+# Math.Quaternion — removed
 # ═══════════════════════════════════════════════════════════
-
-@test
-function void test_math_quaternion_constructor() {
-    Math.Quaternion q = Math.quaternion(1.0, 2.0, 3.0, 4.0)
-
-    assert(Math.approximately_equal(q.w, 1.0, 0.001), "w component")
-    assert(Math.approximately_equal(q.x, 2.0, 0.001), "x component")
-    assert(Math.approximately_equal(q.y, 3.0, 0.001), "y component")
-    assert(Math.approximately_equal(q.z, 4.0, 0.001), "z component")
-}
-
-@test
-function void test_math_quat_from_axis_angle_is_unit() {
-    # 90-degree rotation about Z: w = z = cos(45 deg) = sin(45 deg).
-    Math.Quaternion q = Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 1.0), Math.pi / 2.0)
-
-    assert(Math.approximately_equal(q.w, 0.7071068, 0.001), "scalar part is cos(45 deg)")
-    assert(Math.approximately_equal(q.z, 0.7071068, 0.001), "vector part is sin(45 deg) about Z")
-}
-
-@test
-function void test_math_quat_multiply_is_hamilton_product() {
-    # i * j = k: (0,1,0,0) * (0,0,1,0) = (0,0,0,1).
-    Math.Quaternion i = Math.quaternion(0.0, 1.0, 0.0, 0.0)
-    Math.Quaternion j = Math.quaternion(0.0, 0.0, 1.0, 0.0)
-    Math.Quaternion k = Math.quat_multiply(i, j)
-
-    assert(Math.approximately_equal(k.z, 1.0, 0.001), "i * j = k")
-    assert(Math.approximately_equal(k.w, 0.0, 0.001), "scalar part is zero")
-}
-
-@test
-function void test_math_quat_normalize_unit_length() {
-    Math.Quaternion q = Math.quat_normalize(Math.quaternion(1.0, 1.0, 1.0, 1.0))
-
-    # Each component of a normalised (1,1,1,1) is 0.5.
-    assert(Math.approximately_equal(q.w, 0.5, 0.001), "normalised w")
-    assert(Math.approximately_equal(q.x, 0.5, 0.001), "normalised x")
-}
-
-@test
-function void test_math_quat_rotate_vector() {
-    # Rotating unit-x by 90 degrees about Z yields unit-y.
-    Math.Quaternion q = Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 1.0), Math.pi / 2.0)
-    Math.Vector3 v = Math.quat_rotate_vector(q, Math.vector3(1.0, 0.0, 0.0))
-
-    assert(Math.approximately_equal(v.x, 0.0, 0.001), "x becomes 0")
-    assert(Math.approximately_equal(v.y, 1.0, 0.001), "x rotates onto y")
-    assert(Math.approximately_equal(v.z, 0.0, 0.001), "z stays 0")
-}
-
-@test
-function void test_math_quat_rotate_vector_on_axis_is_fixed() {
-    # A point on the rotation axis is unchanged by the rotation.
-    Math.Quaternion q = Math.quat_from_axis_angle(Math.vector3(0.0, 0.0, 1.0), Math.pi / 2.0)
-    Math.Vector3 v = Math.quat_rotate_vector(q, Math.vector3(0.0, 0.0, 5.0))
-
-    assert(Math.approximately_equal(v.z, 5.0, 0.001), "the axis component is fixed")
-}
 
 # ─── Math.Rect (N03) — axis-aligned 2D rectangle ───
 

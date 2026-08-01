@@ -197,7 +197,7 @@ constexpr std::int64_t k_max_port = 65535;
 
 // Build a Socket.Address record { host: string, port: integer } from a resolved
 // socket address.  IPv6-aware via sockaddr_host_port (no fragile "host:port"
-// string parsing), mirroring the host/port fields of Socket.UdpPacket.
+// string parsing).
 [[nodiscard]] Value make_address_record(const struct sockaddr_storage& addr) {
     const auto hp = sockaddr_host_port(addr);
 
@@ -1383,57 +1383,6 @@ void register_socket_ns(const EnvPtr& env) {
             }
 
             return make_success_value(Value{static_cast<std::int64_t>(sent)});
-        })
-        // Socket.udp_receive(socket s, integer max_bytes)
-        //     -> result<UdpPacket>
-        // Receive data and the sender's address.  Returns a UdpPacket
-        // record with fields "data", "host", and "port".
-        .func("udp_receive", 2)
-        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto& sv = expect_socket(args[0], "Socket.udp_receive", loc);
-
-            if (auto err = check_socket_open(sv)) {
-                return *err;
-            }
-
-            const auto max_bytes = expect_integer(args[1], "Socket.udp_receive", loc);
-
-            std::string buffer;
-
-            if (auto err = make_recv_buffer(max_bytes, buffer)) {
-                return *err;
-            }
-
-            struct sockaddr_storage sender_addr {};
-
-            auto addr_len = static_cast<socklen_t>(sizeof(sender_addr));
-
-            const auto received =
-                ::recvfrom(sv->handle.load(), buffer.data(),
-                           static_cast<platform_socket::io_length_t>(buffer.size()), 0,
-                           reinterpret_cast<struct sockaddr*>(&sender_addr), &addr_len);
-
-            if (received < 0) {
-                return socket_failure("receive");
-            }
-
-            buffer.resize(static_cast<std::size_t>(received));
-
-            std::string ip;
-            int sender_port{0};
-
-            if (const auto hp = sockaddr_host_port(sender_addr)) {
-                ip = hp->host;
-                sender_port = hp->port;
-            }
-
-            auto rec = std::make_shared<RecordValue>();
-            rec->type_name = "UdpPacket";
-            rec->fields.emplace_back("data", Value{std::move(buffer)});
-            rec->fields.emplace_back("host", Value{std::move(ip)});
-            rec->fields.emplace_back("port", Value{static_cast<std::int64_t>(sender_port)});
-
-            return make_success_value(Value{std::move(rec)});
         })
         // Socket.parse_ip(string) -> result<Socket.IpAddress>
         // Validate and classify an IP literal without any OS call.  IPv4 is

@@ -328,12 +328,6 @@ namespace named {
     return ReturnTypeDesc::named("Math.Angle");
 }
 
-// Math.quaternion() / quat_* take and return this unit-rotation record (bare
-// short name, like vector3()).
-[[nodiscard]] inline ReturnTypeDesc quaternion() {
-    return ReturnTypeDesc::named("Quaternion");
-}
-
 // Statistics.five_number_summary() returns this box-plot record (bare short name).
 [[nodiscard]] inline ReturnTypeDesc five_number_summary() {
     return ReturnTypeDesc::named("FiveNumberSummary");
@@ -400,18 +394,6 @@ namespace named {
 // (bare short name "Cmyk", like hsl() / hsv()).
 [[nodiscard]] inline ReturnTypeDesc cmyk() {
     return ReturnTypeDesc::named("Cmyk");
-}
-
-// Color.stop() builds these gradient colour-stop records (bare short name "Stop",
-// like color()).
-[[nodiscard]] inline ReturnTypeDesc color_stop() {
-    return ReturnTypeDesc::named("Stop");
-}
-
-// Color.gradient() builds these multi-stop linear-gradient records (bare short
-// name "Gradient", like color()).
-[[nodiscard]] inline ReturnTypeDesc gradient() {
-    return ReturnTypeDesc::named("Gradient");
 }
 
 // Encoder.encode_text / decode_text take this text-encoding selector choice.
@@ -554,10 +536,6 @@ namespace named {
 
 [[nodiscard]] inline ReturnTypeDesc size() {
     return ReturnTypeDesc::named("Size");
-}
-
-[[nodiscard]] inline ReturnTypeDesc udp_packet() {
-    return ReturnTypeDesc::named("UdpPacket");
 }
 
 [[nodiscard]] inline ReturnTypeDesc address() {

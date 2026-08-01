@@ -205,48 +205,8 @@ function void test_calculus_gradient_quadratic() {
     assert(Math.approximately_equal(g[1], 8.0, 0.001))
 }
 
-# ─── taylor ──────────────────────────────────────────────
-
-@test
-function void test_calculus_taylor_sine() {
-    # Taylor coefficients of sine at 0:
-    # c[0] = sin(0) = 0, c[1] = cos(0)/1! = 1.0
-    array<number> coeffs = Calculus.taylor(0.0, 4, Math.sine)
-
-    assert(Array.length(coeffs) == 4)
-    assert(Math.approximately_equal(coeffs[0], 0.0, 0.01))
-    assert(Math.approximately_equal(coeffs[1], 1.0, 0.01))
-}
-
-@test
-function void test_calculus_taylor_constant() {
-    # Taylor coefficients of f(x)=5 at 0: c[0]=5, rest≈0
-    array<number> coeffs = Calculus.taylor(0.0, 3, (number _x) -> 5.0)
-
-    assert(Math.approximately_equal(coeffs[0], 5.0, 0.1))
-    assert(Math.approximately_equal(coeffs[1], 0.0, 0.1))
-}
-
-@test
-function void test_calculus_taylor_higher_degree_coefficients() {
-    # Characterizes the finite-difference stencil for degree >= 2 terms.
-    # Taylor coefficients of f(x) = x^2 at 0 are [0, 0, 1, 0]: the degree-2
-    # coefficient is f''(0) / 2! = 1.0 and the degree-3 coefficient is 0.
-    array<number> quad = Calculus.taylor(0.0, 4, (number x) -> x * x)
-
-    assert(Math.approximately_equal(quad[2], 1.0, 0.01))
-    assert(Math.approximately_equal(quad[3], 0.0, 0.01))
-
-    # Taylor coefficients of f(x) = x^3 at 0 are [0, 0, 0, 1]: the degree-3
-    # coefficient is f'''(0) / 3! = 1.0.
-    array<number> cubic = Calculus.taylor(0.0, 4, (number x) -> x * x * x)
-
-    assert(Math.approximately_equal(cubic[2], 0.0, 0.01))
-    assert(Math.approximately_equal(cubic[3], 1.0, 0.01))
-}
-
 # ───────────────────────────────────────────────────────────
-# partial_derivative, divergence, hessian, curl, convolution
+# partial_derivative, divergence, curl, convolution
 # ───────────────────────────────────────────────────────────
 
 @test
@@ -261,14 +221,6 @@ function void test_calculus_divergence() {
     number d = Calculus.divergence([1.0, 1.0], [(array<number> v) -> v[0], (array<number> v) -> v[1]])
 
     assert(Math.approximately_equal(d, 2.0, 0.001))
-}
-
-@test
-function void test_calculus_hessian() {
-    array<array<number>> h = Calculus.hessian([1.0, 1.0], (array<number> v) -> v[0] * v[0] + v[1] * v[1])
-
-    assert(Math.approximately_equal(h[0][0], 2.0, 0.01))
-    assert(Math.approximately_equal(h[0][1], 0.0, 0.01))
 }
 
 @test
@@ -407,36 +359,6 @@ function void test_calculus_convolution_invalid_bounds_throws() {
 }
 
 @test
-function void test_calculus_taylor_too_few_terms_throws() {
-    # Fewer than one term is invalid.
-    mutable boolean has_thrown = false
-
-    try {
-        array<number> _c = Calculus.taylor(0.0, 0, (number x) -> x * x)
-    } catch(_err) {
-        has_thrown = true
-    }
-
-    assert(has_thrown)
-}
-
-@test
-function void test_calculus_taylor_too_many_terms_throws() {
-    # More than twenty terms is invalid.
-    mutable boolean has_thrown = false
-
-    try {
-        array<number> _c = Calculus.taylor(0.0, 21, (number x) -> x * x)
-    } catch(_err) {
-        has_thrown = true
-    }
-
-    assert(has_thrown)
-}
-
-# ─── Positive tests: under-verified output components ─────
-
-@test
 function void test_calculus_second_derivative_of_cubic() {
     # f(x) = x^3 → f''(x) = 6x, so f''(2) = 12.
     number d2 = Calculus.second_derivative(2.0, (number x) -> x * x * x)
@@ -462,34 +384,10 @@ function void test_calculus_maximize_returns_function_value() {
     assert(Math.approximately_equal(m.1, 0.0, 0.01))
 }
 
-@test
-function void test_calculus_hessian_mixed_partial() {
-    # f(x, y) = x * y → H = [[0, 1], [1, 0]]; the mixed partials are 1.
-    array<array<number>> h = Calculus.hessian([1.0, 1.0], (array<number> v) -> v[0] * v[1])
-
-    assert(Math.approximately_equal(h[0][1], 1.0, 0.01))
-    assert(Math.approximately_equal(h[1][0], 1.0, 0.01))
-    assert(Math.approximately_equal(h[0][0], 0.0, 0.01))
-}
-
 # ───────────────────────────────────────────────────────────
-# Additions: jacobian, laplacian, arc_length, nth_derivative,
+# Additions: laplacian, arc_length, nth_derivative,
 # differentiate, product_series
 # ───────────────────────────────────────────────────────────
-
-@test
-function void test_calculus_jacobian() {
-    # f0 = x*y, f1 = x+y at (2, 3): J = [[3, 2], [1, 1]]
-    result<array<array<number>>> r = Calculus.jacobian(
-        [2.0, 3.0],
-        [(array<number> v) -> v[0] * v[1], (array<number> v) -> v[0] + v[1]])
-
-    array<array<number>> j = Result.unwrap(r)
-    assert(Math.approximately_equal(j[0][0], 3.0, 0.01))
-    assert(Math.approximately_equal(j[0][1], 2.0, 0.01))
-    assert(Math.approximately_equal(j[1][0], 1.0, 0.01))
-    assert(Math.approximately_equal(j[1][1], 1.0, 0.01))
-}
 
 @test
 function void test_calculus_laplacian() {

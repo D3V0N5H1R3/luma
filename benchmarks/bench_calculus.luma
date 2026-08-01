@@ -91,10 +91,6 @@ function BenchResult run_calculus_benchmarks(BenchResult state) {
         number _s = Calculus.sum_series(1, 100, (integer x) -> 1.0 / (Result.unwrap(Converter.to_number(x)) * Result.unwrap(Converter.to_number(x))))
     })
 
-    st = time_it(st, "Calculus.taylor (x^2, 5 terms)", 1000, () -> {
-        array<number> _coeffs = Calculus.taylor(0.0, 5, bench_square)
-    })
-
     st = time_it(st, "Calculus.limit ((x^2-1)/(x-1))", 2000, () -> {
         result<number> _lim = Calculus.limit(1.0, bench_removable_singularity)
     })
@@ -107,10 +103,6 @@ function BenchResult run_calculus_benchmarks(BenchResult state) {
 
     st = time_it(st, "Calculus.partial_derivative (x^2+y^2)", 3000, () -> {
         number _p = Calculus.partial_derivative([3.0, 4.0], 0, bench_sphere2)
-    })
-
-    st = time_it(st, "Calculus.hessian (x^2+y^2)", 1000, () -> {
-        array<array<number>> _h = Calculus.hessian([1.0, 1.0], bench_sphere2)
     })
 
     # --- Vector calculus ---

@@ -169,8 +169,6 @@ void register_socket_functions(std::vector<FunctionSpec>& specs, const ModuleBui
             m.fn("udp_bind", 3, "(s: socket, host: string, port: integer)", R::result_boolean(),
                  {p.socket, p.string, p.integer}),
             m.fn("udp_create", 0, "()", R::result(named::socket()), {}),
-            m.fn("udp_receive", 2, "(s: socket, max_bytes: integer)",
-                 R::result(named::udp_packet()), {p.socket, p.integer}),
             m.fn("udp_send", 4, "(s: socket, data: string, host: string, port: integer)",
                  R::result_integer(), {p.socket, p.string, p.string, p.integer}),
         });
