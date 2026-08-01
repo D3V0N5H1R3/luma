@@ -79,28 +79,6 @@ function BenchResult run_partitioning_benchmarks(BenchResult state) {
         |> Result.unwrap()
     })
 
-    # --- HashSet.filter / reduce / partition ---
-
-    hash_set hashset50 = HashSet.from_array(Array.range(0, 50) |> Result.unwrap())
-
-    st = time_it(st, "HashSet.filter (50 elem)", 2000, () -> {
-        hash_set _filtered = hashset50
-        |> HashSet.filter((integer x) -> x > 25)
-        |> Result.unwrap()
-    })
-
-    st = time_it(st, "HashSet.reduce (50 elem)", 2000, () -> {
-        integer _total = hashset50
-        |> HashSet.reduce(0, (integer acc, integer x) -> acc + x)
-        |> Result.unwrap()
-    })
-
-    st = time_it(st, "HashSet.partition (50 elem)", 2000, () -> {
-        (hash_set _small, hash_set _large) = hashset50
-        |> HashSet.partition((integer x) -> x < 25)
-        |> Result.unwrap()
-    })
-
     # --- Queue.concat / partition ---
 
     queue<integer> queue_first = bench_build_queue(25, 0)
@@ -128,15 +106,6 @@ function BenchResult run_partitioning_benchmarks(BenchResult state) {
     st = time_it(st, "Stack.partition (50 elem)", 1000, () -> {
         (stack<integer> _small, stack<integer> _large) = stack50
         |> Stack.partition((integer x) -> x < 25)
-        |> Result.unwrap()
-    })
-
-    # --- LinkedList.partition ---
-
-    linked_list llist50 = LinkedList.from_array(Array.range(0, 50) |> Result.unwrap())
-    st = time_it(st, "LinkedList.partition (50 elem)", 1000, () -> {
-        (linked_list _small, linked_list _large) = llist50
-        |> LinkedList.partition((integer x) -> x < 25)
         |> Result.unwrap()
     })
 

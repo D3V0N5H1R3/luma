@@ -34,11 +34,9 @@ include "bench_hash_encoder.luma"
 include "bench_compression.luma"
 include "bench_datetime.luma"
 include "bench_tuples_interfaces.luma"
-include "bench_graph.luma"
 include "bench_linearalgebra.luma"
 include "bench_calculus.luma"
 include "bench_random.luma"
-include "bench_linkedlist.luma"
 include "bench_reference.luma"
 include "bench_resource.luma"
 include "bench_keyvaluestore.luma"
@@ -75,11 +73,9 @@ function void run_benchmarks() {
     st = run_compression_benchmarks(st)
     st = run_datetime_benchmarks(st)
     st = run_tuple_interface_benchmarks(st)
-    st = run_graph_benchmarks(st)
     st = run_linearalgebra_benchmarks(st)
     st = run_calculus_benchmarks(st)
     st = run_random_benchmarks(st)
-    st = run_linkedlist_benchmarks(st)
     st = run_reference_benchmarks(st)
     st = run_resource_benchmarks(st)
     st = run_keyvaluestore_benchmarks(st)
