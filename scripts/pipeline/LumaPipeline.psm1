@@ -147,32 +147,7 @@ function Get-FixPhase {
     return $Phases
 }
 
-function Get-EvolveKind {
-    <#
-    .SYNOPSIS
-        The language-evolution implementer kinds, mapping a candidate kind to the
-        prompt that implements it.
-    .DESCRIPTION
-        The discover runner (new-requirements) triages candidate additions and
-        tags each with a Handoff kind; the evolve runner routes that kind to the
-        matching implementer prompt. Routing is deterministic (kind -> prompt),
-        never parsed from agent output, so a candidate can never be misrouted.
 
-        Kind   = the candidate kind, as written on a Handoff line or -Kind/-GoalsFile.
-        Prompt = the implementer prompt that builds it, end to end and gated.
-        Name   = a human-readable label for banners and the run summary.
-    #>
-    [CmdletBinding()]
-    [OutputType([System.Collections.Generic.List[psobject]])]
-    param()
-
-    $Kinds = [System.Collections.Generic.List[psobject]]::new()
-    $Kinds.Add([pscustomobject]@{ Kind = 'function'; Name = 'New stdlib function'; Prompt = 'new-stdlib-function.prompt.md' })
-    $Kinds.Add([pscustomobject]@{ Kind = 'type';     Name = 'New stdlib type';     Prompt = 'new-stdlib-type.prompt.md' })
-    $Kinds.Add([pscustomobject]@{ Kind = 'module';   Name = 'New stdlib module';   Prompt = 'new-stdlib-module.prompt.md' })
-    $Kinds.Add([pscustomobject]@{ Kind = 'feature';  Name = 'New language feature'; Prompt = 'new-language-feature.prompt.md' })
-    return $Kinds
-}
 
 function Get-AgentReportFromJsonl {
     <#
@@ -1107,7 +1082,6 @@ Export-ModuleMember -Function @(
     'Write-PhaseBanner'
     'Get-AuditPhase'
     'Get-FixPhase'
-    'Get-EvolveKind'
     'Invoke-AgentPhase'
     'Test-BuildAndTest'
     'Test-CleanWorkingTree'

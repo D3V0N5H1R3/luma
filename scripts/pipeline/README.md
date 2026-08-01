@@ -1,6 +1,6 @@
 # Prompt Pipeline Runners
 
-Tooling that drives the repository's improvement and language-evolution prompts
+Tooling that drives the repository's improvement prompts
 (`.github/prompts/*.prompt.md`) through an agentic CLI — the
 [GitHub Copilot CLI](https://docs.github.com/en/copilot/reference/copilot-cli-reference) (default) or the
 [Claude Code CLI](https://code.claude.com/docs/en/cli-reference) — in a
@@ -20,8 +20,7 @@ A convenience wrapper —
 [`Invoke-LumaAll.ps1`](Invoke-LumaAll.ps1) /
 [`luma-all.sh`](luma-all.sh) — runs the audit and then the
 fix in a single command, defaulting to the **Copilot CLI** driving **Claude Opus
-4.8** at **medium** reasoning effort, and can optionally chain the conformance pass
-as a third stage (`-IncludeConformance` / `--include-conformance`). See
+4.6** at **medium** reasoning effort. See
 [Both stages in one command](#both-stages-in-one-command).
 
 Each language pair shares one helper module — PowerShell through
@@ -35,32 +34,6 @@ behaviourally in lock-step.
 > human triages. Fixes change source and must be gated, checkpointed, and
 > reversible. Keeping them separate keeps a human decision point between
 > *finding* problems and *changing* code.
-
-A third runner — [`Invoke-LumaConformance.ps1`](Invoke-LumaConformance.ps1) /
-[`luma-conformance.sh`](luma-conformance.sh) — is organised along a different
-axis. Instead of driving the improvement prompts, it walks **every file of a
-given type** (C++, CSS, CMake, GitHub Actions, JavaScript, Luma, Markdown,
-PowerShell, Python, Rust, Shell, TypeScript) and runs **one agent session per
-file** to make that file conform to its language's guides under `instructions/`
-(and `documents/` for Luma), fixing every issue found. It shares the same helper
-module, agent selection, dry-run path, and safety model as the fix runner and
-defaults to the **Copilot CLI** driving **Claude Opus 4.6** at **medium** effort.
-See [Per-file conformance](#per-file-conformance).
-
-A fourth set of runners —
-[`Invoke-LumaDiscover.ps1`](Invoke-LumaDiscover.ps1) /
-[`luma-discover.sh`](luma-discover.sh) and
-[`Invoke-LumaEvolve.ps1`](Invoke-LumaEvolve.ps1) /
-[`luma-evolve.sh`](luma-evolve.sh) — drives the **language-evolution** prompts
-(`new-requirements` and the four `new-*` implementers) instead of the improvement
-prompts. Where audit → fix *improves existing code*, discover → evolve *grows the
-language*: **discover** runs read-only and saves a ranked report of candidate
-additions — new stdlib functions, types, modules, or language features — that fit
-Luma's philosophy, and **evolve** implements the ones you pick, gating and
-checkpointing each exactly like the fix runner. Unlike audit → fix, the handoff
-is **deliberately manual** — you hand evolve a concrete goal (or a goals file)
-rather than a report — so it is never wired into the combined runner. See
-[Language evolution](#language-evolution).
 
 ## Prerequisites
 
@@ -201,24 +174,6 @@ or `-Agent claude`). Run only one stage with `-SkipFix` / `--skip-fix` or
 `-AuditArgs` / `--audit-arg` and `-FixArgs` / `--fix-arg` (for example
 `-FixArgs '-RevertOnFailure'`).
 
-Add the [per-file conformance](#per-file-conformance) pass as an optional **third
-stage** with `-IncludeConformance` / `--include-conformance`. It runs after the
-fix, is skipped if the fix stage fails, and takes its own passthrough via
-`-ConformanceArgs` / `--conformance-arg`. Because a full run visits every tracked
-file of every target, scope it — for example to one target:
-
-```powershell
-pwsh -File scripts/pipeline/Invoke-LumaAll.ps1 -IncludeConformance -ConformanceArgs '-Target', 'cpp'
-```
-
-```bash
-bash scripts/pipeline/luma-all.sh --include-conformance --conformance-arg --target=cpp
-```
-
-Pass `-SkipAudit -SkipFix -IncludeConformance` to drive **only** the conformance
-pass through the wrapper (with both audit and fix skipped you must include it, or
-there is nothing to run).
-
 > **Heads-up:** running the mutating fixer straight after the audit **skips the
 > manual triage step** the two-runner split is designed to preserve. Prefer the
 > separate runners when you want to review the reports before any code changes.
@@ -329,189 +284,6 @@ into `main` — with `git merge` or by opening a pull request from it — is lef
 you. The run ends with a summary printing the branch name and a per-phase
 status/commit table to pick up from.
 
-## Per-file conformance
-
-The conformance runner —
-[`Invoke-LumaConformance.ps1`](Invoke-LumaConformance.ps1) /
-[`luma-conformance.sh`](luma-conformance.sh) — reviews and fixes source files for
-conformance to the project's coding-standard guides **one file at a time**. For
-each selected file-type target it enumerates every matching tracked file (via
-`git ls-files`) and runs one agent session per file, telling the agent to make
-that single file conform to the target's guides and to fix every issue it finds.
-
-```powershell
-# See the 12 targets and how many files each matches — nothing invoked.
-pwsh -File scripts/pipeline/Invoke-LumaConformance.ps1 -List
-
-# See the exact files one target would process.
-pwsh -File scripts/pipeline/Invoke-LumaConformance.ps1 -Target cpp -ListFiles
-
-# Preview the agent / cmake / ctest / git commands for one file.
-pwsh -File scripts/pipeline/Invoke-LumaConformance.ps1 -Target markdown -MaxFiles 1 -DryRun
-
-# Run for real over one target (Copilot CLI + Claude Opus 4.6 + max effort).
-pwsh -File scripts/pipeline/Invoke-LumaConformance.ps1 -Target shell
-```
-
-```bash
-bash scripts/pipeline/luma-conformance.sh --list
-bash scripts/pipeline/luma-conformance.sh --target cpp --list-files
-bash scripts/pipeline/luma-conformance.sh --target markdown --max-files 1 --dry-run
-bash scripts/pipeline/luma-conformance.sh --target shell
-```
-
-### Targets
-
-Each target maps a file type to the authoritative guides its files must satisfy.
-Every target also references [`instructions/learnings.instructions.md`](../../instructions/learnings.instructions.md).
-
-| Id               | Files                             | Conforms to                                                                 | Gated |
-| ---------------- | --------------------------------- | --------------------------------------------------------------------------- | ----- |
-| `cpp`            | `*.cpp` `*.hpp` `*.h`             | `cpp` + `testing`                                                           | yes   |
-| `css`            | `*.css`                           | `css`                                                                        | no    |
-| `cmake`          | `CMakeLists.txt` `*.cmake`        | `cmake`                                                                      | yes   |
-| `github-actions` | `.github/workflows/*.y{a,}ml`     | `github-actions` + `github-actions-recipes`                                 | no    |
-| `javascript`     | `*.js` `*.mjs` `*.cjs`            | `javascript` + `testing`                                                    | no    |
-| `luma`           | `*.luma`                          | `luma` + `testing` + the seven `documents/Luma_*` guides                    | no    |
-| `markdown`       | `*.md`                            | `markdown` + `readme`                                                        | no    |
-| `powershell`     | `*.ps1` `*.psm1` `*.psd1`         | `powershell`                                                                 | no    |
-| `python`         | `*.py`                            | `python` + `testing`                                                        | no    |
-| `rust`           | `*.rs`                            | `rust` + `testing`                                                          | no    |
-| `shell`          | `*.sh` `*.bash`                   | `shell`                                                                      | no    |
-| `typescript`     | `*.ts` `*.tsx`                    | `typescript` + `testing`                                                    | no    |
-
-Vendored code under `external/` is skipped (the first-party
-`external/gui-framework/` is kept), and each runner excludes its own executing
-script and shared library from enumeration so a session never rewrites a script
-mid-run. Because each runner only self-excludes its **own** pair, the two are
-complementary: run the PowerShell runner's `shell` target to conform
-`luma-pipeline.sh`, and the shell runner's `powershell` target to conform
-`LumaPipeline.psm1`.
-
-### Gating
-
-The runner shares the fix runner's [safety model](#safety-model-fix-runner):
-clean tree required, a dedicated `pipeline/conformance-<timestamp>` branch, one
-commit per file (`chore(conformance): <target> <path>`), stop-on-failure, and no
-push. Only the `cpp` and `cmake` targets change what `cmake --build` + `ctest`
-covers, so only those are **gated by the script** — and the green baseline runs
-only when a gated target is selected. For every other target the per-file
-instruction tells the agent to run the verification appropriate to that file
-type (cargo, npm/tsc, shellcheck, PSScriptAnalyzer, markdownlint, actionlint, the
-Luma test runner, …) and keep the project green. `-GateMode` / `--gate-mode`
-chooses when the script gate runs for the gated targets: `per-target` (default,
-once after all of a target's files), `per-file`, or `off`.
-
-As in the fix runner, a rejected checkpoint commit is recorded as `commit-failed`
-and treated as a failed file (revert and/or stop). A `commit-failed` is systemic —
-`git add -A` re-stages the un-committable change into every later checkpoint — so
-it **stops the run even under** `-ContinueOnFailure` / `--continue-on-failure`
-unless `-RevertOnFailure` / `--revert-on-failure` is also set; per-file failures
-(`agent-failed`, `gate-failed`) still skip forward. The runner **exits non-zero**
-when it stops early or finishes with any non-`ok` file, so the failure is visible
-to `luma-all.sh` / `Invoke-LumaAll.ps1` and CI.
-
-> **Scale.** The `cpp` (900+) and `luma` (300+) targets match a lot of files, and
-> one agent session per file is slow and consuming. Preview with `-List` /
-> `-ListFiles`, scope with `-Path` / `--path` (a path substring) and `-MaxFiles`
-> / `--max-files`, and run one `-Target` at a time rather than all twelve at once.
-
-## Language evolution
-
-Where audit → fix *improves existing code*, the **discover → evolve** pair
-*grows the language*. It drives the `new-*` prompt family: a read-only
-**discover** stage that surveys the language and standard library for worthwhile
-additions, and a mutating **evolve** stage that implements the ones you pick.
-
-[`Invoke-LumaDiscover.ps1`](Invoke-LumaDiscover.ps1) /
-[`luma-discover.sh`](luma-discover.sh) runs `new-requirements.prompt.md` in
-**plan** mode and saves the ranked candidate report — each entry tagged with its
-*kind* (function, type, module, or feature) — under
-`pipeline-artifacts/discover-<timestamp>/reports/new-requirements.md`. Narrow the
-survey to one area with `-Focus` / `--focus` (e.g. `-Focus 'String module'`); omit
-it for a broad sweep. It is read-only and shares the audit runner's safety model.
-
-[`Invoke-LumaEvolve.ps1`](Invoke-LumaEvolve.ps1) /
-[`luma-evolve.sh`](luma-evolve.sh) implements one or more candidates in **agent**
-mode. Each candidate is a `(kind, goal)` pair: the *kind* deterministically
-selects the implementer prompt, and the *goal* is the concrete thing to build.
-Every candidate is gated on build + test + lint and checkpointed on a dedicated
-`pipeline/evolve-<timestamp>` branch, reusing the fix runner's
-[safety model](#safety-model-fix-runner) verbatim.
-
-```powershell
-# Preview without invoking anything: discover's plan, then evolve's kind → prompt map.
-pwsh -File scripts/pipeline/Invoke-LumaDiscover.ps1 -DryRun
-pwsh -File scripts/pipeline/Invoke-LumaEvolve.ps1   -ListKinds
-
-# 1. Survey for candidate additions (read-only).
-pwsh -File scripts/pipeline/Invoke-LumaDiscover.ps1 -Focus 'String module'
-
-# 2. Read pipeline-artifacts/discover-<timestamp>/reports/new-requirements.md
-#    and pick what is worth building.
-
-# 3. Implement one candidate, gated on build + test + lint.
-pwsh -File scripts/pipeline/Invoke-LumaEvolve.ps1 -Goal 'Add String.center to pad a string to a width' -Kind function
-```
-
-```bash
-bash scripts/pipeline/luma-discover.sh --dry-run
-bash scripts/pipeline/luma-evolve.sh   --list-kinds
-bash scripts/pipeline/luma-discover.sh --focus 'String module'
-bash scripts/pipeline/luma-evolve.sh --goal 'Add String.center to pad a string to a width' --kind function
-```
-
-### Kinds
-
-Each candidate's **kind** routes it to exactly one implementer prompt.
-`-ListKinds` / `--list-kinds` prints this mapping.
-
-| Kind       | Implementer prompt               | Adds                                               |
-| ---------- | -------------------------------- | -------------------------------------------------- |
-| `function` | `new-stdlib-function.prompt.md`  | A built-in function in an existing stdlib module.  |
-| `type`     | `new-stdlib-type.prompt.md`      | A record or choice type in an existing module.     |
-| `module`   | `new-stdlib-module.prompt.md`    | An entirely new standard-library module.           |
-| `feature`  | `new-language-feature.prompt.md` | A language feature across every interpreter phase. |
-
-### Seeding evolve
-
-Evolve does **not** parse the discover report — you seed it with an explicit
-goal, so what gets built is always a deliberate choice. Two input modes:
-
-- **One candidate** — `-Goal '<text>' -Kind <kind>` /
-  `--goal '<text>' --kind <kind>`.
-- **A batch** — `-GoalsFile <path>` / `--goals-file <path>`, one `kind|goal` per
-  line. Blank lines and `#` comments are skipped, and only the **first** `|`
-  splits the line (so a goal may itself contain `|`):
-
-  ```text
-  # kind | goal
-  function | Add String.center to pad a string to a width
-  module   | Add a Statistics module with mean, median, and mode
-  feature  | Add a `where` guard clause to for-loops
-  ```
-
-Candidates run in order, each gated and checkpointed independently, so a later
-candidate's failure never discards an earlier green one. `-Goal`/`-Kind` and
-`-GoalsFile` are mutually exclusive.
-
-### Gating
-
-Evolve shares the fix runner's [safety model](#safety-model-fix-runner): a clean
-tree is required, work happens on a dedicated `pipeline/evolve-<timestamp>`
-branch, each candidate is gated on build + test then `format.py` + `lint.py`, and
-a green candidate is checkpointed as `chore(evolve): <kind> - <goal>` with a
-`Co-authored-by` trailer naming the agent. Stop-on-failure, `-ContinueOnFailure`,
-`-RevertOnFailure`, and the systemic-`commit-failed` handling all behave exactly
-as in the fix runner, and the runner exits non-zero on any non-`ok` candidate.
-
-Because evolve implements whole features and modules — the pipeline's heaviest
-work — it defaults, like the conformance runner, to the **Copilot CLI** driving
-**Claude Opus 4.6** at **medium** effort; override with `-Agent` / `-Model` /
-`-Effort` (pass `-Model ''` / `-Effort ''` to defer to the agent's own default).
-Because evolve needs a human-seeded goal, it is **not** part of
-`Invoke-LumaAll.ps1` / `luma-all.sh`.
-
 ## Options
 
 The tables below use the PowerShell flag names. The shell runners take the same
@@ -557,106 +329,25 @@ options in `--kebab-case` form (`-Phase` → `--phase`, `-DryRun` → `--dry-run
 ### `Invoke-LumaAll.ps1`
 
 Runs `Invoke-LumaAudit.ps1` and then `Invoke-LumaFix.ps1` in sequence, forwarding
-the agent flags to both, and optionally `Invoke-LumaConformance.ps1` as a third
-stage. Defaults to the Copilot CLI driving **Claude Opus 4.6** (`claude-opus-4.6`)
-at **medium** effort. Skips the remaining stages if the audit exits non-zero, skips
-the conformance stage if the fix stage fails, and exits with the last stage's exit
-code.
+the agent flags to both. Defaults to the Copilot CLI driving **Claude Opus 4.6**
+(`claude-opus-4.6`) at **medium** effort. Skips the fix if the audit exits
+non-zero, and exits with the last stage's exit code.
 
-| Flag                      | Purpose                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------- |
-| `-Agent <name>`           | Backend forwarded to every stage: `copilot` (default) or `claude`.              |
-| `-Model <name>`           | Model for every stage (default `claude-opus-4.6`; pass `''` to let the agent choose). |
-| `-Effort <lvl>`           | Reasoning effort for every stage (default `medium`; pass `''` to omit).            |
-| `-DryRun`                 | Preview every stage; invoke nothing.                                            |
-| `-SkipAudit`              | Skip the audit stage.                                                           |
-| `-SkipFix`                | Skip the fix stage.                                                             |
-| `-IncludeConformance`     | Also run `Invoke-LumaConformance.ps1` as a third stage (off by default).        |
-| `-AuditArgs <args>`       | Extra arguments forwarded verbatim to `Invoke-LumaAudit.ps1`.                   |
-| `-FixArgs <args>`         | Extra arguments forwarded verbatim to `Invoke-LumaFix.ps1`.                     |
-| `-ConformanceArgs <args>` | Extra arguments forwarded verbatim to `Invoke-LumaConformance.ps1` (scope it, e.g. `-Target`, `cpp`). |
+| Flag              | Purpose                                                                          |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `-Agent <name>`   | Backend forwarded to every stage: `copilot` (default) or `claude`.              |
+| `-Model <name>`   | Model for every stage (default `claude-opus-4.6`; pass `''` to let the agent choose). |
+| `-Effort <lvl>`   | Reasoning effort for every stage (default `medium`; pass `''` to omit).            |
+| `-DryRun`         | Preview every stage; invoke nothing.                                            |
+| `-SkipAudit`      | Skip the audit stage.                                                           |
+| `-SkipFix`        | Skip the fix stage.                                                             |
+| `-AuditArgs <args>` | Extra arguments forwarded verbatim to `Invoke-LumaAudit.ps1`.                |
+| `-FixArgs <args>` | Extra arguments forwarded verbatim to `Invoke-LumaFix.ps1`.                     |
 
 The shell counterpart `luma-all.sh` takes the same options in
 `--kebab-case` (`--agent`, `--model`, `--effort`, `--dry-run`, `--skip-audit`,
-`--skip-fix`, `--include-conformance`), forwards per-stage extras with the
-repeatable `--audit-arg` / `--fix-arg` / `--conformance-arg`, and sends anything
-after a literal `--` to every stage.
-
-### `Invoke-LumaConformance.ps1`
-
-Defaults to the Copilot CLI driving **Claude Opus 4.6** (`claude-opus-4.6`) at
-**medium** effort. Omit `-Target` to run every target in order.
-
-| Flag                       | Purpose                                                                     |
-| -------------------------- | --------------------------------------------------------------------------- |
-| `-List`                    | List the targets in order with file counts and exit.                        |
-| `-ListFiles`               | List the files each selected target would process and exit.                 |
-| `-DryRun`                  | Print the agent / `cmake` / `ctest` / `git` commands; invoke nothing.       |
-| `-Target <a,b>`            | Run only matching targets — exact id, else id/name substring (e.g. `cpp`).  |
-| `-Path <substring>`        | Only process files whose path contains this substring (e.g. `core/runtime/vm/`). |
-| `-MaxFiles <n>`            | Cap the number of files processed per target.                               |
-| `-ArtifactRoot <dir>`      | Where run artifacts go (default `pipeline-artifacts/`).                      |
-| `-Preset <name>`           | CMake preset for the gate (default `default`).                              |
-| `-GateMode <mode>`         | When the script gate runs for gated targets: `per-target` (default), `per-file`, `off`. |
-| `-AllowDirty`              | Do not require a clean working tree.                                        |
-| `-SkipBaseline`            | Skip the initial green baseline (only runs when a gated target is selected). |
-| `-SkipBuild` / `-SkipTest` | Drop the build or test half of every gate.                                 |
-| `-NoBranch`                | Work on the current branch instead of a new one.                           |
-| `-NoCommit`                | Do not checkpoint after each file.                                         |
-| `-ContinueOnFailure`       | Keep going past a failed file or gate instead of stopping.                 |
-| `-RevertOnFailure`         | Hard-reset tracked changes on failure (to HEAD per file; to the target's start commit on a failed per-target gate). |
-| `-Agent <name>`            | Agent CLI backend: `copilot` (default) or `claude`.                        |
-| `-Model` / `-Effort`       | Agent model/effort overrides (defaults `claude-opus-4.6` / `medium`).         |
-
-The shell counterpart `luma-conformance.sh` takes the same options in
-`--kebab-case` (`--target`, `--path`, `--max-files`, `--gate-mode`,
-`--list-files`, and so on) plus `-h` / `--help`. Run
-`bash scripts/pipeline/luma-conformance.sh --help` for the authoritative list.
-
-### `Invoke-LumaDiscover.ps1`
-
-Read-only; shares the audit runner's model/effort convention (no default — the
-agent chooses unless you pass `-Model` / `-Effort`).
-
-| Flag                  | Purpose                                                       |
-| --------------------- | ------------------------------------------------------------ |
-| `-DryRun`             | Print the agent command the run would issue; invoke nothing. |
-| `-Focus <text>`       | Narrow the survey to one area (e.g. `'String module'`); omit for a broad sweep. |
-| `-ArtifactRoot <dir>` | Where run artifacts go (default `pipeline-artifacts/`).       |
-| `-Agent <name>`       | Agent CLI backend: `copilot` (default) or `claude`.          |
-| `-Model <name>`       | Model override for the chosen agent.                         |
-| `-Effort <lvl>`       | Reasoning effort (`low`…`max`).                              |
-
-### `Invoke-LumaEvolve.ps1`
-
-Mutating and gated; defaults to the Copilot CLI driving **Claude Opus 4.6**
-(`claude-opus-4.6`) at **medium** effort. Requires either `-Goal` + `-Kind` or
-`-GoalsFile` (mutually exclusive).
-
-| Flag                       | Purpose                                                                     |
-| -------------------------- | --------------------------------------------------------------------------- |
-| `-ListKinds`               | Print the four kinds and the prompt each routes to, then exit.              |
-| `-DryRun`                  | Print the agent / `cmake` / `ctest` / `git` commands; invoke nothing.       |
-| `-Goal <text>`             | The single candidate to build (pair with `-Kind`).                          |
-| `-Kind <kind>`             | Implementer kind for `-Goal`: `function`, `type`, `module`, or `feature`.   |
-| `-GoalsFile <path>`        | Batch input: one `kind\|goal` per line (`#` comments and blanks skipped).   |
-| `-ArtifactRoot <dir>`      | Where run artifacts go (default `pipeline-artifacts/`).                      |
-| `-Preset <name>`           | CMake preset for the gate (default `default`).                              |
-| `-AllowDirty`              | Do not require a clean working tree.                                        |
-| `-SkipBaseline`            | Skip the initial green baseline check.                                      |
-| `-SkipBuild` / `-SkipTest` | Drop the build or test half of every gate.                                 |
-| `-SkipLintFormat`          | Skip the lint/format gate (`format.py` + `lint.py`, incl. clang-tidy).      |
-| `-NoBranch`                | Work on the current branch instead of a new one.                           |
-| `-NoCommit`                | Do not checkpoint after green candidates.                                  |
-| `-ContinueOnFailure`       | Keep going past a red gate instead of stopping.                            |
-| `-RevertOnFailure`         | Hard-reset tracked changes to the last checkpoint on a red gate.           |
-| `-Agent <name>`            | Agent CLI backend: `copilot` (default) or `claude`.                        |
-| `-Model` / `-Effort`       | Agent model/effort overrides (defaults `claude-opus-4.6` / `medium`; pass `''` to defer to the agent). |
-
-The shell counterparts `luma-discover.sh` and `luma-evolve.sh` take the same
-options in `--kebab-case` (`--focus`, `--goal`, `--kind`, `--goals-file`,
-`--list-kinds`, and so on) plus `-h` / `--help`. Run
-`bash scripts/pipeline/luma-evolve.sh --help` for the authoritative list.
+`--skip-fix`), forwards per-stage extras with the repeatable `--audit-arg` /
+`--fix-arg`, and sends anything after a literal `--` to every stage.
 
 ## Artifacts
 
@@ -672,16 +363,6 @@ pipeline-artifacts/
   fix-<timestamp>/
     SUMMARY.md            # table of each phase's status, commit, and log link
     logs/<phase>.log      # per-phase agent transcript
-  conformance-<timestamp>/
-    SUMMARY.md            # table of each file's target, status, and commit
-    logs/<target>/<path>.log  # per-file transcript, nested by source path
-  discover-<timestamp>/
-    INDEX.md              # table linking the discovery report
-    reports/new-requirements.md  # ranked candidate additions, tagged by kind
-    logs/                 # agent logs (Copilot --log-dir)
-  evolve-<timestamp>/
-    SUMMARY.md            # table of each candidate's kind, status, and commit
-    logs/<NN-kind>.log    # per-candidate agent transcript
 ```
 
 The fix runner auto-detects the newest `audit-*` run and feeds each report to

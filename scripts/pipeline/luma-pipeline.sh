@@ -135,21 +135,6 @@ update-learnings|Update learnings|update-learnings.prompt.md||0|1|0
 LUMA_FIX_PHASES
 }
 
-# Emit the language-evolution implementer kinds. Fields, pipe-delimited:
-# kind|name|prompt. The discover runner (new-requirements) triages candidate
-# additions and tags each with a Handoff kind; the evolve runner routes that
-# kind to the matching implementer prompt. Routing is deterministic
-# (kind -> prompt), never parsed from agent output, so a candidate can never be
-# misrouted. Keep in lock-step with Get-EvolveKind in LumaPipeline.psm1.
-luma_evolve_kinds() {
-    cat <<'LUMA_EVOLVE_KINDS'
-function|New stdlib function|new-stdlib-function.prompt.md
-type|New stdlib type|new-stdlib-type.prompt.md
-module|New stdlib module|new-stdlib-module.prompt.md
-feature|New language feature|new-language-feature.prompt.md
-LUMA_EVOLVE_KINDS
-}
-
 # Locate the CLI executable for the requested agent, honouring the matching
 # override variable ($LUMA_COPILOT for copilot, $LUMA_CLAUDE for claude).
 luma_agent_exe() {
@@ -685,9 +670,8 @@ $trailer"
     printf '%s\n' "$sha"
 }
 
-# Decide whether a failed per-file/per-phase step should stop the run. Shared by
-# both the conformance and fix runners so the abort rule stays in one place and
-# cannot drift between them. Returns 0 (stop) or 1 (keep going).
+# Decide whether a failed per-phase step should stop the run. Used by the fix
+# runner so the abort rule stays in one place. Returns 0 (stop) or 1 (keep going).
 #
 # The rule:
 #   * Without --continue-on-failure, any failure stops the run.
