@@ -2,6 +2,8 @@
 description: "Add a new built-in function to an existing Luma standard library module"
 agent: "agent"
 argument-hint: "Module name and function description, e.g. 'String.reverse — reverses a string'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # New Standard Library Function
@@ -33,3 +35,40 @@ A named constant (e.g. `Math.pi`, `Math.tau`, `GraphicalUi.PRIMARY`) is a nullar
 2. **Add catalog metadata.** Use `m.constant("name", return_type)` (e.g. `m.constant("pi", R::number_type())`) in `shared/stdlib/stdlib_catalog_<module>.cpp` instead of `m.fn(...)`. This records `arity = 0` and `is_constant = true` and remains the single source of truth for the type checker and language server (completions, hover).
 3. **Skip arity and type refinement.** Constants are excluded from arity validation automatically (`init_arities()` skips every `is_constant` spec), and a constant's type is fixed, so `refine_return_type()` never applies.
 4. **Test, document — skip fuzz/benchmark.** Add a C++ unit test and a Luma feature test asserting the constant's value/type, and document it under the module's section in `Luma_Standard_Library_Reference.md`. (The catalog↔runtime wiring is already guarded — `test_catalog_constants_are_not_callable` in `tests/runtime/stdlib_catalog_conformance_test.cpp` fails if a catalog constant has no runtime binding — so add both entries together.) Fuzz and benchmark coverage do not apply to a constant.
+
+## Example
+
+Adding `String.repeat(count)` — repeats a string `count` times:
+
+```cpp
+// core/runtime/stdlib/string_module.cpp — in register_string_ns()
+builder.func("repeat", 2).extract_body(
+    [](const std::vector<Value>& args, const std::string& name) {
+        return std::make_pair(expect_string(args, 0, name), expect_integer(args, 1, name));
+    },
+    [](std::pair<std::string, int64_t> extracted, const std::string& name) -> Value {
+        auto& [str, count] = extracted;
+        if (count < 0) {
+            throw std::runtime_error(error_messages::must_be_non_negative(name, "count"));
+        }
+        std::string result;
+        result.reserve(str.size() * static_cast<size_t>(count));
+        for (int64_t i = 0; i < count; ++i) { result += str; }
+        return Value{std::move(result)};
+    });
+```
+
+```cpp
+// shared/stdlib/stdlib_catalog_string.cpp
+m.fn("repeat", 2, "(value: string, count: integer)", R::string_type(), {P::string_type(), P::integer_type()});
+```
+
+```luma
+# tests/features/stdlib/string_functions.luma
+@test
+function void test_string_repeat() {
+    assert("ab" |> String.repeat(3) == "ababab")
+    assert("" |> String.repeat(5) == "")
+    assert("x" |> String.repeat(0) == "")
+}
+```

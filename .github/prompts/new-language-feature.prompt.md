@@ -2,6 +2,8 @@
 description: "Add a new language feature to Luma by implementing it across all interpreter phases"
 agent: "agent"
 argument-hint: "Feature description, e.g. 'while loops' or 'optional chaining operator'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # New Language Feature
@@ -54,3 +56,23 @@ Implement a new language feature in Luma. Follow the interpreter pipeline and mo
 
     (The [Standard Library Reference](../../documents/Luma_Standard_Library_Reference.md) covers stdlib surface, not language features. The REPL, Language Server, Debugger, GraphicalUi, and Concurrent Debugging guides — and their subsystem READMEs — only need updates if you changed those subsystems.)
 10. Build and run all tests to verify nothing is broken — see [build-and-test.prompt.md](build-and-test.prompt.md) for the canonical workflow. Because a language feature touches the whole pipeline (and you added fuzz seeds in step 8), finish with the deeper [full-test-sweep.prompt.md](full-test-sweep.prompt.md), which also exercises the fuzz smoke tests, benchmarks, and examples that `ctest` does not cover.
+
+## Example
+
+Adding a `unless` statement (sugar for `if not`):
+
+1. **Lexer**: Add `TokenType::Unless` to `token_type.hpp`, add `"unless"` → `TokenType::Unless` to `keyword_map`.
+2. **Parser**: In `parse_statement()`, match `Unless` and parse as `IfStatement` with an inverted condition (wrap in `UnaryExpression{Not, condition}`).
+3. **Type checker**: No changes — reuses `IfStatement` validation.
+4. **Compiler**: No changes — reuses `IfStatement` compilation.
+5. **Tests**: Add lexer test for `unless` token, parser test for AST shape, feature test in `tests/features/language/`:
+```luma
+@test
+function void test_unless_basic() {
+    mutable integer x = 0
+    unless false {
+        x = 1
+    }
+    assert(x == 1)
+}
+```

@@ -2,6 +2,8 @@
 description: "Add a new record or choice type to a Luma standard library module"
 agent: "agent"
 argument-hint: "Module name and type description, e.g. 'Http.Response — record with status, reason, body, headers'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # New Standard Library Type
@@ -38,3 +40,20 @@ Add a new record or choice type to a Luma standard library module. Follow the ex
 4. Add a Luma test in the appropriate `tests/features/stdlib/` file.
 5. Document the type in `Luma_Standard_Library_Reference.md` under the module's section.
 6. Build and verify: `cmake --build --preset default`, then run the relevant tests (`ctest --preset default` for the C++ unit test and `build/Release/luma --test <your-feature-test>.luma` for the Luma test). Confirm everything passes before finishing.
+
+## Example
+
+Adding a simple choice type `Http.Method` with unit variants `Get`, `Post`, `Put`, and `Delete`:
+
+1. In `core/analysis/types/stdlib_type_arities.cpp`, add a `ChoiceDeclaration` for `Http.Method` with four field-less `ChoiceVariant`s and register it in `choice_map` as `"Http.Method"`.
+2. Rely on `core/runtime/stdlib/common/stdlib_registry.hpp` to auto-register the unit variants at runtime as `Http.Method.Get`, `Http.Method.Post`, `Http.Method.Put`, and `Http.Method.Delete` — no custom constructor body is needed for unit variants.
+3. When adding related APIs (for example `Http.request(method, url)`), return or accept the type via `R::named("Http.Method")` in the catalog metadata.
+4. Add a feature test:
+```luma
+@test
+function void test_http_method_choice_variants() {
+    assert(Http.Method.Get == Http.Method.Get)
+    assert(Http.Method.Post != Http.Method.Get)
+}
+```
+5. Document the new type and its variants in `Luma_Standard_Library_Reference.md`.

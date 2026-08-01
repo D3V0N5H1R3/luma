@@ -1,6 +1,8 @@
 ---
 description: "Lint and format all first-party source code and documentation across every language in the repository (C++, Luma, Python, TypeScript/JavaScript, Rust, CSS, PowerShell, Shell, CMake, Markdown)."
 agent: "agent"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Lint and Format

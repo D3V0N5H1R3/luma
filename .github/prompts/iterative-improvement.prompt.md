@@ -1,6 +1,8 @@
 ---
 description: "Iteratively review, fix, build, and test the project until no significant issue remains"
 agent: "agent"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Iterative Improvement

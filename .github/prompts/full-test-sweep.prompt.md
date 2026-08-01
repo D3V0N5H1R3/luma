@@ -1,6 +1,8 @@
 ---
 description: "Run the complete test suite including unit tests, fuzz tests, benchmarks, and example validation"
 agent: "agent"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Full Test Sweep

@@ -2,6 +2,8 @@
 description: "Refactor Luma code — interpreter, language server, debugger, or editor extensions — while keeping all tests green"
 agent: "agent"
 argument-hint: "Refactoring goal, e.g. 'extract token validation into a shared helper'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Refactor
@@ -34,3 +36,13 @@ Refactor code anywhere in the Luma project — the interpreter core, the languag
 7. Lint and format every language you touched, following [lint-and-format.prompt.md](lint-and-format.prompt.md) for the exact tooling, pinned versions, and commands (lint first, then format). For C++ this means the `tidy` (clang-tidy) target and clang-format — the CI **Formatting** job fails on *any* clang-format diff, and the `clang-analyzer-*`, `bugprone-*`, and `concurrency-*` categories are escalated to errors that fail the build, so fix those first.
 8. Build and run the full test suite one final time (including the extension's own build and tests if you changed one), confirming it is green and that the linters and formatters for every language you touched are clean (per step 7) before finishing. For a deeper final sweep — especially when the refactor touched the lexer→VM pipeline or a stdlib parser — follow [full-test-sweep.prompt.md](full-test-sweep.prompt.md), which additionally exercises the fuzz smoke tests and benchmarks that `ctest` does not cover.
 9. When the refactor touched the interpreter or the analysis pipeline the LSP and DAP share, run the example programs as a final behaviour guardrail (`python scripts/run_examples.py`) — they are not part of `ctest`, so this catches regressions the test suite does not reach. A pure extension refactor does not need this; its behaviour is covered by the extension's own unit, grammar, and validation tests.
+
+## Example
+
+Extract a `CompiledBreakpoint` helper from `BreakpointManager`:
+
+1. Move breakpoint-condition parsing, compilation, and cached bytecode storage into a new `debugger/source/compiled_breakpoint.{hpp,cpp}` class.
+2. Keep `BreakpointManager` focused on breakpoint storage, hit counting, and resolution — it should hold `CompiledBreakpoint` instances rather than raw condition strings plus ad-hoc compilation state.
+3. Inject the existing condition-evaluation callback into the manager instead of letting it own compilation details directly.
+4. Update `debugger/CMakeLists.txt`, includes, and tests so the new helper builds everywhere.
+5. Rebuild and run the debugger suites (`ctest --preset default --output-on-failure --tests-regex "dap|breakpoint"`) to confirm behaviour is unchanged.

@@ -2,6 +2,8 @@
 description: "Add an entirely new standard library module to Luma"
 agent: "agent"
 argument-hint: "Module name and purpose, e.g. 'Http — make HTTP requests'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # New Standard Library Module

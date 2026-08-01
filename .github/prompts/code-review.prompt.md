@@ -3,6 +3,8 @@ description: "Review code for bugs, security issues, performance pitfalls, and s
 agent: "agent"
 tools: ["search", "read"]
 argument-hint: "File or directory to review, e.g. 'core/runtime/vm/' or 'core/analysis/types/type_checker.cpp'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Code Review

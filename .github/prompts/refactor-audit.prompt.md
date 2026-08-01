@@ -3,6 +3,8 @@ description: "Analyse the project read-only and produce a prioritized, actionabl
 agent: "agent"
 tools: ["search", "read"]
 argument-hint: "Optional scope, e.g. 'core/runtime/vm/' or 'the whole project'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Refactor Audit

@@ -2,6 +2,8 @@
 description: "Diagnose and fix a bug in the Luma debugger (DAP)"
 agent: "agent"
 argument-hint: "Bug description, e.g. 'step out skips the caller frame inside task_scope'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Bug Fix — Debugger

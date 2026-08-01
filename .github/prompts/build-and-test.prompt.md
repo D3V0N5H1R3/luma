@@ -1,6 +1,8 @@
 ---
 description: "Build the Luma interpreter from source and run the test suite"
 agent: "agent"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Build and Test

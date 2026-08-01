@@ -3,6 +3,8 @@ description: "Check that all project artefacts are consistent and up to date wit
 agent: "agent"
 tools: ["search", "read"]
 argument-hint: "Optional focus area, e.g. 'docs vs implementation' or 'CMake vs source files'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Consistency Check

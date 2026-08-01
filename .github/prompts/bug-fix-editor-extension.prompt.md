@@ -2,6 +2,8 @@
 description: "Diagnose and fix a bug in a Luma editor extension (VS Code or Zed)"
 agent: "agent"
 argument-hint: "Bug description, e.g. 'Zed highlights choice-type variants as plain identifiers'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Bug Fix — Editor Extension

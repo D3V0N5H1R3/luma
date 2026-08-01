@@ -3,6 +3,8 @@ description: "Analyse the Luma interpreter and standard library read-only and pr
 agent: "agent"
 tools: ["search", "read"]
 argument-hint: "Optional scope, e.g. 'core/runtime/vm/' or 'the whole interpreter'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Bug Search

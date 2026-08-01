@@ -1,6 +1,8 @@
 ---
 description: "Clean the workspace, rebuild every binary and editor extension from scratch, then run the full verification suite — a clean-room release check"
 agent: "agent"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Release Verification
