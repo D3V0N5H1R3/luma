@@ -21,6 +21,16 @@ For the build workflow — presets, sanitizers, coverage, and the full build-opt
 | [LumaConfig.cmake.in](LumaConfig.cmake.in)             | Package configuration template providing the `Luma::luma`, `Luma::luma_lsp`, and `Luma::luma_dap` imported targets to `find_package(Luma)`. | Configured at install time by [`CMakeLists.txt`](../CMakeLists.txt) |
 | [PRESETS.md](PRESETS.md)                               | Reference for the presets defined in [`CMakePresets.json`](../CMakePresets.json).               | Documentation only                                         |
 
+## Design Rationale
+
+The directory uses **one module per concern** rather than a few large files. Each `.cmake` file exists because it has a distinct responsibility, a different consumer, or a different execution mode:
+
+- **Independent change frequency.** WebView backend detection (`LumaWebView`) changes for entirely different reasons than compiler warning flags (`LumaCompilerFlags`). Separate files mean unrelated changes never produce diffs in the same module.
+- **Different inclusion points.** The vendored-library modules are included from `core/runtime/CMakeLists.txt` (close to the linking target), while build policy modules are included from the root. A monolith would need internal `if()` guards to replicate this scoping.
+- **Different execution modes.** `LumaRunClangTool.cmake` runs as a standalone script (`cmake -P`), not via `include()` — it cannot be merged with the others.
+- **Optional/conditional presence.** Code-quality targets are only defined when the tools are found; Doxygen targets only when Doxygen is installed. Keeping them isolated means the core build never sees dead code paths.
+- **Discoverability.** A developer asking "how are compiler flags set?" navigates directly to `LumaCompilerFlags.cmake` instead of searching inside a multi-hundred-line monolith.
+
 ## How the Build Uses These Modules
 
 The root [`CMakeLists.txt`](../CMakeLists.txt) includes `LumaCompilerFlags.cmake` and `LumaTargetHelpers.cmake` early, so every target created afterwards through the `luma_add_*` wrappers inherits the shared warning, security, and language-standard settings without re-applying them by hand. `LumaTargetHelpers.cmake` also provides `luma_configure_vendored_c_target()`, which applies the shared vendored-C policy (build to C99, suppress the project's strict warnings) so `LumaMiniz.cmake` and `LumaMbedTLS.cmake` do not repeat it.
