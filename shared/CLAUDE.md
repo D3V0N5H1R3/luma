@@ -13,6 +13,7 @@ work here, read the matching guides:
 
 - `instructions/cpp.instructions.md` — C++ naming, const-correctness, RAII, modern idioms.
 - `instructions/software-architecture.instructions.md` — simplicity, modularity, separation of concerns, encapsulation.
+- `instructions/learnings-stdlib.instructions.md` — stdlib metadata and infrastructure pitfalls (for `shared/stdlib/`).
 
 When editing this subtree's `CMakeLists.txt`, also follow
 `instructions/cmake.instructions.md` (target-based configuration) and

@@ -12,6 +12,7 @@ them aligned with the applyTo globs in instructions/README.md and the mapping in
 
 - `instructions/cpp.instructions.md` — C++ naming, const-correctness, RAII, modern idioms.
 - `instructions/software-architecture.instructions.md` — simplicity, modularity, separation of concerns, encapsulation.
+- `instructions/learnings-lsp.instructions.md` — language server architecture, symbol resolution, and column/range pitfalls.
 
 When editing this subtree's `CMakeLists.txt`, also follow
 `instructions/cmake.instructions.md` (target-based configuration) and

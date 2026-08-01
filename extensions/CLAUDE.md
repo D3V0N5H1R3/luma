@@ -13,3 +13,4 @@ guides:
 
 - `instructions/typescript.instructions.md` — TypeScript type safety, async patterns, idioms.
 - `instructions/rust.instructions.md` — Rust ownership, error handling, unsafe code, idioms.
+- `instructions/learnings-extensions.instructions.md` — editor extensions, Tree-sitter queries, and highlight pitfalls.

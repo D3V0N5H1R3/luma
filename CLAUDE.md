@@ -78,6 +78,17 @@ for reference:
 - `instructions/git.instructions.md` — commit message conventions, branch naming, merge strategy, safe workflows (no `applyTo`; referenced manually).
 - `instructions/ux-design.instructions.md` — UX, usability, and graphic design principles: visual hierarchy, Gestalt grouping, colour, typography, spacing, feedback, accessibility (no `applyTo`; referenced manually).
 
+**Domain learnings (path-scoped pitfalls, split out of `learnings.instructions.md`):**
+
+- `instructions/learnings-build.instructions.md` — build system, CI, static analysis, and C++ portability pitfalls (`{CMakeLists.txt,CMakePresets.json,cmake/**,.github/workflows/**,scripts/**}`).
+- `instructions/learnings-compiler.instructions.md` — compiler, optimizer, bytecode serialization, and the scratch-slot invariant (`core/runtime/compiler/**`).
+- `instructions/learnings-vm.instructions.md` — VM architecture, dispatch table, and component decomposition (`core/runtime/vm/**`).
+- `instructions/learnings-stdlib.instructions.md` — stdlib infrastructure, module registration, common utilities, and sandbox mode (`{core/runtime/stdlib/**,shared/stdlib/**}`).
+- `instructions/learnings-lsp.instructions.md` — language server architecture, symbol resolution, and column/range pitfalls (`language-server/**`).
+- `instructions/learnings-dap.instructions.md` — debug adapter architecture, thread safety, expression evaluation, and breakpoint semantics (`debugger/**`).
+- `instructions/learnings-gui.instructions.md` — GraphicalUi module, Solaris prelude, headless testing, and renderer pitfalls (`{core/runtime/stdlib/**/graphicalui*,core/analysis/prelude/**,external/gui-framework/**}`).
+- `instructions/learnings-extensions.instructions.md` — VS Code and Zed editor extensions, Tree-sitter queries, and highlight pitfalls (`extensions/**`).
+
 **Languages:**
 
 - `instructions/cpp.instructions.md` — C++ sources: naming, const-correctness, RAII, modern idioms (`**/*.{cpp,hpp,h}`).

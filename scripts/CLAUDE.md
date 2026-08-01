@@ -14,3 +14,4 @@ guides:
 - `instructions/python.instructions.md` — Python type hints, error handling, idioms.
 - `instructions/powershell.instructions.md` — PowerShell naming, pipeline patterns, modules.
 - `instructions/shell.instructions.md` — shell portability, quoting, safe scripting.
+- `instructions/learnings-build.instructions.md` — build system, CI, and static-analysis pitfalls (also scoped to `scripts/`).

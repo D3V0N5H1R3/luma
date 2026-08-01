@@ -12,6 +12,7 @@ Before non-trivial work here, read the matching guides:
 
 - `instructions/cpp.instructions.md` — C++ naming, const-correctness, RAII, modern idioms.
 - `instructions/software-architecture.instructions.md` — simplicity, modularity, separation of concerns, encapsulation.
+- `instructions/learnings-dap.instructions.md` — debug adapter architecture, thread safety, expression evaluation, and breakpoint semantics.
 
 When editing this subtree's `CMakeLists.txt`, also follow
 `instructions/cmake.instructions.md` (target-based configuration) and
