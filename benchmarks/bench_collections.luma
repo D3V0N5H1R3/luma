@@ -182,34 +182,6 @@ function BenchResult run_collection_benchmarks(BenchResult state) {
         boolean _dis = Set.is_disjoint(set_a, set_b)
     })
 
-    # --- HashSet ---
-    # HashSet uses bucket-based hashing for O(1) average-case membership, so the
-    # input sets are built once outside the timed body and the operations
-    # (membership and set algebra) are measured on the prebuilt sets. The
-    # from_array construction is timed separately because it builds on purpose.
-
-    hash_set hashset_a = HashSet.from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-    hash_set hashset_b = HashSet.from_array([5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
-
-    st = time_it(st, "HashSet.from_array (10 elem)", 5000, () -> {
-        hash_set _hs = HashSet.from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-    })
-
-    st = time_it(st, "HashSet.contains (hit + miss)", 10000, () -> {
-        boolean _hit = HashSet.contains(hashset_a, 7)
-        boolean _miss = HashSet.contains(hashset_a, 99)
-    })
-
-    st = time_it(st, "HashSet.add", 5000, () -> {
-        hash_set _bigger = HashSet.add(hashset_a, 11)
-    })
-
-    st = time_it(st, "HashSet set algebra", 1000, () -> {
-        integer _union_len = HashSet.union(hashset_a, hashset_b) |> HashSet.length()
-        integer _inter_len = HashSet.intersection(hashset_a, hashset_b) |> HashSet.length()
-        integer _diff_len = HashSet.difference(hashset_a, hashset_b) |> HashSet.length()
-    })
-
     # --- Queue ---
 
     st = time_it(st, "Queue enqueue pipe (3 elem)", 5000, () -> {
