@@ -70,4 +70,25 @@ export default [
             eqeqeq: ["error", "always", { null: "ignore" }],
         },
     },
+    {
+        // The renderers/*.js fragments are spliced into gui-renderer.js's IIFE
+        // at build time (scripts/generate_gui_assets.mjs), so they reference its
+        // module-private helpers and define helpers used by sibling fragments.
+        // Neither cross-scope rule can be resolved when linting a fragment on
+        // its own; the concatenated framework is exercised by ci-gui-framework's
+        // node --test suite, which catches genuine undefined references.
+        files: ["renderers/**/*.js"],
+        rules: {
+            "no-undef": "off",
+            "no-unused-vars": "off",
+        },
+    },
+    {
+        // gui-renderer.js defines module-private helpers consumed only by the
+        // spliced-in fragments, so they read as unused when it is linted alone.
+        files: ["gui-renderer.js"],
+        rules: {
+            "no-unused-vars": "off",
+        },
+    },
 ];

@@ -203,8 +203,3 @@ core.*
 # Reports, logs, and transcripts produced by scripts/pipeline/*.ps1. These are
 # generated audit/fix run outputs, never source.
 pipeline-artifacts/
-
-# ── GraphicalUi JS lint bundle ──
-# Ephemeral renderer bundle assembled by .github/workflows/ci-javascript.yml
-# (gui-renderer.js + renderers/*.js) for ESLint. Regenerated each run.
-external/gui-framework/.lint-renderer.bundle.js
