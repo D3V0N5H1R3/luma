@@ -1,9 +1,12 @@
 ---
 description: "Virtual machine architecture, dispatch table, and component decomposition."
 applyTo: "core/runtime/vm/**"
+priority: reference
 ---
 
 # Learnings — Virtual Machine
+
+> **See also:** The compiler produces the bytecode the VM executes — see [learnings-compiler.instructions.md](learnings-compiler.instructions.md) for opcode semantics, the scratch-slot invariant, and optimizer constraints. Concurrency (task_scope, channels) is summarised in the core [learnings.instructions.md](learnings.instructions.md) § Concurrency.
 
 ## Architecture & Pipeline
 

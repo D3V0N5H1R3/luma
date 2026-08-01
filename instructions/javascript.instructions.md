@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying JavaScript source code (.js, .mjs, .cjs files). Covers naming, style, error handling, async patterns, modules, and modern JavaScript idioms."
 applyTo: "**/*.{js,mjs,cjs}"
+priority: reference
 ---
 
 # Working with JavaScript

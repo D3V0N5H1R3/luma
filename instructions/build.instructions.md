@@ -1,6 +1,7 @@
 ---
 description: "Use when building, configuring, or troubleshooting the Luma build system. Covers manual commands, CMake presets, sanitizers, coverage, fuzz testing, and cross-platform considerations."
 applyTo: "**/{CMakeLists.txt,CMakePresets.json}"
+priority: reference
 ---
 
 # Building and Testing Luma

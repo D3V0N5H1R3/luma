@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying C++ source code (.cpp, .hpp, .h). Covers naming, style, const-correctness, error handling, resource management, and modern C++ idioms for the Luma interpreter."
 applyTo: "**/*.{cpp,hpp,h}"
+priority: essential
 ---
 
 # Working with C++

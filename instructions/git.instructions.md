@@ -1,5 +1,6 @@
 ---
 description: "Use when writing, reviewing, or modifying Git commits, branches, merges, or repository operations. Covers commit message conventions, branch naming, merge strategy, and safe Git workflows."
+priority: reference
 ---
 
 # Working with Git

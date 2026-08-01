@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying Luma source code (.luma files). Covers Luma language syntax, types, conventions, standard library usage, and testing patterns."
 applyTo: "**/*.luma"
+priority: reference
 ---
 
 # Working with Luma

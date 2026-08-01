@@ -1,6 +1,7 @@
 ---
 description: "Core project knowledge — language design, architecture overview, and cross-cutting patterns. Domain-specific learnings are in sibling files."
 applyTo: "**/*"
+priority: essential
 ---
 
 

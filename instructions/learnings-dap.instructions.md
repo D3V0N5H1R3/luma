@@ -1,9 +1,12 @@
 ---
 description: "Debug adapter architecture, thread safety, expression evaluation, and breakpoint semantics."
 applyTo: "debugger/**"
+priority: reference
 ---
 
 # Learnings — Debug Adapter
+
+> **See also:** The debugger hooks into the VM — see [learnings-vm.instructions.md](learnings-vm.instructions.md) for VMDebugInterface and hook installation. Expression evaluation compiles Luma source — see [learnings-compiler.instructions.md](learnings-compiler.instructions.md). The shared protocol transport serves both DAP and LSP.
 
 ## Debugger (DAP)
 

@@ -1,6 +1,7 @@
 ---
 description: "Use when designing, reviewing, or restructuring software architecture. Covers simplicity, modularity, separation of concerns, naming, encapsulation, robustness, and security principles."
 applyTo: "{core,shared,language-server,debugger}/**"
+priority: essential
 ---
 
 # Working with Software Architecture

@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying shell scripts (.sh, .bash files). Covers portability, naming, style, error handling, quoting, and safe scripting patterns for Linux and macOS."
 applyTo: "**/*.{sh,bash}"
+priority: reference
 ---
 
 # Working with Shell Scripts

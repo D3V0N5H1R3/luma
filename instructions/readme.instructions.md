@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying README files. Covers structure, section ordering, writing style, completeness checks, and update safety for project README documents."
 applyTo: "**/README.md"
+priority: reference
 ---
 
 # Working with README Files

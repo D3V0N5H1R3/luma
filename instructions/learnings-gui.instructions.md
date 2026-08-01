@@ -1,9 +1,12 @@
 ---
 description: "GraphicalUi module, Solaris prelude, headless testing, and renderer pitfalls."
 applyTo: "{core/runtime/stdlib/**/graphicalui*,core/analysis/prelude/**,external/gui-framework/**}"
+priority: reference
 ---
 
 # Learnings — GUI
+
+> **See also:** The Solaris prelude is injected before type checking — see the core [learnings.instructions.md](learnings.instructions.md) § Architecture & Pipeline for the injection point. Stdlib module registration patterns are in [learnings-stdlib.instructions.md](learnings-stdlib.instructions.md).
 
 ## GraphicalUi
 

@@ -1,9 +1,12 @@
 ---
 description: "Compiler, optimizer, bytecode serialization, and the scratch-slot invariant."
 applyTo: "core/runtime/compiler/**"
+priority: reference
 ---
 
 # Learnings — Compiler
+
+> **See also:** The VM executes what the compiler emits — see [learnings-vm.instructions.md](learnings-vm.instructions.md) for dispatch and stack layout. Stdlib type signatures that affect compilation live in [learnings-stdlib.instructions.md](learnings-stdlib.instructions.md) § StdlibCatalog.
 
 ## Module Layout & Key Files
 

@@ -1,9 +1,12 @@
 ---
 description: "Standard library infrastructure, module registration, common utilities, and sandbox mode."
 applyTo: "{core/runtime/stdlib/**,shared/stdlib/**}"
+priority: reference
 ---
 
 # Learnings — Standard Library
+
+> **See also:** Type checking of stdlib calls uses the catalog — see [learnings-compiler.instructions.md](learnings-compiler.instructions.md) for how the compiler resolves stdlib calls. GUI-related stdlib (GraphicalUi) has its own file: [learnings-gui.instructions.md](learnings-gui.instructions.md).
 
 ## Module Layout & Key Files
 

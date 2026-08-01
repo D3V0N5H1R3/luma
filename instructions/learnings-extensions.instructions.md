@@ -1,9 +1,12 @@
 ---
 description: "VS Code and Zed editor extensions, Tree-sitter queries, and highlight pitfalls."
 applyTo: "extensions/**"
+priority: reference
 ---
 
 # Learnings — Editor Extensions
+
+> **See also:** The extensions communicate with the language server — see [learnings-lsp.instructions.md](learnings-lsp.instructions.md) for protocol details and LSP features. Syntax highlighting queries must match the Tree-sitter grammar in `extensions/zed/grammars/`.
 
 ## Editor Extensions
 

@@ -1,9 +1,12 @@
 ---
 description: "Build system, CI, static analysis, and C++ portability pitfalls."
 applyTo: "{CMakeLists.txt,CMakePresets.json,cmake/**,.github/workflows/**,scripts/**}"
+priority: essential
 ---
 
 # Learnings — Build
+
+> **See also:** C++ portability issues often surface during CI — see the core [learnings.instructions.md](learnings.instructions.md) § Architecture & Pipeline for the phase where a build failure roots. Compiler-specific codegen traps (clang-cl funclet, ASan) are documented here because they manifest as build/CI failures, but may root-cause to code in `core/runtime/`.
 
 ## Build System
 

@@ -1,9 +1,12 @@
 ---
 description: "Language server architecture, symbol resolution, and column/range pitfalls."
 applyTo: "language-server/**"
+priority: reference
 ---
 
 # Learnings — Language Server
+
+> **See also:** The LSP reuses the interpreter front-end (lexer → type checker) — bugs may root-cause to `core/analysis/`. See the core [learnings.instructions.md](learnings.instructions.md) § Architecture & Pipeline. The shared protocol transport is documented in [learnings-dap.instructions.md](learnings-dap.instructions.md) (same `shared/protocol/` layer).
 
 ## Language Server (LSP)
 
