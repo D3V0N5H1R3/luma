@@ -2951,6 +2951,7 @@ assert(Array.length(h.counts) == 3)
 - [Coding Guidelines](Luma_Coding_Guidelines.md) — idiomatic use of the standard library
 - [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) — debugging tasks and channels that use these modules
 - [REPL Guide](Luma_REPL_Guide.md) — explore these functions interactively
+
 ## 37 — String
 
 | Function                            | Parameter Types                | Return Type       | Description                                                                     |
@@ -3422,4 +3423,3 @@ case Xml.Node.CData(content)            { print(content) }
 `Xml.find_descendant` / `Xml.find_all_descendants` are the recursive counterparts to `Xml.find` / `Xml.find_all`: they match elements at any depth in document (pre-order) order, not just among direct children. `Xml.get_path` walks a `/`-separated tag path starting from the element's children — for example `"book/title"` — and accepts an optional 0-based `[n]` index to disambiguate repeated tags, as in `"book[1]/title"`; it fails if any segment is missing. `Xml.inner_text` returns the concatenated text of an element and every descendant text and CDATA node (the DOM `textContent`), whereas `Xml.text` reads only the element's own direct text children. `Xml.remove_child` and `Xml.replace_child` are immutable like `Xml.add_child`: they return a new element with the child element at the given 0-based index (indexing the same element-only sequence `Xml.children` exposes) removed or replaced, and fail when the index is out of bounds. `Xml.escape` escapes the five predefined XML entities (`&` first, then `< > " '`), and `Xml.unescape` decodes named references (`&amp; &lt; &gt; &quot; &apos;`) plus decimal and hexadecimal numeric character references, failing on any unknown or unterminated entity.
 
 ---
-
