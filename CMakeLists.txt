@@ -253,10 +253,6 @@ install(FILES README.md LICENSE
     COMPONENT Documentation
 )
 
-# ─────────── Doxygen documentation ───────────
-# Defines the docs target (Doxygen) when the toolchain is available. See module.
-
-include(cmake/LumaDoxygen.cmake)
 
 # ─────────── Convenience targets for code quality tools ───────────
 # Defines the format and tidy targets when clang-format / clang-tidy are found.

@@ -89,7 +89,6 @@ Also verify:
 - The root [README.md](../../README.md) is up to date with recent changes.
 - The root [CONTRIBUTING.md](../../CONTRIBUTING.md) and [SECURITY.md](../../SECURITY.md) reference valid build commands, paths, workflow names, and supported-version information.
 - The component and directory READMEs are current and reference valid paths, targets, and commands: `language-server/README.md`, `debugger/README.md`, `fuzz/README.md`, `tests/README.md`, `examples/README.md`, `benchmarks/README.md`, `documents/README.md`, `instructions/README.md`, and the editor-extension READMEs (`extensions/vscode/README.md`, `extensions/zed/README.md`, `extensions/shared/README.md`, `extensions/tests/README.md`). Vendored `external/*/README.md` files are excluded.
-- The Doxygen configuration (`Doxyfile.in`) is current: every `INPUT` path (`README.md`, `core/`, `shared/`, `language-server/`, `debugger/`) still exists and covers the documented source tree, `USE_MDFILE_AS_MAINPAGE` points to an existing file, and the version comes from CMake (`@LUMA_VERSION@`) rather than a hardcoded number.
 - The CMake preset documentation (`cmake/PRESETS.md`) matches `CMakePresets.json` — every preset it lists exists in the JSON with the same generator, build type, and options — and the preset set agrees with [build.instructions.md](../../instructions/build.instructions.md).
 
 ## 8. Tests vs Implementation
