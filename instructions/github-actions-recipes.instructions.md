@@ -1,5 +1,6 @@
 ---
 description: "Use when you need a complete, copy-paste GitHub Actions workflow file or workflow debugging guidance. A companion to github-actions.instructions.md that collects ready-to-adapt recipes: C++/CMake CI, Docker publish, release, deployment, CodeQL/SAST, and debugging techniques."
+priority: reference
 ---
 
 # GitHub Actions Recipes

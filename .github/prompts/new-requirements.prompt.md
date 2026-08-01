@@ -3,6 +3,8 @@ description: "Research other languages, libraries, and GUI frameworks read-only 
 agent: "agent"
 tools: ["search", "read"]
 argument-hint: "Optional focus, e.g. 'string handling', 'concurrency', 'GraphicalUi', or 'the whole language and stdlib'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # New Requirements

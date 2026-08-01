@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying Python source code (.py files). Covers naming, style, type hints, error handling, modules, and idiomatic Python patterns."
 applyTo: "**/*.py"
+priority: reference
 ---
 
 # Working with Python

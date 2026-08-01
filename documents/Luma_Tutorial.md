@@ -65,7 +65,7 @@ Let's get you set up.
 
 ## 2 — Installing and Running Luma
 
-To follow along you need the `luma` program installed on your computer. Building it from source is covered in detail in the [Development Environment Setup](Luma_Setup.md) guide; follow that guide once, then come back here.
+To follow along you need the `luma` program installed on your computer. Building it from source is covered in detail in the [Contributing guide](../CONTRIBUTING.md); follow that guide once, then come back here.
 
 Once it is installed, open a **terminal** (also called a command line or shell) — a text window where you type commands. Check that Luma is available:
 
@@ -1789,7 +1789,7 @@ A quick reference for the terms introduced in this tutorial.
 - [Standard Library Reference](Luma_Standard_Library_Reference.md) — the full catalogue of built-in modules and functions
 - [REPL Guide](Luma_REPL_Guide.md) — experiment with the language interactively as you learn
 - [Solaris Tutorial](Luma_Solaris_Tutorial.md) — put these language basics to work building a graphical desktop app
-- [Development Environment Setup](Luma_Setup.md) — install and build Luma, and set up an editor
+- [Contributing](../CONTRIBUTING.md) — install and build Luma, and set up an editor
 - [Coding Guidelines](Luma_Coding_Guidelines.md) — idiomatic style and conventions to grow into
 - [Error Handling](Luma_Error_Handling.md) — a deeper look at `result`, `optional`, and recovery
 - [Documentation Index](README.md) — index of all Luma documentation

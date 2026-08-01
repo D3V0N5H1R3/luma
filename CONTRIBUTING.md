@@ -19,6 +19,8 @@ uphold this code.
     - [Benchmarks](#benchmarks)
     - [Fuzz Testing](#fuzz-testing)
     - [Security Considerations](#security-considerations)
+    - [Debugging the C++ Interpreter](#debugging-the-c-interpreter)
+    - [Editor Integration](#editor-integration)
 - [Branch Naming](#branch-naming)
 - [Commit Messages](#commit-messages)
 - [Pull Request Workflow](#pull-request-workflow)
@@ -68,7 +70,6 @@ Some optional components need extra tooling:
 Before making significant changes, skim the design and reference documents in
 [`documents/`](documents/):
 
-- [Luma_Setup.md](documents/Luma_Setup.md) — toolchain setup and build details.
 - [Luma_Software_Architecture.md](documents/Luma_Software_Architecture.md) — interpreter pipeline and module design.
 - [Luma_User_Manual.md](documents/Luma_User_Manual.md) — complete language reference.
 - [Luma_Standard_Library_Reference.md](documents/Luma_Standard_Library_Reference.md) — standard library and built-in functions.
@@ -362,6 +363,111 @@ When adding or modifying standard library modules:
 - **Sandbox mode:** any function that performs file I/O, network access, or process execution must be gated behind the `sandbox` flag in the module's registration function. If the module is entirely OS-dependent, skip its registration in `stdlib_registry.hpp` when `sandbox` is true. If only individual functions access the filesystem, wrap those `define_native` calls in `if (!sandbox) { ... }`.
 - **Resource limits:** new unbounded resources (queues, pools, caches) must have an upper bound defined in `resource_limits.hpp`.
 - **Input validation:** validate all inputs at the module boundary. Return `result<T>` on failure. Reject path traversal, CRLF injection, and other injection vectors.
+
+### Debugging the C++ Interpreter
+
+To debug the interpreter itself, build a `Debug` configuration and launch it under a native debugger:
+
+```bash
+# Configure a Debug build
+cmake -B build-debug -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-debug --parallel
+
+# GDB
+gdb --args build-debug/luma examples/language-features/hello.luma
+
+# LLDB
+lldb -- build-debug/luma examples/language-features/hello.luma
+```
+
+Each editor can drive these debuggers through its own interface — see [Editor Integration](#editor-integration) below. For debugging **Luma programs** (rather than the interpreter), use the Debug Adapter Protocol integration described per editor, and see [Luma_Debugger.md](documents/Luma_Debugger.md) for the debugger's design.
+
+### Editor Integration
+
+The Luma project ships first-class integration for two editors. Each provides syntax highlighting, Language Server Protocol (LSP) support, and Debug Adapter Protocol (DAP) debugging for `.luma` files. For the design of these tools, see [Luma_Language_Server.md](documents/Luma_Language_Server.md), [Luma_Debugger.md](documents/Luma_Debugger.md), and [Luma_Syntax_Highlighting.md](documents/Luma_Syntax_Highlighting.md).
+
+#### Visual Studio Code
+
+**Recommended extensions** (all listed in `.vscode/extensions.json`):
+
+- **C/C++ Extension Pack** (`ms-vscode.cpptools-extension-pack`): IntelliSense, debugging, CMake Tools integration.
+- **Luma** (`D3V0N5H1R3.luma-language`): Syntax highlighting, LSP, and DAP for `.luma` files.
+- **GitHub Actions** (`github.vscode-github-actions`): Workflow authoring and validation.
+- **GitHub Copilot** (`github.copilot`) and **Copilot Chat** (`github.copilot-chat`): AI code completion and chat.
+- **Claude Code** (`anthropic.claude-code`): Anthropic's agentic coding assistant.
+- **GitHub Pull Requests** (`github.vscode-pull-request-github`): PR review in the editor.
+
+**Configuration:** When you first open the project, CMake Tools prompts you to select a kit. Choose a C++20-compliant compiler. CMake Tools then configures automatically; if not, run **CMake: Configure** from the Command Palette.
+
+The Luma extension resolves `luma_lsp`, `luma`, and `luma_dap` binaries automatically (bundled download, then `PATH`). To use a locally-built binary, set `luma.lsp.path`, `luma.path`, and `luma.dap.path` in your **user** settings.
+
+**Building, running, and testing:**
+
+- **Build:** Press `F7` or run **CMake: Build**.
+- **Run:** Set the launch target via the status bar, then `Ctrl+F5` (run) or `F5` (debug).
+- **Test:** Use **CTest: Run All Tests** or the Test Explorer for C++ tests.
+
+**Debugging the C++ interpreter:** The project ships `.vscode/launch.json` with pre-configured targets for the Debug build (`build-debug/`). Open the "Run and Debug" view (`Ctrl+Shift+D`) and select one of:
+
+- **C++: Interpreter (MSVC / GDB / LLDB)** — Launch the interpreter under the debugger.
+- **C++: REPL (MSVC / GDB)** — Launch the REPL under the debugger.
+- **C++: Language Server** / **C++: DAP Debugger** — Debug `luma_lsp` or `luma_dap`.
+
+**Debugging Luma programs:** Set a breakpoint in a `.luma` file and use a `"type": "luma"` launch configuration:
+
+```json
+{
+    "type": "luma",
+    "request": "launch",
+    "name": "Debug Current File",
+    "program": "${file}",
+    "stopOnEntry": false
+}
+```
+
+**Formatting:** The C/C++ extension formats on save using the repository's `.clang-format`, pre-configured in `.vscode/settings.json`.
+
+#### Zed
+
+**Install the Luma extension:** Command Palette → **zed: extensions** → search **Luma** → **Install**. The extension automatically downloads `luma_lsp` from GitHub Releases on first use. For manual installation:
+
+```bash
+cp -r extensions/zed ~/.local/share/zed/extensions/luma
+```
+
+**Building, running, and testing:** Zed has no built-in CMake integration; use the integrated terminal and the commands in [Build](#3-build) and [Test Your Changes](#4-test-your-changes).
+
+**Debugging Luma programs:** Open a `.luma` file, set breakpoints, then Command Palette → **debugger: start** → select **Debug Current File**. Ensure `luma_dap` is on your `PATH`.
+
+**Formatting:** Configure clang-format as an external formatter in your Zed `settings.json`:
+
+```json
+{
+    "languages": {
+        "C++": {
+            "formatter": {
+                "external": {
+                    "command": "clang-format",
+                    "arguments": ["--assume-filename={buffer_path}"]
+                }
+            },
+            "format_on_save": "on"
+        }
+    }
+}
+```
+
+**LSP features:** Once the language server is available, completions, hover, diagnostics, inlay hints, and code snippets work automatically.
+
+#### Keeping Editor Configurations in Sync
+
+| Surface                      | VS Code               | Zed               |
+| ---------------------------- | --------------------- | ----------------- |
+| Tasks (configure/build/test) | `.vscode/tasks.json`  | `.zed/tasks.json` |
+| Run / test current file      | `.vscode/tasks.json`  | `.zed/tasks.json` |
+| C++ debug launch             | `.vscode/launch.json` | `.zed/debug.json` |
+
+Both editors drive the same CMake presets (`default`, `debug`, `relwithdebinfo`, `sanitize`, `coverage`). When you add or rename a preset, update both editor configurations together.
 
 ---
 

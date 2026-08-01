@@ -1,6 +1,6 @@
 # Luma Documentation
 
-Index of the design, reference, and guide documents for the Luma programming language. New to programming? Start with the [Tutorial](Luma_Tutorial.md). Looking for a complete reference? See the [User Manual](Luma_User_Manual.md). Want to contribute? Start with the [Development Environment Setup](Luma_Setup.md).
+Index of the design, reference, and guide documents for the Luma programming language. New to programming? Start with the [Tutorial](Luma_Tutorial.md). Looking for a complete reference? See the [User Manual](Luma_User_Manual.md). Want to contribute? Start with the [Contributing guide](../CONTRIBUTING.md). Need a specific section fast? The [Document Index](INDEX.md) lists every document's sections with line ranges for targeted reads.
 
 ## Table of Contents
 
@@ -43,7 +43,6 @@ Index of the design, reference, and guide documents for the Luma programming lan
 
 | Document                                           | Description                                                           |
 | -------------------------------------------------- | --------------------------------------------------------------------- |
-| [Development Environment Setup](Luma_Setup.md)     | Cloning, building, running, testing, and editor integration.          |
 | [Debugger](Luma_Debugger.md)                       | Debug Adapter Protocol (DAP) debug adapter design and implementation. |
 | [Language Server](Luma_Language_Server.md)         | Language Server Protocol (LSP) server design and implementation.      |
 | [Syntax Highlighting](Luma_Syntax_Highlighting.md) | Editor grammars and the Visual Studio Code and Zed extensions.        |
@@ -83,7 +82,7 @@ Companion documents at the repository root that sit alongside this set.
 
 Luma documentation follows a consistent naming and titling scheme:
 
-- **File names** use the `Luma_<Topic>.md` pattern (`PascalCase` topic words joined by underscores). This index is the sole exception, named `README.md` by convention.
+- **File names** use the `Luma_<Topic>.md` pattern (`PascalCase` topic words joined by underscores). This index (`README.md`) and the section-level [Document Index](INDEX.md) (`INDEX.md`) are the exceptions, named by convention.
 - **Titles** are level-one headings of the form `# Luma — <Title>` using an em-dash.
 - **The "Guide" suffix** is reserved for task-oriented, how-to documents aimed at users — for example, the [REPL Guide](Luma_REPL_Guide.md), [Performance Guide](Luma_Performance_Guide.md), [Solaris Guide](Luma_Solaris_Guide.md), and [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md). Reference and design documents use plain descriptive titles — for example, *User Manual*, *Standard Library Reference*, *Debugger*, and *Software Architecture*.
 - **Section headings** within each document are numbered `## N — <Title>` and listed in a table of contents.

@@ -18,7 +18,15 @@ For repository-wide context — the architecture overview, module layout, and co
 | [github-actions.instructions.md](github-actions.instructions.md)                 | CI/CD workflow conventions                                             | `.github/workflows/**`                      |
 | [github-actions-recipes.instructions.md](github-actions-recipes.instructions.md) | Copy-paste workflow recipes and debugging guidance                     | Manually referenced                         |
 | [javascript.instructions.md](javascript.instructions.md)                         | JavaScript naming, style, async patterns, modules, error handling      | `**/*.{js,mjs,cjs}`                         |
-| [learnings.instructions.md](learnings.instructions.md)                           | Accumulated learnings and pitfalls discovered during development       | `**/*` (all files)                          |
+| [learnings-build.instructions.md](learnings-build.instructions.md)               | Build system, CI, static analysis, and C++ portability pitfalls        | `{CMakeLists.txt,CMakePresets.json,cmake/**,.github/workflows/**,scripts/**}` |
+| [learnings-compiler.instructions.md](learnings-compiler.instructions.md)         | Compiler, optimizer, bytecode serialization, and the scratch-slot invariant | `core/runtime/compiler/**`              |
+| [learnings-dap.instructions.md](learnings-dap.instructions.md)                   | Debug adapter architecture, thread safety, expression evaluation, and breakpoint semantics | `debugger/**`                 |
+| [learnings-extensions.instructions.md](learnings-extensions.instructions.md)     | VS Code and Zed editor extensions, Tree-sitter queries, and highlight pitfalls | `extensions/**`                     |
+| [learnings-gui.instructions.md](learnings-gui.instructions.md)                   | GraphicalUi module, Solaris prelude, headless testing, and renderer pitfalls | `{core/runtime/stdlib/**/graphicalui*,core/analysis/prelude/**,external/gui-framework/**}` |
+| [learnings-lsp.instructions.md](learnings-lsp.instructions.md)                   | Language server architecture, symbol resolution, and column/range pitfalls | `language-server/**`                  |
+| [learnings-stdlib.instructions.md](learnings-stdlib.instructions.md)             | Standard library infrastructure, module registration, common utilities, and sandbox mode | `{core/runtime/stdlib/**,shared/stdlib/**}` |
+| [learnings-vm.instructions.md](learnings-vm.instructions.md)                     | Virtual machine architecture, dispatch table, and component decomposition | `core/runtime/vm/**`                    |
+| [learnings.instructions.md](learnings.instructions.md)                           | Core project knowledge — language design, architecture overview, and cross-cutting patterns | `**/*` (all files)            |
 | [luma.instructions.md](luma.instructions.md)                                     | Luma language syntax, types, standard library usage                    | `**/*.luma`                                 |
 | [markdown.instructions.md](markdown.instructions.md)                             | Documentation structure and formatting                                 | `**/*.md`                                   |
 | [powershell.instructions.md](powershell.instructions.md)                         | PowerShell naming, style, pipeline, error handling, Pester             | `**/*.{ps1,psm1,psd1}`                      |
@@ -53,6 +61,8 @@ it rather than trying to centralise it.
 - [learnings.instructions.md](learnings.instructions.md) uses `applyTo: **/*`, so it loads as a
   baseline alongside whichever language-specific guide matches the file in context. It is the
   one guide that is always active; the language guides layer on top of it.
+- The narrower `learnings-*.instructions.md` sibling files add domain-specific detail on top of
+  that baseline when their targeted `applyTo` globs match the files you are editing.
 - Some globs overlap by design. A `CMakeLists.txt` matches both
   [build.instructions.md](build.instructions.md) and [cmake.instructions.md](cmake.instructions.md);
   both sets of guidance apply together.

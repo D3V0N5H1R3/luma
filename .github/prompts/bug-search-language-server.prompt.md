@@ -3,6 +3,8 @@ description: "Analyse the Luma language server (LSP) read-only and produce a pri
 agent: "agent"
 tools: ["search", "read"]
 argument-hint: "Optional scope, e.g. 'lsp_completion_provider.cpp' or 'the whole language server'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Bug Search — Language Server

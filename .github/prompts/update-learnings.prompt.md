@@ -2,6 +2,8 @@
 description: "Capture new development learnings and prune redundant or obsolete ones from the project's learnings file"
 agent: "agent"
 argument-hint: "Optional focus, e.g. 'this session's changes' or a subsystem like 'VM' or 'LSP'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Update Learnings

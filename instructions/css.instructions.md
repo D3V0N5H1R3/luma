@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying CSS source code (.css files). Covers naming, specificity, layout, responsive design, custom properties, and maintainable CSS patterns."
 applyTo: "**/*.css"
+priority: reference
 ---
 
 # Working with CSS

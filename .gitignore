@@ -27,8 +27,6 @@ _deps/
 CMakeFiles/
 /Testing/
 
-# Doxyfile is generated from the tracked Doxyfile.in template by CMake.
-/Doxyfile
 
 # ── Ninja build files ──
 *.ninja

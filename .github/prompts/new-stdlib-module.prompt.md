@@ -2,6 +2,8 @@
 description: "Add an entirely new standard library module to Luma"
 agent: "agent"
 argument-hint: "Module name and purpose, e.g. 'Http — make HTTP requests'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # New Standard Library Module
@@ -31,3 +33,16 @@ This prompt covers creating the module skeleton and wiring it into the runtime, 
 8. **When warranted, add fuzz and/or benchmark coverage.** Add a fuzz target in `fuzz/` only if the module parses or decodes *untrusted input* (a new parser/decoder/codec entry point). Add `time_it` cases to a `bench_<topic>.luma` in `benchmarks/` only if the module is performance-sensitive. Skip both for pure-logic modules.
 9. Document the module in `Luma_Standard_Library_Reference.md` under the standard library section. If the module is large enough to warrant its own guide (e.g. `GraphicalUi` → `Luma_GraphicalUi_Guide.md`), add one.
 10. Build and verify: `cmake --build --preset default`, then `ctest --preset default` for the C++ tests and `build/Release/luma --test tests/features/stdlib/<module_lower>_functions.luma` for the Luma test. Confirm everything passes before finishing.
+
+## Verification Tiers
+
+A new module involves many files. Verify incrementally rather than waiting until step 10.
+
+| After… | Run | Why |
+|---------|-----|-----|
+| Creating the module source + registry entry (step 5) | `cmake --build --preset default` (compile only) | Catches includes, linker errors, registration typos early |
+| Compiling cleanly | `ctest -R stdlib_test_<module>` (targeted test) | Confirms the module registers and its functions work |
+| Adding catalog metadata | `ctest -R stdlib_catalog_conformance` | Catches arity/name mismatches between runtime and catalog |
+| All C++ tests pass | `build/Release/luma --strict --test tests/features/stdlib/<module>_functions.luma` | Validates Luma-level behaviour and catches lint warnings |
+
+If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.

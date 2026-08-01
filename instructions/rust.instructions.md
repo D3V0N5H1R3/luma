@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying Rust source code (.rs files). Covers naming, style, ownership, error handling, unsafe code, and idiomatic Rust patterns."
 applyTo: "**/*.rs"
+priority: reference
 ---
 
 # Working with Rust

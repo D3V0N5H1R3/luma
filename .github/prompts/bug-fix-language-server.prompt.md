@@ -2,6 +2,8 @@
 description: "Diagnose and fix a bug in the Luma language server (LSP)"
 agent: "agent"
 argument-hint: "Bug description, e.g. 'hover shows the wrong range on strings containing emoji'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Bug Fix — Language Server

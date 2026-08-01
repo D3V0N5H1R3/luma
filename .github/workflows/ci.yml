@@ -19,7 +19,7 @@ on:
       - ".clang-format"
       - ".clang-tidy"
       - ".github/actions/**"
-      - ".github/linux-distros.json"
+      - ".github/workflows/linux-distros.json"
       - ".github/workflows/build-raspberry-pi.yml"
       - ".github/workflows/ci.yml"
       - ".github/workflows/resolve-distro-matrix.yml"
@@ -268,11 +268,20 @@ jobs:
       # space or newline. xargs exits non-zero if any invocation fails.
       - name: Run clang-tidy (shard ${{ matrix.shard }} of 4)
         run: |
+          set -o pipefail
           find core language-server/source debugger/source shared -name '*.cpp' \
             ! -name '*_win32.cpp' \
             | sort \
             | awk 'NR % 4 == ${{ matrix.shard }}' \
-            | xargs -P "$(nproc)" -n 1 clang-tidy -p build
+            | xargs -P "$(nproc)" -n 1 clang-tidy -p build \
+            2>&1 | tee clang-tidy-report.txt
+
+      - name: Upload clang-tidy report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: clang-tidy-report-shard-${{ matrix.shard }}
+          path: clang-tidy-report.txt
 
   formatting:
     name: Formatting (clang-format)
@@ -296,9 +305,18 @@ jobs:
       # is not formatted, without modifying any files.
       - name: Check clang-format
         run: |
+          set -o pipefail
           find core shared language-server/source debugger/source tests fuzz \
             \( -name '*.cpp' -o -name '*.hpp' \) \
-            -exec clang-format --dry-run --Werror {} +
+            -exec clang-format --dry-run --Werror {} + \
+            2>&1 | tee clang-format-report.txt
+
+      - name: Upload clang-format report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: clang-format-report
+          path: clang-format-report.txt
 
   warning-sync:
     name: Warning Flag Sync
@@ -485,7 +503,7 @@ jobs:
         run: ctest --output-on-failure
 
   # ── Linux distribution builds (broad distro coverage via containers) ──
-  # The distro list lives in .github/linux-distros.json so it is defined once
+  # The distro list lives in .github/workflows/linux-distros.json so it is defined once
   # and shared with the release workflow. resolve-distro-matrix.yml loads it
   # into a matrix that the build job consumes via fromJSON.
   setup-linux-matrix:

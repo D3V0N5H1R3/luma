@@ -3,6 +3,8 @@ description: "Analyse a Luma editor extension (VS Code or Zed) read-only and pro
 agent: "agent"
 tools: ["search", "read"]
 argument-hint: "Optional scope, e.g. 'the VS Code extension' or 'the shared grammar'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Bug Search — Editor Extension

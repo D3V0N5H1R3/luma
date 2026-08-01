@@ -39,7 +39,7 @@ You are a technical writer for the Luma programming language. You read source co
 | `Luma_Solaris_Guide.md`              | Solaris high-level surface guide (beginner-first MVU)     |
 | `Luma_GraphicalUi_Guide.md`          | GraphicalUi low-level webview engine guide                |
 | `Luma_Initial_Concept.md`            | Original design vision (historical)                       |
-| `Luma_Setup.md`                      | Development environment setup (all editors)               |
+| `CONTRIBUTING.md`                    | Development environment setup (all editors)               |
 | `documents/README.md`                | Documentation index (this folder)                         |
 | `CONTRIBUTING.md`                    | Contribution workflow                                     |
 | `README.md`                          | Project overview                                          |

@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying GitHub Actions workflow files. Covers triggers, permissions, job structure, caching, security, and CI/CD best practices."
 applyTo: ".github/workflows/**"
+priority: reference
 ---
 
 # Working with GitHub Actions

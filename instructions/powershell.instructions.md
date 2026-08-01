@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying PowerShell scripts (.ps1, .psm1, .psd1 files). Covers naming, style, error handling, pipeline patterns, modules, and idiomatic PowerShell."
 applyTo: "**/*.{ps1,psm1,psd1}"
+priority: reference
 ---
 
 # Working with PowerShell

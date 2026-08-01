@@ -1,0 +1,17 @@
+---
+description: "Virtual machine architecture, dispatch table, and component decomposition."
+applyTo: "core/runtime/vm/**"
+priority: reference
+---
+
+# Learnings — Virtual Machine
+
+> **See also:** The compiler produces the bytecode the VM executes — see [learnings-compiler.instructions.md](learnings-compiler.instructions.md) for opcode semantics, the scratch-slot invariant, and optimizer constraints. Concurrency (task_scope, channels) is summarised in the core [learnings.instructions.md](learnings.instructions.md) § Concurrency.
+
+## Architecture & Pipeline
+
+- The VM is stack-based: value stack (max 65,536 entries), call frame stack (max 256 frames), plus a separate exception handler stack for try/catch/finally. VM internals are decomposed via composition: **VMStack** (stack + call frame storage with O(1) push/pop), **VMGlobalCache** (inline cache for global variable lookups exploiting `std::unordered_map` pointer stability), and a **function pointer dispatch table** (`vm_dispatch_table.cpp`) that maps opcodes to `void (VM::*)()` handler methods — replaces the previous switch-based dispatch for better branch prediction. A narrow **VMStackAPI** seam (`vm_stack_api.hpp`) abstracts the stack/frame/exception operations opcode handlers use, so extracted handlers can be unit-tested against a lightweight mock stack (see `vm_stack_api_test.cpp`); the VM is declared `final`, so the virtual calls devirtualize back to direct calls under optimisation — zero hot-path overhead. Debug-hook callback storage and its `callbacks_mutex` live in a first-class **VMDebugInterface** component (`vm_debug_interface.hpp`, `debug_` member, methods in `vm_debug.cpp`) that owns its own synchronisation — extracted from the former nested `DebugContext` struct as the first staged component of the VM god-class decomposition (`TODO(refactor/V1)`). Task/concurrency state (the `task_scope` LIFO stack, thread pool, task-id counter, and the thread-local current-scope pointer) likewise lives in a first-class **VMTaskManager** component (`vm_task_manager.hpp`, `task_manager_` member) — the second staged extraction. Note the dispatch table's `void (VM::*)()` member-pointer entries force every `op_*()` handler to stay a VM member, so these components own only STATE + helpers that thin `op_*()` members delegate to; the remaining VMCallDispatch/VMCore split is deferred because the call handlers are the execution-engine core (coupled to frames/base_depth_/PC beyond the seam).
+
+## Module Layout & Key Files
+
+- The VM is split into `vm.cpp` (dispatch loop), `vm_helpers.cpp` (non-inlined helper methods extracted to reduce file size), plus dispatch headers: `vm_dispatch_arithmetic.cpp`, `vm_dispatch_collections.cpp`, `vm_dispatch_control_flow.cpp`, `vm_dispatch_concurrency.cpp`, `vm_dispatch_types.cpp`, `vm_dispatch_table.cpp` (function pointer table). Additional modules: `vm_stack.hpp` (stack + frame storage), `vm_global_cache.hpp` (inline global lookup cache), `vm_introspection.hpp/.cpp` (high-level state access for debuggers — stack trace, locals, upvalues, set_local/set_upvalue), `vm_types.hpp` (`TypeMatcher` class for runtime IS_TYPE / match dispatch — simple, tuple, parameterized, choice/record patterns). Opcode handlers follow two naming conventions: short, simple handlers are defined inline as `op_*` in `vm_dispatch_table.cpp`, while complex handlers are `handle_*` methods in the topical `vm_dispatch_*.cpp` files.

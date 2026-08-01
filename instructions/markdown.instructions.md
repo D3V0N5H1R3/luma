@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying Markdown documentation files. Covers structure, formatting, linking, and content guidelines for project documentation."
 applyTo: "**/*.md"
+priority: reference
 ---
 
 # Working with Markdown

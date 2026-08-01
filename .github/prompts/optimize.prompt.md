@@ -2,6 +2,8 @@
 description: "Optimize Luma code for speed or memory — interpreter, language server, debugger, or stdlib — proving the win with a benchmark while keeping all tests green"
 agent: "agent"
 argument-hint: "Optimization goal, e.g. 'cut the per-opcode Value copy in the VM arithmetic handlers'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Optimize

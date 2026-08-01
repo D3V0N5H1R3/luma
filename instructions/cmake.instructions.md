@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying CMake files (CMakeLists.txt and .cmake modules). Covers target-based configuration, dependency management, compiler warnings, and project structure conventions."
 applyTo: "**/{CMakeLists.txt,*.cmake}"
+priority: reference
 ---
 
 # Working with CMake

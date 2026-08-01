@@ -3,6 +3,8 @@ description: "Analyse the Luma debugger (DAP) read-only and produce a prioritize
 agent: "agent"
 tools: ["search", "read"]
 argument-hint: "Optional scope, e.g. 'breakpoint_manager.cpp' or 'the whole debugger'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Bug Search — Debugger

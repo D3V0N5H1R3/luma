@@ -719,5 +719,5 @@ Zed's built-in themes (One Dark, Solarized Light, Gruvbox, etc.) use the standar
 
 ## See Also
 
-- [Development Environment Setup](Luma_Setup.md) — installing the editor extensions
+- [Contributing](../CONTRIBUTING.md) — installing the editor extensions
 - [Language Server](Luma_Language_Server.md) — semantic editor features (diagnostics, hover, completion)

@@ -3,6 +3,8 @@ description: "Check that all project artefacts are consistent and up to date wit
 agent: "agent"
 tools: ["search", "read"]
 argument-hint: "Optional focus area, e.g. 'docs vs implementation' or 'CMake vs source files'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Consistency Check
@@ -84,12 +86,11 @@ Also verify:
 - [Luma_Performance_Guide.md](../../documents/Luma_Performance_Guide.md) reflects current performance characteristics and optimisation advice.
 - [Luma_GraphicalUi_Guide.md](../../documents/Luma_GraphicalUi_Guide.md) documents the current `GraphicalUi` module — widgets, layout containers, overlays, charts, commands, subscriptions, and styling helpers match the runtime (`core/runtime/stdlib/io/graphicalui_*`) and the embedded GUI framework (`external/gui-framework/`); [Luma_Solaris_Guide.md](../../documents/Luma_Solaris_Guide.md) documents the beginner-first `Solaris` MVU surface.
 - [Luma_REPL_Guide.md](../../documents/Luma_REPL_Guide.md) reflects the current REPL behaviour — commands (`:quit`, `:help`, `:clear`, `:file`), multi-line input, tab completion, and history.
-- The setup guide ([Luma_Setup.md](../../documents/Luma_Setup.md)) references valid paths, extension versions, and configuration for all supported editors.
+- The contributing guide ([CONTRIBUTING.md](../../CONTRIBUTING.md)) references valid paths, extension versions, and configuration for all supported editors.
 - The documentation index ([documents/README.md](../../documents/README.md)) lists every document in `documents/` — a newly added, removed, or renamed document is reflected in the index's table of contents, and every link in the index resolves to an existing file.
 - The root [README.md](../../README.md) is up to date with recent changes.
 - The root [CONTRIBUTING.md](../../CONTRIBUTING.md) and [SECURITY.md](../../SECURITY.md) reference valid build commands, paths, workflow names, and supported-version information.
 - The component and directory READMEs are current and reference valid paths, targets, and commands: `language-server/README.md`, `debugger/README.md`, `fuzz/README.md`, `tests/README.md`, `examples/README.md`, `benchmarks/README.md`, `documents/README.md`, `instructions/README.md`, and the editor-extension READMEs (`extensions/vscode/README.md`, `extensions/zed/README.md`, `extensions/shared/README.md`, `extensions/tests/README.md`). Vendored `external/*/README.md` files are excluded.
-- The Doxygen configuration (`Doxyfile.in`) is current: every `INPUT` path (`README.md`, `core/`, `shared/`, `language-server/`, `debugger/`) still exists and covers the documented source tree, `USE_MDFILE_AS_MAINPAGE` points to an existing file, and the version comes from CMake (`@LUMA_VERSION@`) rather than a hardcoded number.
 - The CMake preset documentation (`cmake/PRESETS.md`) matches `CMakePresets.json` — every preset it lists exists in the JSON with the same generator, build type, and options — and the preset set agrees with [build.instructions.md](../../instructions/build.instructions.md).
 
 ## 8. Tests vs Implementation

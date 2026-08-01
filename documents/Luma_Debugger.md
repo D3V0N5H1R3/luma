@@ -343,7 +343,7 @@ The existing VS Code extension (`extensions/vscode/`) gains a debug adapter cont
 }
 ```
 
-A concrete `launch.json` example that uses these attributes is maintained in the [Setup guide](Luma_Setup.md#8--editor-integration), the canonical reference for editor configuration.
+A concrete `launch.json` example that uses these attributes is maintained in [CONTRIBUTING.md](../CONTRIBUTING.md#editor-integration), the canonical reference for editor configuration.
 
 ### Zed
 
@@ -999,6 +999,6 @@ Once the current implementation is stable, the following features could be added
 ## See Also
 
 - [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) — debugging tasks and channels
-- [Development Environment Setup](Luma_Setup.md) — configuring editors to launch the debugger
+- [Contributing](../CONTRIBUTING.md) — configuring editors to launch the debugger
 - [Language Server](Luma_Language_Server.md) — the companion LSP language server
 - [Software Architecture](Luma_Software_Architecture.md) — how the debug adapter fits into the interpreter

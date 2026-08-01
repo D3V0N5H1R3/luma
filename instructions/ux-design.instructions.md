@@ -1,5 +1,6 @@
 ---
 description: "Use when designing or reviewing any user interface — Luma Solaris or GraphicalUi apps, CSS, editor extensions, CLI/REPL output, or documentation layout. Covers user experience, usability, and graphic design principles: colour, typography, spacing, hierarchy, layout, Gestalt laws, interaction, feedback, accessibility, and the usability heuristics."
+priority: reference
 ---
 
 # Working with UX and Visual Design

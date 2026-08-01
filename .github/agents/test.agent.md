@@ -1,6 +1,15 @@
 ---
 description: "Test engineer that runs, writes, and fixes tests across C++ unit tests and Luma feature tests."
 tools: ["search", "read", "edit", "execute", "todo"]
+handoffs:
+  - label: Return to Implementation (failures found)
+    agent: implement
+    prompt: "The test suite has failures that require code changes beyond the test layer. Here are the failures, their root causes, and the files that likely need fixing:"
+    send: true
+  - label: Request Documentation Update
+    agent: docs
+    prompt: "Tests pass. The following behavioural changes were verified and may need documentation updates:"
+    send: true
 ---
 
 # Test Agent

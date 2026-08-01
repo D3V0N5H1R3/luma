@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying TypeScript source code (.ts, .tsx files). Covers naming, style, type safety, error handling, async patterns, and modern TypeScript idioms."
 applyTo: "**/*.{ts,tsx}"
+priority: reference
 ---
 
 # Working with TypeScript

@@ -25,14 +25,15 @@ Compile and exercise the interpreter itself.
 
 Static checks for every non-C++ language in the repository; each runs only when files of its kind change.
 
-| Workflow                                 | Trigger             | Purpose                                             |
-| ---------------------------------------- | ------------------- | --------------------------------------------------- |
-| [`ci-cmake.yml`](ci-cmake.yml)           | Push / PR to `main` | cmakelint over the first-party CMake files.         |
-| [`ci-css.yml`](ci-css.yml)               | Push / PR to `main` | Stylelint over the first-party CSS.                 |
-| [`ci-markdown.yml`](ci-markdown.yml)     | Push / PR to `main` | markdownlint-cli2 over every Markdown file.         |
-| [`ci-powershell.yml`](ci-powershell.yml) | Push / PR to `main` | PSScriptAnalyzer over the PowerShell scripts.       |
-| [`ci-python.yml`](ci-python.yml)         | Push / PR to `main` | Ruff lint and format check over the Python tooling. |
-| [`ci-shell.yml`](ci-shell.yml)           | Push / PR to `main` | ShellCheck over the shell scripts.                  |
+| Workflow                                 | Trigger             | Purpose                                                      |
+| ---------------------------------------- | ------------------- | ------------------------------------------------------------ |
+| [`ci-cmake.yml`](ci-cmake.yml)           | Push / PR to `main` | cmakelint over the first-party CMake files.                  |
+| [`ci-css.yml`](ci-css.yml)               | Push / PR to `main` | Stylelint over the first-party CSS.                          |
+| [`ci-javascript.yml`](ci-javascript.yml) | Push / PR to `main` | ESLint over the GraphicalUi renderer JS.                     |
+| [`ci-markdown.yml`](ci-markdown.yml)     | Push / PR to `main` | markdownlint-cli2 over every Markdown file.                  |
+| [`ci-powershell.yml`](ci-powershell.yml) | Push / PR to `main` | PSScriptAnalyzer over the PowerShell scripts.                |
+| [`ci-python.yml`](ci-python.yml)         | Push / PR to `main` | Ruff lint and format check over the Python tooling.          |
+| [`ci-shell.yml`](ci-shell.yml)           | Push / PR to `main` | ShellCheck over the shell scripts.                           |
 
 ---
 
@@ -102,7 +103,7 @@ Internal `workflow_call` components — never triggered directly, only invoked b
 
 ```text
 ci.yml
-├── resolve-distro-matrix.yml      reads .github/linux-distros.json → matrix
+├── resolve-distro-matrix.yml      reads .github/workflows/linux-distros.json → matrix
 ├── reusable-linux-build.yml       one job per distro in the matrix
 └── build-raspberry-pi.yml
     └── reusable-linux-build.yml   Raspberry Pi OS (ARM64), native runner
@@ -143,6 +144,7 @@ For reference, the checks each pull-request-triggered workflow reports:
 | [`docs.yml`](docs.yml)                         | `Documentation Consistency`                                                                                                                                                                                                                                                                                                                                                                                              |
 | [`ci-cmake.yml`](ci-cmake.yml)                 | `cmakelint`                                                                                                                                                                                                                                                                                                                                                                                                              |
 | [`ci-css.yml`](ci-css.yml)                     | `stylelint`                                                                                                                                                                                                                                                                                                                                                                                                              |
+| [`ci-javascript.yml`](ci-javascript.yml)       | `ESLint`                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | [`ci-markdown.yml`](ci-markdown.yml)           | `markdownlint`                                                                                                                                                                                                                                                                                                                                                                                                           |
 | [`ci-powershell.yml`](ci-powershell.yml)       | `PSScriptAnalyzer`                                                                                                                                                                                                                                                                                                                                                                                                       |
 | [`ci-python.yml`](ci-python.yml)               | `ruff`                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -161,7 +163,7 @@ For reference, the checks each pull-request-triggered workflow reports:
 - [github-actions-recipes.instructions.md](../../instructions/github-actions-recipes.instructions.md) — copy-paste workflow recipes and debugging guidance.
 - [build.instructions.md](../../instructions/build.instructions.md) — the CMake presets, sanitizers, and coverage the build and test jobs drive.
 - [../actions](../actions) — the composite actions these workflows call (`apt-install`, `cmake-build`, `package-binaries`, `build-vscode-extension`, `build-zed-extension`).
-- [linux-distros.json](../linux-distros.json) — the distribution matrix [`resolve-distro-matrix.yml`](resolve-distro-matrix.yml) loads.
+- [linux-distros.json](linux-distros.json) — the distribution matrix [`resolve-distro-matrix.yml`](resolve-distro-matrix.yml) loads.
 - [stale-path-denylist.txt](../stale-path-denylist.txt) — the patterns [`docs.yml`](docs.yml) rejects.
 - [prompts/README.md](../prompts/README.md) and [hooks/README.md](../hooks/README.md) — the sibling `.github/` indexes.
 

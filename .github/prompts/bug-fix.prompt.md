@@ -2,6 +2,8 @@
 description: "Diagnose and fix a bug in the Luma interpreter or standard library"
 agent: "agent"
 argument-hint: "Bug description, e.g. 'string interpolation crashes on empty expressions'"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # Bug Fix
@@ -29,3 +31,34 @@ Diagnose and fix a bug in the Luma interpreter. Follow a structured approach:
     - C++ platform test in `tests/platform/` if the bug is OS-specific (e.g. Win32 UTF-8 handling).
     - Luma test in `tests/features/language/` or `tests/features/stdlib/` if the bug is user-visible.
 6. Build and run the full test suite to verify the fix and confirm nothing else broke. See [build-and-test.prompt.md](build-and-test.prompt.md) for the canonical build-and-test workflow.
+
+## Verification Tiers
+
+Verify incrementally as you work — don't wait until the end to discover a cascade of failures.
+
+| After… | Run | Why |
+|---------|-----|-----|
+| Writing the fix | `cmake --build --preset default` (compile only) | Catches typos, missing includes, type errors immediately |
+| Compiling cleanly | The **single most-relevant test** (e.g. `ctest -R stdlib_test_string`) | Confirms the fix works in isolation |
+| Targeted test passes | `ctest --preset default` (full C++ suite) | Catches regressions in other subsystems |
+| Full suite passes | `build/Release/luma --strict --test <feature-test>.luma` | Validates the Luma-level behaviour |
+
+If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.
+
+## Example
+
+Bug: `"hello" |> String.slice(1, 3)` returns `"hel"` instead of `"el"`.
+
+1. **Reproduce**: Write a test `assert("hello" |> String.slice(1, 3) == "el")` — fails.
+2. **Isolate**: The lexer, parser, type checker, and compiler are not involved (this is a runtime stdlib function). Check `string_module.cpp`.
+3. **Root cause**: `String.slice` uses `substr(start, end)` but `std::string::substr` takes `(pos, count)`, not `(start, end)`. Fix: `substr(start, end - start)`.
+4. **Regression test**: Add to `tests/features/stdlib/string_functions.luma`:
+
+    ```luma
+    @test
+    function void test_string_slice_range() {
+        assert("hello" |> String.slice(1, 3) == "el")
+    }
+    ```
+
+5. **Build and verify**: `cmake --build --preset default && ctest --preset default`.

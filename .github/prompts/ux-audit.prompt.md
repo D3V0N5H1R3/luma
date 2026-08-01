@@ -3,6 +3,8 @@ description: "Audit a Luma application or example for user-experience, usability
 agent: "agent"
 tools: ["search", "read"]
 argument-hint: "File or directory to review, e.g. 'examples/applications/gui_todo.luma' or 'examples/applications/' (defaults to the GraphicalUi examples)"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # UX Audit

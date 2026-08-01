@@ -20,7 +20,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 #   libwebkit2gtk-4.1-dev ... enables GraphicalUi (else it compiles to a stub)
 #   clang-format-18 ......... C++ formatting gate (Formatting job in ci.yml)
 #   clang-tidy-18 ........... C++ static-analysis gate (Static Analysis job)
-#   gdb ..................... native debugging of the interpreter (Luma_Setup.md §7)
+#   gdb ..................... native debugging of the interpreter (CONTRIBUTING.md §Debugging the C++ Interpreter)
 #   lcov ................... the coverage preset (LUMA_FEATURE_COVERAGE)
 #   python3 python3-pip pipx  helper scripts under scripts/ and the Ruff CLI
 RUN apt-get update \

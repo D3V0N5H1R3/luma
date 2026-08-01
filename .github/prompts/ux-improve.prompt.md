@@ -2,6 +2,8 @@
 description: "Apply UX-audit findings — improve the user experience, usability, and visual design of a Luma app or example while keeping all tests green"
 agent: "agent"
 argument-hint: "A target app or example to improve, e.g. 'examples/applications/gui_todo.luma' or 'examples/applications/' (defaults to the GraphicalUi examples; the pipeline supplies the ranked ux-audit report)"
+version: 1
+lastUpdated: "2026-08-01"
 ---
 
 # UX Improve

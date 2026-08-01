@@ -1,6 +1,7 @@
 ---
 description: "Use when writing, reviewing, or modifying C++ or Luma test files. Covers the custom test framework, assertion macros, helper functions, Luma feature tests, and test conventions."
 applyTo: "tests/**"
+priority: essential
 ---
 
 # Working with Tests
