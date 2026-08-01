@@ -6,7 +6,7 @@
 // ═══════════════════════════════════════════════════════════
 //
 // Shared comparison logic used by Array.sort, Array.binary_search,
-// BinaryTree, and other modules that need to order Luma values.
+// and other modules that need to order Luma values.
 
 #include <cmath>
 #include <format>

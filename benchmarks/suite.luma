@@ -39,7 +39,6 @@ include "bench_linearalgebra.luma"
 include "bench_calculus.luma"
 include "bench_random.luma"
 include "bench_linkedlist.luma"
-include "bench_binarytree.luma"
 include "bench_reference.luma"
 include "bench_resource.luma"
 include "bench_keyvaluestore.luma"
@@ -81,7 +80,6 @@ function void run_benchmarks() {
     st = run_calculus_benchmarks(st)
     st = run_random_benchmarks(st)
     st = run_linkedlist_benchmarks(st)
-    st = run_binarytree_benchmarks(st)
     st = run_reference_benchmarks(st)
     st = run_resource_benchmarks(st)
     st = run_keyvaluestore_benchmarks(st)

@@ -42,8 +42,6 @@ const std::unordered_map<std::string_view, std::string_view>& get_builtin_type_n
     // identifiers (R02).  They lex as identifiers now, so hover matches them by
     // lexeme rather than by token type.
     static const std::unordered_map<std::string_view, std::string_view> map = {
-        {"binary_tree",
-         "```luma\nbinary_tree\n```\n\nImmutable binary search tree with unique elements."},
         {"channel",
          "```luma\nchannel<T>\n```\n\nA typed message channel for communicating between tasks."},
         {"key_value_store", "```luma\nkey_value_store\n```\n\nPersistent key-value store."},

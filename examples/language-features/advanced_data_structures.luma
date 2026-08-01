@@ -1,7 +1,7 @@
 # ═══════════════════════════════════════════════════════════
 # Advanced Data Structures
 #
-# Demonstrates BinaryTree, Set, Dictionary, Queue, and Stack
+# Demonstrates Set, Dictionary, Queue, and Stack
 # modules — immutable, functional data structures.
 # ═══════════════════════════════════════════════════════════
 
@@ -12,33 +12,10 @@ function string join_numbers(array<number> values) {
     |> String.join(", ")
 }
 
-# ── BinaryTree: sorted data with fast lookup ──
-
-function void demo_binary_tree() {
-    print("=== BinaryTree ===")
-
-    binary_tree sample_tree = BinaryTree.from_array([50, 30, 70, 20, 40, 60, 80])
-    number tree_size = sample_tree |> BinaryTree.length()
-    print("Tree size: ${tree_size}")
-
-    binary_tree lookup_tree = BinaryTree.from_array([50, 30, 70, 20, 40])
-    number tree_min = lookup_tree |> BinaryTree.min() |> Result.unwrap()
-    number tree_max = lookup_tree |> BinaryTree.max() |> Result.unwrap()
-    print("Min: ${tree_min}, Max: ${tree_max}")
-
-    array<number> sorted = BinaryTree.from_array([5, 3, 7, 1, 9, 2, 8])
-    |> BinaryTree.inorder()
-    string sorted_str = join_numbers(sorted)
-    print("Sorted: [${sorted_str}]")
-
-    number height = sample_tree |> BinaryTree.height()
-    print("Height: ${height}")
-}
-
 # ── Combining and partitioning collections ──
 
 function void demo_combining_and_partitioning() {
-    print("\n=== Combining & Partitioning ===")
+    print("=== Combining & Partitioning ===")
 
     # Array.concat — join two arrays
     array<number> combined = Array.concat([1, 2, 3], [4, 5, 6])
@@ -53,13 +30,6 @@ function void demo_combining_and_partitioning() {
     print("Evens: [${evens_str}]")
     print("Odds:  [${odds_str}]")
 
-    # BinaryTree.union — merge two trees (duplicates discarded)
-    number union_tree_size = BinaryTree.union(
-        BinaryTree.from_array([1, 3, 5, 7]),
-        BinaryTree.from_array([2, 4, 6, 7])
-    ) |> BinaryTree.length()
-    print("Tree union size (overlap at 7): ${union_tree_size}")
-
     # Set.partition — split a set by predicate
     (set small, set large) = Set.from_array([10, 25, 3, 42, 7, 99])
     |> Set.partition((number x) -> x < 20)
@@ -73,16 +43,6 @@ function void demo_combining_and_partitioning() {
     |> Dictionary.partition((string _name, integer score) -> score >= 60)
     |> Result.unwrap()
     print("Passing: ${Dictionary.length(passing)}, Failing: ${Dictionary.length(failing)}")
-
-    # BinaryTree.partition — split by predicate
-    (binary_tree small_tree, binary_tree large_tree) = BinaryTree.from_array(
-        [10, 5, 20, 3, 8, 15, 30]
-    )
-    |> BinaryTree.partition((integer x) -> x <= 10)
-    |> Result.unwrap()
-    integer small_count = BinaryTree.length(small_tree)
-    integer large_count = BinaryTree.length(large_tree)
-    print("Tree nodes <=10: ${small_count}, >10: ${large_count}")
 }
 
 # ── Filtering and reducing collections ──
@@ -102,19 +62,6 @@ function void demo_filtering_and_reducing() {
     |> Set.reduce(0, (number acc, number x) -> acc + x)
     |> Result.unwrap()
     print("Sum of set {1..5}: ${set_sum}")
-
-    # BinaryTree.filter — keep elements matching a predicate
-    binary_tree evens_tree = BinaryTree.from_array([1, 2, 3, 4, 5, 6])
-    |> BinaryTree.filter((number x) -> x % 2 == 0)
-    |> Result.unwrap()
-    print("Even nodes in tree: ${BinaryTree.length(evens_tree)}")
-
-    # BinaryTree.reduce — fold elements inorder with accumulator
-    string tree_csv = BinaryTree.from_array([5, 2, 8, 1, 4])
-    |> BinaryTree.reduce("", (string acc, number x) ->
-        if acc == "" { Converter.to_string(x) } else { "${acc}, ${Converter.to_string(x)}" })
-    |> Result.unwrap()
-    print("Tree inorder: [${tree_csv}]")
 }
 
 # ── Queue and Stack: concat & partition ──
@@ -152,21 +99,18 @@ function void demo_queue_and_stack() {
 function void demo_type_keywords() {
     print("\n=== Type Keywords ===")
 
-    # binary_tree, queue<T>, and stack<T> are first-class type keywords
-    binary_tree my_tree = BinaryTree.from_array([10, 5, 15, 3, 7])
+    # queue<T> and stack<T> are first-class type keywords
     queue<string> my_queue = Queue.new() |> Queue.enqueue("alpha") |> Queue.enqueue("beta")
     stack<number> my_stack = Stack.new() |> Stack.push(1.5) |> Stack.push(2.5)
 
-    print("Tree has ${BinaryTree.length(my_tree)} nodes")
     print("Queue has ${Queue.length(my_queue)} items")
     print("Stack has ${Stack.length(my_stack)} items")
 }
 
 @main
 function void main() {
-    print("Shows BinaryTree, Set, Dictionary, Queue, Stack, and collection helpers.")
+    print("Shows Set, Dictionary, Queue, Stack, and collection helpers.")
 
-    demo_binary_tree()
     demo_combining_and_partitioning()
     demo_filtering_and_reducing()
     demo_queue_and_stack()

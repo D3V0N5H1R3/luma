@@ -197,7 +197,6 @@ set(LUMA_RUNTIME_TESTS
     stdlib_test_calculus
     stdlib_test_linearalgebra
     stdlib_test_decimal
-    stdlib_test_binarytree
     stdlib_test_keyvaluestore
     stdlib_test_queue
     stdlib_test_reference
@@ -460,7 +459,6 @@ set(LUMA_FEATURE_TESTS_LANGUAGE
 
 set(LUMA_FEATURE_TESTS_STDLIB
     array_functions.luma
-    binarytree_functions.luma
     bits_functions.luma
     calculus_functions.luma
     channel_functions.luma

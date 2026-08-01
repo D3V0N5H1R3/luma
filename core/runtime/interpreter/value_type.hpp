@@ -91,7 +91,6 @@ LUMA_VALUE_TYPE_FOR(StackValue,          Stack);
 LUMA_VALUE_TYPE_FOR(SetValue,            Set);
 LUMA_VALUE_TYPE_FOR(XmlValue,            Xml);
 LUMA_VALUE_TYPE_FOR(KeyValueStoreValue,  KeyValueStore);
-LUMA_VALUE_TYPE_FOR(BinaryTreeValue,     BinaryTree);
 // clang-format on
 
 #undef LUMA_VALUE_TYPE_FOR
@@ -128,7 +127,7 @@ concept CollectionSubtype =
 // runtime value: primitives (null, bool, integer, number, string), compound
 // types (array, dictionary, tuple, record, choice, result, range, function),
 // concurrency types (task, channel), and collection types (queue, stack, set,
-// hash_set, linked_list, binary_tree, graph, xml, key_value_store).
+// hash_set, linked_list, graph, xml, key_value_store).
 //
 // ─── Design ──────────────────────────────────────────────────────────────
 //
@@ -321,16 +320,12 @@ public:
         return type_ == ValueType::KeyValueStore;
     }
 
-    [[nodiscard]] bool is_binary_tree() const {
-        return type_ == ValueType::BinaryTree;
-    }
-
     [[nodiscard]] bool is_reference() const {
         return type_ == ValueType::Reference;
     }
 
     /// Returns true if this value holds any CollectionObject-derived type
-    /// (queue, stack, set, hash_set, xml, key_value_store, linked_list, binary_tree, graph).
+    /// (queue, stack, set, xml, key_value_store).
     [[nodiscard]] bool is_collection() const noexcept {
         return std::holds_alternative<std::shared_ptr<CollectionObject>>(data_);
     }
@@ -446,11 +441,6 @@ public:
 
     [[nodiscard]] std::shared_ptr<KeyValueStoreValue> as_key_value_store() const {
         return std::static_pointer_cast<KeyValueStoreValue>(
-            std::get<std::shared_ptr<CollectionObject>>(data_));
-    }
-
-    [[nodiscard]] std::shared_ptr<BinaryTreeValue> as_binary_tree() const {
-        return std::static_pointer_cast<BinaryTreeValue>(
             std::get<std::shared_ptr<CollectionObject>>(data_));
     }
 

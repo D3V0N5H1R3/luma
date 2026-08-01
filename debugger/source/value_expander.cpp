@@ -106,8 +106,6 @@ std::vector<Variable> ValueExpander::get_value_variables(const Value& val, int v
             return get_indexed_variables(val.as_stack()->elements, start, count, child_depth);
         case ValueKind::Set:
             return get_indexed_variables(val.as_set()->elements, start, count, child_depth);
-        case ValueKind::BinaryTree:
-            return get_binary_tree_variables(val, start, count, child_depth);
         case ValueKind::KeyValueStore:
             return get_key_value_store_variables(val);
         case ValueKind::Xml:
@@ -210,31 +208,6 @@ std::vector<Variable> ValueExpander::get_indexed_variables(const std::vector<Val
     }
 
     return result;
-}
-
-std::vector<Variable> ValueExpander::get_binary_tree_variables(const Value& val, int start,
-                                                               int count, int child_depth) const {
-    // Iterative in-order traversal yields the BST's elements in sorted order
-    // without risking native stack overflow on deep or degenerate trees.
-    std::vector<Value> elements;
-    elements.reserve(val.as_binary_tree()->size());
-
-    std::vector<std::shared_ptr<BinaryTreeNode>> pending;
-    auto node = val.as_binary_tree()->root;
-
-    while (node || !pending.empty()) {
-        while (node) {
-            pending.push_back(node);
-            node = node->left;
-        }
-
-        node = pending.back();
-        pending.pop_back();
-        elements.push_back(node->value);
-        node = node->right;
-    }
-
-    return get_indexed_variables(elements, start, count, child_depth);
 }
 
 std::vector<Variable> ValueExpander::get_key_value_store_variables(const Value& val) const {

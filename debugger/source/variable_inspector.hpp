@@ -104,7 +104,6 @@ enum class ValueKind {
     Queue,
     Stack,
     Set,
-    BinaryTree,
     KeyValueStore,
     Xml,
     Range,

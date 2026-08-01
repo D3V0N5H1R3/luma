@@ -159,8 +159,8 @@ struct RectBounds {
     return Value{std::move(rec)};
 }
 
-// Build a Math.Vector2 record value (type_name "Vector2"), matching make_vec2 in
-// math_vectors.cpp — used by Math.rect_center.
+// Build a Math.Vector2 record value (type_name "Vector2") — used by
+// Math.rect_center and Math.circle.
 [[nodiscard]] Value make_rect_vec2(double x, double y) {
     auto rec = std::make_shared<RecordValue>();
     rec->type_name = "Vector2";
@@ -787,6 +787,16 @@ void register_math_ns(const EnvPtr& env) {
 
             return Value{r.width * r.height};
         })
+        // ── Math.Vector2 constructor ─────────────────────────────────────────
+        // Minimal constructor for the Math.Vector2 { x, y } record used by
+        // Math.circle() and Math.rect_center().
+        .func("vector2", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            const double x = expect_numeric(args[0], "Math.vector2", loc);
+            const double y = expect_numeric(args[1], "Math.vector2", loc);
+
+            return make_rect_vec2(x, y);
+        })
         // ── Math.Circle ──────────────────────────────────────────────────────
         // A 2D circle { center: Math.Vector2, radius }, the disk companion to
         // Math.Rect.  A total constructor (radius clamped non-negative) plus
@@ -842,9 +852,6 @@ void register_math_ns(const EnvPtr& env) {
 
     register_math_analysis(env);
     register_math_transcendental(env);
-    register_math_fraction(env);
-    register_math_complex(env);
-    register_math_vectors(env);
 }
 
 } // namespace luma

@@ -327,7 +327,6 @@ TypeInfo TypeChecker::resolve_named_type(const TypeAnnotation& ann, bool cacheab
     static constexpr auto named_record_types = std::to_array<std::string_view>({
         "widget",
         "xml",
-        "binary_tree",
         "set",
         "key_value_store",
         "queue",

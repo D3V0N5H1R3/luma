@@ -38,7 +38,7 @@
 //                                 equality is not meaningful for the type,
 //                                 override equals_kind() to return
 //                                 EqualsKind::by_reference (see XmlValue,
-//                                 BinaryTreeValue) and leave equals_to() to the base
+//                                 XmlValue) and leave equals_to() to the base
 //                                 default (which returns false).
 //   3. value_type.hpp           — Add is_*() and as_*() convenience methods
 //                                 to Value for the new collection kind.
@@ -82,7 +82,7 @@
 //
 //   Structure-specific names — When the data structure dictates a
 //                 specific layout that none of the above describe:
-//                   `root`      — BinaryTreeValue (tree root node)
+//                   `root`      — (reserved for future use)
 //
 // Prefer the generic names when they fit.  Use a structure-specific
 // name only when the storage layout has no natural analogue above.
@@ -116,7 +116,7 @@ namespace luma {
 // ──────────── CollectionObject hierarchy ────────────
 
 // CollectionObject — polymorphic base for rarely-used collection types
-// (Queue, Stack, Set, Xml, KeyValueStore, HashSet, LinkedList, BinaryTree, Graph).
+// (Queue, Stack, Set, Xml, KeyValueStore).
 // These types share a single variant slot in Value, reducing the variant from
 // 27 to 19 alternatives and simplifying all std::visit dispatch.
 //
@@ -785,37 +785,6 @@ struct KeyValueStoreValue : CollectionObject {
 };
 
 // ─── Node types ─────────────────────────────────────────────────────────────
-
-struct BinaryTreeNode {
-    explicit BinaryTreeNode(Value v) : value{std::move(v)} {}
-
-    Value value;
-    std::shared_ptr<BinaryTreeNode> left;
-    std::shared_ptr<BinaryTreeNode> right;
-};
-
-struct BinaryTreeValue : CollectionObject {
-    BinaryTreeValue() : CollectionObject(CollectionKind::BinaryTree) {}
-
-    std::shared_ptr<BinaryTreeNode> root;
-    std::size_t count_{0};
-
-    [[nodiscard]] std::string to_display_string() const override;
-
-    [[nodiscard]] std::string display_type_name() const override {
-        return "binary_tree";
-    }
-
-    [[nodiscard]] EqualsKind equals_kind() const noexcept override {
-        return EqualsKind::by_reference;
-    }
-
-    [[nodiscard]] Value deep_copy_value() const override;
-
-    [[nodiscard]] std::size_t size() const override {
-        return count_;
-    }
-};
 
 struct ReferenceValue {
     explicit ReferenceValue(Value v) : value{std::make_shared<Value>(std::move(v))} {}

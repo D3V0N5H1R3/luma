@@ -94,8 +94,6 @@ struct NullValue {
 // Heap-allocated compound types — forward-declared here,
 // defined after Value (MSVC requires complete types for std::pair/vector).
 struct ArrayValue;
-struct BinaryTreeNode;
-struct BinaryTreeValue;
 struct ChannelValue;
 struct ChoiceValue;
 struct CompiledFunction; // Compile-time bytecode (chunk.hpp).
@@ -126,7 +124,6 @@ enum class CollectionKind : std::uint8_t {
     Set,
     Xml,
     KeyValueStore,
-    BinaryTree,
 };
 
 // Abstract base for rarely-used collection types — one variant slot for all.
@@ -159,7 +156,6 @@ enum class ValueType : std::uint8_t {
     Set,
     Xml,
     KeyValueStore,
-    BinaryTree,
     Reference,
     Decimal,
 };
@@ -224,7 +220,6 @@ constexpr ValueCategory operator|(ValueCategory a, ValueCategory b) noexcept {
         case ValueType::Xml:
             return Collection;
         case ValueType::KeyValueStore:
-        case ValueType::BinaryTree:
             return Collection | Iterable;
         case ValueType::Reference:
             return None;

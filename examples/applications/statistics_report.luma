@@ -2,12 +2,12 @@
 # Statistics Report — Descriptive Statistics
 #
 # Produces a descriptive-statistics report for a numeric data
-# set using the Math standard-library module: sum, mean, median,
-# mode, variance, standard deviation, percentiles and Pearson
-# correlation. Demonstrates result<T> handling for every
-# statistic, Math.approximately_equal for floating-point checks
-# (the language forbids '==' on numbers), array reductions, and
-# @test annotations that pin the maths to textbook values.
+# set using the Statistics standard-library module: sum, mean,
+# median, mode, variance and standard deviation. Demonstrates
+# result<T> handling for every statistic, Math.approximately_equal
+# for floating-point checks (the language forbids '==' on numbers),
+# array reductions, and @test annotations that pin the maths to
+# textbook values.
 #
 # Usage: luma examples/applications/statistics_report.luma
 # Tests: luma --test examples/applications/statistics_report.luma
@@ -55,11 +55,7 @@ function void describe(string title, array<number> data) {
     print_statistic("range", maximum - minimum)
     print_statistic("variance", Result.unwrap_or(Statistics.variance(data), 0.0))
     print_statistic("std deviation", Result.unwrap_or(Statistics.standard_deviation(data), 0.0))
-    print_statistic("25th percentile", Result.unwrap_or(Statistics.percentile(data, 25.0), 0.0))
-    print_statistic("75th percentile", Result.unwrap_or(Statistics.percentile(data, 75.0), 0.0))
-    print_statistic("90th percentile", Result.unwrap_or(Statistics.percentile(data, 90.0), 0.0))
     print("  Note: variance is squared spread; standard deviation uses the data units.")
-    print("  Percentiles show the value at or below that share of the data.")
 }
 
 @main
@@ -74,18 +70,10 @@ function void main() {
     ]
     describe("Server response times (ms)", response_times)
 
-    print("")
-    print("Study hours vs exam score")
-    print("  Input data")
-    array<number> hours = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
-    array<number> scores = [52.0, 60.0, 68.0, 76.0, 84.0, 92.0]
-    print("  hours:  ${String.join(map_to_strings(hours), ", ")}")
-    print("  scores: ${String.join(map_to_strings(scores), ", ")}")
-    number r = Result.unwrap_or(Statistics.correlation(hours, scores), 0.0)
-    print("")
-    print("  Summary statistics")
-    print("  Pearson correlation: ${show_number(r)}")
-    print("  Note: correlation ranges from -1 to 1; 1 means both values rise together.")
+    array<number> exam_scores = [
+        52.0, 60.0, 68.0, 76.0, 84.0, 92.0,
+    ]
+    describe("Exam scores", exam_scores)
 }
 
 # ─── Tests ───────────────────────────────────────────────
@@ -128,29 +116,4 @@ function void test_std_is_root_of_variance() {
     number deviation = Result.unwrap_or(Statistics.standard_deviation(data), 0.0)
     number squared = Result.unwrap_or(Math.power(deviation, 2.0), 0.0)
     assert(numbers_close(squared, variance), "std deviation squared returns the variance")
-}
-
-@test
-function void test_percentiles_are_monotonic() {
-    array<number> data = textbook_sample()
-    number p25 = Result.unwrap_or(Statistics.percentile(data, 25.0), 0.0)
-    number p50 = Result.unwrap_or(Statistics.percentile(data, 50.0), 0.0)
-    number p75 = Result.unwrap_or(Statistics.percentile(data, 75.0), 0.0)
-    assert(p25 <= p50 && p50 <= p75, "percentiles increase with rank")
-}
-
-@test
-function void test_perfect_positive_correlation() {
-    array<number> xs = [1.0, 2.0, 3.0, 4.0, 5.0]
-    array<number> ys = [3.0, 5.0, 7.0, 9.0, 11.0]
-    number r = Result.unwrap_or(Statistics.correlation(xs, ys), 0.0)
-    assert(numbers_close(r, 1.0), "a perfect line correlates at 1.0")
-}
-
-@test
-function void test_perfect_negative_correlation() {
-    array<number> xs = [1.0, 2.0, 3.0, 4.0, 5.0]
-    array<number> ys = [10.0, 8.0, 6.0, 4.0, 2.0]
-    number r = Result.unwrap_or(Statistics.correlation(xs, ys), 0.0)
-    assert(numbers_close(r, -1.0), "a perfect descending line correlates at -1.0")
 }

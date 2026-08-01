@@ -229,7 +229,6 @@ bool Value::equals(const Value& other) const {
         case ValueType::Set:
         case ValueType::Xml:
         case ValueType::KeyValueStore:
-        case ValueType::BinaryTree:
             return equals_collection(*this, other);
 
         // Opaque handles and callables — identity only (never equal).
@@ -277,8 +276,5 @@ bool SetValue::equals_to(const CollectionObject& other) const {
 
 // KeyValueStoreValue reports EqualsKind::by_reference — identity semantics,
 // never structurally equal.  It inherits the base equals_to() default.
-
-// BinaryTreeValue reports EqualsKind::by_reference — structural equality is not
-// defined for trees.  It inherits the base equals_to() default (returns false).
 
 } // namespace luma

@@ -28,10 +28,6 @@ static void test_statistics_standard_deviation_returns_result_number() {
     ASSERT_TRUE(passes("result<number> r = Statistics.standard_deviation([1.0, 2.0, 3.0])\n"));
 }
 
-static void test_statistics_percentile_returns_result_number() {
-    ASSERT_TRUE(passes("result<number> r = Statistics.percentile([1, 2, 3], 50.0)\n"));
-}
-
 // ─── None type ───
 
 // none is not assignable to a concrete type.
@@ -606,7 +602,6 @@ int main() {
     RUN(test_statistics_mode_returns_result_number);
     RUN(test_statistics_variance_returns_result_number);
     RUN(test_statistics_standard_deviation_returns_result_number);
-    RUN(test_statistics_percentile_returns_result_number);
 
     // ─── None/Optional type ───
 

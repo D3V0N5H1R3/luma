@@ -155,7 +155,6 @@ Value Value::deep_copy() const {
         case ValueType::Set:
         case ValueType::Xml:
         case ValueType::KeyValueStore:
-        case ValueType::BinaryTree:
             return as_collection()->deep_copy_value();
 
         // Task handles are cloned so that each thread which receives a copy
@@ -252,29 +251,6 @@ Value KeyValueStoreValue::deep_copy_value() const {
     copy->entries = entries;
     copy->file_path = file_path;
     copy->read_only = read_only;
-
-    return Value{std::move(copy)};
-}
-
-// BinaryTreeValue
-
-static std::shared_ptr<BinaryTreeNode>
-clone_binary_tree_node(const std::shared_ptr<BinaryTreeNode>& node) {
-    if (!node) {
-        return nullptr;
-    }
-
-    auto copy_node = std::make_shared<BinaryTreeNode>(node->value.deep_copy());
-    copy_node->left = clone_binary_tree_node(node->left);
-    copy_node->right = clone_binary_tree_node(node->right);
-
-    return copy_node;
-}
-
-Value BinaryTreeValue::deep_copy_value() const {
-    auto copy = std::make_shared<BinaryTreeValue>();
-    copy->root = clone_binary_tree_node(root);
-    copy->count_ = count_;
 
     return Value{std::move(copy)};
 }

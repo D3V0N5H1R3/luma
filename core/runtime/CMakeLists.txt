@@ -41,9 +41,6 @@ luma_add_stdlib_library(collections
         stdlib/collections/set_module.cpp
         stdlib/collections/queue_module.cpp
         stdlib/collections/stack_module.cpp
-        stdlib/collections/binarytree_module.cpp
-        stdlib/collections/binarytree_core.cpp
-        stdlib/collections/binarytree_advanced.cpp
 )
 
 luma_platform_source_pair(_platform_process stdlib/system/platform_process)
@@ -104,9 +101,6 @@ luma_add_stdlib_library(math
         stdlib/math/math_analysis.cpp
         stdlib/math/statistics_module.cpp
         stdlib/math/math_transcendental.cpp
-        stdlib/math/math_fraction.cpp
-        stdlib/math/math_complex.cpp
-        stdlib/math/math_vectors.cpp
         stdlib/math/decimal_module.cpp
         stdlib/system/random_module.cpp
         stdlib/math/linearalgebra_module.cpp

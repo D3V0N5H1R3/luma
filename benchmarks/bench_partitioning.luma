@@ -101,34 +101,6 @@ function BenchResult run_partitioning_benchmarks(BenchResult state) {
         |> Result.unwrap()
     })
 
-    # --- BinaryTree.filter / reduce / union / partition ---
-
-    binary_tree tree30 = BinaryTree.from_array(Array.range(0, 30) |> Result.unwrap())
-
-    st = time_it(st, "BinaryTree.filter (30 elem)", 1000, () -> {
-        binary_tree _filtered = tree30
-        |> BinaryTree.filter((integer x) -> x % 2 == 0)
-        |> Result.unwrap()
-    })
-
-    st = time_it(st, "BinaryTree.reduce (30 elem)", 1000, () -> {
-        integer _total = tree30
-        |> BinaryTree.reduce(0, (integer acc, integer x) -> acc + x)
-        |> Result.unwrap()
-    })
-
-    binary_tree union_first = BinaryTree.from_array(Array.range(0, 20) |> Result.unwrap())
-    binary_tree union_second = BinaryTree.from_array(Array.range(15, 35) |> Result.unwrap())
-    st = time_it(st, "BinaryTree.union (2 x 20)", 1000, () -> {
-        binary_tree _merged = BinaryTree.union(union_first, union_second)
-    })
-
-    st = time_it(st, "BinaryTree.partition (30 elem)", 1000, () -> {
-        (binary_tree _matches, binary_tree _rest) = tree30
-        |> BinaryTree.partition((integer x) -> x < 15)
-        |> Result.unwrap()
-    })
-
     # --- Queue.concat / partition ---
 
     queue<integer> queue_first = bench_build_queue(25, 0)
