@@ -57,6 +57,20 @@ Implement a new language feature in Luma. Follow the interpreter pipeline and mo
     (The [Standard Library Reference](../../documents/Luma_Standard_Library_Reference.md) covers stdlib surface, not language features. The REPL, Language Server, Debugger, GraphicalUi, and Concurrent Debugging guides — and their subsystem READMEs — only need updates if you changed those subsystems.)
 10. Build and run all tests to verify nothing is broken — see [build-and-test.prompt.md](build-and-test.prompt.md) for the canonical workflow. Because a language feature touches the whole pipeline (and you added fuzz seeds in step 8), finish with the deeper [full-test-sweep.prompt.md](full-test-sweep.prompt.md), which also exercises the fuzz smoke tests, benchmarks, and examples that `ctest` does not cover.
 
+## Verification Tiers
+
+A language feature touches every pipeline phase. Verify incrementally rather than waiting until the end.
+
+| After… | Run | Why |
+|---------|-----|-----|
+| Each pipeline phase (step 6) | `cmake --build --preset default` (compile only) | Catches signature errors before the next phase builds on them |
+| Lexer + Parser + Type Checker done | `ctest -R "lexer_test|parser_test|type_checker_test"` | Confirms front-end accepts/rejects correctly before wiring bytecode |
+| Compiler + VM done | `ctest -R "compiler_test|vm_test|integration_test"` | Confirms end-to-end runtime behaviour |
+| All C++ tests pass | `build/Release/luma --strict --test tests/features/language/<feature>.luma` | Validates the user-facing semantics and catches lint warnings |
+| Feature tests pass | [full-test-sweep.prompt.md](full-test-sweep.prompt.md) | Exercises fuzz seeds, benchmarks, and examples |
+
+If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.
+
 ## Example
 
 Adding a `unless` statement (sugar for `if not`):

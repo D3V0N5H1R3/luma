@@ -32,6 +32,19 @@ Diagnose and fix a bug in the Luma interpreter. Follow a structured approach:
     - Luma test in `tests/features/language/` or `tests/features/stdlib/` if the bug is user-visible.
 6. Build and run the full test suite to verify the fix and confirm nothing else broke. See [build-and-test.prompt.md](build-and-test.prompt.md) for the canonical build-and-test workflow.
 
+## Verification Tiers
+
+Verify incrementally as you work — don't wait until the end to discover a cascade of failures.
+
+| After… | Run | Why |
+|---------|-----|-----|
+| Writing the fix | `cmake --build --preset default` (compile only) | Catches typos, missing includes, type errors immediately |
+| Compiling cleanly | The **single most-relevant test** (e.g. `ctest -R stdlib_test_string`) | Confirms the fix works in isolation |
+| Targeted test passes | `ctest --preset default` (full C++ suite) | Catches regressions in other subsystems |
+| Full suite passes | `build/Release/luma --strict --test <feature-test>.luma` | Validates the Luma-level behaviour |
+
+If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.
+
 ## Example
 
 Bug: `"hello" |> String.slice(1, 3)` returns `"hel"` instead of `"el"`.

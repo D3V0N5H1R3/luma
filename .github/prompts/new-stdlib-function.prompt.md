@@ -36,6 +36,19 @@ A named constant (e.g. `Math.pi`, `Math.tau`, `GraphicalUi.PRIMARY`) is a nullar
 3. **Skip arity and type refinement.** Constants are excluded from arity validation automatically (`init_arities()` skips every `is_constant` spec), and a constant's type is fixed, so `refine_return_type()` never applies.
 4. **Test, document — skip fuzz/benchmark.** Add a C++ unit test and a Luma feature test asserting the constant's value/type, and document it under the module's section in `Luma_Standard_Library_Reference.md`. (The catalog↔runtime wiring is already guarded — `test_catalog_constants_are_not_callable` in `tests/runtime/stdlib_catalog_conformance_test.cpp` fails if a catalog constant has no runtime binding — so add both entries together.) Fuzz and benchmark coverage do not apply to a constant.
 
+## Verification Tiers
+
+Verify incrementally as you work — don't wait until step 10 to discover a cascade of failures.
+
+| After… | Run | Why |
+|---------|-----|-----|
+| Implementing the runtime body (step 5) | `cmake --build --preset default` (compile only) | Catches typos, missing includes, signature mismatches |
+| Compiling cleanly | `ctest -R stdlib_test_<module>` (targeted test) | Confirms the function works in isolation |
+| Adding catalog metadata | `ctest -R stdlib_catalog_conformance` | Catches arity/name mismatches between runtime and catalog |
+| All C++ tests pass | `build/Release/luma --strict --test <feature-test>.luma` | Validates Luma-level behaviour and catches lint warnings |
+
+If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.
+
 ## Example
 
 Adding `String.repeat(count)` — repeats a string `count` times:

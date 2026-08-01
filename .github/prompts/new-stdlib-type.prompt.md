@@ -41,6 +41,19 @@ Add a new record or choice type to a Luma standard library module. Follow the ex
 5. Document the type in `Luma_Standard_Library_Reference.md` under the module's section.
 6. Build and verify: `cmake --build --preset default`, then run the relevant tests (`ctest --preset default` for the C++ unit test and `build/Release/luma --test <your-feature-test>.luma` for the Luma test). Confirm everything passes before finishing.
 
+## Verification Tiers
+
+Verify incrementally as you work — don't wait until step 6 to discover a cascade of failures.
+
+| After… | Run | Why |
+|---------|-----|-----|
+| Adding the type declaration (step 5–6) | `cmake --build --preset default` (compile only) | Catches malformed declarations, missing includes |
+| Compiling cleanly | `ctest -R stdlib_test_<module>` (targeted test) | Confirms the type is constructible and usable |
+| Adding catalog entries for accessors | `ctest -R stdlib_catalog_conformance` | Catches arity/name mismatches |
+| All C++ tests pass | `build/Release/luma --strict --test <feature-test>.luma` | Validates Luma-level behaviour and catches lint warnings |
+
+If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.
+
 ## Example
 
 Adding a simple choice type `Http.Method` with unit variants `Get`, `Post`, `Put`, and `Delete`:
