@@ -10,45 +10,44 @@ This reference was previously part of the [User Manual](Luma_User_Manual.md). Fo
 
 1. [Core Built-Ins](#1--core-built-ins)
 2. [Array](#2--array)
-3. [BinaryTree](#3--binarytree)
-4. [Calculus](#4--calculus)
-5. [Channel](#5--channel)
-6. [Compression](#6--compression)
-7. [Converter](#7--converter)
-8. [Csv](#8--csv)
-9. [DateTime](#9--datetime)
-10. [Decimal](#10--decimal)
-11. [Dictionary](#11--dictionary)
-12. [Encoder](#12--encoder)
-13. [FileSystem](#13--filesystem)
-14. [Solaris and GraphicalUi](#14--solaris-and-graphicalui)
-15. [Hash](#15--hash)
-16. [Http](#16--http)
-17. [Console](#17--console)
-18. [Json](#18--json)
-19. [KeyValueStore](#19--keyvaluestore)
-20. [LinearAlgebra](#20--linearalgebra)
-21. [Log](#21--log)
-22. [Math](#22--math)
-23. [Optional](#23--optional)
-24. [Order](#24--order)
-25. [Process](#25--process)
-26. [Queue](#26--queue)
-27. [Random](#27--random)
-28. [Reference](#28--reference)
-29. [RegularExpression](#29--regularexpression)
-30. [Resource](#30--resource)
-31. [Result](#31--result)
-32. [Set](#32--set)
-33. [Socket](#33--socket)
-34. [Stack](#34--stack)
-35. [String](#35--string)
-36. [Task](#36--task)
-37. [Terminal](#37--terminal)
-38. [Xml](#38--xml)
-39. [Color](#39--color)
-40. [Bits](#40--bits)
-41. [Statistics](#41--statistics)
+3. [Calculus](#3--calculus)
+4. [Channel](#4--channel)
+5. [Compression](#5--compression)
+6. [Converter](#6--converter)
+7. [Csv](#7--csv)
+8. [DateTime](#8--datetime)
+9. [Decimal](#9--decimal)
+10. [Dictionary](#10--dictionary)
+11. [Encoder](#11--encoder)
+12. [FileSystem](#12--filesystem)
+13. [Solaris and GraphicalUi](#13--solaris-and-graphicalui)
+14. [Hash](#14--hash)
+15. [Http](#15--http)
+16. [Console](#16--console)
+17. [Json](#17--json)
+18. [KeyValueStore](#18--keyvaluestore)
+19. [LinearAlgebra](#19--linearalgebra)
+20. [Log](#20--log)
+21. [Math](#21--math)
+22. [Optional](#22--optional)
+23. [Order](#23--order)
+24. [Process](#24--process)
+25. [Queue](#25--queue)
+26. [Random](#26--random)
+27. [Reference](#27--reference)
+28. [RegularExpression](#28--regularexpression)
+29. [Resource](#29--resource)
+30. [Result](#30--result)
+31. [Set](#31--set)
+32. [Socket](#32--socket)
+33. [Stack](#33--stack)
+34. [String](#34--string)
+35. [Task](#35--task)
+36. [Terminal](#36--terminal)
+37. [Xml](#37--xml)
+38. [Color](#38--color)
+39. [Bits](#39--bits)
+40. [Statistics](#40--statistics)
 
 - [See Also](#see-also)
 
@@ -138,50 +137,7 @@ These require no namespace prefix:
 
 > **Sorting.** The `Array.sort` comparator must return a number: negative puts `a` before `b`, zero treats them as equal, and positive puts `b` before `a`. `Array.sort_by` accepts any function that returns a comparable string or number key — elements are sorted in ascending order by that key.
 
-## 3 — BinaryTree
-
-A binary search tree (BST) with O(log n) average-case insert, remove, and lookup. Supports comparable types (integer, number, string). All operations are immutable — they return a new tree.
-
-> **Ordering invariant.** For every node, all values in the left subtree are strictly less than the node's value, and all values in the right subtree are strictly greater. Integers and numbers are compared numerically; strings are compared lexicographically. Duplicate values are not stored — inserting an existing value is a no-op.
->
-> **Balance.** The tree is **not** self-balancing. Inserting values in sorted order produces a degenerate linear tree with O(n) height. For predictable performance on large inputs, shuffle the data before inserting, or prefer `Set` for membership-only queries.
-
-| Function                            | Parameter Types                         | Return Type                          | Description                                                    |
-| ----------------------------------- | --------------------------------------- | ------------------------------------ | -------------------------------------------------------------- |
-| `BinaryTree.balance(t)`             | `(binary_tree)`                         | `binary_tree`                        | Return a height-balanced copy of the tree                      |
-| `BinaryTree.all(t, fn)`             | `(binary_tree, function(T) -> boolean)` | `result<boolean>`                    | `true` if every value matches; fail if predicate throws        |
-| `BinaryTree.any(t, fn)`             | `(binary_tree, function(T) -> boolean)` | `result<boolean>`                    | `true` if some value matches; fail if predicate throws         |
-| `BinaryTree.ceiling_value(t, v)`    | `(binary_tree, T)`                      | `result<T>`                          | Smallest value ≥ `v`; fail if none exists                      |
-| `BinaryTree.contains(t, v)`         | `(binary_tree, T)`                      | `boolean`                            | Whether `v` is in the tree                                     |
-| `BinaryTree.count(t, fn)`           | `(binary_tree, function(T) -> boolean)` | `result<integer>`                    | Number of values matching `fn`; fail if predicate throws       |
-| `BinaryTree.each(t, fn)`            | `(binary_tree, function(T) -> void)`    | `result<binary_tree>`                | Apply `fn` to each value in order; returns `t` unchanged       |
-| `BinaryTree.equals(a, b)`           | `(binary_tree, binary_tree)`            | `boolean`                            | Whether both hold the same set of values (shape-independent)   |
-| `BinaryTree.filter(t, fn)`          | `(binary_tree, function(T) -> boolean)` | `result<binary_tree>`                | Elements for which `fn` returns true; fail if predicate throws |
-| `BinaryTree.find(t, fn)`            | `(binary_tree, function(T) -> boolean)` | `result<optional<T>>`                | First in-order value matching `fn`; `none` if no match         |
-| `BinaryTree.floor_value(t, v)`      | `(binary_tree, T)`                      | `result<T>`                          | Largest value ≤ `v`; fail if none exists                       |
-| `BinaryTree.from_array(arr)`        | `(array<T>)`                            | `binary_tree`                        | Build tree from array                                          |
-| `BinaryTree.height(t)`              | `(binary_tree)`                         | `integer`                            | Tree height                                                    |
-| `BinaryTree.inorder(t)`             | `(binary_tree)`                         | `array<T>`                           | In-order traversal (sorted)                                    |
-| `BinaryTree.insert(t, v)`           | `(binary_tree, T)`                      | `binary_tree`                        | Insert value; returns new tree                                 |
-| `BinaryTree.is_balanced(t)`         | `(binary_tree)`                         | `boolean`                            | Whether every node's subtree heights differ by at most 1       |
-| `BinaryTree.is_empty(t)`            | `(binary_tree)`                         | `boolean`                            | Whether the tree is empty                                      |
-| `BinaryTree.length(t)`              | `(binary_tree)`                         | `integer`                            | Number of nodes                                                |
-| `BinaryTree.level_order(t)`         | `(binary_tree)`                         | `array<T>`                           | Level-order (breadth-first) traversal                          |
-| `BinaryTree.map(t, fn)`             | `(binary_tree, function(T) -> U)`       | `result<binary_tree>`                | Apply `fn` to each value and rebuild the BST (re-sorted, deduplicated); fail if `fn` throws |
-| `BinaryTree.max(t)`                 | `(binary_tree)`                         | `result<T>`                          | Maximum value; fail if empty                                   |
-| `BinaryTree.min(t)`                 | `(binary_tree)`                         | `result<T>`                          | Minimum value; fail if empty                                   |
-| `BinaryTree.new()`                  | `()`                                    | `binary_tree`                        | Empty tree                                                     |
-| `BinaryTree.partition(t, fn)`       | `(binary_tree, function(T) -> boolean)` | `result<(binary_tree, binary_tree)>` | Split into `(matches, rest)`; fail if predicate throws         |
-| `BinaryTree.predecessor(t, v)`      | `(binary_tree, T)`                      | `result<T>`                          | Largest value strictly less than `v`; fail if none exists      |
-| `BinaryTree.postorder(t)`           | `(binary_tree)`                         | `array<T>`                           | Post-order traversal                                           |
-| `BinaryTree.preorder(t)`            | `(binary_tree)`                         | `array<T>`                           | Pre-order traversal                                            |
-| `BinaryTree.reduce(t, initial, fn)` | `(binary_tree, U, function(U, T) -> U)` | `result<U>`                          | Fold elements in order with accumulator; fail if `fn` throws   |
-| `BinaryTree.remove(t, v)`           | `(binary_tree, T)`                      | `binary_tree`                        | Remove value; returns new tree                                 |
-| `BinaryTree.successor(t, v)`        | `(binary_tree, T)`                      | `result<T>`                          | Smallest value strictly greater than `v`; fail if none exists  |
-| `BinaryTree.to_array(t)`            | `(binary_tree)`                         | `array<T>`                           | Same as `inorder`                                              |
-| `BinaryTree.union(a, b)`            | `(binary_tree, binary_tree)`            | `binary_tree`                        | Union of two trees; duplicates discarded                       |
-
-## 4 — Calculus
+## 3 — Calculus
 
 Numerical calculus operations. Functions accept callable values (native functions like `Math.sine` or user-defined lambdas).
 
@@ -211,7 +167,7 @@ Numerical calculus operations. Functions accept callable values (native function
 
 Callbacks that return `result<number>` (such as `Math.sine`) are automatically unwrapped.
 
-## 5 — Channel
+## 4 — Channel
 
 Thread-safe FIFO queues for passing values between tasks.
 
@@ -251,7 +207,7 @@ Channel operations use typed exceptions instead of result types for error condit
 
 These are runtime errors catchable with `try`/`catch`. Use `Channel.is_closed(ch)` to check channel state without throwing.
 
-## 6 — Compression
+## 5 — Compression
 
 Compress and decompress data using Deflate (RFC 1951), Gzip (RFC 1952), and run-length encoding.
 
@@ -300,7 +256,7 @@ match decoded {
 }
 ```
 
-## 7 — Converter
+## 6 — Converter
 
 Convert values between different types (e.g. string → integer, integer → string).
 
@@ -325,7 +281,7 @@ Convert values between different types (e.g. string → integer, integer → str
 | `Converter.to_roman(n)`                | `(integer)`     | `result<string>`  | Roman numeral; fail if value outside [1, 3999]               |
 | `Converter.to_string(v)`               | `(T)`           | `string`          | String representation of any value                           |
 
-## 8 — Csv
+## 7 — Csv
 
 Parse and serialise comma-separated values.
 
@@ -368,7 +324,7 @@ character).
 1-based) — so a program parsing a malformed CSV can point at the row/column that broke rather than
 surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 
-## 9 — DateTime
+## 8 — DateTime
 
 | Function                                   | Parameter Types                                          | Return Type                  | Description                                                              |
 | ------------------------------------------ | -------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------ |
@@ -511,7 +467,7 @@ failure(_other)                             { print("that isn't a valid ISO-8601
 }
 ```
 
-## 10 — Decimal
+## 9 — Decimal
 
 Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where `0.1 + 0.2` is not exactly `0.3`), a `decimal` stores its value in base 10, so money and other decimal maths behave the way people expect. `decimal` is a distinct opaque type built on an arbitrary-precision coefficient, so it never silently loses precision the way `number` does.
 
@@ -600,7 +556,7 @@ function void main() {
 }
 ```
 
-## 11 — Dictionary
+## 10 — Dictionary
 
 Dictionaries preserve insertion order. All reads and writes use string keys.
 
@@ -643,7 +599,7 @@ Dictionaries preserve insertion order. All reads and writes use string keys.
 
 `Dictionary.KeyValue` record fields: `key: string`, `value` (the dictionary's value type `V`). It is the element type of `Dictionary.to_array`, so a program can annotate the result as `array<Dictionary.KeyValue>` and read `.key`/`.value` directly. Use `Dictionary.to_entries` instead when you want `(key, value)` tuples rather than records.
 
-## 12 — Encoder
+## 11 — Encoder
 
 Transform the representation of a string without changing its type (e.g. Base64, URL percent-encoding).
 
@@ -674,7 +630,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 
 `Encoder.Error` is a choice type with four variants — `InvalidBase64`, `InvalidPercentEncoding`, `InvalidUtf8`, `InvalidAscii` — that categorises _why_ a decode failed, so a program validating user-supplied encoded input can branch on the cause instead of substring-matching an opaque message. It is surfaced by the opt-in `*_typed` companions — `Encoder.decode_base64_typed`, `Encoder.decode_url_typed`, and `Encoder.decode_text_typed` — which return `result<string, Encoder.Error>`: a bad Base64 alphabet or padding is `InvalidBase64`; a malformed percent-escape is `InvalidPercentEncoding`; bytes that are not valid UTF-8 (or outside the byte domain) under `Utf8`/`Latin1` are `InvalidUtf8`; and bytes outside the ASCII range under `Ascii` are `InvalidAscii`. This is additive (mirroring `DateTime.from_iso_string_typed` / `DateTime.ParseError`): the plain `decode_base64`, `decode_url`, and `decode_text` keep their string-error `result<string>`.
 
-## 13 — FileSystem
+## 12 — FileSystem
 
 | Function                                  | Parameter Types           | Return Type             | Description                                           |
 | ----------------------------------------- | ------------------------- | ----------------------- | ----------------------------------------------------- |
@@ -762,7 +718,7 @@ failure(_other) { print("could not read config") }
 
 > **Security note** — `append_file`, `read_bytes`, `read_file`, `read_lines`, `write_bytes`, `write_file`, and `write_lines` validate that the resolved path stays within the current working directory, which blocks cross-directory symlink traversal (e.g. a symlink pointing to `/etc/passwd` is rejected). However, a symbolic link that points to another file **within** the working directory is followed transparently. If your program accepts a user-supplied file path, validate that the resolved path refers to the expected file before reading or writing.
 
-## 14 — Solaris and GraphicalUi
+## 13 — Solaris and GraphicalUi
 
 Luma's GUI story is two layers under one section:
 
@@ -1571,7 +1527,7 @@ Accessibility functions add ARIA attributes, manage focus, and provide screen re
 
 The `attributes` dictionary accepts `"role"` and any key starting with `"aria_"` (underscores are converted to hyphens in the rendered HTML).
 
-## 15 — Hash
+## 14 — Hash
 
 Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 
@@ -1613,7 +1569,7 @@ print(d.hex)                                              # the 64-char hex stri
 match d.algorithm { case Hash.Algorithm.Sha256 { print("sha-256") } else { print("other") } }
 ```
 
-## 16 — Http
+## 15 — Http
 
 Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https://` URLs return an error result.
 
@@ -1721,7 +1677,7 @@ result<Http.Response> r = Http.get_with(
 > **Security note** — HTTP header names and values are validated to reject carriage-return (`\r`) and line-feed (`\n`) characters. Supplying headers that contain these characters returns a `failure` result to prevent CRLF header injection.
 > **Proxy support** — When the `HTTPS_PROXY`, `HTTP_PROXY`, or `ALL_PROXY` environment variables are set (lower-case variants are also honoured), requests are routed through the named HTTP proxy: `https` URLs use a `CONNECT` tunnel (TLS remains end-to-end with the origin server, so certificate verification is unaffected), and plain `http` URLs are forwarded with an absolute-form request line. `NO_PROXY` (comma-separated host or domain suffixes) bypasses the proxy for matching hosts. Proxy credentials supplied in the proxy URL's userinfo are sent via `Proxy-Authorization`. SSRF protection still applies to the request target: requests resolving to private, loopback, or otherwise reserved addresses are rejected even when a proxy is configured.
 
-## 17 — Console
+## 16 — Console
 
 | Function                       | Parameter Types | Return Type       | Description                                                               |
 | ------------------------------ | --------------- | ----------------- | ------------------------------------------------------------------------- |
@@ -1743,7 +1699,7 @@ result<Http.Response> r = Http.get_with(
 
 > **Console vs FileSystem:** `Console` handles console I/O — reading from stdin and writing to stdout/stderr. `FileSystem` handles file content — reading, writing, and appending data — as well as file metadata and paths (checking existence, querying size, listing directories, copying, renaming, and manipulating path components). Use `Console` for interactive console I/O; use `FileSystem` to read, write, and manage files and directories.
 
-## 18 — Json
+## 17 — Json
 
 Serialise and deserialise Luma values as JSON.
 
@@ -1840,7 +1796,7 @@ match Json.parse_detailed(user_input) {
 }
 ```
 
-## 19 — KeyValueStore
+## 18 — KeyValueStore
 
 Persistent file-backed key-value store. Keys and values are strings. The store uses a tab-separated format with proper escaping. Mutation functions (`set`, `remove`, `set_many`, `clear`) return `result<key_value_store>` — `success` with a new copy of the store, or `failure` if the store is read-only.
 
@@ -1868,7 +1824,7 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.update(s, key, fn)`          | `(key_value_store, string, function(optional<string>) -> string)` | `result<key_value_store>` | Set key to `fn(current-or-none)`; fail if read-only |
 | `KeyValueStore.values(s)`                   | `(key_value_store)`                     | `array<string>`           | All values                                        |
 
-## 20 — LinearAlgebra
+## 19 — LinearAlgebra
 
 Vector and matrix operations using arrays of numbers.
 
@@ -1927,7 +1883,7 @@ Vector and matrix operations using arrays of numbers.
 | `LinearAlgebra.transpose(m)`          | `(array<array<number>>)`                       | `array<array<number>>`         | Transpose matrix                |
 | `LinearAlgebra.zero_matrix(r, c)`     | `(integer, integer)`                           | `array<array<number>>`         | r×c zero matrix                 |
 
-## 21 — Log
+## 20 — Log
 
 Structured logging with configurable levels. Messages are written to stderr by default.
 
@@ -1953,7 +1909,7 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 
 `Log.set_output` also accepts a `Log.Output` choice in place of the string, mirroring how `Log.set_level` accepts `Log.Level`. The choice has three variants: `Log.Output.Stderr`, `Log.Output.Stdout`, and `Log.Output.File(path: string)`. The typed form removes the ambiguity of the string overload — where a mistyped stream name such as `"stdrr"` is silently treated as a file path — because a stream and a file path are now distinct variants: `Log.set_output(Log.Output.File("app.log"))` can only mean a file.
 
-## 22 — Math
+## 21 — Math
 
 | Function                              | Parameter Types                  | Return Type       | Description                                                                      |
 | ------------------------------------- | -------------------------------- | ----------------- | -------------------------------------------------------------------------------- |
@@ -2174,7 +2130,7 @@ case Sign.Positive { "rising" }
 | `Math.max_number` | `number` | 1.7976931348623157e308 (largest finite `number`) |
 | `Math.min_number` | `number` | 2.2250738585072014e-308 (smallest positive normal `number`; the most-negative `number` is `-Math.max_number`) |
 
-## 23 — Optional
+## 22 — Optional
 
 Functions for working with `optional<T>` values. All functions are available as `Optional.function_name(...)` without a `use` declaration.
 
@@ -2231,7 +2187,7 @@ string label = some(42)
 print(label) # "positive: 42"
 ```
 
-## 24 — Order
+## 23 — Order
 
 Comparison utilities built around the `Ordering` choice type, a self-documenting
 alternative to raw `-1` / `0` / `1` comparison numbers. All functions are available
@@ -2295,7 +2251,7 @@ array<Person> sorted = Result.unwrap(
 The existing numeric comparator convention (a `function(T, T) -> number` returning a
 negative, zero, or positive value) still works unchanged; `Order` is purely additive.
 
-## 25 — Process
+## 24 — Process
 
 | Function                                        | Parameter Types    | Return Type                     | Description                                                              |
 | ----------------------------------------------- | ------------------ | ------------------------------- | ------------------------------------------------------------------------ |
@@ -2394,7 +2350,7 @@ failure(_e)  { print("could not signal that process") }
 }
 ```
 
-## 26 — Queue
+## 25 — Queue
 
 Immutable FIFO (first-in, first-out) queue. All mutating operations return a new queue, leaving the original unchanged.
 
@@ -2421,7 +2377,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Queue.reverse(q)`          | `(queue)`                         | `queue`                  | New queue with the element order reversed              |
 | `Queue.to_array(q)`         | `(queue)`                         | `array<T>`               | Convert to array                                       |
 
-## 27 — Random
+## 26 — Random
 
 | Function                          | Parameter Types       | Return Type        | Description                                                                     |
 | --------------------------------- | --------------------- | ------------------ | ------------------------------------------------------------------------------- |
@@ -2477,7 +2433,7 @@ Random.Uuid id = Random.uuid_typed()
 result<Random.Uuid> parsed = Random.parse_uuid("550e8400-e29b-41d4-a716-446655440000")
 ```
 
-## 28 — Reference
+## 27 — Reference
 
 Mutable reference cells — shared mutable containers that preserve identity across closure capture boundaries. All functions are available as `Reference.function_name(...)` without a `use` declaration.
 
@@ -2534,7 +2490,7 @@ integer value = Reference.new(42) |> Reference.get()       # 42
 string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 ```
 
-## 29 — RegularExpression
+## 28 — RegularExpression
 
 | Function                                          | Parameter Types            | Return Type                              | Description                                                   |
 | ------------------------------------------------- | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
@@ -2637,7 +2593,7 @@ result<boolean> spans =
 
 The ReDoS guard and pattern-size limit apply to the `*_with` variants exactly as they do to the flagless functions.
 
-## 30 — Resource
+## 29 — Resource
 
 `Resource.with` guarantees that a cleanup function is called after a body function runs, regardless of whether the body throws a runtime error. It is the Luma equivalent of a `finally`-based cleanup block, expressed as a library function.
 
@@ -2690,11 +2646,40 @@ string content = Resource.using(
 )
 ```
 
-## 31 — Result
+## 30 — Result
 
-See the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--result-and-optional).
+Combinators for transforming and inspecting `result<T>` values without explicit `match`. For the `result<T>` type itself (creation via `success()`/`failure()`, pattern matching, propagation with `?`, and the `??`/`!>` operators), see the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--result-and-optional).
 
-## 32 — Set
+| Function                       | Parameter Types                                     | Return Type    | Description                                                              |
+| ------------------------------ | --------------------------------------------------- | -------------- | ------------------------------------------------------------------------ |
+| `Result.bimap(r, on_ok, on_err)` | `(result<T>, function(T) -> U, function(T) -> V)` | `result<U>`    | Map success with `on_ok`, failure with `on_err`                          |
+| `Result.collect(arr)`          | `(array<result<T>>)`                                | `result<array<T>>` | Collect an array of results into a result of an array; short-circuits on first failure |
+| `Result.error(r)`              | `(result<T>)`                                       | `T`            | Extract failure value; throws if `r` is a success                        |
+| `Result.error_code(r)`         | `(result<T>)`                                       | `string`       | Machine-readable error code; empty string for success values             |
+| `Result.expect(r, msg)`        | `(result<T>, string)`                               | `T`            | Unwrap or throw with a custom message                                    |
+| `Result.filter(r, pred, err)`  | `(result<T>, function(T) -> boolean, T)`            | `result<T>`    | Keep success only if `pred` holds; otherwise fail with `err`             |
+| `Result.flat_map(r, fn)`       | `(result<T>, function(T) -> result<U>)`             | `result<U>`    | Chain computation that itself returns a result                            |
+| `Result.flatten(r)`            | `(result<result<T>>)`                               | `result<T>`    | Unwrap one layer of nesting                                              |
+| `Result.fold(r, on_ok, on_err)` | `(result<T>, function(T) -> U, function(T) -> U)` | `U`            | Reduce to a single value regardless of success/failure                   |
+| `Result.is_failure(r)`         | `(result<T>)`                                       | `boolean`      | Whether `r` is a failure                                                 |
+| `Result.is_success(r)`         | `(result<T>)`                                       | `boolean`      | Whether `r` is a success                                                 |
+| `Result.map(r, fn)`            | `(result<T>, function(T) -> U)`                     | `result<U>`    | Transform the success value; pass through failure unchanged               |
+| `Result.map_boolean(r, fn)`    | `(result<boolean>, function(boolean) -> U)`         | `result<U>`    | Map only if inner value is a boolean                                     |
+| `Result.map_failure(r, fn)`    | `(result<T>, function(T) -> U)`                     | `result<T>`    | Transform the failure value; pass through success unchanged               |
+| `Result.map_integer(r, fn)`    | `(result<integer>, function(integer) -> U)`         | `result<U>`    | Map only if inner value is an integer                                    |
+| `Result.map_number(r, fn)`     | `(result<number>, function(number) -> U)`           | `result<U>`    | Map only if inner value is a number                                      |
+| `Result.map_string(r, fn)`     | `(result<string>, function(string) -> U)`           | `result<U>`    | Map only if inner value is a string                                      |
+| `Result.or(r, fallback)`       | `(result<T>, result<T>)`                            | `result<T>`    | Return `r` if success, otherwise `fallback`                              |
+| `Result.or_else(r, fn)`        | `(result<T>, function(T) -> result<T>)`             | `result<T>`    | On failure, call `fn` with the error to produce a new result             |
+| `Result.recover(r, fn)`        | `(result<T>, function(T) -> U)`                     | `result<U>`    | On failure, map the error into a success value                           |
+| `Result.source_function(r)`    | `(result<T>)`                                       | `string`       | Name of the function that produced the failure; empty for success         |
+| `Result.tap(r, fn)`            | `(result<T>, function(T) -> none)`                  | `result<T>`    | Run side effect on success value; return `r` unchanged                   |
+| `Result.to_optional(r)`        | `(result<T>)`                                       | `optional<T>`  | Success → `some(value)`, failure → `none`                                |
+| `Result.unwrap(r)`             | `(result<T>)`                                       | `T`            | Extract success value; throws if failure                                 |
+| `Result.unwrap_or(r, default)` | `(result<T>, T)`                                    | `T`            | Extract success value or use `default`                                   |
+| `Result.zip(r1, r2)`           | `(result<T>, result<U>)`                            | `result<(T, U)>` | Combine two successes into a tuple; short-circuit on first failure      |
+
+## 31 — Set
 
 `Set` values are a distinct type (not arrays). Use `Set.from_array` to create a set and `Set.to_array` to convert back.
 
@@ -2729,7 +2714,7 @@ See the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--resul
 | `Set.to_array(s)`                    | `(set)`                         | `array<T>`           | Convert to array                                               |
 | `Set.union(s, other)`                | `(set, set)`                    | `set`                | Elements in `s` or `other`                                     |
 
-## 33 — Socket
+## 32 — Socket
 
 Cross-platform TCP and UDP networking.
 
@@ -2797,7 +2782,7 @@ match Socket.connect_typed("127.0.0.1", 8080) {
 
 ---
 
-## 34 — Stack
+## 33 — Stack
 
 Immutable LIFO (last-in, first-out) stack. All mutating operations return a new stack.
 
@@ -2825,7 +2810,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `Stack.reverse(s)`          | `(stack)`                         | `stack`                  | Reverse element order (top becomes bottom)                      |
 | `Stack.to_array(s)`         | `(stack)`                         | `array<T>`               | Convert to array                                                |
 
-## 35 — String
+## 34 — String
 
 | Function                            | Parameter Types                | Return Type       | Description                                                                     |
 | ----------------------------------- | ------------------------------ | ----------------- | ------------------------------------------------------------------------------- |
@@ -2931,7 +2916,7 @@ string letter = Result.unwrap(Random.choice(letters))
 boolean is_punct = String.contains(String.punctuation, "!")
 ```
 
-## 36 — Task
+## 35 — Task
 
 Concurrency combinators for `spawn`/`await` tasks.
 
@@ -3001,7 +2986,7 @@ Using `spawn` outside a `task_scope` still works (fire-and-forget) but produces 
 
 > **Resource limit** — The internal task queue holds a bounded number of pending tasks (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`). Spawning beyond this limit throws a runtime error (`task queue is full — too many pending tasks`). Design your program to await tasks before spawning more to stay within this limit.
 
-## 37 — Terminal
+## 36 — Terminal
 
 Terminal UI control — cursor movement, colors, styling, screen management, and mouse input.
 
@@ -3218,7 +3203,7 @@ function void test_counter_responds_to_keys() {
 
 The same machinery is reachable without Luma code via the `LUMA_TERMINAL_INPUT` environment variable (one key per line), which the example runner (`scripts/run_examples.py`) uses to drive the raw-mode example programs unattended.
 
-## 38 — Xml
+## 37 — Xml
 
 Parse, build, query, and serialise XML documents. XML nodes are opaque `xml` values; decode one into a typed `Xml.Node` choice with `Xml.to_node` when you need to `match` over its structure.
 
@@ -3297,7 +3282,7 @@ case Xml.Node.CData(content)            { print(content) }
 
 ---
 
-## 39 — Color
+## 38 — Color
 
 A typed RGBA colour value with validating constructors and derivations. Every value serialises to a CSS string the GraphicalUi web-view already accepts, so `Solaris` themes can be _computed_ rather than hand-written. Like `Decimal` and `Math.Fraction`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
 
@@ -3360,7 +3345,7 @@ number ratio = Color.contrast_ratio(base, Result.unwrap(Color.rgb(255, 255, 255)
 
 ---
 
-## 40 — Bits
+## 39 — Bits
 
 Integer bit manipulation as pipe-first free functions. `Bits` replaces the former
 `& | ^ ~ << >>` operators, which were removed from the language surface — bit
@@ -3389,7 +3374,7 @@ integer doubled  = Bits.shift_left(3, 1)     # 6
 
 ---
 
-## 41 — Statistics
+## 40 — Statistics
 
 Descriptive and inferential statistics over numeric arrays. Split out of `Math`
 so the four maths modules each cover one cohesive domain: `Math` (scalar

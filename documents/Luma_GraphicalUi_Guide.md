@@ -56,8 +56,8 @@
 | Layout containers   | 9     | row, column, grid, tabs, panel, toolbar, scroll, wrapped row             |
 | Overlay positioning | 6     | above, below, on_left, on_right, in_front, behind                        |
 | Charts              | 7     | bar, line, pie, donut, scatter, area, horizontal bar (hover tooltips, axis labels) |
-| Commands            | 21    | HTTP verbs, clipboard, localStorage, download, notify, delay, debounce, random, focus, announce, open URL, set title, print |
-| Subscriptions       | 14    | tick, key, resize, focus, mouse, visibility, online/offline, media query, scroll, idle, storage, animation frame, drag |
+| Commands            | 34    | HTTP verbs (+ full-response variants), clipboard, localStorage, download, notify, delay, debounce, random, focus, blur, scroll_to, announce, open URL, set title, print, stylesheet, font_face, set_theme_mode, navigate |
+| Subscriptions       | 22    | tick, key, resize, focus, mouse, visibility, online/offline, media query, scroll, wheel, idle, storage, animation frame, drag (each with typed companions) |
 | Styling helpers     | 17    | spacing, padding, alignment, sizing, merge, responsive, validate         |
 | Routing             | 4     | router, navigate, navigate_back, navigation_link                         |
 | Accessibility       | 6     | accessible, keyed, focus, announce, aria_live, aria_describedby          |
@@ -985,6 +985,8 @@ Commands are data values returned from `update` via `with_command`. The runtime 
 | `http_put(url, body, callback, headers?)`  | `(string, string, function, dictionary?)` | `command` | PUT request  |
 | `http_patch(url, body, callback, headers?)`| `(string, string, function, dictionary?)` | `command` | PATCH request |
 | `http_delete(url, callback, headers?)`     | `(string, function, dictionary?)`         | `command` | DELETE request |
+| `http_get_full(url, callback, headers?)`   | `(string, function, dictionary?)`         | `command` | GET with typed `{status, headers, body}` response |
+| `http_post_full(url, body, callback, headers?)` | `(string, string, function, dictionary?)` | `command` | POST with typed `{status, headers, body}` response |
 
 > **Non-blocking.** HTTP requests run on a **background thread**, so the window
 > stays fully responsive while a request is in flight — renders, clicks, and
@@ -1005,10 +1007,12 @@ Commands are data values returned from `update` via `with_command`. The runtime 
 
 ### Local Storage
 
-| Function                           | Parameters           | Returns   | Description                  |
-| ---------------------------------- | -------------------- | --------- | ---------------------------- |
-| `get_local_storage(key, callback)` | `(string, function)` | `command` | Read value from localStorage |
-| `set_local_storage(key, value)`    | `(string, string)`   | `command` | Write value to localStorage  |
+| Function                               | Parameters           | Returns   | Description                     |
+| -------------------------------------- | -------------------- | --------- | ------------------------------- |
+| `get_local_storage(key, callback)`     | `(string, function)` | `command` | Read value from localStorage    |
+| `set_local_storage(key, value)`        | `(string, string)`   | `command` | Write value to localStorage     |
+| `remove_local_storage(key)`            | `(string)`           | `command` | Remove a key from localStorage  |
+| `clear_local_storage()`                | `()`                 | `command` | Clear all localStorage entries  |
 
 ```luma
 # Save a preference
@@ -1043,10 +1047,23 @@ GraphicalUi.with_command(model, GraphicalUi.get_local_storage("theme", (string v
 | `random(min, max, callback)` | `(number, number, function)` | `command` | Random number in range     |
 | `debounce(id, ms, callback)` | `(string, integer, function)`| `command` | Coalesce rapid calls; fire after `ms` of quiet |
 | `focus(widget_id)`           | `(string)`                   | `command` | Move keyboard focus        |
+| `blur(widget_id)`            | `(string)`                   | `command` | Remove keyboard focus from a widget |
+| `scroll_to(widget_id, behavior?)` | `(string, string?)`    | `command` | Scroll a widget into view (`behavior`: `"smooth"` or `"instant"`) |
 | `announce(text)`             | `(string)`                   | `command` | Screen reader announcement |
 | `open_url(url)`              | `(string)`                   | `command` | Open a URL in the default browser |
 | `set_title(title)`           | `(string)`                   | `command` | Update the window title    |
 | `print()`                    | `()`                         | `command` | Open the browser print dialog |
+| `navigate(route)`            | `(string)`                   | `command` | Navigate to a route (see §12 Routing) |
+| `navigate_back()`            | `()`                         | `command` | Navigate to the previous route |
+
+### Styling & Theming Commands
+
+| Function                            | Parameters                    | Returns   | Description                              |
+| ----------------------------------- | ----------------------------- | --------- | ---------------------------------------- |
+| `stylesheet(css)`                   | `(string)`                    | `command` | Inject inline CSS into the page          |
+| `load_stylesheet(path)`             | `(string)`                    | `command` | Load an external `.css` file (relative path only) |
+| `font_face(path, family, options?)` | `(string, string, dictionary?)` | `command` | Load a custom font (`.woff2`/`.woff`/`.ttf`/`.otf`); options: `weight`, `style` |
+| `set_theme_mode(mode)`              | `(string)`                    | `command` | Set colour scheme: `"light"`, `"dark"`, or `"auto"` |
 
 > **Security:** `open_url` accepts only `http`, `https`, `mailto`, and `tel` URLs
 > (or relative paths); script-bearing schemes such as `javascript:` are rejected.
@@ -1080,21 +1097,26 @@ Subscriptions react to external events not tied to a specific widget. Declare th
 | ------------------------------------- | ----------------------------- | -------------- | ----------------------------- |
 | `on_tick(id, ms, callback)`           | `(string, integer, function)` | `subscription` | Timer every `ms` milliseconds |
 | `on_key(id, filter, callback)`        | `(string, string, function)`  | `subscription` | Key press (`"*"` = any key)   |
+| `on_key_typed(id, filter, callback)`  | `(string, string, func(GraphicalUi.KeyEvent) -> any)` | `subscription` | Key press delivering a typed `KeyEvent` record (key + modifiers) |
 | `on_resize(id, callback)`             | `(string, function)`          | `subscription` | Window resize with `(w, h)`   |
+| `on_resize_typed(id, callback)`       | `(string, func(GraphicalUi.WindowSize) -> any)` | `subscription` | Window resize as a typed `WindowSize` record |
 | `on_focus(id, callback)`              | `(string, function)`          | `subscription` | Window focus/blur             |
 | `on_mouse(id, event_type, callback)`  | `(string, string, function)`  | `subscription` | Mouse events                  |
+| `on_mouse_typed(id, event_type, callback)` | `(string, string, func(GraphicalUi.MouseEvent) -> any)` | `subscription` | Mouse events as a typed `MouseEvent` record |
 | `on_visibility_change(id, callback)`  | `(string, function)`          | `subscription` | Page visibility change        |
 | `on_visibility_change_typed(id, callback)` | `(string, func(GraphicalUi.VisibilityState) -> any)` | `subscription` | Page visibility as a typed `Visible`/`Hidden` choice |
 | `on_online(id, callback)`             | `(string, function)`          | `subscription` | Network comes online          |
 | `on_offline(id, callback)`            | `(string, function)`          | `subscription` | Network goes offline          |
 | `on_media_query(id, query, callback)` | `(string, string, function)`  | `subscription` | CSS media query match         |
 | `on_scroll(id, callback)`             | `(string, function)`          | `subscription` | Document scroll position changes |
+| `on_scroll_typed(id, callback)`       | `(string, func(GraphicalUi.ScrollPosition) -> any)` | `subscription` | Scroll position as a typed `ScrollPosition` record |
 | `on_wheel_typed(id, callback)`        | `(string, func(GraphicalUi.WheelDelta) -> any)` | `subscription` | Scroll-wheel deltas as a typed `WheelDelta` record |
 | `on_idle(id, timeout_ms, callback)`   | `(string, integer, function)` | `subscription` | User idle for `timeout_ms` milliseconds |
 | `on_storage_change(id, key, callback)`| `(string, string, function)`  | `subscription` | `localStorage` `key` changed (another tab) |
 | `on_storage_change_typed(id, key, callback)` | `(string, string, func(GraphicalUi.StorageEvent) -> any)` | `subscription` | `localStorage` `key` change as a typed `StorageEvent` record |
 | `on_animation_frame(id, callback)`    | `(string, function)`          | `subscription` | Per-frame tick (`requestAnimationFrame`) |
 | `on_drag(id, event_type, callback)`   | `(string, string, function)`  | `subscription` | Drag events; callback receives a position dictionary |
+| `on_drag_typed(id, callback)`         | `(string, func(GraphicalUi.DragEvent) -> any)` | `subscription` | Drag events as a typed `DragEvent` record (x, y, data, phase) |
 
 ### Mouse Event Types
 
