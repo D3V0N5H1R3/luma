@@ -79,7 +79,7 @@ The runner maps each pipeline concept to that CLI's own flags:
 | Pipeline concept       | Copilot (`copilot`)             | Claude Code (`claude`)                                          |
 | ---------------------- | ------------------------------- | -------------------------------------------------------------- |
 | Headless prompt        | `-p "<instruction>"`            | `-p "<instruction>" --output-format text`                      |
-| Read-only audit (plan) | `--plan --output-format json`   | `--permission-mode plan`                                       |
+| Read-only audit (plan) | `--output-format json --available-tools=view,grep,glob` | `--permission-mode plan`                    |
 | Mutating fix (agent)   | `--allow-all-tools`             | `--permission-mode acceptEdits --allowedTools Bash Edit Write` |
 | Deny `git push`        | `--deny-tool="shell(git push)"` | `--disallowedTools "Bash(git push *)"`                         |
 | Model override         | `--model=<name>`                | `--model <name>`                                               |
@@ -87,9 +87,11 @@ The runner maps each pipeline concept to that CLI's own flags:
 
 Both backends are held **read-only** during audits and are **denied `git push`**
 during fixes, so the safety model is identical either way. During audits, Claude's
-plan mode grants no edit tools, and Copilot additionally denies the file-write
-tool (`--deny-tool=write`) on top of `--plan` — a belt-and-suspenders guard, since
-`--allow-all-tools` is required for non-interactive runs and deny rules beat it.
+plan mode grants no edit tools, and Copilot is restricted to the read/search tools
+with `--available-tools=view,grep,glob`, so it cannot modify, create, or run
+anything. (Copilot's interactive `--plan` mode is *not* used non-interactively: it
+delivers its result through the `exit_plan_mode` tool / a `plan.md` file rather
+than stdout, so under `-p --output-format json` it would produce an empty report.)
 Override the
 executable name or full path with the `LUMA_COPILOT` / `LUMA_CLAUDE` environment
 variables. Model names and `--effort` values differ between the two CLIs — check
