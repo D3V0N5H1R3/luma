@@ -418,11 +418,11 @@ struct Refiner {
         true,
         [](const RefineContext& c) { return TypeInfo::make_result(TypeInfo::make_array(c.elem)); });
 
-    add({"Array.get", "Array.first", "Array.last", "Array.find", "Array.min", "Array.max",
+    add({"Array.get", "Array.first", "Array.last", "Array.find", "Array.minimum", "Array.maximum",
          "Array.sum"},
         true, [](const RefineContext& c) { return TypeInfo::make_result(c.elem); });
 
-    add({"Array.max_by", "Array.min_by"}, true,
+    add({"Array.maximum_by", "Array.minimum_by"}, true,
         [](const RefineContext& c) { return TypeInfo::make_optional(c.elem); });
 
     add({"Array.reduce"}, true, [](const RefineContext& c) -> TypeInfo {

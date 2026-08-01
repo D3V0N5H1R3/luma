@@ -50,8 +50,14 @@ constexpr std::array<LevelDescriptor, 5> k_level_table = {{
      .display_name = "DEBUG",
      .variant_name = "Debug",
      .level = LogLevel::Debug},
-    {.str_name = "info", .display_name = "INFO", .variant_name = "Info", .level = LogLevel::Info},
-    {.str_name = "warn", .display_name = "WARN", .variant_name = "Warn", .level = LogLevel::Warn},
+    {.str_name = "info",
+     .display_name = "INFO",
+     .variant_name = "Information",
+     .level = LogLevel::Info},
+    {.str_name = "warn",
+     .display_name = "WARN",
+     .variant_name = "Warning",
+     .level = LogLevel::Warn},
     {.str_name = "error",
      .display_name = "ERROR",
      .variant_name = "Error",
@@ -239,8 +245,8 @@ void register_log_ns(const EnvPtr& env, bool sandbox) {
 
     constexpr std::array<EmissionFunction, 4> emission_functions = {{
         {.name = "debug", .level = LogLevel::Debug},
-        {.name = "info", .level = LogLevel::Info},
-        {.name = "warn", .level = LogLevel::Warn},
+        {.name = "information", .level = LogLevel::Info},
+        {.name = "warning", .level = LogLevel::Warn},
         {.name = "error", .level = LogLevel::Error},
     }};
 
@@ -292,7 +298,7 @@ void register_log_ns(const EnvPtr& env, bool sandbox) {
             const auto idx = static_cast<std::size_t>(state.level);
             const auto variant = idx < k_level_table.size()
                                      ? std::string{k_level_table[idx].variant_name}
-                                     : std::string{"Info"};
+                                     : std::string{"Information"};
 
             auto cv = std::make_shared<ChoiceValue>();
             cv->type_name = "Level";

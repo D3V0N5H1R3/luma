@@ -188,10 +188,10 @@ function void test_math_clamp() {
 
 @test
 function void test_math_lerp() {
-    assert(Math.approximately_equal(Result.unwrap(Math.lerp(0, 10, 0.5)), 5.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.lerp(0, 10, 0.0)), 0.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.lerp(0, 10, 1.0)), 10.0))
-    assert(Result.is_failure(Math.lerp(0, 10, 1.5)))
+    assert(Math.approximately_equal(Result.unwrap(Math.linear_interpolation(0, 10, 0.5)), 5.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.linear_interpolation(0, 10, 0.0)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.linear_interpolation(0, 10, 1.0)), 10.0))
+    assert(Result.is_failure(Math.linear_interpolation(0, 10, 1.5)))
 }
 
 @test
@@ -271,14 +271,14 @@ function void test_math_exponential() {
 
 @test
 function void test_math_max() {
-    assert(Math.approximately_equal(Math.max(3.0, 7.0), 7.0))
-    assert(Math.approximately_equal(Math.max(-1.0, -5.0), -1.0))
+    assert(Math.approximately_equal(Math.maximum(3.0, 7.0), 7.0))
+    assert(Math.approximately_equal(Math.maximum(-1.0, -5.0), -1.0))
 }
 
 @test
 function void test_math_min() {
-    assert(Math.approximately_equal(Math.min(3.0, 7.0), 3.0))
-    assert(Math.approximately_equal(Math.min(-1.0, -5.0), -5.0))
+    assert(Math.approximately_equal(Math.minimum(3.0, 7.0), 3.0))
+    assert(Math.approximately_equal(Math.minimum(-1.0, -5.0), -5.0))
 }
 
 @test
@@ -451,24 +451,24 @@ function void test_math_power_negative_fractional() {
     assert(Result.is_failure(r), "negative base with fractional exponent should fail")
 }
 
-# ─── Math.atan2 ────────────────────────────────────────
+# ─── Math.arc_tangent2 ────────────────────────────────────────
 
 @test
 function void test_math_atan2() {
-    number res = Result.unwrap(Math.atan2(1.0, 1.0))
+    number res = Result.unwrap(Math.arc_tangent2(1.0, 1.0))
 
     assert(Math.approximately_equal(res, Math.pi / 4.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.atan2(0.0, 1.0)), 0.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.atan2(1.0, 0.0)), Math.pi / 2.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.arc_tangent2(0.0, 1.0)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.arc_tangent2(1.0, 0.0)), Math.pi / 2.0))
 }
 
-# ─── Math.hypot ────────────────────────────────────────
+# ─── Math.hypotenuse ────────────────────────────────────────
 
 @test
 function void test_math_hypot() {
-    assert(Math.approximately_equal(Math.hypot(3.0, 4.0), 5.0))
-    assert(Math.approximately_equal(Math.hypot(0.0, 0.0), 0.0))
-    assert(Math.approximately_equal(Math.hypot(5.0, 12.0), 13.0))
+    assert(Math.approximately_equal(Math.hypotenuse(3.0, 4.0), 5.0))
+    assert(Math.approximately_equal(Math.hypotenuse(0.0, 0.0), 0.0))
+    assert(Math.approximately_equal(Math.hypotenuse(5.0, 12.0), 13.0))
 }
 
 # ─── Math.log ──────────────────────────────────────────
@@ -676,8 +676,8 @@ function void test_math_sign_of() {
 function void test_math_interval() {
     Math.Interval iv = Result.unwrap(Math.interval(0.0, 10.0))
 
-    assert(Math.approximately_equal(iv.min, 0.0, 0.001), "min stored")
-    assert(Math.approximately_equal(iv.max, 10.0, 0.001), "max stored")
+    assert(Math.approximately_equal(iv.minimum, 0.0, 0.001), "min stored")
+    assert(Math.approximately_equal(iv.maximum, 10.0, 0.001), "max stored")
     assert(Math.interval_contains(iv, 5.0), "contains a midpoint")
     assert(Math.interval_contains(iv, 0.0), "closed: contains the low endpoint")
     assert(!Math.interval_contains(iv, 11.0), "excludes points outside")
@@ -706,7 +706,7 @@ function void test_math_angle() {
     Math.Angle ninety = Math.Angle.Degrees(90.0)
     assert(Math.approximately_equal(Math.to_radians(ninety), Math.pi / 2.0, 0.001),
         "90 degrees is pi/2 radians")
-    assert(Math.approximately_equal(Math.sin_of(ninety), 1.0, 0.001), "sin of 90 degrees is 1")
+    assert(Math.approximately_equal(Math.sine_of(ninety), 1.0, 0.001), "sin of 90 degrees is 1")
 
     Math.Angle half_turn = Math.Angle.Radians(Math.pi)
     assert(Math.approximately_equal(Math.to_degrees(half_turn), 180.0, 0.001),
@@ -721,11 +721,11 @@ function void test_math_angle() {
 # Math.Quaternion — removed
 # ═══════════════════════════════════════════════════════════
 
-# ─── Math.Rect (N03) — axis-aligned 2D rectangle ───
+# ─── Math.Rectangle (N03) — axis-aligned 2D rectangle ───
 
 @test
 function void test_math_rect_construct() {
-    Math.Rect r = Math.rect(1.0, 2.0, 30.0, 40.0)
+    Math.Rectangle r = Math.rectangle(1.0, 2.0, 30.0, 40.0)
 
     assert(Math.approximately_equal(r.x, 1.0, 0.001))
     assert(Math.approximately_equal(r.y, 2.0, 0.001))
@@ -735,21 +735,21 @@ function void test_math_rect_construct() {
 
 @test
 function void test_math_rect_contains_half_open() {
-    Math.Rect r = Math.rect(0.0, 0.0, 10.0, 10.0)
+    Math.Rectangle r = Math.rectangle(0.0, 0.0, 10.0, 10.0)
 
-    assert(Math.rect_contains(r, 5.0, 5.0), "an interior point is contained")
-    assert(Math.rect_contains(r, 0.0, 0.0), "the min corner is contained")
-    assert(!Math.rect_contains(r, 10.0, 5.0), "the max edge is excluded (half-open)")
+    assert(Math.rectangle_contains(r, 5.0, 5.0), "an interior point is contained")
+    assert(Math.rectangle_contains(r, 0.0, 0.0), "the min corner is contained")
+    assert(!Math.rectangle_contains(r, 10.0, 5.0), "the max edge is excluded (half-open)")
 }
 
 @test
 function void test_math_rect_intersects_and_intersection() {
-    Math.Rect a = Math.rect(0.0, 0.0, 10.0, 10.0)
-    Math.Rect b = Math.rect(5.0, 5.0, 10.0, 10.0)
+    Math.Rectangle a = Math.rectangle(0.0, 0.0, 10.0, 10.0)
+    Math.Rectangle b = Math.rectangle(5.0, 5.0, 10.0, 10.0)
 
-    assert(Math.rect_intersects(a, b), "overlapping rectangles intersect")
+    assert(Math.rectangle_intersects(a, b), "overlapping rectangles intersect")
 
-    optional<Math.Rect> overlap = Math.rect_intersection(a, b)
+    optional<Math.Rectangle> overlap = Math.rectangle_intersection(a, b)
     match overlap {
         case some(o) {
             assert(Math.approximately_equal(o.width, 5.0, 0.001))
@@ -761,27 +761,27 @@ function void test_math_rect_intersects_and_intersection() {
 
 @test
 function void test_math_rect_intersection_disjoint_is_none() {
-    Math.Rect a = Math.rect(0.0, 0.0, 5.0, 5.0)
-    Math.Rect b = Math.rect(10.0, 10.0, 5.0, 5.0)
+    Math.Rectangle a = Math.rectangle(0.0, 0.0, 5.0, 5.0)
+    Math.Rectangle b = Math.rectangle(10.0, 10.0, 5.0, 5.0)
 
-    assert(!Math.rect_intersects(a, b), "disjoint rectangles do not intersect")
-    assert(Optional.is_none(Math.rect_intersection(a, b)), "disjoint intersection is none")
+    assert(!Math.rectangle_intersects(a, b), "disjoint rectangles do not intersect")
+    assert(Optional.is_none(Math.rectangle_intersection(a, b)), "disjoint intersection is none")
 }
 
 @test
 function void test_math_rect_union_center_area() {
-    Math.Rect a = Math.rect(0.0, 0.0, 5.0, 5.0)
-    Math.Rect b = Math.rect(10.0, 10.0, 5.0, 5.0)
+    Math.Rectangle a = Math.rectangle(0.0, 0.0, 5.0, 5.0)
+    Math.Rectangle b = Math.rectangle(10.0, 10.0, 5.0, 5.0)
 
-    Math.Rect u = Math.rect_union(a, b)
+    Math.Rectangle u = Math.rectangle_union(a, b)
     assert(Math.approximately_equal(u.width, 15.0, 0.001))
     assert(Math.approximately_equal(u.height, 15.0, 0.001))
 
-    Math.Vector2 c = Math.rect_center(Math.rect(0.0, 0.0, 10.0, 20.0))
+    Math.Vector2 c = Math.rectangle_center(Math.rectangle(0.0, 0.0, 10.0, 20.0))
     assert(Math.approximately_equal(c.x, 5.0, 0.001))
     assert(Math.approximately_equal(c.y, 10.0, 0.001))
 
-    assert(Math.approximately_equal(Math.rect_area(Math.rect(0.0, 0.0, 10.0, 20.0)), 200.0, 0.001))
+    assert(Math.approximately_equal(Math.rectangle_area(Math.rectangle(0.0, 0.0, 10.0, 20.0)), 200.0, 0.001))
 }
 
 # ─── Math.Circle (N05) — 2D circle geometry ───
@@ -821,14 +821,14 @@ function void test_math_circle_intersects() {
 }
 
 @test
-function void test_math_circle_rect_intersects() {
-    Math.Rect r = Math.rect(0.0, 0.0, 10.0, 10.0)
+function void test_math_circle_rectangle_intersects() {
+    Math.Rectangle r = Math.rectangle(0.0, 0.0, 10.0, 10.0)
 
-    assert(Math.circle_rect_intersects(Math.circle(Math.vector2(5.0, 5.0), 2.0), r),
+    assert(Math.circle_rectangle_intersects(Math.circle(Math.vector2(5.0, 5.0), 2.0), r),
         "a circle centred inside the rect overlaps")
-    assert(Math.circle_rect_intersects(Math.circle(Math.vector2(11.0, 5.0), 2.0), r),
+    assert(Math.circle_rectangle_intersects(Math.circle(Math.vector2(11.0, 5.0), 2.0), r),
         "a circle within radius of an edge overlaps")
-    assert(!Math.circle_rect_intersects(Math.circle(Math.vector2(12.0, 12.0), 2.0), r),
+    assert(!Math.circle_rectangle_intersects(Math.circle(Math.vector2(12.0, 12.0), 2.0), r),
         "a circle beyond the far corner does not overlap")
 }
 
@@ -857,7 +857,7 @@ function void test_math_special_functions() {
     assert(Math.approximately_equal(Math.sigmoid(0.0), 0.5))
     assert(Math.approximately_equal(Result.unwrap(Math.gamma(5.0)), 24.0))
     assert(Result.is_failure(Math.gamma(0.0)))
-    assert(Math.approximately_equal(Math.erf(0.0), 0.0))
+    assert(Math.approximately_equal(Math.error_function(0.0), 0.0))
 }
 
 @test

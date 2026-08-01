@@ -11,9 +11,9 @@
 
 @test
 function void test_log_set_and_get_level() {
-    Log.set_level(Log.Level.Warn)
+    Log.set_level(Log.Level.Warning)
 
-    assert(Log.get_level() == Log.Level.Warn)
+    assert(Log.get_level() == Log.Level.Warning)
 
     Log.set_level(Log.Level.Debug)
 
@@ -32,9 +32,9 @@ function void test_log_set_level_off() {
 
 @test
 function void test_log_level_info() {
-    Log.set_level(Log.Level.Info)
+    Log.set_level(Log.Level.Information)
 
-    assert(Log.get_level() == Log.Level.Info)
+    assert(Log.get_level() == Log.Level.Information)
 
     Log.set_level(Log.Level.Debug)
 }
@@ -63,7 +63,7 @@ function void test_log_debug_message() {
 @test
 function void test_log_info_message() {
     Log.set_level(Log.Level.Debug)
-    Log.info("info test message")
+    Log.information("info test message")
 
     assert(true)
 }
@@ -71,7 +71,7 @@ function void test_log_info_message() {
 @test
 function void test_log_warn_message() {
     Log.set_level(Log.Level.Debug)
-    Log.warn("warn test message")
+    Log.warning("warn test message")
 
     assert(true)
 }
@@ -89,8 +89,8 @@ function void test_log_filtered_by_level() {
     # Set level to Error — debug/info/warn should be suppressed.
     Log.set_level(Log.Level.Error)
     Log.debug("should be filtered")
-    Log.info("should be filtered")
-    Log.warn("should be filtered")
+    Log.information("should be filtered")
+    Log.warning("should be filtered")
     Log.error("should appear")
 
     # No crash — level filtering works.
@@ -126,7 +126,7 @@ function void test_log_multiple_contexts() {
     Log.set_context("module", "auth")
     Log.set_context("user", "alice")
 
-    Log.info("context test")
+    Log.information("context test")
 
     Log.clear_context()
 
@@ -176,7 +176,7 @@ function void test_log_reset_restores_default_level() {
     Log.set_level(Log.Level.Error)
     Log.reset()
 
-    assert(Log.get_level() == Log.Level.Info)
+    assert(Log.get_level() == Log.Level.Information)
 
     Log.set_level(Log.Level.Debug)
 }
@@ -223,7 +223,7 @@ function void test_log_output_substitutes_level_and_message() {
     string out = capture_log("fmt", () -> {
         Log.set_format("\${level}::\${message}")
         Log.set_level(Log.Level.Debug)
-        Log.info("hello")
+        Log.information("hello")
     })
 
     assert(String.contains(out, "INFO::hello"))
@@ -232,7 +232,7 @@ function void test_log_output_substitutes_level_and_message() {
 @test
 function void test_log_output_uses_default_format() {
     string out = capture_log("deffmt", () -> {
-        Log.info("ready")
+        Log.information("ready")
     })
 
     # Default format is "${timestamp} [${level}] ${message}".
@@ -244,7 +244,7 @@ function void test_log_output_preserves_unknown_placeholder() {
     string out = capture_log("unknownph", () -> {
         Log.set_format("\${nope}")
         Log.set_level(Log.Level.Debug)
-        Log.info("ignored")
+        Log.information("ignored")
     })
 
     assert(String.contains(out, "\${nope}"))
@@ -256,8 +256,8 @@ function void test_log_output_level_filtering() {
         Log.set_format("\${message}")
         Log.set_level(Log.Level.Error)
         Log.debug("DBG")
-        Log.info("INF")
-        Log.warn("WRN")
+        Log.information("INF")
+        Log.warning("WRN")
         Log.error("ERR")
     })
 
@@ -285,7 +285,7 @@ function void test_log_output_context_appended() {
         Log.set_format("\${message}")
         Log.set_level(Log.Level.Debug)
         Log.set_context("module", "auth")
-        Log.info("login")
+        Log.information("login")
     })
 
     assert(String.contains(out, "login | module=auth"))
@@ -298,7 +298,7 @@ function void test_log_output_context_updates_existing_key() {
         Log.set_level(Log.Level.Debug)
         Log.set_context("k", "v1")
         Log.set_context("k", "v2")
-        Log.info("m")
+        Log.information("m")
     })
 
     assert(String.contains(out, "k=v2"))
@@ -312,7 +312,7 @@ function void test_log_output_clear_context_removes_fields() {
         Log.set_level(Log.Level.Debug)
         Log.set_context("k", "v")
         Log.clear_context()
-        Log.info("m")
+        Log.information("m")
     })
 
     assert(!String.contains(out, "k=v"))
@@ -381,7 +381,7 @@ function void test_log_output_typed_file_writes() {
     result<void> routed = Log.set_output(Log.Output.File("_test_log_output_typed.log"))
     assert(Result.is_success(routed), "File target accepted")
 
-    Log.info("typed_output_marker_xyz")
+    Log.information("typed_output_marker_xyz")
 
     # Restore the default sink, which closes the file so it can be read back.
     Log.reset()
@@ -401,9 +401,9 @@ function void test_log_output_typed_file_writes() {
 
 @test
 function void test_log_is_enabled_and_log() {
-    Log.set_level(Log.Level.Warn)
+    Log.set_level(Log.Level.Warning)
     assert(Log.is_enabled("error"))
-    assert(Log.is_enabled(Log.Level.Warn))
+    assert(Log.is_enabled(Log.Level.Warning))
     assert(!Log.is_enabled("debug"))
     # Log.log emits at a dynamically chosen level (no observable return).
     Log.log("info", "dynamic level message")

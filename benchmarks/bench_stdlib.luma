@@ -45,7 +45,7 @@ function BenchResult run_stdlib_benchmarks(BenchResult state) {
 
     st = time_it(st, "Math interpolation", 10000, () -> {
         result<number> _c = Math.clamp(15.0, 0.0, 10.0)
-        result<number> _le = Math.lerp(0.0, 100.0, 0.42)
+        result<number> _le = Math.linear_interpolation(0.0, 100.0, 0.42)
         result<number> _re = Math.remap(5.0, 0.0, 10.0, 0.0, 100.0)
         result<number> _ss = Math.smooth_step(0.0, 1.0, 0.5)
     })
@@ -53,8 +53,8 @@ function BenchResult run_stdlib_benchmarks(BenchResult state) {
     st = time_it(st, "Math inverse and hyperbolic", 10000, () -> {
         result<number> _as = Math.arc_sine(0.5)
         result<number> _at = Math.arc_tangent(1.0)
-        result<number> _a2 = Math.atan2(1.0, 1.0)
-        number _hy = Math.hypot(3.0, 4.0)
+        result<number> _a2 = Math.arc_tangent2(1.0, 1.0)
+        number _hy = Math.hypotenuse(3.0, 4.0)
         number _cr = Math.cube_root(27.0)
         number _ht = Math.hyperbolic_tangent(0.5)
     })

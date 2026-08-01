@@ -79,11 +79,12 @@ void register_array_transform_aggregate(const EnvPtr& env) {
                           }
                           return make_success_value(all_int ? Value{int_prod} : Value{dbl_prod});
                       })
-        .func("min", 1)
+        .func("minimum", 1)
         .extract_body(expect_array,
                       [](const auto& src, const Args&, SourceLocation loc) -> Value {
                           if (src->elements->empty()) {
-                              return make_failure_value(error_msg("Array", "min", "empty array"));
+                              return make_failure_value(
+                                  error_msg("Array", "minimum", "empty array"));
                           }
                           // compare_values threads loc and surfaces non-numeric /
                           // NaN / incomparable elements as a result failure (rather
@@ -92,32 +93,33 @@ void register_array_transform_aggregate(const EnvPtr& env) {
                           return apply_with_error_handling([&]() -> Value {
                               const auto it = std::ranges::min_element(
                                   *src->elements, [&loc](const Value& a, const Value& b) {
-                                      return compare_values(a, b, loc, "Array.min") < 0;
+                                      return compare_values(a, b, loc, "Array.minimum") < 0;
                                   });
                               return *it;
                           });
                       })
-        .func("max", 1)
+        .func("maximum", 1)
         .extract_body(expect_array,
                       [](const auto& src, const Args&, SourceLocation loc) -> Value {
                           if (src->elements->empty()) {
-                              return make_failure_value(error_msg("Array", "max", "empty array"));
+                              return make_failure_value(
+                                  error_msg("Array", "maximum", "empty array"));
                           }
                           return apply_with_error_handling([&]() -> Value {
                               const auto it = std::ranges::max_element(
                                   *src->elements, [&loc](const Value& a, const Value& b) {
-                                      return compare_values(a, b, loc, "Array.max") < 0;
+                                      return compare_values(a, b, loc, "Array.maximum") < 0;
                                   });
                               return *it;
                           });
                       })
-        // Array.max_by(array<T>, fn(T) -> number) -> optional<T>
+        // Array.maximum_by(array<T>, fn(T) -> number) -> optional<T>
         // Returns the element with the greatest key, or none for an empty array.
         // The first element wins ties (strict >), so the result is stable.
-        .func("max_by", 2)
+        .func("maximum_by", 2)
         .extract_body(expect_array,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {
-                          expect_callable(args[1], "Array.max_by", loc);
+                          expect_callable(args[1], "Array.maximum_by", loc);
 
                           const auto& elements = *src->elements;
                           if (elements.empty()) {
@@ -145,12 +147,12 @@ void register_array_transform_aggregate(const EnvPtr& env) {
 
                           return elements[best_index];
                       })
-        // Array.min_by(array<T>, fn(T) -> number) -> optional<T>
+        // Array.minimum_by(array<T>, fn(T) -> number) -> optional<T>
         // Mirror of max_by using strict < so the first minimum wins ties.
-        .func("min_by", 2)
+        .func("minimum_by", 2)
         .extract_body(expect_array,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {
-                          expect_callable(args[1], "Array.min_by", loc);
+                          expect_callable(args[1], "Array.minimum_by", loc);
 
                           const auto& elements = *src->elements;
                           if (elements.empty()) {

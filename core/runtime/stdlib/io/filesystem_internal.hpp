@@ -248,14 +248,14 @@ template <typename Project>
 
 /// Maps the three status booleans FileSystem.metadata already computes to a
 /// single, mutually-exclusive FileKind variant, classified symlink-first (like
-/// lstat): a symbolic link is reported as "Symlink" even when its target is a
+/// lstat): a symbolic link is reported as "SymbolicLink" even when its target is a
 /// directory or regular file.  Anything that is none of these (device, fifo,
 /// socket, unknown) is "Other".  Shared by FileSystem.metadata and
 /// FileSystem.kind so the two always agree.
 [[nodiscard]] inline std::string_view file_kind_variant(bool is_symlink, bool is_directory,
                                                         bool is_regular_file) {
     if (is_symlink) {
-        return "Symlink";
+        return "SymbolicLink";
     }
     if (is_directory) {
         return "Directory";

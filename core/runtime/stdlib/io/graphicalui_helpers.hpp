@@ -239,6 +239,7 @@ make_command_dict(std::string_view command_type) {
         }
     }
 
+    // Information is the default severity; anything unrecognised also falls here.
     return "info";
 }
 
@@ -341,6 +342,7 @@ make_command_dict(std::string_view command_type) {
         }
     }
 
+    // Automatic is the default theme mode; anything unrecognised also falls here.
     return "auto";
 }
 
@@ -361,6 +363,7 @@ make_command_dict(std::string_view command_type) {
         }
     }
 
+    // Automatic is the default scroll behaviour; anything unrecognised also falls here.
     return "auto";
 }
 

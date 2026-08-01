@@ -72,7 +72,7 @@ function string describe_event() {
         success(event) {
             mutable string modifiers = ""
 
-            if event.ctrl {
+            if event.control {
                 modifiers = "${modifiers}ctrl+"
             }
 

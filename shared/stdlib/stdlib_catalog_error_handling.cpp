@@ -7,7 +7,7 @@ void register_result_functions(std::vector<FunctionSpec>& specs, const ModuleBui
     append_specs(
         specs,
         {
-            m.fn("collect", 1, "(arr: array<result<T>>)", R::result_any(), {p.array_any}),
+            m.fn("collect", 1, "(array: array<result<T>>)", R::result_any(), {p.array_any}),
             m.fn("error", 1, "(value: result<T>)", R::string_type(), {p.result_any}),
             m.fn("expect", 2, "(value: result<T>, message: string)", R::any_type(),
                  {p.result_any, p.string}),
@@ -44,10 +44,12 @@ void register_result_functions(std::vector<FunctionSpec>& specs, const ModuleBui
                  {p.result_any, p.any}),
             m.fn("zip", 2, "(a: result<T>, b: result<U>)", R::result_any(),
                  {p.result_any, p.result_any}),
-            m.fn("bimap", 3,
-                 "(value: result<T>, ok_fn: func(T) -> U, err_fn: func(string) -> string)",
+            m.fn("map_both", 3,
+                 "(value: result<T>, ok_function: func(T) -> U, error_function: func(string) -> "
+                 "string)",
                  R::result_any(), {p.result_any, p.func, p.func}),
-            m.fn("fold", 3, "(value: result<T>, ok_fn: func(T) -> U, err_fn: func(string) -> U)",
+            m.fn("fold", 3,
+                 "(value: result<T>, ok_function: func(T) -> U, error_function: func(string) -> U)",
                  R::any_type(), {p.result_any, p.func, p.func}),
             m.fn("error_code", 1, "(value: result<T>)", R::string_type(), {p.result_any}),
             m.fn("source_function", 1, "(value: result<T>)", R::string_type(), {p.result_any}),
@@ -94,28 +96,29 @@ void register_optional_functions(std::vector<FunctionSpec>& specs, const ModuleB
 
 void register_reference_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                   const ParamShorthands& p) {
-    append_specs(specs,
-                 {
-                     m.fn("get", 1, "(ref: reference<T>)", R::any_type(), {p.reference_any}),
-                     m.fn("get_and_set", 2, "(ref: reference<T>, value: T)", R::any_type(),
-                          {p.reference_any, p.any}),
-                     m.fn("get_and_update", 2, "(ref: reference<T>, f: func(T) -> T)",
-                          R::any_type(), {p.reference_any, p.func}),
-                     m.fn("new", 1, "(value: T)", R::any_type(), {p.any}),
-                     m.fn("set", 2, "(ref: reference<T>, value: T)", R::void_type(),
-                          {p.reference_any, p.any}),
-                     m.fn("swap", 2, "(a: reference<T>, b: reference<T>)", R::void_type(),
-                          {p.reference_any, p.reference_any}),
-                     m.fn("inspect", 1, "(ref: reference<T>)", R::string_type(), {p.reference_any}),
-                     m.fn("equals", 2, "(a: reference<T>, b: reference<T>)", R::boolean_type(),
-                          {p.reference_any, p.reference_any}),
-                     m.fn("same", 2, "(a: reference<T>, b: reference<T>)", R::boolean_type(),
-                          {p.reference_any, p.reference_any}),
-                     m.fn("update", 2, "(ref: reference<T>, f: func(T) -> T)", R::void_type(),
-                          {p.reference_any, p.func}),
-                     m.fn("update_and_get", 2, "(ref: reference<T>, f: func(T) -> T)",
-                          R::any_type(), {p.reference_any, p.func}),
-                 });
+    append_specs(
+        specs,
+        {
+            m.fn("get", 1, "(reference: reference<T>)", R::any_type(), {p.reference_any}),
+            m.fn("get_and_set", 2, "(reference: reference<T>, value: T)", R::any_type(),
+                 {p.reference_any, p.any}),
+            m.fn("get_and_update", 2, "(reference: reference<T>, f: func(T) -> T)", R::any_type(),
+                 {p.reference_any, p.func}),
+            m.fn("new", 1, "(value: T)", R::any_type(), {p.any}),
+            m.fn("set", 2, "(reference: reference<T>, value: T)", R::void_type(),
+                 {p.reference_any, p.any}),
+            m.fn("swap", 2, "(a: reference<T>, b: reference<T>)", R::void_type(),
+                 {p.reference_any, p.reference_any}),
+            m.fn("inspect", 1, "(reference: reference<T>)", R::string_type(), {p.reference_any}),
+            m.fn("equals", 2, "(a: reference<T>, b: reference<T>)", R::boolean_type(),
+                 {p.reference_any, p.reference_any}),
+            m.fn("same", 2, "(a: reference<T>, b: reference<T>)", R::boolean_type(),
+                 {p.reference_any, p.reference_any}),
+            m.fn("update", 2, "(reference: reference<T>, f: func(T) -> T)", R::void_type(),
+                 {p.reference_any, p.func}),
+            m.fn("update_and_get", 2, "(reference: reference<T>, f: func(T) -> T)", R::any_type(),
+                 {p.reference_any, p.func}),
+        });
 }
 
 void register_resource_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,

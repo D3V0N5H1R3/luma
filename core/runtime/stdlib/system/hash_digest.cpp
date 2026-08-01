@@ -111,7 +111,7 @@ algorithm_name_from_variant(std::string_view variant) {
     auto rec = std::make_shared<RecordValue>();
     rec->type_name = "Digest";
     rec->fields.emplace_back("algorithm", Value{std::move(algorithm)});
-    rec->fields.emplace_back("hex", Value{std::move(hex)});
+    rec->fields.emplace_back("hexadecimal", Value{std::move(hex)});
 
     return Value{std::move(rec)};
 }

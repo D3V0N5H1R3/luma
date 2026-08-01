@@ -1170,8 +1170,8 @@ list[1] = 99 # [1, 99, 3]
 | `Array.last(arr)`             | `result<T>` — last element                                                                                                  |
 | `Array.length(arr)`           | `integer` — number of elements                                                                                              |
 | `Array.map(arr, fn)`          | `result<array<T>>` — transform each element; `failure` if callback throws                                                   |
-| `Array.max(arr)`              | `result<T>` — maximum value; `failure` if array is empty                                                                    |
-| `Array.min(arr)`              | `result<T>` — minimum value; `failure` if array is empty                                                                    |
+| `Array.maximum(arr)`              | `result<T>` — maximum value; `failure` if array is empty                                                                    |
+| `Array.minimum(arr)`              | `result<T>` — minimum value; `failure` if array is empty                                                                    |
 | `Array.pop(arr)`              | `result<(array, T)>` — `success((array, last))` or `failure` if empty                                                       |
 | `Array.push(arr, v)`          | `array<T>` — new array with `v` appended                                                                                    |
 | `Array.range(start, end)`     | `result<array<integer>>` — generate `[start, start+1, ..., end-1]`; `failure` if range exceeds size limit                   |
@@ -1334,7 +1334,7 @@ Functions may declare a tuple return type using `(T, T)` syntax:
 
 ```luma
 function (number, number) min_max(array<number> arr) {
-    return (Result.unwrap(Array.min(arr)), Result.unwrap(Array.max(arr)))
+    return (Result.unwrap(Array.minimum(arr)), Result.unwrap(Array.maximum(arr)))
 }
 
 (number lo, number hi) = min_max([3, 1, 4, 1, 5, 9])
@@ -1681,7 +1681,7 @@ boolean ok = Channel.send(ch, 42) # OK — assigned
 | `Result.unwrap(r)`               | Value — runtime error if `failure`                                                           |
 | `Result.unwrap_or(r, default)`   | Value or default                                                                             |
 | `Result.zip(a, b)`               | `success((a_val, b_val))` if both succeed; returns first `failure` otherwise                 |
-| `Result.bimap(r, ok_fn, err_fn)` | Map both branches: apply `ok_fn` to success value, `err_fn` to failure error                 |
+| `Result.map_both(r, ok_fn, err_fn)` | Map both branches: apply `ok_fn` to success value, `err_fn` to failure error                 |
 | `Result.fold(r, ok_fn, err_fn)`  | Extract a value from either branch; both functions must return the same type                 |
 
 ### Optional

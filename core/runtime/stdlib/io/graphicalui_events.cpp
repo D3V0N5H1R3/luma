@@ -625,7 +625,7 @@ Value build_mouse_event_record(const DictionaryValue& payload) {
     rec->fields.emplace_back("x", Value{read_number("x")});
     rec->fields.emplace_back("y", Value{read_number("y")});
     rec->fields.emplace_back("button", Value{std::move(button)});
-    rec->fields.emplace_back("ctrl", Value{dict_bool(payload, "ctrl")});
+    rec->fields.emplace_back("control", Value{dict_bool(payload, "ctrl")});
     rec->fields.emplace_back("shift", Value{dict_bool(payload, "shift")});
     rec->fields.emplace_back("alt", Value{dict_bool(payload, "alt")});
 
@@ -675,7 +675,7 @@ Value build_key_event_record(const std::string& key, const DictionaryValue* mods
     auto rec = std::make_shared<RecordValue>();
     rec->type_name = "KeyEvent";
     rec->fields.emplace_back("key", Value{key});
-    rec->fields.emplace_back("ctrl", Value{read_mod("ctrl")});
+    rec->fields.emplace_back("control", Value{read_mod("ctrl")});
     rec->fields.emplace_back("shift", Value{read_mod("shift")});
     rec->fields.emplace_back("alt", Value{read_mod("alt")});
     rec->fields.emplace_back("meta", Value{read_mod("meta")});

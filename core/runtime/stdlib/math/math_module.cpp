@@ -33,7 +33,7 @@ constexpr double pi{std::numbers::pi};
 // Convert a Math.Angle choice value — Radians(number) | Degrees(number) — to a
 // magnitude in radians.  Throws when the value is not a well-formed angle (only
 // reachable by bypassing the type checker).  Used by Math.to_radians /
-// Math.to_degrees / Math.sin_of.
+// Math.to_degrees / Math.sine_of.
 [[nodiscard]] double angle_to_radians(const Value& value, std::string_view func,
                                       const SourceLocation& loc) {
     if (!value.is_choice()) {
@@ -132,10 +132,10 @@ struct IntervalBounds {
         return v != nullptr ? v->to_numeric() : 0.0;
     };
 
-    return IntervalBounds{.min = field("min"), .max = field("max")};
+    return IntervalBounds{.min = field("minimum"), .max = field("maximum")};
 }
 
-// A Math.Rect record's fields, as doubles.  width/height are non-negative (the
+// A Math.Rectangle record's fields, as doubles.  width/height are non-negative (the
 // constructor clamps them).
 struct RectBounds {
     double x;
@@ -144,13 +144,13 @@ struct RectBounds {
     double height;
 };
 
-// Build a Math.Rect record value (type_name "Rect").  width/height are clamped to
+// Build a Math.Rectangle record value (type_name "Rectangle").  width/height are clamped to
 // be non-negative so a degenerate rectangle is empty rather than inside-out,
 // keeping contains/intersects/area well-defined (the beginner-friendly "clamp
 // over throw" convention, like String.truncate).
 [[nodiscard]] Value make_rect(const RectBounds& r) {
     auto rec = std::make_shared<RecordValue>();
-    rec->type_name = "Rect";
+    rec->type_name = "Rectangle";
     rec->fields.emplace_back("x", Value{r.x});
     rec->fields.emplace_back("y", Value{r.y});
     rec->fields.emplace_back("width", Value{std::max(r.width, 0.0)});
@@ -160,7 +160,7 @@ struct RectBounds {
 }
 
 // Build a Math.Vector2 record value (type_name "Vector2") — used by
-// Math.rect_center and Math.circle.
+// Math.rectangle_center and Math.circle.
 [[nodiscard]] Value make_rect_vec2(double x, double y) {
     auto rec = std::make_shared<RecordValue>();
     rec->type_name = "Vector2";
@@ -170,15 +170,15 @@ struct RectBounds {
     return Value{std::move(rec)};
 }
 
-// Read a Math.Rect record's x/y/width/height fields.  Throws when the argument is
+// Read a Math.Rectangle record's x/y/width/height fields.  Throws when the argument is
 // not a record; missing fields default to 0.0.  width/height are clamped to be
 // non-negative so a hand-built record can never carry inside-out extents into a
 // derivation.  Mirrors read_interval.
 [[nodiscard]] RectBounds read_rect(const Value& value, std::string_view func,
                                    const SourceLocation& loc) {
     if (!value.is_record()) {
-        throw RuntimeError{std::string{func} + ": expected a Math.Rect record", loc,
-                           "build one with Math.rect(x, y, width, height)"};
+        throw RuntimeError{std::string{func} + ": expected a Math.Rectangle record", loc,
+                           "build one with Math.rectangle(x, y, width, height)"};
     }
 
     const auto& rec = value.as_record();
@@ -229,7 +229,7 @@ struct CircleData {
 // Build a Math.Circle record value (type_name "Circle") from a centre and radius.
 // radius is clamped to be non-negative so a degenerate circle is a point rather
 // than inside-out, keeping contains/intersects well-defined (the beginner-friendly
-// "clamp over throw" convention, like Math.rect).
+// "clamp over throw" convention, like Math.rectangle).
 [[nodiscard]] Value make_circle(double cx, double cy, double radius) {
     auto rec = std::make_shared<RecordValue>();
     rec->type_name = "Circle";
@@ -582,20 +582,21 @@ void register_math_ns(const EnvPtr& env) {
             auto hi = expect_numeric(args[2], "Math.clamp", loc);
 
             if (lo > hi) {
-                return make_failure_value(error_msg("Math", "clamp", "'lo' must not exceed 'hi'"));
+                return make_failure_value(
+                    error_msg("Math", "clamp", "'minimum' must not exceed 'maximum'"));
             }
 
             return make_success_value(Value{std::clamp(val, lo, hi)});
         })
-        .func("lerp", 3)
+        .func("linear_interpolation", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            auto a = expect_numeric(args[0], "Math.lerp", loc);
-            auto b = expect_numeric(args[1], "Math.lerp", loc);
-            auto t = expect_numeric(args[2], "Math.lerp", loc);
+            auto a = expect_numeric(args[0], "Math.linear_interpolation", loc);
+            auto b = expect_numeric(args[1], "Math.linear_interpolation", loc);
+            auto t = expect_numeric(args[2], "Math.linear_interpolation", loc);
 
             if (t < 0.0 || t > 1.0) {
-                return make_failure_value(
-                    error_msg("Math", "lerp", "interpolation factor 't' must be in [0, 1]"));
+                return make_failure_value(error_msg("Math", "linear_interpolation",
+                                                    "interpolation factor 't' must be in [0, 1]"));
             }
 
             return make_success_value(Value{a + ((b - a) * t)});
@@ -653,9 +654,9 @@ void register_math_ns(const EnvPtr& env) {
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             return Value{angle_to_radians(args[0], "Math.to_degrees", loc) * 180.0 / pi};
         })
-        .func("sin_of", 1)
+        .func("sine_of", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            return Value{std::sin(angle_to_radians(args[0], "Math.sin_of", loc))};
+            return Value{std::sin(angle_to_radians(args[0], "Math.sine_of", loc))};
         })
         // ── Math.Interval ────────────────────────────────────────────────────
         // A closed numeric range [min, max].  Mirrors DateTime.Interval: a
@@ -673,8 +674,8 @@ void register_math_ns(const EnvPtr& env) {
 
             auto rec = std::make_shared<RecordValue>();
             rec->type_name = "Interval";
-            rec->fields.emplace_back("min", Value{min});
-            rec->fields.emplace_back("max", Value{max});
+            rec->fields.emplace_back("minimum", Value{min});
+            rec->fields.emplace_back("maximum", Value{max});
 
             return make_success_value(Value{std::move(rec)});
         })
@@ -708,45 +709,45 @@ void register_math_ns(const EnvPtr& env) {
             // endpoints (a.max == b.min) count as overlapping at that point.
             return Value{a.min <= b.max && b.min <= a.max};
         })
-        // ── Math.Rect ────────────────────────────────────────────────────────
+        // ── Math.Rectangle ────────────────────────────────────────────────────────
         // An axis-aligned rectangle { x, y, width, height }, the 2D analogue of
         // Math.Interval.  A total constructor (dimensions clamped non-negative)
         // plus contains/intersects/intersection/union/center/area, so beginners
         // get named layout and hit-testing instead of hand-rolled overlap
         // arithmetic.  Edges are half-open ([x, x+width)) — consistent with
         // DOMRect hit-testing — so a zero-size rect contains nothing.
-        .func("rect", 4)
+        .func("rectangle", 4)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const double x = expect_numeric(args[0], "Math.rect", loc);
-            const double y = expect_numeric(args[1], "Math.rect", loc);
-            const double width = expect_numeric(args[2], "Math.rect", loc);
-            const double height = expect_numeric(args[3], "Math.rect", loc);
+            const double x = expect_numeric(args[0], "Math.rectangle", loc);
+            const double y = expect_numeric(args[1], "Math.rectangle", loc);
+            const double width = expect_numeric(args[2], "Math.rectangle", loc);
+            const double height = expect_numeric(args[3], "Math.rectangle", loc);
 
             return make_rect(RectBounds{.x = x, .y = y, .width = width, .height = height});
         })
-        .func("rect_contains", 3)
+        .func("rectangle_contains", 3)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto r = read_rect(args[0], "Math.rect_contains", loc);
-            const double px = expect_numeric(args[1], "Math.rect_contains", loc);
-            const double py = expect_numeric(args[2], "Math.rect_contains", loc);
+            const auto r = read_rect(args[0], "Math.rectangle_contains", loc);
+            const double px = expect_numeric(args[1], "Math.rectangle_contains", loc);
+            const double py = expect_numeric(args[2], "Math.rectangle_contains", loc);
 
             // Half-open: the min edges are inside, the max edges are outside.
             return Value{px >= r.x && px < r.x + r.width && py >= r.y && py < r.y + r.height};
         })
-        .func("rect_intersects", 2)
+        .func("rectangle_intersects", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto a = read_rect(args[0], "Math.rect_intersects", loc);
-            const auto b = read_rect(args[1], "Math.rect_intersects", loc);
+            const auto a = read_rect(args[0], "Math.rectangle_intersects", loc);
+            const auto b = read_rect(args[1], "Math.rectangle_intersects", loc);
 
             // Half-open overlap: touching edges (a.x + a.width == b.x) do not
             // count as intersecting, consistent with rect_contains.
             return Value{a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height &&
                          b.y < a.y + a.height};
         })
-        .func("rect_intersection", 2)
+        .func("rectangle_intersection", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto a = read_rect(args[0], "Math.rect_intersection", loc);
-            const auto b = read_rect(args[1], "Math.rect_intersection", loc);
+            const auto a = read_rect(args[0], "Math.rectangle_intersection", loc);
+            const auto b = read_rect(args[1], "Math.rectangle_intersection", loc);
 
             const double left = std::max(a.x, b.x);
             const double top = std::max(a.y, b.y);
@@ -754,7 +755,7 @@ void register_math_ns(const EnvPtr& env) {
             const double bottom = std::min(a.y + a.height, b.y + b.height);
 
             // No positive-area overlap → none.  The one fallible operation
-            // returns optional<Math.Rect> (none is Value{NullValue{}}).
+            // returns optional<Math.Rectangle> (none is Value{NullValue{}}).
             if (right <= left || bottom <= top) {
                 return Value{NullValue{}};
             }
@@ -762,10 +763,10 @@ void register_math_ns(const EnvPtr& env) {
             return make_rect(
                 RectBounds{.x = left, .y = top, .width = right - left, .height = bottom - top});
         })
-        .func("rect_union", 2)
+        .func("rectangle_union", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto a = read_rect(args[0], "Math.rect_union", loc);
-            const auto b = read_rect(args[1], "Math.rect_union", loc);
+            const auto a = read_rect(args[0], "Math.rectangle_union", loc);
+            const auto b = read_rect(args[1], "Math.rectangle_union", loc);
 
             const double left = std::min(a.x, b.x);
             const double top = std::min(a.y, b.y);
@@ -775,21 +776,21 @@ void register_math_ns(const EnvPtr& env) {
             return make_rect(
                 RectBounds{.x = left, .y = top, .width = right - left, .height = bottom - top});
         })
-        .func("rect_center", 1)
+        .func("rectangle_center", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto r = read_rect(args[0], "Math.rect_center", loc);
+            const auto r = read_rect(args[0], "Math.rectangle_center", loc);
 
             return make_rect_vec2(r.x + r.width / 2.0, r.y + r.height / 2.0);
         })
-        .func("rect_area", 1)
+        .func("rectangle_area", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto r = read_rect(args[0], "Math.rect_area", loc);
+            const auto r = read_rect(args[0], "Math.rectangle_area", loc);
 
             return Value{r.width * r.height};
         })
         // ── Math.Vector2 constructor ─────────────────────────────────────────
         // Minimal constructor for the Math.Vector2 { x, y } record used by
-        // Math.circle() and Math.rect_center().
+        // Math.circle() and Math.rectangle_center().
         .func("vector2", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const double x = expect_numeric(args[0], "Math.vector2", loc);
@@ -799,8 +800,8 @@ void register_math_ns(const EnvPtr& env) {
         })
         // ── Math.Circle ──────────────────────────────────────────────────────
         // A 2D circle { center: Math.Vector2, radius }, the disk companion to
-        // Math.Rect.  A total constructor (radius clamped non-negative) plus
-        // contains/intersects/circle_rect_intersects, so beginners get the common
+        // Math.Rectangle.  A total constructor (radius clamped non-negative) plus
+        // contains/intersects/circle_rectangle_intersects, so beginners get the common
         // circle collision tests without hand-writing the distance-squared
         // comparison.  All predicates use inclusive (closed-disk) boundaries.
         .func("circle", 2)
@@ -834,10 +835,10 @@ void register_math_ns(const EnvPtr& env) {
 
             return Value{dx * dx + dy * dy <= sum * sum};
         })
-        .func("circle_rect_intersects", 2)
+        .func("circle_rectangle_intersects", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto c = read_circle(args[0], "Math.circle_rect_intersects", loc);
-            const auto r = read_rect(args[1], "Math.circle_rect_intersects", loc);
+            const auto c = read_circle(args[0], "Math.circle_rectangle_intersects", loc);
+            const auto r = read_rect(args[1], "Math.circle_rectangle_intersects", loc);
 
             // Distance from the circle centre to the closest point on the rect: if
             // that is within the radius, the shapes overlap.  Edges are inclusive,

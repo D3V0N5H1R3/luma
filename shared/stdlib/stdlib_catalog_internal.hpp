@@ -226,10 +226,10 @@ namespace named {
     return ReturnTypeDesc::named("Interval");
 }
 
-// Math.rect() / rect_* take and return these axis-aligned rectangle records
-// (bare short name "Rect", like interval() / vector2()).
+// Math.rectangle() / rectangle_* take and return these axis-aligned rectangle
+// records (bare short name "Rectangle", like interval() / vector2()).
 [[nodiscard]] inline ReturnTypeDesc rect() {
-    return ReturnTypeDesc::named("Rect");
+    return ReturnTypeDesc::named("Rectangle");
 }
 
 // Math.circle() / circle_* take and return these 2D circle records (bare short
@@ -269,12 +269,12 @@ namespace named {
     return ReturnTypeDesc::named("PathParts");
 }
 
-// Math.Vector2 records — still used by circle and rect_center functions.
+// Math.Vector2 records — still used by circle and rectangle_center functions.
 [[nodiscard]] inline ReturnTypeDesc vector2() {
     return ReturnTypeDesc::named("Vector2");
 }
 
-// Math.to_radians / to_degrees / sin_of consume this optional unit-safe angle
+// Math.to_radians / to_degrees / sine_of consume this optional unit-safe angle
 // choice (qualified "Math.Angle", a payload-carrying choice like Terminal.Key).
 [[nodiscard]] inline ReturnTypeDesc angle() {
     return ReturnTypeDesc::named("Math.Angle");

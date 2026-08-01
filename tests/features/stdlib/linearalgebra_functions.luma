@@ -477,7 +477,7 @@ function void test_linearalgebra_project_reject_lerp() {
     assert(Math.approximately_equal(p[1], 0.0))
     array<number> r = Result.unwrap(LinearAlgebra.reject([2.0, 0.0], [0.0, 5.0]))
     assert(Math.approximately_equal(r[0], 2.0))
-    array<number> l = Result.unwrap(LinearAlgebra.lerp([0.0, 0.0], [10.0, 10.0], 0.5))
+    array<number> l = Result.unwrap(LinearAlgebra.linear_interpolation([0.0, 0.0], [10.0, 10.0], 0.5))
     assert(Math.approximately_equal(l[0], 5.0))
     assert(Result.is_failure(LinearAlgebra.project([1.0, 1.0], [0.0, 0.0])))
 }

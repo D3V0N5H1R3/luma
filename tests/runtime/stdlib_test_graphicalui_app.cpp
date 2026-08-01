@@ -809,7 +809,7 @@ LUMA_TEST(build_mouse_event_record_maps_payload) {
     ASSERT_EQ(button->as_choice()->type_name, "MouseButton");
     ASSERT_EQ(button->as_choice()->variant, "Right");
 
-    const auto* ctrl = rec.find_field("ctrl");
+    const auto* ctrl = rec.find_field("control");
     ASSERT_TRUE(ctrl != nullptr && ctrl->is_bool());
     ASSERT_TRUE(ctrl->as_bool());
 
@@ -844,7 +844,7 @@ LUMA_TEST(build_mouse_event_record_defaults_to_left) {
     ASSERT_NEAR(rec.find_field("x")->as_number(), 0.0, 1e-9);
     ASSERT_NEAR(rec.find_field("y")->as_number(), 0.0, 1e-9);
     ASSERT_EQ(rec.find_field("button")->as_choice()->variant, "Left");
-    ASSERT_FALSE(rec.find_field("ctrl")->as_bool());
+    ASSERT_FALSE(rec.find_field("control")->as_bool());
     ASSERT_FALSE(rec.find_field("shift")->as_bool());
     ASSERT_FALSE(rec.find_field("alt")->as_bool());
 }
@@ -938,7 +938,7 @@ LUMA_TEST(build_key_event_record_maps_payload) {
     ASSERT_TRUE(key != nullptr && key->is_string());
     ASSERT_EQ(key->as_string(), "s");
 
-    const auto* ctrl = rec.find_field("ctrl");
+    const auto* ctrl = rec.find_field("control");
     ASSERT_TRUE(ctrl != nullptr && ctrl->is_bool());
     ASSERT_TRUE(ctrl->as_bool());
 
@@ -961,7 +961,7 @@ LUMA_TEST(build_key_event_record_null_mods_defaults_false) {
     const auto rec_val = gui_detail::build_key_event_record("Enter", nullptr);
     const auto& rec = *rec_val.as_record();
     ASSERT_EQ(rec.find_field("key")->as_string(), "Enter");
-    ASSERT_FALSE(rec.find_field("ctrl")->as_bool());
+    ASSERT_FALSE(rec.find_field("control")->as_bool());
     ASSERT_FALSE(rec.find_field("shift")->as_bool());
     ASSERT_FALSE(rec.find_field("alt")->as_bool());
     ASSERT_FALSE(rec.find_field("meta")->as_bool());
@@ -1273,8 +1273,9 @@ LUMA_TEST(set_theme_mode_of_and_bridge) {
 
     ASSERT_EQ(eval(R"(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Light))").as_string(),
               "light");
-    ASSERT_EQ(eval(R"(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Auto))").as_string(),
-              "auto");
+    ASSERT_EQ(
+        eval(R"(GraphicalUi.theme_mode_to_string(GraphicalUi.ThemeMode.Automatic))").as_string(),
+        "auto");
 }
 
 // ── G06: GraphicalUi.SortDirection ─────────────────────────
@@ -1364,7 +1365,7 @@ LUMA_TEST(classify_device_typed_returns_record) {
 // to the string keys of the untyped API.
 LUMA_TEST(severity_to_string_bridge) {
     const auto v = eval(R"(
-        [GraphicalUi.severity_to_string(GraphicalUi.Severity.Info),
+        [GraphicalUi.severity_to_string(GraphicalUi.Severity.Information),
          GraphicalUi.severity_to_string(GraphicalUi.Severity.Warning),
          GraphicalUi.severity_to_string(GraphicalUi.Severity.Error),
          GraphicalUi.severity_to_string(GraphicalUi.Severity.Success)]

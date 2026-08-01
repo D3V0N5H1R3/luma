@@ -78,7 +78,7 @@ function void main() {
     result<integer> kept = Result.filter(success(5), (integer x) -> x > 0, "small")
     result<integer> tapped = Result.tap(success(7), (integer v) -> print(v))
     result<integer> wrapped = Result.map_failure(failure("e"), (string m) -> "wrapped: " + m)
-    result<integer> bimapped = Result.bimap(success(5), (integer v) -> v * 2, (string _e) -> 0)
+    result<integer> bimapped = Result.map_both(success(5), (integer v) -> v * 2, (string _e) -> 0)
     result<integer> flat = Result.flatten(success(success(9)))
 
     print(Result.unwrap_or(recovered, -1))

@@ -193,7 +193,7 @@ function number calculate_area(number radius) {
 
 # Good — explains a non-obvious constraint.
 # Clamped to 1000 because the upstream API rejects larger page sizes.
-integer page_size = Math.min(requested_size, 1000)
+integer page_size = Math.minimum(requested_size, 1000)
 ```
 
 ---

@@ -201,11 +201,11 @@ function DepartmentSummary summarize_department(
     number avg = if count > 0 { total / count } else { 0.0 }
 
     number min_sal = salaries
-    |> Array.min()
+    |> Array.minimum()
     |> Result.unwrap_or(0.0)
 
     number max_sal = salaries
-    |> Array.max()
+    |> Array.maximum()
     |> Result.unwrap_or(0.0)
 
     return DepartmentSummary {

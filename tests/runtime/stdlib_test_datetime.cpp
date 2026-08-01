@@ -374,7 +374,7 @@ static void test_datetime_weekday_accessors_reject_non_weekday() {
     // The choice-consuming accessors reject a non-choice and a foreign choice.
     ASSERT_TRUE(luma::test::eval_throws("DateTime.weekday_number(5)"));
     ASSERT_TRUE(luma::test::eval_throws(R"(DateTime.weekday_name("Monday"))"));
-    ASSERT_TRUE(luma::test::eval_throws("DateTime.weekday_number(Log.Level.Info)"));
+    ASSERT_TRUE(luma::test::eval_throws("DateTime.weekday_number(Log.Level.Information)"));
 }
 
 static void test_datetime_month_of_returns_choice() {

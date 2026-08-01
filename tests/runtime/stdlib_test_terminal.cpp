@@ -762,7 +762,7 @@ static void test_terminal_test_get_input_parses_modifiers() {
     const auto v = eval(R"(
         Terminal.test_start(["ctrl+c"])
         string r = match Terminal.get_input() {
-            success(ev) { "${ev.key}:${ev.ctrl}:${ev.shift}:${ev.alt}" }
+            success(ev) { "${ev.key}:${ev.control}:${ev.shift}:${ev.alt}" }
             failure(_) { "fail" }
         }
         Terminal.test_stop()

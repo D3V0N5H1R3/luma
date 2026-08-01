@@ -82,8 +82,8 @@ function void demo_min_and_max() {
     print("")
     print("=== Min and max ===")
 
-    print("min(3, 7) = ${Math.min(3, 7)}")
-    print("max(3, 7) = ${Math.max(3, 7)}")
+    print("min(3, 7) = ${Math.minimum(3, 7)}")
+    print("max(3, 7) = ${Math.maximum(3, 7)}")
 }
 
 # ── Statistics ──

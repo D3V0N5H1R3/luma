@@ -4,7 +4,7 @@
 // validating constructors and derivations.  Every value serialises to a CSS
 // string the GraphicalUi web-view already accepts, so Solaris themes can be
 // computed rather than hand-written.  Data + free functions, no operator
-// overloading — the same philosophy as Decimal and Math.Fraction.
+// overloading — the same philosophy as Decimal.
 
 #include "runtime/stdlib/io/color_module.hpp"
 
@@ -593,17 +593,17 @@ void register_color_ns(const EnvPtr& env) {
             return make_success_value(
                 make_color(Rgba{static_cast<int>(r), static_cast<int>(g), static_cast<int>(b), a}));
         })
-        .func("from_hex", 1)
+        .func("from_hexadecimal", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            std::string_view hex = expect_string(args[0], "Color.from_hex", loc);
+            std::string_view hex = expect_string(args[0], "Color.from_hexadecimal", loc);
 
             if (!hex.empty() && hex.front() == '#') {
                 hex.remove_prefix(1);
             }
 
             const auto invalid = [] {
-                return make_failure_value(
-                    error_msg("Color", "from_hex", "expected #rgb, #rgba, #rrggbb, or #rrggbbaa"));
+                return make_failure_value(error_msg("Color", "from_hexadecimal",
+                                                    "expected #rgb, #rgba, #rrggbb, or #rrggbbaa"));
             };
 
             // Expand a 3/4-digit shorthand (#rgb / #rgba) to its full form by

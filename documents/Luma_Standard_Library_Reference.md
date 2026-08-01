@@ -70,70 +70,70 @@ These require no namespace prefix:
 
 | Function                         | Parameter Types                        | Return Type                    | Description                                                                |
 | -------------------------------- | -------------------------------------- | ------------------------------ | -------------------------------------------------------------------------- |
-| `Array.all(arr, fn)`             | `(array<T>, function(T) -> boolean)`   | `result<boolean>`              | `true` if all elements match; fail if predicate throws                     |
-| `Array.any(arr, fn)`             | `(array<T>, function(T) -> boolean)`   | `result<boolean>`              | `true` if any element matches; fail if predicate throws                    |
-| `Array.append(arr, v)`           | `(array<T>, T)`                        | `array<T>`                     | New array with `v` appended (alias for `push`)                             |
-| `Array.binary_search(arr, v)`    | `(array<T>, T)`                        | `result<integer>`              | Index of `v` via binary search of a sorted array; fail if not found        |
-| `Array.chunk(arr, n)`            | `(array<T>, integer)`                  | `result<array<array<T>>>`      | Split into sub-arrays of size `n`; fail if `n` is not > 0                  |
-| `Array.compact(arr)`             | `(array<T>)`                           | `array<T>`                     | Remove `none` elements                                                     |
-| `Array.contains(arr, v)`         | `(array<T>, T)`                        | `boolean`                      | Whether `v` is present in the array                                        |
+| `Array.all(array, function)`             | `(array<T>, function(T) -> boolean)`   | `result<boolean>`              | `true` if all elements match; fail if predicate throws                     |
+| `Array.any(array, function)`             | `(array<T>, function(T) -> boolean)`   | `result<boolean>`              | `true` if any element matches; fail if predicate throws                    |
+| `Array.append(array, v)`           | `(array<T>, T)`                        | `array<T>`                     | New array with `v` appended (alias for `push`)                             |
+| `Array.binary_search(array, v)`    | `(array<T>, T)`                        | `result<integer>`              | Index of `v` via binary search of a sorted array; fail if not found        |
+| `Array.chunk(array, n)`            | `(array<T>, integer)`                  | `result<array<array<T>>>`      | Split into sub-arrays of size `n`; fail if `n` is not > 0                  |
+| `Array.compact(array)`             | `(array<T>)`                           | `array<T>`                     | Remove `none` elements                                                     |
+| `Array.contains(array, v)`         | `(array<T>, T)`                        | `boolean`                      | Whether `v` is present in the array                                        |
 | `Array.concat(a, b)`             | `(array<T>, array<T>)`                 | `array<T>`                     | Concatenate two arrays                                                     |
-| `Array.count(arr, fn)`           | `(array<T>, function(T) -> boolean)`   | `result<integer>`              | Number of matching elements; fail if predicate throws                      |
-| `Array.count_by(arr, key)`       | `(array<T>, function(T) -> string)`    | `dictionary<integer>`          | Per-bucket occurrence counts keyed by `key` (like `group_by` counting)     |
-| `Array.drop(arr, n)`             | `(array<T>, integer)`                  | `array<T>`                     | Drop the first `n` elements                                                |
-| `Array.drop_while(arr, fn)`      | `(array<T>, function(T) -> boolean)`   | `result<array<T>>`             | Drop elements while predicate is true; fail if predicate throws            |
-| `Array.each(arr, fn)`            | `(array<T>, function(T) -> none)`      | `result<none>`                 | Iterate for side effects; fail if callback throws                          |
-| `Array.enumerate(arr)`           | `(array<T>)`                           | `array<(integer, T)>`          | Array of `(index, value)` tuples                                           |
-| `Array.filter(arr, fn)`          | `(array<T>, function(T) -> boolean)`   | `result<array<T>>`             | Keep elements where `fn` returns `true`; fail if predicate throws          |
-| `Array.find(arr, fn)`            | `(array<T>, function(T) -> boolean)`   | `result<T>`                    | First matching element; fail if not found                                  |
-| `Array.find_index(arr, fn)`      | `(array<T>, function(T) -> boolean)`   | `result<integer>`              | Index of first matching element; fail if not found                         |
-| `Array.find_last(arr, fn)`       | `(array<T>, function(T) -> boolean)`   | `result<T>`                    | Last matching element; fail if not found                                   |
-| `Array.find_last_index(arr, fn)` | `(array<T>, function(T) -> boolean)`   | `result<integer>`              | Index of last matching element; fail if not found                          |
-| `Array.first(arr)`               | `(array<T>)`                           | `result<T>`                    | First element; fail if empty                                               |
-| `Array.flat_map(arr, fn)`        | `(array<T>, function(T) -> array<U>)`  | `result<array<U>>`             | Map then flatten one level; fail if callback throws                        |
-| `Array.flatten(arr)`             | `(array<array<T>>)`                    | `array<T>`                     | Flatten one nesting level                                                  |
-| `Array.get(arr, i)`              | `(array<T>, integer)`                  | `result<T>`                    | Safe indexed access; fail if out of bounds                                 |
-| `Array.group_by(arr, fn)`        | `(array<T>, function(T) -> string)`    | `result<dictionary<array<T>>>` | Group elements by key returned by `fn`; fail if callback throws            |
-| `Array.index_of(arr, v)`         | `(array<T>, T)`                        | `result<integer>`              | First index of `v`; fail if not found                                      |
-| `Array.insert_at(arr, i, v)`     | `(array<T>, integer, T)`               | `result<array<T>>`             | Insert `v` at index `i`; fail if index out of bounds                       |
-| `Array.is_empty(arr)`            | `(array<T>)`                           | `boolean`                      | Whether the array has no elements                                          |
-| `Array.is_sorted(arr)`           | `(array<T>)`                           | `boolean`                      | Whether the array is in ascending natural order                            |
-| `Array.is_sorted_by(arr, key)`   | `(array<T>, function(T) -> U)`         | `result<boolean>`              | Whether the array is ascending by the projected key; fail if key throws    |
-| `Array.join(arr, sep)`           | `(array<T>, string)`                   | `string`                       | Concatenate elements as strings separated by `sep`                         |
-| `Array.last(arr)`                | `(array<T>)`                           | `result<T>`                    | Last element; fail if empty                                                |
-| `Array.length(arr)`              | `(array<T>)`                           | `integer`                      | Number of elements                                                         |
-| `Array.map(arr, fn)`             | `(array<T>, function(T) -> U)`         | `result<array<U>>`             | Transform each element; fail if callback throws                            |
-| `Array.max(arr)`                 | `(array<T>)`                           | `result<T>`                    | Maximum value; fail if empty                                               |
-| `Array.max_by(arr, key)`         | `(array<T>, function(T) -> number)`    | `optional<T>`                  | Element with the greatest key; `none` if empty; first element wins ties    |
-| `Array.min(arr)`                 | `(array<T>)`                           | `result<T>`                    | Minimum value; fail if empty                                               |
-| `Array.min_by(arr, key)`         | `(array<T>, function(T) -> number)`    | `optional<T>`                  | Element with the smallest key; `none` if empty; first element wins ties    |
-| `Array.none(arr, fn)`            | `(array<T>, function(T) -> boolean)`   | `result<boolean>`              | `true` if no element matches; fail if predicate throws                     |
-| `Array.partition(arr, fn)`       | `(array<T>, function(T) -> boolean)`   | `result<(array<T>, array<T>)>` | Split into `(matches, rest)`; fail if predicate throws                     |
-| `Array.pop(arr)`                 | `(array<T>)`                           | `result<(array<T>, T)>`        | Remove last element; fail if empty                                         |
-| `Array.product(arr)`             | `(array<T>)`                           | `result<integer \| number>`    | Multiply numeric elements; `1` for an empty array; fail if non-numeric element found |
-| `Array.push(arr, v)`             | `(array<T>, T)`                        | `array<T>`                     | New array with `v` appended                                                |
+| `Array.count(array, function)`           | `(array<T>, function(T) -> boolean)`   | `result<integer>`              | Number of matching elements; fail if predicate throws                      |
+| `Array.count_by(array, key)`       | `(array<T>, function(T) -> string)`    | `dictionary<integer>`          | Per-bucket occurrence counts keyed by `key` (like `group_by` counting)     |
+| `Array.drop(array, n)`             | `(array<T>, integer)`                  | `array<T>`                     | Drop the first `n` elements                                                |
+| `Array.drop_while(array, function)`      | `(array<T>, function(T) -> boolean)`   | `result<array<T>>`             | Drop elements while predicate is true; fail if predicate throws            |
+| `Array.each(array, function)`            | `(array<T>, function(T) -> none)`      | `result<none>`                 | Iterate for side effects; fail if callback throws                          |
+| `Array.enumerate(array)`           | `(array<T>)`                           | `array<(integer, T)>`          | Array of `(index, value)` tuples                                           |
+| `Array.filter(array, function)`          | `(array<T>, function(T) -> boolean)`   | `result<array<T>>`             | Keep elements where `function` returns `true`; fail if predicate throws          |
+| `Array.find(array, function)`            | `(array<T>, function(T) -> boolean)`   | `result<T>`                    | First matching element; fail if not found                                  |
+| `Array.find_index(array, function)`      | `(array<T>, function(T) -> boolean)`   | `result<integer>`              | Index of first matching element; fail if not found                         |
+| `Array.find_last(array, function)`       | `(array<T>, function(T) -> boolean)`   | `result<T>`                    | Last matching element; fail if not found                                   |
+| `Array.find_last_index(array, function)` | `(array<T>, function(T) -> boolean)`   | `result<integer>`              | Index of last matching element; fail if not found                          |
+| `Array.first(array)`               | `(array<T>)`                           | `result<T>`                    | First element; fail if empty                                               |
+| `Array.flat_map(array, function)`        | `(array<T>, function(T) -> array<U>)`  | `result<array<U>>`             | Map then flatten one level; fail if callback throws                        |
+| `Array.flatten(array)`             | `(array<array<T>>)`                    | `array<T>`                     | Flatten one nesting level                                                  |
+| `Array.get(array, i)`              | `(array<T>, integer)`                  | `result<T>`                    | Safe indexed access; fail if out of bounds                                 |
+| `Array.group_by(array, function)`        | `(array<T>, function(T) -> string)`    | `result<dictionary<array<T>>>` | Group elements by key returned by `function`; fail if callback throws            |
+| `Array.index_of(array, v)`         | `(array<T>, T)`                        | `result<integer>`              | First index of `v`; fail if not found                                      |
+| `Array.insert_at(array, i, v)`     | `(array<T>, integer, T)`               | `result<array<T>>`             | Insert `v` at index `i`; fail if index out of bounds                       |
+| `Array.is_empty(array)`            | `(array<T>)`                           | `boolean`                      | Whether the array has no elements                                          |
+| `Array.is_sorted(array)`           | `(array<T>)`                           | `boolean`                      | Whether the array is in ascending natural order                            |
+| `Array.is_sorted_by(array, key)`   | `(array<T>, function(T) -> U)`         | `result<boolean>`              | Whether the array is ascending by the projected key; fail if key throws    |
+| `Array.join(array, separator)`           | `(array<T>, string)`                   | `string`                       | Concatenate elements as strings separated by `separator`                         |
+| `Array.last(array)`                | `(array<T>)`                           | `result<T>`                    | Last element; fail if empty                                                |
+| `Array.length(array)`              | `(array<T>)`                           | `integer`                      | Number of elements                                                         |
+| `Array.map(array, function)`             | `(array<T>, function(T) -> U)`         | `result<array<U>>`             | Transform each element; fail if callback throws                            |
+| `Array.maximum(array)`                 | `(array<T>)`                           | `result<T>`                    | Maximum value; fail if empty                                               |
+| `Array.maximum_by(array, key)`         | `(array<T>, function(T) -> number)`    | `optional<T>`                  | Element with the greatest key; `none` if empty; first element wins ties    |
+| `Array.minimum(array)`                 | `(array<T>)`                           | `result<T>`                    | Minimum value; fail if empty                                               |
+| `Array.minimum_by(array, key)`         | `(array<T>, function(T) -> number)`    | `optional<T>`                  | Element with the smallest key; `none` if empty; first element wins ties    |
+| `Array.none(array, function)`            | `(array<T>, function(T) -> boolean)`   | `result<boolean>`              | `true` if no element matches; fail if predicate throws                     |
+| `Array.partition(array, function)`       | `(array<T>, function(T) -> boolean)`   | `result<(array<T>, array<T>)>` | Split into `(matches, rest)`; fail if predicate throws                     |
+| `Array.pop(array)`                 | `(array<T>)`                           | `result<(array<T>, T)>`        | Remove last element; fail if empty                                         |
+| `Array.product(array)`             | `(array<T>)`                           | `result<integer \| number>`    | Multiply numeric elements; `1` for an empty array; fail if non-numeric element found |
+| `Array.push(array, v)`             | `(array<T>, T)`                        | `array<T>`                     | New array with `v` appended                                                |
 | `Array.range(start, end)`        | `(integer, integer)`                   | `result<array<integer>>`       | Generate `[start, start+1, ..., end-1]`; fail if range exceeds limit       |
-| `Array.reduce(arr, init, fn)`    | `(array<T>, U, function(U, T) -> U)`   | `result<U>`                    | Fold left with accumulator; fail if `fn` is not callable                   |
-| `Array.remove_at(arr, i)`        | `(array<T>, integer)`                  | `result<(array<T>, T)>`        | Remove element at index; fail if out of bounds                             |
+| `Array.reduce(array, init, function)`    | `(array<T>, U, function(U, T) -> U)`   | `result<U>`                    | Fold left with accumulator; fail if `function` is not callable                   |
+| `Array.remove_at(array, i)`        | `(array<T>, integer)`                  | `result<(array<T>, T)>`        | Remove element at index; fail if out of bounds                             |
 | `Array.repeat(v, n)`             | `(T, integer)`                         | `result<array<T>>`             | `n` copies of `v`; fail if `n` is negative or exceeds limit                |
-| `Array.reverse(arr)`             | `(array<T>)`                           | `array<T>`                     | Return reversed copy                                                       |
-| `Array.set(arr, i, v)`           | `(array<T>, integer, T)`               | `result<array<T>>`             | New array with element at index `i` replaced by `v`; fail if out of bounds |
-| `Array.slice(arr, from, to)`     | `(array<T>, integer, integer)`         | `result<array<T>>`             | Subarray `[from, to)`; fail if indices are negative or `from > to`         |
-| `Array.sort(arr, fn)`            | `(array<T>, function(T, T) -> number)` | `result<array<T>>`             | Sort by comparator; fail if comparator throws                              |
-| `Array.sort_by(arr, fn)`         | `(array<T>, function(T) -> U)`         | `result<array<T>>`             | Sort by key function; fail if key function throws                          |
-| `Array.split_at(arr, i)`         | `(array<T>, integer)`                  | `(array<T>, array<T>)`         | Split into `(take i, drop i)`; `i` is clamped to `[0, length]`             |
-| `Array.sum(arr)`                 | `(array<T>)`                           | `result<integer \| number>`    | Sum numeric elements; fail if non-numeric element found                    |
-| `Array.sum_by(arr, key)`         | `(array<T>, function(T) -> number)`    | `number`                       | Total of the projected key over every element; `0` for an empty array      |
-| `Array.take(arr, n)`             | `(array<T>, integer)`                  | `array<T>`                     | Take the first `n` elements                                                |
-| `Array.take_while(arr, fn)`      | `(array<T>, function(T) -> boolean)`   | `result<array<T>>`             | Take elements while predicate is true; fail if predicate throws            |
-| `Array.unique(arr)`              | `(array<T>)`                           | `array<T>`                     | Deduplicate elements                                                       |
-| `Array.unzip(arr)`               | `(array<(T, U)>)`                      | `(array<T>, array<U>)`         | Split an array of pairs into two parallel arrays (inverse of `zip`)        |
-| `Array.windows(arr, n)`          | `(array<T>, integer)`                  | `result<array<array<T>>>`      | Overlapping sliding windows of size `n`; fail if `n` is not > 0            |
+| `Array.reverse(array)`             | `(array<T>)`                           | `array<T>`                     | Return reversed copy                                                       |
+| `Array.set(array, i, v)`           | `(array<T>, integer, T)`               | `result<array<T>>`             | New array with element at index `i` replaced by `v`; fail if out of bounds |
+| `Array.slice(array, from, to)`     | `(array<T>, integer, integer)`         | `result<array<T>>`             | Subarray `[from, to)`; fail if indices are negative or `from > to`         |
+| `Array.sort(array, function)`            | `(array<T>, function(T, T) -> number)` | `result<array<T>>`             | Sort by comparator; fail if comparator throws                              |
+| `Array.sort_by(array, function)`         | `(array<T>, function(T) -> U)`         | `result<array<T>>`             | Sort by key function; fail if key function throws                          |
+| `Array.split_at(array, i)`         | `(array<T>, integer)`                  | `(array<T>, array<T>)`         | Split into `(take i, drop i)`; `i` is clamped to `[0, length]`             |
+| `Array.sum(array)`                 | `(array<T>)`                           | `result<integer \| number>`    | Sum numeric elements; fail if non-numeric element found                    |
+| `Array.sum_by(array, key)`         | `(array<T>, function(T) -> number)`    | `number`                       | Total of the projected key over every element; `0` for an empty array      |
+| `Array.take(array, n)`             | `(array<T>, integer)`                  | `array<T>`                     | Take the first `n` elements                                                |
+| `Array.take_while(array, function)`      | `(array<T>, function(T) -> boolean)`   | `result<array<T>>`             | Take elements while predicate is true; fail if predicate throws            |
+| `Array.unique(array)`              | `(array<T>)`                           | `array<T>`                     | Deduplicate elements                                                       |
+| `Array.unzip(array)`               | `(array<(T, U)>)`                      | `(array<T>, array<U>)`         | Split an array of pairs into two parallel arrays (inverse of `zip`)        |
+| `Array.windows(array, n)`          | `(array<T>, integer)`                  | `result<array<array<T>>>`      | Overlapping sliding windows of size `n`; fail if `n` is not > 0            |
 | `Array.zip(a, b)`                | `(array<T>, array<U>)`                 | `array<(T, U)>`                | Pair elements into tuples; truncates to shorter array                      |
-| `Array.scan(arr, init, fn)`      | `(array<T>, U, function(U, T) -> U)`   | `result<array<U>>`             | Like reduce but returns all intermediate values; fail if callback throws   |
-| `Array.intersperse(arr, sep)`    | `(array<T>, T)`                        | `array<T>`                     | Insert `sep` between each pair of elements                                 |
-| `Array.rotate(arr, n)`           | `(array<T>, integer)`                  | `array<T>`                     | Rotate elements left by `n` positions (negative rotates right)             |
-| `Array.transpose(arr)`           | `(array<array<T>>)`                    | `result<array<array<T>>>`      | Transpose a 2D array; fail if rows have unequal length                     |
+| `Array.scan(array, init, function)`      | `(array<T>, U, function(U, T) -> U)`   | `result<array<U>>`             | Like reduce but returns all intermediate values; fail if callback throws   |
+| `Array.intersperse(array, separator)`    | `(array<T>, T)`                        | `array<T>`                     | Insert `separator` between each pair of elements                                 |
+| `Array.rotate(array, n)`           | `(array<T>, integer)`                  | `array<T>`                     | Rotate elements left by `n` positions (negative rotates right)             |
+| `Array.transpose(array)`           | `(array<array<T>>)`                    | `result<array<array<T>>>`      | Transpose a 2D array; fail if rows have unequal length                     |
 
 > **Sorting.** The `Array.sort` comparator must return a number: negative puts `a` before `b`, zero treats them as equal, and positive puts `b` before `a`. `Array.sort_by` accepts any function that returns a comparable string or number key — elements are sorted in ascending order by that key.
 
@@ -173,26 +173,26 @@ Numerical calculus operations. Functions accept callable values (native function
 | Function                                        | Parameter Types                                                                    | Return Type             | Description                                                          |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------------- |
 | `Calculus.convolution(f, g, t, a, b)`           | `(function(number) -> number, function(number) -> number, number, number, number)` | `number`                | Convolution `(f * g)(t)` integrated over `[a, b]`                    |
-| `Calculus.arc_length(a, b, fn)`                 | `(number, number, function(number) -> number)`                                     | `number`                | Length of `y = f(x)` over `[a, b]` = `∫ √(1 + f'(x)²) dx`            |
+| `Calculus.arc_length(a, b, function)`                 | `(number, number, function(number) -> number)`                                     | `number`                | Length of `y = f(x)` over `[a, b]` = `∫ √(1 + f'(x)²) dx`            |
 | `Calculus.curl(point, fields)`                  | `(array<number>, array<function(array<number>) -> number>)`                        | `result<array<number>>` | Curl of a vector field at `point`; fail if dimensions mismatch       |
-| `Calculus.derivative(x, fn)`                    | `(number, function(number) -> number)`                                             | `number`                | Numerical first derivative at `x`                                    |
-| `Calculus.derivative_with(x, h, fn)`            | `(number, number, function(number) -> number)`                                     | `number`                | First derivative with custom step `h`                                |
-| `Calculus.differentiate(fn)`                    | `(function(number) -> number)`                                                     | `function(number) -> number` | The derivative as a first-class function (`g(x) ≈ fn'(x)`)      |
+| `Calculus.derivative(x, function)`                    | `(number, function(number) -> number)`                                             | `number`                | Numerical first derivative at `x`                                    |
+| `Calculus.derivative_with(x, h, function)`            | `(number, number, function(number) -> number)`                                     | `number`                | First derivative with custom step `h`                                |
+| `Calculus.differentiate(function)`                    | `(function(number) -> number)`                                                     | `function(number) -> number` | The derivative as a first-class function (`g(x) ≈ fn'(x)`)      |
 | `Calculus.divergence(point, fields)`            | `(array<number>, array<function(array<number>) -> number>)`                        | `number`                | Divergence of a vector field at `point`                              |
-| `Calculus.gradient(point, fn)`                  | `(array<number>, function(array<number>) -> number)`                               | `array<number>`         | Numerical partial derivatives at a point                             |
-| `Calculus.integrate(a, b, fn)`                  | `(number, number, function(number) -> number)`                                     | `number`                | Definite integral (Simpson's rule)                                   |
-| `Calculus.integrate_with(a, b, n, fn)`          | `(number, number, integer, function(number) -> number)`                            | `number`                | Definite integral with `n` subdivisions                              |
-| `Calculus.laplacian(point, fn)`                 | `(array<number>, function(array<number>) -> number)`                               | `number`                | Sum of unmixed second partials `∇²f` (trace of the Hessian)         |
-| `Calculus.limit(x, fn)`                         | `(number, function(number) -> number)`                                             | `result<number>`        | Numerical limit (Richardson extrapolation)                           |
-| `Calculus.maximize(a, b, fn)`                   | `(number, number, function(number) -> number)`                                     | `(number, number)`      | Maximise over `[a, b]`; returns `(x_max, f(x_max))`                  |
-| `Calculus.minimize(a, b, fn)`                   | `(number, number, function(number) -> number)`                                     | `(number, number)`      | Minimise over `[a, b]` (golden section); returns `(x_min, f(x_min))` |
-| `Calculus.newton(x0, fn)`                       | `(number, function(number) -> number)`                                             | `result<number>`        | Root finding (Newton's method)                                       |
-| `Calculus.nth_derivative(x, n, fn)`             | `(number, integer, function(number) -> number)`                                    | `number`                | The `n`-th derivative at `x` (`n ≥ 0`; `n = 0` ⇒ `fn(x)`)           |
-| `Calculus.partial_derivative(point, index, fn)` | `(array<number>, integer, function(array<number>) -> number)`                      | `number`                | Partial derivative along axis `index` at `point`                     |
-| `Calculus.product_series(start, n, fn)`         | `(integer, integer, function(number) -> number)`                                   | `number`                | Product `fn(start)` · ... · `fn(start + n - 1)` (empty ⇒ `1`)        |
-| `Calculus.root(a, b, fn)`                       | `(number, number, function(number) -> number)`                                     | `result<number>`        | Root finding (bisection method)                                     |
-| `Calculus.second_derivative(x, fn)`             | `(number, function(number) -> number)`                                             | `number`                | Numerical second derivative at `x`                                   |
-| `Calculus.sum_series(start, n, fn)`             | `(integer, integer, function(number) -> number)`                                   | `number`                | Sum `fn(start)` + ... + `fn(start + n - 1)`                          |
+| `Calculus.gradient(point, function)`                  | `(array<number>, function(array<number>) -> number)`                               | `array<number>`         | Numerical partial derivatives at a point                             |
+| `Calculus.integrate(a, b, function)`                  | `(number, number, function(number) -> number)`                                     | `number`                | Definite integral (Simpson's rule)                                   |
+| `Calculus.integrate_with(a, b, n, function)`          | `(number, number, integer, function(number) -> number)`                            | `number`                | Definite integral with `n` subdivisions                              |
+| `Calculus.laplacian(point, function)`                 | `(array<number>, function(array<number>) -> number)`                               | `number`                | Sum of unmixed second partials `∇²f` (trace of the Hessian)         |
+| `Calculus.limit(x, function)`                         | `(number, function(number) -> number)`                                             | `result<number>`        | Numerical limit (Richardson extrapolation)                           |
+| `Calculus.maximize(a, b, function)`                   | `(number, number, function(number) -> number)`                                     | `(number, number)`      | Maximise over `[a, b]`; returns `(x_max, f(x_max))`                  |
+| `Calculus.minimize(a, b, function)`                   | `(number, number, function(number) -> number)`                                     | `(number, number)`      | Minimise over `[a, b]` (golden section); returns `(x_min, f(x_min))` |
+| `Calculus.newton(x0, function)`                       | `(number, function(number) -> number)`                                             | `result<number>`        | Root finding (Newton's method)                                       |
+| `Calculus.nth_derivative(x, n, function)`             | `(number, integer, function(number) -> number)`                                    | `number`                | The `n`-th derivative at `x` (`n ≥ 0`; `n = 0` ⇒ `fn(x)`)           |
+| `Calculus.partial_derivative(point, index, function)` | `(array<number>, integer, function(array<number>) -> number)`                      | `number`                | Partial derivative along axis `index` at `point`                     |
+| `Calculus.product_series(start, n, function)`         | `(integer, integer, function(number) -> number)`                                   | `number`                | Product `fn(start)` · ... · `fn(start + n - 1)` (empty ⇒ `1`)        |
+| `Calculus.root(a, b, function)`                       | `(number, number, function(number) -> number)`                                     | `result<number>`        | Root finding (bisection method)                                     |
+| `Calculus.second_derivative(x, function)`             | `(number, function(number) -> number)`                                             | `number`                | Numerical second derivative at `x`                                   |
+| `Calculus.sum_series(start, n, function)`             | `(integer, integer, function(number) -> number)`                                   | `number`                | Sum `fn(start)` + ... + `fn(start + n - 1)`                          |
 
 Callbacks that return `result<number>` (such as `Math.sine`) are automatically unwrapped.
 
@@ -202,25 +202,25 @@ Thread-safe FIFO queues for passing values between tasks.
 
 | Function                          | Parameter Types            | Return Type       | Description                                                                               |
 | --------------------------------- | -------------------------- | ----------------- | ----------------------------------------------------------------------------------------- |
-| `Channel.close(ch)`               | `(channel<T>)`             | `none`            | Close the channel                                                                         |
-| `Channel.capacity(ch)`            | `(channel<T>)`             | `optional<integer>` | Buffered capacity; `none` for an unbounded channel                                      |
-| `Channel.consume(ch, fn)`         | `(channel<T>, function(T) -> none)` | `result<integer>` | Receive each value until the channel closes and drains, applying `fn`; returns the count; fail if `fn` throws. Blocks until close — call inside a task |
-| `Channel.is_closed(ch)`           | `(channel<T>)`             | `boolean`         | Whether the channel is closed                                                             |
-| `Channel.is_empty(ch)`            | `(channel<T>)`             | `boolean`         | Whether no values are buffered                                                            |
-| `Channel.is_full(ch)`             | `(channel<T>)`             | `boolean`         | Whether a buffered channel is at capacity; always `false` when unbounded                  |
-| `Channel.length(ch)`              | `(channel<T>)`             | `integer`         | Number of buffered values                                                                 |
+| `Channel.close(channel)`               | `(channel<T>)`             | `none`            | Close the channel                                                                         |
+| `Channel.capacity(channel)`            | `(channel<T>)`             | `optional<integer>` | Buffered capacity; `none` for an unbounded channel                                      |
+| `Channel.consume(channel, function)`         | `(channel<T>, function(T) -> none)` | `result<integer>` | Receive each value until the channel closes and drains, applying `function`; returns the count; fail if `function` throws. Blocks until close — call inside a task |
+| `Channel.is_closed(channel)`           | `(channel<T>)`             | `boolean`         | Whether the channel is closed                                                             |
+| `Channel.is_empty(channel)`            | `(channel<T>)`             | `boolean`         | Whether no values are buffered                                                            |
+| `Channel.is_full(channel)`             | `(channel<T>)`             | `boolean`         | Whether a buffered channel is at capacity; always `false` when unbounded                  |
+| `Channel.length(channel)`              | `(channel<T>)`             | `integer`         | Number of buffered values                                                                 |
 | `Channel.new()`                   | `()`                       | `channel<T>`      | Create unbounded channel (no capacity limit)                                              |
-| `Channel.new_buffered(cap)`       | `(integer)`                | `channel<T>`      | Create buffered channel; throws if `cap ≤ 0`                                              |
-| `Channel.poll(ch)`                | `(channel<T>)`             | `optional<T>`     | Non-blocking, non-throwing receive; `some(v)` when ready, `none` when empty (open or drained-closed). Pair with `is_closed` to tell empty-open from drained-closed |
-| `Channel.receive(ch)`             | `(channel<T>)`             | `T`               | Blocking receive; throws `ChannelClosedError` if closed and drained                       |
-| `Channel.receive_all(ch)`         | `(channel<T>)`             | `array<T>`        | Drain all buffered values                                                                 |
-| `Channel.receive_timeout(ch, ms)` | `(channel<T>, integer)`    | `result<T>`       | Timed receive; fail on timeout, throws `ChannelClosedError` if closed                     |
+| `Channel.new_buffered(capacity)`       | `(integer)`                | `channel<T>`      | Create buffered channel; throws if `cap ≤ 0`                                              |
+| `Channel.poll(channel)`                | `(channel<T>)`             | `optional<T>`     | Non-blocking, non-throwing receive; `some(v)` when ready, `none` when empty (open or drained-closed). Pair with `is_closed` to tell empty-open from drained-closed |
+| `Channel.receive(channel)`             | `(channel<T>)`             | `T`               | Blocking receive; throws `ChannelClosedError` if closed and drained                       |
+| `Channel.receive_all(channel)`         | `(channel<T>)`             | `array<T>`        | Drain all buffered values                                                                 |
+| `Channel.receive_timeout(channel, milliseconds)` | `(channel<T>, integer)`    | `result<T>`       | Timed receive; fail on timeout, throws `ChannelClosedError` if closed                     |
 | `Channel.select(channels)`        | `(array<channel<T>>)`      | `result<T>`       | Wait for the first ready channel; returns `(index, value)`; fail if all are closed        |
-| `Channel.send(ch, v)`             | `(channel<T>, T)`          | `boolean`         | Blocking send; returns `false` if the channel is closed                                      |
-| `Channel.send_all(ch, values)`    | `(channel<T>, array<T>)`   | `integer`         | Blocking-send each element in order; returns the count sent, stopping early if the channel closes mid-send |
-| `Channel.send_timeout(ch, v, ms)` | `(channel<T>, T, integer)` | `result<boolean>` | Timed send; fail on timeout, throws `ChannelClosedError` if closed                        |
-| `Channel.try_receive(ch)`         | `(channel<T>)`             | `T`               | Non-blocking receive; throws `ChannelEmptyError` if empty, `ChannelClosedError` if closed |
-| `Channel.try_send(ch, v)`         | `(channel<T>, T)`          | `boolean`         | Non-blocking send; returns `false` if the channel is full or closed      |
+| `Channel.send(channel, value)`             | `(channel<T>, T)`          | `boolean`         | Blocking send; returns `false` if the channel is closed                                      |
+| `Channel.send_all(channel, values)`    | `(channel<T>, array<T>)`   | `integer`         | Blocking-send each element in order; returns the count sent, stopping early if the channel closes mid-send |
+| `Channel.send_timeout(channel, value, milliseconds)` | `(channel<T>, T, integer)` | `result<boolean>` | Timed send; fail on timeout, throws `ChannelClosedError` if closed                        |
+| `Channel.try_receive(channel)`         | `(channel<T>)`             | `T`               | Non-blocking receive; throws `ChannelEmptyError` if empty, `ChannelClosedError` if closed |
+| `Channel.try_send(channel, value)`         | `(channel<T>, T)`          | `boolean`         | Non-blocking send; returns `false` if the channel is full or closed      |
 
 Values are deep-copied on send to prevent shared mutable state between tasks.
 
@@ -234,11 +234,11 @@ Channel operations use typed exceptions instead of result types for error condit
 | `ChannelFullError`   | Non-blocking send (`try_send`) on a full buffered channel   |
 | `ChannelEmptyError`  | Non-blocking receive (`try_receive`) on an empty channel    |
 
-These are runtime errors catchable with `try`/`catch`. Use `Channel.is_closed(ch)` to check channel state without throwing.
+These are runtime errors catchable with `try`/`catch`. Use `Channel.is_closed(channel)` to check channel state without throwing.
 
 ## 6 — Color
 
-A typed RGBA colour value with validating constructors and derivations. Every value serialises to a CSS string the GraphicalUi web-view already accepts, so `Solaris` themes can be _computed_ rather than hand-written. Like `Decimal` and `Math.Fraction`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
+A typed RGBA colour value with validating constructors and derivations. Every value serialises to a CSS string the GraphicalUi web-view already accepts, so `Solaris` themes can be _computed_ rather than hand-written. Like `Decimal`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
 
 > **Color vs Terminal.Color** — `Color` is a general RGBA value for GUI/CSS work. `Terminal.Color` is a fixed choice of 16 named ANSI terminal colours, used only by the `Terminal` module.
 
@@ -253,7 +253,7 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.desaturate(c, amount)`   | `(Color.Color, number)`                     | `Color.Color`        | Decrease HSL saturation by `amount` (clamped to [0, 1])                  |
 | `Color.fade(c, amount)`         | `(Color.Color, number)`                     | `Color.Color`        | Reduce alpha by `amount` (result clamped to [0, 1])                      |
 | `Color.from_cmyk(c)`            | `(Color.Cmyk)`                              | `Color.Color`        | Convert a CMYK colour to RGBA (alpha 1.0)                                |
-| `Color.from_hex(hex)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
+| `Color.from_hexadecimal(value)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
 | `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
 | `Color.from_hsv(h)`             | `(Color.Hsv)`                               | `Color.Color`        | Convert an HSV (HSB) colour to RGBA (alpha 1.0)                          |
 | `Color.from_name(name)`         | `(Color.Name)`                              | `Color.Color`        | Build an opaque colour from a curated named colour (`Color.Name`)       |
@@ -264,7 +264,7 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.lighten(c, amount)`      | `(Color.Color, number)`                     | `Color.Color`        | Blend toward white by `amount` (clamped to [0, 1])                       |
 | `Color.luminance(c)`            | `(Color.Color)`                             | `number`             | WCAG relative luminance in [0, 1] (alpha ignored)                       |
 | `Color.mix(a, b, t)`            | `(Color.Color, Color.Color, number)`        | `Color.Color`        | Linear blend of `a` and `b` at `t` (clamped to [0, 1])                   |
-| `Color.readable_text_color(bg)` | `(Color.Color)`                             | `Color.Color`        | Black or white — whichever has higher contrast against `bg`             |
+| `Color.readable_text_color(background)` | `(Color.Color)`                             | `Color.Color`        | Black or white — whichever has higher contrast against `background`             |
 | `Color.rgb(r, g, b)`            | `(integer, integer, integer)`               | `result<Color.Color>` | Construct an opaque colour; fail if a channel is outside 0–255         |
 | `Color.rgba(r, g, b, a)`        | `(integer, integer, integer, number)`       | `result<Color.Color>` | Construct with alpha; fail if a channel is out of range or `a` ∉ [0, 1] |
 | `Color.rotate_hue(c, degrees)`  | `(Color.Color, number)`                     | `Color.Color`        | Rotate the hue by `degrees`, preserving saturation, lightness, and alpha |
@@ -279,7 +279,7 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 
 `rgb` / `rgba` / `from_hex` are validating constructors returning `result<Color.Color>`; the derivations (`lighten` / `darken` / `mix`) take already-validated colours and clamp their `amount` / `t` argument, so they return a `Color.Color` directly. `contrast_ratio` computes the WCAG 2.x relative-luminance ratio (alpha ignored) — black on white is 21:1, a colour against itself is 1:1 — feeding accessibility checks. The `to_css` output drops straight into the theme and per-widget style dictionaries the webview already consumes.
 
-**Analysis, accessibility, and scheme helpers.** `Color.luminance` exposes the same WCAG relative luminance `contrast_ratio` uses internally, and `Color.brightness` gives the simpler perceived-brightness weighting (`0.299R + 0.587G + 0.114B`) — both normalised to [0, 1]. `Color.is_light` / `Color.is_dark` threshold the relative luminance at 0.5, and `Color.readable_text_color(bg)` returns black or white — whichever has the higher contrast against `bg` — the one-call way to keep label text legible on a computed background. `Color.saturate` / `Color.desaturate` nudge HSL saturation by an amount (clamped to [0, 1]) and `Color.grayscale` drops it to zero while preserving lightness; all three keep the original alpha. `Color.with_alpha` sets the alpha channel outright while `Color.fade` reduces it by an amount (both clamped to [0, 1]), and `Color.invert` flips each RGB channel (leaving alpha untouched). For palettes, `Color.complement` returns the opposite hue, while `Color.complementary` (`[base, +180°]`), `Color.triadic` (`[base, +120°, +240°]`), and `Color.analogous` (`[base, −30°, +30°]`) return ready-made colour schemes as arrays — the hue maths that is awkward in RGB, done for you.
+**Analysis, accessibility, and scheme helpers.** `Color.luminance` exposes the same WCAG relative luminance `contrast_ratio` uses internally, and `Color.brightness` gives the simpler perceived-brightness weighting (`0.299R + 0.587G + 0.114B`) — both normalised to [0, 1]. `Color.is_light` / `Color.is_dark` threshold the relative luminance at 0.5, and `Color.readable_text_color(background)` returns black or white — whichever has the higher contrast against `background` — the one-call way to keep label text legible on a computed background. `Color.saturate` / `Color.desaturate` nudge HSL saturation by an amount (clamped to [0, 1]) and `Color.grayscale` drops it to zero while preserving lightness; all three keep the original alpha. `Color.with_alpha` sets the alpha channel outright while `Color.fade` reduces it by an amount (both clamped to [0, 1]), and `Color.invert` flips each RGB channel (leaving alpha untouched). For palettes, `Color.complement` returns the opposite hue, while `Color.complementary` (`[base, +180°]`), `Color.triadic` (`[base, +120°, +240°]`), and `Color.analogous` (`[base, −30°, +30°]`) return ready-made colour schemes as arrays — the hue maths that is awkward in RGB, done for you.
 
 **`Color.Hsl`** is the hue/saturation/lightness sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `lightness: number` (0–1 ratios). `Color.to_hsl` / `Color.from_hsl` convert between the two spaces, and `Color.rotate_hue(c, degrees)` shifts the hue (wrapping at 360°) while preserving saturation, lightness, and the original alpha — the natural way to build a rainbow, pastel, or complementary colour that is awkward in RGB. HSL drops alpha (so `to_hsl` discards it and `from_hsl` produces an opaque colour); everything still serialises through the same RGBA `to_css` path the webview consumes.
 
@@ -287,10 +287,10 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 
 **`Color.Cmyk`** is the cyan/magenta/yellow/**key** (black) sibling of `Color.Color` — `cyan: number`, `magenta: number`, `yellow: number`, and `key: number` (all 0–1 ratios). It is the subtractive model used by print production, so `Color.to_cmyk` / `Color.from_cmyk` are the natural pair for previewing how an on-screen colour will separate to ink. Like HSL/HSV it drops alpha (`from_cmyk` produces an opaque colour), and it serialises through the same RGBA `to_css` path.
 
-**`Color.Name`** is a curated palette of common named colours as an exhaustive choice — `Black`, `White`, `Red`, `Green`, `Lime`, `Blue`, `Yellow`, `Cyan`, `Magenta`, `Gray`, `Silver`, `Orange`, `Purple`, `Pink`, `Brown` (a subset of the CSS named colours, not all 140). `Color.from_name(name)` maps a variant to its opaque `Color.Color`, giving beginners a typo-proof, autocompleted alternative to remembering hex strings — a misspelled colour is a compile error, not a runtime surprise. The values are CSS-canonical, so `Color.Name.Green` is `0,128,0` and `Color.Name.Lime` is `0,255,0` (matching the web platform). It parallels the exhaustive `Terminal.Color` palette; for any colour outside the curated set, `Color.rgb` / `Color.from_hex` remain.
+**`Color.Name`** is a curated palette of common named colours as an exhaustive choice — `Black`, `White`, `Red`, `Green`, `Lime`, `Blue`, `Yellow`, `Cyan`, `Magenta`, `Gray`, `Silver`, `Orange`, `Purple`, `Pink`, `Brown` (a subset of the CSS named colours, not all 140). `Color.from_name(name)` maps a variant to its opaque `Color.Color`, giving beginners a typo-proof, autocompleted alternative to remembering hex strings — a misspelled colour is a compile error, not a runtime surprise. The values are CSS-canonical, so `Color.Name.Green` is `0,128,0` and `Color.Name.Lime` is `0,255,0` (matching the web platform). It parallels the exhaustive `Terminal.Color` palette; for any colour outside the curated set, `Color.rgb` / `Color.from_hexadecimal` remain.
 
 ```luma
-Color.Color base = Result.unwrap(Color.from_hex("#0172ad"))
+Color.Color base = Result.unwrap(Color.from_hexadecimal("#0172ad"))
 string css = base |> Color.darken(0.1) |> Color.to_css()   # "rgb(1, 102, 155)"
 
 # Pick a readable text colour against a background.
@@ -352,19 +352,19 @@ match decoded {
 
 | Function                       | Parameter Types | Return Type       | Description                                                               |
 | ------------------------------ | --------------- | ----------------- | ------------------------------------------------------------------------- |
-| `Console.confirm(msg)`         | `(string)`      | `result<boolean>` | Prompt for yes/no (`y`/`yes`/`n`/`no`, case-insensitive); fail on other input or EOF |
+| `Console.confirm(message)`         | `(string)`      | `result<boolean>` | Prompt for yes/no (`y`/`yes`/`n`/`no`, case-insensitive); fail on other input or EOF |
 | `Console.flush()`              | `()`            | `result<boolean>` | Flush buffered stdout (so a newline-less prompt appears before a blocking read) |
 | `Console.is_interactive()`     | `()`            | `boolean`         | Whether stdin is an interactive terminal (TTY)                           |
 | `Console.is_tty()`             | `()`            | `boolean`         | Whether stdout is an interactive terminal (TTY)                          |
-| `Console.prompt(msg)`          | `(string)`      | `result<string>`  | Print prompt, read line from stdin; fail on EOF or if it exceeds the maximum string size |
-| `Console.prompt_integer(msg)`  | `(string)`      | `result<integer>` | Print prompt, read and parse a whole number; fail on invalid input or EOF |
-| `Console.prompt_number(msg)`   | `(string)`      | `result<number>`  | Print prompt, read and parse a number; fail on invalid input or EOF      |
-| `Console.prompt_with_default(msg, default)` | `(string, string)` | `result<string>` | Print prompt, read a line; return `default` on an empty line; fail on EOF |
+| `Console.prompt(message)`          | `(string)`      | `result<string>`  | Print prompt, read line from stdin; fail on EOF or if it exceeds the maximum string size |
+| `Console.prompt_integer(message)`  | `(string)`      | `result<integer>` | Print prompt, read and parse a whole number; fail on invalid input or EOF |
+| `Console.prompt_number(message)`   | `(string)`      | `result<number>`  | Print prompt, read and parse a number; fail on invalid input or EOF      |
+| `Console.prompt_with_default(message, default)` | `(string, string)` | `result<string>` | Print prompt, read a line; return `default` on an empty line; fail on EOF |
 | `Console.read_from_stdin()`    | `()`            | `result<string>`  | Read all of stdin; fail if it exceeds the maximum string size            |
 | `Console.read_line()`          | `()`            | `result<string>`  | Read one line from stdin (newline stripped); fail on EOF or if it exceeds the maximum string size |
 | `Console.read_lines()`         | `()`            | `result<array<string>>` | Read all of stdin split into lines; fail if it exceeds the maximum string size |
-| `Console.write_to_stderr(msg)` | `(string)`      | `result<boolean>` | Write to stderr                                                           |
-| `Console.write_to_stdout(msg)` | `(string)`      | `result<boolean>` | Write to stdout                                                           |
+| `Console.write_to_stderr(message)` | `(string)`      | `result<boolean>` | Write to stderr                                                           |
+| `Console.write_to_stdout(message)` | `(string)`      | `result<boolean>` | Write to stdout                                                           |
 
 > **Resource limit** — Console input is bounded by the maximum string size (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_STRING_SIZE`). `Console.prompt` and `Console.read_from_stdin` return `failure` if the input would exceed it.
 
@@ -378,7 +378,7 @@ Convert values between different types (e.g. string → integer, integer → str
 
 | Function                               | Parameter Types | Return Type       | Description                                                  |
 | -------------------------------------- | --------------- | ----------------- | ------------------------------------------------------------ |
-| `Converter.character_to_codepoint(ch)` | `(string)`      | `result<integer>` | Unicode codepoint of character; fail on empty string         |
+| `Converter.character_to_codepoint(channel)` | `(string)`      | `result<integer>` | Unicode codepoint of character; fail on empty string         |
 | `Converter.codepoint_to_character(cp)` | `(integer)`     | `result<string>`  | Character from codepoint; fail on invalid codepoint          |
 | `Converter.from_binary(s)`             | `(string)`      | `result<integer>` | Parse binary string (e.g. `"1010"` → 10)                     |
 | `Converter.from_hexadecimal(s)`        | `(string)`      | `result<integer>` | Parse hex string (e.g. `"ff"` → 255)                         |
@@ -414,7 +414,7 @@ Parse and serialise comma-separated values.
 | `Csv.column(t, name)`            | `(Csv.Table, string)`                        | `result<array<string>>`             | Extract one named column from a `Csv.Table`; fail if no header matches |
 | `Csv.row(t, index)`              | `(Csv.Table, integer)`                       | `result<dictionary<string>>`        | Extract one 0-based data row as a header-keyed record (short rows padded with `""`); fail on out-of-bounds |
 | `Csv.select(t, names)`           | `(Csv.Table, array<string>)`                 | `result<Csv.Table>`                 | Project the named columns (in order) into a new `Csv.Table`; fail if any name is absent |
-| `Csv.filter_rows(t, fn)`         | `(Csv.Table, function(dictionary<string>) -> boolean)` | `result<Csv.Table>`      | Keep data rows where `fn(row-record)` is true, preserving headers; fail if the predicate throws |
+| `Csv.filter_rows(t, function)`         | `(Csv.Table, function(dictionary<string>) -> boolean)` | `result<Csv.Table>`      | Keep data rows where `fn(row-record)` is true, preserving headers; fail if the predicate throws |
 | `Csv.read_file(path)`            | `(string)`                                   | `result<array<dictionary<string>>>` | Read and parse CSV file                                           |
 | `Csv.serialize(rows)`            | `(array<array<string>>)`                     | `result<string>`                    | Serialise rows to CSV string; fail if row is not array            |
 | `Csv.serialize_records(records)` | `(array<dictionary<string>>)`                | `string`                            | Serialise records to CSV with header                              |
@@ -442,21 +442,21 @@ surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 
 | Function                                   | Parameter Types                                          | Return Type                  | Description                                                              |
 | ------------------------------------------ | -------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------ |
-| `DateTime.add_days(ts, n)`                 | `(number, number)`                                       | `number`                     | Add `n` days to a Unix timestamp                                         |
-| `DateTime.add_hours(ts, n)`                | `(number, number)`                                       | `number`                     | Add `n` hours to a Unix timestamp                                        |
-| `DateTime.add_months(ts, n)`               | `(number, integer)`                                      | `result<number>`             | Add `n` calendar months (clamps day); fail if out of range               |
-| `DateTime.add_milliseconds(ts, n)`         | `(number, integer)`                                      | `number`                     | Add `n` milliseconds to a Unix timestamp                                 |
-| `DateTime.add_minutes(ts, n)`              | `(number, number)`                                       | `number`                     | Add `n` minutes to a Unix timestamp                                      |
-| `DateTime.add_seconds(ts, n)`              | `(number, number)`                                       | `number`                     | Add `n` seconds to a Unix timestamp                                      |
-| `DateTime.add_weeks(ts, n)`                | `(number, number)`                                       | `number`                     | Add `n` weeks to a Unix timestamp                                        |
-| `DateTime.add_years(ts, n)`                | `(number, integer)`                                      | `result<number>`             | Add `n` calendar years (clamps Feb 29); fail if out of range             |
+| `DateTime.add_days(timestamp, n)`                 | `(number, number)`                                       | `number`                     | Add `n` days to a Unix timestamp                                         |
+| `DateTime.add_hours(timestamp, n)`                | `(number, number)`                                       | `number`                     | Add `n` hours to a Unix timestamp                                        |
+| `DateTime.add_months(timestamp, n)`               | `(number, integer)`                                      | `result<number>`             | Add `n` calendar months (clamps day); fail if out of range               |
+| `DateTime.add_milliseconds(timestamp, n)`         | `(number, integer)`                                      | `number`                     | Add `n` milliseconds to a Unix timestamp                                 |
+| `DateTime.add_minutes(timestamp, n)`              | `(number, number)`                                       | `number`                     | Add `n` minutes to a Unix timestamp                                      |
+| `DateTime.add_seconds(timestamp, n)`              | `(number, number)`                                       | `number`                     | Add `n` seconds to a Unix timestamp                                      |
+| `DateTime.add_weeks(timestamp, n)`                | `(number, number)`                                       | `number`                     | Add `n` weeks to a Unix timestamp                                        |
+| `DateTime.add_years(timestamp, n)`                | `(number, integer)`                                      | `result<number>`             | Add `n` calendar years (clamps Feb 29); fail if out of range             |
 | `DateTime.period(years, months, days)`     | `(integer, integer, integer)`                            | `DateTime.Period`            | Construct a calendar span (any component may be negative)                |
-| `DateTime.add_period(ts, p)`               | `(number, DateTime.Period)`                              | `result<number>`             | Add a calendar span (year/month with day clamping, then whole days); fail if out of range |
-| `DateTime.between_dates(a, b)`             | `(number, number)`                                       | `result<DateTime.Period>`    | The calendar span from `a` to `b` (date components only; negative if `a` is after `b`) |
+| `DateTime.add_period(timestamp, p)`               | `(number, DateTime.Period)`                              | `result<number>`             | Add a calendar span (year/month with day clamping, then whole days); fail if out of range |
+| `DateTime.between_dates(date_time, b)`             | `(number, number)`                                       | `result<DateTime.Period>`    | The calendar span from `a` to `b` (date components only; negative if `a` is after `b`) |
 | `DateTime.break_duration(total_seconds)`   | `(number)`                                               | `DateTime.Duration`          | Break a span in seconds into a `days`/`hours`/`minutes`/`seconds`/`milliseconds` record (with a `negative` flag) |
-| `DateTime.day_of_month(ts)`                | `(number)`                                               | `result<integer>`            | Day of month (1–31); fail if out of supported range (year 0001–9999)     |
-| `DateTime.day_of_week(ts)`                 | `(number)`                                               | `result<integer>`            | 1 (Monday) to 7 (Sunday); fail if out of range                           |
-| `DateTime.day_of_year(ts)`                 | `(number)`                                               | `result<integer>`            | Ordinal day of the year (1–366, leap-aware); fail if out of range        |
+| `DateTime.day_of_month(timestamp)`                | `(number)`                                               | `result<integer>`            | Day of month (1–31); fail if out of supported range (year 0001–9999)     |
+| `DateTime.day_of_week(timestamp)`                 | `(number)`                                               | `result<integer>`            | 1 (Monday) to 7 (Sunday); fail if out of range                           |
+| `DateTime.day_of_year(timestamp)`                 | `(number)`                                               | `result<integer>`            | Ordinal day of the year (1–366, leap-aware); fail if out of range        |
 | `DateTime.days_in_month(year, month)`      | `(integer, integer)`                                     | `result<integer>`            | Days in given month; fail if month not in [1, 12]                        |
 | `DateTime.difference_days(t1, t2)`         | `(number, number)`                                       | `number`                     | Absolute difference in days                                              |
 | `DateTime.difference_hours(t1, t2)`        | `(number, number)`                                       | `number`                     | Absolute difference in hours                                             |
@@ -466,53 +466,53 @@ surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 | `DateTime.difference_seconds(t1, t2)`      | `(number, number)`                                       | `number`                     | Absolute difference in seconds                                           |
 | `DateTime.difference_weeks(t1, t2)`        | `(number, number)`                                       | `number`                     | Absolute difference in weeks                                             |
 | `DateTime.difference_years(t1, t2)`        | `(number, number)`                                       | `result<integer>`            | Absolute difference in calendar years; fail if out of range              |
-| `DateTime.end_of_day(ts)`                  | `(number)`                                               | `result<number>`             | Last second of the timestamp's day (UTC); fail if out of range           |
-| `DateTime.end_of_hour(ts)`                 | `(number)`                                               | `result<number>`             | Last second of the timestamp's hour (UTC); fail if out of range          |
-| `DateTime.end_of_month(ts)`                | `(number)`                                               | `result<number>`             | Last second of the timestamp's month (UTC); fail if out of range         |
-| `DateTime.end_of_year(ts)`                 | `(number)`                                               | `result<number>`             | Last second of the timestamp's year (UTC); fail if out of range          |
-| `DateTime.from_iso_string(s)`              | `(string)`                                               | `result<number>`             | Parse ISO 8601 string to Unix timestamp                                  |
-| `DateTime.from_iso_string_typed(s)`        | `(string)`                                               | `result<number, DateTime.ParseError>` | Parse ISO 8601; on failure the error is a typed `DateTime.ParseError` instead of a string |
+| `DateTime.end_of_day(timestamp)`                  | `(number)`                                               | `result<number>`             | Last second of the timestamp's day (UTC); fail if out of range           |
+| `DateTime.end_of_hour(timestamp)`                 | `(number)`                                               | `result<number>`             | Last second of the timestamp's hour (UTC); fail if out of range          |
+| `DateTime.end_of_month(timestamp)`                | `(number)`                                               | `result<number>`             | Last second of the timestamp's month (UTC); fail if out of range         |
+| `DateTime.end_of_year(timestamp)`                 | `(number)`                                               | `result<number>`             | Last second of the timestamp's year (UTC); fail if out of range          |
+| `DateTime.from_iso_string(date_time)`              | `(string)`                                               | `result<number>`             | Parse ISO 8601 string to Unix timestamp                                  |
+| `DateTime.from_iso_string_typed(date_time)`        | `(string)`                                               | `result<number, DateTime.ParseError>` | Parse ISO 8601; on failure the error is a typed `DateTime.ParseError` instead of a string |
 | `DateTime.combine(date, time)`             | `(DateTime.Date, DateTime.Time)`                         | `result<number>`             | Fuse a calendar date and a wall-clock time into a UTC timestamp          |
-| `DateTime.date(y, m, d)`                   | `(integer, integer, integer)`                            | `result<DateTime.Date>`      | Build a validated calendar-only date; fail if out of range              |
-| `DateTime.date_of(ts)`                     | `(number)`                                               | `result<DateTime.Date>`      | Extract the calendar date from a timestamp                              |
-| `DateTime.time(h, min, s)`                 | `(integer, integer, integer)`                            | `result<DateTime.Time>`      | Build a validated wall-clock-only time; fail if out of range           |
-| `DateTime.time_of(ts)`                     | `(number)`                                               | `result<DateTime.Time>`      | Extract the wall-clock time from a timestamp                           |
-| `DateTime.from_parts(y, m, d, h, min, s)`  | `(integer, integer, integer, integer, integer, integer)` | `result<number>`             | Build timestamp from components; fail if out of range                    |
-| `DateTime.format(ts, pattern)`             | `(number, string)`                                       | `result<string>`             | Format timestamp; placeholders: YYYY, MM, DD, hh, mm, ss                 |
-| `DateTime.format_duration(d)`              | `(DateTime.Duration)`                                    | `string`                     | Render a `DateTime.Duration` as `"1d 2h 3m 4s 5ms"` (zero components omitted; `"0s"` when empty; `-` prefix when negative) |
-| `DateTime.hour(ts)`                        | `(number)`                                               | `result<integer>`            | Hour (0–23); fail if out of range                                        |
+| `DateTime.date(date_time, m, d)`                   | `(integer, integer, integer)`                            | `result<DateTime.Date>`      | Build a validated calendar-only date; fail if out of range              |
+| `DateTime.date_of(timestamp)`                     | `(number)`                                               | `result<DateTime.Date>`      | Extract the calendar date from a timestamp                              |
+| `DateTime.time(date_time, minimum, s)`                 | `(integer, integer, integer)`                            | `result<DateTime.Time>`      | Build a validated wall-clock-only time; fail if out of range           |
+| `DateTime.time_of(timestamp)`                     | `(number)`                                               | `result<DateTime.Time>`      | Extract the wall-clock time from a timestamp                           |
+| `DateTime.from_parts(date_time, m, d, h, minimum, s)`  | `(integer, integer, integer, integer, integer, integer)` | `result<number>`             | Build timestamp from components; fail if out of range                    |
+| `DateTime.format(timestamp, pattern)`             | `(number, string)`                                       | `result<string>`             | Format timestamp; placeholders: YYYY, MM, DD, hh, mm, ss                 |
+| `DateTime.format_duration(date_time)`              | `(DateTime.Duration)`                                    | `string`                     | Render a `DateTime.Duration` as `"1d 2h 3m 4s 5ms"` (zero components omitted; `"0s"` when empty; `-` prefix when negative) |
+| `DateTime.hour(timestamp)`                        | `(number)`                                               | `result<integer>`            | Hour (0–23); fail if out of range                                        |
 | `DateTime.interval(start, end)`            | `(number, number)`                                       | `result<DateTime.Interval>`  | Build a time interval; fail if `end < start`                             |
-| `DateTime.interval_contains(iv, ts)`       | `(DateTime.Interval, number)`                            | `boolean`                    | Whether `ts` lies within the closed interval                             |
-| `DateTime.interval_duration(iv)`           | `(DateTime.Interval)`                                    | `number`                     | Length of the interval in seconds (`end - start`)                        |
-| `DateTime.intervals_overlap(a, b)`         | `(DateTime.Interval, DateTime.Interval)`                 | `boolean`                    | Whether two closed intervals overlap (touching counts)                   |
-| `DateTime.is_after(a, b)`                  | `(number, number)`                                       | `boolean`                    | Whether timestamp `a` is after `b`                                       |
-| `DateTime.is_before(a, b)`                 | `(number, number)`                                       | `boolean`                    | Whether timestamp `a` is before `b`                                      |
+| `DateTime.interval_contains(interval, timestamp)`       | `(DateTime.Interval, number)`                            | `boolean`                    | Whether `timestamp` lies within the closed interval                             |
+| `DateTime.interval_duration(interval)`           | `(DateTime.Interval)`                                    | `number`                     | Length of the interval in seconds (`end - start`)                        |
+| `DateTime.intervals_overlap(date_time, b)`         | `(DateTime.Interval, DateTime.Interval)`                 | `boolean`                    | Whether two closed intervals overlap (touching counts)                   |
+| `DateTime.is_after(date_time, b)`                  | `(number, number)`                                       | `boolean`                    | Whether timestamp `a` is after `b`                                       |
+| `DateTime.is_before(date_time, b)`                 | `(number, number)`                                       | `boolean`                    | Whether timestamp `a` is before `b`                                      |
 | `DateTime.is_leap_year(year)`              | `(integer)`                                              | `boolean`                    | Whether `year` is a leap year                                            |
-| `DateTime.is_weekday(ts)`                  | `(number)`                                               | `boolean`                    | Whether the timestamp falls on Monday–Friday                             |
-| `DateTime.is_weekend(ts)`                  | `(number)`                                               | `boolean`                    | Whether the timestamp falls on Saturday or Sunday                        |
-| `DateTime.minute(ts)`                      | `(number)`                                               | `result<integer>`            | Minute (0–59); fail if out of range                                      |
-| `DateTime.month(ts)`                       | `(number)`                                               | `result<integer>`            | Month (1–12); fail if out of range                                       |
-| `DateTime.month_from_number(n)`            | `(integer)`                                              | `result<DateTime.Month>`     | `DateTime.Month` from 1 (January)–12 (December); fail if `n` not in [1, 12] |
-| `DateTime.month_name(m)`                   | `(DateTime.Month)`                                       | `string`                     | English month name, `"January"`–`"December"`                             |
-| `DateTime.month_number(m)`                 | `(DateTime.Month)`                                       | `integer`                    | Number of a month, 1 (January)–12 (December)                             |
-| `DateTime.month_of(ts)`                    | `(number)`                                               | `result<DateTime.Month>`     | Month of a timestamp as a `DateTime.Month` choice; fail if out of range  |
+| `DateTime.is_weekday(timestamp)`                  | `(number)`                                               | `boolean`                    | Whether the timestamp falls on Monday–Friday                             |
+| `DateTime.is_weekend(timestamp)`                  | `(number)`                                               | `boolean`                    | Whether the timestamp falls on Saturday or Sunday                        |
+| `DateTime.minute(timestamp)`                      | `(number)`                                               | `result<integer>`            | Minute (0–59); fail if out of range                                      |
+| `DateTime.month(timestamp)`                       | `(number)`                                               | `result<integer>`            | Month (1–12); fail if out of range                                       |
+| `DateTime.month_from_number(date_time)`            | `(integer)`                                              | `result<DateTime.Month>`     | `DateTime.Month` from 1 (January)–12 (December); fail if `n` not in [1, 12] |
+| `DateTime.month_name(date_time)`                   | `(DateTime.Month)`                                       | `string`                     | English month name, `"January"`–`"December"`                             |
+| `DateTime.month_number(date_time)`                 | `(DateTime.Month)`                                       | `integer`                    | Number of a month, 1 (January)–12 (December)                             |
+| `DateTime.month_of(timestamp)`                    | `(number)`                                               | `result<DateTime.Month>`     | Month of a timestamp as a `DateTime.Month` choice; fail if out of range  |
 | `DateTime.milliseconds_since_start()`      | `()`                                                     | `number`                     | Milliseconds since program start                                         |
 | `DateTime.now_iso_string()`                | `()`                                                     | `result<string>`             | Current time as `"YYYY-MM-DDTHH:MM:SSZ"`                                 |
 | `DateTime.now_unix()`                      | `()`                                                     | `number`                     | Current Unix timestamp                                                   |
 | `DateTime.parse(text, pattern)`            | `(string, string)`                                       | `result<number>`             | Parse `text` against a pattern (placeholders YYYY, MM, DD, hh, mm, ss) to a Unix timestamp; fail on mismatch or invalid fields |
-| `DateTime.second(ts)`                      | `(number)`                                               | `result<integer>`            | Second (0–59); fail if out of range                                      |
-| `DateTime.start_of_day(ts)`                | `(number)`                                               | `result<number>`             | First second of the timestamp's day (UTC); fail if out of range          |
-| `DateTime.start_of_hour(ts)`               | `(number)`                                               | `result<number>`             | First second of the timestamp's hour (UTC); fail if out of range         |
-| `DateTime.start_of_month(ts)`              | `(number)`                                               | `result<number>`             | First second of the timestamp's month (UTC); fail if out of range        |
-| `DateTime.start_of_year(ts)`               | `(number)`                                               | `result<number>`             | First second of the timestamp's year (UTC); fail if out of range         |
-| `DateTime.to_iso_string(ts)`               | `(number)`                                               | `result<string>`             | Format as `"YYYY-MM-DDTHH:MM:SSZ"`; fail if out of range                 |
-| `DateTime.to_parts(ts)`                    | `(number)`                                               | `result<DateTime.TimeParts>` | Record with year, month, day, hour, minute, second; fail if out of range |
-| `DateTime.weekday(ts)`                     | `(number)`                                               | `result<DateTime.Weekday>`   | Weekday of a timestamp as a `DateTime.Weekday` choice; fail if out of range |
-| `DateTime.weekday_from_number(n)`          | `(integer)`                                              | `result<DateTime.Weekday>`   | `DateTime.Weekday` from 1 (Monday)–7 (Sunday); fail if `n` not in [1, 7]  |
-| `DateTime.weekday_name(w)`                 | `(DateTime.Weekday)`                                     | `string`                     | English day name, `"Monday"`–`"Sunday"`                                   |
-| `DateTime.weekday_number(w)`               | `(DateTime.Weekday)`                                     | `integer`                    | ISO number of a weekday, 1 (Monday)–7 (Sunday)                           |
-| `DateTime.week_of_year(ts)`                | `(number)`                                               | `integer`                    | ISO 8601 week number (1–53; Monday-start, first-Thursday rule)           |
-| `DateTime.year(ts)`                        | `(number)`                                               | `result<integer>`            | Four-digit year; fail if out of range                                    |
+| `DateTime.second(timestamp)`                      | `(number)`                                               | `result<integer>`            | Second (0–59); fail if out of range                                      |
+| `DateTime.start_of_day(timestamp)`                | `(number)`                                               | `result<number>`             | First second of the timestamp's day (UTC); fail if out of range          |
+| `DateTime.start_of_hour(timestamp)`               | `(number)`                                               | `result<number>`             | First second of the timestamp's hour (UTC); fail if out of range         |
+| `DateTime.start_of_month(timestamp)`              | `(number)`                                               | `result<number>`             | First second of the timestamp's month (UTC); fail if out of range        |
+| `DateTime.start_of_year(timestamp)`               | `(number)`                                               | `result<number>`             | First second of the timestamp's year (UTC); fail if out of range         |
+| `DateTime.to_iso_string(timestamp)`               | `(number)`                                               | `result<string>`             | Format as `"YYYY-MM-DDTHH:MM:SSZ"`; fail if out of range                 |
+| `DateTime.to_parts(timestamp)`                    | `(number)`                                               | `result<DateTime.TimeParts>` | Record with year, month, day, hour, minute, second; fail if out of range |
+| `DateTime.weekday(timestamp)`                     | `(number)`                                               | `result<DateTime.Weekday>`   | Weekday of a timestamp as a `DateTime.Weekday` choice; fail if out of range |
+| `DateTime.weekday_from_number(date_time)`          | `(integer)`                                              | `result<DateTime.Weekday>`   | `DateTime.Weekday` from 1 (Monday)–7 (Sunday); fail if `n` not in [1, 7]  |
+| `DateTime.weekday_name(date_time)`                 | `(DateTime.Weekday)`                                     | `string`                     | English day name, `"Monday"`–`"Sunday"`                                   |
+| `DateTime.weekday_number(date_time)`               | `(DateTime.Weekday)`                                     | `integer`                    | ISO number of a weekday, 1 (Monday)–7 (Sunday)                           |
+| `DateTime.week_of_year(timestamp)`                | `(number)`                                               | `integer`                    | ISO 8601 week number (1–53; Monday-start, first-Thursday rule)           |
+| `DateTime.year(timestamp)`                        | `(number)`                                               | `result<integer>`            | Four-digit year; fail if out of range                                    |
 
 `DateTime` also exposes duration constants: `DateTime.seconds_per_minute` (60), `DateTime.seconds_per_hour` (3600), `DateTime.seconds_per_day` (86400), `DateTime.days_per_week` (7), `DateTime.minutes_per_hour` (60), `DateTime.hours_per_day` (24), `DateTime.months_per_year` (12), and `DateTime.milliseconds_per_second` (1000) — all `integer`.
 
@@ -522,14 +522,14 @@ All `DateTime` timestamps are in UTC. The following functions convert between UT
 
 | Function                                                 | Parameter Types                                                  | Return Type      | Description                                            |
 | -------------------------------------------------------- | ---------------------------------------------------------------- | ---------------- | ------------------------------------------------------ |
-| `DateTime.from_offset(ts, offset)`                       | `(number, number)`                                               | `result<number>` | Local timestamp → UTC                                  |
-| `DateTime.from_parts_offset(y, m, d, h, min, s, offset)` | `(integer, integer, integer, integer, integer, integer, number)` | `result<number>` | Build local date/time and return UTC timestamp         |
-| `DateTime.offset_hours(h)`                               | `(number)`                                                       | `number`         | Convert hours to offset minutes (e.g. `5.5` → `330.0`) |
-| `DateTime.to_iso_string_offset(ts, offset)`              | `(number, number)`                                               | `result<string>` | Format with UTC offset suffix                          |
-| `DateTime.to_offset(ts, offset)`                         | `(number, number)`                                               | `result<number>` | UTC → local timestamp                                  |
-| `DateTime.zoned(ts, offset_minutes)`                     | `(number, integer)`                                              | `result<DateTime.Zoned>` | Bundle an instant with its UTC offset; fail if the offset is out of range |
-| `DateTime.zoned_to_iso_string(z)`                        | `(DateTime.Zoned)`                                               | `result<string>` | ISO 8601 string rendered in the Zoned's own offset     |
-| `DateTime.zoned_to_parts(z)`                             | `(DateTime.Zoned)`                                               | `result<DateTime.TimeParts>` | Broken-down local components in the Zoned's offset |
+| `DateTime.from_offset(timestamp, offset)`                       | `(number, number)`                                               | `result<number>` | Local timestamp → UTC                                  |
+| `DateTime.from_parts_offset(date_time, m, d, h, minimum, s, offset)` | `(integer, integer, integer, integer, integer, integer, number)` | `result<number>` | Build local date/time and return UTC timestamp         |
+| `DateTime.offset_hours(date_time)`                               | `(number)`                                                       | `number`         | Convert hours to offset minutes (e.g. `5.5` → `330.0`) |
+| `DateTime.to_iso_string_offset(timestamp, offset)`              | `(number, number)`                                               | `result<string>` | Format with UTC offset suffix                          |
+| `DateTime.to_offset(timestamp, offset)`                         | `(number, number)`                                               | `result<number>` | UTC → local timestamp                                  |
+| `DateTime.zoned(timestamp, offset_minutes)`                     | `(number, integer)`                                              | `result<DateTime.Zoned>` | Bundle an instant with its UTC offset; fail if the offset is out of range |
+| `DateTime.zoned_to_iso_string(date_time)`                        | `(DateTime.Zoned)`                                               | `result<string>` | ISO 8601 string rendered in the Zoned's own offset     |
+| `DateTime.zoned_to_parts(date_time)`                             | `(DateTime.Zoned)`                                               | `result<DateTime.TimeParts>` | Broken-down local components in the Zoned's offset |
 
 Valid offsets range from −720 (UTC−12:00) to +840 (UTC+14:00) minutes. Out-of-range offsets return `failure`. A zero offset produces the `"Z"` suffix in ISO strings.
 
@@ -537,7 +537,7 @@ Valid offsets range from −720 (UTC−12:00) to +840 (UTC+14:00) minutes. Out-o
 
 `DateTime.TimeParts` record fields: `year`, `month`, `day`, `hour`, `minute`, `second` (all `integer`).
 
-`DateTime.Date` (fields `year`, `month`, `day`) and `DateTime.Time` (fields `hour`, `minute`, `second`) — all `integer` — are the calendar-only and wall-clock-only counterparts to the full `TimeParts` breakdown. A `Date` models a value that is genuinely only a calendar date (a birthday, a due date, with no time-of-day) and a `Time` only a wall-clock time (an alarm, opening hours, with no date), so neither carries the fields it should not — they complement, rather than re-slice, `TimeParts`. `DateTime.date(y, m, d)` and `DateTime.time(h, min, s)` are validating constructors (a `Date` is always a real calendar day, respecting leap years and month lengths; a `Time` is always a legal `00:00:00`–`23:59:59`), `DateTime.date_of(ts)` / `DateTime.time_of(ts)` extract each partial view from an instant, and `DateTime.combine(date, time)` fuses them back into a UTC timestamp. Timestamps stay plain `number` values, so this does not reintroduce a newtype over the instant.
+`DateTime.Date` (fields `year`, `month`, `day`) and `DateTime.Time` (fields `hour`, `minute`, `second`) — all `integer` — are the calendar-only and wall-clock-only counterparts to the full `TimeParts` breakdown. A `Date` models a value that is genuinely only a calendar date (a birthday, a due date, with no time-of-day) and a `Time` only a wall-clock time (an alarm, opening hours, with no date), so neither carries the fields it should not — they complement, rather than re-slice, `TimeParts`. `DateTime.date(date_time, m, d)` and `DateTime.time(date_time, minimum, s)` are validating constructors (a `Date` is always a real calendar day, respecting leap years and month lengths; a `Time` is always a legal `00:00:00`–`23:59:59`), `DateTime.date_of(timestamp)` / `DateTime.time_of(timestamp)` extract each partial view from an instant, and `DateTime.combine(date, time)` fuses them back into a UTC timestamp. Timestamps stay plain `number` values, so this does not reintroduce a newtype over the instant.
 
 ```luma
 DateTime.Date d = Result.unwrap(DateTime.date(2024, 6, 15))
@@ -547,11 +547,11 @@ result<number> ts = DateTime.combine(d, t)
 
 `DateTime.Duration` record fields: `days`, `hours`, `minutes`, `seconds`, `milliseconds` (all `integer`), and `negative` (`boolean`). `break_duration` splits a `number` span in seconds into this human-readable breakdown — the `hours`/`minutes`/`seconds` components are normalised (0–23, 0–59, 0–59) and the sign is carried in `negative` — and `format_duration` renders it back into a compact string such as `"1h 2m 5s"`.
 
-`DateTime.Period` record fields: `years`, `months`, `days` (all `integer`, any may be negative). Where `DateTime.Duration` models a fixed wall-clock span (a number of seconds), a `Period` models a **calendar** span — "1 year, 2 months, 3 days" — whose real length depends on which month and year it is applied to. `DateTime.period(years, months, days)` is a total constructor; `DateTime.add_period(ts, p)` applies it to an instant (the year and month components first, clamping the day to the target month's length exactly like `add_months`/`add_years`, then the whole-day component), returning `failure` only when the result leaves the supported range; and `DateTime.between_dates(a, b)` measures the calendar span between two instants using their date components only (time-of-day is ignored), yielding a negative `Period` when `a` is after `b`. The two shapes are complementary: keep `Duration` for elapsed time, reach for `Period` for "add one month" calendar arithmetic.
+`DateTime.Period` record fields: `years`, `months`, `days` (all `integer`, any may be negative). Where `DateTime.Duration` models a fixed wall-clock span (a number of seconds), a `Period` models a **calendar** span — "1 year, 2 months, 3 days" — whose real length depends on which month and year it is applied to. `DateTime.period(years, months, days)` is a total constructor; `DateTime.add_period(timestamp, p)` applies it to an instant (the year and month components first, clamping the day to the target month's length exactly like `add_months`/`add_years`, then the whole-day component), returning `failure` only when the result leaves the supported range; and `DateTime.between_dates(date_time, b)` measures the calendar span between two instants using their date components only (time-of-day is ignored), yielding a negative `Period` when `a` is after `b`. The two shapes are complementary: keep `Duration` for elapsed time, reach for `Period` for "add one month" calendar arithmetic.
 
 `DateTime.Interval` record fields: `start` (`number`), `end` (`number`) — a pair of Unix timestamps modelling a time range rather than a point. `DateTime.interval(start, end)` is a validating constructor that returns `failure` when `end < start`, so an `Interval` value is always well-formed. Intervals are closed (both endpoints are included): `DateTime.interval_contains` treats a timestamp equal to `start` or `end` as contained, and `DateTime.intervals_overlap` counts two intervals that merely touch at an endpoint as overlapping. `DateTime.interval_duration` returns `end - start` in seconds. Timestamps stay plain `number` values, so the existing `DateTime` point helpers still apply.
 
-`DateTime.Weekday` is a choice type with seven variants — `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday` — in ISO-8601 order (Monday = 1 … Sunday = 7). `DateTime.weekday(ts)` returns it for a timestamp, so a `match` over the result is exhaustive and autocompleted, and a mistyped day is a compile error rather than a magic number. It complements the integer `DateTime.day_of_week` (kept for index-style use): `DateTime.weekday_number` and `DateTime.weekday_from_number` bridge between the choice and the 1–7 integer, and `DateTime.weekday_name` gives the English day name.
+`DateTime.Weekday` is a choice type with seven variants — `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday` — in ISO-8601 order (Monday = 1 … Sunday = 7). `DateTime.weekday(timestamp)` returns it for a timestamp, so a `match` over the result is exhaustive and autocompleted, and a mistyped day is a compile error rather than a magic number. It complements the integer `DateTime.day_of_week` (kept for index-style use): `DateTime.weekday_number` and `DateTime.weekday_from_number` bridge between the choice and the 1–7 integer, and `DateTime.weekday_name` gives the English day name.
 
 ```luma
 match Result.unwrap(DateTime.weekday(DateTime.now_unix())) {
@@ -561,7 +561,7 @@ else                           { print("weekday") }
 }
 ```
 
-`DateTime.Month` is a choice type with twelve variants — `January`, `February`, `March`, `April`, `May`, `June`, `July`, `August`, `September`, `October`, `November`, `December` — in calendar order (January = 1 … December = 12). `DateTime.month_of(ts)` returns it for a timestamp (named to avoid clashing with the integer `DateTime.month`, which is kept for index-style use), so a `match` over the result is exhaustive and autocompleted, and a mistyped month is a compile error rather than a magic number. `DateTime.month_number` and `DateTime.month_from_number` bridge between the choice and the 1–12 integer, and `DateTime.month_name` gives the English month name.
+`DateTime.Month` is a choice type with twelve variants — `January`, `February`, `March`, `April`, `May`, `June`, `July`, `August`, `September`, `October`, `November`, `December` — in calendar order (January = 1 … December = 12). `DateTime.month_of(timestamp)` returns it for a timestamp (named to avoid clashing with the integer `DateTime.month`, which is kept for index-style use), so a `match` over the result is exhaustive and autocompleted, and a mistyped month is a compile error rather than a magic number. `DateTime.month_number` and `DateTime.month_from_number` bridge between the choice and the 1–12 integer, and `DateTime.month_name` gives the English month name.
 
 ```luma
 match Result.unwrap(DateTime.month_of(DateTime.now_unix())) {
@@ -570,7 +570,7 @@ else                         { print(DateTime.month_name(Result.unwrap(DateTime.
 }
 ```
 
-`DateTime.ParseError` is a choice type with four variants — `Empty`, `InvalidFormat`, `OutOfRange`, `UnsupportedPrecision` — that categorises _why_ an ISO-8601 string failed to parse, so a program can branch on the cause instead of substring-matching an opaque message. It is surfaced by `DateTime.from_iso_string_typed(s)`, which returns `result<number, DateTime.ParseError>`: the value on success is the UTC Unix timestamp, and the error on failure is the typed category. An empty or whitespace-only string is `Empty`; a present but malformed string (`"not-a-date"`, `"2024/03/15"`, a truncated time) is `InvalidFormat`; a well-formed shape with an impossible field (month 13, day 30 of February, a year outside 0001–9999) is `OutOfRange`; and a valid shape carrying sub-second precision this parser does not accept (`"...:00.5Z"`) is `UnsupportedPrecision`. This is an opt-in, additive companion (mirroring `FileSystem.read_file_typed` / `FileSystem.IoError`): the plain `DateTime.from_iso_string` keeps its string-error `result<number>`.
+`DateTime.ParseError` is a choice type with four variants — `Empty`, `InvalidFormat`, `OutOfRange`, `UnsupportedPrecision` — that categorises _why_ an ISO-8601 string failed to parse, so a program can branch on the cause instead of substring-matching an opaque message. It is surfaced by `DateTime.from_iso_string_typed(date_time)`, which returns `result<number, DateTime.ParseError>`: the value on success is the UTC Unix timestamp, and the error on failure is the typed category. An empty or whitespace-only string is `Empty`; a present but malformed string (`"not-a-date"`, `"2024/03/15"`, a truncated time) is `InvalidFormat`; a well-formed shape with an impossible field (month 13, day 30 of February, a year outside 0001–9999) is `OutOfRange`; and a valid shape carrying sub-second precision this parser does not accept (`"...:00.5Z"`) is `UnsupportedPrecision`. This is an opt-in, additive companion (mirroring `FileSystem.read_file_typed` / `FileSystem.IoError`): the plain `DateTime.from_iso_string` keeps its string-error `result<number>`.
 
 ```luma
 match DateTime.from_iso_string_typed(user_input) {
@@ -589,39 +589,39 @@ Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where
 
 | Function                        | Parameter Types              | Return Type       | Description                                                          |
 | ------------------------------- | ---------------------------- | ----------------- | ------------------------------------------------------------------- |
-| `Decimal.absolute(d)`           | `(decimal)`                  | `decimal`         | Absolute value                                                      |
-| `Decimal.add(a, b)`             | `(decimal, decimal)`         | `decimal`         | Exact sum                                                           |
-| `Decimal.compare(a, b)`         | `(decimal, decimal)`         | `integer`         | `-1`, `0`, or `1` (scale-insensitive: `1.5` compares equal to `1.50`) |
-| `Decimal.divide(a, b, scale)`   | `(decimal, decimal, integer)` | `result<decimal>` | Quotient rounded (half-up) to `scale` fractional digits; fail on divide-by-zero or negative scale. Use `Decimal.divide_with` to choose the rounding mode |
-| `Decimal.divide_typed(a, b, scale)` | `(decimal, decimal, integer)` | `result<decimal, Decimal.Error>` | Like `divide`, but on failure the error is a typed `Decimal.Error` (`DivisionByZero`, `PrecisionExceeded`, or `Overflow`) instead of a string |
-| `Decimal.divide_with(a, b, scale, mode)` | `(decimal, decimal, integer, RoundingMode \| string)` | `result<decimal>` | Quotient rounded using `mode` to `scale` fractional digits; fail on divide-by-zero or negative scale |
-| `Decimal.equals(a, b)`          | `(decimal, decimal)`         | `boolean`         | Value equality, ignoring trailing-zero scale (`1.5` equals `1.50`)  |
-| `Decimal.from_integer(i)`       | `(integer)`                  | `decimal`         | Exact decimal from an integer                                       |
-| `Decimal.from_number(n)`        | `(number)`                   | `decimal`         | Shortest exact decimal for a `number`; throws on NaN or infinity    |
-| `Decimal.from_string(s)`        | `(string)`                   | `result<decimal>` | Parse decimal text (optional sign, digits, `.`, optional `eNN` exponent); fail on malformed input |
-| `Decimal.from_string_typed(s)`  | `(string)`                   | `result<decimal, Decimal.Error>` | Like `from_string`, but on failure the error is a typed `Decimal.Error` (`InvalidFormat`) instead of a string |
-| `Decimal.greater_or_equal(a, b)`| `(decimal, decimal)`         | `boolean`         | Whether `a` ≥ `b` (readable wrapper over `compare`)                 |
-| `Decimal.greater_than(a, b)`    | `(decimal, decimal)`         | `boolean`         | Whether `a` > `b` (readable wrapper over `compare`)                 |
-| `Decimal.is_negative(d)`        | `(decimal)`                  | `boolean`         | Whether `d` is less than zero                                       |
-| `Decimal.is_positive(d)`        | `(decimal)`                  | `boolean`         | Whether `d` is greater than zero                                    |
-| `Decimal.is_zero(d)`            | `(decimal)`                  | `boolean`         | Whether `d` is zero                                                 |
-| `Decimal.less_or_equal(a, b)`   | `(decimal, decimal)`         | `boolean`         | Whether `a` ≤ `b` (readable wrapper over `compare`)                 |
-| `Decimal.less_than(a, b)`       | `(decimal, decimal)`         | `boolean`         | Whether `a` < `b` (readable wrapper over `compare`)                 |
-| `Decimal.max(a, b)`             | `(decimal, decimal)`         | `decimal`         | Larger of two decimals (scale-insensitive)                         |
-| `Decimal.min(a, b)`             | `(decimal, decimal)`         | `decimal`         | Smaller of two decimals (scale-insensitive)                        |
-| `Decimal.multiply(a, b)`        | `(decimal, decimal)`         | `decimal`         | Exact product; throws if the result would exceed the maximum decimal size |
-| `Decimal.negate(d)`             | `(decimal)`                  | `decimal`         | Additive inverse (`-d`)                                             |
+| `Decimal.absolute(decimal)`           | `(decimal)`                  | `decimal`         | Absolute value                                                      |
+| `Decimal.add(decimal, b)`             | `(decimal, decimal)`         | `decimal`         | Exact sum                                                           |
+| `Decimal.compare(decimal, b)`         | `(decimal, decimal)`         | `integer`         | `-1`, `0`, or `1` (scale-insensitive: `1.5` compares equal to `1.50`) |
+| `Decimal.divide(decimal, b, scale)`   | `(decimal, decimal, integer)` | `result<decimal>` | Quotient rounded (half-up) to `scale` fractional digits; fail on divide-by-zero or negative scale. Use `Decimal.divide_with` to choose the rounding mode |
+| `Decimal.divide_typed(decimal, b, scale)` | `(decimal, decimal, integer)` | `result<decimal, Decimal.Error>` | Like `divide`, but on failure the error is a typed `Decimal.Error` (`DivisionByZero`, `PrecisionExceeded`, or `Overflow`) instead of a string |
+| `Decimal.divide_with(decimal, b, scale, mode)` | `(decimal, decimal, integer, RoundingMode \| string)` | `result<decimal>` | Quotient rounded using `mode` to `scale` fractional digits; fail on divide-by-zero or negative scale |
+| `Decimal.equals(decimal, b)`          | `(decimal, decimal)`         | `boolean`         | Value equality, ignoring trailing-zero scale (`1.5` equals `1.50`)  |
+| `Decimal.from_integer(decimal)`       | `(integer)`                  | `decimal`         | Exact decimal from an integer                                       |
+| `Decimal.from_number(decimal)`        | `(number)`                   | `decimal`         | Shortest exact decimal for a `number`; throws on NaN or infinity    |
+| `Decimal.from_string(decimal)`        | `(string)`                   | `result<decimal>` | Parse decimal text (optional sign, digits, `.`, optional `eNN` exponent); fail on malformed input |
+| `Decimal.from_string_typed(decimal)`  | `(string)`                   | `result<decimal, Decimal.Error>` | Like `from_string`, but on failure the error is a typed `Decimal.Error` (`InvalidFormat`) instead of a string |
+| `Decimal.greater_or_equal(decimal, b)`| `(decimal, decimal)`         | `boolean`         | Whether `a` ≥ `b` (readable wrapper over `compare`)                 |
+| `Decimal.greater_than(decimal, b)`    | `(decimal, decimal)`         | `boolean`         | Whether `a` > `b` (readable wrapper over `compare`)                 |
+| `Decimal.is_negative(decimal)`        | `(decimal)`                  | `boolean`         | Whether `d` is less than zero                                       |
+| `Decimal.is_positive(decimal)`        | `(decimal)`                  | `boolean`         | Whether `d` is greater than zero                                    |
+| `Decimal.is_zero(decimal)`            | `(decimal)`                  | `boolean`         | Whether `d` is zero                                                 |
+| `Decimal.less_or_equal(decimal, b)`   | `(decimal, decimal)`         | `boolean`         | Whether `a` ≤ `b` (readable wrapper over `compare`)                 |
+| `Decimal.less_than(decimal, b)`       | `(decimal, decimal)`         | `boolean`         | Whether `a` < `b` (readable wrapper over `compare`)                 |
+| `Decimal.maximum(decimal, b)`             | `(decimal, decimal)`         | `decimal`         | Larger of two decimals (scale-insensitive)                         |
+| `Decimal.minimum(decimal, b)`             | `(decimal, decimal)`         | `decimal`         | Smaller of two decimals (scale-insensitive)                        |
+| `Decimal.multiply(decimal, b)`        | `(decimal, decimal)`         | `decimal`         | Exact product; throws if the result would exceed the maximum decimal size |
+| `Decimal.negate(decimal)`             | `(decimal)`                  | `decimal`         | Additive inverse (`-d`)                                             |
 | `Decimal.power(base, exp)`      | `(decimal, integer)`         | `result<decimal>` | Exact repeated multiplication for `exp ≥ 0`; fail on negative exponent, overflow, or an exponent above 1,000,000 |
 | `Decimal.product(values)`       | `(array<decimal>)`           | `decimal`         | Exact product of all elements (empty ⇒ `1`); throws on overflow    |
-| `Decimal.remainder(a, b)`       | `(decimal, decimal)`         | `result<decimal>` | Exact remainder of `a / b` (sign of `a`); fail on zero divisor     |
-| `Decimal.round(d, places, mode)` | `(decimal, integer, RoundingMode \| string)` | `decimal`         | Round to `places` fractional digits using `mode` (a `Decimal.RoundingMode` variant or the equivalent mode string); throws on an unknown mode string |
-| `Decimal.scale(d)`              | `(decimal)`                  | `integer`         | Number of stored fractional digits                                 |
-| `Decimal.sign(d)`               | `(decimal)`                  | `integer`         | `-1`, `0`, or `1` according to the sign of `d`                      |
-| `Decimal.subtract(a, b)`        | `(decimal, decimal)`         | `decimal`         | Exact difference                                                   |
+| `Decimal.remainder(decimal, b)`       | `(decimal, decimal)`         | `result<decimal>` | Exact remainder of `a / b` (sign of `a`); fail on zero divisor     |
+| `Decimal.round(decimal, places, mode)` | `(decimal, integer, RoundingMode \| string)` | `decimal`         | Round to `places` fractional digits using `mode` (a `Decimal.RoundingMode` variant or the equivalent mode string); throws on an unknown mode string |
+| `Decimal.scale(decimal)`              | `(decimal)`                  | `integer`         | Number of stored fractional digits                                 |
+| `Decimal.sign(decimal)`               | `(decimal)`                  | `integer`         | `-1`, `0`, or `1` according to the sign of `d`                      |
+| `Decimal.subtract(decimal, b)`        | `(decimal, decimal)`         | `decimal`         | Exact difference                                                   |
 | `Decimal.sum(values)`           | `(array<decimal>)`           | `decimal`         | Exact sum of all elements (empty ⇒ `0`)                            |
-| `Decimal.to_integer(d)`         | `(decimal)`                  | `result<integer>` | Exact integer when `d` has no fractional part; else fail (pre-round with `round(d, 0, Down)` to truncate deliberately) |
-| `Decimal.to_number(d)`          | `(decimal)`                  | `number`          | Nearest IEEE-754 `number` (may lose precision)                     |
-| `Decimal.to_string(d)`          | `(decimal)`                  | `string`          | Canonical text; preserves the value's scale (e.g. `"2.50"`)         |
+| `Decimal.to_integer(decimal)`         | `(decimal)`                  | `result<integer>` | Exact integer when `d` has no fractional part; else fail (pre-round with `round(d, 0, Down)` to truncate deliberately) |
+| `Decimal.to_number(decimal)`          | `(decimal)`                  | `number`          | Nearest IEEE-754 `number` (may lose precision)                     |
+| `Decimal.to_string(decimal)`          | `(decimal)`                  | `string`          | Canonical text; preserves the value's scale (e.g. `"2.50"`)         |
 
 **Rounding modes** — the `mode` argument to `Decimal.round` and `Decimal.divide_with` is a `Decimal.RoundingMode` choice value (the discoverable, match-exhaustive form) or, for convenience, the equivalent lowercase string. `Decimal.divide` always uses half-up; reach for `Decimal.divide_with` when you need another mode. The seven modes are:
 
@@ -639,7 +639,7 @@ Access a variant as `Decimal.RoundingMode.HalfEven`. Because it is a choice type
 
 Equality and comparison are **scale-insensitive** — the value `1.5` equals `1.50` — but `Decimal.to_string` and `Decimal.scale` preserve the scale a value was created or computed with, so arithmetic that widens the scale (for example adding `1.50` and `2.25`) keeps the extra digits until you `Decimal.round` it. `Decimal` is always available and needs no imports.
 
-`Decimal.Error` is a choice type with four variants — `InvalidFormat`, `DivisionByZero`, `Overflow`, `PrecisionExceeded` — that categorises _why_ a decimal operation failed, so a program can branch on the cause instead of substring-matching an opaque message. It is surfaced by two opt-in, additive companions: `Decimal.from_string_typed(s)` returns `result<decimal, Decimal.Error>` (an unparseable string is `InvalidFormat`), and `Decimal.divide_typed(a, b, scale)` returns `result<decimal, Decimal.Error>` (a zero divisor is `DivisionByZero`, a negative or too-large `scale` is `PrecisionExceeded`, and an unrepresentable quotient is `Overflow`). This mirrors `FileSystem.read_file_typed` / `FileSystem.IoError`: the plain `Decimal.from_string` and `Decimal.divide` keep their string-error `result<decimal>`.
+`Decimal.Error` is a choice type with four variants — `InvalidFormat`, `DivisionByZero`, `Overflow`, `PrecisionExceeded` — that categorises _why_ a decimal operation failed, so a program can branch on the cause instead of substring-matching an opaque message. It is surfaced by two opt-in, additive companions: `Decimal.from_string_typed(decimal)` returns `result<decimal, Decimal.Error>` (an unparseable string is `InvalidFormat`), and `Decimal.divide_typed(decimal, b, scale)` returns `result<decimal, Decimal.Error>` (a zero divisor is `DivisionByZero`, a negative or too-large `scale` is `PrecisionExceeded`, and an unrepresentable quotient is `Overflow`). This mirrors `FileSystem.read_file_typed` / `FileSystem.IoError`: the plain `Decimal.from_string` and `Decimal.divide` keep their string-error `result<decimal>`.
 
 ```luma
 match Decimal.from_string_typed(user_input) {
@@ -676,40 +676,40 @@ Dictionaries preserve insertion order. All reads and writes use string keys.
 
 | Function                          | Parameter Types                                   | Return Type                              | Description                                                                                     |
 | --------------------------------- | ------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `Dictionary.has_value(d, v)`      | `(dictionary<T>, T)`                              | `boolean`                                | Whether any value equals `v`                                                                    |
-| `Dictionary.all(d, fn)`           | `(dictionary<T>, function(string, T) -> boolean)` | `result<boolean>`                        | `true` if every entry matches; fail if callback throws                                          |
-| `Dictionary.any(d, fn)`           | `(dictionary<T>, function(string, T) -> boolean)` | `result<boolean>`                        | `true` if any entry matches; fail if callback throws                                            |
-| `Dictionary.count(d, fn)`         | `(dictionary<T>, function(string, T) -> boolean)` | `result<integer>`                        | Count entries matching predicate                                                                |
-| `Dictionary.deep_merge(a, b)`     | `(dictionary<T>, dictionary<T>)`                  | `dictionary<T>`                          | Recursive merge; `b` wins on conflicts                                                          |
-| `Dictionary.each(d, fn)`          | `(dictionary<T>, function(string, T) -> none)`    | `result<none>`                           | Iterate key–value pairs; fail if callback throws                                                |
-| `Dictionary.filter(d, fn)`        | `(dictionary<T>, function(string, T) -> boolean)` | `result<dictionary<T>>`                  | Keep entries where `fn` returns `true`; fail if callback throws                                 |
-| `Dictionary.find(d, fn)`          | `(dictionary<T>, function(string, T) -> boolean)` | `result<(string, T)>`                    | First entry where `fn` returns `true`; fail if not found                                        |
-| `Dictionary.flip(d)`              | `(dictionary<V>)`                                 | `result<dictionary<string>>`             | Swap keys and values; fail if any value is not a string                                         |
-| `Dictionary.from_entries(arr)`    | `(array<(string, T)>)`                            | `dictionary<T>`                          | Create from array of `(key, value)` tuples                                                      |
+| `Dictionary.has_value(dictionary, value)`      | `(dictionary<T>, T)`                              | `boolean`                                | Whether any value equals `v`                                                                    |
+| `Dictionary.all(dictionary, function)`           | `(dictionary<T>, function(string, T) -> boolean)` | `result<boolean>`                        | `true` if every entry matches; fail if callback throws                                          |
+| `Dictionary.any(dictionary, function)`           | `(dictionary<T>, function(string, T) -> boolean)` | `result<boolean>`                        | `true` if any entry matches; fail if callback throws                                            |
+| `Dictionary.count(dictionary, function)`         | `(dictionary<T>, function(string, T) -> boolean)` | `result<integer>`                        | Count entries matching predicate                                                                |
+| `Dictionary.deep_merge(dictionary, b)`     | `(dictionary<T>, dictionary<T>)`                  | `dictionary<T>`                          | Recursive merge; `b` wins on conflicts                                                          |
+| `Dictionary.each(dictionary, function)`          | `(dictionary<T>, function(string, T) -> none)`    | `result<none>`                           | Iterate key–value pairs; fail if callback throws                                                |
+| `Dictionary.filter(dictionary, function)`        | `(dictionary<T>, function(string, T) -> boolean)` | `result<dictionary<T>>`                  | Keep entries where `function` returns `true`; fail if callback throws                                 |
+| `Dictionary.find(dictionary, function)`          | `(dictionary<T>, function(string, T) -> boolean)` | `result<(string, T)>`                    | First entry where `function` returns `true`; fail if not found                                        |
+| `Dictionary.flip(dictionary)`              | `(dictionary<V>)`                                 | `result<dictionary<string>>`             | Swap keys and values; fail if any value is not a string                                         |
+| `Dictionary.from_entries(array)`    | `(array<(string, T)>)`                            | `dictionary<T>`                          | Create from array of `(key, value)` tuples                                                      |
 | `Dictionary.from_arrays(ks, vs)`  | `(array<string>, array<T>)`                       | `result<dictionary<T>>`                  | Pair keys and values positionally; fail on length mismatch; last value wins on duplicate keys   |
 | `Dictionary.from_keys(keys, def)` | `(array<string>, T)`                              | `dictionary<T>`                          | Create from key list with default value                                                         |
-| `Dictionary.get(d, k)`            | `(dictionary<T>, string)`                         | `result<T>`                              | Safe lookup; fail if key not found                                                              |
-| `Dictionary.get_or(d, k, def)`    | `(dictionary<T>, string, T)`                      | `T`                                      | Lookup with default                                                                             |
-| `Dictionary.has(d, k)`            | `(dictionary<T>, string)`                         | `boolean`                                | Key membership test                                                                             |
-| `Dictionary.invert(d)`            | `(dictionary<string>)`                            | `dictionary<string>`                     | Swap keys and values                                                                            |
-| `Dictionary.is_empty(d)`          | `(dictionary<T>)`                                 | `boolean`                                | Whether the dictionary is empty                                                                 |
-| `Dictionary.keys(d)`              | `(dictionary<T>)`                                 | `array<string>`                          | Array of keys                                                                                   |
-| `Dictionary.length(d)`            | `(dictionary<T>)`                                 | `integer`                                | Number of entries                                                                               |
-| `Dictionary.map(d, fn)`           | `(dictionary<T>, function(string, T) -> U)`       | `result<dictionary<U>>`                  | Transform every entry; `fn` receives `(key, value)`, returns new value; fail if callback throws |
-| `Dictionary.map_keys(d, fn)`      | `(dictionary<T>, function(string) -> string)`     | `result<dictionary<T>>`                  | Transform every key, keeping values; last write wins on collision; fail if callback throws      |
-| `Dictionary.map_values(d, fn)`    | `(dictionary<T>, function(T) -> U)`               | `result<dictionary<U>>`                  | Transform every value; fail if callback throws                                                  |
-| `Dictionary.merge(a, b)`          | `(dictionary<T>, dictionary<T>)`                  | `dictionary<T>`                          | Merge; `b` wins on conflicts                                                                    |
-| `Dictionary.merge_with(a, b, fn)` | `(dictionary<T>, dictionary<T>, function(T, T) -> T)` | `dictionary<T>`                      | Merge; on a shared key `fn(value_from_a, value_from_b)` resolves the conflict                   |
-| `Dictionary.omit(d, keys)`        | `(dictionary<T>, array<string>)`                  | `dictionary<T>`                          | New dictionary excluding entries whose keys are in `keys`                                       |
-| `Dictionary.partition(d, fn)`     | `(dictionary<T>, function(string, T) -> boolean)` | `result<(dictionary<T>, dictionary<T>)>` | Split into `(matches, rest)`; `fn` receives `(key, value)`; fail if predicate throws            |
-| `Dictionary.pick(d, keys)`        | `(dictionary<T>, array<string>)`                  | `dictionary<T>`                          | New dictionary containing only entries whose keys are in `keys`                                 |
-| `Dictionary.reduce(d, init, fn)`  | `(dictionary<T>, U, function(U, string, T) -> U)` | `result<U>`                              | Fold entries; `fn` receives `(accumulator, key, value)`; fail if callback throws                |
-| `Dictionary.remove(d, k)`         | `(dictionary<T>, string)`                         | `dictionary<T>`                          | New dictionary without key                                                                      |
-| `Dictionary.set(d, k, v)`         | `(dictionary<T>, string, T)`                      | `dictionary<T>`                          | New dictionary with key set                                                                     |
-| `Dictionary.to_array(d)`          | `(dictionary<T>)`                                 | `array<KeyValue>`                        | Each element is a record with `.key` (`string`) and `.value` fields                             |
-| `Dictionary.to_entries(d)`        | `(dictionary<T>)`                                 | `array<(string, T)>`                     | Each element is a `(key, value)` tuple                                                          |
-| `Dictionary.update(d, k, fn)`     | `(dictionary<T>, string, function(optional<T>) -> T)` | `dictionary<T>`                      | New dictionary with `k` set to `fn(current-or-none)` (read-modify-write for one key)            |
-| `Dictionary.values(d)`            | `(dictionary<T>)`                                 | `array<T>`                               | Array of values                                                                                 |
+| `Dictionary.get(dictionary, k)`            | `(dictionary<T>, string)`                         | `result<T>`                              | Safe lookup; fail if key not found                                                              |
+| `Dictionary.get_or(dictionary, k, def)`    | `(dictionary<T>, string, T)`                      | `T`                                      | Lookup with default                                                                             |
+| `Dictionary.has(dictionary, k)`            | `(dictionary<T>, string)`                         | `boolean`                                | Key membership test                                                                             |
+| `Dictionary.invert(dictionary)`            | `(dictionary<string>)`                            | `dictionary<string>`                     | Swap keys and values                                                                            |
+| `Dictionary.is_empty(dictionary)`          | `(dictionary<T>)`                                 | `boolean`                                | Whether the dictionary is empty                                                                 |
+| `Dictionary.keys(dictionary)`              | `(dictionary<T>)`                                 | `array<string>`                          | Array of keys                                                                                   |
+| `Dictionary.length(dictionary)`            | `(dictionary<T>)`                                 | `integer`                                | Number of entries                                                                               |
+| `Dictionary.map(dictionary, function)`           | `(dictionary<T>, function(string, T) -> U)`       | `result<dictionary<U>>`                  | Transform every entry; `function` receives `(key, value)`, returns new value; fail if callback throws |
+| `Dictionary.map_keys(dictionary, function)`      | `(dictionary<T>, function(string) -> string)`     | `result<dictionary<T>>`                  | Transform every key, keeping values; last write wins on collision; fail if callback throws      |
+| `Dictionary.map_values(dictionary, function)`    | `(dictionary<T>, function(T) -> U)`               | `result<dictionary<U>>`                  | Transform every value; fail if callback throws                                                  |
+| `Dictionary.merge(dictionary, b)`          | `(dictionary<T>, dictionary<T>)`                  | `dictionary<T>`                          | Merge; `b` wins on conflicts                                                                    |
+| `Dictionary.merge_with(dictionary, b, function)` | `(dictionary<T>, dictionary<T>, function(T, T) -> T)` | `dictionary<T>`                      | Merge; on a shared key `fn(value_from_a, value_from_b)` resolves the conflict                   |
+| `Dictionary.omit(dictionary, keys)`        | `(dictionary<T>, array<string>)`                  | `dictionary<T>`                          | New dictionary excluding entries whose keys are in `keys`                                       |
+| `Dictionary.partition(dictionary, function)`     | `(dictionary<T>, function(string, T) -> boolean)` | `result<(dictionary<T>, dictionary<T>)>` | Split into `(matches, rest)`; `function` receives `(key, value)`; fail if predicate throws            |
+| `Dictionary.pick(dictionary, keys)`        | `(dictionary<T>, array<string>)`                  | `dictionary<T>`                          | New dictionary containing only entries whose keys are in `keys`                                 |
+| `Dictionary.reduce(dictionary, init, function)`  | `(dictionary<T>, U, function(U, string, T) -> U)` | `result<U>`                              | Fold entries; `function` receives `(accumulator, key, value)`; fail if callback throws                |
+| `Dictionary.remove(dictionary, k)`         | `(dictionary<T>, string)`                         | `dictionary<T>`                          | New dictionary without key                                                                      |
+| `Dictionary.set(dictionary, k, value)`         | `(dictionary<T>, string, T)`                      | `dictionary<T>`                          | New dictionary with key set                                                                     |
+| `Dictionary.to_array(dictionary)`          | `(dictionary<T>)`                                 | `array<KeyValue>`                        | Each element is a record with `.key` (`string`) and `.value` fields                             |
+| `Dictionary.to_entries(dictionary)`        | `(dictionary<T>)`                                 | `array<(string, T)>`                     | Each element is a `(key, value)` tuple                                                          |
+| `Dictionary.update(dictionary, k, function)`     | `(dictionary<T>, string, function(optional<T>) -> T)` | `dictionary<T>`                      | New dictionary with `k` set to `fn(current-or-none)` (read-modify-write for one key)            |
+| `Dictionary.values(dictionary)`            | `(dictionary<T>)`                                 | `array<T>`                               | Array of values                                                                                 |
 
 `Dictionary.KeyValue` record fields: `key: string`, `value` (the dictionary's value type `V`). It is the element type of `Dictionary.to_array`, so a program can annotate the result as `array<Dictionary.KeyValue>` and read `.key`/`.value` directly. Use `Dictionary.to_entries` instead when you want `(key, value)` tuples rather than records.
 
@@ -764,7 +764,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.is_directory(path)`           | `(string)`                | `result<boolean>`       | Whether the path is a directory                       |
 | `FileSystem.is_file(path)`                | `(string)`                | `result<boolean>`       | Whether the path is a file                            |
 | `FileSystem.is_relative(path)`            | `(string)`                | `boolean`               | Whether the path is relative                          |
-| `FileSystem.is_symlink(path)`             | `(string)`                | `result<boolean>`       | Whether the path is a symbolic link                   |
+| `FileSystem.is_symbolic_link(path)`       | `(string)`                | `result<boolean>`       | Whether the path is a symbolic link                   |
 | `FileSystem.join(a, b)`                   | `(string, string)`        | `string`                | Join two path components                              |
 | `FileSystem.kind(path)`                   | `(string)`                | `result<FileSystem.FileKind>` | Classify a path as `File`, `Directory`, `Symlink`, or `Other`; fail if the path does not exist |
 | `FileSystem.list_directories(path)`       | `(string)`                | `result<array<string>>` | List subdirectories                                   |
@@ -777,7 +777,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.permissions(path)`            | `(string)`                | `result<FileSystem.Permissions>` | Report readable/writable/executable flags and POSIX mode bits; fail if the path does not exist |
 | `FileSystem.read_bytes(path)`             | `(string)`                | `result<array<integer>>` | Read entire file as raw bytes (each element 0–255); lossless for binary/non-UTF-8 data |
 | `FileSystem.read_file(path)`              | `(string)`                | `result<string>`        | Read entire file as string                            |
-| `FileSystem.read_file_limited(path, max)` | `(string, integer)`       | `result<string>`        | Read file; fail if it exceeds `max` bytes             |
+| `FileSystem.read_file_limited(path, maximum)` | `(string, integer)`       | `result<string>`        | Read file; fail if it exceeds `maximum` bytes             |
 | `FileSystem.read_file_typed(path)`        | `(string)`                | `result<string, FileSystem.IoError>` | Read entire file; on failure the error is a typed `FileSystem.IoError` instead of a string |
 | `FileSystem.read_lines(path)`             | `(string)`                | `result<array<string>>` | Read file as array of lines                           |
 | `FileSystem.relative(path, base)`         | `(string, string)`        | `string`                | Relative path from `base`                             |
@@ -792,7 +792,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 
 `copy`, `delete`, `delete_directory`, `list_directories`, and `list_files` reject symbolic links and return `failure` to prevent symlink-following attacks.
 
-`FileSystem.FileInfo` record fields: `size` (`integer`, bytes; `0` for directories and other non-regular files), `modified_time` (`number`, fractional seconds since the Unix epoch, matching `get_modified_time`), `is_directory` (`boolean`), `is_file` (`boolean`), `is_symlink` (`boolean`), and `kind` (`FileSystem.FileKind`, the single mutually-exclusive answer described below). `metadata` answers in one call what `size`, `get_modified_time`, `is_directory`, `is_file`, `is_symlink`, and `kind` answer individually; the `is_symlink` flag reflects the path itself (it is not followed) while the size, time, and directory/file flags follow symlinks.
+`FileSystem.FileInfo` record fields: `size` (`integer`, bytes; `0` for directories and other non-regular files), `modified_time` (`number`, fractional seconds since the Unix epoch, matching `get_modified_time`), `is_directory` (`boolean`), `is_file` (`boolean`), `is_symbolic_link` (`boolean`), and `kind` (`FileSystem.FileKind`, the single mutually-exclusive answer described below). `metadata` answers in one call what `size`, `get_modified_time`, `is_directory`, `is_file`, `is_symbolic_link`, and `kind` answer individually; the `is_symbolic_link` flag reflects the path itself (it is not followed) while the size, time, and directory/file flags follow symlinks.
 
 `FileSystem.Permissions` record fields: `readable` (`boolean`), `writable` (`boolean`), `executable` (`boolean`), and `mode` (`integer`, the POSIX mode bits — owner/group/others read/write/execute plus set-uid, set-gid, and sticky). It answers "what may I do with this file?" in one call, returned by `FileSystem.permissions(path)` as a `result<FileSystem.Permissions>`. The three booleans are the beginner-facing answer (read from the owner permission bits), while `mode` is the escape hatch for advanced users who want the raw bits — no numeric magic is forced on beginners. It is cross-platform and never null: on POSIX the flags and `mode` reflect the file's actual permission bits (so a `chmod +x` script reports `executable`), while on Windows the bits are synthesised from the read-only attribute (a read-only file is not `writable`; `readable` and `executable` are reported for every file). `permissions` follows symlinks (it describes the target) and fails only when the path does not exist.
 
@@ -806,13 +806,13 @@ failure(_e) { print("no such file") }
 }
 ```
 
-`FileSystem.FileKind` is a choice type with four variants — `File`, `Directory`, `Symlink`, `Other` — the single, mutually-exclusive answer to "what kind of thing is this path?". `FileSystem.kind(path)` returns it (and it is also the `kind` field on `FileSystem.FileInfo`), so a `match` is exhaustive and autocompleted instead of a nested `if` chain over the `is_file` / `is_directory` / `is_symlink` booleans. It is classified symlink-first, like `lstat`: a symbolic link is reported as `Symlink` even when its target is a directory or a regular file (so the four variants never overlap), and anything that is none of these — a device, FIFO, or socket — is `Other`. `kind` fails only when the path does not exist.
+`FileSystem.FileKind` is a choice type with four variants — `File`, `Directory`, `SymbolicLink`, `Other` — the single, mutually-exclusive answer to "what kind of thing is this path?". `FileSystem.kind(path)` returns it (and it is also the `kind` field on `FileSystem.FileInfo`), so a `match` is exhaustive and autocompleted instead of a nested `if` chain over the `is_file` / `is_directory` / `is_symbolic_link` booleans. It is classified symlink-first, like `lstat`: a symbolic link is reported as `SymbolicLink` even when its target is a directory or a regular file (so the four variants never overlap), and anything that is none of these — a device, FIFO, or socket — is `Other`. `kind` fails only when the path does not exist.
 
 ```luma
 match Result.unwrap(FileSystem.kind("README.md")) {
 case FileSystem.FileKind.File      { print("a file") }
 case FileSystem.FileKind.Directory { print("a directory") }
-case FileSystem.FileKind.Symlink   { print("a link") }
+case FileSystem.FileKind.SymbolicLink   { print("a link") }
 case FileSystem.FileKind.Other     { print("something else") }
 }
 ```
@@ -943,13 +943,13 @@ Typed **records** for structured data: `DataPoint { string label, number value }
 
 | Function | Effect |
 |---|---|
-| `on_click(View, any msg)` | Send `msg` when a button is clicked |
+| `on_click(View, any msg)` | Send `message` when a button is clicked |
 | `on_change(View, function(string) -> any)` | Handle each edit of a text field/area or date |
 | `on_toggle(View, function(boolean) -> any)` | Handle a checkbox/switch toggle |
 | `on_select(View, function(string) -> any)` | Handle a radio/dropdown/menu choice |
 | `on_slide(View, function(number) -> any)` | Handle a slider change |
 | `on_tab(View, function(integer) -> any)` | Handle a tab switch |
-| `on_close(View, any msg)` | Send `msg` when a dialog is dismissed |
+| `on_close(View, any msg)` | Send `message` when a dialog is dismissed |
 | `level(View, integer)` | Heading level (1–6) |
 | `size(View, TextScale)` · `weight(View, Weight)` · `bold(View)` | Typography |
 | `primary` · `secondary` · `danger` · `muted` · `emphasis(View, Emphasis)` | Semantic emphasis |
@@ -999,7 +999,7 @@ Typed **records** for structured data: `DataPoint { string label, number value }
 | `Solaris.no_command` | `() -> any` | An explicit empty effect |
 | `Solaris.with_command` | `(any model, any command) -> any` | Return the next model plus a command |
 | `Solaris.batch` | `(array<any> commands) -> any` | Run several commands at once |
-| `Solaris.after` | `(integer ms, any msg) -> any` | Send `msg` once after a delay |
+| `Solaris.after` | `(integer ms, any msg) -> any` | Send `message` once after a delay |
 | `Solaris.fetch` | `(string url, function(any) -> any) -> any` | HTTP GET, then map the reply to a `Msg` |
 | `Solaris.notify` | `(string title, string body) -> any` | An OS desktop notification |
 | `Solaris.set_scheme` | `(Scheme) -> any` | Switch light/dark/auto at runtime |
@@ -1110,10 +1110,10 @@ The `VAR_*` constants return CSS `var()` references that resolve to the current 
 
 | Function                        | Parameter Types | Return Type  | Description                                     |
 | ------------------------------- | --------------- | ------------ | ----------------------------------------------- |
-| `GraphicalUi.app(config)`       | `(dictionary)`  | `none`       | Open a window and run the Elm-architecture loop |
+| `GraphicalUi.app(configuration)`       | `(dictionary)`  | `none`       | Open a window and run the Elm-architecture loop |
 | `GraphicalUi.style(properties)` | `(dictionary)`  | `widget`     | Identity helper — validates and returns a style |
 
-The `config` dictionary accepts these keys:
+The `configuration` dictionary accepts these keys:
 
 | Key           | Type                              | Default              | Description                                              |
 | ------------- | --------------------------------- | -------------------- | -------------------------------------------------------- |
@@ -1138,20 +1138,20 @@ The `config` dictionary accepts these keys:
 
 ### Interaction Testing
 
-For finer-grained verification than the headless lifecycle above, the `GraphicalUi.test_*` functions drive an application **without opening a window** by rendering its view, simulating a real interaction, and returning the resulting model. Each call is stateless and takes the same `config` dictionary that `GraphicalUi.app` consumes, so examples and tests can assert that user actions produce the expected state. Widgets are located by their visible text (label, placeholder, value, name, title) or by a unique style `id`. When several widgets share a locator, a 0-based `index` selects which one to act on (use `test_count` to count them); alternatively, give a widget a style `id` to address it by identity.
+For finer-grained verification than the headless lifecycle above, the `GraphicalUi.test_*` functions drive an application **without opening a window** by rendering its view, simulating a real interaction, and returning the resulting model. Each call is stateless and takes the same `configuration` dictionary that `GraphicalUi.app` consumes, so examples and tests can assert that user actions produce the expected state. Widgets are located by their visible text (label, placeholder, value, name, title) or by a unique style `id`. When several widgets share a locator, a 0-based `index` selects which one to act on (use `test_count` to count them); alternatively, give a widget a style `id` to address it by identity.
 
 | Function                                                       | Parameter Types                                | Return Type  | Description                                                                                                                                       |
 | -------------------------------------------------------------- | ---------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GraphicalUi.test_init(config)`                                | `(dictionary)`                                 | `any`        | Run `init` (or fall back to the configured model) and return the initial model                                                                   |
-| `GraphicalUi.test_render(config, model)`                       | `(dictionary, any)`                            | `dictionary` | Render `view(model)` and return the widget tree for structural assertions                                                                        |
-| `GraphicalUi.test_count(config, model, locator)`               | `(dictionary, any, string)`                    | `integer`    | Count the widgets matching `locator` (the same matching `test_find` uses) for disambiguating duplicates before addressing one by index           |
-| `GraphicalUi.test_find(config, model, locator, index?)`        | `(dictionary, any, string, integer?)`          | `dictionary` | Return the matching widget's rendered dictionary so tests can assert on its serialized state (value, type, `_element_id`, …) without acting on it |
-| `GraphicalUi.test_click(config, model, locator, index?)`       | `(dictionary, any, string, integer?)`          | `any`        | Click the `index`-th widget matching `locator` (default 0) and return the new model                                                              |
-| `GraphicalUi.test_input(config, model, locator, value, index?)`| `(dictionary, any, string, any, integer?)`     | `any`        | Send `value` to the widget matching `locator` (text input, checkbox, toggle, slider, dropdown) and return the new model                          |
-| `GraphicalUi.test_event(config, model, locator, event, args?, index?)` | `(dictionary, any, string, string, array<any>?, integer?)` | `any` | Fire `event` on the matching widget, forwarding optional `args`, and return the new model                                                        |
-| `GraphicalUi.test_key(config, model, key)`                     | `(dictionary, any, string)`                    | `any`        | Deliver `key` to the application's keyboard subscriptions (`on_key`) and return the new model                                                     |
-| `GraphicalUi.test_drag(config, model, phase, data?)`           | `(dictionary, any, string, string?)`           | `any`        | Deliver a drag event of `phase` (`"start"`/`"move"`/`"end"`/`"enter"`/`"leave"`/`"drop"`) carrying optional `data` to the drag subscriptions (`on_drag`) and return the new model |
-| `GraphicalUi.test_message(config, model, message)`             | `(dictionary, any, any)`                       | `any`        | Deliver `message` to `update(model, message)` and return the new model                                                                           |
+| `GraphicalUi.test_init(configuration)`                                | `(dictionary)`                                 | `any`        | Run `init` (or fall back to the configured model) and return the initial model                                                                   |
+| `GraphicalUi.test_render(configuration, model)`                       | `(dictionary, any)`                            | `dictionary` | Render `view(model)` and return the widget tree for structural assertions                                                                        |
+| `GraphicalUi.test_count(configuration, model, locator)`               | `(dictionary, any, string)`                    | `integer`    | Count the widgets matching `locator` (the same matching `test_find` uses) for disambiguating duplicates before addressing one by index           |
+| `GraphicalUi.test_find(configuration, model, locator, index?)`        | `(dictionary, any, string, integer?)`          | `dictionary` | Return the matching widget's rendered dictionary so tests can assert on its serialized state (value, type, `_element_id`, …) without acting on it |
+| `GraphicalUi.test_click(configuration, model, locator, index?)`       | `(dictionary, any, string, integer?)`          | `any`        | Click the `index`-th widget matching `locator` (default 0) and return the new model                                                              |
+| `GraphicalUi.test_input(configuration, model, locator, value, index?)`| `(dictionary, any, string, any, integer?)`     | `any`        | Send `value` to the widget matching `locator` (text input, checkbox, toggle, slider, dropdown) and return the new model                          |
+| `GraphicalUi.test_event(configuration, model, locator, event, args?, index?)` | `(dictionary, any, string, string, array<any>?, integer?)` | `any` | Fire `event` on the matching widget, forwarding optional `args`, and return the new model                                                        |
+| `GraphicalUi.test_key(configuration, model, key)`                     | `(dictionary, any, string)`                    | `any`        | Deliver `key` to the application's keyboard subscriptions (`on_key`) and return the new model                                                     |
+| `GraphicalUi.test_drag(configuration, model, phase, data?)`           | `(dictionary, any, string, string?)`           | `any`        | Deliver a drag event of `phase` (`"start"`/`"move"`/`"end"`/`"enter"`/`"leave"`/`"drop"`) carrying optional `data` to the drag subscriptions (`on_drag`) and return the new model |
+| `GraphicalUi.test_message(configuration, model, message)`             | `(dictionary, any, any)`                       | `any`        | Deliver `message` to `update(model, message)` and return the new model                                                                           |
 
 `test_click`, `test_input`, and `test_event` fire the widget's own callback and resolve its return value exactly as a live app does — a returned message (string) is routed through `update`, while a returned model or `with_command` pair is applied directly; command side effects are inert without a window, so the model update is deterministic. `test_event` covers the secondary handlers a widget exposes: valid `event` names are `click`, `change`, `double_click`, `right_click`, `mouse_enter`, `mouse_leave`, `mouse_move` (pointer handlers declared in the style dictionary), plus `close` (a `dialog`'s `on_close`) and `clear` (a `search_input`'s `on_clear`). The optional `args` array is forwarded to the handler so handlers of any arity (e.g. `on_mouse_move(x, y)`) can be tested. `test_key` drives the keyboard path end-to-end (subscribe → matching `on_key` / `on_key_typed` callback → `update`), so keyboard shortcuts are verified through the same dispatch the live runtime uses; a typed `on_key_typed` subscription receives a `GraphicalUi.KeyEvent` record (with modifiers defaulting to false under `test_key`). `test_drag` drives the drag path the same way (subscribe → matching `on_drag` / `on_drag_typed` callback → `update`); a typed `on_drag_typed` subscription receives a `GraphicalUi.DragEvent` record whose `phase` is set from the `phase` argument, `data` from the optional `data` argument, and coordinates default to 0. `test_storage` drives the storage path (`on_storage_change` / `on_storage_change_typed`, filtered by `key`); a typed subscription receives a `GraphicalUi.StorageEvent` record built from the `key`, optional `old_value`, and optional `new_value` arguments (pass `none` for an added or cleared value). `test_wheel` drives `on_wheel_typed` with a `GraphicalUi.WheelDelta` built from the `delta_x` / `delta_y` arguments, and `test_visibility` drives `on_visibility_change` / `on_visibility_change_typed` with the given `visible` boolean (a typed subscription receives a `GraphicalUi.VisibilityState` choice). `test_message` exercises the `update` function directly, and `test_find` returns rendered widget state for assertions. A locator that matches no widget (or an out-of-range `index`) raises a runtime error.
 
@@ -1166,8 +1166,8 @@ Most widget functions accept an optional `style?` dictionary as their last param
 | `GraphicalUi.heading(text, level?, style?)`    | `(string, integer?, dictionary?)` | `widget`    | Heading (level 1–6, default 1)           |
 | `GraphicalUi.image(source, style?)`            | `(string, dictionary?)`           | `widget`    | Image from URL or data URI               |
 | `GraphicalUi.label(text, style?)`              | `(string, dictionary?)`           | `widget`    | Static text span                         |
-| `GraphicalUi.progress(value, max, style?)`     | `(number, number, dictionary?)`   | `widget`    | Progress bar                             |
-| `GraphicalUi.progress_bar(value, max, style?)` | `(number, number, dictionary?)`   | `widget`    | Progress bar (alias for `progress`)      |
+| `GraphicalUi.progress(value, maximum, style?)`     | `(number, number, dictionary?)`   | `widget`    | Progress bar                             |
+| `GraphicalUi.progress_bar(value, maximum, style?)` | `(number, number, dictionary?)`   | `widget`    | Progress bar (alias for `progress`)      |
 | `GraphicalUi.spinner(label?, style?)`          | `(string?, dictionary?)`          | `widget`    | Indeterminate busy indicator (default label `"Loading…"`) |
 | `GraphicalUi.separator(style?)`                | `(dictionary?)`                   | `widget`    | Horizontal rule                          |
 | `GraphicalUi.spacer(height?, style?)`          | `(integer?, dictionary?)`         | `widget`    | Vertical spacing (default 16 px)         |
@@ -1185,7 +1185,7 @@ Most widget functions accept an optional `style?` dictionary as their last param
 | `GraphicalUi.dropdown(options, value, on_select, style?)`        | `(array<string>, string, function, dictionary?)`  | `widget`    | Select dropdown                           |
 | `GraphicalUi.file_input(on_select, accept?)`                     | `(func(string) -> any, string?)`                  | `widget`    | File chooser; `accept` filters file types |
 | `GraphicalUi.radio_group(options, selected, on_select, style?)`  | `(array<string>, string, function, dictionary?)`  | `widget`    | Radio button group                        |
-| `GraphicalUi.slider(value, min, max, on_change, style?)`         | `(number, number, number, function, dictionary?)` | `widget`    | Range slider                              |
+| `GraphicalUi.slider(value, minimum, maximum, on_change, style?)`         | `(number, number, number, function, dictionary?)` | `widget`    | Range slider                              |
 | `GraphicalUi.text_area(value, on_change, on_commit?, style?)`    | `(string, function, function?, dictionary?)`      | `widget`    | Multi-line text input (optional `on_commit` fires on blur / Ctrl+Enter) |
 | `GraphicalUi.text_input(value, on_change, placeholder?, on_commit?, style?)` | `(string, function, string?, function?, dictionary?)` | `widget`    | Single-line text input (optional `on_commit` fires on blur / Enter) |
 | `GraphicalUi.time_picker(value, on_change)`                      | `(string, func(string) -> any)`                   | `widget`    | Time picker input                         |
@@ -1230,7 +1230,7 @@ Sizing helpers return CSS `flex` shorthand strings or dictionaries that can be p
 | `GraphicalUi.fill_portion(n)`            | `(integer)`          | `string`     | Fill with weight `n` (`"n 1 0%"`)         |
 | `GraphicalUi.shrink()`                   | `()`                 | `string`     | Shrink to content size (`"0 1 auto"`)     |
 | `GraphicalUi.px(n)`                      | `(integer)`          | `string`     | Fixed pixel size (`"npx"`)                |
-| `GraphicalUi.constrained_fill(min, max)` | `(integer, integer)` | `widget`     | Fill with min/max width constraints       |
+| `GraphicalUi.constrained_fill(minimum, maximum)` | `(integer, integer)` | `widget`     | Fill with min/max width constraints       |
 
 ### Typed Alignment Helpers
 
@@ -1298,7 +1298,7 @@ Several stringly-typed GraphicalUi APIs have typed companions whose choices the 
 | `GraphicalUi.button_of(label, on_click, variant, style?)`    | `(string, func() -> any, GraphicalUi.ButtonVariant, dictionary?)` | `widget` | Typed `button` — takes a `ButtonVariant` choice for the hierarchy   |
 | `GraphicalUi.button_variant_to_string(variant)`              | `(GraphicalUi.ButtonVariant)`                       | `string`    | Bridge from `ButtonVariant` to the `"primary"`/`"secondary"`/… string |
 
-`GraphicalUi.Severity` is a closed choice with four variants: `Info`, `Warning`, `Error`, `Success`. `GraphicalUi.ButtonVariant` is a closed choice with four variants: `Primary`, `Secondary`, `Ghost`, `Danger`.
+`GraphicalUi.Severity` is a closed choice with four variants: `Information`, `Warning`, `Error`, `Success`. `GraphicalUi.ButtonVariant` is a closed choice with four variants: `Primary`, `Secondary`, `Ghost`, `Danger`.
 
 ### Display Widgets
 
@@ -1338,7 +1338,7 @@ same `update` cycle as the basic widgets.
 | `GraphicalUi.infinite_scroll(items, item_height, on_load_more)`       | `(array, integer, func() -> any)`                | `widget`    | Scrolling list that requests more items near the end            |
 | `GraphicalUi.inspect(child)`                                          | `(widget)`                                       | `widget`    | Wraps a child with a debug inspector overlay                    |
 | `GraphicalUi.menu(label, items, on_select)`                          | `(string, array<string>, func(string) -> any)`   | `widget`    | Click-to-open action menu; arrow-key + Esc keyboard support     |
-| `GraphicalUi.number_input(value, min, max, on_change)`                | `(number, number, number, func(number) -> any)`  | `widget`    | Numeric input field                                             |
+| `GraphicalUi.number_input(value, minimum, maximum, on_change)`                | `(number, number, number, func(number) -> any)`  | `widget`    | Numeric input field                                             |
 | `GraphicalUi.paginator(current_page, total_pages, on_page_change)`    | `(integer, integer, func(integer) -> any)`       | `widget`    | Page navigation control                                         |
 | `GraphicalUi.popover(label, content)`                                | `(string, widget)`                               | `widget`    | Click-to-open floating panel; closes on outside-click or Esc    |
 | `GraphicalUi.search_input(value, on_change, on_clear?)`               | `(string, func(string) -> any, func() -> any)`   | `widget`    | Text field with an optional clear button                        |
@@ -1457,7 +1457,7 @@ Commands represent side effects that the runtime executes on behalf of the appli
 | `GraphicalUi.http_post_full(url, body, on_result, headers?, timeout?)` | `(string, string, func(result<GraphicalUi.HttpResponse>) -> any, dictionary?, integer?)` | `command`    | Like `http_post`, but the result carries status, headers, and body |
 | `GraphicalUi.delay(milliseconds, on_done)`                         | `(integer, func(result<string>) -> any)`                               | `command`    | Wait for `milliseconds`, then invoke callback                   |
 | `GraphicalUi.write_clipboard(text)`                                | `(string)`                                                             | `command`    | Copy text to the system clipboard                               |
-| `GraphicalUi.random(min, max, on_result)`                          | `(number, number, func(number) -> any)`                                | `command`    | Generate a random number in `[min, max]`                        |
+| `GraphicalUi.random(minimum, maximum, on_result)`                          | `(number, number, func(number) -> any)`                                | `command`    | Generate a random number in `[min, max]`                        |
 | `GraphicalUi.focus(widget_id)`                                     | `(string)`                                                             | `command`    | Move keyboard focus to the widget with the given `id`           |
 | `GraphicalUi.blur(widget_id)`                                      | `(string)`                                                             | `command`    | Remove keyboard focus from the widget with the given `id`       |
 | `GraphicalUi.scroll_to(widget_id, behavior?)`                      | `(string, string?)`                                                    | `command`    | Scroll the widget with the given `id` into view (`behavior`: `"smooth"` default or `"instant"`) |
@@ -1489,7 +1489,7 @@ Subscriptions let an application react to external events that are not tied to a
 
 | Function                                            | Parameter Types                             | Return Type    | Description                                                              |
 | --------------------------------------------------- | ------------------------------------------- | -------------- | ------------------------------------------------------------------------ |
-| `GraphicalUi.on_tick(id, interval_ms, on_tick)`     | `(string, integer, func() -> any)`          | `subscription` | Fire `on_tick` every `interval_ms` milliseconds                          |
+| `GraphicalUi.on_tick(id, interval_milliseconds, on_tick)`     | `(string, integer, func() -> any)`          | `subscription` | Fire `on_tick` every `interval_milliseconds` milliseconds                          |
 | `GraphicalUi.on_key(id, key_filter, on_key)`        | `(string, string, func(string) -> any)`     | `subscription` | Fire on key press; `"*"` matches any key                                 |
 | `GraphicalUi.on_key_typed(id, key_filter, on_key)`  | `(string, string, func(GraphicalUi.KeyEvent) -> any)` | `subscription` | Like `on_key`, but the callback receives a typed `GraphicalUi.KeyEvent` record |
 | `GraphicalUi.on_resize(id, on_resize)`              | `(string, func(integer, integer) -> any)`   | `subscription` | Fire when the window is resized with `(width, height)`                   |
@@ -1502,7 +1502,7 @@ Subscriptions let an application react to external events that are not tied to a
 | `GraphicalUi.on_animation_frame(id, on_frame)`      | `(string, func() -> any)`                   | `subscription` | Fire before each browser animation frame                                 |
 | `GraphicalUi.on_drag(id, event_type, on_drag)`      | `(string, string, func(dictionary) -> any)` | `subscription` | Fire on drag events; `event_type` selects the phase                      |
 | `GraphicalUi.on_drag_typed(id, on_drag)`            | `(string, func(GraphicalUi.DragEvent) -> any)` | `subscription` | Like `on_drag`, but the callback receives a typed `GraphicalUi.DragEvent` record |
-| `GraphicalUi.on_idle(id, timeout_ms, on_idle)`      | `(string, integer, func() -> any)`          | `subscription` | Fire after `timeout_ms` of user inactivity                               |
+| `GraphicalUi.on_idle(id, timeout_milliseconds, on_idle)`      | `(string, integer, func() -> any)`          | `subscription` | Fire after `timeout_milliseconds` of user inactivity                               |
 | `GraphicalUi.on_media_query(id, query, on_match)`   | `(string, string, func(boolean) -> any)`    | `subscription` | Fire when a CSS media-query match state changes                          |
 | `GraphicalUi.on_offline(id, on_offline)`            | `(string, func() -> any)`                   | `subscription` | Fire when the browser goes offline                                       |
 | `GraphicalUi.on_online(id, on_online)`              | `(string, func() -> any)`                   | `subscription` | Fire when the browser comes online                                       |
@@ -1519,7 +1519,7 @@ The `on_mouse` callback receives a dictionary with `x`, `y`, `button` (`"left"`,
 
 `GraphicalUi.on_mouse_typed` is an additive, type-safe companion to `on_mouse`: it delivers the same mouse events, but the callback receives a typed `GraphicalUi.MouseEvent` record instead of a raw dictionary, so fields are autocompleted and typo-proof and the button can be matched exhaustively. Prefer it in new code; `on_mouse` stays for dynamic/dictionary handlers.
 
-`GraphicalUi.MouseEvent` record fields: `x` (`number`), `y` (`number`), `button` (`GraphicalUi.MouseButton`), `ctrl` (`boolean`), `shift` (`boolean`), `alt` (`boolean`). Coordinates are device-pixel measurements (a `number`, not an index).
+`GraphicalUi.MouseEvent` record fields: `x` (`number`), `y` (`number`), `button` (`GraphicalUi.MouseButton`), `control` (`boolean`), `shift` (`boolean`), `alt` (`boolean`). Coordinates are device-pixel measurements (a `number`, not an index).
 
 `GraphicalUi.MouseButton` is a closed choice with three variants, so a `match` over it is exhaustively checked by the type checker: `Left`, `Middle`, `Right`.
 
@@ -1537,11 +1537,11 @@ Each subscription requires a unique `id` string. The runtime uses the `id` to ma
 
 `GraphicalUi.on_key_typed(id, key_filter, on_key)` is the type-safe companion to `on_key`: it delivers the same key presses (with the same `key_filter`, where `"*"` matches any key), but the callback receives a typed `GraphicalUi.KeyEvent` record instead of a bare key string, giving structured access to the modifier state the browser already tracks. Prefer it when a shortcut depends on modifiers (e.g. `Ctrl+S`); `on_key` stays for simple single-key handlers.
 
-`GraphicalUi.KeyEvent` record fields: `key` (`string`, the pressed key's name — e.g. `"s"`, `"Enter"`, `"ArrowUp"`), `ctrl` (`boolean`), `shift` (`boolean`), `alt` (`boolean`), `meta` (`boolean`).
+`GraphicalUi.KeyEvent` record fields: `key` (`string`, the pressed key's name — e.g. `"s"`, `"Enter"`, `"ArrowUp"`), `control` (`boolean`), `shift` (`boolean`), `alt` (`boolean`), `meta` (`boolean`).
 
 ```luma
 GraphicalUi.on_key_typed("editor", "*", (GraphicalUi.KeyEvent e) -> {
-    if e.ctrl and e.key == "s" { "save" } else { "" }
+    if e.control and e.key == "s" { "save" } else { "" }
 })
 ```
 
@@ -1573,9 +1573,9 @@ GraphicalUi.on_visibility_change_typed("page", (GraphicalUi.VisibilityState s) -
 })
 ```
 
-`GraphicalUi.set_theme_mode_of(mode)` and `GraphicalUi.theme_mode_to_string(mode)` are the typed companions to `set_theme_mode`: the former takes a `GraphicalUi.ThemeMode` choice and the latter bridges it back to the `"light"` / `"dark"` / `"auto"` string, so a typo like `set_theme_mode("drak")` becomes a compile error. `GraphicalUi.ThemeMode` is a closed choice with three variants: `Light`, `Dark`, `Auto`.
+`GraphicalUi.set_theme_mode_of(mode)` and `GraphicalUi.theme_mode_to_string(mode)` are the typed companions to `set_theme_mode`: the former takes a `GraphicalUi.ThemeMode` choice and the latter bridges it back to the `"light"` / `"dark"` / `"auto"` string, so a typo like `set_theme_mode("drak")` becomes a compile error. `GraphicalUi.ThemeMode` is a closed choice with three variants: `Light`, `Dark`, `Automatic`.
 
-`GraphicalUi.scroll_to_of(widget_id, behavior)` is the typo-proof companion to `scroll_to`: it takes a `GraphicalUi.ScrollBehavior` choice instead of an open behavior string, lowering it to the same `"smooth"` / `"instant"` / `"auto"` value. `GraphicalUi.ScrollBehavior` is a closed choice with three variants: `Smooth`, `Instant`, `Auto`.
+`GraphicalUi.scroll_to_of(widget_id, behavior)` is the typo-proof companion to `scroll_to`: it takes a `GraphicalUi.ScrollBehavior` choice instead of an open behavior string, lowering it to the same `"smooth"` / `"instant"` / `"auto"` value. `GraphicalUi.ScrollBehavior` is a closed choice with three variants: `Smooth`, `Instant`, `Automatic`.
 
 `GraphicalUi.sort_direction_to_string(direction)` bridges a `GraphicalUi.SortDirection` choice to the `"asc"` / `"desc"` string the `table` `sort_direction` option carries; the `table` widget also accepts a `SortDirection` choice directly for that option, so the model can store a typed sort direction. `GraphicalUi.SortDirection` is a closed choice with two variants: `Ascending`, `Descending`.
 
@@ -1592,11 +1592,11 @@ history back into application state inside `update`.
 
 ### Components
 
-Components encapsulate a slice of the model and a render function into a reusable widget. The runtime memoizes components by `id` — if the same `id` is rendered again with an identical `model_slice` (compared by JSON serialisation), the cached widget is returned without invoking `render_fn`.
+Components encapsulate a slice of the model and a render function into a reusable widget. The runtime memoizes components by `id` — if the same `id` is rendered again with an identical `model_slice` (compared by JSON serialisation), the cached widget is returned without invoking `render_function`.
 
 | Function                                            | Parameter Types                      | Return Type | Description                                    |
 | --------------------------------------------------- | ------------------------------------ | ----------- | ---------------------------------------------- |
-| `GraphicalUi.component(id, model_slice, render_fn)` | `(string, any, func(any) -> widget)` | `widget`    | Reusable component with identity-based caching |
+| `GraphicalUi.component(id, model_slice, render_function)` | `(string, any, func(any) -> widget)` | `widget`    | Reusable component with identity-based caching |
 
 ### Routing
 
@@ -1621,11 +1621,11 @@ When rendering dynamic lists, wrap each item in `keyed` to give it a stable iden
 
 ### Error Boundaries
 
-Wrap a view function in `error_boundary` to catch rendering errors gracefully. If `view_fn` throws, `fallback_fn` is called with the error message instead of crashing the entire view.
+Wrap a view function in `error_boundary` to catch rendering errors gracefully. If `view_function` throws, `fallback_function` is called with the error message instead of crashing the entire view.
 
 | Function                                           | Parameter Types                              | Return Type | Description                                   |
 | -------------------------------------------------- | -------------------------------------------- | ----------- | --------------------------------------------- |
-| `GraphicalUi.error_boundary(fallback_fn, view_fn)` | `(func(string) -> widget, func() -> widget)` | `widget`    | Catch rendering errors with a fallback widget |
+| `GraphicalUi.error_boundary(fallback_function, view_function)` | `(func(string) -> widget, func() -> widget)` | `widget`    | Catch rendering errors with a fallback widget |
 
 ### Accessibility
 
@@ -1634,7 +1634,7 @@ Accessibility functions add ARIA attributes, manage focus, and provide screen re
 | Function                                       | Parameter Types        | Return Type | Description                                                     |
 | ---------------------------------------------- | ---------------------- | ----------- | --------------------------------------------------------------- |
 | `GraphicalUi.accessible(child, attributes)`    | `(widget, dictionary)` | `widget`    | Wrap a widget with ARIA attributes (`role`, `aria_label`, etc.) |
-| `GraphicalUi.aria_describedby(desc_id, child)` | `(string, widget)`     | `widget`    | Link a child to a description element by `id`                   |
+| `GraphicalUi.aria_describedby(description_id, child)` | `(string, widget)`     | `widget`    | Link a child to a description element by `id`                   |
 | `GraphicalUi.aria_live(level, child)`          | `(string, widget)`     | `widget`    | Mark a child as an ARIA live region (`"polite"`/`"assertive"`)  |
 | `GraphicalUi.focus(widget_id)`                 | `(string)`             | `command`   | Move keyboard focus to a widget (see Commands)                  |
 | `GraphicalUi.announce(text)`                   | `(string)`             | `command`   | Announce text to screen readers (see Commands)                  |
@@ -1649,10 +1649,10 @@ Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 | ------------------------------- | -------------------------- | ---------------- | ------------------------------ |
 | `Hash.algorithms()`             | `()`                       | `array<string>`  | List supported algorithm names |
 | `Hash.crc32(s)`                 | `(string)`                 | `integer`        | CRC-32 checksum                |
-| `Hash.digest(algo, s)`          | `(Hash.Algorithm \| string, string)` | `string` | Digest `s` with the named algorithm; accepts the `Hash.Algorithm` choice or its string name |
-| `Hash.digest_file(algo, path)`  | `(Hash.Algorithm \| string, string)` | `result<string>` | Streaming file digest with the named algorithm (`md5`/`sha1`/`sha256`/`sha512`); accepts the choice or string name |
-| `Hash.hmac_sha256(key, msg)`    | `(string, string)`         | `string`         | HMAC-SHA-256                   |
-| `Hash.hmac_sha512(key, msg)`    | `(string, string)`         | `string`         | HMAC-SHA-512                   |
+| `Hash.digest(algorithm, s)`          | `(Hash.Algorithm \| string, string)` | `string` | Digest `s` with the named algorithm; accepts the `Hash.Algorithm` choice or its string name |
+| `Hash.digest_file(algorithm, path)`  | `(Hash.Algorithm \| string, string)` | `result<string>` | Streaming file digest with the named algorithm (`md5`/`sha1`/`sha256`/`sha512`); accepts the choice or string name |
+| `Hash.hmac_sha256(key, message)`    | `(string, string)`         | `string`         | HMAC-SHA-256                   |
+| `Hash.hmac_sha512(key, message)`    | `(string, string)`         | `string`         | HMAC-SHA-512                   |
 | `Hash.md5(s)`                   | `(string)`                 | `string`         | MD5 digest (32-char hex)       |
 | `Hash.md5_file(path)`           | `(string)`                 | `result<string>` | MD5 of file contents           |
 | `Hash.md5_typed(s)`             | `(string)`                 | `Hash.Digest`    | MD5 digest tagged with its algorithm |
@@ -1665,7 +1665,7 @@ Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 | `Hash.sha512_file(path)`        | `(string)`                 | `result<string>` | SHA-512 of file contents       |
 | `Hash.sha512(s)`                | `(string)`                 | `string`         | SHA-512 digest (128-char hex)  |
 | `Hash.sha512_typed(s)`          | `(string)`                 | `Hash.Digest`    | SHA-512 digest tagged with its algorithm |
-| `Hash.verify(algo, data, hash)` | `(Hash.Algorithm \| string, string, string)` | `boolean` | Verify `hash` matches `data`; accepts the `Hash.Algorithm` choice or its string name |
+| `Hash.verify(algorithm, data, hash)` | `(Hash.Algorithm \| string, string, string)` | `boolean` | Verify `hash` matches `data`; accepts the `Hash.Algorithm` choice or its string name |
 
 `Hash.Algorithm` is a choice type with five variants — `Md5`, `Sha1`, `Sha256`, `Sha512`, `Crc32` — the discoverable, closed set of algorithms that `Hash.digest` and `Hash.verify` accept. Both functions take `Hash.Algorithm | string`: passing the choice variant is autocompleted and a typo becomes a compile error, while the string form (`"sha256"`, matching `Hash.algorithms()`) keeps every existing call working. This is the same "stringly-typed argument → choice, keep the string form for compatibility" dual-form as `Terminal.Color | string`.
 
@@ -1675,11 +1675,11 @@ boolean ok = Hash.verify(Hash.Algorithm.Sha256, "hello", h)
 boolean also_ok = Hash.verify("sha256", "hello", h)       # string form still works
 ```
 
-`Hash.Digest` is a record — `algorithm` (`Hash.Algorithm`), `hex` (`string`) — that pairs a hex digest with the algorithm that produced it, so a SHA-256 and an MD5 digest are no longer the same (bare-string) type and cannot be compared across algorithms by accident. The per-algorithm `*_typed` companions (`Hash.md5_typed`, `Hash.sha1_typed`, `Hash.sha256_typed`, `Hash.sha512_typed`) return it; the plain digest functions (`Hash.sha256`, …) still return a bare hex string.
+`Hash.Digest` is a record — `algorithm` (`Hash.Algorithm`), `hexadecimal` (`string`) — that pairs a hexadecimal digest with the algorithm that produced it, so a SHA-256 and an MD5 digest are no longer the same (bare-string) type and cannot be compared across algorithms by accident. The per-algorithm `*_typed` companions (`Hash.md5_typed`, `Hash.sha1_typed`, `Hash.sha256_typed`, `Hash.sha512_typed`) return it; the plain digest functions (`Hash.sha256`, …) still return a bare hexadecimal string.
 
 ```luma
 Hash.Digest d = Hash.sha256_typed("hello")
-print(d.hex)                                              # the 64-char hex string
+print(d.hexadecimal)                                     # the 64-char hex string
 match d.algorithm { case Hash.Algorithm.Sha256 { print("sha-256") } else { print("other") } }
 ```
 
@@ -1689,10 +1689,10 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 
 | Function                              | Parameter Types                            | Return Type             | Description                                                          |
 | ------------------------------------- | ------------------------------------------ | ----------------------- | -------------------------------------------------------------------- |
-| `Http.authorization_header(auth)`     | `(Http.Auth)`                              | `string`                | Render an `Http.Auth` choice into its `Authorization` header value    |
+| `Http.authorization_header(authorization)`     | `(Http.Auth)`                              | `string`                | Render an `Http.Auth` choice into its `Authorization` header value    |
 | `Http.basic_auth(user, pass)`         | `(string, string)`                         | `string`                | Build a Basic `Authorization` header value                           |
 | `Http.bearer_auth(token)`             | `(string)`                                 | `string`                | Build a Bearer `Authorization` header value                          |
-| `Http.build_query(params)`            | `(dictionary<string>)`                     | `string`                | Build query string (e.g. `"a=1&b=2"`)                                |
+| `Http.build_query(parameters)`            | `(dictionary<string>)`                     | `string`                | Build query string (e.g. `"a=1&b=2"`)                                |
 | `Http.build_url(parts)`               | `(Http.UrlParts)`                          | `string`                | Reassemble a URL from its parts (inverse of `parse_url`)             |
 | `Http.cookie_header(cookie)`          | `(Http.Cookie)`                            | `string`                | Format an `Http.Cookie` back into a `Set-Cookie`-style header string  |
 | `Http.delete(url)`                    | `(string)`                                 | `result<Http.Response>` | DELETE request                                                       |
@@ -1716,7 +1716,7 @@ Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https:
 | `Http.put_with(url, body, headers)`   | `(string, string, dictionary<string>)`     | `result<Http.Response>` | PUT with body and custom headers                                     |
 | `Http.request(opts, headers)`         | `(dictionary<string>, dictionary<string>)` | `result<Http.Response>` | Generic request (`opts` has `"method"` and `"url"` keys)             |
 | `Http.request_of(method, url)`        | `(Http.Method, string)`                    | `Http.Request`          | Build a typed request (empty headers/body, default 30 s timeout)     |
-| `Http.request_with(method, url, headers, body, timeout_ms)` | `(Http.Method, string, dictionary<string>, string, integer)` | `Http.Request` | Build a fully-specified typed request                    |
+| `Http.request_with(method, url, headers, body, timeout_milliseconds)` | `(Http.Method, string, dictionary<string>, string, integer)` | `Http.Request` | Build a fully-specified typed request                    |
 | `Http.send(request)`                  | `(Http.Request)`                           | `result<Http.Response>` | Perform a typed `Http.Request` and return the response               |
 | `Http.status_class(status)`           | `(integer)`                                | `result<Http.StatusClass>` | Classify a status code into its family; fail if outside 100–599    |
 | `Http.status_text(code)`              | `(integer)`                                | `string`                | Standard reason phrase for a status code (e.g. `404` → `"Not Found"`); generic fallback for unknown codes |
@@ -1735,7 +1735,7 @@ boolean is_json = mt.type == "application" && mt.subtype == "json"
 string charset = Dictionary.get_or(mt.parameters, "charset", "utf-8")
 ```
 
-`Http.Request` record fields: `method` (`Http.Method`), `url` (`string`), `headers` (`dictionary<string>`), `body` (`string`), `timeout_ms` (`integer`). Unlike the `Http.request` options dictionary — which is homogeneous and so forces the verb to be stringified — an `Http.Request` carries the `Http.Method` choice natively, so the request is type-checked and discoverable and its method can be matched exhaustively. Build one with `Http.request_of` (common case) or `Http.request_with` (full control), then run it with `Http.send`:
+`Http.Request` record fields: `method` (`Http.Method`), `url` (`string`), `headers` (`dictionary<string>`), `body` (`string`), `timeout_milliseconds` (`integer`). Unlike the `Http.request` options dictionary — which is homogeneous and so forces the verb to be stringified — an `Http.Request` carries the `Http.Method` choice natively, so the request is type-checked and discoverable and its method can be matched exhaustively. Build one with `Http.request_of` (common case) or `Http.request_with` (full control), then run it with `Http.send`:
 
 ```luma
 Http.Request req = Http.request_of(Http.Method.Get, "http://example.com/api")
@@ -1779,7 +1779,7 @@ failure(_other) { print("request failed") }
 }
 ```
 
-`Http.Auth` is a choice type modelling request credentials as a closed, exhaustive set: `Basic(username, password)` carries HTTP Basic credentials and `Bearer(token)` a bearer/OAuth token. `Http.authorization_header(auth)` renders it into the exact `Authorization` header value — `Basic(u, p)` becomes `"Basic " + base64("u:p")` and `Bearer(t)` becomes `"Bearer " + t` — so a scheme typo is a compile error instead of a hand-built `"Authrization"` header. It is the typed companion to the stringly-typed `Http.basic_auth` / `Http.bearer_auth` helpers (which remain), mirroring how `Http.method_to_string` renders an `Http.Method`:
+`Http.Auth` is a choice type modelling request credentials as a closed, exhaustive set: `Basic(username, password)` carries HTTP Basic credentials and `Bearer(token)` a bearer/OAuth token. `Http.authorization_header(authorization)` renders it into the exact `Authorization` header value — `Basic(u, p)` becomes `"Basic " + base64("u:p")` and `Bearer(t)` becomes `"Bearer " + t` — so a scheme typo is a compile error instead of a hand-built `"Authrization"` header. It is the typed companion to the stringly-typed `Http.basic_auth` / `Http.bearer_auth` helpers (which remain), mirroring how `Http.method_to_string` renders an `Http.Method`:
 
 ```luma
 Http.Auth auth = Http.Auth.Bearer("my-token")
@@ -1812,7 +1812,7 @@ Serialise and deserialise Luma values as JSON.
 | `Json.has_path(json, path)`    | `(string, string)`    | `boolean`                      | Whether the dot/`[index]` path exists (false for invalid JSON or a missing path) |
 | `Json.index(v, i)`             | `(Json.Value, integer)` | `optional<Json.Value>`       | Index into a `JsonArray`; `none` if out of bounds or `v` is not an array          |
 | `Json.is_array(v)`             | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonArray`                                                     |
-| `Json.is_bool(v)`              | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonBool`                                                      |
+| `Json.is_boolean(v)`              | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonBool`                                                      |
 | `Json.is_null(v)`              | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonNull`                                                      |
 | `Json.is_number(v)`            | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonNumber`                                                    |
 | `Json.is_object(v)`            | `(Json.Value)`        | `boolean`                      | Whether `v` is a `JsonObject`                                                    |
@@ -1913,7 +1913,7 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.set(s, key, value)`          | `(key_value_store, string, string)`     | `result<key_value_store>` | Set a key; fail if read-only                      |
 | `KeyValueStore.set_many(s, entries)`        | `(key_value_store, dictionary<string>)` | `result<key_value_store>` | Batch set; fail if read-only                      |
 | `KeyValueStore.to_dictionary(s)`            | `(key_value_store)`                     | `dictionary<string>`      | Convert to dictionary                             |
-| `KeyValueStore.update(s, key, fn)`          | `(key_value_store, string, function(optional<string>) -> string)` | `result<key_value_store>` | Set key to `fn(current-or-none)`; fail if read-only |
+| `KeyValueStore.update(s, key, function)`          | `(key_value_store, string, function(optional<string>) -> string)` | `result<key_value_store>` | Set key to `fn(current-or-none)`; fail if read-only |
 | `KeyValueStore.values(s)`                   | `(key_value_store)`                     | `array<string>`           | All values                                        |
 
 ## 21 — LinearAlgebra
@@ -1929,14 +1929,14 @@ Vector and matrix operations using arrays of numbers.
 | `LinearAlgebra.add(a, b)`           | `(array<number>, array<number>)` | `result<array<number>>` | Vector addition                               |
 | `LinearAlgebra.angle(a, b)`         | `(array<number>, array<number>)` | `result<number>`        | Angle between vectors in radians              |
 | `LinearAlgebra.cross(a, b)`         | `(array<number>, array<number>)` | `result<array<number>>` | Cross product (3D only)                       |
-| `LinearAlgebra.dimension(v)`        | `(array<number>)`                | `integer`               | Number of elements                            |
+| `LinearAlgebra.dimension(vector)`        | `(array<number>)`                | `integer`               | Number of elements                            |
 | `LinearAlgebra.distance(a, b)`      | `(array<number>, array<number>)` | `result<number>`        | Euclidean distance; fail if dimensions differ |
 | `LinearAlgebra.dot(a, b)`           | `(array<number>, array<number>)` | `result<number>`        | Dot product                                   |
 | `LinearAlgebra.is_orthogonal(a, b)` | `(array<number>, array<number>)` | `boolean`               | Whether two vectors are orthogonal            |
-| `LinearAlgebra.negate(v)`           | `(array<number>)`                | `array<number>`         | Negate all elements                           |
-| `LinearAlgebra.norm(v)`             | `(array<number>)`                | `number`                | Euclidean norm                                |
-| `LinearAlgebra.normalize(v)`        | `(array<number>)`                | `result<array<number>>` | Unit vector in same direction                 |
-| `LinearAlgebra.scale(v, s)`         | `(array<number>, number)`        | `array<number>`         | Scalar multiplication                         |
+| `LinearAlgebra.negate(vector)`           | `(array<number>)`                | `array<number>`         | Negate all elements                           |
+| `LinearAlgebra.norm(vector)`             | `(array<number>)`                | `number`                | Euclidean norm                                |
+| `LinearAlgebra.normalize(vector)`        | `(array<number>)`                | `result<array<number>>` | Unit vector in same direction                 |
+| `LinearAlgebra.scale(vector, s)`         | `(array<number>, number)`        | `array<number>`         | Scalar multiplication                         |
 | `LinearAlgebra.subtract(a, b)`      | `(array<number>, array<number>)` | `result<array<number>>` | Vector subtraction                            |
 | `LinearAlgebra.unit_vector(n, i)`   | `(integer, integer)`             | `array<number>`         | Unit vector with 1 at index `i`               |
 | `LinearAlgebra.zero_vector(n)`      | `(integer)`                      | `array<number>`         | Zero vector of dimension `n`                  |
@@ -1946,33 +1946,33 @@ Vector and matrix operations using arrays of numbers.
 | Function                              | Parameter Types                                | Return Type                    | Description                     |
 | ------------------------------------- | ---------------------------------------------- | ------------------------------ | ------------------------------- |
 | `LinearAlgebra.add_matrix(a, b)`      | `(array<array<number>>, array<array<number>>)` | `result<array<array<number>>>` | Element-wise matrix addition    |
-| `LinearAlgebra.columns(m)`            | `(array<array<number>>)`                       | `integer`                      | Number of columns               |
-| `LinearAlgebra.determinant(m)`        | `(array<array<number>>)`                       | `result<number>`               | Determinant                     |
-| `LinearAlgebra.diagonal(v)`           | `(array<number>)`                              | `array<array<number>>`         | Diagonal matrix from vector     |
+| `LinearAlgebra.columns(matrix)`            | `(array<array<number>>)`                       | `integer`                      | Number of columns               |
+| `LinearAlgebra.determinant(matrix)`        | `(array<array<number>>)`                       | `result<number>`               | Determinant                     |
+| `LinearAlgebra.diagonal(vector)`           | `(array<number>)`                              | `array<array<number>>`         | Diagonal matrix from vector     |
 | `LinearAlgebra.identity(n)`           | `(integer)`                                    | `array<array<number>>`         | n×n identity matrix             |
-| `LinearAlgebra.inverse(m)`            | `(array<array<number>>)`                       | `result<array<array<number>>>` | Matrix inverse                  |
-| `LinearAlgebra.is_square(m)`          | `(array<array<number>>)`                       | `boolean`                      | Whether the matrix is square    |
-| `LinearAlgebra.is_symmetric(m)`       | `(array<array<number>>)`                       | `boolean`                      | Whether the matrix is symmetric |
+| `LinearAlgebra.inverse(matrix)`            | `(array<array<number>>)`                       | `result<array<array<number>>>` | Matrix inverse                  |
+| `LinearAlgebra.is_square(matrix)`          | `(array<array<number>>)`                       | `boolean`                      | Whether the matrix is square    |
+| `LinearAlgebra.is_symmetric(matrix)`       | `(array<array<number>>)`                       | `boolean`                      | Whether the matrix is symmetric |
 | `LinearAlgebra.hadamard(a, b)`        | `(array<number>, array<number>)`               | `result<array<number>>`        | Element-wise vector product; fail on dimension mismatch |
 | `LinearAlgebra.hadamard_matrix(a, b)` | `(array<array<number>>, array<array<number>>)` | `result<array<array<number>>>` | Element-wise matrix product; fail on shape mismatch |
 | `LinearAlgebra.project(a, b)`         | `(array<number>, array<number>)`               | `result<array<number>>`        | Projection of `a` onto `b`; fail on dimension mismatch or zero `b` |
 | `LinearAlgebra.reject(a, b)`          | `(array<number>, array<number>)`               | `result<array<number>>`        | Perpendicular component `a - proj_b(a)`; fail on dimension mismatch or zero `b` |
-| `LinearAlgebra.lerp(a, b, t)`         | `(array<number>, array<number>, number)`       | `result<array<number>>`        | Component-wise `a + t·(b − a)`; fail on dimension mismatch |
+| `LinearAlgebra.linear_interpolation(a, b, t)`         | `(array<number>, array<number>, number)`       | `result<array<number>>`        | Component-wise `a + t·(b − a)`; fail on dimension mismatch |
 | `LinearAlgebra.outer(a, b)`           | `(array<number>, array<number>)`               | `result<array<array<number>>>` | Outer product with entry `(i,j) = a[i]·b[j]` |
-| `LinearAlgebra.rank(m)`               | `(array<array<number>>)`                       | `integer`                      | Matrix rank via Gaussian elimination |
-| `LinearAlgebra.is_identity(m)`        | `(array<array<number>>)`                       | `boolean`                      | Whether the matrix is the identity |
-| `LinearAlgebra.is_diagonal(m)`        | `(array<array<number>>)`                       | `boolean`                      | Whether all off-diagonal entries are zero |
-| `LinearAlgebra.sum(v)`                | `(array<number>)`                              | `number`                       | Sum of the vector's components  |
-| `LinearAlgebra.mean(v)`               | `(array<number>)`                              | `result<number>`               | Mean of the components; fail on empty vector |
-| `LinearAlgebra.clamp(v, lo, hi)`      | `(array<number>, number, number)`              | `array<number>`                | Clamp each component to `[lo, hi]` |
+| `LinearAlgebra.rank(matrix)`               | `(array<array<number>>)`                       | `integer`                      | Matrix rank via Gaussian elimination |
+| `LinearAlgebra.is_identity(matrix)`        | `(array<array<number>>)`                       | `boolean`                      | Whether the matrix is the identity |
+| `LinearAlgebra.is_diagonal(matrix)`        | `(array<array<number>>)`                       | `boolean`                      | Whether all off-diagonal entries are zero |
+| `LinearAlgebra.sum(vector)`                | `(array<number>)`                              | `number`                       | Sum of the vector's components  |
+| `LinearAlgebra.mean(vector)`               | `(array<number>)`                              | `result<number>`               | Mean of the components; fail on empty vector |
+| `LinearAlgebra.clamp(vector, low, high)`      | `(array<number>, number, number)`              | `array<number>`                | Clamp each component to `[lo, hi]` |
 | `LinearAlgebra.multiply(a, b)`        | `(array<array<number>>, array<array<number>>)` | `result<array<array<number>>>` | Matrix multiplication           |
-| `LinearAlgebra.multiply_vector(m, v)` | `(array<array<number>>, array<number>)`        | `result<array<number>>`        | Matrix–vector multiplication    |
-| `LinearAlgebra.rows(m)`               | `(array<array<number>>)`                       | `integer`                      | Number of rows                  |
-| `LinearAlgebra.scale_matrix(m, s)`    | `(array<array<number>>, number)`               | `array<array<number>>`         | Multiply all elements by scalar |
-| `LinearAlgebra.shape(m)`              | `(array<array<number>>)`                       | `(integer, integer)`           | `(rows, columns)`               |
+| `LinearAlgebra.multiply_vector(matrix, vector)` | `(array<array<number>>, array<number>)`        | `result<array<number>>`        | Matrix–vector multiplication    |
+| `LinearAlgebra.rows(matrix)`               | `(array<array<number>>)`                       | `integer`                      | Number of rows                  |
+| `LinearAlgebra.scale_matrix(matrix, s)`    | `(array<array<number>>, number)`               | `array<array<number>>`         | Multiply all elements by scalar |
+| `LinearAlgebra.shape(matrix)`              | `(array<array<number>>)`                       | `(integer, integer)`           | `(rows, columns)`               |
 | `LinearAlgebra.solve(a, b)`           | `(array<array<number>>, array<number>)`        | `result<array<number>>`        | Solve Ax = b                    |
-| `LinearAlgebra.trace(m)`              | `(array<array<number>>)`                       | `result<number>`               | Trace (sum of diagonal)         |
-| `LinearAlgebra.transpose(m)`          | `(array<array<number>>)`                       | `array<array<number>>`         | Transpose matrix                |
+| `LinearAlgebra.trace(matrix)`              | `(array<array<number>>)`                       | `result<number>`               | Trace (sum of diagonal)         |
+| `LinearAlgebra.transpose(matrix)`          | `(array<array<number>>)`                       | `array<array<number>>`         | Transpose matrix                |
 | `LinearAlgebra.zero_matrix(r, c)`     | `(integer, integer)`                           | `array<array<number>>`         | r×c zero matrix                 |
 
 ## 22 — Log
@@ -1982,20 +1982,20 @@ Structured logging with configurable levels. Messages are written to stderr by d
 | Function                      | Parameter Types    | Return Type    | Description                                          |
 | ----------------------------- | ------------------ | -------------- | ---------------------------------------------------- |
 | `Log.clear_context()`         | `()`               | `none`         | Remove all context                                   |
-| `Log.debug(msg)`              | `(string)`         | `none`         | Log at debug level                                   |
-| `Log.error(msg)`              | `(string)`         | `none`         | Log at error level                                   |
+| `Log.debug(message)`              | `(string)`         | `none`         | Log at debug level                                   |
+| `Log.error(message)`              | `(string)`         | `none`         | Log at error level                                   |
 | `Log.get_level()`             | `()`               | `Log.Level`    | Current log level                                    |
-| `Log.info(msg)`               | `(string)`         | `none`         | Log at info level                                    |
+| `Log.information(message)`               | `(string)`         | `none`         | Log at info level                                    |
 | `Log.is_enabled(level)`       | `(Log.Level \| string)` | `boolean` | Whether a message at `level` would be emitted (guards expensive builds) |
-| `Log.log(level, msg)`         | `(Log.Level \| string, string)` | `none` | Emit `msg` at a runtime-chosen level                 |
+| `Log.log(level, message)`         | `(Log.Level \| string, string)` | `none` | Emit `message` at a runtime-chosen level                 |
 | `Log.reset()`                 | `()`               | `none`         | Reset level, format, output, and context to defaults |
 | `Log.set_context(key, value)` | `(string, string)` | `none`         | Add key–value context to log messages                |
 | `Log.set_format(format)`      | `(string)`         | `none`         | Set custom format template                           |
 | `Log.set_level(level)`        | `(Log.Level)`      | `none`         | Set minimum log level                                |
 | `Log.set_output(target)`      | `(Log.Output \| string)` | `result<void>` | Redirect to a file, `Stderr`, or `Stdout`            |
-| `Log.warn(msg)`               | `(string)`         | `none`         | Log at warn level                                    |
+| `Log.warning(message)`               | `(string)`         | `none`         | Log at warn level                                    |
 
-Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level` choice type provides variants: `Log.Level.Debug`, `Log.Level.Info`, `Log.Level.Warn`, `Log.Level.Error`, `Log.Level.Off`. For convenience, `Log.set_level` also accepts lowercase strings (`"debug"`, `"info"`, `"warn"`, `"error"`, `"off"`).
+Levels are ordered: `Debug` < `Information` < `Warning` < `Error` < `Off`. The `Log.Level` choice type provides variants: `Log.Level.Debug`, `Log.Level.Information`, `Log.Level.Warning`, `Log.Level.Error`, `Log.Level.Off`. For convenience, `Log.set_level` also accepts lowercase strings (`"debug"`, `"info"`, `"warn"`, `"error"`, `"off"`).
 
 `Log.set_output` accepts a file path or one of the special strings `"stderr"` (default) or `"stdout"`. When given a file path it appends to the file, creating it if it does not exist.
 
@@ -2007,43 +2007,25 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | ------------------------------------- | -------------------------------- | ----------------- | -------------------------------------------------------------------------------- |
 | `Math.absolute(x)`                    | `(integer \| number)`            | `result<integer \| number>` | Absolute value of `x`; fail on integer overflow                                  |
 | `Math.approximately_equal(a, b)`      | `(number, number)`               | `boolean`         | Whether `a` and `b` are equal within a tolerance (default `1e-9`)                |
-| `Math.approximately_equal(a, b, eps)` | `(number, number, number)`       | `boolean`         | Whether `a` and `b` are equal within `eps`                                       |
+| `Math.approximately_equal(a, b, epsilon)` | `(number, number, number)`       | `boolean`         | Whether `a` and `b` are equal within `epsilon`                                       |
 | `Math.arc_cosine(x)`                  | `(number)`                       | `result<number>`  | Inverse cosine; fail if `x` outside [−1, 1]                                      |
 | `Math.arc_sine(x)`                    | `(number)`                       | `result<number>`  | Inverse sine; fail if `x` outside [−1, 1]                                        |
 | `Math.arc_tangent(x)`                 | `(number)`                       | `result<number>`  | Inverse tangent                                                                  |
-| `Math.atan2(y, x)`                    | `(number, number)`               | `result<number>`  | Arctangent of y/x considering signs; fail if result is NaN                       |
+| `Math.arc_tangent2(y, x)`                    | `(number, number)`               | `result<number>`  | Arctangent of y/x considering signs; fail if result is NaN                       |
 | `Math.ceil(x)`                        | `(number)`                       | `result<integer>` | Round up to nearest integer; fail on overflow                                    |
 | `Math.combinations(n, k)`             | `(integer, integer)`             | `result<integer>` | Number of ways to choose `k` of `n` (nCr); fail if `n < 0`, `k < 0`, `k > n`, or overflow |
-| `Math.complex(real, imaginary)`       | `(number, number)`               | `Math.Complex`    | Construct a complex number                                                        |
-| `Math.complex_add(a, b)`              | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Sum `a + b`                                                                       |
-| `Math.complex_argument(c)`            | `(Math.Complex)`                 | `number`          | Argument (phase angle) of `c` in radians                                          |
-| `Math.complex_conjugate(c)`           | `(Math.Complex)`                 | `Math.Complex`    | Complex conjugate of `c`                                                          |
-| `Math.complex_divide(a, b)`           | `(Math.Complex, Math.Complex)`   | `result<Math.Complex>` | Quotient `a / b`; fail if `b` is zero                                             |
-| `Math.complex_from_polar(p)`          | `(Math.Polar)`                   | `Math.Complex`    | Convert a `Math.Polar` to a `Math.Complex` (total conversion)                    |
-| `Math.complex_magnitude(c)`           | `(Math.Complex)`                 | `number`          | Magnitude (modulus) of `c`                                                        |
-| `Math.complex_multiply(a, b)`         | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Product `a * b`                                                                   |
-| `Math.complex_subtract(a, b)`         | `(Math.Complex, Math.Complex)`   | `Math.Complex`    | Difference `a - b`                                                                |
-| `Math.complex_to_polar(c)`            | `(Math.Complex)`                 | `Math.Polar`      | Convert a `Math.Complex` to a `Math.Polar` (total conversion)                    |
-| `Math.clamp(x, lo, hi)`               | `(number, number, number)`       | `result<number>`  | Clamp `x` to `[lo, hi]`; fail if `lo > hi`                                       |
+| `Math.clamp(x, low, high)`               | `(number, number, number)`       | `result<number>`  | Clamp `x` to `[lo, hi]`; fail if `lo > hi`                                       |
 | `Math.cosine(x)`                      | `(number)`                       | `result<number>`  | Cosine; fail if result is NaN or infinite                                        |
 | `Math.cube_root(x)`                   | `(number)`                       | `number`          | Cube root of `x`                                                                 |
 | `Math.degrees(rad)`                   | `(number)`                       | `number`          | Convert radians to degrees                                                       |
 | `Math.exponential(x)`                 | `(number)`                       | `result<number>`  | e^x                                                                              |
 | `Math.factorial(n)`                   | `(integer)`                      | `result<integer>` | n!; fail if `n < 0` or `n > 20`                                                  |
 | `Math.floor(x)`                       | `(number)`                       | `result<integer>` | Round down to nearest integer; fail on overflow                                  |
-| `Math.fraction(numerator, denominator)` | `(integer, integer)`           | `result<Math.Fraction>` | Exact rational in lowest terms with a positive denominator; fail if `denominator` is 0 |
-| `Math.fraction_add(a, b)`             | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact sum `a + b`; runtime error on int64 overflow                               |
-| `Math.fraction_compare(a, b)`         | `(Math.Fraction, Math.Fraction)` | `Ordering`        | Order `a` against `b` exactly (`Less`, `Equal`, `Greater`)                        |
-| `Math.fraction_divide(a, b)`          | `(Math.Fraction, Math.Fraction)` | `result<Math.Fraction>` | Exact quotient `a / b`; fail if `b` is zero                                       |
-| `Math.fraction_multiply(a, b)`        | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact product `a * b`; runtime error on int64 overflow                           |
-| `Math.fraction_subtract(a, b)`        | `(Math.Fraction, Math.Fraction)` | `Math.Fraction`   | Exact difference `a - b`; runtime error on int64 overflow                        |
-| `Math.fraction_to_number(f)`          | `(Math.Fraction)`                | `number`          | Approximate `f` as a floating-point `number`                                     |
-| `Math.from_polar(p)`                  | `(Math.Polar)`                   | `Math.Vector2`    | Convert a `Math.Polar` to a `Math.Vector2` (total conversion)                     |
 | `Math.greatest_common_divisor(a, b)`  | `(integer, integer)`             | `result<integer>` | GCD of `a` and `b`                                                               |
 | `Math.hyperbolic_cosine(x)`           | `(number)`                       | `result<number>`  | Hyperbolic cosine; fail if result is infinite                                    |
 | `Math.hyperbolic_sine(x)`             | `(number)`                       | `result<number>`  | Hyperbolic sine; fail if result is infinite                                      |
 | `Math.hyperbolic_tangent(x)`          | `(number)`                       | `number`          | Hyperbolic tangent (always bounded to [−1, 1])                                   |
-| `Math.hypot(x, y)`                    | `(number, number)`               | `number`          | Hypotenuse √(x² + y²)                                                            |
+| `Math.hypotenuse(x, y)`                    | `(number, number)`               | `number`          | Hypotenuse √(x² + y²)                                                            |
 | `Math.is_infinite(x)`                 | `(number)`                       | `boolean`         | Whether `x` is +∞ or −∞                                                          |
 | `Math.is_finite(x)`                   | `(number)`                       | `boolean`         | Whether `x` is neither ±∞ nor NaN                                                |
 | `Math.is_even(n)`                     | `(integer)`                      | `boolean`         | Whether `n` is even (negative-safe)                                             |
@@ -2051,153 +2033,86 @@ Levels are ordered: `Debug` < `Info` < `Warn` < `Error` < `Off`. The `Log.Level`
 | `Math.is_odd(n)`                      | `(integer)`                      | `boolean`         | Whether `n` is odd (negative-safe)                                              |
 | `Math.is_prime(n)`                    | `(integer)`                      | `boolean`         | Whether `n` is prime                                                             |
 | `Math.least_common_multiple(a, b)`    | `(integer, integer)`             | `result<integer>` | LCM of `a` and `b`; fail on overflow                                             |
-| `Math.lerp(a, b, t)`                  | `(number, number, number)`       | `result<number>`  | Linear interpolation; fail if `t` outside [0, 1]                                 |
+| `Math.linear_interpolation(a, b, t)`                  | `(number, number, number)`       | `result<number>`  | Linear interpolation; fail if `t` outside [0, 1]                                 |
 | `Math.log(base, value)`               | `(number, number)`               | `result<number>`  | Logarithm of `value` with `base`; fail if base ≤ 0, base = 1, or value ≤ 0       |
 | `Math.log_10(x)`                      | `(number)`                       | `result<number>`  | Base-10 logarithm                                                                |
 | `Math.log_2(x)`                       | `(number)`                       | `result<number>`  | Base-2 logarithm                                                                 |
 | `Math.log_e(x)`                       | `(number)`                       | `result<number>`  | Natural logarithm                                                                |
 | `Math.log_base(x, base)`              | `(number, number)`               | `result<number>`  | Logarithm of `x` in arbitrary `base`; fail if `x ≤ 0`, `base ≤ 0`, or `base = 1` |
 | `Math.nth_root(x, n)`                 | `(number, number)`               | `result<number>`  | `n`-th root of `x`; fail on an even/fractional root of a negative `x` or `n = 0` |
-| `Math.wrap(x, lo, hi)`                | `(number, number, number)`       | `number`          | Wrap `x` cyclically into `[lo, hi)`                                              |
+| `Math.wrap(x, low, high)`                | `(number, number, number)`       | `number`          | Wrap `x` cyclically into `[lo, hi)`                                              |
 | `Math.normalize_angle(rad)`           | `(number)`                       | `number`          | Normalise an angle (radians) to `[−π, π]`                                        |
 | `Math.angle_difference(a, b)`         | `(number, number)`               | `number`          | Shortest signed difference between two angles (radians)                          |
 | `Math.sigmoid(x)`                     | `(number)`                       | `number`          | Logistic function `1 / (1 + e^−x)`                                               |
 | `Math.gamma(x)`                       | `(number)`                       | `result<number>`  | Gamma function; fail at non-positive integer poles                               |
-| `Math.erf(x)`                         | `(number)`                       | `number`          | Error function                                                                    |
+| `Math.error_function(x)`                         | `(number)`                       | `number`          | Error function                                                                    |
 | `Math.digit_sum(n)`                   | `(integer)`                      | `integer`         | Sum of the decimal digits of `\|n\|`                                             |
 | `Math.digit_count(n)`                 | `(integer)`                      | `integer`         | Number of decimal digits of `n`                                                  |
-| `Math.max(a, b)`                      | `(number, number)`               | `number`          | Larger of two values                                                             |
-| `Math.min(a, b)`                      | `(number, number)`               | `number`          | Smaller of two values                                                            |
+| `Math.maximum(a, b)`                      | `(number, number)`               | `number`          | Larger of two values                                                             |
+| `Math.minimum(a, b)`                      | `(number, number)`               | `number`          | Smaller of two values                                                            |
 | `Math.permutations(n, k)`             | `(integer, integer)`             | `result<integer>` | Number of ordered arrangements of `k` of `n` (nPr); fail if `n < 0`, `k < 0`, `k > n`, or overflow |
 | `Math.power(base, exp)`               | `(number, number)`               | `result<number>`  | `base` raised to `exp`; fail if result is NaN or Inf                             |
 | `Math.radians(deg)`                   | `(number)`                       | `number`          | Convert degrees to radians                                                       |
 | `Math.remainder(a, b)`                | `(integer \| number, integer \| number)` | `result<integer \| number>` | Remainder of `a` divided by `b`; fail if `b` is zero                             |
-| `Math.remap(value, in_min, in_max, out_min, out_max)` | `(number, number, number, number, number)` | `result<number>` | Linearly re-map `value` from input range to output range; fail if `in_min == in_max` |
+| `Math.remap(value, in_minimum, in_maximum, out_minimum, out_maximum)` | `(number, number, number, number, number)` | `result<number>` | Linearly re-map `value` from input range to output range; fail if `in_min == in_max` |
 | `Math.round(x)`                       | `(number)`                       | `result<integer>` | Round to nearest integer; fail on overflow                                       |
 | `Math.round_to(x, places)`            | `(number, integer)`              | `result<number>`  | Round `x` to `places` decimal places; fail if `places` is negative or above 15   |
 | `Math.sign(x)`                        | `(number)`                       | `integer`         | −1, 0, or 1                                                                      |
 | `Math.sign_of(x)`                     | `(number)`                       | `Sign`            | Sign of `x` as a typed `Sign` choice (`Negative`, `Zero`, `Positive`)           |
-| `Math.sin_of(angle)`                  | `(Math.Angle)`                   | `number`          | Sine of a unit-safe `Math.Angle` (converts to radians first)                    |
+| `Math.sine_of(angle)`                  | `(Math.Angle)`                   | `number`          | Sine of a unit-safe `Math.Angle` (converts to radians first)                    |
 | `Math.sine(x)`                        | `(number)`                       | `result<number>`  | Sine; fail if result is NaN or infinite                                          |
 | `Math.smooth_step(edge0, edge1, x)`   | `(number, number, number)`       | `result<number>`  | Smoothstep interpolation between `edge0` and `edge1`; fail if `edge0 == edge1`   |
 | `Math.square_root(x)`                 | `(number)`                       | `result<number>`  | Square root; fail if `x` is negative                                             |
-| `Math.sum(arr)`                       | `(array<number>)`                | `result<integer \| number>` | Sum of all elements; fail on a non-numeric element                               |
+| `Math.sum(array)`                       | `(array<number>)`                | `result<integer \| number>` | Sum of all elements; fail on a non-numeric element                               |
 | `Math.tangent(x)`                     | `(number)`                       | `result<number>`  | Tangent; fail if result is NaN or infinite                                       |
 | `Math.to_degrees(angle)`              | `(Math.Angle)`                   | `number`          | The `Math.Angle` as a number of degrees                                         |
-| `Math.to_polar(v)`                    | `(Math.Vector2)`                 | `Math.Polar`      | Convert a `Math.Vector2` to a `Math.Polar` (total conversion)                     |
 | `Math.to_radians(angle)`              | `(Math.Angle)`                   | `number`          | The `Math.Angle` as a number of radians                                         |
 | `Math.truncate(x)`                    | `(number)`                       | `result<integer>` | Truncate toward zero; fail on overflow                                           |
 | `Math.vector2(x, y)`                  | `(number, number)`               | `Math.Vector2`    | Construct a 2D vector                                                            |
-| `Math.vec2_add(a, b)`                 | `(Math.Vector2, Math.Vector2)`   | `Math.Vector2`    | Component-wise sum `a + b`                                                        |
-| `Math.vec2_sub(a, b)`                 | `(Math.Vector2, Math.Vector2)`   | `Math.Vector2`    | Component-wise difference `a - b`                                                |
-| `Math.vec2_scale(v, s)`               | `(Math.Vector2, number)`         | `Math.Vector2`    | Scale `v` by scalar `s`                                                          |
-| `Math.vec2_dot(a, b)`                 | `(Math.Vector2, Math.Vector2)`   | `number`          | Dot product                                                                      |
-| `Math.vec2_length(v)`                 | `(Math.Vector2)`                 | `number`          | Euclidean length                                                                 |
-| `Math.vec2_normalize(v)`              | `(Math.Vector2)`                 | `Math.Vector2`    | Unit vector (the zero vector is returned unchanged)                             |
-| `Math.vector3(x, y, z)`               | `(number, number, number)`       | `Math.Vector3`    | Construct a 3D vector                                                            |
-| `Math.vec3_add(a, b)`                 | `(Math.Vector3, Math.Vector3)`   | `Math.Vector3`    | Component-wise sum `a + b`                                                        |
-| `Math.vec3_sub(a, b)`                 | `(Math.Vector3, Math.Vector3)`   | `Math.Vector3`    | Component-wise difference `a - b`                                                |
-| `Math.vec3_scale(v, s)`               | `(Math.Vector3, number)`         | `Math.Vector3`    | Scale `v` by scalar `s`                                                          |
-| `Math.vec3_dot(a, b)`                 | `(Math.Vector3, Math.Vector3)`   | `number`          | Dot product                                                                      |
-| `Math.vec3_cross(a, b)`               | `(Math.Vector3, Math.Vector3)`   | `Math.Vector3`    | Cross product `a × b`                                                            |
-| `Math.vec3_length(v)`                 | `(Math.Vector3)`                 | `number`          | Euclidean length                                                                 |
-| `Math.vec3_normalize(v)`              | `(Math.Vector3)`                 | `Math.Vector3`    | Unit vector (the zero vector is returned unchanged)                             |
-| `Math.vector4(x, y, z, w)`            | `(number, number, number, number)` | `Math.Vector4`  | Construct a 4D (homogeneous) vector                                              |
-| `Math.vec4_add(a, b)`                 | `(Math.Vector4, Math.Vector4)`   | `Math.Vector4`    | Component-wise sum `a + b`                                                        |
-| `Math.vec4_sub(a, b)`                 | `(Math.Vector4, Math.Vector4)`   | `Math.Vector4`    | Component-wise difference `a - b`                                                |
-| `Math.vec4_scale(v, s)`               | `(Math.Vector4, number)`         | `Math.Vector4`    | Scale `v` by scalar `s`                                                          |
-| `Math.vec4_dot(a, b)`                 | `(Math.Vector4, Math.Vector4)`   | `number`          | Dot product                                                                      |
-| `Math.vec4_length(v)`                 | `(Math.Vector4)`                 | `number`          | Euclidean length                                                                 |
-| `Math.vec4_normalize(v)`              | `(Math.Vector4)`                 | `Math.Vector4`    | Unit vector (the zero vector is returned unchanged)                             |
-| `Math.matrix2(m00, m01, m10, m11)`    | `(number, number, number, number)` | `Math.Matrix2`  | Construct a 2×2 matrix (row-major)                                              |
-| `Math.mat2_identity()`                | `()`                             | `Math.Matrix2`    | The 2×2 identity matrix                                                          |
-| `Math.mat2_multiply(a, b)`            | `(Math.Matrix2, Math.Matrix2)`   | `Math.Matrix2`    | Matrix product `a · b`                                                           |
-| `Math.mat2_determinant(m)`            | `(Math.Matrix2)`                 | `number`          | Determinant of a 2×2 matrix                                                      |
-| `Math.mat2_transform(m, v)`           | `(Math.Matrix2, Math.Vector2)`   | `Math.Vector2`    | Apply the transform `m · v`                                                      |
-| `Math.matrix3(m00, …, m22)`           | `(number × 9)`                   | `Math.Matrix3`    | Construct a 3×3 matrix (row-major)                                              |
-| `Math.mat3_identity()`                | `()`                             | `Math.Matrix3`    | The 3×3 identity matrix                                                          |
-| `Math.mat3_multiply(a, b)`            | `(Math.Matrix3, Math.Matrix3)`   | `Math.Matrix3`    | Matrix product `a · b`                                                           |
-| `Math.mat3_determinant(m)`            | `(Math.Matrix3)`                 | `number`          | Determinant of a 3×3 matrix                                                      |
-| `Math.mat3_transform(m, v)`           | `(Math.Matrix3, Math.Vector3)`   | `Math.Vector3`    | Apply the transform `m · v`                                                      |
-| `Math.matrix4(m00, …, m33)`           | `(number × 16)`                  | `Math.Matrix4`    | Construct a 4×4 matrix (row-major)                                              |
-| `Math.mat4_identity()`                | `()`                             | `Math.Matrix4`    | The 4×4 identity matrix                                                          |
-| `Math.mat4_multiply(a, b)`            | `(Math.Matrix4, Math.Matrix4)`   | `Math.Matrix4`    | Matrix product `a · b`                                                           |
-| `Math.mat4_determinant(m)`            | `(Math.Matrix4)`                 | `number`          | Determinant of a 4×4 matrix                                                      |
-| `Math.mat4_transform(m, v)`           | `(Math.Matrix4, Math.Vector4)`   | `Math.Vector4`    | Apply the transform `m · v` to a 4D vector                                       |
-| `Math.interval(min, max)`             | `(number, number)`               | `result<Math.Interval>` | Build a closed numeric interval; fail if `max < min`                      |
-| `Math.interval_contains(iv, x)`       | `(Math.Interval, number)`        | `boolean`         | Whether `x` lies within the closed interval                                     |
-| `Math.interval_clamp(iv, x)`          | `(Math.Interval, number)`        | `number`          | Clamp `x` into `[min, max]`                                                      |
-| `Math.interval_length(iv)`            | `(Math.Interval)`                | `number`          | Interval width (`max - min`)                                                     |
+| `Math.interval(minimum, maximum)`             | `(number, number)`               | `result<Math.Interval>` | Build a closed numeric interval; fail if `max < min`                      |
+| `Math.interval_contains(interval, x)`       | `(Math.Interval, number)`        | `boolean`         | Whether `x` lies within the closed interval                                     |
+| `Math.interval_clamp(interval, x)`          | `(Math.Interval, number)`        | `number`          | Clamp `x` into `[min, max]`                                                      |
+| `Math.interval_length(interval)`            | `(Math.Interval)`                | `number`          | Interval width (`max - min`)                                                     |
 | `Math.intervals_overlap(a, b)`        | `(Math.Interval, Math.Interval)` | `boolean`         | Whether two closed intervals overlap (touching counts)                          |
-| `Math.rect(x, y, width, height)`      | `(number, number, number, number)` | `Math.Rect`     | Build an axis-aligned rectangle (negative extents clamp to 0)                   |
-| `Math.rect_contains(r, x, y)`         | `(Math.Rect, number, number)`    | `boolean`         | Whether point `(x, y)` lies in `r` (half-open: min edges in, max edges out)      |
-| `Math.rect_intersects(a, b)`          | `(Math.Rect, Math.Rect)`         | `boolean`         | Whether two rectangles overlap (touching edges do not count)                    |
-| `Math.rect_intersection(a, b)`        | `(Math.Rect, Math.Rect)`         | `optional<Math.Rect>` | The overlapping rectangle, or `none` when they are disjoint                  |
-| `Math.rect_union(a, b)`               | `(Math.Rect, Math.Rect)`         | `Math.Rect`       | The smallest rectangle containing both                                          |
-| `Math.rect_center(r)`                 | `(Math.Rect)`                    | `Math.Vector2`    | The centre point of the rectangle                                               |
-| `Math.rect_area(r)`                   | `(Math.Rect)`                    | `number`          | Area (`width × height`)                                                          |
+| `Math.rectangle(x, y, width, height)`      | `(number, number, number, number)` | `Math.Rectangle`     | Build an axis-aligned rectangle (negative extents clamp to 0)                   |
+| `Math.rectangle_contains(rectangle, x, y)`         | `(Math.Rectangle, number, number)`    | `boolean`         | Whether point `(x, y)` lies in `r` (half-open: min edges in, max edges out)      |
+| `Math.rectangle_intersects(a, b)`          | `(Math.Rectangle, Math.Rectangle)`         | `boolean`         | Whether two rectangles overlap (touching edges do not count)                    |
+| `Math.rectangle_intersection(a, b)`        | `(Math.Rectangle, Math.Rectangle)`         | `optional<Math.Rectangle>` | The overlapping rectangle, or `none` when they are disjoint                  |
+| `Math.rectangle_union(a, b)`               | `(Math.Rectangle, Math.Rectangle)`         | `Math.Rectangle`       | The smallest rectangle containing both                                          |
+| `Math.rectangle_center(rectangle)`                 | `(Math.Rectangle)`                    | `Math.Vector2`    | The centre point of the rectangle                                               |
+| `Math.rectangle_area(rectangle)`                   | `(Math.Rectangle)`                    | `number`          | Area (`width × height`)                                                          |
 | `Math.circle(center, radius)`         | `(Math.Vector2, number)`         | `Math.Circle`     | Build a circle (a negative radius clamps to 0)                                   |
-| `Math.circle_contains(c, point)`      | `(Math.Circle, Math.Vector2)`    | `boolean`         | Whether `point` lies in the closed disk (the boundary is inclusive)             |
+| `Math.circle_contains(circle, point)`      | `(Math.Circle, Math.Vector2)`    | `boolean`         | Whether `point` lies in the closed disk (the boundary is inclusive)             |
 | `Math.circle_intersects(a, b)`        | `(Math.Circle, Math.Circle)`     | `boolean`         | Whether two circles overlap or touch                                            |
-| `Math.circle_rect_intersects(c, r)`   | `(Math.Circle, Math.Rect)`       | `boolean`         | Whether a circle and a rectangle overlap                                        |
+| `Math.circle_rectangle_intersects(circle, r)`   | `(Math.Circle, Math.Rectangle)`       | `boolean`         | Whether a circle and a rectangle overlap                                        |
 
-`Math.Vector2 { x: number, y: number }` and `Math.Vector3 { x: number, y: number, z: number }` are typed geometry vectors for 2D/3D work — game positions, GraphicalUi layout, physics — where named `.x` / `.y` / `.z` components are far more teachable than the index arithmetic of `LinearAlgebra`'s general `array<number>` vectors. Like `Math.Complex`, they are pure data plus a pipe-first free-function family — `vec2_*` / `vec3_*` for `add`, `sub`, `scale`, `dot`, `length`, and `normalize`, with `vec3_cross` for the 3D cross product — and no operator overloading. `normalize` returns the zero vector unchanged rather than dividing by zero. `Math.to_polar` / `Math.from_polar` bridge `Math.Vector2` to the `Math.Polar` record below.
+`Math.Vector2 { x: number, y: number }` is a typed 2D point/vector record — named `.x` / `.y` components that are far more teachable than a loose `array<number>` for the geometry helpers below. Build one with `Math.vector2(x, y)`. It is the point type consumed by `Math.circle` / `Math.circle_contains` and the centre returned by `Math.rectangle_center`. Pure data with no operator overloading; `LinearAlgebra` remains for general N-dimensional vector and matrix work.
 
-`Math.Vector4 { x, y, z, w }` (all `number`) completes the fixed-size vector ladder: the extra `w` component carries the homogeneous coordinate that full 3D transforms (`Math.Matrix4`) need, so a point is `(x, y, z, 1.0)` and a direction is `(x, y, z, 0.0)`. It has the same pipe-first `vec4_*` family — `add`, `sub`, `scale`, `dot`, `length`, `normalize` (there is no 4D cross product) — with the same zero-vector leniency in `normalize`.
+`Math.Interval { minimum: number, maximum: number }` is a closed numeric range — the general-purpose sibling of `DateTime.Interval`. `Math.interval(minimum, maximum)` is a validating constructor that fails when `maximum < minimum`, so an `Interval` is always well-formed. It replaces hand-rolled `x >= low && x <= high` with the teachable `Math.interval_contains` (closed, so both endpoints count), and adds `Math.interval_clamp` (bound `x` into the range), `Math.interval_length` (`maximum - minimum`), and `Math.intervals_overlap` (closed, so touching endpoints count).
 
-`Math.Matrix2 { m00, m01, m10, m11 }` and `Math.Matrix3 { m00 … m22 }` (all `number`, row-major) are the typed transform-matrix companions to the vectors, for the 2×2/3×3 linear transforms that `LinearAlgebra`'s general `array<array<number>>` expresses only through index arithmetic. Build them with `Math.matrix2` / `Math.matrix3` or the ready-made `Math.mat2_identity` / `Math.mat3_identity`; `mat*_multiply` composes transforms, `mat*_determinant` reports the scale factor, and `mat2_transform` / `mat3_transform` apply a matrix to a `Math.Vector2` / `Math.Vector3`. Data plus free functions, no operator overloading — the same philosophy as the vectors. `LinearAlgebra` remains for general N-dimensional work.
-
-`Math.Matrix4 { m00 … m33 }` (all `number`, row-major) is the 4×4 homogeneous-transform companion — the full model / view / projection matrix of 3D graphics that the smaller matrices cannot express. Build one with `Math.matrix4` or the ready-made `Math.mat4_identity`. `Math.mat4_multiply(a, b)` composes transforms (`a · b`, so the rightmost is applied first) and `Math.mat4_determinant(m)` reports the scale factor. Apply a matrix with `Math.mat4_transform(m, v)` — the direct `m · v` on a `Math.Vector4`. Data plus pipe-first free functions, the same philosophy as `Math.Matrix3`.
+`Math.Rectangle { x: number, y: number, width: number, height: number }` is an axis-aligned rectangle — the 2D analogue of `Math.Interval` for layout, hit-testing, collision, and cropping, where named `.x` / `.y` / `.width` / `.height` are far more teachable than four loose numbers and hand-written overlap arithmetic. `Math.rectangle(x, y, width, height)` is a total constructor that clamps negative extents to 0 (so a degenerate rectangle is empty rather than inside-out). Edges are half-open (`[x, x+width)`), consistent with DOM hit-testing: `Math.rectangle_contains(rectangle, x, y)` counts the min edges as inside and the max edges as outside, and `Math.rectangle_intersects(a, b)` treats merely-touching edges as non-overlapping. The one fallible operation, `Math.rectangle_intersection(a, b)`, returns `optional<Math.Rectangle>` — `none` when the rectangles are disjoint. `Math.rectangle_union` returns the bounding rectangle of both, `Math.rectangle_center` returns the centre as a `Math.Vector2`, and `Math.rectangle_area` returns `width × height`. Pure data plus free functions, mirroring `Math.Vector2`.
 
 ```luma
-# Scale a homogeneous vector through a diagonal transform.
-Math.Matrix4 scale = Math.matrix4(2.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 0.0, 1.0)
-Math.Vector4 scaled = Math.mat4_transform(scale, Math.vector4(1.0, 1.0, 1.0, 1.0))
-```
-
-`Math.Interval { min: number, max: number }` is a closed numeric range — the general-purpose sibling of `DateTime.Interval`. `Math.interval(min, max)` is a validating constructor that fails when `max < min`, so an `Interval` is always well-formed. It replaces hand-rolled `x >= lo && x <= hi` with the teachable `Math.interval_contains` (closed, so both endpoints count), and adds `Math.interval_clamp` (bound `x` into the range), `Math.interval_length` (`max - min`), and `Math.intervals_overlap` (closed, so touching endpoints count).
-
-`Math.Rect { x: number, y: number, width: number, height: number }` is an axis-aligned rectangle — the 2D analogue of `Math.Interval` for layout, hit-testing, collision, and cropping, where named `.x` / `.y` / `.width` / `.height` are far more teachable than four loose numbers and hand-written overlap arithmetic. `Math.rect(x, y, width, height)` is a total constructor that clamps negative extents to 0 (so a degenerate rectangle is empty rather than inside-out). Edges are half-open (`[x, x+width)`), consistent with DOM hit-testing: `Math.rect_contains(r, x, y)` counts the min edges as inside and the max edges as outside, and `Math.rect_intersects(a, b)` treats merely-touching edges as non-overlapping. The one fallible operation, `Math.rect_intersection(a, b)`, returns `optional<Math.Rect>` — `none` when the rectangles are disjoint. `Math.rect_union` returns the bounding rectangle of both, `Math.rect_center` returns the centre as a `Math.Vector2`, and `Math.rect_area` returns `width × height`. Pure data plus free functions, mirroring `Math.Vector2`.
-
-```luma
-Math.Rect a = Math.rect(0.0, 0.0, 10.0, 10.0)
-Math.Rect b = Math.rect(5.0, 5.0, 10.0, 10.0)
-match Math.rect_intersection(a, b) {
-    case some(overlap) { print("overlap area is ${Math.rect_area(overlap)}") }   # 25.0
+Math.Rectangle a = Math.rectangle(0.0, 0.0, 10.0, 10.0)
+Math.Rectangle b = Math.rectangle(5.0, 5.0, 10.0, 10.0)
+match Math.rectangle_intersection(a, b) {
+    case some(overlap) { print("overlap area is ${Math.rectangle_area(overlap)}") }   # 25.0
     case none { print("disjoint") }
 }
 ```
 
-`Math.Circle { center: Math.Vector2, radius: number }` is a 2D circle — the disk companion to `Math.Rect`, reusing `Math.Vector2` for its centre. `Math.circle(center, radius)` is a total constructor that clamps a negative radius to 0 (so a degenerate circle is a point rather than inside-out). All predicates use inclusive (closed-disk) boundaries: `Math.circle_contains(c, point)` is true when a point lies within or exactly on the boundary, `Math.circle_intersects(a, b)` is true when two circles overlap or merely touch, and `Math.circle_rect_intersects(c, rect)` is true when a circle overlaps an axis-aligned `Math.Rect` (comparing the circle centre against the closest point on the rectangle). They give a beginner the two most common collision tests after rectangles without hand-writing the distance-squared comparison. Pure data plus total boolean predicates, mirroring `Math.Rect`. Note that the circle predicates are inclusive whereas the `Math.Rect` predicates are half-open, so the two families disagree on an exactly-touching edge (a point on a circle's boundary is contained, but a point on a rectangle's max edge is not).
+`Math.Circle { center: Math.Vector2, radius: number }` is a 2D circle — the disk companion to `Math.Rectangle`, reusing `Math.Vector2` for its centre. `Math.circle(center, radius)` is a total constructor that clamps a negative radius to 0 (so a degenerate circle is a point rather than inside-out). All predicates use inclusive (closed-disk) boundaries: `Math.circle_contains(circle, point)` is true when a point lies within or exactly on the boundary, `Math.circle_intersects(a, b)` is true when two circles overlap or merely touch, and `Math.circle_rectangle_intersects(circle, rect)` is true when a circle overlaps an axis-aligned `Math.Rectangle` (comparing the circle centre against the closest point on the rectangle). They give a beginner the two most common collision tests after rectangles without hand-writing the distance-squared comparison. Pure data plus total boolean predicates, mirroring `Math.Rectangle`. Note that the circle predicates are inclusive whereas the `Math.Rectangle` predicates are half-open, so the two families disagree on an exactly-touching edge (a point on a circle's boundary is contained, but a point on a rectangle's max edge is not).
 
 ```luma
 Math.Circle c = Math.circle(Math.vector2(0.0, 0.0), 5.0)
 print(Math.circle_contains(c, Math.vector2(3.0, 4.0)))                    # true (on the boundary)
 print(Math.circle_intersects(c, Math.circle(Math.vector2(9.0, 0.0), 5.0)))   # true
-print(Math.circle_rect_intersects(c, Math.rect(4.0, 4.0, 2.0, 2.0)))     # false
-```
-
-`Math.Fraction` is a record of exact rational numbers — `numerator: integer` and `denominator: integer` — always stored in lowest terms with a strictly positive denominator (the sign lives in the numerator, and zero is stored as `0/1`). Unlike `number`, a fraction never loses precision, so `1/3 + 1/6` is exactly `1/2`; unlike `Decimal` (base-10), it represents thirds exactly. Like `Decimal`, the type avoids operator overloading: build values with `Math.fraction(numerator, denominator)` (a validating constructor that fails on a zero denominator) and combine them with the `Math.fraction_*` free functions. `add`/`subtract`/`multiply` return a `Math.Fraction` directly and raise a catchable runtime error on int64 overflow (mirroring native integer `+`), while `divide` returns `result<Math.Fraction>` and fails on division by a zero fraction. `Math.fraction_compare` returns the top-level `Ordering` choice for an exhaustive `match`.
-
-```luma
-Math.Fraction a = Result.unwrap(Math.fraction(1, 3))
-Math.Fraction b = Result.unwrap(Math.fraction(1, 6))
-Math.Fraction sum = Math.fraction_add(a, b)   # exactly 1/2
-assert(sum.numerator == 1 && sum.denominator == 2)
-```
-
-`Math.Complex` is a record of complex numbers — `real: number` and `imaginary: number` — for the quadratic formula with a negative discriminant, signal work, and Argand-plane maths. Like `Decimal` and `Math.Fraction`, it avoids operator overloading: build values with `Math.complex(real, imaginary)` and combine them with the `Math.complex_*` free functions. `add`/`subtract`/`multiply`/`conjugate` return a `Math.Complex`; `divide` returns `result<Math.Complex>` and fails when the divisor is `0 + 0i`. `Math.complex_magnitude` and `Math.complex_argument` return the modulus and phase angle (radians). `Math.complex_to_polar` / `Math.complex_from_polar` bridge to the `Math.Polar` record below.
-
-`Math.Polar { radius: number, angle: number }` (`angle` in radians) is the polar-coordinate counterpart of `Math.Vector2` and `Math.Complex` — the natural representation for rotations, orbits, and anything phrased as "how far, which way" rather than "how far right, how far up". `Math.to_polar(v)` / `Math.from_polar(p)` convert to and from `Math.Vector2`, and `Math.complex_to_polar(c)` / `Math.complex_from_polar(p)` do the same for `Math.Complex` — all four are **total conversions with no error case**: every Cartesian value has a polar form (the origin maps to `radius: 0.0, angle: 0.0`) and every polar value has a Cartesian one, so none of them return a `result`.
-
-```luma
-Math.Polar p = Math.to_polar(Math.vector2(3.0, 4.0))   # radius: 5.0, angle: atan2(4, 3)
-Math.Vector2 v = Math.from_polar(p)                    # back to (3.0, 4.0)
+print(Math.circle_rectangle_intersects(c, Math.rectangle(4.0, 4.0, 2.0, 2.0)))     # false
 ```
 
 `Sign` is a **top-level** choice type (not namespaced, like `Ordering`) with three variants — `Sign.Negative`, `Sign.Zero`, `Sign.Positive` — the self-documenting answer to "which way does this number point?". `Math.sign_of(x)` returns it, so a `match` is exhaustive and autocompleted instead of comparing against the magic `-1` / `0` / `1` that `Math.sign` returns (where `-1` could be misread as an error sentinel). `Math.sign` is unchanged for callers that want the integer.
 
-`Math.Angle` is an **optional** unit-safe angle: a payload-carrying choice with two variants — `Math.Angle.Radians(number)` and `Math.Angle.Degrees(number)` — that makes the radians-versus-degrees distinction explicit at the call site, so mixing the two becomes a visible choice rather than a silent bug. `Math.to_radians(angle)` and `Math.to_degrees(angle)` convert to a bare `number` in either unit, and `Math.sin_of(angle)` takes the sine of an angle regardless of how it was expressed. This is a **convenience, not a replacement**: the primary trig APIs (`Math.sine`, `Math.cosine`, `Math.radians`, `Math.degrees`) still take and return bare number radians, so reach for `Math.Angle` only where the extra clarity is worth the wrapper.
+`Math.Angle` is an **optional** unit-safe angle: a payload-carrying choice with two variants — `Math.Angle.Radians(number)` and `Math.Angle.Degrees(number)` — that makes the radians-versus-degrees distinction explicit at the call site, so mixing the two becomes a visible choice rather than a silent bug. `Math.to_radians(angle)` and `Math.to_degrees(angle)` convert to a bare `number` in either unit, and `Math.sine_of(angle)` takes the sine of an angle regardless of how it was expressed. This is a **convenience, not a replacement**: the primary trig APIs (`Math.sine`, `Math.cosine`, `Math.radians`, `Math.degrees`) still take and return bare number radians, so reach for `Math.Angle` only where the extra clarity is worth the wrapper.
 
 ```luma
 string direction = match Math.sign_of(-4.2) {
@@ -2228,21 +2143,21 @@ Functions for working with `optional<T>` values. All functions are available as 
 
 | Function                         | Parameter Types                             | Return Type        | Description                                                    |
 | -------------------------------- | ------------------------------------------- | ------------------ | -------------------------------------------------------------- |
-| `Optional.filter(o, fn)`         | `(optional<T>, function(T) -> boolean)`     | `optional<T>`      | Keep the value only if `fn(value)` is `true`; otherwise `none` |
-| `Optional.flat_map(o, fn)`       | `(optional<T>, function(T) -> optional<U>)` | `optional<U>`      | Apply `fn` returning `optional<U>`; propagate `none`           |
+| `Optional.filter(o, function)`         | `(optional<T>, function(T) -> boolean)`     | `optional<T>`      | Keep the value only if `fn(value)` is `true`; otherwise `none` |
+| `Optional.flat_map(o, function)`       | `(optional<T>, function(T) -> optional<U>)` | `optional<U>`      | Apply `function` returning `optional<U>`; propagate `none`           |
 | `Optional.flatten(o)`            | `(optional<optional<T>>)`                   | `optional<T>`      | Unwrap nested optional; `none` if outer or inner is `none`     |
 | `Optional.is_none(o)`            | `(optional<T>)`                             | `boolean`          | Whether the optional is `none`                                 |
 | `Optional.is_some(o)`            | `(optional<T>)`                             | `boolean`          | Whether the optional holds a value                             |
-| `Optional.map(o, fn)`            | `(optional<T>, function(T) -> U)`           | `optional<U>`      | Apply `fn` to the value; propagate `none`                      |
+| `Optional.map(o, function)`            | `(optional<T>, function(T) -> U)`           | `optional<U>`      | Apply `function` to the value; propagate `none`                      |
 | `Optional.or(o, fallback)`       | `(optional<T>, optional<T>)`                | `optional<T>`      | Return `o` if it holds a value, otherwise `fallback`           |
-| `Optional.tap(o, fn)`            | `(optional<T>, function(T) -> none)`        | `optional<T>`      | Call `fn(value)` as side effect if some; return `o` unchanged  |
-| `Optional.to_result(o, msg)`     | `(optional<T>, string)`                     | `result<T>`        | Convert to `success(value)` or `failure(msg)` if `none`        |
+| `Optional.tap(o, function)`            | `(optional<T>, function(T) -> none)`        | `optional<T>`      | Call `fn(value)` as side effect if some; return `o` unchanged  |
+| `Optional.to_result(o, message)`     | `(optional<T>, string)`                     | `result<T>`        | Convert to `success(value)` or `failure(msg)` if `none`        |
 | `Optional.unwrap(o)`             | `(optional<T>)`                             | `T`                | Return inner value; runtime error if `none`                    |
 | `Optional.unwrap_or(o, default)` | `(optional<T>, T)`                          | `T`                | Return inner value or `default` if `none`                      |
 | `Optional.zip(a, b)`             | `(optional<A>, optional<B>)`                | `optional<(A, B)>` | Both some → tuple; either none → `none`                        |
-| `Optional.and_then(o, fn)`       | `(optional<T>, function(T) -> optional<U>)` | `optional<U>`      | Apply `fn` returning `optional<U>` if some; alias for `flat_map` |
+| `Optional.and_then(o, function)`       | `(optional<T>, function(T) -> optional<U>)` | `optional<U>`      | Apply `function` returning `optional<U>` if some; alias for `flat_map` |
 | `Optional.contains(o, value)`    | `(optional<T>, T)`                          | `boolean`          | Whether the optional holds a value equal to `value`            |
-| `Optional.expect(o, msg)`        | `(optional<T>, string)`                     | `T`                | Return inner value; runtime error with `msg` if `none`         |
+| `Optional.expect(o, message)`        | `(optional<T>, string)`                     | `T`                | Return inner value; runtime error with `message` if `none`         |
 | `Optional.and(a, b)`             | `(optional<T>, optional<U>)`                | `optional<U>`      | `b` if `a` is some, otherwise `none`                           |
 | `Optional.xor(a, b)`             | `(optional<T>, optional<T>)`                | `optional<T>`      | Some iff exactly one of `a`, `b` is some                       |
 
@@ -2355,7 +2270,7 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 | `Process.command(program, arguments)`           | `(string, array<string>)` | `Process.Command`        | Build a shell-free command (explicit program + argument vector)          |
 | `Process.run_command(cmd)`                      | `(Process.Command)` | `result<Process.CommandOutput>` | Run a `Process.Command` directly (no shell); metacharacters are inert    |
 | `Process.run_command_typed(cmd)`                | `(Process.Command)` | `result<Process.CommandOutput, Process.Error>` | Like `run_command`; on a launch failure the error is a typed `Process.Error` |
-| `Process.run_command_timeout(cmd, timeout_ms)`  | `(Process.Command, integer)` | `result<Process.CommandOutput>` | Like `run_command`, but kills the child and fails if it overruns `timeout_ms` |
+| `Process.run_command_timeout(cmd, timeout_milliseconds)`  | `(Process.Command, integer)` | `result<Process.CommandOutput>` | Like `run_command`, but kills the child and fails if it overruns `timeout_milliseconds` |
 | `Process.get_arguments()`                       | `()`               | `array<string>`                 | Command-line arguments after the file name                               |
 | `Process.get_environment_variable(name)`        | `(string)`         | `result<string>`                | Environment variable value; fail if not set                              |
 | `Process.find_executable(name)`                 | `(string)`         | `optional<string>`              | Absolute path of `name` on `PATH` (honouring `PATHEXT` on Windows), or `none`; read-only |
@@ -2363,7 +2278,7 @@ negative, zero, or positive value) still works unchanged; `Order` is purely addi
 | `Process.has_environment_variable(name)`        | `(string)`         | `boolean`                       | Whether the environment variable is set                                  |
 | `Process.run(cmd)`                              | `(string)`         | `result<Process.ProcessResult>` | Execute shell command and capture stdout                                 |
 | `Process.set_environment_variable(name, value)` | `(string, string)` | `result<none>`                  | Set environment variable; fail if name/value exceeds 32 KB or OS rejects |
-| `Process.signal(pid, signal)`                   | `(integer, Process.Signal)` | `result<boolean>`      | Send a `Process.Signal` to another process by pid; fail if the OS rejects the request |
+| `Process.signal(process_id, signal)`                   | `(integer, Process.Signal)` | `result<boolean>`      | Send a `Process.Signal` to another process by pid; fail if the OS rejects the request |
 
 > **Security warning:** `Process.run` passes its argument to the system shell (`cmd.exe` on Windows, `/bin/sh` on Unix). If any part of the string comes from user input, an attacker can inject shell commands using characters such as `;`, `&&`, `|`, or `$(...)`. **Never pass unsanitised user input to `Process.run`.** Validate and whitelist all inputs before use, or construct the command from a fixed set of known-safe values only. **When any part of a command comes from untrusted input, prefer `Process.run_command` (below), which bypasses the shell entirely.**
 
@@ -2380,7 +2295,7 @@ match Process.run_command(cmd) {
 
 `Process.ProcessResult` record fields: `exit_code` (`integer`), `output` (`string`).
 
-`Process.run_command_timeout(cmd, timeout_ms)` is the timeout-bounded companion of `run_command`: it runs the same shell-free `Process.Command` but, if the child has not exited within `timeout_ms` milliseconds, forcibly kills it (SIGKILL on POSIX; a kill-on-close Job Object that terminates the whole child process tree on Windows) and returns a `failure`. This is the safety affordance that prevents a hung or runaway child — a stuck network call, a program waiting on input it will never receive, an infinite loop — from freezing the Luma program forever. A command that exits within the deadline returns exactly the same `result<Process.CommandOutput>` as `run_command` (a negative exit code, surfaced as `failure`, still signals a launch failure such as an unknown program). `timeout_ms` must be a positive integer; a non-positive value fails immediately without launching anything. On a timeout the failure message reads `command timed out after <n> ms`, and the child's partial output is discarded.
+`Process.run_command_timeout(cmd, timeout_milliseconds)` is the timeout-bounded companion of `run_command`: it runs the same shell-free `Process.Command` but, if the child has not exited within `timeout_milliseconds` milliseconds, forcibly kills it (SIGKILL on POSIX; a kill-on-close Job Object that terminates the whole child process tree on Windows) and returns a `failure`. This is the safety affordance that prevents a hung or runaway child — a stuck network call, a program waiting on input it will never receive, an infinite loop — from freezing the Luma program forever. A command that exits within the deadline returns exactly the same `result<Process.CommandOutput>` as `run_command` (a negative exit code, surfaced as `failure`, still signals a launch failure such as an unknown program). `timeout_milliseconds` must be a positive integer; a non-positive value fails immediately without launching anything. On a timeout the failure message reads `command timed out after <n> ms`, and the child's partial output is discarded.
 
 ```luma
 # Cap a potentially slow tool at two seconds so it can never hang the script.
@@ -2433,7 +2348,7 @@ failure(_other) { print("git could not be launched") }
 }
 ```
 
-`Process.Signal` is a choice type with four variants — `Terminate`, `Kill`, `Interrupt`, `Hangup` — a portable, match-able request to end another process, consumed by `Process.signal(pid, signal)` (which returns `result<boolean>`: `success(true)` when the OS accepted the request, and a `failure` when it did not — for example no such process, or insufficient permission). On POSIX the four variants map directly to `SIGTERM`, `SIGKILL`, `SIGINT`, and `SIGHUP`. On Windows there are no POSIX signals, so the mapping is deliberately lossy: `Terminate` and `Kill` both call `TerminateProcess`, `Interrupt` sends a `CTRL_C_EVENT` to the target's console group where possible, and `Hangup` degrades to `TerminateProcess`. Because it uses no magic signal numbers and a `match` over it is exhaustive, calling code stays portable and readable. Like the rest of `Process`, `signal` is OS-only (unavailable in `--box` sandbox mode).
+`Process.Signal` is a choice type with four variants — `Terminate`, `Kill`, `Interrupt`, `Hangup` — a portable, match-able request to end another process, consumed by `Process.signal(process_id, signal)` (which returns `result<boolean>`: `success(true)` when the OS accepted the request, and a `failure` when it did not — for example no such process, or insufficient permission). On POSIX the four variants map directly to `SIGTERM`, `SIGKILL`, `SIGINT`, and `SIGHUP`. On Windows there are no POSIX signals, so the mapping is deliberately lossy: `Terminate` and `Kill` both call `TerminateProcess`, `Interrupt` sends a `CTRL_C_EVENT` to the target's console group where possible, and `Hangup` degrades to `TerminateProcess`. Because it uses no magic signal numbers and a `match` over it is exhaustive, calling code stays portable and readable. Like the rest of `Process`, `signal` is OS-only (unavailable in `--box` sandbox mode).
 
 ```luma
 match Process.signal(child_pid, Process.Signal.Terminate) {
@@ -2448,48 +2363,48 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 
 | Function                    | Parameter Types                   | Return Type              | Description                                            |
 | --------------------------- | --------------------------------- | ------------------------ | ------------------------------------------------------ |
-| `Queue.concat(a, b)`        | `(queue, queue)`                  | `queue`                  | Concatenate two queues                                 |
-| `Queue.any(q, fn)`          | `(queue, function(T) -> boolean)` | `result<boolean>`        | Whether any element matches; fail if callback throws   |
-| `Queue.all(q, fn)`          | `(queue, function(T) -> boolean)` | `result<boolean>`        | Whether all elements match; fail if callback throws    |
-| `Queue.count(q, fn)`        | `(queue, function(T) -> boolean)` | `result<integer>`        | Number of matching elements; fail if callback throws   |
-| `Queue.contains(q, v)`      | `(queue, T)`                      | `boolean`                | Whether `v` is in the queue (value equality)           |
-| `Queue.find(q, fn)`         | `(queue, function(T) -> boolean)` | `result<T>`              | First FIFO match; fail if none matches                 |
-| `Queue.dequeue(q)`          | `(queue)`                         | `result<(T, queue)>`     | Remove front element; fail if empty                    |
-| `Queue.each(q, fn)`         | `(queue, function(T) -> none)`    | `result<none>`           | Iterate for side effects; fail if callback throws      |
-| `Queue.enqueue(q, v)`       | `(queue, T)`                      | `queue`                  | Add element to back                                    |
-| `Queue.filter(q, fn)`       | `(queue, function(T) -> boolean)` | `result<queue>`          | Keep matching elements; fail if callback throws        |
-| `Queue.from_array(arr)`     | `(array<T>)`                      | `queue`                  | Create queue from array                                |
-| `Queue.is_empty(q)`         | `(queue)`                         | `boolean`                | Whether the queue is empty                             |
-| `Queue.length(q)`           | `(queue)`                         | `integer`                | Number of elements                                     |
-| `Queue.map(q, fn)`          | `(queue, function(T) -> U)`       | `result<queue>`          | Transform each element; fail if callback throws        |
+| `Queue.concat(queue, b)`        | `(queue, queue)`                  | `queue`                  | Concatenate two queues                                 |
+| `Queue.any(queue, function)`          | `(queue, function(T) -> boolean)` | `result<boolean>`        | Whether any element matches; fail if callback throws   |
+| `Queue.all(queue, function)`          | `(queue, function(T) -> boolean)` | `result<boolean>`        | Whether all elements match; fail if callback throws    |
+| `Queue.count(queue, function)`        | `(queue, function(T) -> boolean)` | `result<integer>`        | Number of matching elements; fail if callback throws   |
+| `Queue.contains(queue, value)`      | `(queue, T)`                      | `boolean`                | Whether `v` is in the queue (value equality)           |
+| `Queue.find(queue, function)`         | `(queue, function(T) -> boolean)` | `result<T>`              | First FIFO match; fail if none matches                 |
+| `Queue.dequeue(queue)`          | `(queue)`                         | `result<(T, queue)>`     | Remove front element; fail if empty                    |
+| `Queue.each(queue, function)`         | `(queue, function(T) -> none)`    | `result<none>`           | Iterate for side effects; fail if callback throws      |
+| `Queue.enqueue(queue, value)`       | `(queue, T)`                      | `queue`                  | Add element to back                                    |
+| `Queue.filter(queue, function)`       | `(queue, function(T) -> boolean)` | `result<queue>`          | Keep matching elements; fail if callback throws        |
+| `Queue.from_array(array)`     | `(array<T>)`                      | `queue`                  | Create queue from array                                |
+| `Queue.is_empty(queue)`         | `(queue)`                         | `boolean`                | Whether the queue is empty                             |
+| `Queue.length(queue)`           | `(queue)`                         | `integer`                | Number of elements                                     |
+| `Queue.map(queue, function)`          | `(queue, function(T) -> U)`       | `result<queue>`          | Transform each element; fail if callback throws        |
 | `Queue.new()`               | `()`                              | `queue`                  | Empty queue                                            |
-| `Queue.partition(q, fn)`    | `(queue, function(T) -> boolean)` | `result<(queue, queue)>` | Split into `(matches, rest)`; fail if predicate throws |
-| `Queue.peek(q)`             | `(queue)`                         | `result<T>`              | View front element; fail if empty                      |
-| `Queue.reduce(q, init, fn)` | `(queue, U, function(U, T) -> U)` | `result<U>`              | Fold elements; fail if callback throws                 |
-| `Queue.reverse(q)`          | `(queue)`                         | `queue`                  | New queue with the element order reversed              |
-| `Queue.to_array(q)`         | `(queue)`                         | `array<T>`               | Convert to array                                       |
+| `Queue.partition(queue, function)`    | `(queue, function(T) -> boolean)` | `result<(queue, queue)>` | Split into `(matches, rest)`; fail if predicate throws |
+| `Queue.peek(queue)`             | `(queue)`                         | `result<T>`              | View front element; fail if empty                      |
+| `Queue.reduce(queue, init, function)` | `(queue, U, function(U, T) -> U)` | `result<U>`              | Fold elements; fail if callback throws                 |
+| `Queue.reverse(queue)`          | `(queue)`                         | `queue`                  | New queue with the element order reversed              |
+| `Queue.to_array(queue)`         | `(queue)`                         | `array<T>`               | Convert to array                                       |
 
 ## 28 — Random
 
 | Function                          | Parameter Types       | Return Type        | Description                                                                     |
 | --------------------------------- | --------------------- | ------------------ | ------------------------------------------------------------------------------- |
-| `Random.choice(arr)`              | `(array<T>)`          | `result<T>`        | Random element; fail if array is empty                                          |
+| `Random.choice(array)`              | `(array<T>)`          | `result<T>`        | Random element; fail if array is empty                                          |
 | `Random.generate_boolean()`       | `()`                  | `boolean`          | Random `true` or `false`                                                        |
-| `Random.generate_integer(lo, hi)` | `(integer, integer)`  | `result<integer>`  | Random integer in `[lo, hi]`; fail if `lo > hi`                                 |
+| `Random.generate_integer(low, high)` | `(integer, integer)`  | `result<integer>`  | Random integer in `[lo, hi]`; fail if `lo > hi`                                 |
 | `Random.generate_number()`        | `()`                  | `number`           | Random number in `[0, 1)`                                                       |
 | `Random.generate_bytes(n)`        | `(integer)`           | `result<array<integer>>` | `n` fast (non-secure) bytes, each in `[0, 255]`; fail if `n < 0`          |
 | `Random.set_seed(seed)`           | `(integer)`           | `none`             | Seed the non-secure PRNG so subsequent draws are reproducible                    |
 | `Random.generate_string(len)`     | `(integer)`           | `result<string>`   | Random alphanumeric string; fail if `len < 0`. **Not** cryptographically secure |
-| `Random.sample(arr, k)`           | `(array<T>, integer)` | `result<array<T>>` | `k` unique random elements; fail if `k > length`                                |
+| `Random.sample(array, k)`           | `(array<T>, integer)` | `result<array<T>>` | `k` unique random elements; fail if `k > length`                                |
 | `Random.sample_from(distribution)` | `(Random.Distribution)` | `result<number>` | Draw a number from a `Random.Distribution`; see below for validation           |
-| `Random.shuffle(arr)`             | `(array<T>)`          | `array<T>`         | Shuffled copy                                                                   |
+| `Random.shuffle(array)`             | `(array<T>)`          | `array<T>`         | Shuffled copy                                                                   |
 | `Random.generate_uuid()`          | `()`                  | `string`           | UUID v4 (random). **Not** cryptographically secure                              |
 | `Random.parse_uuid(s)`            | `(string)`            | `result<Random.Uuid>` | Validate a canonical UUID string into a typed `Random.Uuid`; fail if malformed |
 | `Random.uuid_typed()`             | `()`                  | `Random.Uuid`      | UUID v4 (random) as a typed `Random.Uuid`. **Not** cryptographically secure     |
 | `Random.uuid_to_string(u)`        | `(Random.Uuid)`       | `string`           | The canonical string held by a `Random.Uuid`                                    |
 | `Random.secure_boolean()`         | `()`                  | `result<boolean>`  | Cryptographically secure random `true` or `false`                               |
 | `Random.secure_bytes(n)`          | `(integer)`           | `result<array<integer>>` | `n` cryptographically secure bytes, each in `[0, 255]`; the correct source for salts, keys, and nonces; fail if `n < 0` |
-| `Random.secure_integer(lo, hi)`   | `(integer, integer)`  | `result<integer>`  | Cryptographically secure uniform integer in `[lo, hi]`; fail if `lo > hi`       |
+| `Random.secure_integer(low, high)`   | `(integer, integer)`  | `result<integer>`  | Cryptographically secure uniform integer in `[lo, hi]`; fail if `lo > hi`       |
 | `Random.secure_number()`          | `()`                  | `result<number>`   | Cryptographically secure random number in `[0, 1)`                              |
 | `Random.secure_string(len)`       | `(integer)`           | `result<string>`   | Cryptographically secure alphanumeric string; fail if `len < 0`                 |
 | `Random.secure_uuid()`            | `()`                  | `result<string>`   | UUID v4 from cryptographically secure random bytes                              |
@@ -2533,17 +2448,17 @@ A reference cell wraps a value in a heap-allocated, thread-safe container. When 
 
 | Function                     | Parameter Types                    | Return Type    | Description                                          |
 | ---------------------------- | ---------------------------------- | -------------- | ---------------------------------------------------- |
-| `Reference.get(ref)`         | `(reference<T>)`                   | `T`            | Return the current value stored in the cell          |
+| `Reference.get(reference)`         | `(reference<T>)`                   | `T`            | Return the current value stored in the cell          |
 | `Reference.new(value)`       | `(T)`                              | `reference<T>` | Create a new reference cell containing `value`       |
-| `Reference.set(ref, value)`  | `(reference<T>, T)`                | `none`         | Replace the stored value with `value`                |
+| `Reference.set(reference, value)`  | `(reference<T>, T)`                | `none`         | Replace the stored value with `value`                |
 | `Reference.swap(ref1, ref2)` | `(reference<T>, reference<T>)`     | `none`         | Swap the values stored in two reference cells        |
-| `Reference.inspect(ref)`     | `(reference<T>)`                   | `string`       | String representation, e.g. `"ref(42)"`              |
-| `Reference.update(ref, fn)`  | `(reference<T>, function(T) -> T)` | `none`         | Apply `fn` to the current value and store the result |
-| `Reference.update_and_get(ref, fn)` | `(reference<T>, function(T) -> T)` | `T`     | Apply `fn`, store the result, and return the new value |
-| `Reference.get_and_update(ref, fn)` | `(reference<T>, function(T) -> T)` | `T`     | Apply `fn` and store it, returning the previous value |
-| `Reference.get_and_set(ref, value)` | `(reference<T>, T)`         | `T`            | Store `value` and return the previous value          |
-| `Reference.equals(a, b)`     | `(reference<T>, reference<T>)`     | `boolean`      | Whether the two cells hold equal values              |
-| `Reference.same(a, b)`       | `(reference<T>, reference<T>)`     | `boolean`      | Whether the two arguments are the same cell (identity) |
+| `Reference.inspect(reference)`     | `(reference<T>)`                   | `string`       | String representation, e.g. `"ref(42)"`              |
+| `Reference.update(reference, function)`  | `(reference<T>, function(T) -> T)` | `none`         | Apply `function` to the current value and store the result |
+| `Reference.update_and_get(reference, function)` | `(reference<T>, function(T) -> T)` | `T`     | Apply `function`, store the result, and return the new value |
+| `Reference.get_and_update(reference, function)` | `(reference<T>, function(T) -> T)` | `T`     | Apply `function` and store it, returning the previous value |
+| `Reference.get_and_set(reference, value)` | `(reference<T>, T)`         | `T`            | Store `value` and return the previous value          |
+| `Reference.equals(reference, b)`     | `(reference<T>, reference<T>)`     | `boolean`      | Whether the two cells hold equal values              |
+| `Reference.same(reference, b)`       | `(reference<T>, reference<T>)`     | `boolean`      | Whether the two arguments are the same cell (identity) |
 
 ```luma
 reference<integer> count = Reference.new(0)
@@ -2744,28 +2659,28 @@ Combinators for transforming and inspecting `result<T>` values without explicit 
 
 | Function                       | Parameter Types                                     | Return Type    | Description                                                              |
 | ------------------------------ | --------------------------------------------------- | -------------- | ------------------------------------------------------------------------ |
-| `Result.bimap(r, on_ok, on_err)` | `(result<T>, function(T) -> U, function(T) -> V)` | `result<U>`    | Map success with `on_ok`, failure with `on_err`                          |
-| `Result.collect(arr)`          | `(array<result<T>>)`                                | `result<array<T>>` | Collect an array of results into a result of an array; short-circuits on first failure |
+| `Result.map_both(r, on_ok, on_err)` | `(result<T>, function(T) -> U, function(T) -> V)` | `result<U>`    | Map success with `on_ok`, failure with `on_err`                          |
+| `Result.collect(array)`          | `(array<result<T>>)`                                | `result<array<T>>` | Collect an array of results into a result of an array; short-circuits on first failure |
 | `Result.error(r)`              | `(result<T>)`                                       | `T`            | Extract failure value; throws if `r` is a success                        |
 | `Result.error_code(r)`         | `(result<T>)`                                       | `string`       | Machine-readable error code; empty string for success values             |
-| `Result.expect(r, msg)`        | `(result<T>, string)`                               | `T`            | Unwrap or throw with a custom message                                    |
+| `Result.expect(r, message)`        | `(result<T>, string)`                               | `T`            | Unwrap or throw with a custom message                                    |
 | `Result.filter(r, pred, err)`  | `(result<T>, function(T) -> boolean, T)`            | `result<T>`    | Keep success only if `pred` holds; otherwise fail with `err`             |
-| `Result.flat_map(r, fn)`       | `(result<T>, function(T) -> result<U>)`             | `result<U>`    | Chain computation that itself returns a result                            |
+| `Result.flat_map(r, function)`       | `(result<T>, function(T) -> result<U>)`             | `result<U>`    | Chain computation that itself returns a result                            |
 | `Result.flatten(r)`            | `(result<result<T>>)`                               | `result<T>`    | Unwrap one layer of nesting                                              |
 | `Result.fold(r, on_ok, on_err)` | `(result<T>, function(T) -> U, function(T) -> U)` | `U`            | Reduce to a single value regardless of success/failure                   |
 | `Result.is_failure(r)`         | `(result<T>)`                                       | `boolean`      | Whether `r` is a failure                                                 |
 | `Result.is_success(r)`         | `(result<T>)`                                       | `boolean`      | Whether `r` is a success                                                 |
-| `Result.map(r, fn)`            | `(result<T>, function(T) -> U)`                     | `result<U>`    | Transform the success value; pass through failure unchanged               |
-| `Result.map_boolean(r, fn)`    | `(result<boolean>, function(boolean) -> U)`         | `result<U>`    | Map only if inner value is a boolean                                     |
-| `Result.map_failure(r, fn)`    | `(result<T>, function(T) -> U)`                     | `result<T>`    | Transform the failure value; pass through success unchanged               |
-| `Result.map_integer(r, fn)`    | `(result<integer>, function(integer) -> U)`         | `result<U>`    | Map only if inner value is an integer                                    |
-| `Result.map_number(r, fn)`     | `(result<number>, function(number) -> U)`           | `result<U>`    | Map only if inner value is a number                                      |
-| `Result.map_string(r, fn)`     | `(result<string>, function(string) -> U)`           | `result<U>`    | Map only if inner value is a string                                      |
+| `Result.map(r, function)`            | `(result<T>, function(T) -> U)`                     | `result<U>`    | Transform the success value; pass through failure unchanged               |
+| `Result.map_boolean(r, function)`    | `(result<boolean>, function(boolean) -> U)`         | `result<U>`    | Map only if inner value is a boolean                                     |
+| `Result.map_failure(r, function)`    | `(result<T>, function(T) -> U)`                     | `result<T>`    | Transform the failure value; pass through success unchanged               |
+| `Result.map_integer(r, function)`    | `(result<integer>, function(integer) -> U)`         | `result<U>`    | Map only if inner value is an integer                                    |
+| `Result.map_number(r, function)`     | `(result<number>, function(number) -> U)`           | `result<U>`    | Map only if inner value is a number                                      |
+| `Result.map_string(r, function)`     | `(result<string>, function(string) -> U)`           | `result<U>`    | Map only if inner value is a string                                      |
 | `Result.or(r, fallback)`       | `(result<T>, result<T>)`                            | `result<T>`    | Return `r` if success, otherwise `fallback`                              |
-| `Result.or_else(r, fn)`        | `(result<T>, function(T) -> result<T>)`             | `result<T>`    | On failure, call `fn` with the error to produce a new result             |
-| `Result.recover(r, fn)`        | `(result<T>, function(T) -> U)`                     | `result<U>`    | On failure, map the error into a success value                           |
+| `Result.or_else(r, function)`        | `(result<T>, function(T) -> result<T>)`             | `result<T>`    | On failure, call `function` with the error to produce a new result             |
+| `Result.recover(r, function)`        | `(result<T>, function(T) -> U)`                     | `result<U>`    | On failure, map the error into a success value                           |
 | `Result.source_function(r)`    | `(result<T>)`                                       | `string`       | Name of the function that produced the failure; empty for success         |
-| `Result.tap(r, fn)`            | `(result<T>, function(T) -> none)`                  | `result<T>`    | Run side effect on success value; return `r` unchanged                   |
+| `Result.tap(r, function)`            | `(result<T>, function(T) -> none)`                  | `result<T>`    | Run side effect on success value; return `r` unchanged                   |
 | `Result.to_optional(r)`        | `(result<T>)`                                       | `optional<T>`  | Success → `some(value)`, failure → `none`                                |
 | `Result.unwrap(r)`             | `(result<T>)`                                       | `T`            | Extract success value; throws if failure                                 |
 | `Result.unwrap_or(r, default)` | `(result<T>, T)`                                    | `T`            | Extract success value or use `default`                                   |
@@ -2779,32 +2694,32 @@ Combinators for transforming and inspecting `result<T>` values without explicit 
 
 | Function                             | Parameter Types                 | Return Type          | Description                                                    |
 | ------------------------------------ | ------------------------------- | -------------------- | -------------------------------------------------------------- |
-| `Set.add(s, v)`                      | `(set, T)`                      | `set`                | Set with `v` included                                          |
-| `Set.all(s, fn)`                     | `(set, function(T) -> boolean)` | `result<boolean>`    | Whether every element matches `fn`; fail if predicate throws   |
-| `Set.any(s, fn)`                     | `(set, function(T) -> boolean)` | `result<boolean>`    | Whether any element matches `fn`; fail if predicate throws     |
-| `Set.concat(a, b)`                   | `(set, set)`                    | `set`                | Append the elements of `b` to `a`, keeping unique values       |
-| `Set.contains(s, v)`                 | `(set, T)`                      | `boolean`            | Whether `v` is in the set                                      |
-| `Set.count(s, fn)`                   | `(set, function(T) -> boolean)` | `result<integer>`    | Number of elements matching `fn`; fail if predicate throws     |
-| `Set.difference(s, other)`           | `(set, set)`                    | `set`                | Elements in `s` but not `other`                                |
-| `Set.each(s, fn)`                    | `(set, function(T) -> none)`    | `result<none>`       | Apply `fn` to each element; fail if `fn` throws                |
-| `Set.equals(s, other)`               | `(set, set)`                    | `boolean`            | Order-insensitive equality                                     |
-| `Set.filter(s, fn)`                  | `(set, function(T) -> boolean)` | `result<set>`        | Elements for which `fn` returns true; fail if predicate throws |
-| `Set.find(s, fn)`                    | `(set, function(T) -> boolean)` | `result<T>`          | First (stored-order) element matching `fn`; fail if none/throws |
-| `Set.from_array(arr)`                | `(array<T>)`                    | `set`                | Deduplicated set from array                                    |
-| `Set.intersection(s, other)`         | `(set, set)`                    | `set`                | Elements in both sets                                          |
-| `Set.is_disjoint(s, other)`          | `(set, set)`                    | `boolean`            | Whether the sets share no elements                             |
-| `Set.is_empty(s)`                    | `(set)`                         | `boolean`            | Whether the set is empty                                       |
-| `Set.is_subset(s, other)`            | `(set, set)`                    | `boolean`            | Whether `s` ⊆ `other`                                          |
-| `Set.is_superset(s, other)`          | `(set, set)`                    | `boolean`            | Whether `s` ⊇ `other`                                          |
-| `Set.length(s)`                      | `(set)`                         | `integer`            | Number of elements                                             |
-| `Set.map(s, fn)`                     | `(set, function(T) -> U)`       | `result<set>`        | Apply `fn` to each element, collecting into a new set          |
+| `Set.add(set, value)`                      | `(set, T)`                      | `set`                | Set with `v` included                                          |
+| `Set.all(set, function)`                     | `(set, function(T) -> boolean)` | `result<boolean>`    | Whether every element matches `function`; fail if predicate throws   |
+| `Set.any(set, function)`                     | `(set, function(T) -> boolean)` | `result<boolean>`    | Whether any element matches `function`; fail if predicate throws     |
+| `Set.concat(set, b)`                   | `(set, set)`                    | `set`                | Append the elements of `b` to `a`, keeping unique values       |
+| `Set.contains(set, value)`                 | `(set, T)`                      | `boolean`            | Whether `v` is in the set                                      |
+| `Set.count(set, function)`                   | `(set, function(T) -> boolean)` | `result<integer>`    | Number of elements matching `function`; fail if predicate throws     |
+| `Set.difference(set, other)`           | `(set, set)`                    | `set`                | Elements in `s` but not `other`                                |
+| `Set.each(set, function)`                    | `(set, function(T) -> none)`    | `result<none>`       | Apply `function` to each element; fail if `function` throws                |
+| `Set.equals(set, other)`               | `(set, set)`                    | `boolean`            | Order-insensitive equality                                     |
+| `Set.filter(set, function)`                  | `(set, function(T) -> boolean)` | `result<set>`        | Elements for which `function` returns true; fail if predicate throws |
+| `Set.find(set, function)`                    | `(set, function(T) -> boolean)` | `result<T>`          | First (stored-order) element matching `function`; fail if none/throws |
+| `Set.from_array(array)`                | `(array<T>)`                    | `set`                | Deduplicated set from array                                    |
+| `Set.intersection(set, other)`         | `(set, set)`                    | `set`                | Elements in both sets                                          |
+| `Set.is_disjoint(set, other)`          | `(set, set)`                    | `boolean`            | Whether the sets share no elements                             |
+| `Set.is_empty(set)`                    | `(set)`                         | `boolean`            | Whether the set is empty                                       |
+| `Set.is_subset(set, other)`            | `(set, set)`                    | `boolean`            | Whether `s` ⊆ `other`                                          |
+| `Set.is_superset(set, other)`          | `(set, set)`                    | `boolean`            | Whether `s` ⊇ `other`                                          |
+| `Set.length(set)`                      | `(set)`                         | `integer`            | Number of elements                                             |
+| `Set.map(set, function)`                     | `(set, function(T) -> U)`       | `result<set>`        | Apply `function` to each element, collecting into a new set          |
 | `Set.new()`                          | `()`                            | `set`                | Empty set                                                      |
-| `Set.partition(s, fn)`               | `(set, function(T) -> boolean)` | `result<(set, set)>` | Split into `(matches, rest)`; fail if predicate throws         |
-| `Set.reduce(s, initial, fn)`         | `(set, U, function(U, T) -> U)` | `result<U>`          | Fold elements with accumulator; fail if `fn` throws            |
-| `Set.remove(s, v)`                   | `(set, T)`                      | `set`                | Set without `v`                                                |
-| `Set.symmetric_difference(s, other)` | `(set, set)`                    | `set`                | Elements in one but not both                                   |
-| `Set.to_array(s)`                    | `(set)`                         | `array<T>`           | Convert to array                                               |
-| `Set.union(s, other)`                | `(set, set)`                    | `set`                | Elements in `s` or `other`                                     |
+| `Set.partition(set, function)`               | `(set, function(T) -> boolean)` | `result<(set, set)>` | Split into `(matches, rest)`; fail if predicate throws         |
+| `Set.reduce(set, initial, function)`         | `(set, U, function(U, T) -> U)` | `result<U>`          | Fold elements with accumulator; fail if `function` throws            |
+| `Set.remove(set, value)`                   | `(set, T)`                      | `set`                | Set without `v`                                                |
+| `Set.symmetric_difference(set, other)` | `(set, set)`                    | `set`                | Elements in one but not both                                   |
+| `Set.to_array(set)`                    | `(set)`                         | `array<T>`           | Convert to array                                               |
+| `Set.union(set, other)`                | `(set, set)`                    | `set`                | Elements in `s` or `other`                                     |
 
 ## 34 — Socket
 
@@ -2813,46 +2728,46 @@ Cross-platform TCP and UDP networking.
 | Function                               | Parameter Types                     | Return Type                | Description                                                  |
 | -------------------------------------- | ----------------------------------- | -------------------------- | ------------------------------------------------------------ |
 | `Socket.accept(srv)`                   | `(socket)`                          | `result<socket>`           | Accept incoming connection                                   |
-| `Socket.close(s)`                      | `(socket)`                          | `none`                     | Close the socket                                             |
+| `Socket.close(socket)`                      | `(socket)`                          | `none`                     | Close the socket                                             |
 | `Socket.connect(host, port)`           | `(string, integer)`                 | `result<socket>`           | TCP connect (30 s timeout)                                   |
 | `Socket.connect_typed(host, port)`     | `(string, integer)`                 | `result<socket, Socket.Error>` | TCP connect; on failure the error is a typed `Socket.Error` instead of a string |
-| `Socket.connect_timeout(host, port, timeout_ms)` | `(string, integer, integer)`        | `result<socket>`           | TCP connect with an explicit millisecond timeout             |
-| `Socket.connect_timeout_typed(host, port, timeout_ms)` | `(string, integer, integer)`        | `result<socket, Socket.Error>` | TCP connect with an explicit timeout; on failure a typed `Socket.Error` (e.g. `Timeout`) |
-| `Socket.is_connected(s)`               | `(socket)`                          | `boolean`                  | Whether the socket handle is valid                           |
+| `Socket.connect_timeout(host, port, timeout_milliseconds)` | `(string, integer, integer)`        | `result<socket>`           | TCP connect with an explicit millisecond timeout             |
+| `Socket.connect_timeout_typed(host, port, timeout_milliseconds)` | `(string, integer, integer)`        | `result<socket, Socket.Error>` | TCP connect with an explicit timeout; on failure a typed `Socket.Error` (e.g. `Timeout`) |
+| `Socket.is_connected(socket)`               | `(socket)`                          | `boolean`                  | Whether the socket handle is valid                           |
 | `Socket.ip_to_string(ip)`              | `(Socket.IpAddress)`                | `string`                   | Canonical text of a parsed IP address                        |
 | `Socket.listen(host, port)`            | `(string, integer)`                 | `result<socket>`           | Bind and listen for TCP connections                          |
 | `Socket.listen_typed(host, port)`      | `(string, integer)`                 | `result<socket, Socket.Error>` | Bind and listen; on failure the error is a typed `Socket.Error` (e.g. `AddressInUse`) |
-| `Socket.local_address(s)`              | `(socket)`                          | `result<string>`           | Local `"host:port"`                                          |
-| `Socket.local_address_parts(s)`        | `(socket)`                          | `result<Socket.Address>`   | Local address as a `{ host, port }` record (IPv6-safe; no string parsing) |
+| `Socket.local_address(socket)`              | `(socket)`                          | `result<string>`           | Local `"host:port"`                                          |
+| `Socket.local_address_parts(socket)`        | `(socket)`                          | `result<Socket.Address>`   | Local address as a `{ host, port }` record (IPv6-safe; no string parsing) |
 | `Socket.parse_ip(text)`                | `(string)`                          | `result<Socket.IpAddress>` | Validate and classify an IPv4/IPv6 literal (no OS call)      |
-| `Socket.receive(s, max)`               | `(socket, integer)`                 | `result<string>`           | Receive up to `max` bytes                                    |
-| `Socket.receive_all(s)`                | `(socket)`                          | `result<string>`           | Read until the peer closes; accumulates the whole stream     |
-| `Socket.receive_bytes(s, max)`         | `(socket, integer)`                 | `result<array<integer>>`   | Receive up to `max` raw bytes as integers `0-255`            |
-| `Socket.receive_line(s)`               | `(socket)`                          | `result<string>`           | Read up to and including the next `\n`                       |
-| `Socket.receive_typed(s, max)`         | `(socket, integer)`                 | `result<string, Socket.Error>` | Receive up to `max` bytes; on failure the error is a typed `Socket.Error` |
-| `Socket.remote_address(s)`             | `(socket)`                          | `result<string>`           | Remote `"host:port"`                                         |
-| `Socket.remote_address_parts(s)`       | `(socket)`                          | `result<Socket.Address>`   | Remote address as a `{ host, port }` record (IPv6-safe; no string parsing) |
-| `Socket.send(s, data)`                 | `(socket, string)`                  | `result<integer>`          | Send data; returns bytes sent                                |
-| `Socket.send_all(s, data)`             | `(socket, string)`                  | `result<boolean>`          | Send every byte of `data`, looping until fully written       |
-| `Socket.send_all_typed(s, data)`       | `(socket, string)`                  | `result<boolean, Socket.Error>` | Send every byte; on failure the error is a typed `Socket.Error` |
-| `Socket.send_bytes(s, bytes)`          | `(socket, array<integer>)`          | `result<integer>`          | Send raw bytes (each `0-255`); returns bytes sent            |
-| `Socket.send_typed(s, data)`           | `(socket, string)`                  | `result<integer, Socket.Error>` | Send data; on failure the error is a typed `Socket.Error` |
-| `Socket.set_timeout(s, ms)`            | `(socket, integer)`                 | `result<boolean>`          | Set send/recv timeout (does not affect connect)              |
-| `Socket.udp_bind(s, host, port)`       | `(socket, string, integer)`         | `result<boolean>`          | Bind UDP socket to address                                   |
+| `Socket.receive(socket, maximum)`               | `(socket, integer)`                 | `result<string>`           | Receive up to `maximum` bytes                                    |
+| `Socket.receive_all(socket)`                | `(socket)`                          | `result<string>`           | Read until the peer closes; accumulates the whole stream     |
+| `Socket.receive_bytes(socket, maximum)`         | `(socket, integer)`                 | `result<array<integer>>`   | Receive up to `maximum` raw bytes as integers `0-255`            |
+| `Socket.receive_line(socket)`               | `(socket)`                          | `result<string>`           | Read up to and including the next `\n`                       |
+| `Socket.receive_typed(socket, maximum)`         | `(socket, integer)`                 | `result<string, Socket.Error>` | Receive up to `maximum` bytes; on failure the error is a typed `Socket.Error` |
+| `Socket.remote_address(socket)`             | `(socket)`                          | `result<string>`           | Remote `"host:port"`                                         |
+| `Socket.remote_address_parts(socket)`       | `(socket)`                          | `result<Socket.Address>`   | Remote address as a `{ host, port }` record (IPv6-safe; no string parsing) |
+| `Socket.send(socket, data)`                 | `(socket, string)`                  | `result<integer>`          | Send data; returns bytes sent                                |
+| `Socket.send_all(socket, data)`             | `(socket, string)`                  | `result<boolean>`          | Send every byte of `data`, looping until fully written       |
+| `Socket.send_all_typed(socket, data)`       | `(socket, string)`                  | `result<boolean, Socket.Error>` | Send every byte; on failure the error is a typed `Socket.Error` |
+| `Socket.send_bytes(socket, bytes)`          | `(socket, array<integer>)`          | `result<integer>`          | Send raw bytes (each `0-255`); returns bytes sent            |
+| `Socket.send_typed(socket, data)`           | `(socket, string)`                  | `result<integer, Socket.Error>` | Send data; on failure the error is a typed `Socket.Error` |
+| `Socket.set_timeout(socket, milliseconds)`            | `(socket, integer)`                 | `result<boolean>`          | Set send/recv timeout (does not affect connect)              |
+| `Socket.udp_bind(socket, host, port)`       | `(socket, string, integer)`         | `result<boolean>`          | Bind UDP socket to address                                   |
 | `Socket.udp_create()`                  | `()`                                | `result<socket>`           | Create UDP socket                                            |
-| `Socket.udp_send(s, data, host, port)` | `(socket, string, string, integer)` | `result<integer>`          | Send UDP datagram                                            |
+| `Socket.udp_send(socket, data, host, port)` | `(socket, string, string, integer)` | `result<integer>`          | Send UDP datagram                                            |
 
 > **Resource limit** — A program may hold only a bounded number of open sockets at the same time (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_OPEN_SOCKETS`). Attempting to create more returns `failure("socket limit reached — too many open sockets")`. Close sockets that are no longer needed to stay within the limit.
 
 `Socket.Address` record fields: `host: string`, `port: integer`. Returned by `Socket.local_address_parts` and `Socket.remote_address_parts` so the caller reads the host and port directly instead of splitting a `"host:port"` string (which is fragile for IPv6).
 
-`Socket.IpAddress` is a choice type with two payload-carrying variants — `Socket.IpAddress.V4(address: string)` and `Socket.IpAddress.V6(address: string)` — so the IPv4/IPv6 distinction is `match`-exhaustive and autocompleted, unlike the unvalidated `host` string in `Socket.Address`. `Socket.parse_ip(text)` validates a literal purely in memory (no DNS, no OS call) and returns `failure` on malformed input; IPv4 is canonicalised (leading zeros stripped) and IPv6 lowercased. `Socket.ip_to_string(ip)` renders either variant back to its canonical text.
+`Socket.IpAddress` is a choice type with two payload-carrying variants — `Socket.IpAddress.Version4(address: string)` and `Socket.IpAddress.Version6(address: string)` — so the IPv4/IPv6 distinction is `match`-exhaustive and autocompleted, unlike the unvalidated `host` string in `Socket.Address`. `Socket.parse_ip(text)` validates a literal purely in memory (no DNS, no OS call) and returns `failure` on malformed input; IPv4 is canonicalised (leading zeros stripped) and IPv6 lowercased. `Socket.ip_to_string(ip)` renders either variant back to its canonical text.
 
 ```luma
 Socket.IpAddress ip = Result.unwrap(Socket.parse_ip("2001:DB8::1"))
 string family = match ip {
-    case Socket.IpAddress.V4(_a) { "IPv4" }
-    case Socket.IpAddress.V6(_a) { "IPv6" }
+    case Socket.IpAddress.Version4(_a) { "IPv4" }
+    case Socket.IpAddress.Version6(_a) { "IPv6" }
 }
 ```
 
@@ -2880,27 +2795,27 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 
 | Function                    | Parameter Types                   | Return Type              | Description                                                     |
 | --------------------------- | --------------------------------- | ------------------------ | --------------------------------------------------------------- |
-| `Stack.all(s, fn)`          | `(stack, function(T) -> boolean)` | `result<boolean>`        | Whether every element matches `fn`; fail if predicate throws    |
-| `Stack.any(s, fn)`          | `(stack, function(T) -> boolean)` | `result<boolean>`        | Whether any element matches `fn`; fail if predicate throws      |
-| `Stack.concat(a, b)`        | `(stack, stack)`                  | `stack`                  | Concatenate two stacks                                          |
-| `Stack.contains(s, v)`      | `(stack, T)`                      | `boolean`                | Whether `v` is in the stack (value equality)                    |
-| `Stack.count(s, fn)`        | `(stack, function(T) -> boolean)` | `result<integer>`        | Number of elements matching `fn`; fail if predicate throws      |
-| `Stack.each(s, fn)`         | `(stack, function(T) -> none)`    | `result<none>`           | Iterate top to bottom for side effects; fail if callback throws |
-| `Stack.filter(s, fn)`       | `(stack, function(T) -> boolean)` | `result<stack>`          | Keep matching elements; fail if callback throws                 |
-| `Stack.find(s, fn)`         | `(stack, function(T) -> boolean)` | `result<T>`              | First match from the top; fail if none/throws                   |
-| `Stack.from_array(arr)`     | `(array<T>)`                      | `stack`                  | Create stack from array (bottom → top)                          |
-| `Stack.is_empty(s)`         | `(stack)`                         | `boolean`                | Whether the stack is empty                                      |
-| `Stack.length(s)`           | `(stack)`                         | `integer`                | Number of elements                                              |
-| `Stack.map(s, fn)`          | `(stack, function(T) -> U)`       | `result<stack>`          | Transform each element; fail if callback throws                 |
+| `Stack.all(stack, function)`          | `(stack, function(T) -> boolean)` | `result<boolean>`        | Whether every element matches `function`; fail if predicate throws    |
+| `Stack.any(stack, function)`          | `(stack, function(T) -> boolean)` | `result<boolean>`        | Whether any element matches `function`; fail if predicate throws      |
+| `Stack.concat(stack, b)`        | `(stack, stack)`                  | `stack`                  | Concatenate two stacks                                          |
+| `Stack.contains(stack, value)`      | `(stack, T)`                      | `boolean`                | Whether `v` is in the stack (value equality)                    |
+| `Stack.count(stack, function)`        | `(stack, function(T) -> boolean)` | `result<integer>`        | Number of elements matching `function`; fail if predicate throws      |
+| `Stack.each(stack, function)`         | `(stack, function(T) -> none)`    | `result<none>`           | Iterate top to bottom for side effects; fail if callback throws |
+| `Stack.filter(stack, function)`       | `(stack, function(T) -> boolean)` | `result<stack>`          | Keep matching elements; fail if callback throws                 |
+| `Stack.find(stack, function)`         | `(stack, function(T) -> boolean)` | `result<T>`              | First match from the top; fail if none/throws                   |
+| `Stack.from_array(array)`     | `(array<T>)`                      | `stack`                  | Create stack from array (bottom → top)                          |
+| `Stack.is_empty(stack)`         | `(stack)`                         | `boolean`                | Whether the stack is empty                                      |
+| `Stack.length(stack)`           | `(stack)`                         | `integer`                | Number of elements                                              |
+| `Stack.map(stack, function)`          | `(stack, function(T) -> U)`       | `result<stack>`          | Transform each element; fail if callback throws                 |
 | `Stack.new()`               | `()`                              | `stack`                  | Empty stack                                                     |
-| `Stack.partition(s, fn)`    | `(stack, function(T) -> boolean)` | `result<(stack, stack)>` | Split into `(matches, rest)`; fail if predicate throws          |
-| `Stack.peek(s)`             | `(stack)`                         | `result<T>`              | View top element; fail if empty                                 |
-| `Stack.pop(s)`              | `(stack)`                         | `result<(T, stack)>`     | Pop from top; fail if empty                                     |
-| `Stack.pop_while(s, fn)`    | `(stack, function(T) -> boolean)` | `result<(array<T>, stack)>` | Pop top elements while `fn` holds (returned top-first) plus the remaining stack; fail if predicate throws |
-| `Stack.push(s, v)`          | `(stack, T)`                      | `stack`                  | Push to top                                                     |
-| `Stack.reduce(s, init, fn)` | `(stack, U, function(U, T) -> U)` | `result<U>`              | Fold elements; fail if callback throws                          |
-| `Stack.reverse(s)`          | `(stack)`                         | `stack`                  | Reverse element order (top becomes bottom)                      |
-| `Stack.to_array(s)`         | `(stack)`                         | `array<T>`               | Convert to array                                                |
+| `Stack.partition(stack, function)`    | `(stack, function(T) -> boolean)` | `result<(stack, stack)>` | Split into `(matches, rest)`; fail if predicate throws          |
+| `Stack.peek(stack)`             | `(stack)`                         | `result<T>`              | View top element; fail if empty                                 |
+| `Stack.pop(stack)`              | `(stack)`                         | `result<(T, stack)>`     | Pop from top; fail if empty                                     |
+| `Stack.pop_while(stack, function)`    | `(stack, function(T) -> boolean)` | `result<(array<T>, stack)>` | Pop top elements while `function` holds (returned top-first) plus the remaining stack; fail if predicate throws |
+| `Stack.push(stack, value)`          | `(stack, T)`                      | `stack`                  | Push to top                                                     |
+| `Stack.reduce(stack, init, function)` | `(stack, U, function(U, T) -> U)` | `result<U>`              | Fold elements; fail if callback throws                          |
+| `Stack.reverse(stack)`          | `(stack)`                         | `stack`                  | Reverse element order (top becomes bottom)                      |
+| `Stack.to_array(stack)`         | `(stack)`                         | `array<T>`               | Convert to array                                                |
 
 ## 36 — Statistics
 
@@ -2913,20 +2828,20 @@ in `Math`; every function here reduces or summarises a whole array.
 | Function                        | Parameter Types                  | Return Type                        | Description                                                                      |
 | ------------------------------- | -------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
 | `Statistics.correlation(xs, ys)`      | `(array<number>, array<number>)` | `result<number>`                   | Pearson correlation coefficient; fail if arrays differ in length or < 2 elements |
-| `Statistics.five_number_summary(arr)` | `(array<number>)`                | `result<Statistics.FiveNumberSummary>` | Box-plot quartiles (min, Q1, median, Q3, max) in one pass; fail if empty      |
+| `Statistics.five_number_summary(array)` | `(array<number>)`                | `result<Statistics.FiveNumberSummary>` | Box-plot quartiles (min, Q1, median, Q3, max) in one pass; fail if empty      |
 | `Statistics.histogram(values, bins)`  | `(array<number>, integer)`       | `result<Statistics.Histogram>`     | Bin `values` into `bins` equal-width half-open bins; fail if empty or `bins < 1` |
 | `Statistics.linear_fit(xs, ys)`       | `(array<number>, array<number>)` | `result<Statistics.LineFit>`       | Ordinary least-squares line fit; fail on unequal lengths, < 2 points, or zero x-variance |
-| `Statistics.mean(arr)`                | `(array<number>)`                | `result<number>`                   | Arithmetic mean; fail if empty                                                   |
-| `Statistics.median(arr)`              | `(array<number>)`                | `result<number>`                   | Median value; fail if empty                                                      |
-| `Statistics.mode(arr)`                | `(array<number>)`                | `result<number>`                   | Most frequent value; fail if empty                                               |
-| `Statistics.percentile(arr, p)`       | `(array<number>, number)`        | `result<number>`                   | p-th percentile; fail if empty or `p` outside [0, 100]                           |
-| `Statistics.standard_deviation(arr)`  | `(array<number>)`                | `result<number>`                   | Standard deviation; fail if empty                                                |
-| `Statistics.summarize(arr)`           | `(array<number>)`                | `result<Statistics.Summary>`       | Descriptive statistics (count, min, max, mean, median, std. dev.) in one pass; fail if empty |
-| `Statistics.variance(arr)`            | `(array<number>)`                | `result<number>`                   | Variance; fail if empty                                                          |
+| `Statistics.mean(array)`                | `(array<number>)`                | `result<number>`                   | Arithmetic mean; fail if empty                                                   |
+| `Statistics.median(array)`              | `(array<number>)`                | `result<number>`                   | Median value; fail if empty                                                      |
+| `Statistics.mode(array)`                | `(array<number>)`                | `result<number>`                   | Most frequent value; fail if empty                                               |
+| `Statistics.percentile(array, p)`       | `(array<number>, number)`        | `result<number>`                   | p-th percentile; fail if empty or `p` outside [0, 100]                           |
+| `Statistics.standard_deviation(array)`  | `(array<number>)`                | `result<number>`                   | Standard deviation; fail if empty                                                |
+| `Statistics.summarize(array)`           | `(array<number>)`                | `result<Statistics.Summary>`       | Descriptive statistics (count, min, max, mean, median, std. dev.) in one pass; fail if empty |
+| `Statistics.variance(array)`            | `(array<number>)`                | `result<number>`                   | Variance; fail if empty                                                          |
 
 `Statistics.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
 
-`Statistics.FiveNumberSummary` is the box-plot sibling of `Statistics.Summary` — `minimum: number`, `q1: number`, `median: number`, `q3: number`, `maximum: number` — returned by `Statistics.five_number_summary(arr)` (fails on an empty array). The quartiles use the same linear-interpolation method as `Statistics.percentile`, so `Statistics.five_number_summary(v)` agrees with `Statistics.percentile(v, 25/50/75)` — a single typed answer for the five order statistics a box plot needs.
+`Statistics.FiveNumberSummary` is the box-plot sibling of `Statistics.Summary` — `minimum: number`, `q1: number`, `median: number`, `q3: number`, `maximum: number` — returned by `Statistics.five_number_summary(array)` (fails on an empty array). The quartiles use the same linear-interpolation method as `Statistics.percentile`, so `Statistics.five_number_summary(v)` agrees with `Statistics.percentile(v, 25/50/75)` — a single typed answer for the five order statistics a box plot needs.
 
 `Statistics.Histogram { bin_edges: array<number>, counts: array<integer>, bin_width: number }` is the binned frequency distribution behind every bar chart. `Statistics.histogram(values, bins)` splits the data range `[min, max]` into `bins` equal-width half-open bins and tallies how many samples fall in each — `counts[i]` is the number of values in `[bin_edges[i], bin_edges[i+1])`, so `bin_edges` always has one more element than `counts`, and the final bin is closed on the right so the maximum is counted. It fails on an empty array or `bins < 1`. When every value is identical (a zero-width range) the range is widened by half a unit on each side so the bins stay positive-width. The `integer` counts and `number` edges respect the numeric convention, and the shape feeds the GraphicalUi bar chart directly. Mirrors `Statistics.summarize` / `Statistics.five_number_summary`: pure data returned by one pipe-first `result`-typed call.
 
@@ -2956,80 +2871,80 @@ assert(Array.length(h.counts) == 3)
 
 | Function                            | Parameter Types                | Return Type       | Description                                                                     |
 | ----------------------------------- | ------------------------------ | ----------------- | ------------------------------------------------------------------------------- |
-| `String.byte_length(s)`             | `(string)`                     | `integer`         | Byte count of the string                                                        |
-| `String.capitalize(s)`              | `(string)`                     | `string`          | Uppercase the first character                                                   |
-| `String.center(s, width, fill)`     | `(string, integer, string)`    | `result<string>`  | Centre `s` in a field of `width` using `fill`; fail if `width` exceeds the maximum |
-| `String.character_at(s, i)`         | `(string, integer)`            | `result<string>`  | Character at codepoint index `i`; fail if out of bounds                         |
-| `String.characters(s)`              | `(string)`                     | `array<string>`   | Split into individual Unicode characters                                        |
-| `String.chunk(s, n)`                | `(string, integer)`            | `array<string>`   | Split into chunks of `n` characters; throws if `n` <= 0                         |
-| `String.common_prefix(a, b)`        | `(string, string)`             | `string`          | Longest common prefix of two strings                                            |
-| `String.common_suffix(a, b)`        | `(string, string)`             | `string`          | Longest common suffix of two strings                                            |
-| `String.contains(s, sub)`           | `(string, string)`             | `boolean`         | Whether `s` contains `sub`                                                      |
-| `String.contains_ignore_case(s, sub)` | `(string, string)`           | `boolean`         | Whether `s` contains `sub`, ignoring ASCII case                                 |
-| `String.count(s, sub)`              | `(string, string)`             | `integer`         | Number of non-overlapping occurrences of `sub`                                  |
-| `String.dedent(s)`                  | `(string)`                     | `string`          | Remove common leading whitespace                                                |
-| `String.delete(s, start, end)`      | `(string, integer, integer)`   | `result<string>`  | Remove codepoint range `[start, end)`; fail if out of bounds or `start > end`   |
-| `String.ends_with(s, suffix)`       | `(string, string)`             | `boolean`         | Whether `s` ends with `suffix`                                                  |
-| `String.ends_with_any(s, suffixes)` | `(string, array<string>)`      | `boolean`         | Whether `s` ends with any element of `suffixes`                                 |
-| `String.equals_ignore_case(a, b)`   | `(string, string)`             | `boolean`         | Whether `a` and `b` are equal, ignoring ASCII case                              |
-| `String.format_number(n, decimals)` | `(number, integer)`            | `string`          | Format number with fixed decimal places                                         |
+| `String.byte_length(value)`             | `(string)`                     | `integer`         | Byte count of the string                                                        |
+| `String.capitalize(value)`              | `(string)`                     | `string`          | Uppercase the first character                                                   |
+| `String.center(value, width, fill)`     | `(string, integer, string)`    | `result<string>`  | Centre `s` in a field of `width` using `fill`; fail if `width` exceeds the maximum |
+| `String.character_at(value, i)`         | `(string, integer)`            | `result<string>`  | Character at codepoint index `i`; fail if out of bounds                         |
+| `String.characters(value)`              | `(string)`                     | `array<string>`   | Split into individual Unicode characters                                        |
+| `String.chunk(value, n)`                | `(string, integer)`            | `array<string>`   | Split into chunks of `n` characters; throws if `n` <= 0                         |
+| `String.common_prefix(value, b)`        | `(string, string)`             | `string`          | Longest common prefix of two strings                                            |
+| `String.common_suffix(value, b)`        | `(string, string)`             | `string`          | Longest common suffix of two strings                                            |
+| `String.contains(value, sub)`           | `(string, string)`             | `boolean`         | Whether `s` contains `sub`                                                      |
+| `String.contains_ignore_case(value, sub)` | `(string, string)`           | `boolean`         | Whether `s` contains `sub`, ignoring ASCII case                                 |
+| `String.count(value, sub)`              | `(string, string)`             | `integer`         | Number of non-overlapping occurrences of `sub`                                  |
+| `String.dedent(value)`                  | `(string)`                     | `string`          | Remove common leading whitespace                                                |
+| `String.delete(value, start, end)`      | `(string, integer, integer)`   | `result<string>`  | Remove codepoint range `[start, end)`; fail if out of bounds or `start > end`   |
+| `String.ends_with(value, suffix)`       | `(string, string)`             | `boolean`         | Whether `s` ends with `suffix`                                                  |
+| `String.ends_with_any(value, suffixes)` | `(string, array<string>)`      | `boolean`         | Whether `s` ends with any element of `suffixes`                                 |
+| `String.equals_ignore_case(value, b)`   | `(string, string)`             | `boolean`         | Whether `a` and `b` are equal, ignoring ASCII case                              |
+| `String.format_number(value, decimals)` | `(number, integer)`            | `string`          | Format number with fixed decimal places                                         |
 | `String.from_bytes(bytes)`          | `(array<integer>)`             | `result<string>`  | Build string from byte values                                                   |
 | `String.from_codepoints(cps)`       | `(array<integer>)`             | `result<string>`  | Build string from Unicode codepoints                                            |
-| `String.indent(s, prefix)`          | `(string, string)`             | `string`          | Prepend `prefix` to every line                                                  |
-| `String.insert(s, index, text)`     | `(string, integer, string)`    | `result<string>`  | Insert `text` at codepoint `index` (`0..len`); fail if out of bounds            |
-| `String.index_of(s, sub)`           | `(string, string)`             | `result<integer>` | First index of `sub`; fail if not found                                         |
-| `String.is_alpha(s)`                | `(string)`                     | `boolean`         | Whether all characters are alphabetic                                           |
-| `String.is_alphanumeric(s)`         | `(string)`                     | `boolean`         | Whether all characters are alphanumeric                                         |
-| `String.is_ascii(s)`                | `(string)`                     | `boolean`         | Whether all bytes are in the ASCII range (0x00–0x7F)                            |
-| `String.is_digit(s)`                | `(string)`                     | `boolean`         | Whether all characters are digits                                               |
-| `String.is_empty(s)`                | `(string)`                     | `boolean`         | Whether the string is empty                                                     |
-| `String.is_lowercase(s)`            | `(string)`                     | `boolean`         | Whether all characters are lowercase                                            |
-| `String.is_numeric(s)`              | `(string)`                     | `boolean`         | Whether the string represents a numeric value                                   |
-| `String.is_palindrome(s)`           | `(string)`                     | `boolean`         | Whether `s` reads the same forwards and backwards                               |
-| `String.is_uppercase(s)`            | `(string)`                     | `boolean`         | Whether all characters are uppercase                                            |
-| `String.is_whitespace(s)`           | `(string)`                     | `boolean`         | Whether all characters are whitespace                                           |
-| `String.is_blank(s)`                | `(string)`                     | `boolean`         | Whether the string is empty or all whitespace                                   |
-| `String.join(arr, sep)`             | `(array<string>, string)`      | `string`          | Join array elements with separator                                              |
-| `String.last_index_of(s, sub)`      | `(string, string)`             | `result<integer>` | Last index of `sub`; fail if not found                                          |
-| `String.length(s)`                  | `(string)`                     | `integer`         | Number of Unicode codepoints (not bytes)                                        |
-| `String.levenshtein_distance(a, b)` | `(string, string)`             | `integer`         | Edit distance between two strings                                               |
-| `String.lines(s)`                   | `(string)`                     | `array<string>`   | Split into lines on `\n`, `\r\n`, `\r`; no trailing empty after a final newline |
-| `String.lowercase(s)`               | `(string)`                     | `string`          | Convert to lowercase                                                            |
-| `String.matches(s, glob)`           | `(string, string)`             | `result<boolean>` | Glob match (`*` = any chars, `?` = one char)                                    |
-| `String.pad_left(s, width, fill)`   | `(string, integer, string)`    | `result<string>`  | Left-pad to `width`; fail if `width` exceeds the maximum                        |
-| `String.pad_right(s, width, fill)`  | `(string, integer, string)`    | `result<string>`  | Right-pad to `width`; fail if `width` exceeds the maximum                       |
-| `String.parse_integer(s)`           | `(string)`                     | `result<integer>` | Parse string as integer                                                         |
-| `String.parse_number(s)`            | `(string)`                     | `result<number>`  | Parse string as number                                                          |
-| `String.remove_prefix(s, prefix)`   | `(string, string)`             | `string`          | Remove leading prefix                                                           |
-| `String.remove_suffix(s, suffix)`   | `(string, string)`             | `string`          | Remove trailing suffix                                                          |
-| `String.repeat(s, n)`               | `(string, integer)`            | `result<string>`  | Repeat `s` `n` times; fail if the count or result size exceeds the maximum      |
-| `String.replace(s, old, new)`       | `(string, string, string)`     | `string`          | Replace first occurrence                                                        |
-| `String.replace_all(s, old, new)`   | `(string, string, string)`     | `string`          | Replace all occurrences                                                         |
-| `String.replace_range(s, start, end, text)` | `(string, integer, integer, string)` | `result<string>` | Replace codepoint range `[start, end)` with `text`; fail if out of bounds or `start > end` |
-| `String.reverse(s)`                 | `(string)`                     | `string`          | Reverse the string                                                              |
-| `String.slug(s)`                    | `(string)`                     | `string`          | Convert to a URL-friendly slug                                                  |
-| `String.split(s, sep)`              | `(string, string)`             | `array<string>`   | Split by separator                                                              |
-| `String.split_n(s, sep, n)`         | `(string, string, integer)`    | `array<string>`   | Split into at most `n` parts                                                    |
-| `String.split_whitespace(s)`        | `(string)`                     | `array<string>`   | Split on runs of ASCII whitespace; no empty tokens                              |
-| `String.starts_with(s, prefix)`     | `(string, string)`             | `boolean`         | Whether `s` starts with `prefix`                                                |
-| `String.starts_with_any(s, prefixes)` | `(string, array<string>)`    | `boolean`         | Whether `s` starts with any element of `prefixes`                               |
-| `String.substring(s, start, end)`   | `(string, integer, integer)`   | `string`          | Substring by codepoint indices                                                  |
-| `String.template(tmpl, vars)`       | `(string, dictionary<string>)` | `string`          | Replace `{key}` placeholders from dictionary                                    |
-| `String.title_case(s)`              | `(string)`                     | `string`          | Capitalise first letter of each word                                            |
-| `String.to_bytes(s)`                | `(string)`                     | `array<integer>`  | UTF-8 byte values                                                               |
-| `String.to_camel_case(s)`           | `(string)`                     | `string`          | Convert to `camelCase`                                                          |
-| `String.to_codepoints(s)`           | `(string)`                     | `array<integer>`  | Unicode codepoint values                                                        |
-| `String.to_kebab_case(s)`           | `(string)`                     | `string`          | Convert to `kebab-case`                                                         |
-| `String.to_pascal_case(s)`          | `(string)`                     | `string`          | Convert to `PascalCase`                                                         |
-| `String.to_snake_case(s)`           | `(string)`                     | `string`          | Convert to `snake_case`                                                         |
-| `String.trim(s)`                    | `(string)`                     | `string`          | Remove leading and trailing whitespace                                          |
-| `String.trim_end(s)`                | `(string)`                     | `string`          | Remove trailing whitespace                                                      |
-| `String.trim_start(s)`              | `(string)`                     | `string`          | Remove leading whitespace                                                       |
-| `String.truncate(s, max)`           | `(string, integer)`            | `string`          | Truncate to `max` characters, appending `"..."` if needed                       |
-| `String.uppercase(s)`               | `(string)`                     | `string`          | Convert to uppercase                                                            |
-| `String.wrap(s, width)`             | `(string, integer)`            | `string`          | Word-wrap at `width` columns                                                    |
-| `String.word_count(s)`              | `(string)`                     | `integer`         | Number of whitespace-separated words                                            |
-| `String.words(s)`                   | `(string)`                     | `array<string>`   | Split on runs of ASCII whitespace (alias of `split_whitespace`)                 |
+| `String.indent(value, prefix)`          | `(string, string)`             | `string`          | Prepend `prefix` to every line                                                  |
+| `String.insert(value, index, text)`     | `(string, integer, string)`    | `result<string>`  | Insert `text` at codepoint `index` (`0..len`); fail if out of bounds            |
+| `String.index_of(value, sub)`           | `(string, string)`             | `result<integer>` | First index of `sub`; fail if not found                                         |
+| `String.is_alpha(value)`                | `(string)`                     | `boolean`         | Whether all characters are alphabetic                                           |
+| `String.is_alphanumeric(value)`         | `(string)`                     | `boolean`         | Whether all characters are alphanumeric                                         |
+| `String.is_ascii(value)`                | `(string)`                     | `boolean`         | Whether all bytes are in the ASCII range (0x00–0x7F)                            |
+| `String.is_digit(value)`                | `(string)`                     | `boolean`         | Whether all characters are digits                                               |
+| `String.is_empty(value)`                | `(string)`                     | `boolean`         | Whether the string is empty                                                     |
+| `String.is_lowercase(value)`            | `(string)`                     | `boolean`         | Whether all characters are lowercase                                            |
+| `String.is_numeric(value)`              | `(string)`                     | `boolean`         | Whether the string represents a numeric value                                   |
+| `String.is_palindrome(value)`           | `(string)`                     | `boolean`         | Whether `s` reads the same forwards and backwards                               |
+| `String.is_uppercase(value)`            | `(string)`                     | `boolean`         | Whether all characters are uppercase                                            |
+| `String.is_whitespace(value)`           | `(string)`                     | `boolean`         | Whether all characters are whitespace                                           |
+| `String.is_blank(value)`                | `(string)`                     | `boolean`         | Whether the string is empty or all whitespace                                   |
+| `String.join(array, separator)`             | `(array<string>, string)`      | `string`          | Join array elements with separator                                              |
+| `String.last_index_of(value, sub)`      | `(string, string)`             | `result<integer>` | Last index of `sub`; fail if not found                                          |
+| `String.length(value)`                  | `(string)`                     | `integer`         | Number of Unicode codepoints (not bytes)                                        |
+| `String.levenshtein_distance(value, b)` | `(string, string)`             | `integer`         | Edit distance between two strings                                               |
+| `String.lines(value)`                   | `(string)`                     | `array<string>`   | Split into lines on `\n`, `\r\n`, `\r`; no trailing empty after a final newline |
+| `String.lowercase(value)`               | `(string)`                     | `string`          | Convert to lowercase                                                            |
+| `String.matches(value, glob)`           | `(string, string)`             | `result<boolean>` | Glob match (`*` = any chars, `?` = one char)                                    |
+| `String.pad_left(value, width, fill)`   | `(string, integer, string)`    | `result<string>`  | Left-pad to `width`; fail if `width` exceeds the maximum                        |
+| `String.pad_right(value, width, fill)`  | `(string, integer, string)`    | `result<string>`  | Right-pad to `width`; fail if `width` exceeds the maximum                       |
+| `String.parse_integer(value)`           | `(string)`                     | `result<integer>` | Parse string as integer                                                         |
+| `String.parse_number(value)`            | `(string)`                     | `result<number>`  | Parse string as number                                                          |
+| `String.remove_prefix(value, prefix)`   | `(string, string)`             | `string`          | Remove leading prefix                                                           |
+| `String.remove_suffix(value, suffix)`   | `(string, string)`             | `string`          | Remove trailing suffix                                                          |
+| `String.repeat(value, n)`               | `(string, integer)`            | `result<string>`  | Repeat `s` `n` times; fail if the count or result size exceeds the maximum      |
+| `String.replace(value, old, new)`       | `(string, string, string)`     | `string`          | Replace first occurrence                                                        |
+| `String.replace_all(value, old, new)`   | `(string, string, string)`     | `string`          | Replace all occurrences                                                         |
+| `String.replace_range(value, start, end, text)` | `(string, integer, integer, string)` | `result<string>` | Replace codepoint range `[start, end)` with `text`; fail if out of bounds or `start > end` |
+| `String.reverse(value)`                 | `(string)`                     | `string`          | Reverse the string                                                              |
+| `String.slug(value)`                    | `(string)`                     | `string`          | Convert to a URL-friendly slug                                                  |
+| `String.split(value, separator)`              | `(string, string)`             | `array<string>`   | Split by separator                                                              |
+| `String.split_n(value, separator, n)`         | `(string, string, integer)`    | `array<string>`   | Split into at most `n` parts                                                    |
+| `String.split_whitespace(value)`        | `(string)`                     | `array<string>`   | Split on runs of ASCII whitespace; no empty tokens                              |
+| `String.starts_with(value, prefix)`     | `(string, string)`             | `boolean`         | Whether `s` starts with `prefix`                                                |
+| `String.starts_with_any(value, prefixes)` | `(string, array<string>)`    | `boolean`         | Whether `s` starts with any element of `prefixes`                               |
+| `String.substring(value, start, end)`   | `(string, integer, integer)`   | `string`          | Substring by codepoint indices                                                  |
+| `String.template(template, variables)`       | `(string, dictionary<string>)` | `string`          | Replace `{key}` placeholders from dictionary                                    |
+| `String.title_case(value)`              | `(string)`                     | `string`          | Capitalise first letter of each word                                            |
+| `String.to_bytes(value)`                | `(string)`                     | `array<integer>`  | UTF-8 byte values                                                               |
+| `String.to_camel_case(value)`           | `(string)`                     | `string`          | Convert to `camelCase`                                                          |
+| `String.to_codepoints(value)`           | `(string)`                     | `array<integer>`  | Unicode codepoint values                                                        |
+| `String.to_kebab_case(value)`           | `(string)`                     | `string`          | Convert to `kebab-case`                                                         |
+| `String.to_pascal_case(value)`          | `(string)`                     | `string`          | Convert to `PascalCase`                                                         |
+| `String.to_snake_case(value)`           | `(string)`                     | `string`          | Convert to `snake_case`                                                         |
+| `String.trim(value)`                    | `(string)`                     | `string`          | Remove leading and trailing whitespace                                          |
+| `String.trim_end(value)`                | `(string)`                     | `string`          | Remove trailing whitespace                                                      |
+| `String.trim_start(value)`              | `(string)`                     | `string`          | Remove leading whitespace                                                       |
+| `String.truncate(value, maximum)`           | `(string, integer)`            | `string`          | Truncate to `maximum` characters, appending `"..."` if needed                       |
+| `String.uppercase(value)`               | `(string)`                     | `string`          | Convert to uppercase                                                            |
+| `String.wrap(value, width)`             | `(string, integer)`            | `string`          | Word-wrap at `width` columns                                                    |
+| `String.word_count(value)`              | `(string)`                     | `integer`         | Number of whitespace-separated words                                            |
+| `String.words(value)`                   | `(string)`                     | `array<string>`   | Split on runs of ASCII whitespace (alias of `split_whitespace`)                 |
 
 > **Note:** `String.length` returns an `integer` — the number of Unicode codepoints (not bytes). Use `String.byte_length` to get the byte count of a string.
 
@@ -3110,21 +3025,21 @@ Using `spawn` outside a `task_scope` still works (fire-and-forget) but produces 
 | `Task.all(tasks)`       | `(array<task<T>>)`                   | `result<array<T>>` | Wait for all; return results in order            |
 | `Task.all_settled(tasks)` | `(array<task<T>>)`                 | `array<result<T>>` | Await every task; one result each, never fails as a whole (fail-slow) |
 | `Task.any(tasks)`       | `(array<task<T>>)`                   | `result<T>`        | First successful result; ignore failures         |
-| `Task.cancel(t)`        | `(task<T>)`                          | `boolean`          | Cancel a task cooperatively; `true` if token set |
+| `Task.cancel(task)`        | `(task<T>)`                          | `boolean`          | Cancel a task cooperatively; `true` if token set |
 | `Task.completed(value)` | `(T)`                                | `task<T>`          | A task already completed with `value` (like `Promise.resolve`) |
-| `Task.delay(ms)`        | `(integer)`                          | `none`             | Sleep for `ms` milliseconds                      |
+| `Task.delay(milliseconds)`        | `(integer)`                          | `none`             | Sleep for `milliseconds` milliseconds                      |
 | `Task.failed(message)`  | `(string)`                           | `task<T>`          | A task already failed with `message` (like `Promise.reject`) |
-| `Task.flat_map(t, fn)`  | `(task<T>, function(T) -> task<U>)`  | `result<U>`        | Chain with another spawn                         |
-| `Task.is_cancelled(t)`  | `(task<T>)`                          | `boolean`          | Whether the task's cancellation token is set     |
-| `Task.is_done(t)`       | `(task<T>)`                          | `result<boolean>`  | Whether the task has completed                   |
-| `Task.map(t, fn)`       | `(task<T>, function(T) -> U)`        | `result<U>`        | Transform completed value                        |
-| `Task.map_n(tasks, fn)` | `(array<task<T>>, function(T) -> U)` | `result<array<U>>` | Map over all task results                        |
+| `Task.flat_map(task, function)`  | `(task<T>, function(T) -> task<U>)`  | `result<U>`        | Chain with another spawn                         |
+| `Task.is_cancelled(task)`  | `(task<T>)`                          | `boolean`          | Whether the task's cancellation token is set     |
+| `Task.is_done(task)`       | `(task<T>)`                          | `result<boolean>`  | Whether the task has completed                   |
+| `Task.map(task, function)`       | `(task<T>, function(T) -> U)`        | `result<U>`        | Transform completed value                        |
+| `Task.map_n(tasks, function)` | `(array<task<T>>, function(T) -> U)` | `result<array<U>>` | Map over all task results                        |
 | `Task.race(tasks)`      | `(array<task<T>>)`                   | `result<T>`        | Return first completed result                    |
-| `Task.retry(n, fn)`     | `(integer, function() -> T)`         | `result<T>`        | Retry up to `n` times; `n` must be > 0           |
-| `Task.retry_with_backoff(n, base_delay_ms, fn)` | `(integer, integer, function() -> T)` | `result<T>` | Retry up to `n` times with exponential backoff (`base_delay_ms`, `2×`, `4×`, …) between attempts |
+| `Task.retry(task, function)`     | `(integer, function() -> T)`         | `result<T>`        | Retry up to `n` times; `n` must be > 0           |
+| `Task.retry_with_backoff(task, base_delay_milliseconds, function)` | `(integer, integer, function() -> T)` | `result<T>` | Retry up to `n` times with exponential backoff (`base_delay_milliseconds`, `2×`, `4×`, …) between attempts |
 | `Task.sequence(tasks)`  | `(array<task<T>>)`                   | `result<array<T>>` | Await each in order; collect results             |
-| `Task.timeout(t, ms)`   | `(task<T>, integer)`                 | `result<T>`        | Await with timeout; fail on timeout              |
-| `Task.timeout_or(t, ms, default)` | `(task<T>, integer, T)`    | `T`                | Task's value if it completes within `ms`, else `default` (timeout or failure) |
+| `Task.timeout(task, milliseconds)`   | `(task<T>, integer)`                 | `result<T>`        | Await with timeout; fail on timeout              |
+| `Task.timeout_or(task, milliseconds, default)` | `(task<T>, integer, T)`    | `T`                | Task's value if it completes within `milliseconds`, else `default` (timeout or failure) |
 
 > **Resource limit** — The internal task queue holds a bounded number of pending tasks (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`). Spawning beyond this limit throws a runtime error (`task queue is full — too many pending tasks`). Design your program to await tasks before spawning more to stay within this limit.
 
@@ -3168,15 +3083,15 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | `Terminal.move_down(n)`                        | `(integer)`                           | `none`                            | Move cursor down `n` lines                                              |
 | `Terminal.move_left(n)`                        | `(integer)`                           | `none`                            | Move cursor left `n` columns                                            |
 | `Terminal.move_right(n)`                       | `(integer)`                           | `none`                            | Move cursor right `n` columns                                           |
-| `Terminal.move_to_column(col)`                 | `(integer)`                           | `result<none>`                    | Move to column; fail if `col < 1`                                       |
+| `Terminal.move_to_column(column)`                 | `(integer)`                           | `result<none>`                    | Move to column; fail if `col < 1`                                       |
 | `Terminal.move_to_row(row)`                    | `(integer)`                           | `result<none>`                    | Move to row; fail if `row < 1`                                          |
-| `Terminal.move_to(row, col)`                   | `(integer, integer)`                  | `none`                            | Move cursor to row and column (1-based)                                 |
+| `Terminal.move_to(row, column)`                   | `(integer, integer)`                  | `none`                            | Move cursor to row and column (1-based)                                 |
 | `Terminal.move_up(n)`                          | `(integer)`                           | `none`                            | Move cursor up `n` lines                                                |
 | `Terminal.overwrite_line(text)`                | `(string)`                            | `none`                            | Clear current line and write                                            |
 | `Terminal.parse_key(key)`                      | `(string)`                            | `Terminal.Key`                    | Decode a key name into a typed `Terminal.Key` choice                    |
 | `Terminal.parse_mouse_event(key)`              | `(string)`                            | `optional<Terminal.MouseEvent>`   | Decode a `"mouse:<kind>:ROW:COL"` string into a typed event; `none` if malformed |
 | `Terminal.plain_style()`                       | `()`                                  | `Terminal.Style`                  | A default `Terminal.Style` (no colours, no attributes) to override with `with` |
-| `Terminal.read_key_timeout(ms)`                | `(integer)`                           | `result<string>`                  | Non-blocking key read with timeout in ms                                |
+| `Terminal.read_key_timeout(milliseconds)`                | `(integer)`                           | `result<string>`                  | Non-blocking key read with timeout in ms                                |
 | `Terminal.read_key()`                          | `()`                                  | `result<string>`                  | Blocking key read; requires raw mode                                    |
 | `Terminal.read_line(prompt)`                   | `(string)`                            | `result<string>`                  | Print `prompt`, then read a line with minimal editing (printable keys, backspace, Enter); requires raw mode |
 | `Terminal.reset_scroll_region()`               | `()`                                  | `none`                            | Reset to full-screen scrolling                                          |
@@ -3189,7 +3104,7 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | `Terminal.scroll_down(n)`                      | `(integer)`                           | `none`                            | Scroll content down `n` lines                                           |
 | `Terminal.scroll_up(n)`                        | `(integer)`                           | `none`                            | Scroll content up `n` lines                                             |
 | `Terminal.set_cursor_style(style)`             | `(Terminal.CursorStyle)`              | `result<boolean>`                 | Set the cursor shape via DECSCUSR                                       |
-| `Terminal.set_escape_timeout(ms)`              | `(integer)`                           | `none`                            | Set the escape-sequence timeout in milliseconds                         |
+| `Terminal.set_escape_timeout(milliseconds)`              | `(integer)`                           | `none`                            | Set the escape-sequence timeout in milliseconds                         |
 | `Terminal.set_scroll_region(top, bottom)`      | `(integer, integer)`                  | `result<none>`                    | Set scrollable region; fail if `top` or `bottom < 1` or `top >= bottom` |
 | `Terminal.set_title(title)`                    | `(string)`                            | `none`                            | Set the terminal window title                                           |
 | `Terminal.show_cursor()`                       | `()`                                  | `none`                            | Show the cursor                                                         |
@@ -3215,7 +3130,7 @@ Key names returned by `read_key` / `read_key_timeout` / `get_input`: printable c
 
 `Terminal.Size` record fields: `columns` (`integer`), `rows` (`integer`).
 
-`Terminal.InputEvent` record fields: `key` (`string`), `shift` (`boolean`), `ctrl` (`boolean`), `alt` (`boolean`). The `key` field contains the base key name without modifier prefixes. Use `get_input()` instead of `read_key()` when you need to inspect modifiers individually.
+`Terminal.InputEvent` record fields: `key` (`string`), `shift` (`boolean`), `control` (`boolean`), `alt` (`boolean`). The `key` field contains the base key name without modifier prefixes. Use `get_input()` instead of `read_key()` when you need to inspect modifiers individually.
 
 Mouse events arrive from `read_key` / `read_key_timeout` / `get_input` as strings of the form `"mouse:<kind>:ROW:COL"` (ROW and COL are 1-based integers). Decode one into a typed record with `Terminal.parse_mouse_event(key)`, which returns `optional<Terminal.MouseEvent>` — `none` for any string that is not a well-formed, recognised mouse event. This replaces hand-rolled `String.split(key, ":")` parsing, mirroring what `Terminal.InputEvent` does for keys.
 

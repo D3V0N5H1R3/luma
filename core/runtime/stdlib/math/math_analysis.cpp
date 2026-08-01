@@ -101,17 +101,17 @@ void register_math_analysis(const EnvPtr& env) {
         })
         .checked_unary("arc_tangent", [](double x) { return std::atan(x); })
         .checked_unary("exponential", [](double x) { return std::exp(x); })
-        .func("max", 2)
+        .func("maximum", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            auto a = expect_numeric(args[0], "Math.max", loc);
-            auto b = expect_numeric(args[1], "Math.max", loc);
+            auto a = expect_numeric(args[0], "Math.maximum", loc);
+            auto b = expect_numeric(args[1], "Math.maximum", loc);
 
             return a >= b ? args[0] : args[1];
         })
-        .func("min", 2)
+        .func("minimum", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            auto a = expect_numeric(args[0], "Math.min", loc);
-            auto b = expect_numeric(args[1], "Math.min", loc);
+            auto a = expect_numeric(args[0], "Math.minimum", loc);
+            auto b = expect_numeric(args[1], "Math.minimum", loc);
 
             return a <= b ? args[0] : args[1];
         })

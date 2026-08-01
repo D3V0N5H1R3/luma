@@ -185,16 +185,16 @@ LUMA_TEST(math_nan) {
 
 LUMA_TEST(math_lerp) {
     // Happy path: returns result<number>.
-    ASSERT_EVAL_NUM("Math.lerp(0.0, 10.0, 0.5)", 5.0);
+    ASSERT_EVAL_NUM("Math.linear_interpolation(0.0, 10.0, 0.5)", 5.0);
 
-    ASSERT_EVAL_NUM("Math.lerp(0.0, 10.0, 0.0)", 0.0);
+    ASSERT_EVAL_NUM("Math.linear_interpolation(0.0, 10.0, 0.0)", 0.0);
 
-    ASSERT_EVAL_NUM("Math.lerp(0.0, 10.0, 1.0)", 10.0);
+    ASSERT_EVAL_NUM("Math.linear_interpolation(0.0, 10.0, 1.0)", 10.0);
 
     // t outside [0, 1] → fail.
-    ASSERT_EVAL_FAILURE("Math.lerp(0.0, 10.0, 1.5)");
+    ASSERT_EVAL_FAILURE("Math.linear_interpolation(0.0, 10.0, 1.5)");
 
-    ASSERT_EVAL_FAILURE("Math.lerp(0.0, 10.0, -0.1)");
+    ASSERT_EVAL_FAILURE("Math.linear_interpolation(0.0, 10.0, -0.1)");
 }
 
 LUMA_TEST(math_module) {
@@ -294,7 +294,7 @@ LUMA_TEST(math_clamp_inverted_range) {
 }
 
 LUMA_TEST(math_lerp_out_of_range) {
-    ASSERT_EVAL_FAILURE("Math.lerp(0.0, 1.0, 2.0)");
+    ASSERT_EVAL_FAILURE("Math.linear_interpolation(0.0, 1.0, 2.0)");
 }
 
 LUMA_TEST(math_factorial_negative) {
@@ -431,10 +431,10 @@ LUMA_TEST(math_log) {
 }
 
 LUMA_TEST(math_max_min) {
-    ASSERT_NEAR(eval("Math.max(3.0, 7.0)").as_number(), 7.0, 1e-9);
-    ASSERT_NEAR(eval("Math.max(-1.0, -5.0)").as_number(), -1.0, 1e-9);
-    ASSERT_NEAR(eval("Math.min(3.0, 7.0)").as_number(), 3.0, 1e-9);
-    ASSERT_NEAR(eval("Math.min(-1.0, -5.0)").as_number(), -5.0, 1e-9);
+    ASSERT_NEAR(eval("Math.maximum(3.0, 7.0)").as_number(), 7.0, 1e-9);
+    ASSERT_NEAR(eval("Math.maximum(-1.0, -5.0)").as_number(), -1.0, 1e-9);
+    ASSERT_NEAR(eval("Math.minimum(3.0, 7.0)").as_number(), 3.0, 1e-9);
+    ASSERT_NEAR(eval("Math.minimum(-1.0, -5.0)").as_number(), -5.0, 1e-9);
 }
 
 LUMA_TEST(math_truncate) {
@@ -444,7 +444,7 @@ LUMA_TEST(math_truncate) {
 }
 
 LUMA_TEST(math_atan2) {
-    const auto v = eval("Math.atan2(1.0, 1.0)");
+    const auto v = eval("Math.arc_tangent2(1.0, 1.0)");
 
     ASSERT_RESULT_SUCCESS(v);
 
@@ -453,9 +453,9 @@ LUMA_TEST(math_atan2) {
 }
 
 LUMA_TEST(math_hypot) {
-    ASSERT_NEAR(eval("Math.hypot(3.0, 4.0)").as_number(), 5.0, 1e-9);
-    ASSERT_NEAR(eval("Math.hypot(0.0, 0.0)").as_number(), 0.0, 1e-9);
-    ASSERT_NEAR(eval("Math.hypot(5.0, 12.0)").as_number(), 13.0, 1e-9);
+    ASSERT_NEAR(eval("Math.hypotenuse(3.0, 4.0)").as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(eval("Math.hypotenuse(0.0, 0.0)").as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(eval("Math.hypotenuse(5.0, 12.0)").as_number(), 13.0, 1e-9);
 }
 
 LUMA_TEST(math_cube_root) {
@@ -590,8 +590,8 @@ LUMA_TEST(math_interval_construct_and_contains) {
 
     const auto& rec = v.as_result()->owned_inner->as_record();
     ASSERT_EQ(rec->type_name, std::string{"Interval"});
-    ASSERT_NEAR(rec->find_field("min")->as_number(), 1.0, 1e-9);
-    ASSERT_NEAR(rec->find_field("max")->as_number(), 5.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("minimum")->as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(rec->find_field("maximum")->as_number(), 5.0, 1e-9);
 
     ASSERT_EQ(eval("Math.interval_contains(Result.unwrap(Math.interval(1.0, 5.0)), 3.0)").as_bool(),
               true);
@@ -626,14 +626,14 @@ LUMA_TEST(math_interval_clamp_length_overlap) {
               false);
 }
 
-// --- Math.Rect (N03) ---
+// --- Math.Rectangle (N03) ---
 
 LUMA_TEST(math_rect_construct_and_fields) {
-    const auto v = eval("Math.rect(1.0, 2.0, 30.0, 40.0)");
+    const auto v = eval("Math.rectangle(1.0, 2.0, 30.0, 40.0)");
     ASSERT_TRUE(v.is_record());
 
     const auto& rec = v.as_record();
-    ASSERT_EQ(rec->type_name, std::string{"Rect"});
+    ASSERT_EQ(rec->type_name, std::string{"Rectangle"});
     ASSERT_NEAR(rec->find_field("x")->as_number(), 1.0, 1e-9);
     ASSERT_NEAR(rec->find_field("y")->as_number(), 2.0, 1e-9);
     ASSERT_NEAR(rec->find_field("width")->as_number(), 30.0, 1e-9);
@@ -642,45 +642,52 @@ LUMA_TEST(math_rect_construct_and_fields) {
 
 LUMA_TEST(math_rect_negative_dimensions_clamped) {
     // A degenerate (inside-out) rectangle clamps its extent to zero.
-    const auto v = eval("Math.rect(5.0, 5.0, -3.0, -4.0)");
+    const auto v = eval("Math.rectangle(5.0, 5.0, -3.0, -4.0)");
     const auto& rec = v.as_record();
     ASSERT_NEAR(rec->find_field("width")->as_number(), 0.0, 1e-9);
     ASSERT_NEAR(rec->find_field("height")->as_number(), 0.0, 1e-9);
-    ASSERT_NEAR(eval("Math.rect_area(Math.rect(5.0, 5.0, -3.0, -4.0))").as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(eval("Math.rectangle_area(Math.rectangle(5.0, 5.0, -3.0, -4.0))").as_number(), 0.0,
+                1e-9);
 }
 
 LUMA_TEST(math_rect_contains_half_open) {
     // Half-open: the min edges are inside, the max edges are outside.
-    ASSERT_EQ(eval("Math.rect_contains(Math.rect(0.0, 0.0, 10.0, 10.0), 5.0, 5.0)").as_bool(),
-              true);
-    ASSERT_EQ(eval("Math.rect_contains(Math.rect(0.0, 0.0, 10.0, 10.0), 0.0, 0.0)").as_bool(),
-              true);
-    ASSERT_EQ(eval("Math.rect_contains(Math.rect(0.0, 0.0, 10.0, 10.0), 10.0, 5.0)").as_bool(),
-              false);
-    ASSERT_EQ(eval("Math.rect_contains(Math.rect(0.0, 0.0, 10.0, 10.0), 5.0, 10.0)").as_bool(),
-              false);
+    ASSERT_EQ(
+        eval("Math.rectangle_contains(Math.rectangle(0.0, 0.0, 10.0, 10.0), 5.0, 5.0)").as_bool(),
+        true);
+    ASSERT_EQ(
+        eval("Math.rectangle_contains(Math.rectangle(0.0, 0.0, 10.0, 10.0), 0.0, 0.0)").as_bool(),
+        true);
+    ASSERT_EQ(
+        eval("Math.rectangle_contains(Math.rectangle(0.0, 0.0, 10.0, 10.0), 10.0, 5.0)").as_bool(),
+        false);
+    ASSERT_EQ(
+        eval("Math.rectangle_contains(Math.rectangle(0.0, 0.0, 10.0, 10.0), 5.0, 10.0)").as_bool(),
+        false);
 }
 
 LUMA_TEST(math_rect_intersects) {
-    ASSERT_EQ(eval("Math.rect_intersects(Math.rect(0.0, 0.0, 10.0, 10.0), "
-                   "Math.rect(5.0, 5.0, 10.0, 10.0))")
+    ASSERT_EQ(eval("Math.rectangle_intersects(Math.rectangle(0.0, 0.0, 10.0, 10.0), "
+                   "Math.rectangle(5.0, 5.0, 10.0, 10.0))")
                   .as_bool(),
               true);
     // Touching edges do not count (half-open).
-    ASSERT_EQ(eval("Math.rect_intersects(Math.rect(0.0, 0.0, 10.0, 10.0), "
-                   "Math.rect(10.0, 0.0, 5.0, 5.0))")
+    ASSERT_EQ(eval("Math.rectangle_intersects(Math.rectangle(0.0, 0.0, 10.0, 10.0), "
+                   "Math.rectangle(10.0, 0.0, 5.0, 5.0))")
                   .as_bool(),
               false);
 }
 
 LUMA_TEST(math_rect_intersection_some_and_none) {
-    ASSERT_EQ(eval("Optional.is_some(Math.rect_intersection(Math.rect(0.0, 0.0, 10.0, 10.0), "
-                   "Math.rect(5.0, 5.0, 10.0, 10.0)))")
-                  .as_bool(),
-              true);
+    ASSERT_EQ(
+        eval("Optional.is_some(Math.rectangle_intersection(Math.rectangle(0.0, 0.0, 10.0, 10.0), "
+             "Math.rectangle(5.0, 5.0, 10.0, 10.0)))")
+            .as_bool(),
+        true);
 
-    const auto inter = eval("Optional.unwrap(Math.rect_intersection("
-                            "Math.rect(0.0, 0.0, 10.0, 10.0), Math.rect(5.0, 5.0, 10.0, 10.0)))");
+    const auto inter =
+        eval("Optional.unwrap(Math.rectangle_intersection("
+             "Math.rectangle(0.0, 0.0, 10.0, 10.0), Math.rectangle(5.0, 5.0, 10.0, 10.0)))");
     const auto& rec = inter.as_record();
     ASSERT_NEAR(rec->find_field("x")->as_number(), 5.0, 1e-9);
     ASSERT_NEAR(rec->find_field("y")->as_number(), 5.0, 1e-9);
@@ -688,15 +695,16 @@ LUMA_TEST(math_rect_intersection_some_and_none) {
     ASSERT_NEAR(rec->find_field("height")->as_number(), 5.0, 1e-9);
 
     // Disjoint rectangles → none.
-    ASSERT_EQ(eval("Optional.is_none(Math.rect_intersection(Math.rect(0.0, 0.0, 5.0, 5.0), "
-                   "Math.rect(10.0, 10.0, 5.0, 5.0)))")
-                  .as_bool(),
-              true);
+    ASSERT_EQ(
+        eval("Optional.is_none(Math.rectangle_intersection(Math.rectangle(0.0, 0.0, 5.0, 5.0), "
+             "Math.rectangle(10.0, 10.0, 5.0, 5.0)))")
+            .as_bool(),
+        true);
 }
 
 LUMA_TEST(math_rect_union) {
-    const auto v = eval("Math.rect_union(Math.rect(0.0, 0.0, 5.0, 5.0), "
-                        "Math.rect(10.0, 10.0, 5.0, 5.0))");
+    const auto v = eval("Math.rectangle_union(Math.rectangle(0.0, 0.0, 5.0, 5.0), "
+                        "Math.rectangle(10.0, 10.0, 5.0, 5.0))");
     const auto& rec = v.as_record();
     ASSERT_NEAR(rec->find_field("x")->as_number(), 0.0, 1e-9);
     ASSERT_NEAR(rec->find_field("y")->as_number(), 0.0, 1e-9);
@@ -705,13 +713,14 @@ LUMA_TEST(math_rect_union) {
 }
 
 LUMA_TEST(math_rect_center_and_area) {
-    const auto c = eval("Math.rect_center(Math.rect(0.0, 0.0, 10.0, 20.0))");
+    const auto c = eval("Math.rectangle_center(Math.rectangle(0.0, 0.0, 10.0, 20.0))");
     ASSERT_TRUE(c.is_record());
     ASSERT_EQ(c.as_record()->type_name, std::string{"Vector2"});
     ASSERT_NEAR(c.as_record()->find_field("x")->as_number(), 5.0, 1e-9);
     ASSERT_NEAR(c.as_record()->find_field("y")->as_number(), 10.0, 1e-9);
 
-    ASSERT_NEAR(eval("Math.rect_area(Math.rect(0.0, 0.0, 10.0, 20.0))").as_number(), 200.0, 1e-9);
+    ASSERT_NEAR(eval("Math.rectangle_area(Math.rectangle(0.0, 0.0, 10.0, 20.0))").as_number(),
+                200.0, 1e-9);
 }
 
 // --- Math.Circle (N05) ---
@@ -772,20 +781,20 @@ LUMA_TEST(math_circle_intersects) {
               false);
 }
 
-LUMA_TEST(math_circle_rect_intersects) {
+LUMA_TEST(math_circle_rectangle_intersects) {
     // Circle centre inside the rect → overlap.
-    ASSERT_EQ(eval("Math.circle_rect_intersects(Math.circle(Math.vector2(5.0, 5.0), 2.0), "
-                   "Math.rect(0.0, 0.0, 10.0, 10.0))")
+    ASSERT_EQ(eval("Math.circle_rectangle_intersects(Math.circle(Math.vector2(5.0, 5.0), 2.0), "
+                   "Math.rectangle(0.0, 0.0, 10.0, 10.0))")
                   .as_bool(),
               true);
     // Circle near an edge, within radius of the closest point → overlap.
-    ASSERT_EQ(eval("Math.circle_rect_intersects(Math.circle(Math.vector2(11.0, 5.0), 2.0), "
-                   "Math.rect(0.0, 0.0, 10.0, 10.0))")
+    ASSERT_EQ(eval("Math.circle_rectangle_intersects(Math.circle(Math.vector2(11.0, 5.0), 2.0), "
+                   "Math.rectangle(0.0, 0.0, 10.0, 10.0))")
                   .as_bool(),
               true);
     // Far corner: closest point (10,10) is distance ~2.83 from centre (12,12) > radius 2.
-    ASSERT_EQ(eval("Math.circle_rect_intersects(Math.circle(Math.vector2(12.0, 12.0), 2.0), "
-                   "Math.rect(0.0, 0.0, 10.0, 10.0))")
+    ASSERT_EQ(eval("Math.circle_rectangle_intersects(Math.circle(Math.vector2(12.0, 12.0), 2.0), "
+                   "Math.rectangle(0.0, 0.0, 10.0, 10.0))")
                   .as_bool(),
               false);
 }
@@ -793,7 +802,7 @@ LUMA_TEST(math_circle_rect_intersects) {
 LUMA_TEST(math_circle_rejects_non_record) {
     ASSERT_TRUE(luma::test::eval_throws("Math.circle_contains(42, Math.vector2(0.0, 0.0))"));
     ASSERT_TRUE(luma::test::eval_throws(
-        "Math.circle_rect_intersects(Math.circle(Math.vector2(0.0, 0.0), 1.0), 42)"));
+        "Math.circle_rectangle_intersects(Math.circle(Math.vector2(0.0, 0.0), 1.0), 42)"));
 }
 
 // --- Math.Angle (N07) ---
@@ -811,9 +820,9 @@ LUMA_TEST(math_angle_to_radians_and_degrees) {
 }
 
 LUMA_TEST(math_sin_of_angle) {
-    ASSERT_NEAR(eval("Math.sin_of(Math.Angle.Degrees(90.0))").as_number(), 1.0, 1e-9);
-    ASSERT_NEAR(eval("Math.sin_of(Math.Angle.Degrees(0.0))").as_number(), 0.0, 1e-9);
-    ASSERT_NEAR(eval("Math.sin_of(Math.Angle.Radians(Math.pi / 2.0))").as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(eval("Math.sine_of(Math.Angle.Degrees(90.0))").as_number(), 1.0, 1e-9);
+    ASSERT_NEAR(eval("Math.sine_of(Math.Angle.Degrees(0.0))").as_number(), 0.0, 1e-9);
+    ASSERT_NEAR(eval("Math.sine_of(Math.Angle.Radians(Math.pi / 2.0))").as_number(), 1.0, 1e-9);
 }
 
 // --- Math.Quaternion (N06) — removed ---
