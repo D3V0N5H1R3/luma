@@ -2,6 +2,11 @@
 name: review
 description: "Code reviewer that checks for bugs, security issues, performance pitfalls, and style violations."
 tools: Read, Grep, Glob
+handoffs:
+  - agent: implement
+    description: "Return to implementation when findings require code changes"
+  - agent: test
+    description: "Approve and run tests when review passes with no blocking findings"
 ---
 
 # Review Agent

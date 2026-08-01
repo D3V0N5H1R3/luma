@@ -1,6 +1,15 @@
 ---
 description: "Code reviewer that checks for bugs, security issues, performance pitfalls, and style violations."
 tools: ["search", "read"]
+handoffs:
+  - label: Return to Implementation (findings to fix)
+    agent: implement
+    prompt: "Code review complete. The following findings require code changes — fix them in priority order (bugs and security first, then performance, then style):"
+    send: true
+  - label: Approve and Run Tests
+    agent: test
+    prompt: "Code review passed with no blocking findings. Run the full test suite to confirm everything is green before merging."
+    send: true
 ---
 
 # Review Agent

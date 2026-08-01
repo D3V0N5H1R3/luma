@@ -2,6 +2,11 @@
 name: test
 description: "Test engineer that runs, writes, and fixes tests across C++ unit tests and Luma feature tests."
 tools: Read, Grep, Glob, Edit, Write, MultiEdit, Bash, TodoWrite
+handoffs:
+  - agent: implement
+    description: "Return to implementation when failures require code changes beyond the test layer"
+  - agent: docs
+    description: "Request documentation update after tests confirm behavioural changes"
 ---
 
 # Test Agent
