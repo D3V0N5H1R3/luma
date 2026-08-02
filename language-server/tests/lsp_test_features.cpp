@@ -1,6 +1,7 @@
 // LSP feature tests — hover, tokens, formatting, editing, rename, code actions.
 
 #include "analysis/source/source_location.hpp"
+#include "lsp_signature_label.hpp"
 #include "lsp_test_fixtures.hpp"
 #include "lsp_test_helpers.hpp"
 #include "lsp_token_utils.hpp"
@@ -1012,6 +1013,45 @@ void test_signature_help_user_function() {
     }
 }
 
+// ─── Signature help: parameter label offsets are UTF-16 code units ─
+//
+// Regression test for B01: ParameterInformation.label offsets must be UTF-16
+// code-unit offsets into the signature label, not UTF-8 byte offsets. A
+// multi-byte parameter name ('é' is 2 UTF-8 bytes but 1 UTF-16 unit) makes the
+// two disagree, so the correct label range must end 1 unit earlier than the
+// (incorrect) byte-based range would.
+void test_signature_help_parameter_label_utf16_offsets() {
+    // A multi-byte parameter name ('é' is 2 UTF-8 bytes but 1 UTF-16 code unit)
+    // makes byte offsets and UTF-16 offsets disagree. build_parameter_labels
+    // must emit UTF-16 code-unit offsets into the signature label (LSP §3.17),
+    // so the second parameter's start offset must not be inflated by the byte
+    // count of the 'é' in the first parameter's name.
+    const std::string sig_label = "function greet(café: integer, b: integer) -> integer";
+    const std::string params_sig = "(café: integer, b: integer)";
+
+    const auto param_objects = luma::lsp::build_parameter_labels(sig_label, params_sig);
+    ASSERT_EQ(param_objects.size(), static_cast<std::size_t>(2));
+
+    // Parameter 0: "café: integer" starts at UTF-16 offset 15 (right after the
+    // ASCII "function greet(") and spans 13 UTF-16 units — café(4) + ": integer"(9)
+    // — ending at offset 28. The buggy byte-offset code reported 29 because 'é'
+    // counts as 2 UTF-8 bytes but only 1 UTF-16 unit.
+    ASSERT_TRUE(param_objects[0].has("label"));
+    const auto& label0 = param_objects[0]["label"].as_array();
+    ASSERT_EQ(label0.size(), static_cast<std::size_t>(2));
+    ASSERT_EQ(label0[0].as_integer(), 15);
+    ASSERT_EQ(label0[1].as_integer(), 28);
+
+    // Parameter 1: "b: integer" starts at UTF-16 offset 30 ("café: integer, "
+    // is 15 units after the "(", so 15 + 15 = 30) — again the byte-based code
+    // would have shifted this right by 1 because of the 'é' in parameter 0.
+    ASSERT_TRUE(param_objects[1].has("label"));
+    const auto& label1 = param_objects[1]["label"].as_array();
+    ASSERT_EQ(label1.size(), static_cast<std::size_t>(2));
+    ASSERT_EQ(label1[0].as_integer(), 30);
+    ASSERT_EQ(label1[1].as_integer(), 40);
+}
+
 // ─── Signature help: lexical-context characterization ─────────────
 //
 // These lock the backward scanner's string/comment skipping behaviour so a
@@ -1057,6 +1097,33 @@ void test_signature_help_skips_string() {
     const auto& sigs = result["signatures"].as_array();
     ASSERT_FALSE(sigs.empty());
     ASSERT_TRUE(sigs[0]["label"].as_string().find("floor") != std::string::npos);
+}
+
+// A triple-quoted string argument containing '#' must not be misread as
+// opening/closing regular strings whose interior '#' starts a comment.
+// Regression test for B03: `find_comment_start_on_line` must recognise the
+// """ delimiter so the enclosing Math.floor( call is still found, and the
+// second (empty) argument after the string is still reported as active.
+void test_signature_help_skips_triple_quoted_string() {
+    LspTestSession session;
+
+    const std::string uri = "file:///test/sighelp_triple_quote.luma";
+    session.open_document(uri, "@main\nfunction main() {\n    Math.floor(\"\"\"a # b\"\"\", \n}\n");
+    const auto id = session.request("textDocument/signatureHelp", make_td_position(uri, 2, 28));
+    (void)session.run();
+
+    const auto* resp = session.find_response(id);
+    assert_has_result(resp);
+
+    const auto& result = (*resp)["result"];
+    ASSERT_TRUE(result.is_object());
+    ASSERT_TRUE(result.has("signatures"));
+    const auto& sigs = result["signatures"].as_array();
+    ASSERT_FALSE(sigs.empty());
+    ASSERT_TRUE(sigs[0]["label"].as_string().find("floor") != std::string::npos);
+    if (result.has("activeParameter")) {
+        ASSERT_EQ(result["activeParameter"].as_integer(), 1);
+    }
 }
 
 // ─── Rename: function ─────────────────────────────────────────────
@@ -1343,6 +1410,8 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_signature_help_user_function);
     RUN(test_signature_help_skips_comment);
     RUN(test_signature_help_skips_string);
+    RUN(test_signature_help_skips_triple_quoted_string);
+    RUN(test_signature_help_parameter_label_utf16_offsets);
     RUN(test_rename_function);
     RUN(test_rename_type);
     RUN(test_semantic_tokens_modifiers);
