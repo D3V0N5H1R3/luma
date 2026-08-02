@@ -449,6 +449,18 @@ luma_build_and_test() {
         return 0
     fi
 
+    # Preflight: the build toolchain must be present. Distinguish a missing
+    # toolchain (nothing to build with) from a genuinely broken build, so the
+    # caller's "baseline is not green" message is not misattributed to the code.
+    if ! command -v cmake >/dev/null 2>&1; then
+        luma_warn 'cmake is not on PATH; the build + test gate cannot run. Install CMake and a C++ toolchain, or pass --skip-baseline to skip the gate.'
+        return 1
+    fi
+    if [[ "$skip_test" != true ]] && ! command -v ctest >/dev/null 2>&1; then
+        luma_warn 'ctest is not on PATH; the test gate cannot run. Install CMake and a C++ toolchain, or pass --skip-baseline / --skip-test.'
+        return 1
+    fi
+
     if [[ ! -d "$build_dir" ]]; then
         printf 'Configuring (cmake --preset %s)...\n' "$preset"
         if ! ( cd -- "$repo_root" && cmake --preset "$preset" ); then

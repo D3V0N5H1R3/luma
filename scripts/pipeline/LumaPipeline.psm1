@@ -521,6 +521,19 @@ function Test-BuildAndTest {
 
     Push-Location -LiteralPath $RepoRoot
     try {
+        # Preflight: the build toolchain must be present. Distinguish a missing
+        # toolchain (nothing to build with) from a genuinely broken build, so
+        # the caller's "baseline is not green" message is not misattributed to
+        # the code.
+        if (-not (Get-Command -Name 'cmake' -CommandType Application -ErrorAction SilentlyContinue)) {
+            Write-Warning 'cmake is not on PATH; the build + test gate cannot run. Install CMake and a C++ toolchain, or pass -SkipBaseline to skip the gate.'
+            return $false
+        }
+        if (-not $SkipTest -and -not (Get-Command -Name 'ctest' -CommandType Application -ErrorAction SilentlyContinue)) {
+            Write-Warning 'ctest is not on PATH; the test gate cannot run. Install CMake and a C++ toolchain, or pass -SkipBaseline / -SkipTest.'
+            return $false
+        }
+
         $BuildDir = Join-Path -Path $RepoRoot -ChildPath 'build'
         if (-not (Test-Path -LiteralPath $BuildDir)) {
             Write-Host "    Configuring (build dir missing): cmake --preset $Preset"
