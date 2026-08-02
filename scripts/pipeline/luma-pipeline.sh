@@ -387,16 +387,10 @@ if (!last) process.exit(3);
 process.stdout.write(last.replace(/[\r\n]+$/, ""));'
     local out=''
     local have_parser=false
-    if command -v python3 >/dev/null 2>&1; then
+    local py
+    if py="$(luma_python_exe)"; then
         have_parser=true
-        if out="$(python3 -c "$py_prog" <"$jsonl" 2>/dev/null)"; then
-            printf '%s\n' "$out"
-            return 0
-        fi
-    fi
-    if command -v python >/dev/null 2>&1; then
-        have_parser=true
-        if out="$(python -c "$py_prog" <"$jsonl" 2>/dev/null)"; then
+        if out="$("$py" -c "$py_prog" <"$jsonl" 2>/dev/null)"; then
             printf '%s\n' "$out"
             return 0
         fi
@@ -409,7 +403,7 @@ process.stdout.write(last.replace(/[\r\n]+$/, ""));'
         fi
     fi
     if [[ "$have_parser" != true ]]; then
-        luma_warn "no JSON parser (python3/python/node) on PATH; install one for clean audit reports."
+        luma_warn "no JSON parser (python3/python/py/node) on PATH; install one for clean audit reports."
     fi
     return 3
 }
@@ -484,13 +478,21 @@ luma_build_and_test() {
 
 # Resolve a Python interpreter for the lint/format scripts. Prints the command
 # name on stdout and returns 0, preferring python3 (the usual name on macOS and
-# Linux, where these shell runners run) and falling back to python. Returns 1
-# when neither is on PATH so the caller can skip the lint/format gate rather than
-# fail hard, matching the skip-if-missing philosophy of scripts/lint.py.
+# Linux, where these shell runners run), then python, then py (the Windows Python
+# launcher). Returns 1 when none is available so the caller can skip the
+# lint/format gate rather than fail hard, matching the skip-if-missing philosophy
+# of scripts/lint.py.
+#
+# Each candidate is probed by actually running it, not just checked with
+# `command -v`. On Windows, `python`/`python3` on PATH are often the Microsoft
+# Store execution-alias stubs in %LOCALAPPDATA%\Microsoft\WindowsApps: they
+# satisfy `command -v` but, when run non-interactively, only print a "Python was
+# not found" message and exit non-zero. Probing with `-c ''` rejects those stubs
+# so we fall through to a real interpreter (typically `py`).
 luma_python_exe() {
     local exe
-    for exe in python3 python; do
-        if command -v "$exe" >/dev/null 2>&1; then
+    for exe in python3 python py; do
+        if command -v "$exe" >/dev/null 2>&1 && "$exe" -c '' >/dev/null 2>&1; then
             printf '%s\n' "$exe"
             return 0
         fi
@@ -603,7 +605,7 @@ luma_lint_and_format() {
 
     local py
     if ! py="$(luma_python_exe)"; then
-        luma_warn 'no Python interpreter (python3/python) on PATH; skipping the lint/format gate.'
+        luma_warn 'no working Python interpreter (python3/python/py) on PATH; skipping the lint/format gate.'
         return 0
     fi
 

@@ -833,11 +833,20 @@ function Get-PythonExecutable {
     .SYNOPSIS
         Resolve a Python interpreter for the lint/format scripts.
     .DESCRIPTION
-        Returns the source path of the first interpreter found, preferring
-        'python' (the usual name on Windows, where these runners most often run)
-        and falling back to 'python3'. Returns $null when neither is on PATH so
-        the caller can skip the lint/format gate rather than fail hard - matching
-        the skip-if-missing philosophy of scripts/lint.py and scripts/format.py.
+        Returns the source path of the first working interpreter found, preferring
+        'python' (the usual name on Windows, where these runners most often run),
+        then 'python3', then 'py' (the Windows Python launcher). Returns $null when
+        none is available so the caller can skip the lint/format gate rather than
+        fail hard - matching the skip-if-missing philosophy of scripts/lint.py and
+        scripts/format.py.
+
+        Each candidate is probed by actually running it, not just resolved with
+        Get-Command. On Windows, 'python'/'python3' on PATH are often the Microsoft
+        Store execution-alias stubs in %LOCALAPPDATA%\Microsoft\WindowsApps: they
+        resolve via Get-Command but, when run non-interactively, only print a
+        "Python was not found" message and exit non-zero. Probing with '-c ''''
+        rejects those stubs so we fall through to a real interpreter (typically
+        'py').
     .OUTPUTS
         [string] - the interpreter path, or $null when none is available.
     #>
@@ -845,11 +854,19 @@ function Get-PythonExecutable {
     [OutputType([string])]
     param()
 
-    foreach ($Name in @('python', 'python3')) {
+    foreach ($Name in @('python', 'python3', 'py')) {
         $Command = Get-Command -Name $Name -CommandType Application -ErrorAction SilentlyContinue |
             Select-Object -First 1
-        if ($Command) {
-            return $Command.Source
+        if (-not $Command) {
+            continue
+        }
+        try {
+            & $Command.Source '-c' '' 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                return $Command.Source
+            }
+        } catch {
+            # Not a working interpreter (e.g. the Store stub) - try the next name.
         }
     }
     return $null
@@ -1088,7 +1105,7 @@ function Test-LintAndFormat {
 
     $Python = Get-PythonExecutable
     if (-not $Python) {
-        Write-Warning 'No Python interpreter (python/python3) on PATH; skipping the lint/format gate.'
+        Write-Warning 'No working Python interpreter (python/python3/py) on PATH; skipping the lint/format gate.'
         return $true
     }
 
