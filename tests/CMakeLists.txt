@@ -359,6 +359,7 @@ endforeach()
 set(LUMA_DAP_TESTS
     dap_test_types
     dap_test_protocol
+    dap_test_protocol_handler
     dap_test_thread_state
     dap_test_breakpoints
     dap_test_compiled_cache

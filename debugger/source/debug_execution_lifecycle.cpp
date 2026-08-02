@@ -91,10 +91,17 @@ void DebugExecutionEngine::start_execution_thread(bool stop_on_entry,
 
     execution_thread_ =
         std::jthread([this, fns = compiled_functions_, top = compiled_top_level_, main_state,
-                      program_args = args, working_dir = cwd, no_debug](std::stop_token stoken) {
-            execution_stop_token_ = std::move(stoken);
+                      program_args = args, working_dir = cwd, no_debug] {
             run_execution(fns, top, main_state, program_args, working_dir, no_debug);
         });
+
+    // Capture the stop token from the jthread object on the launching thread,
+    // immediately after construction, rather than assigning it from inside
+    // the lambda on the new thread.  This closes the race window where an
+    // early terminate() (e.g. a disconnect arriving before the new thread is
+    // scheduled) would have should_break()/wait_for_resume() read a
+    // default-constructed (never-stopped) execution_stop_token_.
+    execution_stop_token_ = execution_thread_.get_stop_token();
 }
 
 std::string DebugExecutionEngine::launch(const std::string& program_path, bool stop_on_entry,

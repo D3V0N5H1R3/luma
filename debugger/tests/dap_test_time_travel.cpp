@@ -10,10 +10,15 @@
 //      value-stack restore.  A VM with a seeded value stack (via restore_stack)
 //      gives snapshots observable contents without executing any bytecode.
 
+#include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <initializer_list>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "debug_session.hpp"
@@ -171,6 +176,47 @@ void test_max_snapshots_evicts_oldest() {
     ASSERT_EQ(recorder.latest()->line, 30);
 }
 
+// ─── TimeTravelRecorder: concurrent access (B02) ──────────────────
+
+// Regression: TimeTravelRecorder::snapshot_count() must be safe to call
+// concurrently with on_line() mutating snapshots_ on another thread (the
+// execution thread records snapshots while the DAP request thread queries
+// the count, e.g. reverse_continue's cursor pinning). Previously
+// snapshot_count() read snapshots_.size() without holding mutex_ — a data
+// race under the C++ memory model, reported by ThreadSanitizer. This test
+// exercises the race window; run under TSan to confirm the fix.
+void test_snapshot_count_concurrent_with_on_line() {
+    TimeTravelConfig config;
+    config.snapshot_interval = 1;
+    TimeTravelRecorder recorder{config};
+
+    const auto env = Environment::create();
+    VM vm{env};
+    vm.restore_stack(int_stack({1}));
+
+    std::atomic<bool> stop{false};
+
+    std::thread writer([&] {
+        for (int i = 0; i < 2000 && !stop.load(); ++i) {
+            recorder.on_line(vm, 1, i, 0);
+        }
+        stop.store(true);
+    });
+
+    std::size_t last_seen = 0;
+
+    while (!stop.load()) {
+        // Reading while the writer mutates snapshots_ must not race; the
+        // count only ever grows, so it should never appear to shrink.
+        const auto count = recorder.snapshot_count();
+        ASSERT_TRUE(count >= last_seen);
+        last_seen = count;
+    }
+
+    writer.join();
+    ASSERT_TRUE(recorder.snapshot_count() > static_cast<std::size_t>(0));
+}
+
 // ─── TimeTravelRecorder: navigation ───────────────────────────────
 
 void test_snapshots_at_line() {
@@ -201,8 +247,28 @@ void test_step_back_navigates_and_clamps() {
     ASSERT_EQ(recorder.step_back(0)->line, 30); // current position
     ASSERT_EQ(recorder.step_back(1)->line, 20);
     ASSERT_EQ(recorder.step_back(2)->line, 10);
-    // Stepping past the oldest snapshot clamps to the front.
-    ASSERT_EQ(recorder.step_back(5)->line, 10);
+    // Stepping past the oldest snapshot with clamp_to_front=true (the
+    // reverse_continue caller) clamps to the front snapshot.
+    ASSERT_EQ(recorder.step_back(5, /*clamp_to_front=*/true)->line, 10);
+}
+
+// Regression (B05): with the default clamp_to_front=false (the step_back
+// caller), stepping past the oldest retained snapshot must report "no
+// further history" (nullopt) instead of silently returning the same front
+// snapshot repeatedly.
+void test_step_back_past_oldest_reports_no_further_history() {
+    const auto env = Environment::create();
+    VM vm{env};
+    vm.restore_stack(int_stack({1}));
+
+    TimeTravelRecorder recorder;
+    recorder.take_snapshot(vm, 1, 10, 0);
+    recorder.take_snapshot(vm, 1, 20, 0);
+    recorder.take_snapshot(vm, 1, 30, 0);
+
+    ASSERT_EQ(recorder.step_back(2)->line, 10); // exactly the oldest snapshot
+    ASSERT_FALSE(recorder.step_back(3).has_value());
+    ASSERT_FALSE(recorder.step_back(100).has_value());
 }
 
 // ─── DebugSession: repeated step_back walks earlier snapshots (B04) ─
@@ -252,6 +318,46 @@ void test_session_step_back_walks_earlier_snapshots() {
     ASSERT_EQ(vm.stack()[0].as_integer(), static_cast<std::int64_t>(20));
 }
 
+// Regression (B05): once DebugSession::step_back has walked back to the
+// oldest retained snapshot, a further stepBack must report "no further
+// history" rather than silently returning the same oldest snapshot again.
+// reverse_continue, by contrast, is idempotent at the front — repeatedly
+// reverse-continuing while already at the start of history still succeeds.
+void test_session_step_back_reports_no_further_history_at_front() {
+    DebugSession session{EventCallback{}, OutputCallback{}};
+    session.enable_time_travel();
+
+    const auto ctx = session.make_hook_context();
+
+    const auto env = Environment::create();
+    VM vm{env};
+
+    auto state = std::make_shared<ThreadState>();
+    state->thread_id = 1;
+    state->vm = &vm;
+    ctx.thread_state_manager->add_thread(state);
+
+    auto& recorder = *ctx.time_travel_recorder;
+    vm.restore_stack(int_stack({10}));
+    recorder->take_snapshot(vm, 1, 10, 0);
+    vm.restore_stack(int_stack({20}));
+    recorder->take_snapshot(vm, 1, 20, 0);
+
+    // Walk back to the oldest snapshot (stack {10}).
+    ASSERT_TRUE(static_cast<bool>(session.step_back(1)));
+    ASSERT_EQ(vm.stack()[0].as_integer(), static_cast<std::int64_t>(10));
+
+    // A further stepBack has nowhere further to go — must error, not repeat.
+    const auto result = session.step_back(1);
+    ASSERT_FALSE(static_cast<bool>(result));
+    ASSERT_EQ(result.error_message, std::string("No previous state available"));
+
+    // reverse_continue remains idempotent at the front: it succeeds even
+    // when already at the start of recorded history.
+    ASSERT_TRUE(static_cast<bool>(session.reverse_continue(1)));
+    ASSERT_EQ(vm.stack()[0].as_integer(), static_cast<std::int64_t>(10));
+}
+
 void test_clear_resets_recorder() {
     const auto env = Environment::create();
     VM vm{env};
@@ -289,6 +395,46 @@ void test_replay_restores_earlier_stack() {
     ASSERT_EQ(vm.stack()[2].as_integer(), static_cast<std::int64_t>(3));
 }
 
+// ─── DebugSession: immediate terminate after launch (B04) ─────────
+
+// Regression: DebugExecutionEngine::start_execution_thread() previously
+// assigned execution_stop_token_ = std::move(stoken) as the FIRST statement
+// executed *inside* the new execution thread's lambda. If terminate() ran on
+// the launching thread before that assignment executed, should_break() /
+// wait_for_resume() would read a still default-constructed
+// execution_stop_token_ (stop_possible() == false), unable to observe the
+// stop request until the lambda reached its first line. The fix captures
+// the token via execution_thread_.get_stop_token() on the launching thread
+// immediately after jthread construction, eliminating that window. This test
+// launches a real (trivial) program and terminates it immediately —under the
+// old implementation this raced and could hang; the fix must always return
+// promptly.
+void test_launch_then_immediate_terminate_does_not_hang() {
+    const auto temp_path =
+        std::filesystem::temp_directory_path() / "luma_dap_test_b04_immediate_terminate.luma";
+    {
+        std::ofstream out(temp_path);
+        out << "@main\nfunction void main() {\n}\n";
+    }
+
+    DebugSession session{EventCallback{}, OutputCallback{}};
+
+    const auto launch_error = session.launch(temp_path.string(), DebugSessionConfig{});
+    ASSERT_TRUE(launch_error.empty());
+
+    const auto start = std::chrono::steady_clock::now();
+    session.terminate();
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+
+    // Generous bound: a correct implementation returns in well under a
+    // second; a regressed implementation would hang indefinitely (the test
+    // process itself would time out under the test runner instead).
+    ASSERT_TRUE(elapsed < std::chrono::seconds(10));
+
+    std::error_code ec;
+    std::filesystem::remove(temp_path, ec);
+}
+
 } // namespace
 
 int main() {
@@ -313,12 +459,18 @@ int main() {
 
     // TimeTravelRecorder navigation.
     RUN(test_snapshots_at_line);
+    RUN(test_snapshot_count_concurrent_with_on_line);
     RUN(test_step_back_navigates_and_clamps);
+    RUN(test_step_back_past_oldest_reports_no_further_history);
     RUN(test_session_step_back_walks_earlier_snapshots);
+    RUN(test_session_step_back_reports_no_further_history_at_front);
     RUN(test_clear_resets_recorder);
 
     // ReplayEngine restore.
     RUN(test_replay_restores_earlier_stack);
+
+    // Immediate terminate after launch (B04).
+    RUN(test_launch_then_immediate_terminate_does_not_hang);
 
     return SUMMARY();
 }
