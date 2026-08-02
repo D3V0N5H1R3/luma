@@ -3,9 +3,7 @@ mod generated;
 mod labels;
 mod util;
 
-use crate::generated::config_defaults::{
-    DEFAULT_CODE_LENS_ENABLED, DEFAULT_DIAGNOSTICS_ON_SAVE, DEFAULT_INLAY_HINTS_ENABLED,
-};
+use crate::generated::config_defaults::{DEFAULT_DIAGNOSTICS_ON_SAVE, DEFAULT_INLAY_HINTS_ENABLED};
 use zed_extension_api::{self as zed, lsp, CodeLabel};
 
 struct LumaExtension {
@@ -141,28 +139,7 @@ impl zed::Extension for LumaExtension {
             .ok()
             .and_then(|lsp_settings| lsp_settings.settings);
 
-        let luma = user_settings.as_ref().and_then(|s| s.get("luma"));
-
-        let inlay_hints_enabled = bool_setting(
-            luma,
-            &["inlayHints", "enabled"],
-            DEFAULT_INLAY_HINTS_ENABLED,
-        );
-        let code_lens_enabled =
-            bool_setting(luma, &["codeLens", "enabled"], DEFAULT_CODE_LENS_ENABLED);
-        let diagnostics_on_save = bool_setting(
-            luma,
-            &["diagnostics", "onSave"],
-            DEFAULT_DIAGNOSTICS_ON_SAVE,
-        );
-
-        let mut config = zed::serde_json::json!({
-            "luma": {
-                "inlayHints": { "enabled": inlay_hints_enabled },
-                "codeLens": { "enabled": code_lens_enabled },
-                "diagnostics": { "onSave": diagnostics_on_save }
-            }
-        });
+        let mut config = build_workspace_config(user_settings.as_ref());
 
         // Merge any remaining user settings (additional LSP options, etc.).
         if let Some(ref user) = user_settings {
@@ -258,6 +235,35 @@ fn bool_setting(value: Option<&zed::serde_json::Value>, path: &[&str], default: 
             v.as_bool()
         })
         .unwrap_or(default)
+}
+
+/// Build the `luma` workspace-configuration payload sent to the language
+/// server, before merging any additional raw user settings on top.
+///
+/// Deliberately omits `codeLens` — per [`extensions/FEATURE_PARITY.md`], code
+/// lens is VS Code only, so Zed must never advertise it as enabled to the LSP.
+fn build_workspace_config(
+    user_settings: Option<&zed::serde_json::Value>,
+) -> zed::serde_json::Value {
+    let luma = user_settings.and_then(|s| s.get("luma"));
+
+    let inlay_hints_enabled = bool_setting(
+        luma,
+        &["inlayHints", "enabled"],
+        DEFAULT_INLAY_HINTS_ENABLED,
+    );
+    let diagnostics_on_save = bool_setting(
+        luma,
+        &["diagnostics", "onSave"],
+        DEFAULT_DIAGNOSTICS_ON_SAVE,
+    );
+
+    zed::serde_json::json!({
+        "luma": {
+            "inlayHints": { "enabled": inlay_hints_enabled },
+            "diagnostics": { "onSave": diagnostics_on_save }
+        }
+    })
 }
 
 #[cfg(test)]

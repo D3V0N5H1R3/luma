@@ -130,9 +130,81 @@ suite("Grammar Structure", () => {
         assert.ok(op, "operator rule should exist");
     });
 
+    test("Operator sub-patterns tokenise the error-propagation `?` distinctly from `??`/`?.`/`?[`", () => {
+        const op = grammar.repository.operator;
+        assert.ok(Array.isArray(op.patterns), "operator rule should have sub-patterns");
+
+        // Simulate the oniguruma engine scanning left-to-right, taking the
+        // first sub-pattern (in declared order) that matches at the cursor —
+        // this mirrors how TextMate grammars actually tokenise, so pattern
+        // ordering (longer alternatives before the standalone `?`) is exercised.
+        const matchers = (op.patterns as { name: string; match: string }[]).map((p) => ({
+            name: p.name,
+            re: new RegExp(p.match, "y"),
+        }));
+        const tokenAt = (text: string, index: number): string | undefined => {
+            for (const m of matchers) {
+                m.re.lastIndex = index;
+                if (m.re.test(text)) {
+                    return m.name;
+                }
+            }
+            return undefined;
+        };
+
+        const cases: Array<[string, number, string]> = [
+            ["result?", 6, "keyword.operator.propagation.luma"],
+            ["a ?? b", 2, "keyword.operator.coalescing.luma"],
+            ["a?.b", 1, "keyword.operator.optional-chain.luma"],
+            ["a?[0]", 1, "keyword.operator.optional-chain.luma"],
+        ];
+
+        for (const [text, index, expected] of cases) {
+            assert.strictEqual(
+                tokenAt(text, index),
+                expected,
+                `expected "${text}" at index ${index} to tokenise as ${expected}`,
+            );
+        }
+    });
+
     test("String interpolation should be defined", () => {
         const interp = grammar.repository.interpolation;
         assert.ok(interp, "interpolation rule should exist for ${} syntax");
+    });
+
+    test("Turbofish `::<Type>` should be scoped as generic-argument punctuation, not comparisons", () => {
+        const turbofish = grammar.repository.turbofish;
+        assert.ok(turbofish, "turbofish rule should exist");
+
+        const re = new RegExp(turbofish.match);
+        const single = re.exec("::<String>");
+        assert.ok(single, "turbofish pattern should match ::<String>");
+        assert.strictEqual(single[2], "<", "group 2 should capture the opening angle bracket");
+        assert.strictEqual(single[3], "String", "group 3 should capture the type argument");
+        assert.strictEqual(single[4], ">", "group 4 should capture the closing angle bracket");
+
+        assert.strictEqual(
+            turbofish.captures["2"].name,
+            "punctuation.definition.typeparameters.begin.luma",
+            "opening angle bracket must not be scoped as a comparison operator",
+        );
+        assert.strictEqual(
+            turbofish.captures["4"].name,
+            "punctuation.definition.typeparameters.end.luma",
+            "closing angle bracket must not be scoped as a comparison operator",
+        );
+
+        // #turbofish must precede #operator in the top-level pattern list: both
+        // match at the same starting position for "::<...>", and TextMate
+        // resolves such ties by declaration order.
+        const includes = grammar.patterns
+            .filter((p: { include?: string }) => p.include)
+            .map((p: { include: string }) => p.include);
+        assert.ok(
+            includes.indexOf("#turbofish") < includes.indexOf("#operator"),
+            "#turbofish must be listed before #operator to win the tie on '::'",
+        );
     });
 
     test("Triple-quoted string pattern should exist", () => {
