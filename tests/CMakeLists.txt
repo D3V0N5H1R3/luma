@@ -147,6 +147,7 @@ set(LUMA_COMMON_HEADER_TESTS
     qualified_name_test
     symbol_kind_test
     stdlib_return_type_test
+    index_validator_test
 )
 
 foreach(test IN LISTS LUMA_COMMON_HEADER_TESTS)

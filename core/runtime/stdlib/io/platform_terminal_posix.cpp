@@ -30,7 +30,7 @@ void enable_vt_processing() {
 }
 
 void query_terminal_size(int& cols, int& rows) {
-    struct winsize ws {};
+    struct winsize ws{};
 
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
         cols = ws.ws_col;
@@ -49,9 +49,7 @@ void enter_raw_mode(const SourceLocation& loc) {
                            "failed to read terminal attributes"};
     }
 
-    struct termios raw {
-        original_termios
-    };
+    struct termios raw{original_termios};
 
     raw.c_iflag &= ~static_cast<tcflag_t>(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     raw.c_oflag &= ~static_cast<tcflag_t>(OPOST);

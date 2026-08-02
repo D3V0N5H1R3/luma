@@ -130,9 +130,7 @@ public:
     // that pops it on destruction.
     [[nodiscard]] auto make_scope_guard() {
         push_scope();
-        return ScopeGuard{[this] {
-            pop_scope();
-        }};
+        return ScopeGuard{[this] { pop_scope(); }};
     }
 
     // Convenience wrappers over context().current_scope->lookup / lookup_mut.

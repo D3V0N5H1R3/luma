@@ -144,7 +144,10 @@ static void test_jump_target_out_of_bounds() {
 
 static void test_valid_jump_target() {
     auto func = make_func({
-        static_cast<std::uint8_t>(Op::Jump), 0x00, 0x00, 0x00,
+        static_cast<std::uint8_t>(Op::Jump),
+        0x00,
+        0x00,
+        0x00,
         0x01,                                  // jump +1 → offset 6
         static_cast<std::uint8_t>(Op::True),   // offset 5 (skipped)
         static_cast<std::uint8_t>(Op::Return), // offset 6 (target)
@@ -278,7 +281,10 @@ static void test_valid_multi_instruction_sequence() {
 
 static void test_conditional_jump_valid() {
     auto func = make_func({
-        static_cast<std::uint8_t>(Op::True), static_cast<std::uint8_t>(Op::JumpIfFalse), 0x00, 0x00,
+        static_cast<std::uint8_t>(Op::True),
+        static_cast<std::uint8_t>(Op::JumpIfFalse),
+        0x00,
+        0x00,
         0x00,
         0x01,                                  // jump +1 → offset 7
         static_cast<std::uint8_t>(Op::True),   // offset 6
@@ -296,7 +302,10 @@ static void test_conditional_jump_valid() {
 
 static void test_try_catch_valid() {
     auto func = make_func({
-        static_cast<std::uint8_t>(Op::TryCatch), 0x00, 0x00, 0x00,
+        static_cast<std::uint8_t>(Op::TryCatch),
+        0x00,
+        0x00,
+        0x00,
         0x02,                                  // catch at offset 5+2=7
         static_cast<std::uint8_t>(Op::True),   // try body (offset 5)
         static_cast<std::uint8_t>(Op::TryEnd), // end try (offset 6)

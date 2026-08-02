@@ -21,8 +21,8 @@ constexpr std::string_view k_bp_eval_wrapper = "__bp_eval__";
 
 // Wraps a compilation lambda in a try/catch that sets error_out on failure.
 template <typename Fn>
-auto compile_with_error_handling(Fn&& compile_fn,
-                                 std::string& error_out) -> decltype(compile_fn()) {
+auto compile_with_error_handling(Fn&& compile_fn, std::string& error_out)
+    -> decltype(compile_fn()) {
     try {
         return compile_fn();
     } catch (const std::exception& e) {

@@ -509,9 +509,7 @@ static void test_task_cancellation_during_execution() {
     token->cancel();
 
     std::atomic<bool> observed_cancel{false};
-    std::thread observer{[&] {
-        observed_cancel = token->is_cancelled();
-    }};
+    std::thread observer{[&] { observed_cancel = token->is_cancelled(); }};
     observer.join();
 
     ASSERT_TRUE(observed_cancel.load());

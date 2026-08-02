@@ -79,9 +79,7 @@ TypeInfo TypeChecker::resolve_type(const TypeAnnotation& ann) {
     }
 
     // RAII decrement to restore depth on all exit paths.
-    const ScopeGuard guard{[this] {
-        --ctx_.type_resolve_depth;
-    }};
+    const ScopeGuard guard{[this] { --ctx_.type_resolve_depth; }};
 
     // Fast-path: cache hit for simple (non-parameterised, non-tuple, non-func)
     // annotations when no generic bindings are active and the name is not a
@@ -158,9 +156,7 @@ std::optional<TypeInfo> TypeChecker::resolve_alias_type(const TypeAnnotation& an
     }
 
     resolving_aliases_.insert(ann.name());
-    const ScopeGuard alias_guard{[&] {
-        resolving_aliases_.erase(ann.name());
-    }};
+    const ScopeGuard alias_guard{[&] { resolving_aliases_.erase(ann.name()); }};
 
     // Push type param bindings if alias is generic and type args are provided.
     const auto ap_it = generics_.alias_params().find(ann.name());

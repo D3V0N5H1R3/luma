@@ -215,7 +215,7 @@ inline bool set_timeout(SocketHandle h, int ms) {
            setsockopt(h, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout),
                       sizeof(timeout)) == 0;
 #else
-    struct timeval tv {};
+    struct timeval tv{};
 
     tv.tv_sec = ms / 1000;
     tv.tv_usec = static_cast<decltype(tv.tv_usec)>(ms % 1000) * 1000;
@@ -352,7 +352,7 @@ namespace luma {
     FD_ZERO(&ex);
     FD_SET(sock, &ex);
 
-    struct timeval tv {};
+    struct timeval tv{};
 
     tv.tv_sec = timeout_ms / 1000;
     tv.tv_usec = static_cast<decltype(tv.tv_usec)>(timeout_ms % 1000) * 1000;

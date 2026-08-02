@@ -338,8 +338,8 @@ private:
     // Expects `open` token, calls fn(), then recover_expects `close` token.
     // Works for both value-returning and void lambdas.
     template <typename Fn>
-    auto parse_bracketed(TokenType open, TokenType close,
-                         Fn&& fn) -> decltype(std::forward<Fn>(fn)());
+    auto parse_bracketed(TokenType open, TokenType close, Fn&& fn)
+        -> decltype(std::forward<Fn>(fn)());
 
     // Parses a non-empty comma-separated sequence, appending elements to `out`.
     // Precondition: at least one element is expected (caller must verify the
@@ -445,9 +445,7 @@ private:
                          "simplify the expression or split it into smaller parts");
         }
 
-        return ScopeGuard{[this] {
-            --depth_;
-        }};
+        return ScopeGuard{[this] { --depth_; }};
     }
 
     // ====================================================================
@@ -470,8 +468,8 @@ private:
 // Expects `open` token, calls fn(), then recover_expects `close` token.
 // Works for both value-returning and void lambdas.
 template <typename Fn>
-auto Parser::parse_bracketed(TokenType open, TokenType close,
-                             Fn&& fn) -> decltype(std::forward<Fn>(fn)()) {
+auto Parser::parse_bracketed(TokenType open, TokenType close, Fn&& fn)
+    -> decltype(std::forward<Fn>(fn)()) {
     expect(open);
     if constexpr (std::is_void_v<decltype(std::forward<Fn>(fn)())>) {
         std::forward<Fn>(fn)();

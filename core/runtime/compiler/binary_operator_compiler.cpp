@@ -47,8 +47,8 @@ inline constexpr auto k_compound_op_table = [] {
 
 // Bounds-checked lookup into a constexpr token-to-opcode table.
 template <typename Table>
-[[nodiscard]] constexpr auto lookup_op_table(const Table& table,
-                                             std::size_t index) -> Table::value_type {
+[[nodiscard]] constexpr auto lookup_op_table(const Table& table, std::size_t index)
+    -> Table::value_type {
     if (index >= table.size()) {
         return std::nullopt;
     }

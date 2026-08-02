@@ -4,6 +4,7 @@
 #include <string>
 
 #include "runtime/compiler/chunk.hpp"
+#include "runtime/compiler/compiler_limits.hpp"
 #include "runtime/compiler/opcode.hpp"
 #include "runtime/compiler/optimizer.hpp"
 #include "test_framework.hpp"
@@ -824,6 +825,52 @@ static void test_constant_fold_string_concat() {
     ASSERT_TRUE(found);
 }
 
+// ─── Constant folding: skips fold when the constant pool is full ───
+//
+// The pool is capped at CompilerLimits::k_max_constants (65535) because the
+// .lumc format serialises the per-chunk constant count as a u16. Folding must
+// skip (not throw std::overflow_error) when adding the folded result would
+// overflow the pool — the optimizer must never make compilation worse.
+static void test_constant_fold_skips_when_pool_full() {
+    Chunk chunk;
+    auto loc = SourceLocation{};
+
+    // Fill the pool to capacity with distinct values 0..65534 so add_constant
+    // assigns index == value (no dedup hits) and the pool ends up completely
+    // full.
+    std::uint16_t idx_a{};
+    std::uint16_t idx_b{};
+
+    for (std::int64_t i = 0; i < static_cast<std::int64_t>(CompilerLimits::k_max_constants); ++i) {
+        auto idx = chunk.add_constant(Value{i});
+
+        if (i == static_cast<std::int64_t>(CompilerLimits::k_max_constants) - 2) {
+            idx_a = idx;
+        }
+
+        if (i == static_cast<std::int64_t>(CompilerLimits::k_max_constants) - 1) {
+            idx_b = idx;
+        }
+    }
+
+    ASSERT_EQ(chunk.constants.size(), static_cast<std::size_t>(CompilerLimits::k_max_constants));
+
+    // Sum of the two largest constants is not already present in the pool, so
+    // folding would require a brand-new entry.
+    chunk.emit_u16(Op::Constant, idx_a, loc);
+    chunk.emit_u16(Op::Constant, idx_b, loc);
+    chunk.emit(Op::Add, loc);
+    chunk.emit(Op::EndModule, loc);
+
+    Optimizer opt{2};
+
+    // Must not throw std::overflow_error — the fold should simply be skipped.
+    [[maybe_unused]] auto eliminated = opt.optimize(chunk);
+
+    ASSERT_TRUE(has_opcode(chunk, Op::Add));
+    ASSERT_EQ(chunk.constants.size(), static_cast<std::size_t>(CompilerLimits::k_max_constants));
+}
+
 // ─── Unary constant folding: Negate integer ───
 
 static void test_unary_fold_negate_integer() {
@@ -1298,6 +1345,7 @@ int main() {
     RUN(test_constant_fold_skip_div_zero);
     RUN(test_constant_fold_float_add);
     RUN(test_constant_fold_string_concat);
+    RUN(test_constant_fold_skips_when_pool_full);
 
     // Unary constant folding.
     RUN(test_unary_fold_negate_integer);

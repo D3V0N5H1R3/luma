@@ -344,7 +344,10 @@ get_compiled_regex(const std::string& pattern,
 // build Match.named_groups from this index-to-name map. Once compiled, a named
 // group behaves exactly like a plain `(...)` capturing group -- there is no
 // engine-level notion of "named" beyond this bookkeeping.
-struct ParsedPattern {
+// The implicitly-generated special members only touch standard containers; the
+// sole escape path the analyzer traces is std::bad_alloc, which is fatal and
+// cannot be handled here.
+struct ParsedPattern { // NOLINT(bugprone-exception-escape)
     std::string cleaned;
     std::unordered_map<std::size_t, std::string> group_names;
 };

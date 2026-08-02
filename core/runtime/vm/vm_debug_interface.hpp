@@ -58,7 +58,7 @@ public:
 
     /// Set a single callback field under the exclusive lock.
     template <typename Field, typename Callback>
-    void set_callback(Field DebugCallbacks::*field, Callback callback) {
+    void set_callback(Field DebugCallbacks::* field, Callback callback) {
         const std::unique_lock lock(callbacks_mutex);
         callbacks.*field = std::move(callback);
     }
@@ -73,7 +73,7 @@ public:
     /// returned copy after the lock is released, to avoid holding the mutex
     /// during a potentially blocking callback.
     template <typename Field>
-    [[nodiscard]] auto copy_hook(Field DebugCallbacks::*field) const -> Field {
+    [[nodiscard]] auto copy_hook(Field DebugCallbacks::* field) const -> Field {
         const std::shared_lock lock(callbacks_mutex);
         return callbacks.*field;
     }

@@ -152,9 +152,7 @@ bool TypeChecker::satisfies_interface(std::string_view record_name, std::string_
     if (!interface_satisfaction_in_progress_.insert(key).second) {
         return true;
     }
-    const ScopeGuard cycle_guard{[&] {
-        interface_satisfaction_in_progress_.erase(key);
-    }};
+    const ScopeGuard cycle_guard{[&] { interface_satisfaction_in_progress_.erase(key); }};
 
     const auto& record = *rec_it->second;
     const auto& iface = *iface_it->second;
@@ -183,9 +181,7 @@ bool TypeChecker::satisfies_interface_interface(std::string_view source_iface_na
     if (!interface_satisfaction_in_progress_.insert(key).second) {
         return true;
     }
-    const ScopeGuard cycle_guard{[&] {
-        interface_satisfaction_in_progress_.erase(key);
-    }};
+    const ScopeGuard cycle_guard{[&] { interface_satisfaction_in_progress_.erase(key); }};
 
     const auto& source_iface = *src_it->second;
     const auto& target_iface = *tgt_it->second;

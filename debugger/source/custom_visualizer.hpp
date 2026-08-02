@@ -18,7 +18,7 @@ struct VisualizerRule {
     std::string
         type_pattern; // Glob pattern matched against the type name (only '*' is a wildcard).
     std::string display_template; // When a rule matches, this string replaces the displayed value
-        // verbatim.  Placeholder expansion (e.g. "{size}") is NOT supported.
+    // verbatim.  Placeholder expansion (e.g. "{size}") is NOT supported.
     std::string summary_template; // Reserved: parsed from config but not currently applied.
 };
 

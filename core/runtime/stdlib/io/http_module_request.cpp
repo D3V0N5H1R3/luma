@@ -65,7 +65,7 @@ using AddrInfoPtr = std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)>;
 [[nodiscard]] AddrInfoPtr resolve_host(const std::string& host, int port) {
     ensure_winsock();
 
-    struct addrinfo hints {};
+    struct addrinfo hints{};
 
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
