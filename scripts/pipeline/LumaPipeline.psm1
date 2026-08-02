@@ -867,6 +867,7 @@ function Get-PythonExecutable {
             }
         } catch {
             # Not a working interpreter (e.g. the Store stub) - try the next name.
+            Write-Verbose "Skipping '$Name': probe failed ($($_.Exception.Message))."
         }
     }
     return $null
