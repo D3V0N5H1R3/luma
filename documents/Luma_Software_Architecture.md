@@ -80,13 +80,15 @@ Every architectural decision follows the principles defined in the Software Arch
 
 The interpreter follows a classic multi-phase pipeline. Each phase transforms a well-defined input into a well-defined output and passes it to the next phase.
 
-```text
-┌─────────────┐    ┌─────────┐    ┌──────────┐    ┌──────────────────┐    ┌──────────────┐    ┌────────┐    ┌──────────┐    ┌────┐
-│ Source Code │───▸│  Lexer  │───▸│  Parser  │───▸│ Include Resolver │───▸│ Type Checker │───▸│ Linter │───▸│ Compiler │───▸│ VM │
-│   (string)  │    │         │    │          │    │                  │    │              │    │        │    │          │    │    │
-└─────────────┘    └─────────┘    └──────────┘    └──────────────────┘    └──────────────┘    └────────┘    └──────────┘    └────┘
-                        │              │                  │                     │              │              │
-                   Token Stream       AST           Merged AST            Typed AST       Warnings      Bytecode    Execution
+```mermaid
+graph LR
+    Source["Source Code<br/>(string)"] -->|Token Stream| Lexer
+    Lexer -->|AST| Parser
+    Parser -->|Merged AST| Include["Include Resolver"]
+    Include -->|Typed AST| TypeChecker["Type Checker"]
+    TypeChecker -->|Warnings| Linter
+    Linter -->|Bytecode| Compiler
+    Compiler -->|Execution| VM
 ```
 
 Each phase transforms a well-defined input into a well-defined output. Information flows in one direction, which keeps coupling low and makes each phase independently testable.
@@ -2047,13 +2049,12 @@ ThreadPool {
 
 ### 12.3 Task Lifecycle
 
-```text
-  spawn fn(args)                    await task
-       │                                │
-       ▼                                ▼
-  ┌──────────┐    ┌───────────┐    ┌──────────┐
-  │ Created  │───▸│ Running   │───▸│ Completed│
-  └──────────┘    └───────────┘    └──────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Created : spawn fn(args)
+    Created --> Running
+    Running --> Completed
+    Completed --> [*] : await task
 ```
 
 - **Created:** The task is enqueued in the thread pool but has not started yet.
@@ -2124,23 +2125,14 @@ Channel<T> {
 
 ### 13.1 REPL Loop
 
-```text
-┌──────────────────────────────────────────────────┐
-│                                                  │
-│  ┌──────────┐                                    │
-│  │  Prompt  │◂──────────────────────────┐        │
-│  └────┬─────┘                           │        │
-│       ▼                                 │        │
-│  ┌──────────┐    ┌──────────┐    ┌──────┴─────┐  │
-│  │ Read     │───▸│ Evaluate │───▸│ Print      │  │
-│  │ input    │    │ pipeline │    │ result     │  │
-│  └──────────┘    └──────────┘    └────────────┘  │
-│                       │                          │
-│                  On error:                       │
-│                  print error,                    │
-│                  continue loop                   │
-│                                                  │
-└──────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    Prompt -->|read| Read["Read input"]
+    Read --> Evaluate["Evaluate pipeline"]
+    Evaluate -->|on success| Print["Print result"]
+    Evaluate -->|on error| Error["Print error"]
+    Print --> Prompt
+    Error --> Prompt
 ```
 
 ### 13.2 REPL-Specific Behaviour

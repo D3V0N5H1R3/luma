@@ -133,20 +133,12 @@ web view** that renders it. The developer touches only the top layer.
 
 Solaris has **exactly one** control flow. A beginner fills in three blanks.
 
-```text
-        ┌──────────────┐
-        │    Model     │◄──────────────────────┐
-        └──────┬───────┘                       │
-               │ view(model)                    │ update(model, msg) → Model [+ Cmd]
-               ▼                               │
-        ┌──────────────┐                ┌──────┴───────┐
-        │     View     │                │    Update    │
-        └──────┬───────┘                └──────▲───────┘
-               │ reconcile → patch             │ Message
-               ▼                               │
-        ┌──────────────────────────────────────┴──────┐
-        │  Web View   (user event → Message)           │
-        └──────────────────────────────────────────────┘
+```mermaid
+graph TD
+    Model -->|"view(model)"| View
+    View -->|"reconcile → patch"| WebView["Web View<br/>(user event → Message)"]
+    WebView -->|Message| Update
+    Update -->|"update(model, msg) → Model [+ Cmd]"| Model
 ```
 
 1. **Model** — a plain `record` holding *all* application state.

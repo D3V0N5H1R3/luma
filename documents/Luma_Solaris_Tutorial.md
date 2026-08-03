@@ -69,16 +69,11 @@ Every Solaris app is built from exactly four things:
 
 They connect in a loop:
 
-```text
-        ┌──────────────────────────────────────────────┐
-        │                                              │
-        ▼                                              │
-   ┌─────────┐   view(model)    ┌────────┐   user does │ something
-   │  Model  │ ───────────────▶ │ Screen │ ────────────┘
-   └─────────┘                  └────────┘
-        ▲                            │ sends a Message
-        │   update(model, message)   │
-        └────────────────────────────┘
+```mermaid
+graph LR
+    Model -->|"view(model)"| Screen
+    Screen -->|"user does something<br/>sends a Message"| Update
+    Update -->|"update(model, message)"| Model
 ```
 
 Read it round: the **view** draws the **model**; the user interacts and a **message** is sent; **update** turns the old model plus that message into a new model; the view draws the new model. Solaris spins this loop for you. You only write the Model, the Message, `update`, and `view` — all four are ordinary Luma, and `update` and `view` are **pure** functions (same input, same output, no surprises), which is exactly what makes an app easy to reason about and to test.
