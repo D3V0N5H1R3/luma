@@ -75,7 +75,9 @@ void Linter::lint_expression(const Expression& expr) {
         return;
     }
 
-    const ScopeGuard guard{[this] { --expression_depth_; }};
+    const ScopeGuard guard{[this] {
+        --expression_depth_;
+    }};
 
     run_expression_plugins(expr);
     dispatch_expr(expr);

@@ -384,7 +384,9 @@ void NameResolver::resolve_expression(const Expression& expr) {
         return;
     }
 
-    const ScopeGuard guard{[this] { --expression_depth_; }};
+    const ScopeGuard guard{[this] {
+        --expression_depth_;
+    }};
 
     dispatch_expression(expr, [this](const auto& node) {
         using T = std::decay_t<decltype(node)>;

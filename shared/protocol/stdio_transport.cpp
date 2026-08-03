@@ -42,7 +42,7 @@ namespace {
 
     return true;
 #else
-    struct pollfd pfd{};
+    struct pollfd pfd {};
 
     pfd.fd = STDIN_FILENO;
     pfd.events = POLLIN;

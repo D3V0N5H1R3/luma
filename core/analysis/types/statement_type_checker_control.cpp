@@ -315,7 +315,9 @@ void StatementTypeChecker::visit_while(const WhileStatement& stmt) {
     ++tc_.context().loop_depth;
 
     // Balance the loop-depth counter on every exit path.
-    const ScopeGuard loop_depth_guard{[this] { --tc_.context().loop_depth; }};
+    const ScopeGuard loop_depth_guard{[this] {
+        --tc_.context().loop_depth;
+    }};
 
     const auto cond_type = tc_.infer_expression_type(*stmt.condition);
 

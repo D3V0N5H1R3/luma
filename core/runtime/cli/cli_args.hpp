@@ -66,35 +66,59 @@ inline const std::array k_flag_descriptors = std::to_array<FlagDescriptor>({
     {.long_form = "--help",
      .short_form = "-h",
      .description = "Print this help message and exit",
-     .apply = [](ParsedArgs& a) { a.command = Command::Help; }},
+     .apply =
+         [](ParsedArgs& a) {
+             a.command = Command::Help;
+         }},
     {.long_form = "--version",
      .short_form = "-v",
      .description = "Print the version number and exit",
-     .apply = [](ParsedArgs& a) { a.command = Command::Version; }},
+     .apply =
+         [](ParsedArgs& a) {
+             a.command = Command::Version;
+         }},
     {.long_form = "--repl",
      .short_form = "-r",
      .description = "Start the interactive REPL",
-     .apply = [](ParsedArgs& a) { a.command = Command::Repl; }},
+     .apply =
+         [](ParsedArgs& a) {
+             a.command = Command::Repl;
+         }},
     {.long_form = "--test",
      .short_form = "-t",
      .description = "Run test annotations in the file",
-     .apply = [](ParsedArgs& a) { a.command = Command::Test; }},
+     .apply =
+         [](ParsedArgs& a) {
+             a.command = Command::Test;
+         }},
     {.long_form = "--eval",
      .short_form = "-e",
      .description = "Evaluate a program read from standard input",
-     .apply = [](ParsedArgs& a) { a.command = Command::Eval; }},
+     .apply =
+         [](ParsedArgs& a) {
+             a.command = Command::Eval;
+         }},
     {.long_form = "--check",
      .short_form = "-c",
      .description = "Type-check the file without running it",
-     .apply = [](ParsedArgs& a) { a.command = Command::Check; }},
+     .apply =
+         [](ParsedArgs& a) {
+             a.command = Command::Check;
+         }},
     {.long_form = "--strict",
      .short_form = "-s",
      .description = "Treat warnings as errors (use with --check)",
-     .apply = [](ParsedArgs& a) { a.strict = true; }},
+     .apply =
+         [](ParsedArgs& a) {
+             a.strict = true;
+         }},
     {.long_form = "--box",
      .short_form = "-b",
      .description = "Run in sandbox mode (restricted I/O)",
-     .apply = [](ParsedArgs& a) { a.sandbox = true; }},
+     .apply =
+         [](ParsedArgs& a) {
+             a.sandbox = true;
+         }},
     // The optimisation level (-O2 or -O 2) is consumed by try_consume_optimize()
     // before the flag table is consulted, so this entry needs no apply callback;
     // it exists only for help text and flag suggestions.
@@ -105,7 +129,10 @@ inline const std::array k_flag_descriptors = std::to_array<FlagDescriptor>({
     {.long_form = "--verify",
      .short_form = "",
      .description = "Verify bytecode after compilation",
-     .apply = [](ParsedArgs& a) { a.verify = true; }},
+     .apply =
+         [](ParsedArgs& a) {
+             a.verify = true;
+         }},
 });
 
 /// Returns true if the given string matches any known flag (long or short form).

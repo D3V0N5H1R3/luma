@@ -639,8 +639,8 @@ private:
                                       std::vector<Value> args, SourceLocation loc,
                                       const std::vector<CompiledFunction>* compiled_fns, EnvPtr env,
                                       std::shared_ptr<CancellationToken> cancel_token,
-                                      ThreadPool& pool_ref, DebugCallbacks debug_cbs, int task_id)
-        -> std::function<void()>;
+                                      ThreadPool& pool_ref, DebugCallbacks debug_cbs,
+                                      int task_id) -> std::function<void()>;
 
     /// Configures the child task VM: propagates debug hooks and fires the spawn hook.
     static void prepare_spawn_environment(VM& task_vm, const DebugCallbacks& debug_cbs,

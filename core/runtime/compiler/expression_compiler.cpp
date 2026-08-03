@@ -53,7 +53,9 @@ void Compiler::compile_expression(const Expression& expr) {
         return;
     }
 
-    const ScopeGuard guard{[this] { --expression_depth_; }};
+    const ScopeGuard guard{[this] {
+        --expression_depth_;
+    }};
 
     dispatch_expr(expr);
 }

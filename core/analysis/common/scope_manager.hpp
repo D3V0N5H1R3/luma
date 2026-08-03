@@ -44,7 +44,9 @@ protected:
     [[nodiscard]] auto make_scope_guard() {
         auto* self = static_cast<Derived*>(this);
         self->push_scope();
-        return ScopeGuard{[self] { self->pop_scope(); }};
+        return ScopeGuard{[self] {
+            self->pop_scope();
+        }};
     }
 };
 

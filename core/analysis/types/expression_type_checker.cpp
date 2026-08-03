@@ -38,7 +38,9 @@ TypeInfo ExpressionTypeChecker::infer_expression_type(const Expression& expr) {
         return TypeInfo::make(TypeInfo::Kind::Unknown);
     }
 
-    const ScopeGuard guard{[this] { --expression_depth_; }};
+    const ScopeGuard guard{[this] {
+        --expression_depth_;
+    }};
 
     return dispatch_expr(expr);
 }
@@ -101,7 +103,9 @@ TypeInfo ExpressionTypeChecker::visit_task_scope(const TaskScopeExpression& node
     ++tc_.context().task_scope_depth;
 
     // Balance the task-scope-depth counter on every exit path.
-    const ScopeGuard task_scope_depth_guard{[this] { --tc_.context().task_scope_depth; }};
+    const ScopeGuard task_scope_depth_guard{[this] {
+        --tc_.context().task_scope_depth;
+    }};
 
     TypeInfo element_type = TypeInfo::make(TypeInfo::Kind::Unknown);
 

@@ -214,7 +214,9 @@ private:
     // RAII scope guard for push_scope / pop_scope.
     [[nodiscard]] auto make_scope_guard() {
         push_scope();
-        return ScopeGuard{[this] { pop_scope(); }};
+        return ScopeGuard{[this] {
+            pop_scope();
+        }};
     }
 
     // Convenience accessor for the current scope.

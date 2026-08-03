@@ -16,11 +16,11 @@ namespace luma {
 // Platform-specific saved terminal state for POSIX (termios), kept out of the
 // header so <termios.h> does not leak to every LineEditor consumer.
 struct TerminalGuard::Impl {
-    struct termios saved_termios{};
+    struct termios saved_termios {};
 };
 
 TerminalGuard::TerminalGuard() : impl_{std::make_unique<Impl>()} {
-    struct termios raw{};
+    struct termios raw {};
 
     tcgetattr(STDIN_FILENO, &impl_->saved_termios);
     raw = impl_->saved_termios;
@@ -49,7 +49,7 @@ namespace {
 // below, so they live here as file-local helpers rather than on the
 // cross-platform LineEditor interface.
 void set_timeout_mode() {
-    struct termios mode{};
+    struct termios mode {};
 
     tcgetattr(STDIN_FILENO, &mode);
     mode.c_cc[VMIN] = 0;
@@ -59,7 +59,7 @@ void set_timeout_mode() {
 
 // Restore stdin to blocking mode (VMIN=1, VTIME=0).
 void set_blocking_mode() {
-    struct termios mode{};
+    struct termios mode {};
 
     tcgetattr(STDIN_FILENO, &mode);
     mode.c_cc[VMIN] = 1;
