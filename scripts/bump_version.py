@@ -27,7 +27,6 @@ from pathlib import Path
 
 from _common import REPO_ROOT
 
-
 VERSION_FILE: Path = REPO_ROOT / "VERSION"
 VSCODE_PACKAGE_JSON: Path = REPO_ROOT / "extensions" / "vscode" / "package.json"
 ZED_EXTENSION_TOML: Path = REPO_ROOT / "extensions" / "zed" / "extension.toml"
@@ -91,7 +90,10 @@ def update_zed_extension_toml(new_version: str) -> None:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        sys.exit("Usage: python scripts/bump_version.py {VERSION | --major | --minor | --patch | --current}")
+        sys.exit(
+            "Usage: python scripts/bump_version.py"
+            " {VERSION | --major | --minor | --patch | --current}"
+        )
 
     arg = sys.argv[1]
     current = read_current_version()
@@ -116,9 +118,9 @@ def main() -> None:
     update_zed_extension_toml(new_version)
 
     print(f"Version bumped: {current} -> {new_version}")
-    print(f"  Updated: VERSION")
-    print(f"  Updated: extensions/vscode/package.json")
-    print(f"  Updated: extensions/zed/extension.toml")
+    print("  Updated: VERSION")
+    print("  Updated: extensions/vscode/package.json")
+    print("  Updated: extensions/zed/extension.toml")
 
 
 if __name__ == "__main__":
