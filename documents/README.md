@@ -29,6 +29,7 @@ Index of the design, reference, and guide documents for the Luma programming lan
 
 | Document                                                         | Description                                                        |
 | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [Installation Guide](Luma_Installation_Guide.md)                 | Install pre-built binaries and set up editor integration.          |
 | [Tutorial](Luma_Tutorial.md)                                     | A step-by-step introduction to Luma for absolute beginners.        |
 | [Solaris Tutorial](Luma_Solaris_Tutorial.md)                     | A step-by-step introduction to GUI programming with Solaris.       |
 | [REPL Guide](Luma_REPL_Guide.md)                                 | Interactive exploration of the language and standard library.      |

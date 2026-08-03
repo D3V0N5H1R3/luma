@@ -148,6 +148,24 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 3 — Next | 141–148 |
 | See Also | 149–153 |
 
+## Luma_Installation_Guide.md
+
+| Section | Lines |
+| ------- | ----- |
+| Table of Contents | 7–22 |
+| 1 — Overview | 24–36 |
+| 2 — Download | 38–56 |
+| 3 — Verify Checksums | 58–85 |
+| 4 — Windows | 87–122 |
+| 5 — macOS | 124–171 |
+| 6 — Linux | 173–220 |
+| 7 — Editor Setup — Visual Studio Code | 222–276 |
+| 8 — Editor Setup — Zed | 278–287 |
+| 9 — Verify the Installation | 289–330 |
+| 10 — Building from Source | 332–344 |
+| 11 — Troubleshooting | 344–362 |
+| See Also | 364–373 |
+
 ## Luma_Language_Server.md
 
 | Section | Lines |
