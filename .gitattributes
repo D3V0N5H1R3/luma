@@ -19,7 +19,7 @@
 # binary. Force text+LF on the scripts the shell executes, so a stray NUL
 # byte can never leave them with CRLF endings that break on Unix.
 *.sh            text eol=lf
-scripts/hooks/* text eol=lf
+scripts/git-hooks/* text eol=lf
 
 # ── Binary files (no line-ending conversion, no diff) ──
 *.a     binary

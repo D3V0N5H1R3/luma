@@ -56,9 +56,7 @@ struct ServiceFixture {
     ServiceFixture()
         : service(config, cancel_flag,
                   AnalysisCallbacks{.log = [](const std::string&) {},
-                                    .notify =
-                                        [](std::string_view, const JsonValue&) {
-                                        }}) {}
+                                    .notify = [](std::string_view, const JsonValue&) {}}) {}
 
     [[nodiscard]] AnalysisResult analyze(const std::string& source,
                                          const std::string& uri = "file:///test/main.luma") {
@@ -155,15 +153,16 @@ void test_include_missing_file_reported() {
     ASSERT_TRUE(any_message_contains(result, "not found"));
 }
 
-// ─── B05: include diagnostic range spans the path in UTF-16 units ──
+// ─── B02/B05: include diagnostic range spans the quoted path in UTF-16 ──
 
 void test_include_diagnostic_range_measures_utf16_width() {
     ServiceFixture fx;
 
     // The include path contains a two-byte UTF-8 character (é = U+00E9), so its
     // byte length (10) differs from its UTF-16 width (9). The include-diagnostic
-    // range must span the path in the client's UTF-16 coordinate space — the
-    // same space every other diagnostic uses — not by raw byte count.
+    // range must span the path (including its surrounding quotes) in the
+    // client's UTF-16 coordinate space — the same space every other diagnostic
+    // uses — not by raw byte count, and not by the unquoted keyword-end offset.
     const auto result = fx.analyze("include \"caf\xC3\xA9.luma\"\n"
                                    "\n"
                                    "@main\n"
@@ -188,11 +187,18 @@ void test_include_diagnostic_range_measures_utf16_width() {
     ASSERT_EQ(range.start.line, 0);
     ASSERT_EQ(range.end.line, 0);
 
+    // The range must start at the opening quote: right after "include" (7
+    // codepoints) plus the separating space (1) = column 8.
+    ASSERT_EQ(range.start.character, 8);
+
     // "café.luma" is 9 codepoints / UTF-16 code units but 10 UTF-8 bytes, so the
-    // range width must be 9 (UTF-16), proving byte length is no longer used.
+    // range width must be 9 (UTF-16) plus 2 for the surrounding quotes = 11,
+    // proving both byte length and the unquoted keyword-end anchor are no
+    // longer used.
     const int width = range.end.character - range.start.character;
-    ASSERT_EQ(width, 9);
+    ASSERT_EQ(width, 11);
     ASSERT_NE(width, 10);
+    ASSERT_NE(width, 9);
 }
 
 // ─── Include phase skipped without a file path ─────────────────────

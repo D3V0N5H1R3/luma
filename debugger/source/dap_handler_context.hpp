@@ -24,9 +24,9 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
+#include "common/string_hash.hpp"
 #include "compiled_breakpoint.hpp"
 #include "dap_feature_manager.hpp"
 #include "dap_handler_types.hpp"
@@ -45,7 +45,7 @@ struct DapHandlerContext {
     std::unique_ptr<DebugSession> session;
     WatchCache watch_cache;
     CompiledBreakpointCache compiled_bp_cache;
-    std::unordered_map<std::string, std::vector<BreakpointRequest>> pending_breakpoints;
+    StringMap<std::vector<BreakpointRequest>> pending_breakpoints;
     std::vector<std::string> pending_exception_filters;
     std::vector<BreakpointRequest> pending_function_bp_requests;
     std::vector<DataBreakpointRequest> pending_data_breakpoints;

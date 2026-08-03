@@ -377,6 +377,11 @@ DecodeResult gzip_decompress_checked(const std::string& input) {
         const auto xlen = static_cast<uint16_t>(static_cast<uint8_t>(input[offset])) |
                           (static_cast<uint16_t>(static_cast<uint8_t>(input[offset + 1])) << 8);
 
+        // Validate the untrusted FEXTRA length before trusting it to advance offset.
+        if (offset + 2 + static_cast<std::size_t>(xlen) > input.size()) {
+            return DecodeResult::err(DecodeError::Truncated);
+        }
+
         offset += 2 + static_cast<std::size_t>(xlen);
     }
 

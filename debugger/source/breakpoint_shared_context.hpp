@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "common/string_hash.hpp"
 #include "dap_types.hpp"
 #include "debugger_config.hpp"
 #include "i_source_locator.hpp"
@@ -86,7 +87,7 @@ struct BreakpointSharedContext {
     // Canonical path cache: canonical path → file_id.
     // Mutable because find_file_id() is a const method that caches
     // the result of expensive canonical path comparisons.
-    mutable std::unordered_map<std::string, FileId> canonical_path_cache; // GUARDED_BY(mutex)
+    mutable StringMap<FileId> canonical_path_cache; // GUARDED_BY(mutex)
 
     // Non-owning reference set via configuration.
     ISourceLocator* source_locator{nullptr};

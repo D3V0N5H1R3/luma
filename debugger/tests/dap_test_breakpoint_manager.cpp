@@ -1,7 +1,10 @@
 // DAP breakpoint manager tests — exception breakpoints, data breakpoints.
 
+#include <atomic>
+#include <chrono>
 #include <functional>
 #include <string>
+#include <thread>
 
 #include "breakpoint_manager.hpp"
 #include "dap_types.hpp"
@@ -181,6 +184,42 @@ void test_data_breakpoint_has_active_flag() {
     ASSERT_FALSE(mgr.has_active_breakpoints());
 }
 
+// ─── Cross-thread visibility of breakpoints_active_ (B03) ─────────
+
+// Regression: has_active_breakpoints() must observe a concurrent
+// set_data_breakpoint() from another thread promptly. Previously both the
+// store (update_breakpoints_active_flag) and the load (has_active_breakpoints)
+// used memory_order_relaxed, which on weakly-ordered architectures (ARM)
+// provides no cross-thread visibility guarantee and could leave the reader
+// spinning past a newly set breakpoint indefinitely. The store/load are now
+// release/acquire, so this test — a reader thread spinning on
+// has_active_breakpoints() until it observes the writer's update, bounded by
+// a wall-clock deadline rather than an iteration count (a tight atomic-load
+// loop can run millions of iterations faster than a fixed sleep on the
+// writer thread) — must observe the update well within the deadline.
+void test_has_active_breakpoints_visible_across_threads() {
+    BreakpointManager mgr;
+    std::atomic<bool> observed{false};
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+
+    std::thread reader([&] {
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (mgr.has_active_breakpoints()) {
+                observed.store(true);
+                return;
+            }
+        }
+    });
+
+    std::thread writer([&] { mgr.set_data_breakpoint("x", "write", ""); });
+
+    writer.join();
+    reader.join();
+
+    ASSERT_TRUE(observed.load());
+}
+
 } // namespace
 
 int main() {
@@ -206,6 +245,7 @@ int main() {
     RUN(test_data_breakpoint_multiple_variables);
     RUN(test_data_breakpoint_no_condition_null_evaluator);
     RUN(test_data_breakpoint_has_active_flag);
+    RUN(test_has_active_breakpoints_visible_across_threads);
 
     return SUMMARY();
 }

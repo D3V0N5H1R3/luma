@@ -2,7 +2,7 @@
 
 Deterministic guardrails that run at the AI agent's tool-call lifecycle points. Each `*.json` file in this directory registers a hook that the agent runtime discovers automatically and runs around every tool call, turning a project guideline into an enforced, non-negotiable behaviour instead of advice the model might overlook.
 
-These are **agent** hooks — distinct from the **Git** hooks in [`scripts/hooks/`](../../scripts/hooks) (`pre-commit`, `commit-msg`) that run on `git commit`. The two layers are complementary: the agent hooks catch things as the agent edits, and the Git hooks catch anything that reaches a commit regardless of how it was produced. Where they overlap (C++ formatting), the agent hook simply means an edit is already clean by the time the pre-commit gate sees it.
+These are **agent** hooks — distinct from the **Git** hooks in [`scripts/git-hooks/`](../../scripts/git-hooks) (`pre-commit`, `commit-msg`) that run on `git commit`. The two layers are complementary: the agent hooks catch things as the agent edits, and the Git hooks catch anything that reaches a commit regardless of how it was produced. Where they overlap (C++ formatting), the agent hook simply means an edit is already clean by the time the pre-commit gate sees it.
 
 For the guidelines these hooks enforce, see [cpp.instructions.md](../../instructions/cpp.instructions.md) (formatting) and the vendored-code boundary documented across the agent guides and [CONTRIBUTING.md](../../CONTRIBUTING.md). For the sibling prompt files, see [.github/prompts/README.md](../prompts/README.md).
 
@@ -26,7 +26,7 @@ Each hook is a small JSON registration paired with a standalone Python script un
 - **Fail-open.** Every script treats a missing interpreter, an unrecognised payload, or any internal error as a clean no-op (exit 0, no decision). A hook must never wedge the agent; the worst case is that it silently does nothing, never a wrongful block or a crash.
 - **Narrow and confident.** The guard denies *only* when it is certain a call is a file write to a protected path. Reads, searches, shell commands, and anything ambiguous are allowed. The formatter only ever formats; it never blocks.
 - **Dependency-free.** The scripts import only the Python standard library and deliberately do **not** import `scripts/_common.py`, so they run identically whether or not the rest of the tooling is set up. They require Python 3 and (for the formatter) `clang-format` 18+.
-- **Mirrors existing gates.** The formatter matches [`scripts/hooks/pre-commit`](../../scripts/hooks/pre-commit) and the CI *Formatting* job (same tool, same `.clang-format`, same `.cpp`/`.hpp` scope), so the three layers never disagree.
+- **Mirrors existing gates.** The formatter matches [`scripts/git-hooks/pre-commit`](../../scripts/git-hooks/pre-commit) and the CI *Formatting* job (same tool, same `.clang-format`, same `.cpp`/`.hpp` scope), so the three layers never disagree.
 
 ## The hooks
 
@@ -69,7 +69,7 @@ A denied call prints a JSON object containing `"permissionDecision": "deny"`; an
 ## Related documentation
 
 - [scripts/agent-hooks/](../../scripts/agent-hooks) — The hook scripts, each with a full behavioural docstring.
-- [scripts/README.md](../../scripts/README.md) — The wider script directory, including the Git hooks in `scripts/hooks/`.
+- [scripts/README.md](../../scripts/README.md) — The wider script directory, including the Git hooks in `scripts/git-hooks/`.
 - [cpp.instructions.md](../../instructions/cpp.instructions.md) — The C++ style the formatter enforces.
 - [CONTRIBUTING.md](../../CONTRIBUTING.md) — Contributor setup and the vendored-code boundary.
 - [.github/prompts/README.md](../prompts/README.md) — The sibling prompt files that the agent runs on demand.

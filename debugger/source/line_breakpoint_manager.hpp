@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "breakpoint_shared_context.hpp"
+#include "common/string_hash.hpp"
 #include "dap_types.hpp"
 
 namespace luma::dap {
@@ -90,8 +91,7 @@ private:
         line_breakpoints_; // GUARDED_BY(ctx_->mutex)
 
     // Path-based breakpoints (before file_id resolution).
-    std::unordered_map<std::string, std::vector<BreakpointRequest>>
-        path_breakpoints_; // GUARDED_BY(ctx_->mutex)
+    StringMap<std::vector<BreakpointRequest>> path_breakpoints_; // GUARDED_BY(ctx_->mutex)
 };
 
 } // namespace luma::dap

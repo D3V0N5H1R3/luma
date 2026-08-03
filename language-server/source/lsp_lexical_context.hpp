@@ -145,6 +145,25 @@ private:
     return count;
 }
 
+// Skip forward past a triple-quoted string ("""), starting with `pos` pointing
+// at the leftmost '"' of the opening triple-quote. Returns the index just past
+// the closing triple-quote's last '"' (or `line_end` if unterminated on this
+// line — triple-quoted strings spanning multiple lines are handled line by
+// line by the caller's outer loop, which re-invokes this scanner per line).
+[[nodiscard]] inline std::size_t
+skip_triple_quoted_string_forward(const std::string& text, std::size_t pos, std::size_t line_end) {
+    pos += 3; // consume the opening """
+
+    while (pos + 2 < line_end) {
+        if (text[pos] == '"' && text[pos + 1] == '"' && text[pos + 2] == '"') {
+            return pos + 3; // consume the closing """
+        }
+        ++pos;
+    }
+
+    return line_end;
+}
+
 // Scan forward on a single line (from `line_begin` to `line_end`) to find
 // the position of the first '#' that is not inside a string literal.
 // Returns the index of '#', or `line_end` if none found.
@@ -154,6 +173,15 @@ find_comment_start_on_line(const std::string& text, std::size_t line_begin, std:
 
     for (std::size_t i = line_begin; i < line_end; ++i) {
         if (text[i] == '"') {
+            // A triple-quote sequence (""") delimits a triple-quoted string,
+            // whose interior '"' characters must not toggle `in_str` one at a
+            // time — that would misidentify code inside the string as
+            // outside of it (and a '#' inside it as a comment start). Only
+            // recognise this outside an already-open regular string.
+            if (!in_str && i + 2 < line_end && text[i + 1] == '"' && text[i + 2] == '"') {
+                i = skip_triple_quoted_string_forward(text, i, line_end) - 1;
+                continue;
+            }
             if (count_preceding_backslashes(text, i, line_begin) % 2 == 0) {
                 in_str = !in_str;
             }

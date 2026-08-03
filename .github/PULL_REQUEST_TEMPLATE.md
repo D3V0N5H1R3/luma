@@ -29,7 +29,7 @@ See CONTRIBUTING.md for the full workflow.
 
 <!--
 Commands you ran (e.g. `ctest --preset default`), the platforms you tried,
-any new tests added, and examples exercised (`python scripts/run_examples.py`).
+any new tests added, and examples exercised (`python scripts/run_luma_examples.py`).
 -->
 
 ## Checklist

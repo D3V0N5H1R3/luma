@@ -218,7 +218,7 @@ void BreakpointManager::update_breakpoints_active_flag() {
     const bool active = line_mgr_.has_any_breakpoints() || func_mgr_.has_any_breakpoints() ||
                         data_mgr_.has_any_breakpoints();
 
-    breakpoints_active_.store(active, std::memory_order_relaxed);
+    breakpoints_active_.store(active, std::memory_order_release);
 }
 
 } // namespace luma::dap

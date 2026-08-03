@@ -135,7 +135,7 @@ public:
     // ─── Queries ───
 
     [[nodiscard]] bool has_active_breakpoints() const {
-        return breakpoints_active_.load(std::memory_order_relaxed);
+        return breakpoints_active_.load(std::memory_order_acquire);
     }
 
     [[nodiscard]] bool has_breakpoints_in_file(const std::string& source_path) const;

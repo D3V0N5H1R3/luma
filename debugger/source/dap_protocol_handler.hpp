@@ -145,6 +145,14 @@ public:
             // Ignore other message types (responses, events from client).
         }
 
+        // The loop can exit because disconnected_ was set by send_event()
+        // on the execution thread (broken pipe during an event write), by
+        // signal_disconnect() (already invoked the callback), or by a read
+        // failure/EOF above (callback not yet invoked).  Ensure the
+        // disconnect callback fires exactly once, from this thread, so a
+        // session is never left orphaned when send_event fails.
+        invoke_disconnect_callback_once();
+
         return 0;
     }
 
@@ -201,8 +209,11 @@ public:
             transport_.write_message(JsonValue(std::move(msg)));
         } catch (const std::exception&) {
             // Broken pipe — editor closed the connection.
-            // Only set the flag; do NOT terminate session here because
-            // send_event may be called from the execution thread.
+            // Only set the flag here; do NOT invoke the disconnect callback
+            // directly because send_event may be called from the execution
+            // thread, and the callback joins that same thread (self-join
+            // deadlock). run() observes the flag and invokes the callback
+            // from the protocol thread once the message loop exits.
             disconnected_.store(true, std::memory_order_release);
         }
     }
@@ -212,10 +223,7 @@ public:
     // Signal that the protocol should disconnect after the current message.
     void signal_disconnect() {
         disconnected_.store(true, std::memory_order_release);
-
-        if (disconnect_callback_) {
-            disconnect_callback_();
-        }
+        invoke_disconnect_callback_once();
     }
 
     // Check whether the protocol layer is in a disconnected state.
@@ -231,6 +239,18 @@ public:
     }
 
 private:
+    // Invoke disconnect_callback_ exactly once, however disconnection was
+    // detected (send_response/send_event write failure, or the message loop
+    // exiting after a read error/EOF).  Guarded by callback_invoked_ so a
+    // later trigger (e.g. run() observing a flag already handled by
+    // signal_disconnect()) does not call the callback twice.
+    void invoke_disconnect_callback_once() {
+        bool expected = false;
+        if (callback_invoked_.compare_exchange_strong(expected, true) && disconnect_callback_) {
+            disconnect_callback_();
+        }
+    }
+
     // Dispatch a single DAP request message to the appropriate handler.
     void dispatch_request(const JsonValue& message) {
         const auto command = message.get_or<std::string>("command", "");
@@ -275,6 +295,10 @@ private:
     int sequence_number_{1}; // GUARDED_BY(send_mutex_)
 
     std::atomic<bool> disconnected_{false};
+
+    // Ensures disconnect_callback_ fires exactly once regardless of which
+    // path (signal_disconnect() or run()'s loop exit) detects disconnection.
+    std::atomic<bool> callback_invoked_{false};
 
     // Serialises send_response and send_event to guarantee monotonic seq.
     std::mutex send_mutex_; // GUARDED_BY: sequence_number_

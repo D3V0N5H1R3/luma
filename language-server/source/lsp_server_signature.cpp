@@ -8,13 +8,14 @@
 #include "lsp_constants.hpp"
 #include "lsp_lexical_context.hpp"
 #include "lsp_param_utils.hpp"
+#include "lsp_position_utils.hpp"
+#include "lsp_signature_label.hpp"
 #include "symbols/qualified_name.hpp"
 
 namespace luma::lsp {
 
 using lexical::find_comment_start_on_line;
 using lexical::skip_string_backward;
-using util::split_param_list;
 
 // ═══════════════════════════════════════════════════════════
 // Signature help
@@ -236,38 +237,6 @@ namespace {
     }
 
     return std::nullopt;
-}
-
-// Builds per-parameter objects with character-offset labels so editors can
-// highlight the active parameter within the signature label. Falls back to a
-// plain-text label when a parameter substring is not found in the label.
-[[nodiscard]] JsonValue::ArrayType build_parameter_labels(const std::string& sig_label,
-                                                          const std::string& params_sig) {
-    JsonValue::ArrayType param_objects;
-    if (params_sig.empty()) {
-        return param_objects;
-    }
-
-    const auto param_list = split_param_list(params_sig);
-    std::size_t search_from{0};
-    for (const auto& param : param_list) {
-        const auto pos_in_label = sig_label.find(param, search_from);
-        if (pos_in_label != std::string::npos) {
-            param_objects.emplace_back(JsonValue::ObjectType{
-                {"label", JsonValue(JsonValue::ArrayType{
-                              JsonValue(static_cast<int64_t>(pos_in_label)),
-                              JsonValue(static_cast<int64_t>(pos_in_label + param.size())),
-                          })},
-            });
-            search_from = pos_in_label + param.size();
-        } else {
-            // Fallback: use the parameter string as a plain text label.
-            param_objects.emplace_back(JsonValue::ObjectType{
-                {"label", JsonValue(param)},
-            });
-        }
-    }
-    return param_objects;
 }
 
 // Resolved signature text for a call: the full label plus its parameter list.

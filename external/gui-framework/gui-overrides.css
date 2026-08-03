@@ -751,6 +751,7 @@ body {
 .gui-tab:focus-visible,
 .gui-list-item[data-clickable="true"]:focus-visible,
 .gui-link:focus-visible,
+.gui-nav-link:focus-visible,
 .gui-breadcrumb-item[data-link="true"]:focus-visible,
 .gui-wizard-step:focus-visible,
 .gui-paginator-btn:focus-visible,

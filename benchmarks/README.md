@@ -52,10 +52,10 @@ build/luma benchmarks/suite.luma | tee results.txt
 python3 scripts/parse_benchmark_results.py results.txt -o current.json
 
 # Compare against a saved baseline
-python3 scripts/compare_benchmarks.py baseline.json current.json --threshold 10
+python3 scripts/compare_benchmark_results.py baseline.json current.json --threshold 10
 ```
 
-`compare_benchmarks.py` applies a wider tolerance to inherently noisy benchmarks
+`compare_benchmark_results.py` applies a wider tolerance to inherently noisy benchmarks
 (filesystem, key-value store, `Process.run`, and concurrency/channel/task cases),
 controlled by `--io-threshold` (default 50%). This avoids false regressions from
 I/O and scheduling jitter while keeping the strict `--threshold` for CPU-bound

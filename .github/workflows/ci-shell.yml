@@ -15,7 +15,7 @@ on:
       - ".github/workflows/ci-shell.yml"
       - "**/*.sh"
       - "**/*.bash"
-      - "scripts/hooks/pre-commit"
+      - "scripts/git-hooks/pre-commit"
   pull_request:
     branches: [main]
     paths: *paths
@@ -44,7 +44,7 @@ jobs:
           # Discover every tracked shell script (excluding vendored external/),
           # then append the extensionless git hook that no glob would match.
           mapfile -t scripts < <(git ls-files '*.sh' '*.bash' ':!:external/**')
-          [[ -f scripts/hooks/pre-commit ]] && scripts+=(scripts/hooks/pre-commit)
+          [[ -f scripts/git-hooks/pre-commit ]] && scripts+=(scripts/git-hooks/pre-commit)
           printf 'Linting %d shell script(s):\n' "${#scripts[@]}"
           printf '  %s\n' "${scripts[@]}"
           shellcheck "${scripts[@]}"

@@ -102,7 +102,7 @@ def main() -> int:
     # Enable the repository's Git hooks (best-effort; never fails configure).
     if (REPO_ROOT / ".git").exists():
         try:
-            from install_hooks import enable_hooks
+            from install_git_hooks import enable_hooks
 
             enable_hooks()
         except Exception as exc:  # pragma: no cover - defensive

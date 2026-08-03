@@ -161,7 +161,7 @@ build/luma --box --test tests/features/language/sandbox.luma
 Run **and verify every example** end to end — including ones that need user input. Console examples are driven with scripted stdin, Terminal/TUI examples through the headless Terminal harness, and `GraphicalUi` examples in headless mode; any example with `@test` blocks also has its assertions checked:
 
 ```bash
-python scripts/run_examples.py
+python scripts/run_luma_examples.py
 ```
 
 On Windows, replace `build/luma` with `build\Release\luma.exe` in the commands above.
@@ -265,7 +265,7 @@ npx stylelint external/gui-framework/gui-overrides.css
 
 ### Git Hooks
 
-The repository ships two hooks (in `scripts/hooks/`):
+The repository ships two hooks (in `scripts/git-hooks/`):
 
 - **`pre-commit`** runs `clang-format` — and `clang-tidy` when
   `build/compile_commands.json` exists — on staged C++ files, blocking the
@@ -280,7 +280,7 @@ The repository ships two hooks (in `scripts/hooks/`):
 Enable them once per clone by pointing Git at the tracked hooks directory:
 
 ```bash
-python scripts/install_hooks.py
+python scripts/install_git_hooks.py
 ```
 
 This sets a repository-local `core.hooksPath`, so the hooks stay

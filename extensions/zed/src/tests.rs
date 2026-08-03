@@ -470,6 +470,32 @@ fn bool_setting_falls_back_on_non_bool() {
     assert!(bool_setting(Some(&v), &["inlayHints", "enabled"], true));
 }
 
+// ── build_workspace_config tests ──────────────────────────────
+
+use super::build_workspace_config;
+
+#[test]
+fn build_workspace_config_never_sends_code_lens() {
+    // Zed does not support code lens (VS Code only, per FEATURE_PARITY.md).
+    // The workspace configuration sent to the LSP must not include a
+    // `codeLens` key regardless of user settings, since Zed has no way to
+    // request or render code lenses.
+    let config = build_workspace_config(None);
+    assert!(config["luma"].get("codeLens").is_none());
+
+    let user_settings = zed::serde_json::json!({"luma": {"codeLens": {"enabled": true}}});
+    let config = build_workspace_config(Some(&user_settings));
+    assert!(config["luma"].get("codeLens").is_none());
+}
+
+#[test]
+fn build_workspace_config_reads_inlay_hints_and_diagnostics() {
+    let user_settings = zed::serde_json::json!({"luma": {"inlayHints": {"enabled": false}, "diagnostics": {"onSave": true}}});
+    let config = build_workspace_config(Some(&user_settings));
+    assert_eq!(config["luma"]["inlayHints"]["enabled"], false);
+    assert_eq!(config["luma"]["diagnostics"]["onSave"], true);
+}
+
 // ── Additional label coverage (property, snippet, guards) ─────
 
 #[test]

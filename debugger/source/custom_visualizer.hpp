@@ -7,8 +7,9 @@
 #include <regex>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
+
+#include "common/string_hash.hpp"
 
 namespace luma::dap {
 
@@ -18,7 +19,7 @@ struct VisualizerRule {
     std::string
         type_pattern; // Glob pattern matched against the type name (only '*' is a wildcard).
     std::string display_template; // When a rule matches, this string replaces the displayed value
-        // verbatim.  Placeholder expansion (e.g. "{size}") is NOT supported.
+    // verbatim.  Placeholder expansion (e.g. "{size}") is NOT supported.
     std::string summary_template; // Reserved: parsed from config but not currently applied.
 };
 
@@ -73,7 +74,7 @@ private:
     // The same small set of type names (e.g. "integer", "string", "array<integer>")
     // is queried repeatedly during variable inspection, so caching avoids redundant
     // regex matching against the (typically < 20) compiled patterns.
-    mutable std::unordered_map<std::string, std::optional<VisualizerRule>> match_cache_;
+    mutable StringMap<std::optional<VisualizerRule>> match_cache_;
 };
 
 } // namespace luma::dap

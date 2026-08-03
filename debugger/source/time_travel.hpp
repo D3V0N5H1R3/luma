@@ -131,18 +131,29 @@ public:
     [[nodiscard]] const VMSnapshot* latest() const;
 
     // Get a COPY of the snapshot N steps before the current position, or
-    // std::nullopt when no snapshot has been recorded.  Returning by value
-    // (copied while mutex_ is held) is deliberate: a raw pointer into the deque
-    // would dangle if a concurrent take_snapshot() evicted the front entry after
-    // the caller released mutex_ but before it read the snapshot.
-    [[nodiscard]] std::optional<VMSnapshot> step_back(std::size_t steps = 1) const;
+    // std::nullopt when no snapshot has been recorded, or when `steps`
+    // exceeds the number of retained snapshots and `clamp_to_front` is
+    // false.  Returning by value (copied while mutex_ is held) is
+    // deliberate: a raw pointer into the deque would dangle if a concurrent
+    // take_snapshot() evicted the front entry after the caller released
+    // mutex_ but before it read the snapshot.
+    //
+    // `clamp_to_front` distinguishes two callers with different semantics:
+    //   - reverse_continue wants an overshoot to rewind to the oldest
+    //     retained snapshot (start of recorded history) — pass true.
+    //   - step_back wants an overshoot to signal "no further history"
+    //     rather than silently returning the same front snapshot again —
+    //     leave false (the default).
+    [[nodiscard]] std::optional<VMSnapshot> step_back(std::size_t steps = 1,
+                                                      bool clamp_to_front = false) const;
 
     // Find all snapshots at a given line in a given file.
     [[nodiscard]] std::vector<const VMSnapshot*> snapshots_at_line(int file_id, int line) const;
 
     // ─── State ───
 
-    [[nodiscard]] std::size_t snapshot_count() const noexcept {
+    [[nodiscard]] std::size_t snapshot_count() const {
+        const std::scoped_lock lock(mutex_);
         return snapshots_.size();
     }
 

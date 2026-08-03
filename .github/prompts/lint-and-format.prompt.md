@@ -191,7 +191,7 @@ git ls-files '*.ps1' '*.psm1' | ForEach-Object {
 ShellCheck lints only; the project does not auto-format shell scripts. Fix reported issues by hand.
 
 ```bash
-shellcheck $(git ls-files '*.sh' '*.bash' ':!:external/**') scripts/hooks/pre-commit
+shellcheck $(git ls-files '*.sh' '*.bash' ':!:external/**') scripts/git-hooks/pre-commit
 ```
 
 ## CMake — cmakelint

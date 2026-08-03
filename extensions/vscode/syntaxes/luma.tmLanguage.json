@@ -29,6 +29,7 @@
         { "include": "#named_argument" },
         { "include": "#function_call" },
         { "include": "#constructor_call" },
+        { "include": "#turbofish" },
         { "include": "#operator" },
         { "include": "#module_access" },
         { "include": "#string" }
@@ -234,6 +235,23 @@
                 "1": { "name": "variable.function.luma" }
             }
         },
+        "turbofish": {
+            "comment": "Explicit type arguments on a call: callee::<Type, Type>(args). Scopes the angle brackets as generic-argument punctuation (not comparison operators) and the enclosed identifiers as types.",
+            "match": "(::)(<)([^<>]*)(>)",
+            "captures": {
+                "1": { "name": "keyword.operator.luma" },
+                "2": { "name": "punctuation.definition.typeparameters.begin.luma" },
+                "3": {
+                    "patterns": [
+                        {
+                            "match": "[A-Za-z_][a-zA-Z0-9_]*",
+                            "name": "entity.name.type.luma"
+                        }
+                    ]
+                },
+                "4": { "name": "punctuation.definition.typeparameters.end.luma" }
+            }
+        },
         "constructor_call": {
             "comment": "Choice variant constructors and declarations: PascalCase(",
             "match": "\\b([A-Z][a-zA-Z0-9_]*)\\s*(?=\\()",
@@ -273,6 +291,10 @@
                 {
                     "name": "keyword.operator.optional-chain.luma",
                     "match": "\\?\\.(?!\\.)|\\?\\["
+                },
+                {
+                    "name": "keyword.operator.propagation.luma",
+                    "match": "\\?(?![?.\\[])"
                 },
                 {
                     "name": "keyword.operator.logical.luma",

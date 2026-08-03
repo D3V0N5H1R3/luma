@@ -15,8 +15,8 @@ namespace luma::lsp {
 
 namespace {
 
-using ModuleMap = std::unordered_map<std::string, std::vector<StdlibFunction>>;
-using FunctionIndex = std::unordered_map<std::string, const StdlibFunction*>;
+using ModuleMap = StringMap<std::vector<StdlibFunction>>;
+using FunctionIndex = StringMap<const StdlibFunction*>;
 
 // Build per-module function lists from stdlib type signatures, reading the
 // human-readable parameter list for each function from the shared catalog.
