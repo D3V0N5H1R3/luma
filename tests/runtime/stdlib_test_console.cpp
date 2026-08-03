@@ -197,6 +197,22 @@ static void test_console_confirm_yes_no() {
     }
 }
 
+static void test_console_confirm_error_message_uses_trimmed_original_case() {
+    // The failure message must report the trimmed *original-case* input
+    // (not the lowercased comparison value), with surrounding whitespace
+    // stripped. This pins the exact behaviour preserved when the local
+    // trim_ascii()/stream_is_tty() duplicates were replaced with the shared
+    // trim() utility and platform_terminal helpers.
+    std::istringstream fake_stdin{"  Maybe  \n"};
+    const StdinRedirect guard{fake_stdin.rdbuf()};
+    const CapturedStream captured{std::cout};
+
+    const auto v = eval("Console.confirm(\"ok? \")");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(v.as_result()->owned_inner->as_string(), "Console.confirm: 'Maybe' is not yes or no");
+}
+
 static void test_console_prompt_with_default() {
     {
         // Empty line accepts the default.
@@ -246,6 +262,7 @@ int main() {
     RUN(test_console_prompt_integer_rejects_non_number);
     RUN(test_console_prompt_number_parses);
     RUN(test_console_confirm_yes_no);
+    RUN(test_console_confirm_error_message_uses_trimmed_original_case);
     RUN(test_console_prompt_with_default);
     RUN(test_console_new_functions_registered);
 

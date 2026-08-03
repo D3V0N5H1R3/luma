@@ -6,12 +6,12 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "analysis/ast/declaration.hpp"
 #include "analysis/lexer/token.hpp"
 #include "analysis/source/source_location.hpp"
+#include "common/string_hash.hpp"
 #include "lsp_optional_ref.hpp"
 #include "lsp_position_utils.hpp"
 #include "lsp_token_index.hpp"
@@ -79,44 +79,43 @@ struct ScopedLocalVar {
 // Top-level symbol definitions, user functions, and record/choice declarations.
 struct SymbolTable {
     // All top-level named declarations → definition location + type.
-    std::unordered_map<std::string, SymbolDefinition> definitions;
+    StringMap<SymbolDefinition> definitions;
     // User-defined functions: qualified name → UserFunctionInfo.
-    std::unordered_map<std::string, UserFunctionInfo> user_functions;
+    StringMap<UserFunctionInfo> user_functions;
     // Record definitions (record name → RecordInfo with fields).
-    std::unordered_map<std::string, RecordInfo> record_definitions;
+    StringMap<RecordInfo> record_definitions;
     // Choice type variants (choice name → list of variant names).
-    std::unordered_map<std::string, std::vector<std::string>> choice_variants;
+    StringMap<std::vector<std::string>> choice_variants;
     // Doc comments extracted from source: symbol name → comment text.
-    std::unordered_map<std::string, std::string> doc_comments;
+    StringMap<std::string> doc_comments;
     // Reverse map: short function name → list of qualified names.
     // Built during symbol_phase for O(1) ns-qualified lookup in classify_token.
-    std::unordered_map<std::string, std::vector<std::string>> function_short_names;
+    StringMap<std::vector<std::string>> function_short_names;
     // Interface implementations: interface name → list of record names.
-    std::unordered_map<std::string, std::vector<std::string>> interface_implementations;
+    StringMap<std::vector<std::string>> interface_implementations;
 };
 
 // Local variable declarations and scope information.
 struct LocalVariableInfo {
     // Local variable declarations found in function bodies (name → type_string).
-    std::unordered_map<std::string, std::string> local_variable_types;
+    StringMap<std::string> local_variable_types;
     // Block-scoped local variables: function name → (var name → scoped entries).
     // Multiple entries for the same var arise when the same name is declared
     // in sibling blocks (e.g. separate if/else branches). Keying by function
     // first lets block-scope collection touch only one function's locals.
-    std::unordered_map<std::string, std::unordered_map<std::string, std::vector<ScopedLocalVar>>>
-        scoped_locals;
+    StringMap<StringMap<std::vector<ScopedLocalVar>>> scoped_locals;
     // Mutable local variables (function_name + ":" + var_name, or just var_name).
-    std::unordered_set<std::string> mutable_locals;
+    StringSet mutable_locals;
     // Per-function local variables (function name → {var name → type string}).
-    std::unordered_map<std::string, std::unordered_map<std::string, std::string>> function_locals;
+    StringMap<StringMap<std::string>> function_locals;
 };
 
 // Function body ranges, call graph, and enclosing-function lookup data.
 struct FunctionStructure {
     // Call graph: caller function name → set of callee function names.
-    std::unordered_map<std::string, std::unordered_set<std::string>> call_graph;
+    StringMap<StringSet> call_graph;
     // Function body ranges (function name → token line range [start, end] inclusive, 1-based).
-    std::unordered_map<std::string, std::pair<int, int>> function_body_ranges;
+    StringMap<std::pair<int, int>> function_body_ranges;
 
     // Sorted function ranges for O(log n) enclosing-function lookup.
     // Built from function_body_ranges after symbol collection.
@@ -136,7 +135,7 @@ struct IncludeInfo {
     // Include paths found in the source (for document links).
     std::vector<std::pair<std::string, SourceLocation>> include_literals;
     // Symbol origin: symbol name → source file path (for symbols from includes).
-    std::unordered_map<std::string, std::string> symbol_origins;
+    StringMap<std::string> symbol_origins;
     // File ID → file path mapping (for include origin tracking).
     std::unordered_map<int, std::string> file_id_to_path;
     // File ID counter for included files (starts at 1; 0 = main document).
@@ -162,7 +161,7 @@ struct AnalysisMetadata {
     std::vector<TokenIndexEntry> token_index; // sorted by (line, col_start)
     TokenIndex line_index;                    // per-line O(1) lookup into tokens
     // Identifier location index: lexeme → list of token indices.
-    std::unordered_map<std::string, std::vector<std::size_t>> identifier_index;
+    StringMap<std::vector<std::size_t>> identifier_index;
     // Cached AST from parsing (avoids re-parse in handle_document_symbol).
     std::optional<Program> cached_program;
     // Semantic token data (for full responses and delta computation).
@@ -277,7 +276,7 @@ struct IncludeCache {
 using IncludeCachePtr = std::shared_ptr<const IncludeCache>;
 
 // Map from resolved include file path to its cached token handle.
-using IncludeCacheMap = std::unordered_map<std::string, IncludeCachePtr>;
+using IncludeCacheMap = StringMap<IncludeCachePtr>;
 
 } // namespace luma::lsp
 

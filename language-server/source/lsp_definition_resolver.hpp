@@ -4,8 +4,8 @@
 #include <functional>
 #include <optional>
 #include <string>
-#include <unordered_map>
 
+#include "common/string_hash.hpp"
 #include "lsp_analysis_cache.hpp"
 #include "lsp_analysis_result.hpp"
 #include "lsp_optional_ref.hpp"
@@ -66,8 +66,7 @@ public:
     // cache for the entire lifetime of the DefinitionResolver instance.
     DefinitionResolver(const std::string& uri, const AnalysisResult& result,
                        const std::vector<Token>& tokens, FindAnalysisFn find_analysis,
-                       FindBlockFn find_block,
-                       const std::unordered_map<std::string, AnalysisResult>& all_results,
+                       FindBlockFn find_block, const StringMap<AnalysisResult>& all_results,
                        const LspAnalysisCache* cache = nullptr)
         : uri_{uri},
           result_{result},
@@ -258,7 +257,7 @@ private:
     FindBlockFn find_block_;
     // Borrowed reference — caller must keep the analysis cache locked for
     // the lifetime of this resolver (see constructor documentation).
-    const std::unordered_map<std::string, AnalysisResult>& all_results_;
+    const StringMap<AnalysisResult>& all_results_;
     // Optional accelerator: cross-file symbol index owned by the cache.
     // Borrowed; nullptr when unavailable, in which case the linear-scan
     // fallback over all_results_ is used.

@@ -25,6 +25,10 @@ bool stdout_is_terminal() {
     return isatty(STDOUT_FILENO) != 0;
 }
 
+bool stdin_is_terminal() {
+    return isatty(STDIN_FILENO) != 0;
+}
+
 void enable_vt_processing() {
     // POSIX terminals process ANSI sequences natively; nothing to enable.
 }

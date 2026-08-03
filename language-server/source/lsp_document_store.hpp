@@ -4,8 +4,9 @@
 #include <functional>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
+
+#include "common/string_hash.hpp"
 
 namespace luma::lsp {
 
@@ -116,8 +117,7 @@ public:
     }
 
     // Iterate over all tracked documents (uri → state).
-    [[nodiscard]] const std::unordered_map<std::string, DocumentState>&
-    all(const LockToken&) const {
+    [[nodiscard]] const StringMap<DocumentState>& all(const LockToken&) const {
         return documents_;
     }
 
@@ -251,7 +251,7 @@ private:
     }
 
     // All per-document state keyed by normalized URI.
-    std::unordered_map<std::string, DocumentState> documents_;
+    StringMap<DocumentState> documents_;
 };
 
 } // namespace luma::lsp

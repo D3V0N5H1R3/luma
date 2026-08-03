@@ -18,6 +18,9 @@ namespace luma::platform_terminal {
 // True when stdout is attached to an interactive terminal device.
 [[nodiscard]] bool stdout_is_terminal();
 
+// True when stdin is attached to an interactive terminal device.
+[[nodiscard]] bool stdin_is_terminal();
+
 // Enable virtual-terminal (ANSI) processing on the Windows console.  Runs at
 // most once per process; a no-op on other platforms.
 void enable_vt_processing();

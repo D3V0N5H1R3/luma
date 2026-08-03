@@ -4,9 +4,9 @@
 #include <functional>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
+#include "common/string_hash.hpp"
 #include "lsp_optional_ref.hpp"
 
 namespace luma::lsp {
@@ -39,8 +39,7 @@ public:
     void init(const LogCallback& log = {});
 
     // Module name → sorted list of functions in that module.
-    [[nodiscard]] const std::unordered_map<std::string, std::vector<StdlibFunction>>&
-    modules() const {
+    [[nodiscard]] const StringMap<std::vector<StdlibFunction>>& modules() const {
         return modules_;
     }
 
@@ -76,8 +75,8 @@ public:
 
 private:
     std::once_flag init_flag_;
-    std::unordered_map<std::string, std::vector<StdlibFunction>> modules_;
-    std::unordered_map<std::string, const StdlibFunction*> function_index_;
+    StringMap<std::vector<StdlibFunction>> modules_;
+    StringMap<const StdlibFunction*> function_index_;
     std::vector<std::string> module_names_;
 };
 

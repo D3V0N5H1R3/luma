@@ -7,10 +7,10 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "common/string_hash.hpp"
 #include "lsp_analysis_result.hpp"
 #include "lsp_optional_ref.hpp"
 
@@ -98,7 +98,7 @@ public:
     void add_include_dependent(const std::string& include_uri, const std::string& dependent_uri);
 
     /// Get all URIs that depend on a given include path.
-    [[nodiscard]] optional_ref<const std::unordered_set<std::string>>
+    [[nodiscard]] optional_ref<const StringSet>
     get_dependents(const std::string& include_uri) const;
 
     /// Remove a URI from all dependency sets.
@@ -114,7 +114,7 @@ public:
     }
 
     /// Direct access to the underlying map (for code that needs iterators).
-    [[nodiscard]] const std::unordered_map<std::string, AnalysisResult>& entries() const {
+    [[nodiscard]] const StringMap<AnalysisResult>& entries() const {
         return cache_;
     }
 
@@ -144,10 +144,10 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, AnalysisResult> cache_;
+    StringMap<AnalysisResult> cache_;
     std::list<std::string> lru_list_;
-    std::unordered_map<std::string, std::list<std::string>::iterator> lru_index_;
-    std::unordered_map<std::string, std::unordered_set<std::string>> include_dependents_;
+    StringMap<std::list<std::string>::iterator> lru_index_;
+    StringMap<StringSet> include_dependents_;
     std::size_t max_entries_;
 
     // Reverse index: symbol name → definition sites across all cached files.
@@ -158,10 +158,10 @@ private:
         SourceLocation location;
     };
 
-    std::unordered_map<std::string, std::vector<IndexEntry>> symbol_index_;
+    StringMap<std::vector<IndexEntry>> symbol_index_;
     // Secondary map: file URI → symbol names it contributed, so a file's
     // entries can be removed from symbol_index_ without scanning every bucket.
-    std::unordered_map<std::string, std::vector<std::string>> uri_symbols_;
+    StringMap<std::vector<std::string>> uri_symbols_;
 
     // Add every definition/user_function in cache_[uri] to the reverse index.
     // Precondition: cache_ already contains an entry for `uri`.

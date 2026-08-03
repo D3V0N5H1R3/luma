@@ -7,8 +7,9 @@
 #include <regex>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
+
+#include "common/string_hash.hpp"
 
 namespace luma::dap {
 
@@ -73,7 +74,7 @@ private:
     // The same small set of type names (e.g. "integer", "string", "array<integer>")
     // is queried repeatedly during variable inspection, so caching avoids redundant
     // regex matching against the (typically < 20) compiled patterns.
-    mutable std::unordered_map<std::string, std::optional<VisualizerRule>> match_cache_;
+    mutable StringMap<std::optional<VisualizerRule>> match_cache_;
 };
 
 } // namespace luma::dap

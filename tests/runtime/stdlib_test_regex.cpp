@@ -425,6 +425,34 @@ static void test_regex_compiled_cache_reuse() {
     ASSERT_EQ(eval("RegularExpression.is_valid(\"[0-9]\")").as_bool(), true);
 }
 
+static void test_regex_compiled_cache_evicts_beyond_capacity() {
+    // The compiled-regex cache now evicts the least-recently-used entry once
+    // full (LruCache) rather than simply refusing to cache new patterns past
+    // its capacity.  Compile well beyond the 256-entry cap with distinct
+    // patterns, then confirm every one -- including the very first, whose
+    // cached automaton should long since have been evicted -- still finds
+    // correct matches.  This pins down that eviction never corrupts or drops
+    // a still-needed compiled regex.
+    constexpr int k_pattern_count = 300;
+
+    for (int i = 0; i < k_pattern_count; ++i) {
+        const std::string pattern = "^item" + std::to_string(i) + "$";
+        const std::string source = "item" + std::to_string(i);
+        const auto v = eval("RegularExpression.matches(\"" + source + "\", \"" + pattern + "\")");
+
+        ASSERT_RESULT_SUCCESS(v);
+        ASSERT_TRUE(v.as_result()->owned_inner->as_bool());
+    }
+
+    // Re-run the first pattern: its compiled automaton was evicted long ago,
+    // so this forces a recompile through the same cache path and must still
+    // succeed with a correct match.
+    const auto v = eval("RegularExpression.matches(\"item0\", \"^item0$\")");
+
+    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_TRUE(v.as_result()->owned_inner->as_bool());
+}
+
 static void test_regex_invalid_pattern_not_cached() {
     // An invalid pattern throws during compilation and is never cached, so it
     // must fail identically every time rather than being wrongly remembered as
@@ -721,6 +749,7 @@ int main() {
     RUN(test_regex_named_groups_do_not_break_lookbehind);
     RUN(test_regex_unterminated_named_group_fails);
     RUN(test_regex_compiled_cache_reuse);
+    RUN(test_regex_compiled_cache_evicts_beyond_capacity);
     RUN(test_regex_invalid_pattern_not_cached);
     RUN(test_regex_find_all_match_limit_propagates);
     RUN(test_regex_split_token_limit_propagates);
