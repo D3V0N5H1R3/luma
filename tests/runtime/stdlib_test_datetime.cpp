@@ -1052,6 +1052,7 @@ static void test_datetime_combine_rejects_foreign_records() {
 }
 
 int main() {
+    RUN(test_datetime_add_days);
     RUN(test_datetime_add_hours);
     RUN(test_datetime_add_months);
     RUN(test_datetime_add_seconds);
