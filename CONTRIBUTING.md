@@ -161,7 +161,7 @@ build/luma --box --test tests/features/language/sandbox.luma
 Run **and verify every example** end to end — including ones that need user input. Console examples are driven with scripted stdin, Terminal/TUI examples through the headless Terminal harness, and `GraphicalUi` examples in headless mode; any example with `@test` blocks also has its assertions checked:
 
 ```bash
-python scripts/run_examples.py
+python scripts/run_luma_examples.py
 ```
 
 On Windows, replace `build/luma` with `build\Release\luma.exe` in the commands above.

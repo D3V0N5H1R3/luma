@@ -3258,7 +3258,7 @@ function void test_counter_responds_to_keys() {
 }
 ```
 
-The same machinery is reachable without Luma code via the `LUMA_TERMINAL_INPUT` environment variable (one key per line), which the example runner (`scripts/run_examples.py`) uses to drive the raw-mode example programs unattended.
+The same machinery is reachable without Luma code via the `LUMA_TERMINAL_INPUT` environment variable (one key per line), which the example runner (`scripts/run_luma_examples.py`) uses to drive the raw-mode example programs unattended.
 
 ## 40 — Xml
 

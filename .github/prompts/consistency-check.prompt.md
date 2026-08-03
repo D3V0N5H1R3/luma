@@ -108,7 +108,7 @@ Also verify:
 ## 9. Benchmarks and Examples
 
 - Files in `benchmarks/` and `examples/` use current Luma syntax and stdlib API.
-- Every example under `examples/` runs cleanly through the headless harness (`scripts/run_examples.py`) — non-interactive, console (scripted stdin), terminal raw-mode, and GraphicalUi (`LUMA_GUI_HEADLESS=1`) examples all complete, and any `@test` block they declare passes.
+- Every example under `examples/` runs cleanly through the headless harness (`scripts/run_luma_examples.py`) — non-interactive, console (scripted stdin), terminal raw-mode, and GraphicalUi (`LUMA_GUI_HEADLESS=1`) examples all complete, and any `@test` block they declare passes.
 - Every `bench_*.luma` is included and invoked by `benchmarks/suite.luma` (they are library modules that cannot run standalone) and uses the `benchmark_harness.luma` helpers.
 - No references to deprecated or removed features.
 
@@ -134,7 +134,7 @@ Also verify:
 
 - Scripts in `scripts/` reference valid paths, build directories, and executable names. The directory is predominantly Python 3.10+ (the version gate lives in `scripts/_common.py`, imported by the others — except the standalone agent hooks in `scripts/agent-hooks/`, which import only the standard library so they stay dependency-free and fail open); the non-Python helpers are `generate_gui_assets.mjs` (Node), `container-build.sh` (shell), and the `scripts/git-hooks/` git hooks installed by `install_git_hooks.py`.
 - Scripts that enforce cross-artefact consistency still match the artefacts they check: `check_warning_sync.py` against the GCC/Clang flags in `cmake/LumaCompilerFlags.cmake` and the checks in `.clang-tidy`, and `generate_gui_assets.mjs` against the embedded GUI assets in `core/runtime/stdlib/io/graphicalui_assets.hpp` (regenerated when `external/gui-framework/` or the vendored front-end libraries change).
-- Scripts invoked by CI workflows (e.g. `run_luma_tests.py`, `run_examples.py`, `compare_benchmark_results.py` / `parse_benchmark_results.py`, `generate_coverage.py`, `check_warning_sync.py`, and the `tsan_suppressions.txt` suppression file) exist with the names and interfaces the workflows expect.
+- Scripts invoked by CI workflows (e.g. `run_luma_tests.py`, `run_luma_examples.py`, `compare_benchmark_results.py` / `parse_benchmark_results.py`, `generate_coverage.py`, `check_warning_sync.py`, and the `tsan_suppressions.txt` suppression file) exist with the names and interfaces the workflows expect.
 - PowerShell and shell scripts elsewhere in the tree (e.g. `extensions/zed/scripts/Download-Binaries.ps1` and `download_binaries.sh`) work with the current project structure.
 
 ## 13. Git and CI
