@@ -69,36 +69,33 @@ The following features remain out of scope for the current implementation:
 
 ## 4 — Architecture
 
-```text
-┌──────────────────────────────────────────────────────────────┐
-│                         Editor                               │
-│            (Visual Studio Code / Zed)                        │
-│                                                              │
-│   DAP Client  ←──  JSON over stdio  ──→  luma_dap           │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    Editor["Editor<br/>(Visual Studio Code / Zed)"]
+    Editor -->|"JSON over stdio"| luma_dap
+    luma_dap -->|"JSON over stdio"| Editor
 ```
 
 The editor spawns `luma_dap` as a child process and communicates via standard input/output using the DAP base protocol (`Content-Length` headers followed by JSON messages).
 
 Internally, the debugger runs two threads:
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                       luma_dap                               │
-│                                                             │
-│  ┌──────────────────┐          ┌─────────────────────────┐ │
-│  │  Protocol Thread │          │   Execution Thread      │ │
-│  │                  │          │                         │ │
-│  │  Read requests   │──cmds──▸ │  VM::run_dispatch()     │ │
-│  │  Write responses │◂─events──│  Breakpoint checking    │ │
-│  │  Write events    │          │  Step tracking          │ │
-│  └──────────────────┘          └─────────────────────────┘ │
-│                                                             │
-│  Shared state (mutex-protected):                            │
-│  • Breakpoint set                                           │
-│  • Pause flag + condition variable                          │
-│  • Variable inspection results                              │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    subgraph luma_dap
+        subgraph Protocol["Protocol Thread"]
+            Read["Read requests"]
+            Write["Write responses<br/>Write events"]
+        end
+        subgraph Execution["Execution Thread"]
+            VM["VM::run_dispatch()"]
+            BP["Breakpoint checking"]
+            Step["Step tracking"]
+        end
+        Shared["Shared state (mutex-protected):<br/>• Breakpoint set<br/>• Pause flag + condition variable<br/>• Variable inspection results"]
+    end
+    Read -->|cmds| VM
+    VM -->|events| Write
 ```
 
 ### Pipeline

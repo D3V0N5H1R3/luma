@@ -62,13 +62,11 @@ The following features remain out of scope:
 
 ## 4 — Architecture
 
-```text
-┌─────────────────────────────────────────────────────────┐
-│                      Editor                             │
-│         (Visual Studio Code / Zed)                      │
-│                                                         │
-│   LSP Client  ←──  JSON-RPC over stdio  ──→  luma_lsp   │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    Editor["Editor<br/>(Visual Studio Code / Zed)"]
+    Editor -->|"JSON-RPC over stdio"| luma_lsp
+    luma_lsp -->|"JSON-RPC over stdio"| Editor
 ```
 
 The server is a single-threaded, synchronous process. The editor spawns it as a child process and communicates via standard input/output using the LSP base protocol (HTTP-style `Content-Length` headers followed by JSON-RPC messages).
@@ -77,8 +75,9 @@ The server is a single-threaded, synchronous process. The editor spawns it as a 
 
 Each time the editor sends a document change notification, the server runs the full analysis pipeline:
 
-```text
-Source text → Lexer → Parser → Type Checker → Diagnostics
+```mermaid
+graph LR
+    Source["Source text"] --> Lexer --> Parser --> TypeChecker["Type Checker"] --> Diagnostics
 ```
 
 The server maintains an in-memory copy of each open document. When a document changes, the server replaces the stored text, re-runs the pipeline, and publishes diagnostics.

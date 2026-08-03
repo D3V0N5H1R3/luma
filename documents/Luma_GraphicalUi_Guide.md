@@ -70,10 +70,12 @@
 
 Every GraphicalUi application has three parts:
 
-```text
-Model  ──→  View  ──→  Widget Tree  ──→  Screen
-  ↑                                        │
-  └──────  Update  ←──  Message  ←─────────┘
+```mermaid
+graph LR
+    Model -->|"view(model)"| View
+    View -->|Widget Tree| Screen
+    Screen -->|Message| Update
+    Update -->|"update(model, msg)"| Model
 ```
 
 - **Model** — the application state (any Luma value)
