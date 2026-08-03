@@ -49,7 +49,7 @@ node extensions/tests/validate-download-constants.test.mjs
 node extensions/tests/validate-resolution-order.test.mjs
 ```
 
-Each validator compares the per-editor generated code against its canonical source in [`../shared`](../shared). A mismatch usually means the generated files are stale and need regenerating — see [`../shared/README.md`](../shared/README.md).
+Each validator compares the per-editor generated code against its canonical source in [`../shared`](../shared). A mismatch usually means the generated files are stale and need regenerating — see [`../shared/DIRECTORY.md`](../shared/DIRECTORY.md).
 
 ## Continuous Integration
 

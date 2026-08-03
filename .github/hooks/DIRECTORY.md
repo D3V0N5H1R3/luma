@@ -4,7 +4,7 @@ Deterministic guardrails that run at the AI agent's tool-call lifecycle points. 
 
 These are **agent** hooks — distinct from the **Git** hooks in [`scripts/git-hooks/`](../../scripts/git-hooks) (`pre-commit`, `commit-msg`) that run on `git commit`. The two layers are complementary: the agent hooks catch things as the agent edits, and the Git hooks catch anything that reaches a commit regardless of how it was produced. Where they overlap (C++ formatting), the agent hook simply means an edit is already clean by the time the pre-commit gate sees it.
 
-For the guidelines these hooks enforce, see [cpp.instructions.md](../../instructions/cpp.instructions.md) (formatting) and the vendored-code boundary documented across the agent guides and [CONTRIBUTING.md](../../CONTRIBUTING.md). For the sibling prompt files, see [.github/prompts/README.md](../prompts/README.md).
+For the guidelines these hooks enforce, see [cpp.instructions.md](../../instructions/cpp.instructions.md) (formatting) and the vendored-code boundary documented across the agent guides and [CONTRIBUTING.md](../../CONTRIBUTING.md). For the sibling prompt files, see [.github/prompts/DIRECTORY.md](../prompts/DIRECTORY.md).
 
 ## Structure
 
@@ -69,7 +69,7 @@ A denied call prints a JSON object containing `"permissionDecision": "deny"`; an
 ## Related documentation
 
 - [scripts/agent-hooks/](../../scripts/agent-hooks) — The hook scripts, each with a full behavioural docstring.
-- [scripts/README.md](../../scripts/README.md) — The wider script directory, including the Git hooks in `scripts/git-hooks/`.
+- [scripts/DIRECTORY.md](../../scripts/DIRECTORY.md) — The wider script directory, including the Git hooks in `scripts/git-hooks/`.
 - [cpp.instructions.md](../../instructions/cpp.instructions.md) — The C++ style the formatter enforces.
 - [CONTRIBUTING.md](../../CONTRIBUTING.md) — Contributor setup and the vendored-code boundary.
-- [.github/prompts/README.md](../prompts/README.md) — The sibling prompt files that the agent runs on demand.
+- [.github/prompts/DIRECTORY.md](../prompts/DIRECTORY.md) — The sibling prompt files that the agent runs on demand.

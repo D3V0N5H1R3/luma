@@ -80,4 +80,4 @@ so opening a Codespace skips the initial compile.
 
 - [Contributing](../CONTRIBUTING.md)
 - [Build presets and options](../instructions/build.instructions.md)
-- [Vendored dependencies](../external/README.md)
+- [Vendored dependencies](../external/DIRECTORY.md)

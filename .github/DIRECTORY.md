@@ -14,7 +14,7 @@ This directory holds everything that GitHub, Dependabot, and AI-powered agents (
 | [`prompts/`](prompts/)           | Copilot prompt files — reusable workflow instructions for AI agents (27 prompts).                 |
 | [`workflows/`](workflows/)       | GitHub Actions workflow definitions (CI, linting, release, fuzzing, etc.).                        |
 
-Each subdirectory carries its own `README.md` with detailed documentation.
+Each subdirectory carries its own `DIRECTORY.md` with detailed documentation.
 
 ## Root-Level Files
 

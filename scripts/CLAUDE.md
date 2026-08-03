@@ -4,7 +4,7 @@
 scripts/. It stands in for the applyTo-scoped guides that VS Code injects but
 Claude Code ignores. The guides are named by repo-root-relative path for Claude to
 read on demand (robust however Claude Code resolves @import paths). Keep them
-aligned with the applyTo globs in instructions/README.md and the mapping in
+aligned with the applyTo globs in instructions/DIRECTORY.md and the mapping in
 ../CLAUDE.md. -->
 
 `scripts/` holds the developer tooling scripts — predominantly Python, with

@@ -68,7 +68,7 @@ function(luma_add_fuzz_target name source lib)
 
     # Each target seeds from its own corpus subdirectory (corpus/<stage>/),
     # derived from the target name by stripping the leading "fuzz_".  This
-    # matches the layout documented in README.md, rather than feeding every
+    # matches the layout documented in DIRECTORY.md, rather than feeding every
     # target the entire corpus tree.
     string(REGEX REPLACE "^fuzz_" "" corpus_subdir "${name}")
     set(corpus_dir "${CMAKE_CURRENT_SOURCE_DIR}/corpus/${corpus_subdir}")

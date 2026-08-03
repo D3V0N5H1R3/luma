@@ -165,6 +165,6 @@ For reference, the checks each pull-request-triggered workflow reports:
 - [../actions](../actions) — the composite actions these workflows call (`apt-install`, `cmake-build`, `package-binaries`, `build-vscode-extension`, `build-zed-extension`).
 - [linux-distros.json](linux-distros.json) — the distribution matrix [`resolve-distro-matrix.yml`](resolve-distro-matrix.yml) loads.
 - [stale-path-denylist.txt](../stale-path-denylist.txt) — the patterns [`docs.yml`](docs.yml) rejects.
-- [prompts/README.md](../prompts/README.md) and [hooks/README.md](../hooks/README.md) — the sibling `.github/` indexes.
+- [prompts/DIRECTORY.md](../prompts/DIRECTORY.md) and [hooks/DIRECTORY.md](../hooks/DIRECTORY.md) — the sibling `.github/` indexes.
 
 > **Note:** When you add, rename, or remove a workflow, update the tables above so this index stays accurate.

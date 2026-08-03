@@ -27,7 +27,7 @@ Perform a thorough code review of the specified file(s). Read the relevant codin
 - [cmake.instructions.md](../../instructions/cmake.instructions.md) (`CMakeLists.txt`) for CMake files.
 - [software-architecture.instructions.md](../../instructions/software-architecture.instructions.md) (`core/`, `shared/`, `language-server/`, `debugger/`) for architecture, modularity, and separation-of-concerns principles.
 - [markdown.instructions.md](../../instructions/markdown.instructions.md) (`.md`) for Markdown documentation.
-- [readme.instructions.md](../../instructions/readme.instructions.md) (`README.md`) for README files.
+- [readme.instructions.md](../../instructions/readme.instructions.md) (`DIRECTORY.md`) for README files.
 - [github-actions.instructions.md](../../instructions/github-actions.instructions.md) (`.github/workflows/**`) for GitHub Actions workflow files.
 
 Verify that:

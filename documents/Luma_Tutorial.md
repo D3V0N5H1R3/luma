@@ -1792,4 +1792,4 @@ A quick reference for the terms introduced in this tutorial.
 - [Contributing](../CONTRIBUTING.md) — install and build Luma, and set up an editor
 - [Coding Guidelines](Luma_Coding_Guidelines.md) — idiomatic style and conventions to grow into
 - [Error Handling](Luma_Error_Handling.md) — a deeper look at `result`, `optional`, and recovery
-- [Documentation Index](README.md) — index of all Luma documentation
+- [Documentation Index](DIRECTORY.md) — index of all Luma documentation

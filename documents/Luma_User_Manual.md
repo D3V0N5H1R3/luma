@@ -3839,4 +3839,4 @@ From lowest to highest:
 - [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) — debugging tasks and channels
 - [Software Architecture](Luma_Software_Architecture.md) — how the interpreter executes the language
 - [Initial Concept](Luma_Initial_Concept.md) — the original design goals and motivation
-- [Documentation Index](README.md) — index of all Luma documentation
+- [Documentation Index](DIRECTORY.md) — index of all Luma documentation

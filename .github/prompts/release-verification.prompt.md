@@ -161,7 +161,7 @@ Run phases 2–6 exactly as described in
 > (drop `,address` from the sanitizer flags, add
 > `-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded` and
 > `-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY`);
-> [fuzz/README.md](../../fuzz/README.md) has the full validated `clang-cl` recipe
+> [fuzz/DIRECTORY.md](../../fuzz/DIRECTORY.md) has the full validated `clang-cl` recipe
 > (Ninja + `RelWithDebInfo`). Run each target against an isolated, writable corpus
 > directory so the tracked seeds in `fuzz/corpus/` are never modified.
 > **Windows fuzzing is not authoritative:** use it only to confirm each target

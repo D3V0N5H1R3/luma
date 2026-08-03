@@ -33,4 +33,4 @@ retired in favour of consuming the canonical tree-sitter grammar directly.
 
 ## See also
 
-- [`README.md`](./README.md#tree-sitter-as-the-canonical-grammar) — How each editor consumes the canonical tree-sitter grammar.
+- [`DIRECTORY.md`](./DIRECTORY.md#tree-sitter-as-the-canonical-grammar) — How each editor consumes the canonical tree-sitter grammar.

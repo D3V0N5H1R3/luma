@@ -17,7 +17,7 @@ scope by design: detecting it reliably would require shell parsing and would
 risk blocking legitimate reads such as ``cat``/``grep`` over ``external/``.
 
 Invoked by ``.github/hooks/protect-vendored-paths.json``. See
-``.github/hooks/README.md`` for the rationale and how to test it.
+``.github/hooks/DIRECTORY.md`` for the rationale and how to test it.
 """
 
 from __future__ import annotations

@@ -25,7 +25,7 @@ three no-applyTo guides) to read on demand.
 Beyond instructions, the .claude/ directory carries Claude-native hooks
 (settings.json), subagents (agents/), and slash commands (commands/) that mirror
 the .github/ hooks, agents, and prompts. Keep each pair in sync; the map and the
-sync rules live in .claude/README.md.
+sync rules live in .claude/DIRECTORY.md.
 -->
 
 @.github/copilot-instructions.md
@@ -41,7 +41,7 @@ CLAUDE.md files in the source subtrees; see "Working with this repo" below. -->
 Claude Code loads none of the `.github/` agent, prompt, or hook files (those are
 Copilot/VS Code formats). The `.claude/` directory provides the Claude-native
 equivalents, each mirroring a `.github/` counterpart from a single source of
-truth. See [`.claude/README.md`](.claude/README.md) for the full map and the
+truth. See [`.claude/DIRECTORY.md`](.claude/DIRECTORY.md) for the full map and the
 rules for keeping the two layers in sync.
 
 - **Hooks** (`.claude/settings.json`): a **PreToolUse** guard blocks edits to
@@ -112,10 +112,10 @@ for reference:
 
 - `instructions/testing.instructions.md` — custom test framework, assertion macros, Luma feature tests (`tests/**`).
 - `instructions/markdown.instructions.md` — Markdown structure, formatting, linking, content (`**/*.md`).
-- `instructions/readme.instructions.md` — README structure, section ordering, update safety (`**/README.md`).
+- `instructions/readme.instructions.md` — README structure, section ordering, update safety (`{**/DIRECTORY.md,README.md}`).
 
 The "Coding Conventions" section of the imported guidance covers most of these
 with additional style detail. The canonical inventory — kept in sync with the
-directory — is the table in [`instructions/README.md`](instructions/README.md);
+directory — is the table in [`instructions/DIRECTORY.md`](instructions/DIRECTORY.md);
 treat that as the source of truth and re-list the folder if this summary ever
 drifts.

@@ -14,7 +14,7 @@ no-op (exit 0, no decision) so the agent is never impeded. It only ever
 formats; it never blocks a tool call.
 
 Invoked by ``.github/hooks/format-cpp-on-edit.json``. See
-``.github/hooks/README.md`` for the rationale and how to test it.
+``.github/hooks/DIRECTORY.md`` for the rationale and how to test it.
 """
 
 from __future__ import annotations

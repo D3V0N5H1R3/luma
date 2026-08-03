@@ -31,7 +31,7 @@ For repository-wide context — the architecture overview, module layout, and co
 | [markdown.instructions.md](markdown.instructions.md)                             | Documentation structure and formatting                                 | `**/*.md`                                   |
 | [powershell.instructions.md](powershell.instructions.md)                         | PowerShell naming, style, pipeline, error handling, Pester             | `**/*.{ps1,psm1,psd1}`                      |
 | [python.instructions.md](python.instructions.md)                                 | Python naming, style, type hints, error handling, testing              | `**/*.py`                                   |
-| [readme.instructions.md](readme.instructions.md)                                 | README content and update rules                                        | `**/README.md`                              |
+| [readme.instructions.md](readme.instructions.md)                                 | README content and update rules                                        | `{**/DIRECTORY.md,README.md}`                  |
 | [rust.instructions.md](rust.instructions.md)                                     | Rust naming, style, ownership, error handling, unsafe code             | `**/*.rs`                                   |
 | [shell.instructions.md](shell.instructions.md)                                   | Shell portability, quoting, error handling, Linux/macOS support        | `**/*.{sh,bash}`                            |
 | [software-architecture.instructions.md](software-architecture.instructions.md)   | Language-agnostic design principles, modularity, safety                | `{core,shared,language-server,debugger}/**` |
@@ -73,6 +73,6 @@ it rather than trying to centralise it.
 
 The topical language and tooling guides number their top-level sections as `## N — Title`
 (em dash), with a Table of Contents linking to each. Two files are deliberate exceptions and use
-plain, unnumbered headings: this `README.md` (an index, not a guide) and
+plain, unnumbered headings: this `DIRECTORY.md` (an index, not a guide) and
 [learnings.instructions.md](learnings.instructions.md) (an append-only log whose sections are
 added over time). Follow the numbered style when authoring a new topical guide.

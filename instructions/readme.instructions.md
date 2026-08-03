@@ -1,10 +1,10 @@
 ---
-description: "Use when writing, reviewing, or modifying README files. Covers structure, section ordering, writing style, completeness checks, and update safety for project README documents."
-applyTo: "**/README.md"
+description: "Use when writing, reviewing, or modifying README or DIRECTORY files. Covers structure, section ordering, writing style, completeness checks, and update safety for project documentation index documents."
+applyTo: "{**/DIRECTORY.md,README.md}"
 priority: reference
 ---
 
-# Working with README Files
+# Working with README and DIRECTORY Files
 
 ## Table of Contents
 
@@ -121,14 +121,14 @@ When asked to review or summarise a README, follow this process.
 ### Step 1 — Read the File
 
 ```bash
-cat README.md
+cat DIRECTORY.md
 ```
 
 If the file is large, read it in sections:
 
 ```bash
-head -n 80 README.md # overview and setup
-tail -n 40 README.md # footer, license, links
+head -n 80 DIRECTORY.md # overview and setup
+tail -n 40 DIRECTORY.md # footer, license, links
 ```
 
 ### Step 2 — Evaluate Completeness

@@ -85,7 +85,7 @@ Use `---` on its own line, surrounded by blank lines, to separate major sections
 ### File Names
 
 - Use `PascalCase` with underscores for multi-word document names: `Luma_User_Manual.md`.
-- Use `UPPER_CASE` for conventional root-level files: `README.md`, `CONTRIBUTING.md`, `LICENSE`, `SECURITY.md`.
+- Use `UPPER_CASE` for conventional root-level files: `DIRECTORY.md`, `CONTRIBUTING.md`, `LICENSE`, `SECURITY.md`.
 - Use `kebab-case` with the `.instructions.md` suffix for instruction files: `cpp.instructions.md`, `cmake.instructions.md`.
 - Always use the `.md` extension.
 

@@ -809,7 +809,7 @@ failure(_e) { print("no such file") }
 `FileSystem.FileKind` is a choice type with four variants — `File`, `Directory`, `SymbolicLink`, `Other` — the single, mutually-exclusive answer to "what kind of thing is this path?". `FileSystem.kind(path)` returns it (and it is also the `kind` field on `FileSystem.FileInfo`), so a `match` is exhaustive and autocompleted instead of a nested `if` chain over the `is_file` / `is_directory` / `is_symbolic_link` booleans. It is classified symlink-first, like `lstat`: a symbolic link is reported as `SymbolicLink` even when its target is a directory or a regular file (so the four variants never overlap), and anything that is none of these — a device, FIFO, or socket — is `Other`. `kind` fails only when the path does not exist.
 
 ```luma
-match Result.unwrap(FileSystem.kind("README.md")) {
+match Result.unwrap(FileSystem.kind("DIRECTORY.md")) {
 case FileSystem.FileKind.File      { print("a file") }
 case FileSystem.FileKind.Directory { print("a directory") }
 case FileSystem.FileKind.SymbolicLink   { print("a link") }

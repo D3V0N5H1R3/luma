@@ -150,4 +150,4 @@ The interpreter (a command-line application written in modern C++) should be abl
 
 - [User Manual](Luma_User_Manual.md) — the language as it exists today
 - [Software Architecture](Luma_Software_Architecture.md) — how these design goals are realised in the interpreter
-- [Documentation Index](README.md) — index of all Luma documentation
+- [Documentation Index](DIRECTORY.md) — index of all Luma documentation
