@@ -117,6 +117,11 @@ Two optional extras pull in more tooling:
 
 ## Installation
 
+> **Pre-built binaries:** Download ready-to-use binaries for Windows, macOS, and
+> Linux from the [latest release](https://github.com/d3v0n5h1r3/luma/releases/latest).
+> See the [Installation Guide](documents/Luma_Installation_Guide.md) for step-by-step
+> instructions, including editor setup for VS Code and Zed.
+
 > **Tip:** To try Luma without installing a local toolchain, open the repository
 > in [GitHub Codespaces](.devcontainer/README.md) (**Code → Codespaces → Create
 > codespace**). The dev container ships the full C++20 toolchain and builds the
@@ -184,6 +189,7 @@ On Windows, replace `build/luma` with `build\Release\luma.exe` in the commands a
 
 | Document                             | Contents                                                  |
 | ------------------------------------ | --------------------------------------------------------- |
+| [Installation Guide](documents/Luma_Installation_Guide.md) | Pre-built binary setup for Windows, macOS, and Linux.  |
 | [User Manual][manual]                | Complete language reference and tutorial.                 |
 | [Standard Library Reference][stdlib] | All 39 standard library modules and built-in functions.   |
 | [Software Architecture][arch]        | Interpreter pipeline and module design.                   |
