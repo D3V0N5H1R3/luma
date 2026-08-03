@@ -147,7 +147,7 @@ function boolean is_over(array<integer> board) {
     return true
 }
 
-function dictionary move(dictionary model, string direction) {
+function any move(dictionary model, string direction) {
     array<integer> board = model["board"]
     array<array<integer>> groups = index_groups(direction)
     mutable array<integer> next = board
@@ -180,7 +180,13 @@ function dictionary move(dictionary model, string direction) {
     updated["score"] = Dictionary.get_or(model, "score", 0) + gained
     updated["won"] = Dictionary.get_or(model, "won", false) || Array.contains(next, 2048)
     updated["over"] = is_over(next)
-    return updated
+
+    # A move that changed the board is visual-only otherwise: a screen-reader
+    # user gets no feedback that anything happened until win/game-over. Announce
+    # the running score after every effective move so assistive tech users know
+    # a move landed and can track progress without seeing the tiles slide.
+    return GraphicalUi.with_command(updated,
+        GraphicalUi.announce("Score: ${updated["score"]}. New tile spawned."))
 }
 
 function string status_text(dictionary model) {
@@ -207,7 +213,7 @@ function string status_text(dictionary model) {
 # single dark ink chosen in tile_style().
 function string tile_background(integer value) {
     dictionary<string> palette = {
-        "0": "var(--gui-input-bg)",
+        "0": "#cdc1b4",
         "2": "#eee4da",
         "4": "#ede0c8",
         "8": "#f2b179",

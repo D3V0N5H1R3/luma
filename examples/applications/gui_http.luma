@@ -96,6 +96,19 @@ function dictionary perform_get(dictionary<string> model) {
     )
 }
 
+# Resets the model back to idle, discarding any response, error, or in-flight
+# request feedback. Shared by the toolbar "Clear" button and the loading
+# state's "Cancel" button, since both make the same promise: return control to
+# the user immediately, even though the underlying native fetch has no
+# cancellation hook and keeps running until it times out.
+function dictionary<string> reset_to_idle(dictionary<string> model) {
+    mutable dictionary<string> m = model
+    m["status"] = "idle"
+    m["response"] = ""
+    m["message"] = ""
+    return m
+}
+
 function widget view_http(dictionary<string> model) {
     string status = model["status"]
     string response = model["response"]
@@ -118,13 +131,7 @@ function widget view_http(dictionary<string> model) {
                 return m
             }, "https://example.com/api", { "flex": GraphicalUi.fill(), "aria_label": "URL to fetch" }),
             GraphicalUi.button("GET", () -> perform_get(model), button_variant(GraphicalUi.PRIMARY)),
-            GraphicalUi.button("Clear", () -> {
-                mutable dictionary<string> m = model
-                m["status"] = "idle"
-                m["response"] = ""
-                m["message"] = ""
-                return m
-            }, button_variant(GraphicalUi.GHOST))
+            GraphicalUi.button("Clear", () -> reset_to_idle(model), button_variant(GraphicalUi.GHOST))
         ], {"align_items": "center"}),
 
         # Live regions: the status pill announces politely as the request moves
@@ -132,7 +139,11 @@ function widget view_http(dictionary<string> model) {
         GraphicalUi.aria_live("polite", view_status_badge(status)),
 
         GraphicalUi.when(status == "loading",
-            GraphicalUi.spinner("Loading…")
+            GraphicalUi.row([
+                GraphicalUi.spinner("Loading…"),
+                GraphicalUi.button("Cancel", () -> reset_to_idle(model),
+                    button_variant(GraphicalUi.GHOST))
+            ], {"align_items": "center", "gap": GraphicalUi.VAR_GAP})
         ),
         GraphicalUi.when(status == "done",
             GraphicalUi.panel("Response", [
@@ -231,6 +242,14 @@ function void test_clear_button_resets_state() {
     dictionary outcome = GraphicalUi.test_click(http_config(), dirty, "Clear")
     assert(Dictionary.get_or(outcome, "status", "") == "idle")
     assert(Dictionary.get_or(outcome, "response", "x") == "")
+}
+
+@test
+function void test_cancel_button_returns_to_idle_while_loading() {
+    dictionary loading = GraphicalUi.test_click(http_config(), http_model(), "GET")
+    assert(Dictionary.get_or(loading, "status", "") == "loading")
+    dictionary cancelled = GraphicalUi.test_click(http_config(), loading, "Cancel")
+    assert(Dictionary.get_or(cancelled, "status", "") == "idle")
 }
 
 @test

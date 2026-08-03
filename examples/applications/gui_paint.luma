@@ -56,7 +56,7 @@ function dictionary paint_initial() {
     mutable dictionary model = {"color": colors[0]}
     model["pixels"] = empty_pixels()
     model["erase"] = false
-    model["confirm_clear"] = false
+    model["show_clear_confirm"] = false
     model["cursor"] = 0
     return model
 }
@@ -85,7 +85,6 @@ function dictionary paint_cell(dictionary model, integer index) {
     }
     mutable dictionary updated = model
     updated["pixels"] = Result.unwrap(Array.set(pixels, index, value))
-    updated["confirm_clear"] = false
     return updated
 }
 
@@ -94,28 +93,34 @@ function dictionary select_color(dictionary model, integer index) {
     mutable dictionary updated = model
     updated["color"] = colors[index]
     updated["erase"] = false
-    updated["confirm_clear"] = false
     return updated
 }
 
 function dictionary set_erase(dictionary model) {
     mutable dictionary updated = model
     updated["erase"] = true
-    updated["confirm_clear"] = false
     return updated
 }
 
-function dictionary clear_canvas(dictionary model) {
+# Clearing the canvas is destructive, so — like gui_todo.luma and gui_2048.luma
+# — it is guarded by a GraphicalUi.confirm() dialog rather than a silent action.
+# A blank canvas has nothing to lose, so it clears immediately without asking.
+function dictionary request_clear_canvas(dictionary model) {
     array<string> pixels = Dictionary.get_or(model, "pixels", [])
     if count_painted(pixels) == 0 {
-        return Dictionary.set(model, "confirm_clear", false)
+        return model
     }
-    if !Dictionary.get_or(model, "confirm_clear", false) {
-        return Dictionary.set(model, "confirm_clear", true)
-    }
+    return Dictionary.set(model, "show_clear_confirm", true)
+}
+
+function dictionary cancel_clear_canvas(dictionary model) {
+    return Dictionary.set(model, "show_clear_confirm", false)
+}
+
+function dictionary clear_canvas(dictionary model) {
     mutable dictionary updated = model
     updated["pixels"] = empty_pixels()
-    updated["confirm_clear"] = false
+    updated["show_clear_confirm"] = false
     return updated
 }
 
@@ -198,9 +203,15 @@ function boolean swatch_is_active(dictionary model, string color) {
 
 # One consistent "selected tool" ring, shared by every swatch and the eraser so
 # the whole tool group reads as a single selection treatment (same colour and
-# offset) rather than each control inventing its own highlight.
+# offset) rather than each control inventing its own highlight. `outline`
+# (unlike `box_shadow`) survives Windows High Contrast / Forced Colours Mode, so
+# it is the indicator kept when box-shadow is stripped there.
 function string selected_ring(boolean active) {
     return if active { "0 0 0 3px ${GraphicalUi.VAR_FG}" } else { "none" }
+}
+
+function string selected_outline(boolean active) {
+    return if active { "2px solid ${GraphicalUi.VAR_FG}" } else { "none" }
 }
 
 function dictionary<string> swatch_style(string color, integer index, boolean active) {
@@ -211,7 +222,9 @@ function dictionary<string> swatch_style(string color, integer index, boolean ac
         "background_color": color,
         "border": "1px solid ${GraphicalUi.VAR_BORDER}",
         "border_radius": GraphicalUi.VAR_RADIUS,
-        "box_shadow": selected_ring(active)
+        "box_shadow": selected_ring(active),
+        "outline": selected_outline(active),
+        "outline_offset": "2px"
     }
 }
 
@@ -235,7 +248,9 @@ function widget view_eraser(dictionary model) {
         "background_color": "transparent",
         "color": GraphicalUi.VAR_FG,
         "border": "1px solid ${GraphicalUi.VAR_BORDER}",
-        "box_shadow": selected_ring(active)
+        "box_shadow": selected_ring(active),
+        "outline": selected_outline(active),
+        "outline_offset": "2px"
     }), attrs)
 }
 
@@ -278,10 +293,27 @@ function widget view_canvas(dictionary model) {
     return GraphicalUi.grid(grid_columns(), cells, GraphicalUi.spacing(2))
 }
 
+# Clearing the canvas is destructive, so — like gui_todo.luma and gui_2048.luma
+# — it is confirmed with a GraphicalUi.confirm() dialog instead of a same-button
+# double-click, giving the user an explicit "Keep drawing" escape hatch.
+function widget view_clear_confirm(dictionary model) {
+    mutable dictionary opts = {}
+    opts["confirm_label"] = "Clear canvas"
+    opts["cancel_label"] = "Keep drawing"
+    opts["danger"] = true
+    return GraphicalUi.when(Dictionary.get_or(model, "show_clear_confirm", false),
+        GraphicalUi.confirm(
+            "Clear the canvas?",
+            "This erases every painted pixel.",
+            () -> clear_canvas(model),
+            () -> cancel_clear_canvas(model),
+            opts
+        )
+    )
+}
+
 function widget view_paint(dictionary model) {
     integer painted = count_painted(Dictionary.get_or(model, "pixels", []))
-    boolean confirming = Dictionary.get_or(model, "confirm_clear", false)
-    string clear_label = if confirming { "Confirm Clear" } else { "Clear" }
     return GraphicalUi.column([
         GraphicalUi.toolbar([
             GraphicalUi.icon("edit", 20),
@@ -301,23 +333,14 @@ function widget view_paint(dictionary model) {
                 "font_size": GraphicalUi.VAR_TEXT_SM,
                 "color": GraphicalUi.VAR_DISABLED_FG
             }),
-            GraphicalUi.button(clear_label, () -> clear_canvas(model), {
+            GraphicalUi.button("Clear", () -> request_clear_canvas(model), {
                 "id": "btn-clear",
                 "background_color": "transparent",
                 "color": GraphicalUi.VAR_ERROR,
                 "border": "1px solid ${GraphicalUi.VAR_BORDER}"
             })
         ], GraphicalUi.merge_styles(GraphicalUi.center_x(), GraphicalUi.spacing(16))),
-        if confirming {
-            GraphicalUi.aria_live("polite",
-                GraphicalUi.label("Press Clear again to confirm.", {
-                    "font_size": GraphicalUi.VAR_TEXT_SM,
-                    "text_align": "center",
-                    "color": GraphicalUi.VAR_WARNING
-                }))
-        } else {
-            GraphicalUi.label("", {"font_size": GraphicalUi.VAR_TEXT_SM})
-        }
+        view_clear_confirm(model)
     ], GraphicalUi.merge_styles(GraphicalUi.spacing(12), GraphicalUi.padding(12)))
 }
 
@@ -412,8 +435,27 @@ function void test_clear_empties_the_whole_canvas() {
     dictionary first = GraphicalUi.test_click(config, paint_initial(), "px-0")
     dictionary second = GraphicalUi.test_click(config, first, "px-7")
     dictionary confirming = GraphicalUi.test_click(config, second, "btn-clear")
-    dictionary cleared = GraphicalUi.test_click(config, confirming, "btn-clear")
+    assert(Dictionary.get_or(confirming, "show_clear_confirm", false))
+    dictionary cleared = GraphicalUi.test_click(config, confirming, "Clear the canvas?")
     assert(count_painted(Dictionary.get_or(cleared, "pixels", [])) == 0)
+    assert(!Dictionary.get_or(cleared, "show_clear_confirm", true))
+}
+
+@test
+function void test_clear_confirm_can_be_cancelled() {
+    dictionary config = paint_config()
+    dictionary painted = GraphicalUi.test_click(config, paint_initial(), "px-0")
+    dictionary confirming = GraphicalUi.test_click(config, painted, "btn-clear")
+    dictionary cancelled = GraphicalUi.test_event(config, confirming, "Clear the canvas?", "close")
+    assert(!Dictionary.get_or(cancelled, "show_clear_confirm", true))
+    assert(pixel_at(cancelled, 0) == "#ef4444")
+}
+
+@test
+function void test_clear_on_an_empty_canvas_does_not_prompt() {
+    dictionary config = paint_config()
+    dictionary model = GraphicalUi.test_click(config, paint_initial(), "btn-clear")
+    assert(!Dictionary.get_or(model, "show_clear_confirm", true))
 }
 
 @test
