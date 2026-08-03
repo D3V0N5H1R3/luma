@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""Bump the project version across all version-bearing files simultaneously.
+
+Updates the version number in:
+  - VERSION                        (interpreter, language server, debugger)
+  - extensions/vscode/package.json (VS Code extension)
+  - extensions/zed/extension.toml  (Zed extension)
+
+Usage:
+    python scripts/bump_version.py 0.6.0          # set an explicit version
+    python scripts/bump_version.py --major        # bump major (0.5.0 -> 1.0.0)
+    python scripts/bump_version.py --minor        # bump minor (0.5.0 -> 0.6.0)
+    python scripts/bump_version.py --patch        # bump patch (0.5.0 -> 0.5.1)
+    python scripts/bump_version.py --current      # print current version and exit
+
+Exit codes:
+    0  Version updated successfully (or --current printed).
+    1  Invalid arguments or version format.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+from _common import REPO_ROOT
+
+VERSION_FILE: Path = REPO_ROOT / "VERSION"
+VSCODE_PACKAGE_JSON: Path = REPO_ROOT / "extensions" / "vscode" / "package.json"
+ZED_EXTENSION_TOML: Path = REPO_ROOT / "extensions" / "zed" / "extension.toml"
+
+SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+
+
+def read_current_version() -> str:
+    """Read the current version from the VERSION file."""
+    return VERSION_FILE.read_text(encoding="utf-8").strip()
+
+
+def parse_semver(version: str) -> tuple[int, int, int]:
+    """Parse a semver string into (major, minor, patch)."""
+    match = SEMVER_RE.match(version)
+    if not match:
+        sys.exit(f"Error: '{version}' is not a valid semver (expected MAJOR.MINOR.PATCH).")
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
+def bump(version: str, part: str) -> str:
+    """Bump the specified part of a semver string."""
+    major, minor, patch = parse_semver(version)
+    if part == "major":
+        return f"{major + 1}.0.0"
+    if part == "minor":
+        return f"{major}.{minor + 1}.0"
+    return f"{major}.{minor}.{patch + 1}"
+
+
+def update_version_file(new_version: str) -> None:
+    """Write the new version to the VERSION file."""
+    VERSION_FILE.write_text(f"{new_version}\n", encoding="utf-8")
+
+
+def update_vscode_package_json(new_version: str) -> None:
+    """Update the 'version' field in the VS Code extension package.json."""
+    content = VSCODE_PACKAGE_JSON.read_text(encoding="utf-8")
+    data = json.loads(content)
+    data["version"] = new_version
+    VSCODE_PACKAGE_JSON.write_text(
+        json.dumps(data, indent=4, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def update_zed_extension_toml(new_version: str) -> None:
+    """Update the 'version' field in the Zed extension.toml."""
+    content = ZED_EXTENSION_TOML.read_text(encoding="utf-8")
+    updated = re.sub(
+        r'^(version\s*=\s*")([^"]+)(")',
+        rf"\g<1>{new_version}\3",
+        content,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if updated == content:
+        sys.exit("Error: Could not find 'version = \"...\"' in extension.toml.")
+    ZED_EXTENSION_TOML.write_text(updated, encoding="utf-8")
+
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        sys.exit(
+            "Usage: python scripts/bump_version.py"
+            " {VERSION | --major | --minor | --patch | --current}"
+        )
+
+    arg = sys.argv[1]
+    current = read_current_version()
+
+    if arg == "--current":
+        print(current)
+        return
+
+    if arg in ("--major", "--minor", "--patch"):
+        new_version = bump(current, arg.lstrip("-"))
+    else:
+        # Treat the argument as an explicit version string.
+        parse_semver(arg)  # validates format
+        new_version = arg
+
+    if new_version == current:
+        print(f"Version is already {current} — nothing to do.")
+        return
+
+    update_version_file(new_version)
+    update_vscode_package_json(new_version)
+    update_zed_extension_toml(new_version)
+
+    print(f"Version bumped: {current} -> {new_version}")
+    print("  Updated: VERSION")
+    print("  Updated: extensions/vscode/package.json")
+    print("  Updated: extensions/zed/extension.toml")
+
+
+if __name__ == "__main__":
+    main()
