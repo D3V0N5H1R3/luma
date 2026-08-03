@@ -147,6 +147,7 @@ set(LUMA_COMMON_HEADER_TESTS
     qualified_name_test
     symbol_kind_test
     stdlib_return_type_test
+    index_validator_test
 )
 
 foreach(test IN LISTS LUMA_COMMON_HEADER_TESTS)
@@ -358,6 +359,7 @@ endforeach()
 set(LUMA_DAP_TESTS
     dap_test_types
     dap_test_protocol
+    dap_test_protocol_handler
     dap_test_thread_state
     dap_test_breakpoints
     dap_test_compiled_cache

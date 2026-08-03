@@ -380,12 +380,16 @@ void VM::handle_concatenate() {
         }
     };
 
-    // Fast path: both operands are already strings (avoids copies).
+    // Fast path: both operands are already strings (avoids copies).  Strings
+    // are stored directly in the Value variant (not behind a shared_ptr), so
+    // a_ref always uniquely owns its buffer — appending in place via += is
+    // safe and, unlike `Value{sa + sb}` (which always allocates an
+    // exact-size buffer), can reuse existing capacity when the left operand's
+    // buffer has room, avoiding a reallocation on repeated concatenation.
     if (a_ref.is_string() && b.is_string()) [[likely]] {
-        const auto& sa = a_ref.as_string();
         const auto& sb = b.as_string();
-        validate_size(sa.size(), sb.size());
-        a_ref = Value{sa + sb};
+        validate_size(a_ref.as_string().size(), sb.size());
+        a_ref.as_string_mut() += sb;
     } else {
         auto sa = a_ref.to_string();
         auto sb = b.to_string();

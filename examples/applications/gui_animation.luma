@@ -27,7 +27,10 @@ function widget view_animation(dictionary<string> model) {
                     "transform": if expanded { "scaleX(1.6)" } else { "scaleX(1)" },
                     "transform_origin": "left center",
                     "background_color": if expanded { "var(--gui-primary)" } else { "var(--gui-bg)" },
-                    "color": if expanded { "white" } else { "var(--gui-fg)" }
+                    # Reference the theme's on-accent token (guaranteed contrast
+                    # against --gui-primary) instead of a hardcoded "white",
+                    # which could fail WCAG AA against a light accent theme.
+                    "color": if expanded { "var(--gui-on-accent)" } else { "var(--gui-fg)" }
                 })),
                 {"transform": "0.3s ease-in-out", "background_color": "0.3s ease", "color": "0.3s ease"}
             ),

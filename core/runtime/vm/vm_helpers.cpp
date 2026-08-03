@@ -57,6 +57,7 @@ void VM::call_function(const FunctionValue& func, int arg_count) {
         stack_.frames.push_back({
             .function = func.compiled,
             .ip = func.compiled->chunk().code.data(),
+            .code_end = func.compiled->chunk().code.data() + func.compiled->chunk().code.size(),
             .slot_offset = base_slot,
         });
         auto& frame = stack_.frames.back();

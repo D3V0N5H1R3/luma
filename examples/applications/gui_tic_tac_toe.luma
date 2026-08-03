@@ -130,10 +130,11 @@ function widget view_cell(dictionary model, integer index) {
     style["role"] = "gridcell"
     style["aria_label"] = cell_label(model, index, mark)
     if locked {
-        # Occupied / finished cells are inert: mark them disabled for assistive
-        # tech rather than exposing a nameless button wired to a no-op.
-        style["aria_disabled"] = "true"
-        return GraphicalUi.button(mark, () -> model, style)
+        # Occupied / finished cells are inert. Rendering them as a label (rather
+        # than a disabled button with a no-op callback) drops them out of the
+        # tab order entirely, so keyboard users only ever land on playable
+        # cells; "gridcell" is preserved so the board's grid semantics hold.
+        return GraphicalUi.label(mark, style)
     }
     return GraphicalUi.button(mark, () -> play_cell(model, index), style)
 }
@@ -241,12 +242,33 @@ function void test_turns_alternate() {
 }
 
 @test
-function void test_cannot_overwrite_a_taken_cell() {
+function void test_play_cell_ignores_an_occupied_cell() {
+    # Direct logic check for the no-op guard in play_cell(), independent of how
+    # the view renders an occupied cell.
+    dictionary taken = play_cell(ttt_initial(), 0)
+    dictionary same = play_cell(taken, 0)
+    assert(mark_at(same, 0) == "X")
+    assert(Dictionary.get_or(same, "turn", "") == "O")
+}
+
+@test
+function void test_taken_cell_renders_as_an_inert_label() {
     dictionary config = tic_tac_toe_config()
-    # X takes cell 0; clicking it again (now O's turn) must be a no-op.
-    dictionary model = click_cells(config, ttt_initial(), ["cell-0", "cell-0"])
+    dictionary model = GraphicalUi.test_click(config, ttt_initial(), "cell-0")
     assert(mark_at(model, 0) == "X")
-    assert(Dictionary.get_or(model, "turn", "") == "O")
+
+    # Once occupied, the cell renders as a label (not a button), so it drops
+    # out of the tab order entirely instead of exposing a no-op click target.
+    dictionary cell = GraphicalUi.test_find(config, model, "cell-0")
+    assert(Dictionary.get_or(cell, "type", "") == "label")
+
+    mutable boolean threw = false
+    try {
+        GraphicalUi.test_click(config, model, "cell-0")
+    } catch(_err) {
+        threw = true
+    }
+    assert(threw)
 }
 
 @test
@@ -263,9 +285,12 @@ function void test_no_moves_accepted_after_a_win() {
     dictionary config = tic_tac_toe_config()
     dictionary won = click_cells(config, ttt_initial(),
         ["cell-0", "cell-3", "cell-1", "cell-4", "cell-2"])
-    dictionary after = GraphicalUi.test_click(config, won, "cell-5")
-    assert(mark_at(after, 5) == "")
-    assert(Dictionary.get_or(after, "winner", "") == "X")
+    # Once the game is decided every remaining cell locks too, rendering as an
+    # inert label rather than a clickable no-op.
+    dictionary cell = GraphicalUi.test_find(config, won, "cell-5")
+    assert(Dictionary.get_or(cell, "type", "") == "label")
+    assert(mark_at(won, 5) == "")
+    assert(Dictionary.get_or(won, "winner", "") == "X")
 }
 
 @test

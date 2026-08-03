@@ -137,12 +137,13 @@ void DebugSession::enable_time_travel(TimeTravelConfig config) {
     time_travel_recorder_ = std::make_unique<TimeTravelRecorder>(config);
 }
 
-ExecutionResult DebugSession::restore_from_snapshot(int thread_id, std::size_t steps_back) {
+ExecutionResult DebugSession::restore_from_snapshot(int thread_id, std::size_t steps_back,
+                                                    bool clamp_to_front) {
     if (!time_travel_recorder_) {
         return ExecutionResult::error("Time-travel debugging is not enabled");
     }
 
-    const auto snapshot = time_travel_recorder_->step_back(steps_back);
+    const auto snapshot = time_travel_recorder_->step_back(steps_back, clamp_to_front);
 
     if (!snapshot) {
         return ExecutionResult::error("No previous state available");
@@ -188,7 +189,9 @@ ExecutionResult DebugSession::step_back(int thread_id) {
 
 ExecutionResult DebugSession::reverse_continue(int thread_id) {
     // Rewind to the earliest retained snapshot (start of recorded history).
-    auto result = restore_from_snapshot(thread_id, std::numeric_limits<std::size_t>::max());
+    // clamp_to_front=true: reaching the start of history is success, not an
+    // error, unlike a plain step_back overshoot.
+    auto result = restore_from_snapshot(thread_id, std::numeric_limits<std::size_t>::max(), true);
 
     if (result && time_travel_recorder_) {
         // Pin the cursor beyond the oldest snapshot so a following step_back

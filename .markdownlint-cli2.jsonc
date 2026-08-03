@@ -44,6 +44,10 @@
     "external/**",
     "**/node_modules/**",
     "build/**",
-    "build-*/**"
+    "build-*/**",
+    // Generated pipeline reports/logs (gitignored; see .gitignore). These are
+    // LLM-authored artefacts, not first-party docs, so the lint gate must not
+    // trip over them.
+    "pipeline-artifacts/**"
   ]
 }

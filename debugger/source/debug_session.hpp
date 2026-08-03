@@ -185,8 +185,11 @@ private:
 
     // Restore a thread's VM state from the recorded time-travel snapshot
     // `steps_back` entries before the current position.  Shared by step_back
-    // (one step) and reverse_continue (rewind to the earliest snapshot).
-    [[nodiscard]] ExecutionResult restore_from_snapshot(int thread_id, std::size_t steps_back);
+    // (one step, `clamp_to_front` false so overshoot reports "no further
+    // history") and reverse_continue (rewind to the earliest snapshot,
+    // `clamp_to_front` true).
+    [[nodiscard]] ExecutionResult restore_from_snapshot(int thread_id, std::size_t steps_back,
+                                                        bool clamp_to_front = false);
 
     // Build a DAP Source descriptor (absolute path + basename) from a loaded
     // source file.

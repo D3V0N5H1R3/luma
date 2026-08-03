@@ -85,7 +85,7 @@ inline void validate_index(std::int64_t index, std::size_t size,
     }
 
     start = std::max(start, std::int64_t{0});
-    end = std::min(end, size);
+    end = std::clamp(end, std::int64_t{0}, size);
 
     return {start, end};
 }

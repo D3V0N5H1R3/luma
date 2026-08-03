@@ -3,10 +3,10 @@
 
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
+#include "common/string_hash.hpp"
 #include "lsp_analysis_result.hpp"
 #include "lsp_types.hpp"
 
@@ -99,7 +99,7 @@ resolve_definition_local(const std::string& name, const std::string& uri,
 [[nodiscard]] std::optional<ResolvedDefinition>
 resolve_definition(const std::string& name, const std::string& current_uri,
                    const AnalysisResult& current_result,
-                   const std::unordered_map<std::string, AnalysisResult>& all_results);
+                   const StringMap<AnalysisResult>& all_results);
 
 // Find the token at a given 0-based (line, character) position.
 // Returns the index into result.semantic.tokens, or nullopt if no token found.
@@ -128,7 +128,7 @@ struct ReferenceQuery {
     const std::optional<std::string>& enclosing_function;
     const std::string& origin_uri;
     const AnalysisResult& origin_result;
-    const std::unordered_map<std::string, AnalysisResult>& all_results;
+    const StringMap<AnalysisResult>& all_results;
     bool include_declaration{true};
 };
 
@@ -149,10 +149,10 @@ struct SymbolResolution {
 
 // Resolve a symbol by name in a single file's definitions and user_functions.
 // Tries the qualified name first, then the plain name, in both maps.
-[[nodiscard]] SymbolResolution
-resolve_symbol_in_file(const std::unordered_map<std::string, SymbolDefinition>& defs,
-                       const std::unordered_map<std::string, UserFunctionInfo>& user_funcs,
-                       const std::string& qualified_name, const std::string& plain_name);
+[[nodiscard]] SymbolResolution resolve_symbol_in_file(const StringMap<SymbolDefinition>& defs,
+                                                      const StringMap<UserFunctionInfo>& user_funcs,
+                                                      const std::string& qualified_name,
+                                                      const std::string& plain_name);
 
 // ═══════════════════════════════════════════════════════════
 // SymbolIndex — cross-file definition lookup cache.
@@ -175,7 +175,7 @@ struct SymbolIndexEntry {
 class SymbolIndex {
 public:
     // Rebuild the index from all analysis results.
-    void rebuild(const std::unordered_map<std::string, AnalysisResult>& all_results);
+    void rebuild(const StringMap<AnalysisResult>& all_results);
 
     // Look up a symbol by name. Returns the first matching entry, or nullopt.
     [[nodiscard]] std::optional<ResolvedDefinition> lookup(const std::string& name) const;
@@ -189,7 +189,7 @@ public:
     }
 
 private:
-    std::unordered_map<std::string, std::vector<SymbolIndexEntry>> index_;
+    StringMap<std::vector<SymbolIndexEntry>> index_;
 };
 
 // Cached variant of resolve_definition() — uses a SymbolIndex for
@@ -198,7 +198,7 @@ private:
 [[nodiscard]] std::optional<ResolvedDefinition>
 resolve_definition_cached(const std::string& name, const std::string& current_uri,
                           const AnalysisResult& current_result, const SymbolIndex& index,
-                          const std::unordered_map<std::string, AnalysisResult>& all_results);
+                          const StringMap<AnalysisResult>& all_results);
 
 } // namespace luma::lsp
 

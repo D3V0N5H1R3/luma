@@ -49,7 +49,13 @@ struct CallFrame {
     const CompiledFunction* function{nullptr};
     FunctionValue* closure{nullptr}; // The FunctionValue (for upvalue access).
     const std::uint8_t* ip{nullptr}; // Instruction pointer into the function's chunk.
-    std::size_t slot_offset{0};      // Offset of this frame's first slot in the stack.
+    // One-past-the-end pointer into `function`'s chunk, cached at frame-push
+    // time (and refreshed on tail-call, which reassigns `function` in place)
+    // so the jump/loop opcode handlers can read it directly instead of
+    // recomputing `function->chunk().code.data() + chunk.code.size()` via two
+    // pointer chases on every jump.
+    const std::uint8_t* code_end{nullptr};
+    std::size_t slot_offset{0}; // Offset of this frame's first slot in the stack.
 
     // Lazily-resolved per-function global inline cache.  Points into the owning
     // VM's global_index_cache_ entry for `function`; nullptr until the first

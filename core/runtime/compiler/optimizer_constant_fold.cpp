@@ -193,6 +193,14 @@ bool Optimizer::apply_fold_optimization(Chunk& chunk, const FoldCandidate& candi
         return false;
     }
 
+    // The constant pool is capped at CompilerLimits::k_max_constants (its index
+    // is serialised as a u16 in the .lumc format). add_constant() throws
+    // std::overflow_error once full; skip the fold rather than let that escape
+    // from the optimizer, which must never make compilation worse.
+    if (chunk.constants.size() >= CompilerLimits::k_max_constants) {
+        return false;
+    }
+
     // Nop out the second Constant instruction and the arithmetic opcode.
     auto& code = chunk.code;
     const auto new_idx = chunk.add_constant(*result);
@@ -283,6 +291,15 @@ std::size_t Optimizer::unary_fold_pass(Chunk& chunk) const {
         }
 
         const auto& val = chunk.constants[idx];
+
+        // The constant pool is capped at CompilerLimits::k_max_constants (its
+        // index is serialised as a u16). add_constant() throws
+        // std::overflow_error once full; skip folding rather than let that
+        // escape from the optimizer, which must never make compilation worse.
+        if (chunk.constants.size() >= CompilerLimits::k_max_constants) {
+            i += InstructionLayout::k_constant_instruction_size;
+            continue;
+        }
 
         // Constant(n) + Negate → Constant(-n)
         if (unary_op == Op::Negate && val.is_integer()) {
@@ -403,6 +420,12 @@ std::size_t Optimizer::comparison_fold_pass(Chunk& chunk) const {
         if (val1.is_integer() && val2.is_integer()) {
             result = fold_comparison(cmp_op, val1.as_integer(), val2.as_integer());
         } else if (val1.is_string() && val2.is_string()) {
+            // Uses C++ std::string::operator< (byte-wise lexicographic), which
+            // must match the VM's runtime Less/Greater string comparison
+            // (compare_values in the VM) or a compile-time fold would disagree
+            // with the -O0 result. If that runtime ordering ever changes
+            // (e.g. to Unicode-aware or locale-dependent collation), this fold
+            // must be updated in lockstep.
             result = fold_comparison(cmp_op, val1.as_string(), val2.as_string());
         }
 

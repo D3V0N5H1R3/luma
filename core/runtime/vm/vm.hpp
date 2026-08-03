@@ -464,8 +464,7 @@ private:
     // Return a pointer past the last byte of the current frame's code.
     // Replaces the repeated `cf.function->chunk().code.data() + code.size()`.
     [[nodiscard]] const std::uint8_t* current_code_end() const {
-        const auto& cf = stack_.frames.back();
-        return cf.function->chunk().code.data() + cf.function->chunk().code.size();
+        return stack_.frames.back().code_end;
     }
 
     // Return a pointer to the first byte of the current frame's code.

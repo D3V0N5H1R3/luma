@@ -32,7 +32,7 @@ function BenchResult time_it(BenchResult state, string name, integer iterations,
     # Round to 6 decimal places (nanosecond resolution). Three places quantised
     # most fast benchmarks to "0.001", hiding sub-microsecond regressions and
     # collapsing distinct cases to the same value (and "0.000" entries are
-    # skipped entirely by compare_benchmarks.py).
+    # skipped entirely by compare_benchmark_results.py).
     number rounded_per_iter = Result.unwrap_or(Math.round(per_iter * 1000000.0), 0) / 1000000.0
     string per_iter_str = Converter.to_string(rounded_per_iter)
 

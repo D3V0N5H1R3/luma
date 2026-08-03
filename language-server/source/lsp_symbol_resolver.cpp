@@ -118,10 +118,10 @@ std::optional<ResolvedDefinition> resolve_definition_local(const std::string& na
     return std::nullopt;
 }
 
-std::optional<ResolvedDefinition>
-resolve_definition(const std::string& name, const std::string& current_uri,
-                   const AnalysisResult& current_result,
-                   const std::unordered_map<std::string, AnalysisResult>& all_results) {
+std::optional<ResolvedDefinition> resolve_definition(const std::string& name,
+                                                     const std::string& current_uri,
+                                                     const AnalysisResult& current_result,
+                                                     const StringMap<AnalysisResult>& all_results) {
     // Try local first.
     auto local = resolve_definition_local(name, current_uri, current_result);
     if (local.has_value()) {
@@ -211,10 +211,10 @@ std::vector<IdentifierLocation> find_all_references(const ReferenceQuery& query)
     return locations;
 }
 
-SymbolResolution
-resolve_symbol_in_file(const std::unordered_map<std::string, SymbolDefinition>& defs,
-                       const std::unordered_map<std::string, UserFunctionInfo>& user_funcs,
-                       const std::string& qualified_name, const std::string& plain_name) {
+SymbolResolution resolve_symbol_in_file(const StringMap<SymbolDefinition>& defs,
+                                        const StringMap<UserFunctionInfo>& user_funcs,
+                                        const std::string& qualified_name,
+                                        const std::string& plain_name) {
     // Try qualified name first in definitions.
     auto def_it = defs.find(qualified_name);
     if (def_it != defs.end()) {
@@ -254,7 +254,7 @@ resolve_symbol_in_file(const std::unordered_map<std::string, SymbolDefinition>& 
 // SymbolIndex implementation
 // ═══════════════════════════════════════════════════════════
 
-void SymbolIndex::rebuild(const std::unordered_map<std::string, AnalysisResult>& all_results) {
+void SymbolIndex::rebuild(const StringMap<AnalysisResult>& all_results) {
     index_.clear();
     for (const auto& [uri, result] : all_results) {
         // Index definitions.
@@ -293,7 +293,7 @@ void SymbolIndex::clear() {
 std::optional<ResolvedDefinition>
 resolve_definition_cached(const std::string& name, const std::string& current_uri,
                           const AnalysisResult& current_result, const SymbolIndex& index,
-                          const std::unordered_map<std::string, AnalysisResult>& all_results) {
+                          const StringMap<AnalysisResult>& all_results) {
     // Always try local first (same-file definitions take priority).
     auto local = resolve_definition_local(name, current_uri, current_result);
     if (local.has_value()) {

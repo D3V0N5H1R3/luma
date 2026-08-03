@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "analysis/source/source_location.hpp"
+#include "common/lru_cache.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
@@ -265,10 +266,11 @@ std::mutex validated_pattern_mutex;
 // which is far more expensive than the ReDoS walk above; reusing the compiled
 // object turns a pattern used in a loop into a one-time cost.  Capped lower
 // than the validation cache because a compiled automaton is heavier than the
-// pattern string it came from.  Like the validation cache it never evicts --
-// once full it simply stops inserting.
+// pattern string it came from.  Uses LruCache so a hot new pattern after the
+// cache fills still benefits from caching by evicting the least-recently-used
+// entry, rather than the cache simply refusing new insertions once full.
 //
-// The map stores shared_ptr<const std::regex>: a handle returned to a caller
+// The cache stores shared_ptr<const std::regex>: a handle returned to a caller
 // stays valid and immutable after the lock is released, so concurrent const
 // regex operations (regex_search / regex_replace, all const on the pattern) are
 // data-race free even while another thread inserts a different pattern.  The key
@@ -279,9 +281,9 @@ std::mutex validated_pattern_mutex;
 constexpr std::size_t k_max_compiled_regex_cache_size{256};
 std::mutex compiled_regex_mutex;
 
-[[nodiscard]] std::unordered_map<std::string, std::shared_ptr<const std::regex>>&
-compiled_regexes() {
-    static std::unordered_map<std::string, std::shared_ptr<const std::regex>> cache;
+[[nodiscard]] LruCache<std::string, std::shared_ptr<const std::regex>>& compiled_regexes() {
+    static LruCache<std::string, std::shared_ptr<const std::regex>> cache{
+        k_max_compiled_regex_cache_size};
     return cache;
 }
 
@@ -299,7 +301,7 @@ compiled_regexes() {
 // Return a compiled regex for `pattern` under `flags`, reusing a cached one when
 // the (pattern, flags) pair recurs.  Compilation happens outside the lock so
 // concurrent callers never serialise on the regex engine; the mutex only guards
-// the map.  Callers must have already cleared the size and ReDoS checks
+// the cache.  Callers must have already cleared the size and ReDoS checks
 // (expect_text_and_pattern / is_valid), so only safe patterns are ever cached.
 // A std::regex_error from an invalid pattern propagates exactly as a direct
 // std::regex construction would.  `flags` defaults to ECMAScript so every
@@ -311,8 +313,8 @@ get_compiled_regex(const std::string& pattern,
 
     {
         const std::scoped_lock lock{compiled_regex_mutex};
-        if (const auto it = compiled_regexes().find(key); it != compiled_regexes().end()) {
-            return it->second;
+        if (auto* const cached = compiled_regexes().get(key)) {
+            return *cached;
         }
     }
 
@@ -320,14 +322,11 @@ get_compiled_regex(const std::string& pattern,
 
     {
         const std::scoped_lock lock{compiled_regex_mutex};
-        if (compiled_regexes().size() < k_max_compiled_regex_cache_size) {
-            // try_emplace so a pattern another thread compiled and inserted in
-            // the meantime wins harmlessly -- both callers get a valid regex.
-            return compiled_regexes().try_emplace(key, std::move(compiled)).first->second;
-        }
+        // A concurrent caller may have compiled and inserted the same key in
+        // the meantime; put() overwrites harmlessly in that case, and both
+        // callers still get a valid regex.
+        return compiled_regexes().put(key, compiled);
     }
-
-    return compiled;
 }
 
 // Pattern with named-capture-group syntax stripped for the regex engine, plus
@@ -344,7 +343,10 @@ get_compiled_regex(const std::string& pattern,
 // build Match.named_groups from this index-to-name map. Once compiled, a named
 // group behaves exactly like a plain `(...)` capturing group -- there is no
 // engine-level notion of "named" beyond this bookkeeping.
-struct ParsedPattern {
+// The implicitly-generated special members only touch standard containers; the
+// sole escape path the analyzer traces is std::bad_alloc, which is fatal and
+// cannot be handled here.
+struct ParsedPattern { // NOLINT(bugprone-exception-escape)
     std::string cleaned;
     std::unordered_map<std::size_t, std::string> group_names;
 };

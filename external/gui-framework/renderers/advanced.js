@@ -85,7 +85,7 @@
         },
 
         navigation_link: (w, style) => {
-            return html`<button style=${style}
+            return html`<button class="gui-nav-link" style=${style}
                 @click=${boundHandler(w._callback_id, makeClickHandler)}
                 >${w.text || ""}</button>`;
         },

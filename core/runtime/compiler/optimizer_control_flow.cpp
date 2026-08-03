@@ -64,7 +64,11 @@ std::size_t Optimizer::jump_threading_pass(Chunk& chunk) const {
 
 std::size_t Optimizer::tail_call_pass(Chunk& chunk) const {
     auto& code = chunk.code;
-    std::size_t eliminated = 0;
+    // TailCall is the same size as Call (only the opcode byte changes), so this
+    // pass never removes bytes and never needs compaction. It still returns the
+    // rewrite count so the outer optimizer loop's convergence check stays
+    // meaningful if a future change makes rewrites size-changing.
+    std::size_t rewrites = 0;
 
     // Tail call optimisation is unsafe when the function captures or is
     // captured by closures, because TailCall tears down the current frame
@@ -109,6 +113,7 @@ std::size_t Optimizer::tail_call_pass(Chunk& chunk) const {
             if (next_op == Op::Return) {
                 code[i] = static_cast<std::uint8_t>(Op::TailCall);
                 // Do NOT nop out Return — it's needed for native callee fallback.
+                ++rewrites;
                 i = next + 1;
                 continue;
             }
@@ -117,7 +122,7 @@ std::size_t Optimizer::tail_call_pass(Chunk& chunk) const {
         i += size;
     }
 
-    return eliminated;
+    return rewrites;
 }
 
 } // namespace luma

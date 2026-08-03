@@ -73,7 +73,13 @@ namespace {
                                                  const std::string& message,
                                                  const std::string& code) {
     const int line = inc.location.line - 1;
-    const int col = inc.location.column - 1;
+    // inc.location is the `include` keyword token, and Token.location records
+    // the 1-based column *past* the lexeme's last character (see
+    // Lexer::add_token, which stamps the location after scanning). So
+    // `keyword_end` is the 0-based column immediately following "include" —
+    // i.e. the single ASCII space that separates the keyword from the path
+    // string literal on a top-level include declaration.
+    const int keyword_end = inc.location.column - 1;
     // The squiggle width must be measured in the client's UTF-16 code units, the
     // same coordinate space every other diagnostic uses (see
     // lsp_diagnostic_builder). inc.path is UTF-8, so path.size() is a *byte*
@@ -83,9 +89,14 @@ namespace {
     // whitespace, so its codepoint column already equals its UTF-16 column and
     // needs no conversion.
     const int path_width = byte_offset_to_utf16_column(inc.path, inc.path.size());
+    // The path string literal starts one column past the keyword-end (the
+    // separating space), at its opening quote, and spans the path plus both
+    // surrounding quote characters.
+    const int path_start = keyword_end + 1;
+    const int path_end = path_start + path_width + 2;
     return Diagnostic{
-        .range = Range{.start = Position{.line = line, .character = col},
-                       .end = Position{.line = line, .character = col + path_width}},
+        .range = Range{.start = Position{.line = line, .character = path_start},
+                       .end = Position{.line = line, .character = path_end}},
         .severity = severity,
         .source = std::string(constants::diagnostic::source),
         .message = message,

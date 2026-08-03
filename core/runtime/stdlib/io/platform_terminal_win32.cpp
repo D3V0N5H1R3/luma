@@ -27,6 +27,10 @@ bool stdout_is_terminal() {
     return _isatty(_fileno(stdout)) != 0;
 }
 
+bool stdin_is_terminal() {
+    return _isatty(_fileno(stdin)) != 0;
+}
+
 void enable_vt_processing() {
     // Called once on first use; subsequent calls are no-ops.
     static bool done{false};

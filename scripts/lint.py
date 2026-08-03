@@ -25,8 +25,10 @@ Exit codes:
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
+from pathlib import Path
 
 from _common import REPO_ROOT
 from _gates import Gate, git_ls, npm_script_gate, npx_tool_installed, run_cli, skip, which
@@ -99,10 +101,25 @@ def _clang_tidy_gate() -> Gate:
         return skip(
             name, description, "no build/compile_commands.json (run cmake --preset default)"
         )
+    # Restrict to files that actually have an entry in this platform's compile
+    # database. ci.yml explicitly excludes *_win32.cpp when it runs clang-tidy
+    # on Linux, because those files aren't part of the Linux build and would be
+    # parsed with a synthesized command line that fails on their unconditional
+    # <windows.h>/<io.h> includes. The mirror image happens locally on Windows:
+    # *_posix.cpp files (termios.h, sys/ioctl.h, sys/select.h, poll.h, ...)
+    # aren't part of the Windows build either. Rather than hard-coding a
+    # platform-specific filename pattern, filter generically against whatever
+    # compile_commands.json actually contains — the same set of sources CMake
+    # compiled for this build, on any platform.
+    compiled_files = {
+        Path(entry["file"]).resolve()
+        for entry in json.loads(compile_db.read_text(encoding="utf-8"))
+        if "file" in entry
+    }
     files = [
         f
         for f in git_ls("core", "language-server/source", "debugger/source", "shared")
-        if f.endswith(".cpp")
+        if f.endswith(".cpp") and (REPO_ROOT / f).resolve() in compiled_files
     ]
     if not files:
         return skip(name, description, "no C++ sources tracked")
@@ -137,8 +154,8 @@ def _shellcheck_gate() -> Gate:
     if exe is None:
         return skip(name, description, "shellcheck not found (apt-get install shellcheck)")
     files = git_ls("*.sh", "*.bash", ":!:external/**")
-    if (REPO_ROOT / "scripts" / "hooks" / "pre-commit").is_file():
-        files.append("scripts/hooks/pre-commit")
+    if (REPO_ROOT / "scripts" / "git-hooks" / "pre-commit").is_file():
+        files.append("scripts/git-hooks/pre-commit")
     if not files:
         return skip(name, description, "no shell scripts tracked")
     return Gate(name, description, [exe], files=files)

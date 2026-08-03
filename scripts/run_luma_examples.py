@@ -24,7 +24,7 @@ successfully — including examples that would normally require user input:
 * A couple of examples are intentionally skipped (documented below).
 
 Usage:
-    python scripts/run_examples.py [--exe <luma-exe>] [--dir <examples-dir>]
+    python scripts/run_luma_examples.py [--exe <luma-exe>] [--dir <examples-dir>]
                                    [--filter <substring>] [--list] [--verbose]
                                    [--jobs <n>]
 

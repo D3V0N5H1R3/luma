@@ -2,10 +2,10 @@
 #define LUMA_LSP_SYMBOL_LOOKUP_HPP
 
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "common/string_hash.hpp"
 #include "lsp_analysis_result.hpp"
 #include "lsp_optional_ref.hpp"
 
@@ -50,7 +50,7 @@ public:
     }
 
     // Find function-local variables by function name.
-    [[nodiscard]] optional_ref<const std::unordered_map<std::string, std::string>>
+    [[nodiscard]] optional_ref<const StringMap<std::string>>
     find_function_locals(const std::string& function_name) const {
         return find_in_map(semantic_.locals.function_locals, function_name);
     }

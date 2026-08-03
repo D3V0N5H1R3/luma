@@ -496,6 +496,25 @@ static void test_codec_gzip_checked_corrupt_crc() {
     ASSERT_TRUE(r.error() == luma::compression::DecodeError::Corrupt);
 }
 
+static void test_codec_gzip_checked_fextra_length_out_of_bounds() {
+    // Valid gzip magic/method with FEXTRA flag set (0x04) and an XLEN that
+    // claims far more extra-field bytes than the buffer actually contains.
+    std::string gz;
+    gz.push_back(static_cast<char>(0x1f));
+    gz.push_back(static_cast<char>(0x8b));
+    gz.push_back(static_cast<char>(0x08)); // CM = deflate
+    gz.push_back(static_cast<char>(0x04)); // FLG = FEXTRA
+    gz.append(6, '\0');                    // MTIME, XFL, OS
+    gz.push_back(static_cast<char>(0xff)); // XLEN low byte
+    gz.push_back(static_cast<char>(0xff)); // XLEN high byte (claims 65535 bytes)
+    gz.append(4, '\0');                    // pretend trailer, but far too short overall
+
+    const auto r = luma::compression::gzip_decompress_checked(gz);
+
+    ASSERT_TRUE(r.is_err());
+    ASSERT_TRUE(r.error() == luma::compression::DecodeError::Truncated);
+}
+
 static void test_codec_rle_checked_corrupt() {
     const auto r = luma::compression::rle_decode_checked("0a");
 
@@ -662,6 +681,7 @@ int main() {
     RUN(test_codec_gzip_checked_unsupported_magic);
     RUN(test_codec_gzip_checked_unsupported_method);
     RUN(test_codec_gzip_checked_corrupt_crc);
+    RUN(test_codec_gzip_checked_fextra_length_out_of_bounds);
     RUN(test_codec_rle_checked_corrupt);
     RUN(test_codec_rle_checked_truncated);
     RUN(test_compression_gunzip_typed_success);

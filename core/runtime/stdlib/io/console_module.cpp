@@ -11,45 +11,18 @@
 #include <string>
 #include <string_view>
 
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
-
 #include "analysis/source/source_location.hpp"
 #include "common/resource_limits.hpp"
+#include "common/string_utils.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/error_messages.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
+#include "runtime/stdlib/io/platform_terminal.hpp"
 
 namespace luma {
 
 namespace {
-
-// Whether `stream` is connected to an interactive terminal (TTY), used by
-// Console.is_tty / is_interactive so a CLI can prompt-and-colour when
-// interactive but stay quiet when piped or redirected.
-[[nodiscard]] bool stream_is_tty(std::FILE* stream) {
-#ifdef _WIN32
-    return _isatty(_fileno(stream)) != 0;
-#else
-    return isatty(fileno(stream)) != 0;
-#endif
-}
-
-// Strips leading and trailing ASCII whitespace, shared by the typed-prompt
-// parsers so surrounding spaces or a trailing carriage return never defeat the
-// parse.
-[[nodiscard]] std::string trim_ascii(std::string_view s) {
-    const auto begin = s.find_first_not_of(" \t\r\n\f\v");
-    if (begin == std::string_view::npos) {
-        return {};
-    }
-    const auto end = s.find_last_not_of(" \t\r\n\f\v");
-    return std::string{s.substr(begin, end - begin + 1)};
-}
 
 // Writes a validated string argument to `stream`, reporting the outcome as a
 // result<boolean>: success(true) while the stream stays healthy, or a failure
@@ -198,11 +171,11 @@ void register_console_ns(const EnvPtr& env) {
         })
         .func("is_tty", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
-            return Value{stream_is_tty(stdout)};
+            return Value{platform_terminal::stdout_is_terminal()};
         })
         .func("is_interactive", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
-            return Value{stream_is_tty(stdin)};
+            return Value{platform_terminal::stdin_is_terminal()};
         })
         .func("prompt_integer", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -217,7 +190,7 @@ void register_console_ns(const EnvPtr& env) {
                     error_msg("Console", "prompt_integer", "end of input or read error"));
             }
 
-            const std::string trimmed = trim_ascii(line);
+            const std::string trimmed = trim(line);
 
             try {
                 std::size_t pos = 0;
@@ -246,7 +219,7 @@ void register_console_ns(const EnvPtr& env) {
                     error_msg("Console", "prompt_number", "end of input or read error"));
             }
 
-            const std::string trimmed = trim_ascii(line);
+            const std::string trimmed = trim(line);
 
             try {
                 std::size_t pos = 0;
@@ -275,7 +248,8 @@ void register_console_ns(const EnvPtr& env) {
                     error_msg("Console", "confirm", "end of input or read error"));
             }
 
-            std::string answer = trim_ascii(line);
+            const std::string trimmed = trim(line);
+            std::string answer = trimmed;
             std::ranges::transform(answer, answer.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
@@ -288,8 +262,8 @@ void register_console_ns(const EnvPtr& env) {
                 return make_success_value(Value{false});
             }
 
-            return make_failure_value(error_msg(
-                "Console", "confirm", std::format("'{}' is not yes or no", trim_ascii(line))));
+            return make_failure_value(
+                error_msg("Console", "confirm", std::format("'{}' is not yes or no", trimmed)));
         })
         .func("prompt_with_default", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

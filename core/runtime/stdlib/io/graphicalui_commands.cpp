@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <format>
 #include <initializer_list>
+#include <iostream>
 #include <memory>
 #include <random>
 #include <string_view>
@@ -266,34 +267,51 @@ void cmd_http(AppState& state, const DictionaryValue& d) {
     auto hub = state.ensure_async_hub();
     const auto loc = state.loc;
 
+    // The flagged throw path is the by-value capture of `url`/`body` (they are
+    // const, so they cannot be move-captured), which copies them into the
+    // closure object synchronously at this construction site, on the calling
+    // thread, before the worker thread even starts. If that copy throws
+    // std::bad_alloc, it propagates normally to cmd_http's caller like any
+    // other exception - it can never escape the detached thread's entry
+    // function, which the try/catch below already guards against.
+    // NOLINTNEXTLINE(bugprone-exception-escape)
     std::thread worker{[hub = std::move(hub), method = std::move(method), url, body,
                         headers = std::move(headers), effective_timeout, cb_id, typed,
                         loc]() mutable {
-        auto fetched = do_http_fetch_text(method, url, body, headers, effective_timeout, loc);
+        // An exception escaping a detached std::thread's entry function calls
+        // std::terminate() and crashes the whole app (see the catch(...) below).
+        try {
+            auto fetched = do_http_fetch_text(method, url, body, headers, effective_timeout, loc);
 
-        auto payload = std::make_unique<HttpResultPayload>();
-        payload->hub = hub;
-        payload->cb_id = std::move(cb_id);
-        payload->ok = fetched.ok;
-        payload->typed = typed;
+            auto payload = std::make_unique<HttpResultPayload>();
+            payload->hub = hub;
+            payload->cb_id = std::move(cb_id);
+            payload->ok = fetched.ok;
+            payload->typed = typed;
 
-        if (fetched.ok) {
-            payload->status = fetched.status_code;
-            payload->body = std::move(fetched.body);
-            payload->headers = std::move(fetched.headers);
-        } else {
-            payload->error = std::move(fetched.error);
+            if (fetched.ok) {
+                payload->status = fetched.status_code;
+                payload->body = std::move(fetched.body);
+                payload->headers = std::move(fetched.headers);
+            } else {
+                payload->error = std::move(fetched.error);
+            }
+
+            const std::lock_guard lock{hub->mutex};
+
+            if (hub->cancelled || hub->webview == nullptr) {
+                return; // App gone — drop the result (payload is freed here).
+            }
+
+            // Ownership of the payload transfers to deliver_http_result, which runs
+            // on the UI thread and frees it.
+            webview_dispatch(hub->webview, &deliver_http_result, payload.release());
+        } catch (...) {
+            // Background worker: an escaping exception would call std::terminate()
+            // and crash the whole app, so log and drop the result instead — the
+            // Luma callback simply never fires for this request.
+            std::cerr << "GraphicalUi: HTTP fetch worker failed (unknown error)\n";
         }
-
-        const std::lock_guard lock{hub->mutex};
-
-        if (hub->cancelled || hub->webview == nullptr) {
-            return; // App gone — drop the result (payload is freed here).
-        }
-
-        // Ownership of the payload transfers to deliver_http_result, which runs
-        // on the UI thread and frees it.
-        webview_dispatch(hub->webview, &deliver_http_result, payload.release());
     }};
 
     worker.detach();

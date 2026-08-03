@@ -23,7 +23,7 @@ on:
       - "shared/**"
       - "benchmarks/**"
       - "scripts/check_benchmark_suite.py"
-      - "scripts/compare_benchmarks.py"
+      - "scripts/compare_benchmark_results.py"
       - "scripts/parse_benchmark_results.py"
       - "CMakeLists.txt"
   workflow_dispatch:
@@ -90,7 +90,7 @@ jobs:
         if: steps.baseline.outputs.exists == 'true' && inputs.update_baseline != 'true'
         run: |
           echo "Comparing against cached baseline..."
-          python3 scripts/compare_benchmarks.py \
+          python3 scripts/compare_benchmark_results.py \
             benchmarks/baseline.json \
             benchmark-results.json \
             --threshold 10 \

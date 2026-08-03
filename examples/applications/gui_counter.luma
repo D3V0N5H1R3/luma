@@ -78,7 +78,7 @@ function widget view_counter(number count) {
                 }, button_style(GraphicalUi.GHOST, "140px")),
                 { "aria_label": "Set counter to a random value" }
             ),
-            GraphicalUi.button("Reset", () -> 0, button_style(GraphicalUi.DANGER, "100px"))
+            GraphicalUi.button("Reset", () -> 0, button_style(GraphicalUi.SECONDARY, "100px"))
         ], GraphicalUi.merge_styles(GraphicalUi.center_x(), GraphicalUi.spacing(12)))
     ], GraphicalUi.merge_styles(GraphicalUi.spacing(16), GraphicalUi.padding(8)))
 }

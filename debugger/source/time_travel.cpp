@@ -97,14 +97,18 @@ const VMSnapshot* TimeTravelRecorder::latest() const {
     return &snapshots_.back();
 }
 
-std::optional<VMSnapshot> TimeTravelRecorder::step_back(std::size_t steps) const {
+std::optional<VMSnapshot> TimeTravelRecorder::step_back(std::size_t steps,
+                                                        bool clamp_to_front) const {
     const std::scoped_lock lock(mutex_);
     if (snapshots_.empty()) {
         return std::nullopt;
     }
 
     if (steps > current_index_) {
-        return snapshots_.front();
+        if (clamp_to_front) {
+            return snapshots_.front();
+        }
+        return std::nullopt; // No further history — do not repeat the front snapshot.
     }
 
     return snapshots_[current_index_ - steps];

@@ -162,7 +162,7 @@ Use `applications/` when you want end-to-end samples, and the other directories 
 To execute **and** verify every example in this directory — including ones that normally need user input — use the runner script:
 
 ```bash
-python scripts/run_examples.py
+python scripts/run_luma_examples.py
 ```
 
 It runs each program end to end and checks that it completes successfully:

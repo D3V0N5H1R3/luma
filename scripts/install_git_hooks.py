@@ -2,7 +2,7 @@
 """Enable the Luma Git hooks for this repository.
 
 Points the repository's local ``core.hooksPath`` at the version-controlled
-``scripts/hooks`` directory, so the tracked hooks run on every commit. The
+``scripts/git-hooks`` directory, so the tracked hooks run on every commit. The
 tracked hooks are a ``pre-commit`` hook that checks staged C++ files with
 clang-format and clang-tidy, and a ``commit-msg`` hook that enforces the
 project's Conventional Commits message format.
@@ -17,7 +17,7 @@ into ``.git/hooks`` because:
   up rather than silently bypassed.
 
 Usage:
-    python scripts/install_hooks.py
+    python scripts/install_git_hooks.py
 """
 
 import subprocess
@@ -28,7 +28,7 @@ from _common import REPO_ROOT
 # Hooks directory, relative to the working-tree root. Git resolves a relative
 # core.hooksPath against the directory a hook runs in, which for a non-bare
 # repository is the top level of the working tree.
-HOOKS_DIR = "scripts/hooks"
+HOOKS_DIR = "scripts/git-hooks"
 
 # Tracked hooks expected to live in HOOKS_DIR. Pointing core.hooksPath at the
 # directory activates every hook it contains; these are listed only so the
@@ -72,7 +72,7 @@ def hook_index_mode(name: str) -> str | None:
 
 
 def enable_hooks() -> int:
-    """Point the repository's local ``core.hooksPath`` at ``scripts/hooks``.
+    """Point the repository's local ``core.hooksPath`` at ``scripts/git-hooks``.
 
     Returns 0 on success and a non-zero exit code on failure.
     """

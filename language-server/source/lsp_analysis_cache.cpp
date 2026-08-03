@@ -108,7 +108,7 @@ void LspAnalysisCache::add_include_dependent(const std::string& include_uri,
     include_dependents_[include_uri].insert(dependent_uri);
 }
 
-optional_ref<const std::unordered_set<std::string>>
+optional_ref<const StringSet>
 LspAnalysisCache::get_dependents(const std::string& include_uri) const {
     auto it = include_dependents_.find(include_uri);
     if (it != include_dependents_.end()) {

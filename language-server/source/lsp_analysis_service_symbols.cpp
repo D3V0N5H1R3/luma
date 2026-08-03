@@ -3,7 +3,6 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "analysis/ast/ast_dispatch.hpp"
@@ -11,6 +10,7 @@
 #include "analysis/ast/expression.hpp"
 #include "analysis/ast/statement.hpp"
 #include "analysis/lexer/token_type.hpp"
+#include "common/string_hash.hpp"
 #include "lsp_analysis_service_impl.hpp"
 #include "lsp_token_utils.hpp"
 #include "lsp_type_formatter.hpp"
@@ -83,7 +83,7 @@ namespace {
 // feasible. Maintainers must not remove kind checks without updating the casts.
 
 struct CallCollector {
-    std::unordered_set<std::string>& callees;
+    StringSet& callees;
 
     void visit_expr(const Expression& expr);
     void visit_stmts(const std::vector<std::unique_ptr<Statement>>& stmts);
@@ -918,7 +918,7 @@ void LspAnalysisService::collect_call_graph(const std::vector<std::unique_ptr<De
         }
 
         const auto& func = static_cast<const FunctionDeclaration&>(*decl);
-        std::unordered_set<std::string> callees;
+        StringSet callees;
         CallCollector collector{callees};
         collector.visit_stmts(func.body);
 
@@ -979,7 +979,7 @@ void LspAnalysisService::build_interface_implementations(AnalysisResult& result)
 
     // Per-record field-signature sets (deduplicated), then an inverted index
     // mapping each signature to the records that declare it.
-    std::unordered_map<std::string, std::unordered_set<std::string>> record_field_sets;
+    std::unordered_map<std::string, StringSet> record_field_sets;
     for (const auto& [rec_name, rec_info] : defs) {
         if (rec_name.starts_with(k_interface_record_prefix)) {
             continue;

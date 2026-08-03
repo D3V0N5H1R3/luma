@@ -153,7 +153,7 @@ Run phases 2–6 exactly as described in
   performance.
 - **Phase 6 — Examples (strict):** type-check every `examples/**/*.luma` with
   `luma --check --strict`. The include-only helper `multi_file_utils.luma` has no
-  `@main` and is expected to be skipped (see `scripts/run_examples.py`).
+  `@main` and is expected to be skipped (see `scripts/run_luma_examples.py`).
 
 > **Note (Windows / clang-cl fuzz):** the bundled LLVM ships only a
 > *dynamic* AddressSanitizer (needs `/MD`) but a *static-CRT* libFuzzer runtime

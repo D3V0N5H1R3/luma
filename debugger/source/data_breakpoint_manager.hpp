@@ -3,9 +3,9 @@
 
 #include <functional>
 #include <string>
-#include <unordered_map>
 
 #include "breakpoint_shared_context.hpp"
+#include "common/string_hash.hpp"
 
 namespace luma::dap {
 
@@ -56,8 +56,7 @@ private:
     BreakpointSharedContext* ctx_;
 
     // Data breakpoints: variable_name → info (O(1) lookup).
-    std::unordered_map<std::string, DataBreakpointInfo>
-        data_breakpoints_; // GUARDED_BY(ctx_->mutex)
+    StringMap<DataBreakpointInfo> data_breakpoints_; // GUARDED_BY(ctx_->mutex)
 };
 
 } // namespace luma::dap
