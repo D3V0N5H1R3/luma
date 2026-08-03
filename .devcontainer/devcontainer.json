@@ -3,7 +3,7 @@
 //
 // Opens the repository in a Linux container with the full C++20 toolchain the
 // interpreter, language server, and debugger need, plus the Node and Rust
-// toolchains the VS Code and Zed extensions use. See .devcontainer/README.md.
+// toolchains the VS Code and Zed extensions use. See .devcontainer/DIRECTORY.md.
 // ─────────────────────────────────────────────────────────────
 {
     "name": "Luma — C++20 Interpreter",

@@ -207,7 +207,7 @@ python scripts/lint.py       # run every check gate (add --list to preview, --sk
 python scripts/format.py     # apply every auto-formatter and safe auto-fix
 ```
 
-See [scripts/README.md](scripts/README.md#linting-and-formatting) for the full
+See [scripts/DIRECTORY.md](scripts/DIRECTORY.md#linting-and-formatting) for the full
 options. The individual gates can also be run by hand — install the tool noted
 below, then invoke it as CI does:
 
@@ -304,7 +304,7 @@ Results are printed as a formatted table with total time and per-iteration cost.
 
 ### Fuzz Testing
 
-The `fuzz/` directory contains LibFuzzer targets for each stage of the interpreter pipeline. Fuzz testing requires **Clang** with AddressSanitizer support and is not part of the normal build. See [fuzz/README.md](fuzz/README.md) for full details.
+The `fuzz/` directory contains LibFuzzer targets for each stage of the interpreter pipeline. Fuzz testing requires **Clang** with AddressSanitizer support and is not part of the normal build. See [fuzz/DIRECTORY.md](fuzz/DIRECTORY.md) for full details.
 
 ```bash
 # Configure with fuzzing flags (Clang only)
@@ -597,7 +597,7 @@ The two editor extensions publish from their own tag prefixes —
 Visual Studio Marketplace) and `zed-v*.*.*`
 ([`release-zed.yml`](.github/workflows/release-zed.yml)) — so they can be versioned
 independently of the interpreter. See
-[.github/workflows/README.md](.github/workflows/README.md) (§6 Releases) for the
+[.github/workflows/DIRECTORY.md](.github/workflows/DIRECTORY.md) (§6 Releases) for the
 workflow index and [Git tag conventions](instructions/git.instructions.md) for the tag
 commands.
 

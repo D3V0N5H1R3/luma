@@ -83,7 +83,7 @@ Companion documents at the repository root that sit alongside this set.
 
 Luma documentation follows a consistent naming and titling scheme:
 
-- **File names** use the `Luma_<Topic>.md` pattern (`PascalCase` topic words joined by underscores). This index (`README.md`) and the section-level [Document Index](INDEX.md) (`INDEX.md`) are the exceptions, named by convention.
+- **File names** use the `Luma_<Topic>.md` pattern (`PascalCase` topic words joined by underscores). This index (`DIRECTORY.md`) and the section-level [Document Index](INDEX.md) (`INDEX.md`) are the exceptions, named by convention.
 - **Titles** are level-one headings of the form `# Luma — <Title>` using an em-dash.
 - **The "Guide" suffix** is reserved for task-oriented, how-to documents aimed at users — for example, the [REPL Guide](Luma_REPL_Guide.md), [Performance Guide](Luma_Performance_Guide.md), [Solaris Guide](Luma_Solaris_Guide.md), and [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md). Reference and design documents use plain descriptive titles — for example, *User Manual*, *Standard Library Reference*, *Debugger*, and *Software Architecture*.
 - **Section headings** within each document are numbered `## N — <Title>` and listed in a table of contents.

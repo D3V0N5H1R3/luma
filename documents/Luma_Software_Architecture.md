@@ -2273,7 +2273,7 @@ luma/
 └── documents/           # project design and reference documents (this set)
 ```
 
-The three executables enter at `core/main.cpp` (`luma`), `language-server/source/main.cpp` (`luma_lsp`), and `debugger/source/main.cpp` (`luma_dap`). Root-level configuration and metadata files — `CMakeLists.txt`, `CMakePresets.json`, `.clang-format`, `.clang-tidy`, `README.md`, `LICENSE`, and similar — sit alongside these directories.
+The three executables enter at `core/main.cpp` (`luma`), `language-server/source/main.cpp` (`luma_lsp`), and `debugger/source/main.cpp` (`luma_dap`). Root-level configuration and metadata files — `CMakeLists.txt`, `CMakePresets.json`, `.clang-format`, `.clang-tidy`, `DIRECTORY.md`, `LICENSE`, and similar — sit alongside these directories.
 
 ### Naming Conventions
 

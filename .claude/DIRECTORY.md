@@ -88,7 +88,7 @@ both places:
 
 - Add, rename, or remove a prompt → update the matching `commands/*.md` wrapper
   (regenerate from the prompt frontmatter) and the prompt index in
-  [`.github/prompts/README.md`](../.github/prompts/README.md).
+  [`.github/prompts/DIRECTORY.md`](../.github/prompts/DIRECTORY.md).
 - Change an agent's role, tools, or boundaries → update both the
   `.github/agents/*.agent.md` source and its `agents/*.md` port.
 - Change a hook script's contract or registration → update both

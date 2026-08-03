@@ -6,7 +6,7 @@
 # Invoke-LumaFix.ps1 (gated, mutating fixes). Every side effect flows through a
 # helper here so the two runners stay thin and the -DryRun path is uniform.
 #
-# See scripts/pipeline/README.md for the pipeline ordering and safety model.
+# See scripts/pipeline/DIRECTORY.md for the pipeline ordering and safety model.
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'

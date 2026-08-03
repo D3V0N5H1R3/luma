@@ -20,7 +20,7 @@ Two extensions live under `extensions/`: **VS Code** (`extensions/vscode/`, Type
 Before judging what looks wrong, learn the behaviour the extensions are meant to have:
 
 - [Luma_Syntax_Highlighting.md](../../documents/Luma_Syntax_Highlighting.md) — token categories, TextMate scopes, and the tree-sitter query strategy any highlighting fix must preserve.
-- [extensions/shared/README.md](../../extensions/shared/README.md) — the canonical-grammar and code-generation model: what is a single source of truth and what is generated from it.
+- [extensions/shared/DIRECTORY.md](../../extensions/shared/DIRECTORY.md) — the canonical-grammar and code-generation model: what is a single source of truth and what is generated from it.
 - [extensions/FEATURE_PARITY.md](../../extensions/FEATURE_PARITY.md) — the cross-editor feature contract, including the **intentional** per-editor differences that are not bugs.
 - [extensions/BINARY_ASSETS.md](../../extensions/BINARY_ASSETS.md) — the `{binary}-{os}-{arch}.{ext}` release-asset convention every download path must match.
 - [learnings.instructions.md](../../instructions/learnings.instructions.md) — the **Editor Extensions** section (the highlight-query model and the child-order query pitfall) and the deliberate decisions in §6.

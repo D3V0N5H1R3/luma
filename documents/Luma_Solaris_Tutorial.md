@@ -1186,4 +1186,4 @@ The best next step is to build something small of your own — a tip calculator,
 - [Solaris design concept](Luma_Solaris_Architecture.md) — the design philosophy, architecture, and rationale behind the surface
 - [Standard Library Reference — §14 (Solaris and GraphicalUi)](Luma_Standard_Library_Reference.md#14--solaris-and-graphicalui) — concise API listing for the surface and the engine
 - [User Manual](Luma_User_Manual.md) — language syntax and semantics, including `record`, `choice`, `match`, and the pipe operator
-- [Documentation Index](README.md) — index of all Luma documentation
+- [Documentation Index](DIRECTORY.md) — index of all Luma documentation

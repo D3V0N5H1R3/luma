@@ -327,7 +327,7 @@ extensions/vscode/
 ├── language-configuration.json # Editor behaviour (brackets, comments, indentation)
 ├── package-lock.json           # Locked dependency versions
 ├── package.json                # Extension manifest (VSCode entry point)
-├── README.md                   # Extension documentation
+├── DIRECTORY.md                   # Extension documentation
 ├── tsconfig.json               # TypeScript compiler configuration
 │
 ├── images/                     # Extension icons and images

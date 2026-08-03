@@ -20,7 +20,7 @@ Luma is currently in **alpha**. The language, interpreter, standard library, and
 [manual]: documents/Luma_User_Manual.md
 [stdlib]: documents/Luma_Standard_Library_Reference.md
 [arch]: documents/Luma_Software_Architecture.md
-[lsp]: language-server/README.md
+[lsp]: language-server/DIRECTORY.md
 
 ## Table of Contents
 
@@ -123,7 +123,7 @@ Two optional extras pull in more tooling:
 > instructions, including editor setup for VS Code and Zed.
 
 > **Tip:** To try Luma without installing a local toolchain, open the repository
-> in [GitHub Codespaces](.devcontainer/README.md) (**Code → Codespaces → Create
+> in [GitHub Codespaces](.devcontainer/DIRECTORY.md) (**Code → Codespaces → Create
 > codespace**). The dev container ships the full C++20 toolchain and builds the
 > interpreter automatically.
 
@@ -198,13 +198,13 @@ On Windows, replace `build/luma` with `build\Release\luma.exe` in the commands a
 | [Debugger](documents/Luma_Debugger.md)                   | Debug Adapter Protocol design and usage.              |
 | [Language Server][lsp]               | Language Server Protocol features and setup.              |
 
-The [documents/](documents/README.md) directory indexes every architecture, reference,
+The [documents/](documents/DIRECTORY.md) directory indexes every architecture, reference,
 and guide document. For contribution and security policies, see
 [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 ## Project Structure
 
-The root README keeps this overview intentionally high-level. For the detailed module inventory, see [documents/Luma_Software_Architecture.md](documents/Luma_Software_Architecture.md). For LSP-specific internals, see [language-server/README.md](language-server/README.md) and [documents/Luma_Language_Server.md](documents/Luma_Language_Server.md).
+The root README keeps this overview intentionally high-level. For the detailed module inventory, see [documents/Luma_Software_Architecture.md](documents/Luma_Software_Architecture.md). For LSP-specific internals, see [language-server/DIRECTORY.md](language-server/DIRECTORY.md) and [documents/Luma_Language_Server.md](documents/Luma_Language_Server.md).
 
 ```text
 luma/
@@ -225,13 +225,13 @@ luma/
 
 Additional indexes:
 
-- [benchmarks/README.md](benchmarks/README.md) describes the performance benchmark suite.
-- [documents/README.md](documents/README.md) indexes the architecture, reference, and guide documents.
-- [examples/README.md](examples/README.md) explains the example categories.
-- [extensions/tests/README.md](extensions/tests/README.md) documents the shared grammar fixture corpus.
-- [external/README.md](external/README.md) inventories the vendored third-party libraries and GraphicalUi web assets.
-- [fuzz/README.md](fuzz/README.md) covers the LibFuzzer fuzz targets and corpus management.
-- [tests/README.md](tests/README.md) explains the C++ and Luma test suite layout.
+- [benchmarks/DIRECTORY.md](benchmarks/DIRECTORY.md) describes the performance benchmark suite.
+- [documents/DIRECTORY.md](documents/DIRECTORY.md) indexes the architecture, reference, and guide documents.
+- [examples/DIRECTORY.md](examples/DIRECTORY.md) explains the example categories.
+- [extensions/tests/DIRECTORY.md](extensions/tests/DIRECTORY.md) documents the shared grammar fixture corpus.
+- [external/DIRECTORY.md](external/DIRECTORY.md) inventories the vendored third-party libraries and GraphicalUi web assets.
+- [fuzz/DIRECTORY.md](fuzz/DIRECTORY.md) covers the LibFuzzer fuzz targets and corpus management.
+- [tests/DIRECTORY.md](tests/DIRECTORY.md) explains the C++ and Luma test suite layout.
 
 ## Debugging Luma Programs
 
@@ -259,7 +259,7 @@ The extension provides a default `launch.json` configuration. You can customise 
 
 ### Zed
 
-The [Zed extension](extensions/zed/) provides Tree-sitter highlighting and LSP integration. Install it from the Zed extension gallery or see [extensions/zed/README.md](extensions/zed/README.md).
+The [Zed extension](extensions/zed/) provides Tree-sitter highlighting and LSP integration. Install it from the Zed extension gallery or see [extensions/zed/DIRECTORY.md](extensions/zed/DIRECTORY.md).
 
 ### Features
 

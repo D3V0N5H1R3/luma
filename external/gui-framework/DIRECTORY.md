@@ -44,7 +44,7 @@ node scripts/generate_gui_assets.mjs
 
 ## Tests
 
-Unit tests for these scripts live in [`tests/`](tests/README.md) and run under
+Unit tests for these scripts live in [`tests/`](tests/DIRECTORY.md) and run under
 Node's built-in test runner with no browser and no third-party dependencies:
 
 ```bash
@@ -61,6 +61,6 @@ exercise the real shipping code **without modifying it** — the embedded
 
 - GraphicalUi runtime module: `core/runtime/stdlib/io/graphicalui_*`
 - Design guide: [`documents/Luma_GraphicalUi_Guide.md`](../../documents/Luma_GraphicalUi_Guide.md)
-- Vendored web libraries: [`lit-html`](../lit-html/README.md),
-  [`pico-css`](../pico-css/README.md), [`uplot`](../uplot/README.md),
-  [`lucide`](../lucide/README.md)
+- Vendored web libraries: [`lit-html`](../lit-html/DIRECTORY.md),
+  [`pico-css`](../pico-css/DIRECTORY.md), [`uplot`](../uplot/DIRECTORY.md),
+  [`lucide`](../lucide/DIRECTORY.md)

@@ -417,7 +417,7 @@ step.
 
 ## Related documentation
 
-- [`scripts/README.md`](../README.md) — the wider maintenance-script catalogue.
+- [`scripts/DIRECTORY.md`](../DIRECTORY.md) — the wider maintenance-script catalogue.
 - [`instructions/powershell.instructions.md`](../../instructions/powershell.instructions.md) — the PowerShell style the `*.ps1` runners follow.
 - [`instructions/shell.instructions.md`](../../instructions/shell.instructions.md) — the shell style the `*.sh` runners follow.
 - [`.github/prompts/`](../../.github/prompts) — the prompt definitions the pipeline invokes.
