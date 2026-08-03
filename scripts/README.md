@@ -16,16 +16,16 @@ Each script carries a module-level docstring describing its full behaviour and o
 | [`agent-hooks/protect_vendored_paths.py`](agent-hooks/protect_vendored_paths.py) | Block AI-agent edits to vendored code under `external/` (`PreToolUse`).            | Agent hook ([`.github/hooks/`](../.github/hooks))          |
 | [`check_benchmark_suite.py`](check_benchmark_suite.py)     | Verify `benchmarks/suite.luma` includes and runs every `bench_*.luma` module.                        | [Benchmark CI](../.github/workflows/benchmark.yml); manual |
 | [`check_warning_sync.py`](check_warning_sync.py)           | Verify that GCC/Clang warning flags in [`LumaCompilerFlags.cmake`](../cmake/LumaCompilerFlags.cmake) and the checks in `.clang-tidy` agree. | [CI](../.github/workflows/ci.yml) (`--strict`); manual     |
-| [`compare_benchmarks.py`](compare_benchmarks.py)           | Compare current benchmark results (JSON) against a cached baseline and exit non-zero if any benchmark regressed beyond the allowed threshold. | [Benchmark CI](../.github/workflows/benchmark.yml); manual |
+| [`compare_benchmark_results.py`](compare_benchmark_results.py) | Compare current benchmark results (JSON) against a cached baseline and exit non-zero if any benchmark regressed beyond the allowed threshold. | [Benchmark CI](../.github/workflows/benchmark.yml); manual |
 | [`configure.py`](configure.py)                             | Developer setup helper: list available CMake presets, configure a build with one, optionally build, and enable the Git hooks. | Manual                                                     |
 | [`container-build.sh`](container-build.sh)                 | Configure, build, and run the full CTest suite using `$CC` / `$CXX`.                                 | CI container matrix                                        |
 | [`format.py`](format.py)                                   | Run every auto-formatter (clang-format, ruff, markdownlint, etc.) across the repo. The write counterpart to `lint.py` — fixes what it can, reports what it cannot. | Manual; editor tasks                                       |
 | [`generate_coverage.py`](generate_coverage.py)             | Configure a coverage build with GCC or Clang, run the tests, and produce an HTML report via lcov/genhtml (or gcovr). | Manual                                                     |
 | [`generate_gui_assets.mjs`](generate_gui_assets.mjs)       | Compress and embed the vendored GUI libraries (lit-html, Pico CSS, uPlot, Lucide icons, renderer JS) into `graphicalui_assets.hpp` as C++ byte arrays. | Manual (Node)                                              |
 | [`generate_prelude_asset.mjs`](generate_prelude_asset.mjs) | Embed the Solaris prelude source (`gui_prelude.luma`) into `gui_prelude_generated.hpp` as an uncompressed C++ byte array. | Manual (Node)                                              |
-| [`hooks/commit-msg`](hooks/commit-msg)                     | Enforce the project's Conventional Commits message format.                                           | Git (`core.hooksPath`)                                     |
-| [`hooks/pre-commit`](hooks/pre-commit)                     | Run clang-format (and clang-tidy when available) over staged C++ files.                              | Git (`core.hooksPath`)                                     |
-| [`install_hooks.py`](install_hooks.py)                     | Set `core.hooksPath` to the tracked `hooks/` directory so the pre-commit and commit-msg hooks run on every commit. | Manual; via `configure.py`                                 |
+| [`git-hooks/commit-msg`](git-hooks/commit-msg)             | Enforce the project's Conventional Commits message format.                                           | Git (`core.hooksPath`)                                     |
+| [`git-hooks/pre-commit`](git-hooks/pre-commit)             | Run clang-format (and clang-tidy when available) over staged C++ files.                              | Git (`core.hooksPath`)                                     |
+| [`install_git_hooks.py`](install_git_hooks.py)             | Set `core.hooksPath` to the tracked `git-hooks/` directory so the pre-commit and commit-msg hooks run on every commit. | Manual; via `configure.py`                                 |
 | [`lint.py`](lint.py)                                       | Run every CI lint check locally in one command (clang-tidy, ruff, shellcheck, etc.). Read-only — reports issues but never modifies files. Skips tools that aren't installed. | Manual; editor tasks                                       |
 | [`parse_benchmark_results.py`](parse_benchmark_results.py) | Parse the text output of `benchmarks/suite.luma` into a JSON map of benchmark names to per-iteration times in milliseconds. | [Benchmark CI](../.github/workflows/benchmark.yml); manual |
 | [`pipeline/Invoke-LumaAll.ps1`](pipeline/Invoke-LumaAll.ps1) | Run the audit then the fix in one command.                                                        | Manual                                                     |
@@ -42,7 +42,7 @@ Each script carries a module-level docstring describing its full behaviour and o
 ## Conventions
 
 - **Python 3.10+.** The Python scripts share a single version gate in [`_common.py`](_common.py); importing it early (which the other scripts do) aborts with a clear message on older interpreters. `_common.py` also exposes `REPO_ROOT` and a `run()` wrapper, so the scripts resolve paths and invoke subprocesses the same way. The agent hooks in [`agent-hooks/`](agent-hooks) are the deliberate exception: they import only the standard library so they stay dependency-free and fail open (see [Agent Hooks](#agent-hooks)).
-- **Mixed toolchain.** The directory is predominantly Python; the non-Python helpers are [`generate_gui_assets.mjs`](generate_gui_assets.mjs) and [`generate_prelude_asset.mjs`](generate_prelude_asset.mjs) (Node), [`container-build.sh`](container-build.sh) (POSIX shell, kept free of bashisms for CI containers), [`run_psscriptanalyzer.ps1`](run_psscriptanalyzer.ps1) and the [`pipeline/`](pipeline) prompt runners (PowerShell `*.ps1` plus their bash `*.sh` counterparts), and the [`hooks/`](hooks) Git hooks.
+- **Mixed toolchain.** The directory is predominantly Python; the non-Python helpers are [`generate_gui_assets.mjs`](generate_gui_assets.mjs) and [`generate_prelude_asset.mjs`](generate_prelude_asset.mjs) (Node), [`container-build.sh`](container-build.sh) (POSIX shell, kept free of bashisms for CI containers), [`run_psscriptanalyzer.ps1`](run_psscriptanalyzer.ps1) and the [`pipeline/`](pipeline) prompt runners (PowerShell `*.ps1` plus their bash `*.sh` counterparts), and the [`git-hooks/`](git-hooks) Git hooks.
 - **Run from the repository root.** Paths are resolved relative to the repository root (via `_common.py`), so invoke the scripts as `python scripts/<name>.py` rather than from inside this directory.
 
 ## Linting and Formatting
@@ -61,10 +61,10 @@ Both scripts run each tool the way its workflow does and print a single pass/fai
 
 ## Git Hooks
 
-The hooks in [`hooks/`](hooks) are version-controlled rather than copied into `.git/hooks`, so they update on `git pull` and a repository-local `core.hooksPath` reliably overrides any global hooks directory. Two hooks are tracked: [`pre-commit`](hooks/pre-commit) checks staged C++ files with clang-format (and clang-tidy when a compile database exists), and [`commit-msg`](hooks/commit-msg) enforces the [Conventional Commits](https://www.conventionalcommits.org/) format documented in [CONTRIBUTING.md](../CONTRIBUTING.md#commit-messages). Enable them once per clone:
+The hooks in [`git-hooks/`](git-hooks) are version-controlled rather than copied into `.git/hooks`, so they update on `git pull` and a repository-local `core.hooksPath` reliably overrides any global hooks directory. Two hooks are tracked: [`pre-commit`](git-hooks/pre-commit) checks staged C++ files with clang-format (and clang-tidy when a compile database exists), and [`commit-msg`](git-hooks/commit-msg) enforces the [Conventional Commits](https://www.conventionalcommits.org/) format documented in [CONTRIBUTING.md](../CONTRIBUTING.md#commit-messages). Enable them once per clone:
 
 ```bash
-python scripts/install_hooks.py
+python scripts/install_git_hooks.py
 ```
 
 `python scripts/configure.py <preset>` also enables the hooks as part of configuring a build, so a contributor who configures through that helper gets them automatically. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full contributor setup.

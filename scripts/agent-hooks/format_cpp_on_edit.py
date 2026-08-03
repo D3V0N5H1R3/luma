@@ -4,7 +4,7 @@
 The hook reads the lifecycle payload as JSON on stdin, pulls the edited file
 path out of ``tool_input``, and — when the target is a first-party C++
 translation unit or header that exists on disk — reformats it in place with
-``clang-format`` (18+). This mirrors the project's ``scripts/hooks/pre-commit``
+``clang-format`` (18+). This mirrors the project's ``scripts/git-hooks/pre-commit``
 gate and the CI *Formatting* job, so edits made by the agent land already
 matching ``.clang-format`` instead of failing the check later.
 

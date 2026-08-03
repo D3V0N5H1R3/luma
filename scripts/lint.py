@@ -154,8 +154,8 @@ def _shellcheck_gate() -> Gate:
     if exe is None:
         return skip(name, description, "shellcheck not found (apt-get install shellcheck)")
     files = git_ls("*.sh", "*.bash", ":!:external/**")
-    if (REPO_ROOT / "scripts" / "hooks" / "pre-commit").is_file():
-        files.append("scripts/hooks/pre-commit")
+    if (REPO_ROOT / "scripts" / "git-hooks" / "pre-commit").is_file():
+        files.append("scripts/git-hooks/pre-commit")
     if not files:
         return skip(name, description, "no shell scripts tracked")
     return Gate(name, description, [exe], files=files)
