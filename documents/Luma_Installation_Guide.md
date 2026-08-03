@@ -345,13 +345,19 @@ This produces `luma`, `luma_lsp`, and `luma_dap` in the `build/` directory (or `
 
 | Problem | Cause | Fix |
 | --- | --- | --- |
-| `luma: command not found` | Installation directory is not on `PATH`. | Add it to `PATH` (see platform sections above) and restart your terminal. |
-| `luma --version` works, but VS Code does not detect it. | VS Code was started before the `PATH` change. | Restart VS Code so it picks up the updated `PATH`. |
-| macOS: `"luma" cannot be opened because the developer cannot be verified.` | Gatekeeper quarantine on downloaded binaries. | Run `xattr -d com.apple.quarantine /usr/local/bin/luma` (and for `luma_lsp`, `luma_dap`). |
-| Linux: `Permission denied` when running `luma`. | The binary is not executable. | Run `chmod +x /usr/local/bin/luma`. |
-| VS Code extension installed but no diagnostics or hover. | Language server binary not found. | Set `luma.lsp.path` in VS Code settings to the absolute path of `luma_lsp`. |
+| `luma: command not found` (Linux/macOS) or `'luma' is not recognized` (Windows). | Installation directory is not on `PATH`. | Add it to `PATH` (see platform sections above) and restart your terminal. |
+| `luma --version` works in a terminal, but VS Code does not detect it. | VS Code was started before the `PATH` change. | Restart VS Code so it picks up the updated `PATH`. |
+| Windows: `Windows protected your PC` (SmartScreen popup). | The binaries are unsigned and downloaded from the internet. | Click **More info** → **Run anyway**. |
+| Windows: antivirus quarantines a binary. | Some antivirus engines flag unsigned executables as false positives. | Add the installation directory (e.g. `C:\Program Files\Luma`) as an exclusion in your antivirus settings, then re-extract the binary. |
+| macOS: `"luma" cannot be opened because the developer cannot be verified.` | Gatekeeper quarantine on downloaded binaries. | Run `xattr -d com.apple.quarantine /usr/local/bin/luma` (and for `luma_lsp`, `luma_dap`). See [§5.2](#52--remove-the-quarantine-attribute). |
+| macOS: `"luma" is damaged and can't be opened.` | Quarantine attribute still present after moving or copying the binary. | Run `xattr -cr /usr/local/bin/luma /usr/local/bin/luma_lsp /usr/local/bin/luma_dap` to remove all extended attributes. |
+| Linux: `Permission denied` when running `luma`. | The binary is not executable. | Run `chmod +x /usr/local/bin/luma` (and for `luma_lsp`, `luma_dap`). |
+| VS Code extension installed but no diagnostics or hover. | Language server binary not found. | Set `luma.lsp.path` in VS Code settings to the absolute path of `luma_lsp`. Check **Output → Luma Language Server** for details. |
+| VS Code shows "Restricted mode — LSP disabled". | The workspace is not trusted. | Open the Command Palette → **Workspaces: Manage Workspace Trust** and trust the folder. |
 | VS Code debugging does not start. | Debug adapter binary not found. | Set `luma.dap.path` in VS Code settings to the absolute path of `luma_dap`. |
+| `no @main function found` when running a `.luma` file. | The source file has no `@main`-annotated function. | Add `@main` on the line immediately before your entry-point function. |
 | Checksum verification fails. | Corrupted or incomplete download. | Re-download the failing archive from the release page. |
+| Behind a corporate proxy — auto-download fails. | The extension cannot reach GitHub to download binaries. | Download the binaries manually (see [§2](#2--download)), then set `luma.lsp.path` and `luma.dap.path` in VS Code settings. |
 
 ---
 

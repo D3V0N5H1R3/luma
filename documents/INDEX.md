@@ -163,8 +163,8 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 8 — Editor Setup — Zed | 278–287 |
 | 9 — Verify the Installation | 289–330 |
 | 10 — Building from Source | 332–344 |
-| 11 — Troubleshooting | 346–358 |
-| See Also | 360–369 |
+| 11 — Troubleshooting | 344–362 |
+| See Also | 364–373 |
 
 ## Luma_Language_Server.md
 
