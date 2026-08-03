@@ -39,14 +39,12 @@ The binaries are standalone executables with no runtime dependencies. Download t
 
 Download the archives and the checksum file from the [latest GitHub release](https://github.com/d3v0n5h1r3/luma/releases/latest). Pick the assets for your platform:
 
-| Platform         | Interpreter               | Language Server                | Debug Adapter                |
-| ---------------- | ------------------------- | ------------------------------ | ---------------------------- |
-| Windows x86\_64  | `luma-windows-x86_64.zip` | `luma_lsp-windows-x86_64.zip` | `luma_dap-windows-x86_64.zip` |
-| Windows aarch64  | `luma-windows-aarch64.zip`| `luma_lsp-windows-aarch64.zip`| `luma_dap-windows-aarch64.zip`|
-| macOS x86\_64    | `luma-macos-x86_64.tar.gz`| `luma_lsp-macos-x86_64.tar.gz`| `luma_dap-macos-x86_64.tar.gz`|
-| macOS aarch64    | `luma-macos-aarch64.tar.gz`| `luma_lsp-macos-aarch64.tar.gz`| `luma_dap-macos-aarch64.tar.gz`|
-| Linux x86\_64    | `luma-linux-x86_64.tar.gz`| `luma_lsp-linux-x86_64.tar.gz`| `luma_dap-linux-x86_64.tar.gz`|
-| Linux aarch64    | `luma-linux-aarch64.tar.gz`| `luma_lsp-linux-aarch64.tar.gz`| `luma_dap-linux-aarch64.tar.gz`|
+| Platform        | Interpreter                 | Language Server                  | Debug Adapter                  |
+| --------------- | --------------------------- | -------------------------------- | ------------------------------ |
+| Windows x86\_64 | `luma-windows-x86_64.zip`   | `luma_lsp-windows-x86_64.zip`   | `luma_dap-windows-x86_64.zip`  |
+| macOS aarch64   | `luma-macos-aarch64.tar.gz` | `luma_lsp-macos-aarch64.tar.gz` | `luma_dap-macos-aarch64.tar.gz`|
+| Linux x86\_64   | `luma-linux-x86_64.tar.gz`  | `luma_lsp-linux-x86_64.tar.gz`  | `luma_dap-linux-x86_64.tar.gz` |
+| Linux aarch64   | `luma-linux-aarch64.tar.gz` | `luma_lsp-linux-aarch64.tar.gz` | `luma_dap-linux-aarch64.tar.gz`|
 
 Also download:
 
@@ -136,7 +134,7 @@ sudo tar xzf luma_lsp-macos-aarch64.tar.gz -C /usr/local/bin
 sudo tar xzf luma_dap-macos-aarch64.tar.gz -C /usr/local/bin
 ```
 
-> **Note:** Replace `aarch64` with `x86_64` if you are on an Intel Mac.
+> **Note:** Pre-built macOS binaries are provided for Apple Silicon (aarch64) only. On an Intel Mac, [build from source](#10--building-from-source) or run the aarch64 binaries under Rosetta 2.
 
 You should now have three binaries in `/usr/local/bin/`:
 
