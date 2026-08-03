@@ -130,6 +130,7 @@ bool VM::call_closure(FunctionValue* func, std::uint8_t arg_count) {
         .function = func->compiled,
         .closure = func,
         .ip = func->compiled->chunk().code.data(),
+        .code_end = func->compiled->chunk().code.data() + func->compiled->chunk().code.size(),
         .slot_offset = call_frame_base_slot(arg_count),
     });
 

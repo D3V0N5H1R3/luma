@@ -454,6 +454,23 @@ LUMA_TEST(vm_concatenate_op) {
     ASSERT_EQ(result.as_string(), "abcdef");
 }
 
+LUMA_TEST(vm_concatenate_chain_reuses_growing_buffer) {
+    // Regression test for the in-place append fast path in
+    // VM::handle_concatenate: a long chain of `+` operators repeatedly
+    // appends to the same left-hand stack value across many concatenations,
+    // growing well past the small-string-optimisation threshold. Correctness
+    // must hold even when the underlying buffer is reused (grown in place)
+    // rather than reallocated exactly to size on every `+`.
+    const auto result =
+        eval("\"a\" + \"bb\" + \"ccc\" + \"dddd\" + \"eeeee\" + \"ffffff\" + \"ggggggg\" + "
+             "\"hhhhhhhh\" + \"iiiiiiiii\" + \"jjjjjjjjjj\" + \"kkkkkkkkkkk\" + "
+             "\"llllllllllll\" + \"mmmmmmmmmmmmm\" + \"nnnnnnnnnnnnnn\"");
+
+    ASSERT_TRUE(result.is_string());
+    ASSERT_EQ(result.as_string(), "abbcccddddeeeeeffffffggggggghhhhhhhhiiiiiiiiijjjjjjjjjj"
+                                  "kkkkkkkkkkkllllllllllllmmmmmmmmmmmmmnnnnnnnnnnnnnn");
+}
+
 LUMA_TEST(vm_tuple_index) {
     const auto result = eval("(10, \"hello\", true)[0]");
 

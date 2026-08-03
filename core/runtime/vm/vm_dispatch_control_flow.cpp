@@ -354,6 +354,7 @@ void VM::handle_tail_call(const std::uint8_t*& code_start, const std::uint8_t*& 
 
         code_start = cf.function->chunk().code.data();
         code_end = code_start + cf.function->chunk().code.size();
+        cf.code_end = code_end;
     } else {
         call_value(callee, arg_count);
     }

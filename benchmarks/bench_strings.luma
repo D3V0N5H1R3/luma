@@ -1,6 +1,17 @@
 # String benchmarks: concatenation, interpolation, split, replace, searching,
 # case conversion, trimming, slicing, decomposition, distance, and templating.
 
+# Helper for the chained-concatenation benchmark below: builds a long string
+# from many `+`-chained operands within a single expression (no intervening
+# variable re-read between appends), so the in-place-append fast path in
+# VM::handle_concatenate can reuse the growing buffer's spare capacity across
+# consecutive appends in the chain.
+function string bench_chain_concat(string a0, string a1, string a2, string a3, string a4,
+                                    string a5, string a6, string a7, string a8, string a9) {
+    return a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7 + a8 + a9 + a0 + a1 + a2 + a3 + a4 + a5 + a6 +
+        a7 + a8 + a9
+}
+
 function BenchResult run_string_benchmarks(BenchResult state) {
     mutable BenchResult st = state
 
@@ -9,6 +20,19 @@ function BenchResult run_string_benchmarks(BenchResult state) {
         s = s + "hello"
         s = s + " "
         s = s + "world"
+    })
+
+    # A single expression chaining 20 `+` operators, each operand well past the
+    # small-string-optimisation threshold, so the in-place append fast path in
+    # VM::handle_concatenate (reusing the accumulating operand's spare
+    # capacity instead of allocating a fresh exact-size buffer per `+`) is
+    # exercised across a long chain of appends within one expression.
+    st = time_it(st, "chained string concatenation (20 operands)", 100000, () -> {
+        string _s = bench_chain_concat(
+            "the quick brown fox jumps", "over the lazy dog while", "the sun sets slowly",
+            "beyond the distant hills", "and the wind begins to", "blow across the fields",
+            "of golden wheat and rye", "as evening settles over", "the quiet countryside",
+            "under a darkening sky")
     })
 
     st = time_it(st, "string interpolation", 10000, () -> {
