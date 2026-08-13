@@ -17,6 +17,10 @@ sha2 = "0.11.0"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 tar = { version = "0.4", default-features = false }
 zip = { version = "8", default-features = false, features = ["deflate"] }
+# Pin typed-path below 0.12.3 — that version uses `#![feature(wasip2)]` behind a
+# cfg gate that fires when Zed's extension builder compiles for wasm32-wasip2,
+# which requires nightly Rust and breaks the stable-channel build.
+typed-path = ">=0.12.0, <0.12.3"
 
 # Make the lint policy enforced by CI (`cargo clippy -- -D warnings`) part of
 # the version-controlled manifest so it also applies to local `cargo clippy`
