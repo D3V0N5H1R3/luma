@@ -1458,51 +1458,51 @@ fn build_test_zip(name: &str, content: &[u8]) -> Vec<u8> {
     // Local file header (signature 0x04034b50).
     let local_offset = buf.len() as u32;
     buf.extend_from_slice(&0x0403_4b50u32.to_le_bytes()); // signature
-    buf.extend_from_slice(&20u16.to_le_bytes());           // version needed
-    buf.extend_from_slice(&0u16.to_le_bytes());            // flags
-    buf.extend_from_slice(&0u16.to_le_bytes());            // method: Stored
-    buf.extend_from_slice(&0u16.to_le_bytes());            // mod time
-    buf.extend_from_slice(&0u16.to_le_bytes());            // mod date
-    buf.extend_from_slice(&crc32(content).to_le_bytes());  // crc-32
+    buf.extend_from_slice(&20u16.to_le_bytes()); // version needed
+    buf.extend_from_slice(&0u16.to_le_bytes()); // flags
+    buf.extend_from_slice(&0u16.to_le_bytes()); // method: Stored
+    buf.extend_from_slice(&0u16.to_le_bytes()); // mod time
+    buf.extend_from_slice(&0u16.to_le_bytes()); // mod date
+    buf.extend_from_slice(&crc32(content).to_le_bytes()); // crc-32
     buf.extend_from_slice(&(content.len() as u32).to_le_bytes()); // compressed
     buf.extend_from_slice(&(content.len() as u32).to_le_bytes()); // uncompressed
     buf.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes()); // name len
-    buf.extend_from_slice(&0u16.to_le_bytes());            // extra len
+    buf.extend_from_slice(&0u16.to_le_bytes()); // extra len
     buf.extend_from_slice(name_bytes);
     buf.extend_from_slice(content);
 
     // Central directory header (signature 0x02014b50).
     let cd_offset = buf.len() as u32;
     buf.extend_from_slice(&0x0201_4b50u32.to_le_bytes()); // signature
-    buf.extend_from_slice(&20u16.to_le_bytes());           // version made by
-    buf.extend_from_slice(&20u16.to_le_bytes());           // version needed
-    buf.extend_from_slice(&0u16.to_le_bytes());            // flags
-    buf.extend_from_slice(&0u16.to_le_bytes());            // method: Stored
-    buf.extend_from_slice(&0u16.to_le_bytes());            // mod time
-    buf.extend_from_slice(&0u16.to_le_bytes());            // mod date
-    buf.extend_from_slice(&crc32(content).to_le_bytes());  // crc-32
+    buf.extend_from_slice(&20u16.to_le_bytes()); // version made by
+    buf.extend_from_slice(&20u16.to_le_bytes()); // version needed
+    buf.extend_from_slice(&0u16.to_le_bytes()); // flags
+    buf.extend_from_slice(&0u16.to_le_bytes()); // method: Stored
+    buf.extend_from_slice(&0u16.to_le_bytes()); // mod time
+    buf.extend_from_slice(&0u16.to_le_bytes()); // mod date
+    buf.extend_from_slice(&crc32(content).to_le_bytes()); // crc-32
     buf.extend_from_slice(&(content.len() as u32).to_le_bytes()); // compressed
     buf.extend_from_slice(&(content.len() as u32).to_le_bytes()); // uncompressed
     buf.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes()); // name len
-    buf.extend_from_slice(&0u16.to_le_bytes());            // extra len
-    buf.extend_from_slice(&0u16.to_le_bytes());            // comment len
-    buf.extend_from_slice(&0u16.to_le_bytes());            // disk start
-    buf.extend_from_slice(&0u16.to_le_bytes());            // internal attrs
-    buf.extend_from_slice(&0u32.to_le_bytes());            // external attrs
-    buf.extend_from_slice(&local_offset.to_le_bytes());    // local header offset
+    buf.extend_from_slice(&0u16.to_le_bytes()); // extra len
+    buf.extend_from_slice(&0u16.to_le_bytes()); // comment len
+    buf.extend_from_slice(&0u16.to_le_bytes()); // disk start
+    buf.extend_from_slice(&0u16.to_le_bytes()); // internal attrs
+    buf.extend_from_slice(&0u32.to_le_bytes()); // external attrs
+    buf.extend_from_slice(&local_offset.to_le_bytes()); // local header offset
     buf.extend_from_slice(name_bytes);
 
     let cd_size = (buf.len() as u32) - cd_offset;
 
     // End of central directory (signature 0x06054b50).
     buf.extend_from_slice(&0x0605_4b50u32.to_le_bytes()); // signature
-    buf.extend_from_slice(&0u16.to_le_bytes());            // disk number
-    buf.extend_from_slice(&0u16.to_le_bytes());            // cd start disk
-    buf.extend_from_slice(&1u16.to_le_bytes());            // entries on disk
-    buf.extend_from_slice(&1u16.to_le_bytes());            // total entries
-    buf.extend_from_slice(&cd_size.to_le_bytes());         // cd size
-    buf.extend_from_slice(&cd_offset.to_le_bytes());       // cd offset
-    buf.extend_from_slice(&0u16.to_le_bytes());            // comment len
+    buf.extend_from_slice(&0u16.to_le_bytes()); // disk number
+    buf.extend_from_slice(&0u16.to_le_bytes()); // cd start disk
+    buf.extend_from_slice(&1u16.to_le_bytes()); // entries on disk
+    buf.extend_from_slice(&1u16.to_le_bytes()); // total entries
+    buf.extend_from_slice(&cd_size.to_le_bytes()); // cd size
+    buf.extend_from_slice(&cd_offset.to_le_bytes()); // cd offset
+    buf.extend_from_slice(&0u16.to_le_bytes()); // comment len
 
     buf
 }
