@@ -1,0 +1,561 @@
+{
+    "Main Function": {
+        "prefix": "@main",
+        "body": [
+            "@main",
+            "function void ${1:main}() {",
+            "    $0",
+            "}"
+        ],
+        "description": "Entry point function with @main annotation"
+    },
+    "Test Function": {
+        "prefix": "@test",
+        "body": [
+            "@test",
+            "function void ${1:test_name}() {",
+            "    $0",
+            "}"
+        ],
+        "description": "Test function with @test annotation"
+    },
+    "Function": {
+        "prefix": "function",
+        "body": [
+            "function ${1:void} ${2:name}(${3}) {",
+            "    $0",
+            "}"
+        ],
+        "description": "Function declaration"
+    },
+    "Record": {
+        "prefix": "record",
+        "body": [
+            "record ${1:Name} {",
+            "    ${2:string} ${3:field}",
+            "}"
+        ],
+        "description": "Record type declaration"
+    },
+    "Choice": {
+        "prefix": "choice",
+        "body": [
+            "choice ${1:Name} {",
+            "    ${2:Variant}",
+            "}"
+        ],
+        "description": "Choice (algebraic data type) declaration"
+    },
+    "Interface": {
+        "prefix": "interface",
+        "body": [
+            "interface ${1:Name} {",
+            "    function ${2:void} ${3:method}(${4})",
+            "}"
+        ],
+        "description": "Interface declaration"
+    },
+    "Namespace": {
+        "prefix": "namespace",
+        "body": [
+            "namespace ${1:Name} {",
+            "    $0",
+            "}"
+        ],
+        "description": "Namespace declaration"
+    },
+    "If": {
+        "prefix": "if",
+        "body": [
+            "if ${1:condition} {",
+            "    $0",
+            "}"
+        ],
+        "description": "If statement"
+    },
+    "If Else": {
+        "prefix": "ifelse",
+        "body": [
+            "if ${1:condition} {",
+            "    $2",
+            "} else {",
+            "    $0",
+            "}"
+        ],
+        "description": "If-else statement"
+    },
+    "For Loop": {
+        "prefix": "for",
+        "body": [
+            "for ${1:item} in ${2:collection} {",
+            "    $0",
+            "}"
+        ],
+        "description": "For-in loop"
+    },
+    "For Key Value": {
+        "prefix": "forkv",
+        "body": [
+            "for ${1:key}, ${2:value} in ${3:dictionary} {",
+            "    $0",
+            "}"
+        ],
+        "description": "For loop with key-value destructuring"
+    },
+    "For Range": {
+        "prefix": "forrange",
+        "body": [
+            "for ${1:i} in ${2:0}..${3:10} {",
+            "    $0",
+            "}"
+        ],
+        "description": "For loop over a range"
+    },
+    "While Loop": {
+        "prefix": "while",
+        "body": [
+            "while ${1:condition} {",
+            "    $0",
+            "}"
+        ],
+        "description": "While loop"
+    },
+    "Match": {
+        "prefix": "match",
+        "body": [
+            "match ${1:value} {",
+            "    case ${2:pattern} {",
+            "        $0",
+            "    }",
+            "}"
+        ],
+        "description": "Match expression"
+    },
+    "Match Result": {
+        "prefix": "matchresult",
+        "body": [
+            "match ${1:value} {",
+            "    case success(${2:s}) {",
+            "        $0",
+            "    }",
+            "    case failure(${3:err}) {",
+            "        ",
+            "    }",
+            "}"
+        ],
+        "description": "Match on result type (success/failure)"
+    },
+    "Match Optional": {
+        "prefix": "matchoptional",
+        "body": [
+            "match ${1:value} {",
+            "    case some(${2:v}) {",
+            "        $0",
+            "    }",
+            "    case none {",
+            "        ",
+            "    }",
+            "}"
+        ],
+        "description": "Match on optional type (some/none)"
+    },
+    "Try Catch": {
+        "prefix": "try",
+        "body": [
+            "try {",
+            "    $1",
+            "} catch(${2:error}) {",
+            "    $0",
+            "}"
+        ],
+        "description": "Try-catch statement"
+    },
+    "Try Catch Finally": {
+        "prefix": "trycf",
+        "body": [
+            "try {",
+            "    $1",
+            "} catch(${2:error}) {",
+            "    $3",
+            "} finally {",
+            "    $0",
+            "}"
+        ],
+        "description": "Try-catch-finally statement"
+    },
+    "Task Scope": {
+        "prefix": "task_scope",
+        "body": [
+            "task_scope {",
+            "    $0",
+            "}"
+        ],
+        "description": "Structured concurrency task scope"
+    },
+    "Spawn Await": {
+        "prefix": "spawn",
+        "body": [
+            "task<${1:type}> ${2:t} = spawn ${3:function_call()}",
+            "${1:type} ${4:result} = await ${2:t}"
+        ],
+        "description": "Spawn a task and await its result"
+    },
+    "Lambda": {
+        "prefix": "lambda",
+        "body": [
+            "(${1:params}) -> ${0:body}"
+        ],
+        "description": "Lambda expression"
+    },
+    "Pipe": {
+        "prefix": "pipe",
+        "body": [
+            "${1:value} |> ${0:Function.call()}"
+        ],
+        "description": "Pipe expression"
+    },
+    "Mutable Variable": {
+        "prefix": "mut",
+        "body": [
+            "mutable ${1:type} ${2:name} = ${0:value}"
+        ],
+        "description": "Mutable variable declaration"
+    },
+    "Variable": {
+        "prefix": "var",
+        "body": [
+            "${1:type} ${2:name} = ${0:value}"
+        ],
+        "description": "Immutable variable declaration"
+    },
+    "Print": {
+        "prefix": "print",
+        "body": [
+            "print(\"${1:$0}\")"
+        ],
+        "description": "Print to stdout"
+    },
+    "Assert": {
+        "prefix": "assert",
+        "body": [
+            "assert(${1:condition})"
+        ],
+        "description": "Assert a condition"
+    },
+    "Channel": {
+        "prefix": "channel",
+        "body": [
+            "channel<${1:type}> ${2:ch} = Channel.new()",
+            "Channel.send(${2:ch}, ${3:value})",
+            "${1:type} ${4:received} = Channel.receive(${2:ch})"
+        ],
+        "description": "Create and use a channel"
+    },
+    "Include": {
+        "prefix": "include",
+        "body": [
+            "include \"${1:file}.luma\""
+        ],
+        "description": "Include a source file"
+    },
+    "Type Alias": {
+        "prefix": "type",
+        "body": [
+            "type ${1:Name} = ${0:OriginalType}"
+        ],
+        "description": "Type alias declaration"
+    },
+    "Use Namespace": {
+        "prefix": "use",
+        "body": [
+            "use ${0:Namespace}"
+        ],
+        "description": "Import a namespace"
+    },
+    "Generic Function": {
+        "prefix": "generic",
+        "body": [
+            "function<${1:T}> ${1:T} ${2:name}(${1:T} ${3:param}) {",
+            "    $0",
+            "}"
+        ],
+        "description": "Generic function declaration"
+    },
+    "Dictionary Literal": {
+        "prefix": "dict",
+        "body": [
+            "dictionary<${1:string}> ${2:d} = {",
+            "    \"${3:key}\" = ${0:value}",
+            "}"
+        ],
+        "description": "Dictionary literal"
+    },
+    "Array Literal": {
+        "prefix": "arr",
+        "body": [
+            "array<${1:integer}> ${2:a} = [${0}]"
+        ],
+        "description": "Array literal"
+    },
+    "Result Variable": {
+        "prefix": "result",
+        "body": [
+            "result<${1:string}> ${2:r} = ${0:success(\"value\")}"
+        ],
+        "description": "Result type variable"
+    },
+    "Optional Variable": {
+        "prefix": "optional",
+        "body": [
+            "optional<${1:integer}> ${2:o} = ${0:some(42)}"
+        ],
+        "description": "Optional type variable"
+    },
+    "Error Pipe": {
+        "prefix": "errorpipe",
+        "body": [
+            "${1:value} !> ${0:transform()}"
+        ],
+        "description": "Error-propagating pipe expression"
+    },
+    "Use Specific Import": {
+        "prefix": "usespecific",
+        "body": [
+            "use ${1:Namespace}.${0:member}"
+        ],
+        "description": "Import a specific member from a namespace"
+    },
+    "Tuple": {
+        "prefix": "tuple",
+        "body": [
+            "(${1:integer}, ${2:string}) ${3:pair} = (${4:1}, ${0:\"hello\"})"
+        ],
+        "description": "Tuple variable declaration"
+    },
+    "Tuple Destructure": {
+        "prefix": "destructure",
+        "body": [
+            "(${1:number} ${2:x}, ${3:number} ${4:y}) = ${0:expression}"
+        ],
+        "description": "Destructure a tuple into variables"
+    },
+    "Mutable Tuple Destructure": {
+        "prefix": "mutdestructure",
+        "body": [
+            "mutable (${1:number} ${2:x}, ${3:number} ${4:y}) = ${0:expression}"
+        ],
+        "description": "Destructure a tuple into mutable variables"
+    },
+    "Generic Constrained Function": {
+        "prefix": "genericconstrained",
+        "body": [
+            "function<${1:T}: ${2:Interface}> ${3:void} ${4:name}(${1:T} ${5:param}) {",
+            "    $0",
+            "}"
+        ],
+        "description": "Generic function with interface constraint"
+    },
+    "Generic Multi-Constrained Function": {
+        "prefix": "genericmulticonstrained",
+        "body": [
+            "function<${1:T}: ${2:Interface1} + ${3:Interface2}> ${4:void} ${5:name}(${1:T} ${6:param}) {",
+            "    $0",
+            "}"
+        ],
+        "description": "Generic function with multiple interface constraints"
+    },
+    "Generic Type Alias": {
+        "prefix": "typeg",
+        "body": [
+            "type ${1:Name}<${2:T}> = ${0:OriginalType}"
+        ],
+        "description": "Generic type alias declaration"
+    },
+    "Choice with Data": {
+        "prefix": "choicedata",
+        "body": [
+            "choice ${1:Name} {",
+            "    ${2:Variant1}(${3:string} ${4:field})",
+            "    ${5:Variant2}(${6:integer} ${7:field})",
+            "    ${0:Variant3}",
+            "}"
+        ],
+        "description": "Choice type with data variants"
+    },
+    "Generic Choice": {
+        "prefix": "choicegeneric",
+        "body": [
+            "choice ${1:Name}<${2:T}> {",
+            "    ${3:Some}(${2:T} ${4:value})",
+            "    ${0:None}",
+            "}"
+        ],
+        "description": "Generic choice type declaration"
+    },
+    "Record with Defaults": {
+        "prefix": "recorddefaults",
+        "body": [
+            "record ${1:Config} {",
+            "    ${2:string} ${3:host} = ${4:\"localhost\"},",
+            "    ${5:integer} ${6:port} = ${0:8080}",
+            "}"
+        ],
+        "description": "Record with default field values"
+    },
+    "Generic Record": {
+        "prefix": "recordgeneric",
+        "body": [
+            "record ${1:Name}<${2:T}> {",
+            "    ${2:T} ${0:value}",
+            "}"
+        ],
+        "description": "Generic record declaration"
+    },
+    "Record Copy": {
+        "prefix": "with",
+        "body": [
+            "${1:original} with { ${2:field} = ${0:value} }"
+        ],
+        "description": "Copy a record with field overrides"
+    },
+    "Generic Interface": {
+        "prefix": "interfacegeneric",
+        "body": [
+            "interface ${1:Name}<${2:T}> {",
+            "    ${2:T} ${0:get}()",
+            "}"
+        ],
+        "description": "Generic interface declaration"
+    },
+    "Internal Function": {
+        "prefix": "internal",
+        "body": [
+            "internal function ${1:void} ${2:name}(${3}) {",
+            "    $0",
+            "}"
+        ],
+        "description": "Namespace-internal function declaration"
+    },
+    "Named Arguments Call": {
+        "prefix": "namedargs",
+        "body": [
+            "${1:function_name}(${2:param}: ${3:value}, ${4:param}: ${0:value})"
+        ],
+        "description": "Function call with named arguments"
+    },
+    "Multi-Line String": {
+        "prefix": "multiline",
+        "body": [
+            "string ${1:text} = \"\"\"",
+            "    ${0}",
+            "    \"\"\""
+        ],
+        "description": "Multi-line triple-quoted string"
+    },
+    "Print Interpolation": {
+        "prefix": "printi",
+        "body": [
+            "print(\"${1:message} \\${${0:expression}}\")"
+        ],
+        "description": "Print with string interpolation"
+    },
+    "Function Returning Result": {
+        "prefix": "functionresult",
+        "body": [
+            "function result<${1:string}> ${2:name}(${3}) {",
+            "    $0",
+            "    return success(${4:value})",
+            "}"
+        ],
+        "description": "Function that returns a result type"
+    },
+    "Function Returning Tuple": {
+        "prefix": "functiontuple",
+        "body": [
+            "function (${1:number}, ${2:number}) ${3:name}(${4}) {",
+            "    $0",
+            "    return (${5:first}, ${6:second})",
+            "}"
+        ],
+        "description": "Function that returns a tuple"
+    },
+    "Unique Variable": {
+        "prefix": "unique",
+        "body": [
+            "unique ${1:type} ${2:name} = ${0:value}"
+        ],
+        "description": "Unique ownership variable declaration"
+    },
+    "Borrow Variable": {
+        "prefix": "borrow",
+        "body": [
+            "borrow ${1:type} ${2:name} = ${0:value}"
+        ],
+        "description": "Borrowed reference variable declaration"
+    },
+    "Assert Message": {
+        "prefix": "assertm",
+        "body": [
+            "assert(${1:condition}, \"${0:message}\")"
+        ],
+        "description": "Assert with a custom error message"
+    },
+    "Match Expression": {
+        "prefix": "matchexpr",
+        "body": [
+            "${1:type} ${2:result} = match ${3:value} {",
+            "    case ${4:pattern} { ${5:expr} }",
+            "    else { ${0:default} }",
+            "}"
+        ],
+        "description": "Match as a value-producing expression"
+    },
+    "Match Multiple Patterns": {
+        "prefix": "matchmulti",
+        "body": [
+            "match ${1:value} {",
+            "    case ${2:pattern1} | ${3:pattern2} {",
+            "        $0",
+            "    }",
+            "    else {",
+            "        ",
+            "    }",
+            "}"
+        ],
+        "description": "Match with multiple alternative patterns"
+    },
+    "Downcast": {
+        "prefix": "downcast",
+        "body": [
+            "result<${1:type}> ${2:r} = downcast<${1:type}>(${0:value})"
+        ],
+        "description": "Downcast a value to a specific type"
+    },
+    "Is Type Check": {
+        "prefix": "is",
+        "body": [
+            "if is<${1:type}>(${2:value}) {",
+            "    $0",
+            "}"
+        ],
+        "description": "Check if a value is of a specific type"
+    },
+    "Turbofish": {
+        "prefix": "turbofish",
+        "body": [
+            "${1:function_name}::<${2:type}>(${0:args})"
+        ],
+        "description": "Function call with explicit type argument"
+    },
+    "Test with Message": {
+        "prefix": "@testm",
+        "body": [
+            "@test",
+            "function void ${1:test_name}() {",
+            "    ${2:type} ${3:result} = ${4:expression}",
+            "    assert(${3:result} == ${5:expected}, \"expected ${5:expected} but got \\${${3:result}}\")",
+            "}"
+        ],
+        "description": "Test function with assertion message"
+    }
+}
