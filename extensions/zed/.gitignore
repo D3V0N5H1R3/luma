@@ -1,0 +1,4 @@
+# Zed build artifacts
+extension.wasm
+grammars/luma/
+target/
