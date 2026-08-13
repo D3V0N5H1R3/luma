@@ -77,21 +77,26 @@ function boolean is_within_canvas(integer row, integer col, integer canvas_rows,
 function void draw_status_bar(integer cols, integer rows, string brush,
 string color_label, string status_text) {
     Result.unwrap(Terminal.move_to(rows, 1))
+    # Erase the line before writing so previous content doesn't bleed through.
+    Terminal.clear_line()
 
     string styled_brush = Result.unwrap(Terminal.color(color_label, brush))
     string left_text = " Brush: ${brush}  Color: ${color_label}  ${status_text}"
-    string right = "q: quit  c×2: clear  1-5: brush  scroll: color "
-    # Use the plain text lengths for padding (escape codes don't occupy columns).
-    number raw_padding_width = cols - String.length(left_text) - String.length(right)
-    number padding_width = if raw_padding_width < 0 { 0 } else { raw_padding_width }
-    integer int_padding = Result.unwrap_or(Converter.to_integer(padding_width), 0)
-    # Build the visible bar with the styled brush substituted in.
+    string right = "q:quit c2:clr 1-5:brush scrl:color"
+    # Use plain text lengths for padding (escape codes don't occupy columns).
+    integer left_len = String.length(left_text)
+    integer right_len = String.length(right)
+    integer content_len = left_len + right_len
     string left_styled = " Brush: ${styled_brush}  Color: ${color_label}  ${status_text}"
-    string bar = "${left_styled}${String.repeat(" ", int_padding)}${right}"
-
-    bar
-    |> Terminal.inverse()
-    |> Terminal.write()
+    # If the content is too wide for the terminal, show only the left portion;
+    # otherwise pad between left and right so the bar spans exactly cols columns.
+    if content_len >= cols {
+        Terminal.write(Terminal.inverse(left_styled))
+    } else {
+        integer int_padding = cols - content_len
+        string bar = "${left_styled}${String.repeat(" ", int_padding)}${right}"
+        Terminal.write(Terminal.inverse(bar))
+    }
 }
 
 function void draw_cell(integer col, integer row, string cell_character, string color_label) {
@@ -297,7 +302,7 @@ function void test_status_bar_renders_through_capture() {
     assert(String.contains(out, "Brush:"))
     assert(String.contains(out, "Color: red"))
     assert(String.contains(out, "Draw (3, 5)"))
-    assert(String.contains(out, "q: quit"))
+    assert(String.contains(out, "q:quit"))
 }
 
 @test
