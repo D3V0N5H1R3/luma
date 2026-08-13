@@ -9,8 +9,9 @@ repository = "https://github.com/d3v0n5h1r3/luma"
 snippets = ["../shared/snippets/luma.json"]
 
 [grammars.luma]
-repository = "file://./grammars/tree-sitter-luma"
+repository = "https://github.com/D3V0N5H1R3/luma"
 rev = "main"
+path = "extensions/zed/grammars/tree-sitter-luma"
 
 [language_servers.luma-lsp]
 name = "Luma Language Server"
