@@ -2,6 +2,9 @@
 # Luma — .gitignore
 # ─────────────────────────────────────────────
 
+# ── Language server index cache ──
+.luma/
+
 # ── Build output ──
 build/
 build-*/
