@@ -6,7 +6,7 @@ schema_version = 1
 authors = ["Luma Contributors"]
 repository = "https://github.com/d3v0n5h1r3/luma"
 
-snippets = ["../shared/snippets/luma.json"]
+snippets = ["snippets/luma.json"]
 
 [grammars.luma]
 repository = "https://github.com/D3V0N5H1R3/luma"
