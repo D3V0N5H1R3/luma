@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import { LSP_CONFIG, checkForBinaryUpdate } from "../utils/binary-download";
-import { isLspPosition, toVscodeLocations } from "./types";
 import { ClientManager } from "./client-manager";
 import { COMMANDS } from "../utils/constants";
 
@@ -39,28 +38,10 @@ export function registerCommands(
             );
         }),
 
-        vscode.commands.registerCommand(
-            COMMANDS.showReferences,
-            async (uri: unknown, position: unknown, locations: unknown) => {
-                if (typeof uri !== "string") {
-                    return;
-                }
-                if (!isLspPosition(position)) {
-                    return;
-                }
-                if (!Array.isArray(locations)) {
-                    return;
-                }
-                const parsed_uri = vscode.Uri.parse(uri);
-                const vscode_pos = new vscode.Position(position.line, position.character);
-                const vscode_locations = toVscodeLocations(locations);
-                await vscode.commands.executeCommand(
-                    "editor.action.showReferences",
-                    parsed_uri,
-                    vscode_pos,
-                    vscode_locations,
-                );
-            },
-        ),
+        // NOTE: luma.showReferences is intentionally NOT registered here.
+        // The language server advertises it via executeCommandProvider, so
+        // vscode-languageclient's ExecuteCommandFeature registers it
+        // automatically.  The middleware in client-manager.ts intercepts
+        // the call and delegates to editor.action.showReferences.
     );
 }
