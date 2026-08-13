@@ -238,7 +238,7 @@ function dictionary create_default_model() {
 # Ctrl+S saves settings without conflicting with ordinary text entry.
 function array<dictionary<string>> settings_subscriptions(dictionary _model) {
     return [
-        GraphicalUi.on_key("save_key", "Ctrl+S", (string _key) -> "save")
+        GraphicalUi.on_key("save_key", "Ctrl+s", (string _key) -> "save")
     ]
 }
 
@@ -340,7 +340,7 @@ function void test_dismiss_saved_message_clears_flag() {
 
 @test
 function void test_save_keyboard_shortcut_marks_saved() {
-    dictionary outcome = GraphicalUi.test_key(settings_config(), create_default_model(), "Ctrl+S")
+    dictionary outcome = GraphicalUi.test_key(settings_config(), create_default_model(), "Ctrl+s")
     boolean saved = Dictionary.get_or(outcome, "saved", false)
     assert(saved)
 }

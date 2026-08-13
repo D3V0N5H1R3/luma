@@ -161,22 +161,21 @@ function widget view_text_tab(dictionary model) {
             GraphicalUi.label("A plain label uses the foreground colour token."),
             GraphicalUi.label("A muted caption label.", caption_style()),
             GraphicalUi.row([
-                GraphicalUi.link("External link", "https://luma-lang.org"),
+                GraphicalUi.link("External link", "https://github.com/D3V0N5H1R3/luma"),
                 GraphicalUi.link("Callback link",
                     () -> Dictionary.set(model, "status", "Link clicked"))
-            ], {"gap": "16px", "align_items": "center"})
+            ], {"gap": "16px", "align_items": "center"}),
+            GraphicalUi.when(Dictionary.get_or(model, "status", "") == "Link clicked",
+                GraphicalUi.badge("Link clicked"))
         ]),
 
         GraphicalUi.panel("Identity & status", [
             GraphicalUi.row([
                 GraphicalUi.avatar("Ada Lovelace"),
-                # Remote avatar image: requires "allow_remote_images" in the app
-                # config (set below); it falls back to the initials otherwise.
-                GraphicalUi.avatar("Grace Hopper", "https://example.com/grace.jpg"),
+                GraphicalUi.avatar("Grace Hopper"),
                 GraphicalUi.badge("NEW"),
                 GraphicalUi.icon("star", 20),
-                GraphicalUi.tooltip("I appear on hover", GraphicalUi.icon("info", 20)),
-                GraphicalUi.image("luma-logo.svg")
+                GraphicalUi.tooltip("I appear on hover", GraphicalUi.icon("info", 20))
             ], {"align_items": "center", "gap": "12px"}),
             GraphicalUi.field_error("Inline field-error message (validation hint)."),
             GraphicalUi.separator(),

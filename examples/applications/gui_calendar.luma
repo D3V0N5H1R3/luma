@@ -153,8 +153,8 @@ function widget view_cell(dictionary model, integer day) {
         && Dictionary.get_or(model, "today_month", 0) == month
         && Dictionary.get_or(model, "today_day", 0) == day
     string background = if selected { GraphicalUi.VAR_PRIMARY } else { "transparent" }
-    string color = if selected { "white" } else { GraphicalUi.VAR_FG }
-    string marker = if selected { "✓ " } else if today { "• " } else { "" }
+    string color = if selected { "var(--gui-on-accent)" } else { GraphicalUi.VAR_FG }
+    string marker = if selected { "✓" } else if today { "•" } else { "" }
     mutable string aria_label = "${day} ${month_name(month)} ${year}"
     if selected {
         aria_label = "${aria_label} (selected)"
@@ -166,6 +166,8 @@ function widget view_cell(dictionary model, integer day) {
         "id": "day-${day}",
         "width": "44px",
         "height": "40px",
+        "overflow": "hidden",
+        "font_size": "12px",
         "background_color": background,
         "color": color,
         "border": if selected { "2px solid ${GraphicalUi.VAR_PRIMARY}" } else if today {
@@ -233,6 +235,7 @@ function dictionary calendar_config() {
     config["title"] = "Luma Calendar"
     config["width"] = 380
     config["height"] = 460
+    config["fullscreen"] = true
     config["min_width"] = 360
     config["min_height"] = 420
     config["model"] = calendar_initial()

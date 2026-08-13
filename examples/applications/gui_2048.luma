@@ -368,6 +368,7 @@ function dictionary g2048_config() {
     config["title"] = "Luma 2048"
     config["width"] = 380
     config["height"] = 520
+    config["fullscreen"] = true
     config["model"] = new_2048()
     config["view"] = view_2048
     config["update"] = (dictionary model, string msg) -> match msg {

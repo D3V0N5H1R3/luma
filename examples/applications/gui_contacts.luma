@@ -300,10 +300,11 @@ function widget view_add_dialog(dictionary model) {
                 {"help": "Choose the closest role for filtering."}
             ),
 
+            GraphicalUi.spacer(12),
             GraphicalUi.row([
                 GraphicalUi.button("Cancel", () -> close_add_dialog(model),
                     button_variant(GraphicalUi.GHOST)),
-                GraphicalUi.button("Add Contact", () -> add_contact(model),
+                GraphicalUi.button("Add", () -> add_contact(model),
                     button_variant(GraphicalUi.PRIMARY))
             ], {"justify_content": "flex-end", "gap": GraphicalUi.VAR_GAP})
         ],
@@ -330,6 +331,7 @@ function widget view_delete_dialog(dictionary model) {
                 "Are you sure you want to delete ${contact_name}?",
                 GraphicalUi.WARNING
             ),
+            GraphicalUi.spacer(12),
             GraphicalUi.row([
                 GraphicalUi.button("Cancel",
                     () -> close_delete_dialog(model), button_variant(GraphicalUi.GHOST)),
@@ -398,7 +400,7 @@ function array<dictionary<string>> contacts_subscriptions(dictionary _model) {
         # Ctrl+N opens the add-contact dialog. A modifier (rather than a bare
         # letter) keeps the shortcut from firing while the search field is typed
         # into; the tooltip on the New Contact button surfaces it for discovery.
-        GraphicalUi.on_key("new_key", "Ctrl+N", (string _key) -> "open_add")
+        GraphicalUi.on_key("new_key", "Ctrl+n", (string _key) -> "open_add")
     ]
 }
 
@@ -489,7 +491,7 @@ function void test_open_add_message_opens_dialog() {
 
 @test
 function void test_new_contact_shortcut_opens_dialog() {
-    dictionary outcome = GraphicalUi.test_key(contacts_config(), create_default_model(), "Ctrl+N")
+    dictionary outcome = GraphicalUi.test_key(contacts_config(), create_default_model(), "Ctrl+n")
     boolean shown = Dictionary.get_or(outcome, "show_add_dialog", false)
     assert(shown)
 }
@@ -527,7 +529,7 @@ function void test_add_contact_appends_to_list() {
     filled["form_name"] = "Zoe Quinn"
     filled["form_email"] = "zoe@example.com"
     filled["form_role"] = "Engineer"
-    dictionary outcome = GraphicalUi.test_click(contacts_config(), filled, "Add Contact")
+    dictionary outcome = GraphicalUi.test_click(contacts_config(), filled, "Add")
     array<dictionary> contacts = outcome["contacts"]
     assert(Array.length(contacts) == 6)
 }
@@ -536,7 +538,7 @@ function void test_add_contact_appends_to_list() {
 function void test_add_contact_requires_name() {
     mutable dictionary empty_form = create_default_model()
     empty_form["show_add_dialog"] = true
-    dictionary outcome = GraphicalUi.test_click(contacts_config(), empty_form, "Add Contact")
+    dictionary outcome = GraphicalUi.test_click(contacts_config(), empty_form, "Add")
     array<dictionary> contacts = outcome["contacts"]
     assert(Array.length(contacts) == 5)
     assert(Dictionary.get_or(outcome, "form_name_error", "") == "Name is required.")

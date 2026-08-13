@@ -12,9 +12,28 @@
 # ("15" not "15.0") while genuine fractions ("5.5") are preserved. Working from
 # the string form keeps this free of integer/number comparison.
 function string format_number(number value) {
+    # Convert to string and strip trailing ".0" for whole numbers. If the raw
+    # representation exceeds the display limit (due to floating-point noise like
+    # 9.600000000000001), truncate to 10 significant digits after the point.
     string text = Converter.to_string(value)
     if String.ends_with(text, ".0") {
         return String.substring(text, 0, String.length(text) - 2)
+    }
+    if String.length(text) > max_entry_length() && String.contains(text, ".") {
+        integer dot = Result.unwrap(String.index_of(text, "."))
+        mutable integer max_decimals = max_entry_length() - dot - 1
+        if max_decimals > 10 {
+            max_decimals = 10
+        }
+        mutable string truncated = String.substring(text, 0, dot + 1 + max_decimals)
+        # Remove trailing zeros after truncation.
+        while String.ends_with(truncated, "0") && !String.ends_with(truncated, ".0") {
+            truncated = String.substring(truncated, 0, String.length(truncated) - 1)
+        }
+        if String.ends_with(truncated, ".") {
+            truncated = String.substring(truncated, 0, String.length(truncated) - 1)
+        }
+        return truncated
     }
     return text
 }
@@ -439,6 +458,7 @@ function dictionary calculator_config() {
     config["title"] = "Luma Calculator"
     config["width"] = 340
     config["height"] = 520
+    config["fullscreen"] = true
     config["model"] = calc_initial()
     config["view"] = view_calculator
     config["update"] = (dictionary model, string msg) -> dispatch_key(model, msg)

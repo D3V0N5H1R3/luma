@@ -56,7 +56,7 @@ function dictionary<string> nav_link_style(boolean active) {
             "padding": "6px 12px",
             "border_radius": "6px",
             "background_color": GraphicalUi.VAR_PRIMARY,
-            "color": "color-mix(in srgb, var(--gui-bg) 92%, var(--gui-fg) 8%)",
+            "color": "var(--gui-on-accent)",
             "font_weight": "600",
             "text_decoration": "none"
         }
@@ -87,7 +87,7 @@ function dictionary<string> hero_style() {
     return GraphicalUi.merge_styles({
         "class": "lw-hero",
         "background": "linear-gradient(135deg, color-mix(in srgb, var(--gui-primary) 82%, var(--gui-bg)) 0%, color-mix(in srgb, var(--gui-primary) 68%, var(--gui-fg)) 100%)",
-        "color": "color-mix(in srgb, var(--gui-bg) 92%, var(--gui-fg) 8%)",
+        "color": "var(--gui-on-accent)",
         "border_radius": "18px"
     }, GraphicalUi.responsive({
         "0": {"padding": "28px 20px"},
@@ -99,15 +99,16 @@ function dictionary<string> hero_style() {
 function dictionary<string> hero_kicker_style() {
     return {
         "class": "lw-kicker",
-        "color": "color-mix(in srgb, var(--gui-bg) 84%, var(--gui-primary) 16%)",
+        "color": "var(--gui-on-accent)",
         "font_weight": "700",
-        "font_size": GraphicalUi.VAR_TEXT_XS
+        "font_size": GraphicalUi.VAR_TEXT_XS,
+        "opacity": "0.85"
     }
 }
 
 function dictionary<string> hero_heading_style() {
     return {
-        "color": "color-mix(in srgb, var(--gui-bg) 92%, var(--gui-fg) 8%)",
+        "color": "var(--gui-on-accent)",
         "font_size": "clamp(var(--gui-font-size-xl), 6vw, 2.5rem)",
         "line_height": "1.1"
     }
@@ -115,9 +116,10 @@ function dictionary<string> hero_heading_style() {
 
 function dictionary<string> hero_sub_style() {
     return {
-        "color": "color-mix(in srgb, var(--gui-bg) 88%, var(--gui-fg) 12%)",
+        "color": "var(--gui-on-accent)",
         "font_size": "18px",
-        "max_width": "560px"
+        "max_width": "560px",
+        "opacity": "0.9"
     }
 }
 
