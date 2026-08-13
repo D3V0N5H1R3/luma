@@ -67,7 +67,7 @@ function dictionary<string> card_style() {
 function dictionary<string> banner_style() {
     return {
         "background_color": GraphicalUi.VAR_PRIMARY,
-        "color": "white",
+        "color": "var(--gui-on-accent)",
         "padding": "24px",
         "border_radius": GraphicalUi.VAR_RADIUS,
         "align_items": "center",
@@ -159,7 +159,7 @@ function dictionary<string> fav_style(boolean active, string slug) {
     s["cursor"] = "pointer"
     if active {
         s["background_color"] = GraphicalUi.VAR_PRIMARY
-        s["color"] = "white"
+        s["color"] = "var(--gui-on-accent)"
     } else {
         s["background_color"] = "transparent"
         s["color"] = GraphicalUi.VAR_PRIMARY

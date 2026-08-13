@@ -87,12 +87,10 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | `gui_http`             | GraphicalUi HTTP integration demo                  | 🔴 Advanced       |
 | `gui_layout`           | GraphicalUi elm-ui-inspired layout features demo   | 🔴 Advanced       |
 | `gui_markdown`         | GraphicalUi Markdown editor with live preview      | 🔴 Advanced       |
-| `gui_paint`            | GraphicalUi pixel paint canvas with palette        | 🔴 Advanced       |
 | `gui_quiz`             | GraphicalUi multiple-choice quiz with scoring      | 🔴 Advanced       |
 | `gui_router`           | GraphicalUi client-side routing                    | 🔴 Advanced       |
 | `gui_settings`         | GraphicalUi settings panel with form widgets       | 🔴 Advanced       |
 | `gui_styled`           | GraphicalUi styling, theming, and responsive demo  | 🔴 Advanced       |
-| `gui_tic_tac_toe`      | GraphicalUi tic-tac-toe with win detection         | 🔴 Advanced       |
 | `gui_timer`            | GraphicalUi Pomodoro timer with on_tick            | 🔴 Advanced       |
 | `gui_todo`             | GraphicalUi todo list application                  | 🔴 Advanced       |
 | `gui_virtual_list`     | GraphicalUi virtual scrolling for large lists      | 🔴 Advanced       |

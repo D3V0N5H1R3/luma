@@ -165,6 +165,7 @@ function widget view_http(dictionary<string> model) {
         GraphicalUi.when(status == "error",
             GraphicalUi.aria_live("assertive", GraphicalUi.panel("Request problem", [
                 GraphicalUi.alert(message, GraphicalUi.ERROR),
+                GraphicalUi.spacer(8),
                 GraphicalUi.button("Retry", () -> perform_get(model),
                     button_variant(GraphicalUi.PRIMARY))
             ]))

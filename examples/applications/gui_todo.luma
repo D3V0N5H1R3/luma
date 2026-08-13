@@ -125,11 +125,6 @@ function widget view_todo(dictionary model) {
         }
     ) ?? [])
 
-    mutable dictionary input_options = {}
-    input_options["required"] = true
-    input_options["help"] = "Press Add or Enter after typing a task."
-    input_options["error"] = Dictionary.get_or(model, "input_error", "")
-
     return GraphicalUi.column([
         # Header with a live "done / total" progress pill.
         GraphicalUi.toolbar([
@@ -151,17 +146,15 @@ function widget view_todo(dictionary model) {
         # from a global handler while a dialog or another control holds focus.
         GraphicalUi.form([
             GraphicalUi.row([
-                GraphicalUi.field(
-                    "Task",
-                    GraphicalUi.text_input(model["input"],
-                        (string text) -> on_input_change(model, text),
-                        "Add a task...",
-                        {"id": "task_input", "flex": GraphicalUi.fill()}
-                    ),
-                    input_options
+                GraphicalUi.text_input(model["input"],
+                    (string text) -> on_input_change(model, text),
+                    "Add a task...",
+                    {"id": "task_input", "flex": GraphicalUi.fill()}
                 ),
                 GraphicalUi.button("Add", () -> on_add(model), button_variant(GraphicalUi.PRIMARY))
-            ], {"align_items": "flex-end", "gap": GraphicalUi.VAR_GAP})
+            ], {"align_items": "center", "gap": GraphicalUi.VAR_GAP}),
+            GraphicalUi.when(Dictionary.get_or(model, "input_error", "") != "",
+                GraphicalUi.field_error(Dictionary.get_or(model, "input_error", "")))
         ], () -> on_add(model)),
 
         # Task list (scrollable, keyed) or a friendly empty state.
