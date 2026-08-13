@@ -1436,17 +1436,9 @@ fn zed_downloader_extracts_zip() {
     let _guard = DirGuard(dir.clone());
     std::fs::create_dir_all(&dir).unwrap();
 
-    // Build a .zip containing a single file named "luma_lsp.exe".
-    let mut zip_bytes = Vec::new();
-    {
-        use std::io::Write;
-        let mut writer = zip::ZipWriter::new(std::io::Cursor::new(&mut zip_bytes));
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
-        writer.start_file("luma_lsp.exe", options).unwrap();
-        writer.write_all(b"zip binary bytes").unwrap();
-        writer.finish().unwrap();
-    }
+    // Build a minimal .zip containing a single file named "luma_lsp.exe"
+    // using the Stored (method 0) compression for simplicity.
+    let zip_bytes = build_test_zip("luma_lsp.exe", b"zip binary bytes");
     let archive_path = format!("{dir}/archive.zip");
     std::fs::write(&archive_path, &zip_bytes).unwrap();
 
@@ -1456,6 +1448,79 @@ fn zed_downloader_extracts_zip() {
 
     let extracted = std::fs::read(format!("{dir}/luma_lsp.exe")).unwrap();
     assert_eq!(extracted, b"zip binary bytes");
+}
+
+/// Build a minimal valid ZIP archive with a single Stored entry.
+fn build_test_zip(name: &str, content: &[u8]) -> Vec<u8> {
+    let name_bytes = name.as_bytes();
+    let mut buf = Vec::new();
+
+    // Local file header (signature 0x04034b50).
+    let local_offset = buf.len() as u32;
+    buf.extend_from_slice(&0x0403_4b50u32.to_le_bytes()); // signature
+    buf.extend_from_slice(&20u16.to_le_bytes());           // version needed
+    buf.extend_from_slice(&0u16.to_le_bytes());            // flags
+    buf.extend_from_slice(&0u16.to_le_bytes());            // method: Stored
+    buf.extend_from_slice(&0u16.to_le_bytes());            // mod time
+    buf.extend_from_slice(&0u16.to_le_bytes());            // mod date
+    buf.extend_from_slice(&crc32(content).to_le_bytes());  // crc-32
+    buf.extend_from_slice(&(content.len() as u32).to_le_bytes()); // compressed
+    buf.extend_from_slice(&(content.len() as u32).to_le_bytes()); // uncompressed
+    buf.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes()); // name len
+    buf.extend_from_slice(&0u16.to_le_bytes());            // extra len
+    buf.extend_from_slice(name_bytes);
+    buf.extend_from_slice(content);
+
+    // Central directory header (signature 0x02014b50).
+    let cd_offset = buf.len() as u32;
+    buf.extend_from_slice(&0x0201_4b50u32.to_le_bytes()); // signature
+    buf.extend_from_slice(&20u16.to_le_bytes());           // version made by
+    buf.extend_from_slice(&20u16.to_le_bytes());           // version needed
+    buf.extend_from_slice(&0u16.to_le_bytes());            // flags
+    buf.extend_from_slice(&0u16.to_le_bytes());            // method: Stored
+    buf.extend_from_slice(&0u16.to_le_bytes());            // mod time
+    buf.extend_from_slice(&0u16.to_le_bytes());            // mod date
+    buf.extend_from_slice(&crc32(content).to_le_bytes());  // crc-32
+    buf.extend_from_slice(&(content.len() as u32).to_le_bytes()); // compressed
+    buf.extend_from_slice(&(content.len() as u32).to_le_bytes()); // uncompressed
+    buf.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes()); // name len
+    buf.extend_from_slice(&0u16.to_le_bytes());            // extra len
+    buf.extend_from_slice(&0u16.to_le_bytes());            // comment len
+    buf.extend_from_slice(&0u16.to_le_bytes());            // disk start
+    buf.extend_from_slice(&0u16.to_le_bytes());            // internal attrs
+    buf.extend_from_slice(&0u32.to_le_bytes());            // external attrs
+    buf.extend_from_slice(&local_offset.to_le_bytes());    // local header offset
+    buf.extend_from_slice(name_bytes);
+
+    let cd_size = (buf.len() as u32) - cd_offset;
+
+    // End of central directory (signature 0x06054b50).
+    buf.extend_from_slice(&0x0605_4b50u32.to_le_bytes()); // signature
+    buf.extend_from_slice(&0u16.to_le_bytes());            // disk number
+    buf.extend_from_slice(&0u16.to_le_bytes());            // cd start disk
+    buf.extend_from_slice(&1u16.to_le_bytes());            // entries on disk
+    buf.extend_from_slice(&1u16.to_le_bytes());            // total entries
+    buf.extend_from_slice(&cd_size.to_le_bytes());         // cd size
+    buf.extend_from_slice(&cd_offset.to_le_bytes());       // cd offset
+    buf.extend_from_slice(&0u16.to_le_bytes());            // comment len
+
+    buf
+}
+
+/// Simple CRC-32 (IEEE) for test zip construction.
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc: u32 = 0xFFFF_FFFF;
+    for &b in data {
+        crc ^= b as u32;
+        for _ in 0..8 {
+            if crc & 1 != 0 {
+                crc = (crc >> 1) ^ 0xEDB8_8320;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    !crc
 }
 
 // ── Grammar declaration: single source of truth (B06) ─────────

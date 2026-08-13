@@ -2,6 +2,7 @@ mod download;
 mod generated;
 mod labels;
 mod util;
+mod zip_extract;
 
 use crate::generated::config_defaults::{DEFAULT_DIAGNOSTICS_ON_SAVE, DEFAULT_INLAY_HINTS_ENABLED};
 use zed_extension_api::{self as zed, lsp, CodeLabel};

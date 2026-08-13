@@ -106,11 +106,7 @@ fn extract_gzip_tar(bytes: &[u8], dest_dir: &str) -> Result<(), String> {
 
 /// Extract a zip archive (pure Rust, WASM-safe).
 fn extract_zip(bytes: &[u8], dest_dir: &str) -> Result<(), String> {
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))
-        .map_err(|e| format!("Failed to open zip archive: {e}"))?;
-    archive
-        .extract(dest_dir)
-        .map_err(|e| format!("Failed to extract zip archive: {e}"))
+    crate::zip_extract::extract_zip(bytes, dest_dir)
 }
 
 // ─── Platform asset helpers ───────────────────────────────────────
