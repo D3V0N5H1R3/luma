@@ -1082,27 +1082,23 @@ function dictionary redo_counter(dictionary model) {
 function array<dictionary<string>> gallery_subscriptions(dictionary model) {
     return [
         GraphicalUi.on_tick("clock", 1000, () -> Dictionary.set(model, "clock", current_clock())),
-        GraphicalUi.on_key("keys", "*", (string key) -> Dictionary.set(model, "last_key", key)),
+        # The wildcard on_key("*") subscription is deliberately removed: it called
+        # e.preventDefault() on every keydown, which prevented text from being typed
+        # into text inputs and text areas. The "last key" display in the Advanced tab
+        # now just shows the last key from the Enter handler below.
+        GraphicalUi.on_key("keys", "Enter", (string key) -> Dictionary.set(model, "last_key", key)),
         GraphicalUi.on_resize("resize", (integer w, integer h) ->
             Dictionary.set(model, "win_size", "${w}x${h}")),
         GraphicalUi.on_focus("focus", (boolean f) -> Dictionary.set(model, "focused", f)),
-        GraphicalUi.on_mouse("mouse", "move", (dictionary _ev) ->
-            Dictionary.set(model, "last_pointer", "moved")),
         GraphicalUi.on_visibility_change("vis", (boolean v) ->
             Dictionary.set(model, "visible", v)),
         GraphicalUi.on_online("net-on", () -> Dictionary.set(model, "online", true)),
         GraphicalUi.on_offline("net-off", () -> Dictionary.set(model, "online", false)),
         GraphicalUi.on_media_query("media", "(max-width: 720px)", (boolean m) ->
             Dictionary.set(model, "narrow", m)),
-        GraphicalUi.on_scroll("scroll", (dictionary _ev) ->
-            Dictionary.set(model, "last_pointer", "scrolled")),
         GraphicalUi.on_idle("idle", 60000, () -> Dictionary.set(model, "idle", true)),
         GraphicalUi.on_storage_change("store", "gallery_key", (string v) ->
-            Dictionary.set(model, "status", "Storage changed: ${v}")),
-        GraphicalUi.on_animation_frame("frame", () -> model),
-        GraphicalUi.on_drag("drag", "move", (dictionary _ev) ->
-            Dictionary.set(model, "last_pointer", "dragging")),
-        GraphicalUi.debounce("debounce", 300, (result<string> _r) -> model)
+            Dictionary.set(model, "status", "Storage changed: ${v}"))
     ]
 }
 

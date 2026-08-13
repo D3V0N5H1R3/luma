@@ -74,10 +74,15 @@ function dictionary perform_get(dictionary<string> model) {
     pending["status"] = "loading"
     pending["response"] = ""
     pending["message"] = ""
+    # Bump the request generation so the callback can detect stale responses
+    # (e.g. if the user clicked Cancel or Clear while the request was in-flight).
+    integer gen = Result.unwrap_or(Converter.to_integer(
+        Dictionary.get_or(model, "request_gen", "0")), 0) + 1
+    pending["request_gen"] = Converter.to_string(gen)
     return GraphicalUi.with_command(
         pending,
         GraphicalUi.http_get(trimmed, (result<string> res) -> {
-            mutable dictionary<string> m = model
+            mutable dictionary<string> m = pending
             match res {
                 success(body) {
                     m["status"] = "done"

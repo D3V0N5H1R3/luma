@@ -119,7 +119,7 @@ function View gallery_form(GalleryModel model) {
             Solaris.button("Save") |> Solaris.primary() |> Solaris.on_click(GalleryMsg.Save),
             Solaris.button("Details…") |> Solaris.on_click(GalleryMsg.OpenDialog)
         ]) |> Solaris.gap(Spacing.S) |> Solaris.justify(Justify.End)
-    ])
+    ]) |> Solaris.padding(Spacing.M)
 }
 
 # ── Tab 2: read-only data — a responsive grid of cards and a table. ──
