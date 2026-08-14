@@ -2,7 +2,7 @@
     "name": "luma-language",
     "displayName": "Luma Language Support",
     "description": "Syntax highlighting, language configuration, and language server integration for the Luma programming language.",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "publisher": "D3V0N5H1R3",
     "license": "MIT",
     "repository": {
