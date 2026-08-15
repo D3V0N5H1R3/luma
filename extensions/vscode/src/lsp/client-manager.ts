@@ -185,6 +185,7 @@ export class ClientManager {
             revealOutputChannelOn: RevealOutputChannelOn.Never,
             middleware: luma_middleware,
             synchronize: {
+                configurationSection: "luma",
                 fileEvents: options.file_events,
             },
         };

@@ -19,6 +19,7 @@ using luma::json::JsonValue;
 struct ConfigSnapshot {
     bool inlay_hints_enabled{true};
     bool code_lens_enabled{true};
+    bool diagnostics_on_save{false};
     int analysis_debounce_ms{50};
     int analysis_timeout_ms{10000}; // 10 s default
 };
@@ -83,6 +84,10 @@ private:
 
         if (const auto& cl = section.get("codeLens"); cl.is_object()) {
             next.code_lens_enabled = cl.get_or<bool>("enabled", next.code_lens_enabled);
+        }
+
+        if (const auto& diag = section.get("diagnostics"); diag.is_object()) {
+            next.diagnostics_on_save = diag.get_or<bool>("onSave", next.diagnostics_on_save);
         }
 
         if (auto ms = luma::json::try_extract_field<int>(section, "analysisDebounceMs");

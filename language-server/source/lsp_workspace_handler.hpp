@@ -25,7 +25,7 @@ public:
     void handle_did_save(const JsonValue& params);
 
     // Schedule analysis via the pipeline.
-    void schedule_analysis(const std::string& uri);
+    void schedule_analysis(const std::string& uri, bool force_diagnostics = false);
 
 private:
     LspHandlerContext& ctx_;

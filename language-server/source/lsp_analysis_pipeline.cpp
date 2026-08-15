@@ -43,8 +43,13 @@ void AnalysisPipeline::stop() {
     analysis_service_ = nullptr;
 }
 
-void AnalysisPipeline::schedule_analysis(const std::string& uri) {
+void AnalysisPipeline::schedule_analysis(const std::string& uri, bool force_diagnostics) {
     with_unique_lock(state_.state_mutex, [&] { state_.pending_uris.insert(uri); });
+
+    if (force_diagnostics) {
+        const std::lock_guard lock(force_diag_mutex_);
+        force_diagnostics_uris_.insert(uri);
+    }
 
     // Signal the in-flight analysis (if any) to abort early so the
     // worker picks up the new content without waiting for the stale
@@ -300,6 +305,15 @@ bool AnalysisPipeline::publish_committed_diagnostics(const std::string& uri,
 
     if (is_background) {
         return false;
+    }
+
+    // When diagnostics_on_save is enabled, only publish if this URI was
+    // explicitly marked for forced diagnostic publication (didOpen/didSave).
+    if (state_.configuration.config().get()->diagnostics_on_save) {
+        const std::lock_guard lock(force_diag_mutex_);
+        if (force_diagnostics_uris_.erase(uri) == 0) {
+            return false;
+        }
     }
 
     try {
