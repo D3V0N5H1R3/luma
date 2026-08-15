@@ -46,7 +46,9 @@ void AnalysisPipeline::stop() {
 void AnalysisPipeline::schedule_analysis(const std::string& uri, bool force_diagnostics) {
     with_unique_lock(state_.state_mutex, [&] { state_.pending_uris.insert(uri); });
 
-    if (force_diagnostics) {
+    // Only track force-publish URIs when diagnostics_on_save is active;
+    // otherwise the set would grow unboundedly since nothing drains it.
+    if (force_diagnostics && state_.configuration.config().get()->diagnostics_on_save) {
         const std::lock_guard lock(force_diag_mutex_);
         force_diagnostics_uris_.insert(uri);
     }
