@@ -107,7 +107,6 @@ inline constexpr std::string_view k_quickfix = "quickfix";
 inline constexpr std::string_view k_refactor_rewrite = "refactor.rewrite";
 inline constexpr std::string_view k_refactor_extract_variable = "refactor.extract.variable";
 inline constexpr std::string_view k_refactor_extract_function = "refactor.extract.function";
-inline constexpr std::string_view k_refactor_inline = "refactor.inline";
 
 } // namespace code_action_kind
 
