@@ -40,7 +40,7 @@ Patterns, pitfalls, and non-obvious knowledge discovered during development sess
 - Primitives: `boolean`, `integer` (64-bit signed), `number` (IEEE-754 64-bit float), `string` (UTF-8), `none`.
 - **Critical distinction**: `integer` is for indices, array subscripts, loop counters, range bounds only. `number` is for counts, measurements, scores, IDs, and all other numeric values. Getting this wrong causes type errors.
 - Type promotion: `integer` + `number` → `number`; `integer` widens to `number` implicitly.
-- Collections: `array<T>`, `dictionary<V>` (string keys), `set<T>`, `queue<T>`, `stack<T>`, `binarytree<T>`.
+- Collections: `array<T>`, `dictionary<V>` (string keys), `set<T>`, `queue<T>`, `stack<T>`.
 - Wrappers: `optional<T>`, `result<T>` (with optional second type param for error type), `reference<T>`, `channel<T>`, `task<T>`.
 - Advanced: tuples (2-4 elements), choice types (ADTs with generics), records (with optional `private` fields), interfaces (structural satisfaction), type aliases (fully transparent).
 - Match exhaustiveness is enforced: booleans need both cases, choice types need all variants, results need success/failure. Others require `else`.

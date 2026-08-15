@@ -572,7 +572,6 @@ module.exports = grammar({
                 "socket",
                 "queue",
                 "stack",
-                "binary_tree",
                 "key_value_store",
                 "set",
                 "widget",

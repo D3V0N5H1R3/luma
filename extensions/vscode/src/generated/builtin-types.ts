@@ -19,7 +19,6 @@ export const LUMA_BUILTIN_TYPE_SET = new Set([
     "socket",
     "queue",
     "stack",
-    "binary_tree",
     "key_value_store",
     "set",
     "widget",
