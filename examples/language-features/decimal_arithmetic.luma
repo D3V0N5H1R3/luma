@@ -1,0 +1,86 @@
+# ═══════════════════════════════════════════════════════════
+# Decimal Arithmetic
+#
+# Demonstrates the Decimal module — arbitrary-precision
+# arithmetic that avoids floating-point rounding errors.
+# Use case: financial calculations, currency, and anywhere
+# exact decimal fractions matter.
+# ═══════════════════════════════════════════════════════════
+
+# Helper — parse a decimal string or stop with an error.
+function decimal dec(string text) {
+    return Result.unwrap(Decimal.from_string(text))
+}
+
+@main
+function void main() {
+    # ── The classic 0.1 + 0.2 problem ──
+    print("=== Precision ===")
+
+    number float_sum = 0.1 + 0.2
+    print("number: 0.1 + 0.2 = ${float_sum}")
+
+    decimal exact_sum = Decimal.add(dec("0.1"), dec("0.2"))
+    print("decimal: 0.1 + 0.2 = ${Decimal.to_string(exact_sum)}")
+
+    # ── Shopping cart total ──
+    print("\n=== Shopping Cart ===")
+
+    decimal item_a = dec("19.99")
+    decimal item_b = dec("5.49")
+    decimal item_c = dec("3.00")
+    decimal tax_rate = dec("0.08")
+
+    decimal subtotal = Decimal.add(Decimal.add(item_a, item_b), item_c)
+    decimal tax = Decimal.round(Decimal.multiply(subtotal, tax_rate), 2, "half_up")
+    decimal total = Decimal.add(subtotal, tax)
+
+    print("Subtotal: $$${Decimal.to_string(subtotal)}")
+    print("Tax (8%): $$${Decimal.to_string(tax)}")
+    print("Total:    $$${Decimal.to_string(total)}")
+
+    # ── Division with controlled precision ──
+    print("\n=== Division ===")
+
+    result<decimal> third = Decimal.divide(dec("1"), dec("3"), 10)
+    print("1 / 3 (10 places): ${Decimal.to_string(Result.unwrap(third))}")
+
+    result<decimal> div_by_zero = Decimal.divide(dec("5"), dec("0"), 2)
+    print("5 / 0: ${Result.is_failure(div_by_zero)}")
+
+    # ── Rounding modes ──
+    print("\n=== Rounding ===")
+
+    decimal value = dec("2.345")
+
+    print("half_up:   ${Decimal.to_string(Decimal.round(value, 2, "half_up"))}")
+    print("half_even: ${Decimal.to_string(Decimal.round(value, 2, "half_even"))}")
+    print("floor:     ${Decimal.to_string(Decimal.round(value, 2, "floor"))}")
+    print("ceiling:   ${Decimal.to_string(Decimal.round(value, 2, "ceiling"))}")
+
+    # ── Comparison ──
+    print("\n=== Comparison ===")
+
+    # Trailing zeros don't matter — 1.5 == 1.50.
+    decimal a = dec("1.50")
+    decimal b = dec("1.5")
+    print("1.50 == 1.5? ${Decimal.equals(a, b)}")
+
+    integer cmp = Decimal.compare(dec("9.99"), dec("10.00"))
+    print("9.99 vs 10.00: ${cmp}")
+}
+
+# ── Tests ──
+
+@test
+function void test_decimal_precision() {
+    decimal sum = Decimal.add(dec("0.1"), dec("0.2"))
+    assert(Decimal.equals(sum, dec("0.3")), "0.1 + 0.2 must equal 0.3 exactly")
+}
+
+@test
+function void test_decimal_rounding() {
+    decimal v = dec("2.345")
+    assert(Decimal.to_string(Decimal.round(v, 2, "half_up")) == "2.35")
+    assert(Decimal.to_string(Decimal.round(v, 2, "floor")) == "2.34")
+}
