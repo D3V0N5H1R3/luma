@@ -258,6 +258,30 @@ echo 'Content-Length: 57\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"initialize","p
 
 The server should respond with a JSON-RPC message containing its capabilities.
 
+### Project Configuration (`luma.json`)
+
+The language server reads a `luma.json` file from the workspace root for per-project settings. Create one with `luma init`, or write it manually. All fields are optional — omitted fields use their defaults.
+
+```json
+{
+    "inlayHints": { "enabled": true },
+    "codeLens": { "enabled": true },
+    "diagnostics": { "onSave": false },
+    "analysisDebounceMs": 50,
+    "analysisTimeoutMs": 10000
+}
+```
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `inlayHints.enabled` | `boolean` | `true` | Show inline type annotations and parameter name hints. |
+| `codeLens.enabled` | `boolean` | `true` | Show reference counts and test annotations above functions. |
+| `diagnostics.onSave` | `boolean` | `false` | When `true`, diagnostics are only published on file open and save — not while typing. Analysis still runs on every keystroke (hover and completion stay fresh), but red/yellow squiggles update only on save. Useful on large files where live diagnostics are distracting. |
+| `analysisDebounceMs` | `integer` | `50` | Milliseconds to wait after the last keystroke before starting analysis. Range: 0–5000. Increase on slow machines to reduce CPU usage during rapid typing. |
+| `analysisTimeoutMs` | `integer` | `10000` | Maximum time (ms) for a single analysis pass before it is cancelled. Range: 100–60000. Increase for very large files that time out. |
+
+Settings can also be configured per-editor (VS Code settings UI or Zed's `settings.json`). The editor sends changes to the server via `workspace/didChangeConfiguration`; a `luma.json` in the workspace root takes priority for project-wide consistency.
+
 ---
 
 ## 13 — Editor Integration
