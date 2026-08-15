@@ -115,7 +115,7 @@ inline constexpr ModuleEntry kModules[] = {
     // Registered under the "GraphicalUi" name: this is the low-level web-view engine
     // that the built-in Solaris prelude (gui_prelude) reconciles onto.  Uses
     // define_native directly instead of ModuleBuilder — see graphicalui_module.hpp.
-    {"GraphicalUi", register_graphicalui_ns, nullptr, false, false},
+    {"GraphicalUi", nullptr, register_graphicalui_ns, false, true},
     {"Json", register_json_ns, nullptr, false, false},
     {"LinearAlgebra", register_linearalgebra_ns, nullptr, false, false},
     {"Math", register_math_ns, nullptr, false, false},

@@ -21,11 +21,11 @@ void register_or_defer_command_callback(std::shared_ptr<DictionaryValue>& w, con
 }
 
 // Aggregator -- delegates to per-category registration files.
-void register_graphicalui_widgets(const EnvPtr& env) {
+void register_graphicalui_widgets(const EnvPtr& env, bool sandbox) {
     register_basic_widgets(env);
     register_layout_widgets(env);
     register_chart_widgets(env);
-    register_commands_and_subscriptions(env);
+    register_commands_and_subscriptions(env, sandbox);
     register_advanced_widgets(env);
 }
 

@@ -145,7 +145,7 @@ void run_gui_headless(gui_detail::AppState& state, const gui_detail::AppConfig& 
 
 } // namespace
 
-void register_graphicalui_ns(const EnvPtr& env) {
+void register_graphicalui_ns(const EnvPtr& env, bool sandbox) {
     using namespace gui_detail;
 
     // ─── Constants ───────────────────────────────────────
@@ -154,7 +154,7 @@ void register_graphicalui_ns(const EnvPtr& env) {
 
     // ─── Register all widgets, commands, subscriptions ───
 
-    register_graphicalui_widgets(env);
+    register_graphicalui_widgets(env, sandbox);
 
     // ─── Headless interaction-testing API (GraphicalUi.test_*) ───
 
@@ -596,7 +596,7 @@ namespace {
 
 } // namespace
 
-void register_graphicalui_ns(const EnvPtr& env) {
+void register_graphicalui_ns(const EnvPtr& env, bool /*sandbox*/) {
     // ─── Constants ───────────────────────────────────────
     gui_detail::register_graphicalui_constants(env);
 

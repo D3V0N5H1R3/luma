@@ -96,7 +96,7 @@ static void register_subscription(const EnvPtr& env, const char* name, const cha
 // Commands (side effects) and subscriptions (lifecycle events)
 // ═══════════════════════════════════════════════════════════
 
-void register_commands_and_subscriptions(const EnvPtr& env) {
+void register_commands_and_subscriptions(const EnvPtr& env, bool sandbox) {
     // ─── Commands (side effects) ─────────────────────────
 
     define_native(env, "GraphicalUi.none",
@@ -115,12 +115,15 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
                       return Value{std::move(w)};
                   });
 
-    register_http_command(env, "GraphicalUi.http_get", cmd::http_get, false);
-    register_http_command(env, "GraphicalUi.http_post", cmd::http_post, true);
+    // HTTP commands are disabled in sandbox mode (network access).
+    if (!sandbox) {
+        register_http_command(env, "GraphicalUi.http_get", cmd::http_get, false);
+        register_http_command(env, "GraphicalUi.http_post", cmd::http_post, true);
 
-    // Typed variants: deliver result<GraphicalUi.HttpResponse> (status/headers/body).
-    register_http_command(env, "GraphicalUi.http_get_full", cmd::http_get_full, false);
-    register_http_command(env, "GraphicalUi.http_post_full", cmd::http_post_full, true);
+        // Typed variants: deliver result<GraphicalUi.HttpResponse> (status/headers/body).
+        register_http_command(env, "GraphicalUi.http_get_full", cmd::http_get_full, false);
+        register_http_command(env, "GraphicalUi.http_post_full", cmd::http_post_full, true);
+    }
 
     define_native(env, "GraphicalUi.delay",
                   [](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -135,25 +138,28 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
                       return Value{std::move(w)};
                   });
 
-    define_native(env, "GraphicalUi.write_clipboard",
-                  [](std::span<const Value> args, SourceLocation loc) -> Value {
-                      expect_args("GraphicalUi.write_clipboard", args, 1, loc);
-                      auto text = expect_string(args[0], "GraphicalUi.write_clipboard", loc);
-                      auto w = make_command_dict(cmd::write_clipboard);
-                      w->set("text", Value{text});
-                      return Value{std::move(w)};
-                  });
+    // Clipboard access is disabled in sandbox mode.
+    if (!sandbox) {
+        define_native(env, "GraphicalUi.write_clipboard",
+                      [](std::span<const Value> args, SourceLocation loc) -> Value {
+                          expect_args("GraphicalUi.write_clipboard", args, 1, loc);
+                          auto text = expect_string(args[0], "GraphicalUi.write_clipboard", loc);
+                          auto w = make_command_dict(cmd::write_clipboard);
+                          w->set("text", Value{text});
+                          return Value{std::move(w)};
+                      });
 
-    // GraphicalUi.read_clipboard(callback) -> command
-    define_native(env, "GraphicalUi.read_clipboard",
-                  [](std::span<const Value> args, SourceLocation loc) -> Value {
-                      expect_args("GraphicalUi.read_clipboard", args, 1, loc);
-                      auto w = make_command_dict(cmd::read_clipboard);
+        // GraphicalUi.read_clipboard(callback) -> command
+        define_native(env, "GraphicalUi.read_clipboard",
+                      [](std::span<const Value> args, SourceLocation loc) -> Value {
+                          expect_args("GraphicalUi.read_clipboard", args, 1, loc);
+                          auto w = make_command_dict(cmd::read_clipboard);
 
-                      register_or_defer_command_callback(w, args[0]);
+                          register_or_defer_command_callback(w, args[0]);
 
-                      return Value{std::move(w)};
-                  });
+                          return Value{std::move(w)};
+                      });
+    }
 
     // GraphicalUi.get_local_storage(key, callback) -> command
     define_native(env, "GraphicalUi.get_local_storage",
@@ -232,17 +238,21 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
                       return Value{std::move(w)};
                   });
 
-    // GraphicalUi.download_file(url, filename) -> command
-    define_native(env, "GraphicalUi.download_file",
-                  [](std::span<const Value> args, SourceLocation loc) -> Value {
-                      expect_args("GraphicalUi.download_file", args, 2, loc);
-                      auto url = expect_string(args[0], "GraphicalUi.download_file", loc);
-                      auto filename = expect_string(args[1], "GraphicalUi.download_file", loc);
-                      auto w = make_command_dict(cmd::download_file);
-                      w->set("url", Value{url});
-                      w->set("filename", Value{filename});
-                      return Value{std::move(w)};
-                  });
+    // download_file, open_url, and remaining HTTP methods are disabled in sandbox mode.
+    if (!sandbox) {
+        // GraphicalUi.download_file(url, filename) -> command
+        define_native(env, "GraphicalUi.download_file",
+                      [](std::span<const Value> args, SourceLocation loc) -> Value {
+                          expect_args("GraphicalUi.download_file", args, 2, loc);
+                          auto url = expect_string(args[0], "GraphicalUi.download_file", loc);
+                          auto filename =
+                              expect_string(args[1], "GraphicalUi.download_file", loc);
+                          auto w = make_command_dict(cmd::download_file);
+                          w->set("url", Value{url});
+                          w->set("filename", Value{filename});
+                          return Value{std::move(w)};
+                      });
+    }
 
     // GraphicalUi.notify(title, body?, icon?) -> command
     define_native(env, "GraphicalUi.notify",
@@ -284,19 +294,21 @@ void register_commands_and_subscriptions(const EnvPtr& env) {
                       return Value{std::move(w)};
                   });
 
-    register_http_command(env, "GraphicalUi.http_put", cmd::http_put, true);
-    register_http_command(env, "GraphicalUi.http_delete", cmd::http_delete, false);
-    register_http_command(env, "GraphicalUi.http_patch", cmd::http_patch, true);
+    if (!sandbox) {
+        register_http_command(env, "GraphicalUi.http_put", cmd::http_put, true);
+        register_http_command(env, "GraphicalUi.http_delete", cmd::http_delete, false);
+        register_http_command(env, "GraphicalUi.http_patch", cmd::http_patch, true);
 
-    // GraphicalUi.open_url(url) -> command
-    define_native(env, "GraphicalUi.open_url",
-                  [](std::span<const Value> args, SourceLocation loc) -> Value {
-                      expect_args("GraphicalUi.open_url", args, 1, loc);
-                      auto url = expect_string(args[0], "GraphicalUi.open_url", loc);
-                      auto w = make_command_dict(cmd::open_url);
-                      w->set("url", Value{url});
-                      return Value{std::move(w)};
-                  });
+        // GraphicalUi.open_url(url) -> command
+        define_native(env, "GraphicalUi.open_url",
+                      [](std::span<const Value> args, SourceLocation loc) -> Value {
+                          expect_args("GraphicalUi.open_url", args, 1, loc);
+                          auto url = expect_string(args[0], "GraphicalUi.open_url", loc);
+                          auto w = make_command_dict(cmd::open_url);
+                          w->set("url", Value{url});
+                          return Value{std::move(w)};
+                      });
+    }
 
     // GraphicalUi.set_title(title) -> command
     define_native(env, "GraphicalUi.set_title",
