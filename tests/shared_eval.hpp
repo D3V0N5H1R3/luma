@@ -151,11 +151,6 @@ enum class EvalMode {
     return v.is_result() && v.as_result()->is_success;
 }
 
-// Check whether a Value holds a failure result.
-[[nodiscard]] inline bool is_failure_result(const Value& v) {
-    return v.is_result() && !v.as_result()->is_success;
-}
-
 // ─── Value assertion macros ──────────────────────────────────────
 
 // Assert that a value is a successful result.
@@ -167,15 +162,6 @@ enum class EvalMode {
 #define ASSERT_RESULT_FAILURE(value)                                                               \
     ASSERT_TRUE((value).is_result());                                                              \
     ASSERT_TRUE(!(value).as_result()->is_success)
-
-// Extract the inner value from a successful result.
-// Throws if the value is not a success result.
-[[nodiscard]] inline Value unwrap_result(const Value& v) {
-    if (!is_success_result(v)) {
-        throw std::runtime_error{"unwrap_result called on non-success value"};
-    }
-    return *v.as_result()->owned_inner;
-}
 
 // Assert that evaluating source code yields a successful result whose
 // inner value equals the expected integer.
