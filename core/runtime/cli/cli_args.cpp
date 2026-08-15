@@ -133,9 +133,9 @@ std::optional<ParsedArgs> parse_args(int argc, char* argv[]) {
             continue;
         }
 
-        if (arg == "pkg") {
+        if (arg == "init" || arg == "pkg") {
             args.command = Command::Pkg;
-            // Remaining args belong to the pkg subcommand.
+            // Remaining args belong to the init subcommand.
             collecting_args = true;
         } else if (arg.starts_with('-')) {
             std::cerr << "error: unknown option '" << arg << "'";

@@ -25,7 +25,7 @@ enum class Command {
     Eval,    ///< Evaluate a program read from standard input.
     Test,    ///< Run test annotations in a file.
     Check,   ///< Type-check without running.
-    Pkg,     ///< Package management subcommand.
+    Pkg,     ///< Project initialisation subcommand (luma init).
 };
 
 /// Describes a single CLI flag with its long form, optional short form,

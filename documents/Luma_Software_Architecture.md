@@ -105,7 +105,7 @@ The CLI module selects one of several modes based on command-line arguments. Eac
 | Strict check    | `luma --check --strict <file>`  | Lexer → Parser → Include Resolver → Type Checker → Linter (warnings are errors)                 |
 | Test            | `luma --test, -t <file.luma>`   | Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM Test Runner           |
 | Sandbox         | `luma --box, -b <file.luma>`    | Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM (OS modules disabled) |
-| Package init    | `luma pkg init`                 | Creates a `luma.json` manifest in the current directory                                         |
+| Project init    | `luma init`                     | Creates a `luma.json` project configuration in the current directory                            |
 | REPL            | `luma`                          | Loop: Lexer → Parser → Compiler → VM (`:file` adds Include Resolver)                            |
 | REPL (explicit) | `luma --repl, -r`               | Loop: Lexer → Parser → Compiler → VM (`:file` adds Include Resolver)                            |
 | Eval (stdin)    | `luma --eval, -e`               | Stdin → Lexer → Parser → Type Checker → Compiler → VM (no `@main` required)                     |

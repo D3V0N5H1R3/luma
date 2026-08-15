@@ -729,14 +729,13 @@ static void test_run_options_to_compiler_profile_conversion() {
     ASSERT_EQ(profile.optimize_level, OptimizationLevel::Peephole);
 }
 
-// ─── run_pkg_command ───
+// ─── run_pkg_command (luma init) ───
 
 static void test_run_pkg_init_creates_manifest() {
     const ScopedTempCwd temp_cwd;
 
     ParsedArgs args;
     args.command = Command::Pkg;
-    args.program_args = {"init"};
 
     const CapturedStreams captured{std::cout, std::cerr};
     const int code = run_pkg_command(args);
@@ -752,7 +751,6 @@ static void test_run_pkg_init_fails_when_manifest_exists() {
 
     ParsedArgs args;
     args.command = Command::Pkg;
-    args.program_args = {"init"};
 
     const CapturedStreams captured{std::cout, std::cerr};
 
@@ -766,21 +764,6 @@ static void test_run_pkg_help_succeeds() {
     explicit_help.command = Command::Pkg;
     explicit_help.program_args = {"help"};
     ASSERT_EQ(run_pkg_command(explicit_help), exit_code::success);
-
-    // No subcommand defaults to help.
-    ParsedArgs no_subcommand;
-    no_subcommand.command = Command::Pkg;
-    ASSERT_EQ(run_pkg_command(no_subcommand), exit_code::success);
-}
-
-static void test_run_pkg_unknown_subcommand_fails() {
-    ParsedArgs args;
-    args.command = Command::Pkg;
-    args.program_args = {"frobnicate"};
-
-    const CapturedStreams captured{std::cout, std::cerr};
-
-    ASSERT_EQ(run_pkg_command(args), exit_code::usage_error);
 }
 
 int main() {
@@ -894,11 +877,10 @@ int main() {
     RUN(test_parsed_args_to_run_options_optimize_full);
     RUN(test_run_options_to_compiler_profile_conversion);
 
-    // run_pkg_command.
+    // run_pkg_command (luma init).
     RUN(test_run_pkg_init_creates_manifest);
     RUN(test_run_pkg_init_fails_when_manifest_exists);
     RUN(test_run_pkg_help_succeeds);
-    RUN(test_run_pkg_unknown_subcommand_fails);
 
     return SUMMARY();
 }
