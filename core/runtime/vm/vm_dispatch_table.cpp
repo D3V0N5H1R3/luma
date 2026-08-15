@@ -72,12 +72,6 @@ namespace luma {
     X(Not,             op_not)                      \
     X(And,             op_and)                      \
     X(Or,              op_or)                       \
-    X(BitwiseAnd,      op_bitwise_and)              \
-    X(BitwiseOr,       op_bitwise_or)               \
-    X(BitwiseXor,      op_bitwise_xor)              \
-    X(BitwiseNot,      op_bitwise_not)              \
-    X(ShiftLeft,       op_shift_left)               \
-    X(ShiftRight,      op_shift_right)              \
     X(Concatenate,     op_concatenate)              \
     X(Interpolate,     op_interpolate)              \
     X(MakeArray,       op_make_array)               \
@@ -399,35 +393,6 @@ void VM::op_and() {
 void VM::op_or() {
     auto [a, b] = pop_binary_ref();
     a = Value{a.is_truthy() || b.is_truthy()};
-}
-
-// ─── Bitwise ──────────────────────────────────────────────────────────────────
-
-void VM::op_bitwise_and() {
-    apply_integer_binary_op("Bitwise AND", [](std::int64_t x, std::int64_t y) { return x & y; });
-}
-
-void VM::op_bitwise_or() {
-    apply_integer_binary_op("Bitwise OR", [](std::int64_t x, std::int64_t y) { return x | y; });
-}
-
-void VM::op_bitwise_xor() {
-    apply_integer_binary_op("Bitwise XOR", [](std::int64_t x, std::int64_t y) { return x ^ y; });
-}
-
-void VM::op_bitwise_not() {
-    validate_stack_depth(1, "BitwiseNot");
-    auto& top = *(stack_.top - 1);
-    validate_integer_operand(top, "Bitwise NOT");
-    top = Value{~top.as_integer()};
-}
-
-void VM::op_shift_left() {
-    apply_shift_op("Shift left", [](std::int64_t x, std::int64_t y) { return x << y; });
-}
-
-void VM::op_shift_right() {
-    apply_shift_op("Shift right", [](std::int64_t x, std::int64_t y) { return x >> y; });
 }
 
 // ─── Strings ──────────────────────────────────────────────────────────────────

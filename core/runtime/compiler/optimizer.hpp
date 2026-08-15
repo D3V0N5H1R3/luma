@@ -63,7 +63,7 @@ private:
 
     // ─── Unary constant folding ───
 
-    // Fold Constant(a) + UnaryOp → Constant(result) (Negate, Not, BitwiseNot).
+    // Fold Constant(a) + UnaryOp → Constant(result) (Negate, Not).
     [[nodiscard]] std::size_t unary_fold_pass(Chunk& chunk) const;
 
     // ─── Comparison constant folding ───

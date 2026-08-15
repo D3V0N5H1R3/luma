@@ -987,7 +987,6 @@ CallFrame {
 | Arithmetic      | 9     | `Add`, `Subtract`, `Multiply`, `Divide`, `IntDivide`, `Modulo`, `Negate`, `Increment`, `Decrement`        |
 | Comparison      | 6     | `Equal`, `NotEqual`, `Less`, `LessEqual`, `Greater`, `GreaterEqual`                                       |
 | Logical         | 3     | `Not`, `And`, `Or`                                                                                        |
-| Bitwise         | 6     | `BitwiseAnd`, `BitwiseOr`, `BitwiseXor`, `BitwiseNot`, `ShiftLeft`, `ShiftRight`                          |
 | Strings         | 2     | `Concatenate`, `Interpolate`                                                                              |
 | Collections     | 8     | `MakeArray`, `MakeDict`, `MakeTuple`, `MakeRange`, `MakeRangeInc`, `IndexGet`, `IndexSet`, `IndexGetOpt`  |
 | Records         | 5     | `MakeRecord`, `GetField`, `SetField`, `GetFieldOpt`, `RecordWith`                                         |
@@ -1622,17 +1621,6 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 | `Not`  | —        | `(a → bool)`   | Logical negation via `is_truthy()`.                                             |
 | `And`  | —        | `(a b → bool)` | Logical AND. The compiler also uses `JumpIfFalse` for short-circuit evaluation. |
 | `Or`   | —        | `(a b → bool)` | Logical OR. The compiler also uses `JumpIfTrue` for short-circuit evaluation.   |
-
-#### Bitwise
-
-| Opcode       | Operands | Stack Effect  | Description              |
-| ------------ | -------- | ------------- | ------------------------ |
-| `BitwiseAnd` | —        | `(a b → int)` | Bitwise AND on integers. |
-| `BitwiseOr`  | —        | `(a b → int)` | Bitwise OR on integers.  |
-| `BitwiseXor` | —        | `(a b → int)` | Bitwise XOR on integers. |
-| `BitwiseNot` | —        | `(a → int)`   | Bitwise NOT on integer.  |
-| `ShiftLeft`  | —        | `(a b → int)` | Left shift on integers.  |
-| `ShiftRight` | —        | `(a b → int)` | Right shift on integers. |
 
 #### Strings
 

@@ -25,11 +25,6 @@ struct VMConstants {
     static constexpr int k_byte_shift_16{16};
     static constexpr int k_byte_shift_24{24};
 
-    // ─── Shift operation limits ─────────────────────────────────────────
-    // Maximum valid shift amount for ShiftLeft / ShiftRight opcodes.
-    // Luma integers are 64-bit, so valid shifts are 0..63.
-    static constexpr std::int64_t k_max_shift_amount{63};
-
     // ─── Stack monitoring ───────────────────────────────────────────────
     // Fraction of stack capacity at which a usage warning is emitted.
     static constexpr double k_stack_warning_threshold{0.9};

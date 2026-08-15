@@ -1,12 +1,11 @@
-// vm_dispatch_arithmetic.cpp — Arithmetic, comparison, logical, and bitwise
+// vm_dispatch_arithmetic.cpp — Arithmetic, comparison, and logical
 // opcode handler methods.
 //
 // Extracted from vm_helpers.cpp as part of the VM dispatch split.
 // Contains:
 //   - numeric_binary_op, compare_values
 //   - handle_divide, handle_int_divide, handle_modulo
-//   - validate_integer_operands, validate_integer_operand
-//   - validate_shift_amount, validate_nonzero_divisor
+//   - validate_nonzero_divisor
 //   - handle_concatenate
 
 #include <cmath>
@@ -335,28 +334,6 @@ void VM::handle_modulo() {
         // `number` operands use floating-point remainder (std::fmod), matching
         // the type checker and language reference, which accept `number % number`.
         a_ref = Value{std::fmod(a_ref.to_numeric(), b.to_numeric())};
-    }
-}
-
-void VM::validate_integer_operands(const Value& a, const Value& b, std::string_view op_name) const {
-    if (!a.is_integer() || !b.is_integer()) [[unlikely]] {
-        runtime_error(vm_errors::requires_integer_operands(op_name, a.display_type_name(),
-                                                           b.display_type_name()),
-                      vm_errors::hint_bitwise_integers_only);
-    }
-}
-
-void VM::validate_integer_operand(const Value& v, std::string_view op_name) const {
-    if (!v.is_integer()) [[unlikely]] {
-        runtime_error(vm_errors::requires_integer_operand(op_name, v.display_type_name()),
-                      vm_errors::hint_bitwise_integers_only);
-    }
-}
-
-void VM::validate_shift_amount(std::int64_t shift) const {
-    if (shift < 0 || shift > VMConstants::k_max_shift_amount) [[unlikely]] {
-        runtime_error(vm_errors::shift_out_of_range(shift, VMConstants::k_max_shift_amount),
-                      vm_errors::hint_shift_range(VMConstants::k_max_shift_amount));
     }
 }
 
