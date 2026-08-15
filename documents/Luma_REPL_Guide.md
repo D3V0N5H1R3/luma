@@ -61,7 +61,7 @@ luma> 2 + 3
 => 5
 luma> "hello" + " " + "world"
 => "hello world"
-luma> Math.sqrt(144.0)
+luma> Math.square_root(144.0)
 => 12
 luma> true && !false
 => true
@@ -159,15 +159,15 @@ Pipes are especially useful for chaining standard library calls interactively.
 All standard library modules are available in the REPL. Call module functions directly:
 
 ```text
-luma> Math.abs(-42.0)
+luma> Math.absolute(-42.0)
 => 42
 luma> String.split("a,b,c", ",")
 => ["a", "b", "c"]
 luma> Array.length([10, 20, 30])
 => 3
-luma> Random.integer(1, 100)
+luma> Random.generate_integer(1, 100)
 => 47
-luma> DateTime.now()
+luma> DateTime.now_iso_string()
 => "2025-01-15T10:30:00Z"
 ```
 

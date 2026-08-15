@@ -520,7 +520,7 @@ from the active theme, so custom themes and dark mode are **one builder chain aw
 
 ```luma
 Theme my_theme = Theme.light()
-    |> Theme.accent(Color.hex("#4F46E5"))
+    |> Theme.accent(Solaris.hex("#4F46E5"))
     |> Theme.corner_radius(Radius.Medium)
     |> Theme.font("Inter")
 ```
