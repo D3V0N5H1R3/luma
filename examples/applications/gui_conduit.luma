@@ -34,8 +34,9 @@ function dictionary<string> brand_style() {
     return {
         "font_size": "1.5rem",
         "font_weight": "700",
-        "color": GraphicalUi.VAR_PRIMARY,
-        "text_decoration": "none"
+        "color": "#5CB85C",
+        "text_decoration": "none",
+        "font_family": "'Titillium Web', sans-serif"
     }
 }
 
@@ -43,7 +44,7 @@ function dictionary<string> nav_style(boolean active) {
     if active {
         return {
             "padding": "6px 10px",
-            "color": GraphicalUi.VAR_PRIMARY,
+            "color": "#5CB85C",
             "font_weight": "600",
             "text_decoration": "none"
         }
@@ -66,10 +67,10 @@ function dictionary<string> card_style() {
 
 function dictionary<string> banner_style() {
     return {
-        "background_color": GraphicalUi.VAR_PRIMARY,
-        "color": "var(--gui-on-accent)",
-        "padding": "24px",
-        "border_radius": GraphicalUi.VAR_RADIUS,
+        "background_color": "#5CB85C",
+        "color": "#ffffff",
+        "padding": "32px 24px",
+        "text_align": "center",
         "align_items": "center",
         "gap": "4px"
     }
@@ -86,7 +87,7 @@ function dictionary<string> title_link_style() {
 
 function dictionary<string> author_link_style() {
     return {
-        "color": GraphicalUi.VAR_PRIMARY,
+        "color": "#5CB85C",
         "text_decoration": "none",
         "font_weight": "600"
     }

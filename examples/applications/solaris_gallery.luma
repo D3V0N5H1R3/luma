@@ -40,6 +40,7 @@ record GalleryModel {
     integer active_tab = 0,
     boolean show_dialog = false,
     boolean saved = false,
+    integer saved_at = 0,
     integer ticks = 0
 }
 
@@ -60,10 +61,18 @@ function any gallery_update(GalleryModel model, GalleryMsg msg) {
         case GalleryMsg.CloseDialog { model with { show_dialog = false } }
         case GalleryMsg.Save {
             Solaris.with_command(
-                model with { saved = true },
+                model with { saved = true, saved_at = model.ticks },
                 Solaris.notify("Saved", "Your preferences were saved."))
         }
-        case GalleryMsg.Tick { model with { ticks = model.ticks + 1 } }
+        case GalleryMsg.Tick {
+            # Auto-dismiss the toast after 5 seconds.
+            boolean dismiss = model.saved && (model.ticks + 1 - model.saved_at) >= 5
+            if dismiss {
+                model with { ticks = model.ticks + 1, saved = false }
+            } else {
+                model with { ticks = model.ticks + 1 }
+            }
+        }
     }
 }
 
@@ -164,7 +173,7 @@ function View gallery_data(GalleryModel model) {
         Solaris.line_chart(
             ["Wk 1", "Wk 2", "Wk 3", "Wk 4"],
             [20, 34, 28, 41]) |> Solaris.height(Length.Fixed(200.0))
-    ]) |> Solaris.gap(Spacing.L)
+    ]) |> Solaris.gap(Spacing.L) |> Solaris.padding(Spacing.M)
 }
 
 # ── Tab 3: feedback and layered content — badges, a spinner, an icon,
@@ -190,7 +199,7 @@ function View gallery_feedback(GalleryModel model) {
         ]),
         Solaris.menu("Actions", ["Refresh", "Export", "Sign out"])
             |> Solaris.on_select((string value) -> GalleryMsg.SetName(value))
-    ]) |> Solaris.gap(Spacing.L)
+    ]) |> Solaris.gap(Spacing.L) |> Solaris.padding(Spacing.M)
 }
 
 # ── The whole screen: an app shell (sidebar + content), tabs switching
@@ -217,7 +226,7 @@ function View gallery_view(GalleryModel model) {
         ]) |> Solaris.padding(Spacing.L) |> Solaris.gap(Spacing.M))
 }
 
-# ── A transient toast, shown only after a successful save. ──
+# ── A transient toast, shown only while save feedback is active. ──
 function View gallery_save_toast(GalleryModel model) {
     return match model.saved {
         case true { Solaris.toast("Preferences saved") }
@@ -225,18 +234,15 @@ function View gallery_save_toast(GalleryModel model) {
     }
 }
 
-# ── A modal dialog with an icon-only close button (note the accessible
-# `label`, which Solaris emits as an ARIA name). ──
+# ── A modal dialog — the title bar already includes a close button via
+# on_close, so no extra dismiss button is needed in the content. ──
 function View gallery_dialog(GalleryModel model) {
     return Solaris.dialog("Profile details", model.show_dialog, [
         Solaris.text("Name: ${model.name}"),
         Solaris.text("Bio: ${model.bio}"),
-        Solaris.row([
-            Solaris.button("✕")
-                |> Solaris.label("Close dialog")
-                |> Solaris.key("close")
-                |> Solaris.on_click(GalleryMsg.CloseDialog)
-        ]) |> Solaris.justify(Justify.End)
+        Solaris.button("Close")
+            |> Solaris.key("close")
+            |> Solaris.on_click(GalleryMsg.CloseDialog)
     ]) |> Solaris.on_close(GalleryMsg.CloseDialog)
 }
 

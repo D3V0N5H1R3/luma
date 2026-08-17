@@ -54,11 +54,11 @@ function widget view_counter(number count) {
             "text_align": "center"
         }),
 
-        # Primary controls: increment is emphasised, decrement stays quiet.
+        # Primary controls: both increment and decrement are emphasised.
         GraphicalUi.row([
             GraphicalUi.accessible(
                 GraphicalUi.button("− Decrement", () -> count - 1,
-                    button_style(GraphicalUi.GHOST, "140px")),
+                    button_style(GraphicalUi.PRIMARY, "140px")),
                 { "aria_label": "Decrement counter by one" }
             ),
             GraphicalUi.accessible(
@@ -75,7 +75,7 @@ function widget view_counter(number count) {
                     return GraphicalUi.with_command(count,
                         GraphicalUi.random(0.0, 100.0,
                             (number n) -> Result.unwrap_or(Converter.to_integer(n), 0)))
-                }, button_style(GraphicalUi.GHOST, "140px")),
+                }, button_style(GraphicalUi.SECONDARY, "140px")),
                 { "aria_label": "Set counter to a random value" }
             ),
             GraphicalUi.button("Reset", () -> 0, button_style(GraphicalUi.SECONDARY, "100px"))
@@ -105,7 +105,7 @@ function dictionary counter_config() {
     mutable dictionary config = {"_": "gui_config"}
     config["title"] = "Luma Counter"
     config["width"] = 400
-    config["height"] = 300
+    config["height"] = 560
     config["fullscreen"] = false
     config["model"] = 0
     config["view"] = view_counter

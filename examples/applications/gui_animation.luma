@@ -5,9 +5,6 @@
 
 function widget view_animation(dictionary<string> model) {
     boolean expanded = model["expanded"] == "true"
-    string color = model["color"]
-    string date = model["date"]
-    string time = model["time"]
 
     return GraphicalUi.column([
         GraphicalUi.toolbar([
@@ -56,26 +53,6 @@ function widget view_animation(dictionary<string> model) {
             )
         ]),
 
-        # Picker widgets — wrapped_row lets the three fields stack onto multiple
-        # lines instead of cramping or overflowing on narrow windows.
-        GraphicalUi.panel("Pickers", [
-            GraphicalUi.wrapped_row([
-                GraphicalUi.field(
-                    "Color",
-                    GraphicalUi.color_picker(color, (string c) -> Dictionary.set(model, "color", c))
-                ),
-                GraphicalUi.field(
-                    "Date",
-                    GraphicalUi.date_picker(date, (string d) -> Dictionary.set(model, "date", d))
-                ),
-                GraphicalUi.field(
-                    "Time",
-                    GraphicalUi.time_picker(time, (string t) -> Dictionary.set(model, "time", t))
-                )
-            ], GraphicalUi.spacing(16)),
-            GraphicalUi.label("Selected: color=${color}, date=${date}, time=${time}",
-                {"color": GraphicalUi.VAR_DISABLED_FG})
-        ])
     ], GraphicalUi.spacing(16))
 }
 
@@ -86,10 +63,7 @@ function void main() {
 
 function dictionary<string> animation_model() {
     return {
-        "expanded": "false",
-        "color": "#4361ee",
-        "date": "2025-01-01",
-        "time": "12:00"
+        "expanded": "false"
     }
 }
 
@@ -118,23 +92,4 @@ function void test_toggle_size_expands_and_collapses() {
     assert(Dictionary.get_or(collapsed, "expanded", "") == "false")
 }
 
-@test
-function void test_color_picker_updates_color() {
-    dictionary outcome =
-        GraphicalUi.test_input(animation_config(), animation_model(), "#4361ee", "#ff0000")
-    assert(Dictionary.get_or(outcome, "color", "") == "#ff0000")
-}
 
-@test
-function void test_date_picker_updates_date() {
-    dictionary outcome =
-        GraphicalUi.test_input(animation_config(), animation_model(), "2025-01-01", "2025-12-25")
-    assert(Dictionary.get_or(outcome, "date", "") == "2025-12-25")
-}
-
-@test
-function void test_time_picker_updates_time() {
-    dictionary outcome =
-        GraphicalUi.test_input(animation_config(), animation_model(), "12:00", "08:30")
-    assert(Dictionary.get_or(outcome, "time", "") == "08:30")
-}
