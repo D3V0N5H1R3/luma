@@ -152,19 +152,19 @@ are 50–100 KB and reading them in full consumes significant context budget.
 
 | Section | Lines |
 | ------- | ----- |
-| Table of Contents | 7–22 |
-| 1 — Overview | 24–36 |
-| 2 — Download | 38–56 |
-| 3 — Verify Checksums | 58–85 |
-| 4 — Windows | 87–122 |
-| 5 — macOS | 124–171 |
-| 6 — Linux | 173–220 |
-| 7 — Editor Setup — Visual Studio Code | 222–276 |
-| 8 — Editor Setup — Zed | 278–287 |
-| 9 — Verify the Installation | 289–330 |
-| 10 — Building from Source | 332–344 |
-| 11 — Troubleshooting | 344–362 |
-| See Also | 364–373 |
+| Table of Contents | 7–23 |
+| 1 — Overview | 24–37 |
+| 2 — Download | 38–55 |
+| 3 — Verify Checksums | 56–84 |
+| 4 — Windows | 85–121 |
+| 5 — macOS | 122–170 |
+| 6 — Linux | 171–219 |
+| 7 — Editor Setup — Visual Studio Code | 220–275 |
+| 8 — Editor Setup — Zed | 276–286 |
+| 9 — Verify the Installation | 287–329 |
+| 10 — Building from Source | 330–343 |
+| 11 — Troubleshooting | 344–363 |
+| See Also | 364–374 |
 
 ## Luma_Language_Server.md
 
@@ -174,27 +174,27 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 1 — Overview | 37–44 |
 | 2 — Goals | 45–54 |
 | 3 — Non-Goals | 55–62 |
-| 4 — Architecture | 63–87 |
-| 5 — Supported LSP Methods | 88–155 |
-| 6 — Diagnostics | 156–176 |
-| 7 — Hover | 177–188 |
-| 8 — Completion | 189–200 |
-| 9 — Document Management | 201–208 |
-| 10 — Standard Library Support | 209–219 |
-| 11 — Platform Support | 220–227 |
-| 12 — Usage | 228–263 |
-| 13 — Editor Integration | 264–275 |
-| 14 — File Layout | 276–446 |
-| 15 — Module Responsibilities | 447–871 |
-| 16 — Data Flow | 872–996 |
-| 17 — JSON-RPC Dispatch | 997–1054 |
-| 18 — Capability Negotiation | 1055–1115 |
-| 19 — Stdlib Signature Access | 1116–1128 |
-| 20 — Build Integration | 1129–1166 |
-| 21 — Error Handling | 1167–1177 |
-| 22 — Logging | 1178–1190 |
-| 23 — Platform-Specific Handling | 1191–1205 |
-| See Also | 1206–1211 |
+| 4 — Architecture | 63–86 |
+| 5 — Supported LSP Methods | 87–154 |
+| 6 — Diagnostics | 155–175 |
+| 7 — Hover | 176–187 |
+| 8 — Completion | 188–199 |
+| 9 — Document Management | 200–207 |
+| 10 — Standard Library Support | 208–218 |
+| 11 — Platform Support | 219–226 |
+| 12 — Usage | 227–286 |
+| 13 — Editor Integration | 287–298 |
+| 14 — File Layout | 299–469 |
+| 15 — Module Responsibilities | 470–894 |
+| 16 — Data Flow | 895–1019 |
+| 17 — JSON-RPC Dispatch | 1020–1077 |
+| 18 — Capability Negotiation | 1078–1138 |
+| 19 — Stdlib Signature Access | 1139–1151 |
+| 20 — Build Integration | 1152–1189 |
+| 21 — Error Handling | 1190–1200 |
+| 22 — Logging | 1201–1213 |
+| 23 — Platform-Specific Handling | 1214–1228 |
+| See Also | 1229–1235 |
 
 ## Luma_Performance_Guide.md
 
@@ -234,24 +234,24 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | Table of Contents | 7–32 |
 | 1 — Introduction | 33–55 |
 | 2 — Design Goals and Constraints | 56–78 |
-| 3 — High-Level Architecture | 79–112 |
-| 4 — Module Decomposition | 113–856 |
-| 5 — Data Structures | 857–1024 |
+| 3 — High-Level Architecture | 79–114 |
+| 4 — Module Decomposition | 115–858 |
+| 5 — Data Structures | 859–1024 |
 | 6 — Processing Pipeline | 1025–1135 |
-| 7 — Bytecode Compiler and Virtual Machine Internals | 1136–1785 |
-| 8 — Type System Design | 1786–1831 |
-| 9 — Memory Management Strategy | 1832–1863 |
-| 10 — Error Handling Strategy | 1864–1907 |
-| 11 — Standard Library Architecture | 1908–2021 |
-| 12 — Concurrency Architecture | 2022–2122 |
-| 13 — REPL Architecture | 2123–2159 |
-| 14 — Testing Architecture | 2160–2187 |
-| 15 — File Inclusion and Source Management | 2188–2218 |
-| 16 — Project File Structure | 2219–2292 |
-| 17 — Cross-Platform Considerations | 2293–2322 |
-| 18 — Debugger Architecture | 2323–2345 |
-| 19 — Design Decisions and Rationale | 2346–2437 |
-| See Also | 2438–2446 |
+| 7 — Bytecode Compiler and Virtual Machine Internals | 1136–1774 |
+| 8 — Type System Design | 1775–1820 |
+| 9 — Memory Management Strategy | 1821–1852 |
+| 10 — Error Handling Strategy | 1853–1896 |
+| 11 — Standard Library Architecture | 1897–2015 |
+| 12 — Concurrency Architecture | 2016–2115 |
+| 13 — REPL Architecture | 2116–2143 |
+| 14 — Testing Architecture | 2144–2171 |
+| 15 — File Inclusion and Source Management | 2172–2202 |
+| 16 — Project File Structure | 2203–2276 |
+| 17 — Cross-Platform Considerations | 2277–2306 |
+| 18 — Debugger Architecture | 2307–2329 |
+| 19 — Design Decisions and Rationale | 2330–2421 |
+| See Also | 2422–2431 |
 
 ## Luma_Solaris_Architecture.md
 
@@ -351,12 +351,12 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 33 — Set | 2689–2723 |
 | 34 — Socket | 2724–2791 |
 | 35 — Stack | 2792–2819 |
-| 36 — Statistics | 2820–2857 |
-| See Also | 2858–2869 |
-| 37 — String | 2870–2975 |
-| 38 — Task | 2976–3045 |
-| 39 — Terminal | 3046–3262 |
-| 40 — Xml | 3263–3340 |
+| 36 — Statistics | 2820–2837 |
+| See Also | 2838–2849 |
+| 37 — String | 2850–2955 |
+| 38 — Task | 2956–3025 |
+| 39 — Terminal | 3026–3242 |
+| 40 — Xml | 3243–3321 |
 
 ## Luma_Syntax_Highlighting.md
 
