@@ -245,8 +245,7 @@ void register_commands_and_subscriptions(const EnvPtr& env, bool sandbox) {
                       [](std::span<const Value> args, SourceLocation loc) -> Value {
                           expect_args("GraphicalUi.download_file", args, 2, loc);
                           auto url = expect_string(args[0], "GraphicalUi.download_file", loc);
-                          auto filename =
-                              expect_string(args[1], "GraphicalUi.download_file", loc);
+                          auto filename = expect_string(args[1], "GraphicalUi.download_file", loc);
                           auto w = make_command_dict(cmd::download_file);
                           w->set("url", Value{url});
                           w->set("filename", Value{filename});

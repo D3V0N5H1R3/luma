@@ -108,6 +108,10 @@ OVERRIDES: dict[str, ExampleSpec] = {
         category=SKIP,
         reason="include-only helper with no @main entry point",
     ),
+    "echo_server.luma": ExampleSpec(
+        category=SKIP,
+        reason="TCP server blocks waiting for connections; @test blocks exercise networking",
+    ),
     # ── Console-interactive (driven via scripted stdin) ──────────────
     "guess_the_number.luma": ExampleSpec(
         category=STDIN,
