@@ -123,7 +123,9 @@ LspServer::LspServer(std::unique_ptr<Transport> transport)
                                           .workspace = workspace_},
         DocumentSynchronizer::Callbacks{
             .schedule_analysis =
-                [this](const std::string& uri) { workspace_handler_->schedule_analysis(uri); },
+                [this](const std::string& uri, bool force) {
+                    workspace_handler_->schedule_analysis(uri, force);
+                },
             .log_message = [this](const std::string& msg,
                                   int type) { transport_wrapper_.log_message(msg, type); },
             .publish_diagnostics =

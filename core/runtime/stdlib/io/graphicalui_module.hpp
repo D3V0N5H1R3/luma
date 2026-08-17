@@ -81,7 +81,7 @@
 
 namespace luma {
 
-void register_graphicalui_ns(const EnvPtr& env);
+void register_graphicalui_ns(const EnvPtr& env, bool sandbox = false);
 
 } // namespace luma
 

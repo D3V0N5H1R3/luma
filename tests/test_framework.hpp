@@ -783,36 +783,6 @@ void run_parameterized(const char* name, const Container& params, Fn&& fn) noexc
 // Print summary and return exit code: return SUMMARY();
 #define SUMMARY() luma::test::summary()
 
-// ─── Benchmarks ───
-
-// Define a simple benchmark function.  The body is executed `iterations` times
-// after a short warm-up phase, and the average time per iteration is printed.
-//
-// Usage:
-//   BENCHMARK(my_benchmark, 10000) {
-//       // code to benchmark
-//   }
-//   RUN(my_benchmark); // in main
-
-#define BENCHMARK(name, iterations)                                                                \
-    static void name##_bench();                                                                    \
-    static void name() {                                                                           \
-        /* Warmup */                                                                               \
-        for (int _w = 0; _w < 3; ++_w) {                                                           \
-            name##_bench();                                                                        \
-        }                                                                                          \
-        /* Timed runs */                                                                           \
-        auto _start = std::chrono::high_resolution_clock::now();                                   \
-        for (int _i = 0; _i < (iterations); ++_i) {                                                \
-            name##_bench();                                                                        \
-        }                                                                                          \
-        auto _end = std::chrono::high_resolution_clock::now();                                     \
-        auto _ns = std::chrono::duration_cast<std::chrono::nanoseconds>(_end - _start).count();    \
-        std::cout << "[BENCH] " << #name << ": " << (_ns / (iterations)) << " ns/iter ("           \
-                  << (iterations) << " iterations)\n";                                             \
-    }                                                                                              \
-    static void name##_bench()
-
 // ─── Auto-registration ───
 //
 // Opt-in alternative to manual RUN() calls.  Use LUMA_TEST(name) to define a

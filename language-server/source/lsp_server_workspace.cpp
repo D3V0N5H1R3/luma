@@ -331,12 +331,12 @@ void LspWorkspaceHandler::handle_did_change_watched_files(const JsonValue& param
 
     // Re-analyze affected documents.
     for (const auto& uri : uris_to_reanalyze) {
-        schedule_analysis(uri);
+        schedule_analysis(uri, true);
     }
 
     // Check if luma.json was changed — reload project configuration.
     check_luma_json_changes(resolved, ctx_,
-                            [this](const std::string& uri) { schedule_analysis(uri); });
+                            [this](const std::string& uri) { schedule_analysis(uri, true); });
 }
 
 void LspWorkspaceHandler::handle_did_save(const JsonValue& params) {
@@ -358,6 +358,12 @@ void LspWorkspaceHandler::handle_did_save(const JsonValue& params) {
         return;
     }
 
+    // When diagnostics_on_save is enabled, re-schedule the saved file itself
+    // with force_diagnostics so its diagnostics are published now.
+    if (ctx_.configuration.config().get()->diagnostics_on_save) {
+        schedule_analysis(*uri_opt, true);
+    }
+
     std::unordered_set<std::string> uris_to_reanalyze;
     {
         auto state = ctx_.acquire_write_lock();
@@ -374,8 +380,8 @@ void LspWorkspaceHandler::handle_did_save(const JsonValue& params) {
     }
 }
 
-void LspWorkspaceHandler::schedule_analysis(const std::string& uri) {
-    analysis_pipeline_.schedule_analysis(uri);
+void LspWorkspaceHandler::schedule_analysis(const std::string& uri, bool force_diagnostics) {
+    analysis_pipeline_.schedule_analysis(uri, force_diagnostics);
 }
 
 } // namespace luma::lsp

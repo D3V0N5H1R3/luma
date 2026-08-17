@@ -78,7 +78,6 @@ constexpr std::string_view kOutputStderr = "stderr";
 
 // ─── Error messages ───
 constexpr std::string_view kErrorAuthFailed = "Authentication failed — connection rejected";
-constexpr std::string_view kErrorUnsupportedCommand = "Unsupported command";
 constexpr std::string_view kErrorUnknownInternal = "Unknown internal error";
 
 // ─── Step modes ───

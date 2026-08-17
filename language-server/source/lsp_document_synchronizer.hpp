@@ -49,7 +49,7 @@ public:
 
     // Callbacks for operations that remain on LspServer.
     struct Callbacks {
-        std::function<void(const std::string& uri)> schedule_analysis;
+        std::function<void(const std::string& uri, bool force_diagnostics)> schedule_analysis;
         std::function<void(const std::string& text, int type)> log_message;
         std::function<void(const std::string& uri, const std::vector<Diagnostic>& diagnostics,
                            int version)>

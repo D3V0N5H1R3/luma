@@ -4,10 +4,12 @@
 #include <atomic>
 #include <condition_variable>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 #include "analysis/diagnostics/diagnostic.hpp"
@@ -111,7 +113,9 @@ public:
 
     // Add a URI to the pending set and signal the worker to wake up.
     // Thread-safe — may be called from any thread.
-    void schedule_analysis(const std::string& uri);
+    // When force_diagnostics is true, diagnostics are published even if the
+    // diagnostics_on_save setting is enabled (used for didOpen and didSave).
+    void schedule_analysis(const std::string& uri, bool force_diagnostics = false);
 
     // Start the background worker thread.
     void start();
@@ -167,6 +171,11 @@ private:
     SharedState state_;
     Callbacks callbacks_;
     AnalysisService* analysis_service_{nullptr};
+
+    // URIs that should publish diagnostics regardless of diagnostics_on_save.
+    // Populated by schedule_analysis(uri, true) and consumed by publish_committed_diagnostics.
+    std::mutex force_diag_mutex_;
+    std::unordered_set<std::string> force_diagnostics_uris_;
 
     std::condition_variable_any analysis_cv_;
     std::thread analysis_thread_;

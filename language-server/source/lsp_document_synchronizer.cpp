@@ -91,7 +91,7 @@ void DocumentSynchronizer::handle_did_open(const JsonValue& params) {
         return;
     }
 
-    callbacks_.schedule_analysis(uri);
+    callbacks_.schedule_analysis(uri, true);
 }
 
 void DocumentSynchronizer::handle_did_change(const JsonValue& params) {
@@ -154,7 +154,7 @@ void DocumentSynchronizer::handle_did_change(const JsonValue& params) {
         state.documents().refresh_stored_hash(state.token(), uri);
     }
 
-    callbacks_.schedule_analysis(uri);
+    callbacks_.schedule_analysis(uri, false);
 }
 
 void DocumentSynchronizer::apply_incremental_change(WriteStateLock& state, const std::string& uri,

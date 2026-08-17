@@ -128,12 +128,12 @@ Follow the detailed instructions in `instructions/`:
 ### Luma Language
 
 - Entry point: `@main` annotated function.
-- Types: `boolean`, `integer`, `number`, `decimal`, `string`, `array<T>`, `dictionary<V>`, `queue<T>`, `stack<T>`, `binary_tree`, `channel<T>`, `task<T>`, `optional<T>`, `result<T>`, `socket`, tuples, choice types (ADTs), records, interfaces.
+- Types: `boolean`, `integer`, `number`, `decimal`, `string`, `array<T>`, `dictionary<V>`, `queue<T>`, `stack<T>`, `channel<T>`, `task<T>`, `optional<T>`, `result<T>`, `socket`, tuples, choice types (ADTs), records, interfaces.
 - Variables are immutable by default; use `mutable` keyword for mutability.
 - No semicolons required. Comments start with `#`.
 - String interpolation: `"value is ${expr}"`.
 - Pipe operator: `value |> Module.function()`.
 - Structured concurrency: `task_scope { }` blocks with cooperative cancellation; `Task.cancel(t)`, `Task.is_cancelled(t)`.
-- Standard library modules: `String`, `Array`, `Dictionary`, `Math`, `Bits`, `Result`, `Converter`, `DateTime`, `Decimal`, `Console`, `FileSystem`, `RegularExpression`, `Process`, `Random`, `Encoder`, `Resource`, `Set`, `Channel`, `Task`, `Terminal`, `GraphicalUi`, `Socket`, `Optional`, `Reference`, `Queue`, `Stack`, `Log`, `Json`, `Csv`, `Xml`, `LinearAlgebra`, `Calculus`, `Statistics`, `Hash`, `Compression`, `Http`, `KeyValueStore`, `BinaryTree`.
+- Standard library modules: `String`, `Array`, `Bits`, `Calculus`, `Channel`, `Color`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `GraphicalUi`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, `Xml`.
 
 > **Note for AI assistants:** This file serves as the single source of truth for project context. See [instructions/learnings.instructions.md](../instructions/learnings.instructions.md) for accumulated development learnings and pitfalls (auto-loaded for all files).

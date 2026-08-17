@@ -514,33 +514,6 @@ static void test_constant_fold_skip_modulo_int_min_neg1() {
     ASSERT_TRUE(has_opcode(chunk, Op::Modulo));
 }
 
-// ─── Constant folding: bitwise AND ───
-
-static void test_constant_fold_bitwise() {
-    Chunk chunk;
-    auto loc = SourceLocation{};
-    auto idx_a = chunk.add_constant(Value{static_cast<std::int64_t>(0xFF)});
-    auto idx_b = chunk.add_constant(Value{static_cast<std::int64_t>(0x0F)});
-
-    chunk.emit_u16(Op::Constant, idx_a, loc);
-    chunk.emit_u16(Op::Constant, idx_b, loc);
-    chunk.emit(Op::BitwiseAnd, loc);
-    chunk.emit(Op::EndModule, loc);
-
-    Optimizer opt{2};
-    auto eliminated = opt.optimize(chunk);
-
-    ASSERT_GT(eliminated, 0U);
-    ASSERT_FALSE(has_opcode(chunk, Op::BitwiseAnd));
-    bool found = false;
-    for (const auto& c : chunk.constants) {
-        if (c.is_integer() && c.as_integer() == 0x0F) {
-            found = true;
-        }
-    }
-    ASSERT_TRUE(found);
-}
-
 // ─── Dead code elimination: after Jump ───
 
 static void test_dead_code_after_jump() {
@@ -758,29 +731,6 @@ static void test_peephole_one_modulo_preserved() {
     ASSERT_FALSE(has_opcode(chunk, Op::Zero));
 }
 
-// ─── Peephole: BitwiseNot + BitwiseNot is NOT folded (~~x is unsound for number) ───
-
-// `~` requires an integer operand and op_bitwise_not raises a RuntimeError on a
-// non-integer, but an integer-typed slot can hold an overflow-promoted `number`
-// (integer overflow promotes to double).  The `BitwiseNot; BitwiseNot` cancel-pair
-// was removed, so both ops must survive the optimizer so the VM can enforce the
-// integer-operand contract at -O1 exactly as it does at -O0.
-static void test_peephole_double_bitwise_not_preserved() {
-    auto chunk = make_chunk({
-        static_cast<std::uint8_t>(Op::GetLocal),
-        0x00,
-        0x00,
-        static_cast<std::uint8_t>(Op::BitwiseNot),
-        static_cast<std::uint8_t>(Op::BitwiseNot),
-        static_cast<std::uint8_t>(Op::EndModule),
-    });
-
-    Optimizer opt{1};
-    [[maybe_unused]] auto elim = opt.optimize(chunk);
-
-    ASSERT_EQ(count_opcode(chunk, Op::BitwiseNot), 2U);
-}
-
 // ─── Peephole: IntToNumber + IntToNumber → single IntToNumber ───
 
 static void test_peephole_double_int_to_number() {
@@ -915,31 +865,6 @@ static void test_unary_fold_negate_double() {
     bool found = false;
     for (const auto& c : chunk.constants) {
         if (c.is_number() && c.as_number() == -3.14) {
-            found = true;
-        }
-    }
-    ASSERT_TRUE(found);
-}
-
-// ─── Unary constant folding: BitwiseNot integer ───
-
-static void test_unary_fold_bitwise_not() {
-    Chunk chunk;
-    auto loc = SourceLocation{};
-    auto idx = chunk.add_constant(Value{static_cast<std::int64_t>(0xFF)});
-
-    chunk.emit_u16(Op::Constant, idx, loc);
-    chunk.emit(Op::BitwiseNot, loc);
-    chunk.emit(Op::EndModule, loc);
-
-    Optimizer opt{2};
-    auto eliminated = opt.optimize(chunk);
-
-    ASSERT_GT(eliminated, 0U);
-    ASSERT_FALSE(has_opcode(chunk, Op::BitwiseNot));
-    bool found = false;
-    for (const auto& c : chunk.constants) {
-        if (c.is_integer() && c.as_integer() == ~static_cast<std::int64_t>(0xFF)) {
             found = true;
         }
     }
@@ -1186,9 +1111,8 @@ static void test_multiply_power_of_two_not_strength_reduced() {
     Optimizer opt{2};
     [[maybe_unused]] auto eliminated = opt.optimize(chunk);
 
-    // Multiply preserved; no ShiftLeft introduced.
+    // Multiply preserved; no shift introduced.
     ASSERT_TRUE(has_opcode(chunk, Op::Multiply));
-    ASSERT_FALSE(has_opcode(chunk, Op::ShiftLeft));
 }
 
 // ─── Constant fold must NOT cross a branch-merge point ───
@@ -1335,7 +1259,6 @@ int main() {
     RUN(test_peephole_one_divide_preserved);
     RUN(test_peephole_one_int_divide_preserved);
     RUN(test_peephole_one_modulo_preserved);
-    RUN(test_peephole_double_bitwise_not_preserved);
     RUN(test_peephole_double_int_to_number);
     RUN(test_peephole_zero_multiply_preserved);
 
@@ -1350,7 +1273,6 @@ int main() {
     // Unary constant folding.
     RUN(test_unary_fold_negate_integer);
     RUN(test_unary_fold_negate_double);
-    RUN(test_unary_fold_bitwise_not);
 
     // Comparison constant folding.
     RUN(test_comparison_fold_less_true);
@@ -1369,7 +1291,6 @@ int main() {
     RUN(test_constant_fold_subtraction);
     RUN(test_constant_fold_modulo);
     RUN(test_constant_fold_skip_modulo_int_min_neg1);
-    RUN(test_constant_fold_bitwise);
     RUN(test_dead_code_after_jump);
     RUN(test_dead_code_preserves_jump_target);
     RUN(test_peephole_relational_not_not_fused);

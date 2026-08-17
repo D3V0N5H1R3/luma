@@ -114,7 +114,7 @@ Keywords are split into sub-categories so that themes can colour control flow di
 
 #### 4. Built-in Types
 
-`array`, `binary_tree`, `boolean`, `channel`, `dictionary`, `integer`, `key_value_store`, `number`, `optional`, `queue`, `reference`, `result`, `set`, `socket`, `stack`, `string`, `task`, `widget`, `xml`
+`array`, `boolean`, `channel`, `dictionary`, `integer`, `key_value_store`, `number`, `optional`, `queue`, `reference`, `result`, `set`, `socket`, `stack`, `string`, `task`, `widget`, `xml`
 
 **Scope:** `storage.type.luma`
 

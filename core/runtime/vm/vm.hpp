@@ -537,28 +537,6 @@ private:
     void handle_divide();
     void handle_int_divide();
     void handle_modulo();
-    void validate_integer_operands(const Value& a, const Value& b, std::string_view op_name) const;
-    void validate_integer_operand(const Value& v, std::string_view op_name) const;
-    void validate_shift_amount(std::int64_t shift) const;
-
-    // Shared scaffolding for integer-only binary operators.  Pops the right
-    // operand, validates both operands are integers, then writes op(left, right)
-    // back into the left stack slot.  op_bitwise_* delegate here.
-    template <typename IntOp> void apply_integer_binary_op(std::string_view op_name, IntOp op) {
-        auto [a, b] = pop_binary_ref();
-        validate_integer_operands(a, b, op_name);
-        a = Value{op(a.as_integer(), b.as_integer())};
-    }
-
-    // As apply_integer_binary_op, but additionally validates the shift amount.
-    // op_shift_left / op_shift_right delegate here.
-    template <typename IntOp> void apply_shift_op(std::string_view op_name, IntOp op) {
-        auto [a, b] = pop_binary_ref();
-        validate_integer_operands(a, b, op_name);
-        validate_shift_amount(b.as_integer());
-        a = Value{op(a.as_integer(), b.as_integer())};
-    }
-
     void validate_nonzero_divisor(const Value& divisor, std::string_view op_name) const;
     void handle_concatenate();
 
@@ -737,12 +715,6 @@ private:
     void op_not();                     // Op::Not
     void op_and();                     // Op::And
     void op_or();                      // Op::Or
-    void op_bitwise_and();             // Op::BitwiseAnd
-    void op_bitwise_or();              // Op::BitwiseOr
-    void op_bitwise_xor();             // Op::BitwiseXor
-    void op_bitwise_not();             // Op::BitwiseNot
-    void op_shift_left();              // Op::ShiftLeft
-    void op_shift_right();             // Op::ShiftRight
     void op_concatenate();             // Op::Concatenate
     void op_interpolate();             // Op::Interpolate
     void op_make_array();              // Op::MakeArray

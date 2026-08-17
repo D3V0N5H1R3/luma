@@ -31,7 +31,7 @@ Syntax highlighting, language configuration, and language server integration for
 | String interpolation | `"value is ${x + 1}"`                                                                                                         |
 | Strings              | `"hello"` `"""multi-line"""`                                                                                                  |
 | Type names           | `record Point`, `choice Shape`                                                                                                |
-| Types                | `array` `binary_tree` `boolean` `channel` `dictionary` `integer` `number` `optional` `result` `string` `task` `void` and more |
+| Types                | `array` `boolean` `channel` `dictionary` `integer` `number` `optional` `result` `string` `task` `void` and more |
 | Variables            | `integer count`, `for x in items`                                                                                             |
 
 ## Installation
@@ -93,14 +93,14 @@ Use the provided download script to fetch the binary:
 
 ```bash
 cd extensions/zed
-LUMA_VERSION=v0.5.0 ./scripts/download_binaries.sh
+LUMA_VERSION=v0.7.0 ./scripts/download_binaries.sh
 ```
 
 On Windows (PowerShell):
 
 ```powershell
 cd extensions\zed
-$env:LUMA_VERSION = "v0.5.0"
+$env:LUMA_VERSION = "v0.7.0"
 pwsh scripts\Download-Binaries.ps1
 ```
 

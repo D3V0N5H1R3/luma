@@ -6,9 +6,6 @@
 // Contains:
 //   - with_shared_lock / with_unique_lock   — RAII lambda wrappers for bare mutexes
 //   - with_shared_state / with_unique_state — RAII lambda wrappers for state locks
-//   - SharedOrderedLockGuard / PlainOrderedLockGuard — acquire two mutexes in documented order
-//
-// Previously split across lsp_lock_adapters.hpp and lsp_ordered_lock_guard.hpp.
 
 #include <concepts>
 #include <mutex>
@@ -60,63 +57,6 @@ auto with_unique_state(std::shared_mutex& mutex, DocumentStore& doc_store, LspAn
     WriteStateLock state(mutex, doc_store, cache, pending_uris);
     return std::forward<Fn>(fn)(state);
 }
-
-// ─── Ordered lock guards ────────────────────────────────────
-//
-// Acquire two mutexes in a fixed order to prevent deadlock.
-//
-// LspServer documents the following lock ordering:
-//
-//   1. state_mutex_    (std::shared_mutex — shared or unique)
-//   2. write_mutex_    (std::mutex in LspTransportWrapper)
-//
-// CancellationManager has its own internal mutex and does NOT
-// participate in the ordering above.
-//
-// SharedOrderedLockGuard acquires a shared_mutex (shared read) then a
-// plain mutex.  Use when reading state while holding the write lock.
-//
-// PlainOrderedLockGuard acquires two plain mutexes in enforced order.
-//
-// Usage:
-//   SharedOrderedLockGuard guard(state_mutex_, write_mutex_);
-//   PlainOrderedLockGuard  guard(first_mutex_, second_mutex_);
-
-// Acquire state_mutex (shared read) + a plain mutex in enforced order.
-class SharedOrderedLockGuard {
-public:
-    SharedOrderedLockGuard(std::shared_mutex& first, std::mutex& second)
-        : first_lock_(first), second_lock_(second) {}
-
-    ~SharedOrderedLockGuard() = default;
-
-    SharedOrderedLockGuard(const SharedOrderedLockGuard&) = delete;
-    SharedOrderedLockGuard& operator=(const SharedOrderedLockGuard&) = delete;
-    SharedOrderedLockGuard(SharedOrderedLockGuard&&) = delete;
-    SharedOrderedLockGuard& operator=(SharedOrderedLockGuard&&) = delete;
-
-private:
-    std::shared_lock<std::shared_mutex> first_lock_;
-    std::unique_lock<std::mutex> second_lock_;
-};
-
-// Acquire two plain mutexes in enforced order (first before second).
-class PlainOrderedLockGuard {
-public:
-    PlainOrderedLockGuard(std::mutex& first, std::mutex& second)
-        : first_lock_(first), second_lock_(second) {}
-
-    ~PlainOrderedLockGuard() = default;
-
-    PlainOrderedLockGuard(const PlainOrderedLockGuard&) = delete;
-    PlainOrderedLockGuard& operator=(const PlainOrderedLockGuard&) = delete;
-    PlainOrderedLockGuard(PlainOrderedLockGuard&&) = delete;
-    PlainOrderedLockGuard& operator=(PlainOrderedLockGuard&&) = delete;
-
-private:
-    std::unique_lock<std::mutex> first_lock_;
-    std::unique_lock<std::mutex> second_lock_;
-};
 
 } // namespace luma::lsp
 

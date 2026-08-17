@@ -212,7 +212,7 @@ The type checker's `stdlib_signatures_` registry contains 700+ function entries 
 - **Hover:** showing the return type of a stdlib call.
 - **Completion:** listing all functions within a module when the user types `Module.`.
 
-The 38 standard library modules (`Array`, `BinaryTree`, `Bits`, `Calculus`, `Channel`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `GraphicalUi`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, `Xml`) are covered by this registry.
+The 39 standard library modules (`Array`, `Bits`, `Calculus`, `Channel`, `Color`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `GraphicalUi`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, `Xml`) are covered by this registry.
 
 ---
 
@@ -257,6 +257,30 @@ echo 'Content-Length: 57\r\n\r\n{"jsonrpc":"2.0","id":1,"method":"initialize","p
 ```
 
 The server should respond with a JSON-RPC message containing its capabilities.
+
+### Project Configuration (`luma.json`)
+
+The language server reads a `luma.json` file from the workspace root for per-project settings. Create one with `luma init`, or write it manually. All fields are optional — omitted fields use their defaults.
+
+```json
+{
+    "inlayHints": { "enabled": true },
+    "codeLens": { "enabled": true },
+    "diagnostics": { "onSave": false },
+    "analysisDebounceMs": 50,
+    "analysisTimeoutMs": 10000
+}
+```
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `inlayHints.enabled` | `boolean` | `true` | Show inline type annotations and parameter name hints. |
+| `codeLens.enabled` | `boolean` | `true` | Show reference counts and test annotations above functions. |
+| `diagnostics.onSave` | `boolean` | `false` | When `true`, diagnostics are only published on file open and save — not while typing. Analysis still runs on every keystroke (hover and completion stay fresh), but red/yellow squiggles update only on save. Useful on large files where live diagnostics are distracting. |
+| `analysisDebounceMs` | `integer` | `50` | Milliseconds to wait after the last keystroke before starting analysis. Range: 0–5000. Increase on slow machines to reduce CPU usage during rapid typing. |
+| `analysisTimeoutMs` | `integer` | `10000` | Maximum time (ms) for a single analysis pass before it is cancelled. Range: 100–60000. Increase for very large files that time out. |
+
+Settings can also be configured per-editor (VS Code settings UI or Zed's `settings.json`). The editor sends changes to the server via `workspace/didChangeConfiguration`; a `luma.json` in the workspace root takes priority for project-wide consistency.
 
 ---
 
@@ -1104,7 +1128,7 @@ The `initialize` response advertises these server capabilities:
             "range": true
         }
     },
-    "serverInfo": { "name": "luma-lsp", "version": "0.5.0" }
+    "serverInfo": { "name": "luma-lsp", "version": "0.7.0" }
 }
 ```
 

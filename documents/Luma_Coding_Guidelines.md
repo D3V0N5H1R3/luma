@@ -726,14 +726,14 @@ array<integer> nums = [1, 2, 3, 4, 5]
 array<string> empty = []
 ```
 
-**Safe access.** Use `Array.get` (returns `result<T>`) or `Array.get_or` (returns default) instead of direct indexing when bounds are uncertain.
+**Safe access.** Use `Array.get` (returns `result<T>`) instead of direct indexing when bounds are uncertain. Use `??` to provide a default on failure.
 
 ```luma
 # Safe — returns result
 result<integer> r = Array.get(nums, 10)
 
 # Safe — returns default on out-of-bounds
-integer v = Array.get_or(nums, 10, 0)
+integer v = Array.get(nums, 10) ?? 0
 ```
 
 **Functional transformations.** Prefer `Array.map`, `Array.filter`, `Array.reduce`, and other standard library functions over mutable loops. Standard library functions return new arrays — they never modify the original.
@@ -860,7 +860,7 @@ result<array<string>> processed = raw_lines
     !> Array.map((string s) -> String.trim(s))
     !> Array.filter((string s) -> !String.is_empty(s))
     !> Array.map((string s) -> String.uppercase(s))
-    !> Array.sort((string a, string b) -> String.compare(a, b))
+    !> Array.sort_by((string s) -> s)
 ```
 
 ### Extract Named Functions for Readability

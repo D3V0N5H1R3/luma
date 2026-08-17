@@ -65,7 +65,10 @@ namespace luma {
 //   1 → 2: widened each serialized string's length prefix from u16 to u32 so
 //          that a string constant or name of 65 536 bytes or more no longer
 //          wraps its length prefix and desyncs the rest of the stream.
-static constexpr std::uint32_t k_bytecode_format_version = 2;
+//   2 → 3: removed unemitted bitwise opcodes (BitwiseAnd, BitwiseOr,
+//          BitwiseXor, BitwiseNot, ShiftLeft, ShiftRight), renumbering
+//          subsequent opcodes.
+static constexpr std::uint32_t k_bytecode_format_version = 3;
 
 // Magic bytes at the start of a .lumc file.
 static constexpr char k_bytecode_magic[4] = {'L', 'U', 'M', 'C'};

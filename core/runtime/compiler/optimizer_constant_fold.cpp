@@ -107,22 +107,6 @@ std::optional<Value> Optimizer::try_fold_operation(const Value& val1, const Valu
                     return Value{a % b};
                 }
                 break;
-            case Op::BitwiseAnd:
-                return Value{a & b};
-            case Op::BitwiseOr:
-                return Value{a | b};
-            case Op::BitwiseXor:
-                return Value{a ^ b};
-            case Op::ShiftLeft:
-                if (b >= 0 && b < CompilerLimits::k_int64_bits) {
-                    return Value{a << b};
-                }
-                break;
-            case Op::ShiftRight:
-                if (b >= 0 && b < CompilerLimits::k_int64_bits) {
-                    return Value{a >> b};
-                }
-                break;
             default:
                 break;
         }
@@ -330,15 +314,6 @@ std::size_t Optimizer::unary_fold_pass(Chunk& chunk) const {
             nop_out(code, i + 1,
                     InstructionLayout::k_u16_operand_size + InstructionLayout::k_opcode_size);
             eliminated += InstructionLayout::k_u16_operand_size + InstructionLayout::k_opcode_size;
-            continue;
-        }
-
-        // Constant(n) + BitwiseNot → Constant(~n)
-        if (unary_op == Op::BitwiseNot && val.is_integer()) {
-            const auto new_idx = chunk.add_constant(Value{~val.as_integer()});
-            optimizer_util::write_u16(code, i + 1, new_idx);
-            nop_out(code, unary_offset, 1);
-            eliminated += 1;
             continue;
         }
 

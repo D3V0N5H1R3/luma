@@ -59,6 +59,52 @@ function void test_bits_shift_out_of_range_throws() {
 }
 
 @test
+function void test_bits_negative_shift_throws() {
+    mutable boolean caught = false
+
+    try {
+        integer _ = Bits.shift_right(8, -1)
+    } catch(_err) {
+        caught = true
+    }
+
+    assert(caught, "negative shift amount must raise a runtime error")
+}
+
+@test
+function void test_bits_edge_values() {
+    # INT64_MAX = 9223372036854775807
+    # INT64_MIN = Bits.not(INT64_MAX) (cannot be written as a literal)
+    integer max_int = 9223372036854775807
+    integer min_int = Bits.not(max_int)
+
+    # AND with max preserves value
+    assert(Bits.and(max_int, 255) == 255)
+
+    # OR with 0 preserves value
+    assert(Bits.or(max_int, 0) == max_int)
+
+    # NOT of max gives min
+    assert(Bits.not(max_int) == min_int)
+
+    # Double NOT is identity
+    assert(Bits.not(Bits.not(max_int)) == max_int)
+
+    # XOR with self is 0
+    assert(Bits.xor(max_int, max_int) == 0)
+
+    # Shift left at boundary (bit 62 → sign bit → negative)
+    assert(Bits.shift_left(1, 63) == min_int)
+
+    # Arithmetic right shift preserves sign
+    assert(Bits.shift_right(min_int, 63) == -1)
+
+    # Shift by 0 is identity
+    assert(Bits.shift_left(42, 0) == 42)
+    assert(Bits.shift_right(42, 0) == 42)
+}
+
+@test
 function void test_bits_pipe_composition() {
     # Pipe-first: the piped value becomes the first argument.
     integer flags = 0

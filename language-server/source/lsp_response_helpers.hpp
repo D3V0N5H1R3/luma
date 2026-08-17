@@ -138,20 +138,6 @@ inline constexpr int k_request_failed = -32803;
     return JsonValue(JsonValue::ArrayType{});
 }
 
-// ─── Full envelope convenience ───────────────────────────────────────
-
-// Build a full JSON-RPC success response wrapping a single Location.
-[[nodiscard]] inline JsonValue make_location_response(const JsonValue& id, const std::string& uri,
-                                                      const Range& range) {
-    return make_success_response(id, make_location_result(uri, range));
-}
-
-// Build a full JSON-RPC success response wrapping an array of Locations.
-[[nodiscard]] inline JsonValue make_locations_response(const JsonValue& id,
-                                                       const std::vector<Location>& locations) {
-    return make_success_response(id, make_locations_result(locations));
-}
-
 } // namespace luma::lsp::response
 
 #endif // LUMA_LSP_RESPONSE_HELPERS_HPP
