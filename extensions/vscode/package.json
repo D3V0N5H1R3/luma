@@ -93,13 +93,6 @@
                 "path": "./themes/luma-light-color-theme.json"
             }
         ],
-        "configurationDefaults": {
-            "[luma]": {
-                "editor.semanticHighlighting.enabled": false,
-                "editor.minimap.showRegionSectionHeaders": false,
-                "editor.minimap.showMarkSectionHeaders": false
-            }
-        },
         "configuration": {
             "title": "Luma",
             "properties": {
@@ -131,12 +124,12 @@
                 "luma.inlayHints.enabled": {
                     "type": "boolean",
                     "default": false,
-                    "markdownDescription": "Show inferred type annotations and parameter names as inlay hints. Disabled by default because hints render in the minimap and can make the editor look cluttered."
+                    "markdownDescription": "Show inferred type annotations and parameter names as inlay hints. Disabled by default to keep the source uncluttered."
                 },
                 "luma.codeLens.enabled": {
                     "type": "boolean",
-                    "default": false,
-                    "markdownDescription": "Show reference counts above functions and types. Disabled by default because code lenses render in the minimap as white text."
+                    "default": true,
+                    "markdownDescription": "Show reference counts above functions and types."
                 },
                 "luma.playground.enabled": {
                     "type": "boolean",
