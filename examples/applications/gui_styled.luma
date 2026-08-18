@@ -54,7 +54,7 @@ function widget view_app(dictionary model) {
     return GraphicalUi.column([
         # Header with segmented theme mode toggle
         GraphicalUi.row([
-            GraphicalUi.heading("Styled App", 1),
+            GraphicalUi.heading("Styled App", 1, {"white_space": "nowrap"}),
             GraphicalUi.flexible_space(),
             # Segmented control highlights the active theme mode. The group is
             # labelled so assistive tech announces it as a single control.

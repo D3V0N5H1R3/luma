@@ -94,7 +94,7 @@ string color_label, string status_text) {
         Terminal.write(Terminal.inverse(left_styled))
     } else {
         integer int_padding = cols - content_len
-        string bar = "${left_styled}${String.repeat(" ", int_padding)}${right}"
+        string bar = "${left_styled}${Result.unwrap(String.repeat(" ", int_padding))}${right}"
         Terminal.write(Terminal.inverse(bar))
     }
 }

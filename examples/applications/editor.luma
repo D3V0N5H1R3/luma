@@ -68,7 +68,7 @@ function string render_status_bar(string mode, boolean is_modified, string filen
     number padding = if raw_padding < 0 { 0 } else { raw_padding }
     integer int_padding = Result.unwrap_or(Converter.to_integer(padding), 0)
 
-    return "${left}${String.repeat(" ", int_padding)}${right}"
+    return "${left}${Result.unwrap(String.repeat(" ", int_padding))}${right}"
 }
 
 function (integer, integer) clamp_cursor(array<string> lines, integer cursor_row,
@@ -512,6 +512,7 @@ function void render_editor(EditorState state, integer cols, integer rows, integ
 
     bar
     |> String.pad_right(cols, " ")
+    |> Result.unwrap()
     |> Terminal.inverse()
     |> Terminal.write()
 

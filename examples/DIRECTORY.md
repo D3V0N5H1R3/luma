@@ -62,20 +62,17 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | `csv_processing`       | Csv module — parsing and generating CSV data       | 🟡 Intermediate   |
 | `editor`               | Simple text editor                                 | 🟡 Intermediate   |
 | `expression_evaluator` | Recursive expression evaluator with choice types   | 🟡 Intermediate   |
-| `game_of_life`         | Conway's Game of Life cellular automaton           | 🟡 Intermediate   |
 | `http_client`          | Http module demonstration                          | 🟡 Intermediate   |
 | `json_processing`      | Json module — parsing and generating JSON          | 🟡 Intermediate   |
 | `key_value_store`      | KeyValueStore module demonstration                 | 🟡 Intermediate   |
 | `library_catalog`      | Library catalog with check-out tracking            | 🟡 Intermediate   |
 | `logging`              | Log module — structured logging                    | 🟡 Intermediate   |
 | `markdown_converter`   | Markdown to HTML converter                         | 🟡 Intermediate   |
-| `password_toolkit`     | Password generator and strength meter              | 🟡 Intermediate   |
 | `statistics_report`    | Statistics — mean, median, stddev, correlation     | 🟡 Intermediate   |
 | `text_adventure`       | Text adventure with a choice-type state machine    | 🟡 Intermediate   |
 | `xml_processing`       | Xml module — parsing and generating XML            | 🟡 Intermediate   |
 | `chat_server`          | Socket-based multi-client chat server              | 🔴 Advanced       |
 | `data_pipeline`        | Multi-stage data processing pipeline               | 🔴 Advanced       |
-| `gui_2048`             | GraphicalUi 2048 sliding-tile keyboard game        | 🔴 Advanced       |
 | `gui_animation`        | GraphicalUi transitions and keyframe animations    | 🔴 Advanced       |
 | `gui_calculator`       | GraphicalUi calculator with keypad and keyboard    | 🔴 Advanced       |
 | `gui_calendar`         | GraphicalUi month calendar with DateTime nav       | 🔴 Advanced       |
@@ -89,18 +86,15 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | `gui_markdown`         | GraphicalUi Markdown editor with live preview      | 🔴 Advanced       |
 | `gui_quiz`             | GraphicalUi multiple-choice quiz with scoring      | 🔴 Advanced       |
 | `gui_router`           | GraphicalUi client-side routing                    | 🔴 Advanced       |
-| `gui_settings`         | GraphicalUi settings panel with form widgets       | 🔴 Advanced       |
 | `gui_styled`           | GraphicalUi styling, theming, and responsive demo  | 🔴 Advanced       |
 | `gui_timer`            | GraphicalUi Pomodoro timer with on_tick            | 🔴 Advanced       |
 | `gui_todo`             | GraphicalUi todo list application                  | 🔴 Advanced       |
 | `gui_virtual_list`     | GraphicalUi virtual scrolling for large lists      | 🔴 Advanced       |
 | `gui_website`          | GraphicalUi multi-page website with routing        | 🔴 Advanced       |
 | `matrix_calculator`    | Matrix calculator using LinearAlgebra module       | 🔴 Advanced       |
-| `maze_solver`          | Maze solver — shortest path via BFS                | 🔴 Advanced       |
 | `mouse_draw`           | Terminal mouse drawing application                 | 🔴 Advanced       |
 | `solaris_counter`      | Solaris counter — canonical MVU surface example    | 🔴 Advanced       |
 | `solaris_gallery`      | Solaris gallery: every component, effects, theming | 🔴 Advanced       |
-| `solaris_showcase`     | Solaris surface tour: inputs, cards, lists, tokens | 🔴 Advanced       |
 | `sudoku_solver`        | Sudoku solver using backtracking                   | 🔴 Advanced       |
 | `tic_tac_toe`          | Tic-tac-toe with a minimax AI opponent             | 🔴 Advanced       |
 

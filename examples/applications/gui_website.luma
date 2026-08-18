@@ -30,17 +30,46 @@ function string brand_name() {
 
 function string site_css() {
     return """
-        .lw-hero {
-            background: linear-gradient(
-                135deg,
-                color-mix(in srgb, var(--gui-primary) 82%, var(--gui-bg)) 0%,
-                color-mix(in srgb, var(--gui-primary) 68%, var(--gui-fg)) 100%
-            );
+        :root {
+            --lw-bg: #0A1A12;
+            --lw-bg-card: #0F2318;
+            --lw-bg-nav: rgba(10, 26, 18, 0.72);
+            --lw-fg: #F0FDF4;
+            --lw-fg-muted: #A7C4B8;
+            --lw-accent: #22C55E;
+            --lw-accent-dim: rgba(34, 197, 94, 0.15);
+            --lw-border: rgba(34, 197, 94, 0.18);
+            --lw-radius: 12px;
         }
-        .lw-kicker { text-transform: uppercase; letter-spacing: 0.09em; }
-        .lw-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
-        .lw-card:hover { transform: translateY(-4px); box-shadow: var(--gui-shadow); }
-        .lw-footer { opacity: 0.82; }
+        body { background: var(--lw-bg); color: var(--lw-fg); }
+        .lw-nav {
+            position: sticky; top: 12px; z-index: 100;
+            background: var(--lw-bg-nav);
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            border-radius: 1rem;
+            border: 1px solid var(--lw-border);
+            padding: 10px 20px;
+            margin: 12px 24px 0;
+        }
+        .lw-hero {
+            background: radial-gradient(ellipse at 30% 20%, rgba(34, 197, 94, 0.08) 0%, transparent 60%),
+                        var(--lw-bg);
+        }
+        .lw-kicker {
+            text-transform: uppercase; letter-spacing: 0.12em;
+            color: var(--lw-accent); font-weight: 700;
+        }
+        .lw-card {
+            background: var(--lw-bg-card);
+            border: 1px solid var(--lw-border);
+            border-radius: var(--lw-radius);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .lw-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 12px 32px rgba(34, 197, 94, 0.10);
+        }
+        .lw-footer { opacity: 0.7; }
         @media (prefers-reduced-motion: reduce) {
             .lw-card { transition: none; }
             .lw-card:hover { transform: none; }
