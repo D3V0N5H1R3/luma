@@ -119,6 +119,39 @@ Then add the build output directory to your `PATH`, or copy the `luma_lsp` binar
 
 If `luma_lsp` is already on your `PATH`, the extension will find and use it automatically — no additional configuration needed.
 
+## Debugger Setup
+
+The extension registers a **Luma** debug adapter (backed by the `luma_dap` binary) with Zed's [debugger](https://zed.dev/docs/debugger). The `luma_dap` binary is resolved exactly like `luma_lsp` — PATH first, then automatic download from GitHub Releases (see [Manual Binary Setup](#manual-binary-setup), substituting `luma_dap` for `luma_lsp`).
+
+### Starting a debug session
+
+1. Open the `.luma` file you want to debug and set breakpoints in the gutter.
+2. Open the debug panel and start a new session (`debug: start`).
+3. Choose **Luma** from the adapter list, then the **Launch** request — this runs the current file under `luma_dap`.
+
+Because the extension also registers a debug _locator_, the ▶ run affordance on a `@main` function (from [tasks.json](languages/luma/tasks.json)) can be launched as a debug session too, without writing any configuration.
+
+### Configuration
+
+For repeatable setups, add a `.zed/debug.json` to your worktree. The adapter accepts these fields (schema: [debug_adapter_schemas/luma.json](debug_adapter_schemas/luma.json)):
+
+```jsonc
+[
+  {
+    "label": "Debug Current File",
+    "adapter": "Luma",
+    "request": "launch",
+    "program": "$ZED_FILE",       // path to the .luma program (required)
+    "args": [],                    // arguments passed to Process.get_arguments()
+    "cwd": "$ZED_WORKTREE_ROOT",   // working directory
+    "stopOnEntry": false,          // pause on the first executable line
+    "timeTravel": false            // record history to enable stepping backwards
+  }
+]
+```
+
+The Luma debugger is **launch-only** — it starts a fresh interpreter for the program and cannot attach to an already-running process.
+
 ## Keybindings
 
 Zed extensions cannot register keybindings automatically. See [KEYBINDINGS.md](KEYBINDINGS.md) for suggested key bindings you can add to your `keymap.json`.
@@ -129,6 +162,8 @@ Zed extensions cannot register keybindings automatically. See [KEYBINDINGS.md](K
 extensions/zed/
 ├── Cargo.toml              # Rust crate manifest (WASM extension)
 ├── extension.toml          # Extension metadata, LSP, snippet, and debugger config
+├── debug_adapter_schemas/
+│   └── luma.json           # JSON schema for the Luma debug adapter configuration
 ├── scripts/
 │   ├── download_binaries.sh   # Fetch pre-built luma_lsp binary (Unix)
 │   └── Download-Binaries.ps1  # Fetch pre-built luma_lsp binary (Windows)
