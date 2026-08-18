@@ -94,9 +94,7 @@ export function registerDebugAdapter(
     context.subscriptions.push(vscode.debug.registerDebugAdapterDescriptorFactory("luma", factory));
 
     const provider = new LumaDebugConfigurationProvider();
-    context.subscriptions.push(
-        vscode.debug.registerDebugConfigurationProvider("luma", provider),
-    );
+    context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider("luma", provider));
 
     // Register the same provider with the Dynamic trigger kind so the
     // configuration dropdown in the Run and Debug sidebar is populated

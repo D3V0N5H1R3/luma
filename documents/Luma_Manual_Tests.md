@@ -825,6 +825,7 @@ Use this summary to track progress:
 ## Reporting Issues
 
 For each failure, record:
+
 - **Test ID** (e.g., 1.10.3)
 - **Observed behavior** (what actually happened)
 - **Expected behavior** (from the "Expected" column)
