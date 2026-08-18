@@ -1,0 +1,112 @@
+# ═══════════════════════════════════════════════════════════
+# Ordering and Sorting
+#
+# Demonstrates the Order module — comparing values, building
+# multi-key sort orders, and using the built-in Ordering
+# choice type (Less, Equal, Greater).
+# ═══════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    # ── Basic comparisons ──
+    print("=== Basic Ordering ===")
+
+    Ordering num_cmp = Order.of(3, 7)
+    print("3 vs 7: ${ordering_name(num_cmp)}")
+
+    Ordering str_cmp = Order.of("banana", "apple")
+    print("banana vs apple: ${ordering_name(str_cmp)}")
+
+    Ordering bool_cmp = Order.of(false, true)
+    print("false vs true: ${ordering_name(bool_cmp)}")
+
+    # ── Ordering utilities ──
+    print("\n=== Ordering Utilities ===")
+
+    Ordering o = Order.of(5, 5)
+    print("5 vs 5 — is_equal: ${Order.is_equal(o)}")
+    print("5 vs 5 — is_less: ${Order.is_less(o)}")
+    print("5 vs 5 — to_number: ${Order.to_number(o)}")
+
+    Ordering reversed = Order.reverse(Order.of(1, 2))
+    print("reverse(1 vs 2): ${ordering_name(reversed)}")
+
+    # ── Multi-key ordering with Order.then ──
+    print("\n=== Multi-Key Ordering ===")
+
+    # When two students have the same name, break the tie by comparing grades.
+    Ordering primary = Order.of("Alice", "Alice")
+    Ordering secondary = Order.of(85.0, 92.0)
+    Ordering combined = Order.then(primary, secondary)
+    print("Same name, different grade: ${ordering_name(combined)}")
+
+    # When the primary comparison decides, the secondary is ignored.
+    Ordering decided = Order.then(Order.of("Alice", "Bob"), Order.of(100.0, 50.0))
+    print("Different name (decided): ${ordering_name(decided)}")
+
+    # ── Sorting with sort_by ──
+    print("\n=== Sorting ===")
+
+    array<number> scores = [88.0, 95.0, 72.0, 91.0, 85.0]
+    array<number> sorted = Result.unwrap(
+        scores |> Array.sort_by((number n) -> Converter.to_string(n))
+    )
+    print("Sorted scores: ${sorted}")
+
+    # ── Predicate helpers ──
+    print("\n=== Predicate Helpers ===")
+
+    Ordering big = Order.of(100, 1)
+    print("100 > 1? ${Order.is_greater(big)}")
+    print("100 >= 1? ${Order.is_greater_or_equal(big)}")
+    print("100 <= 1? ${Order.is_less_or_equal(big)}")
+}
+
+function string ordering_name(Ordering o) {
+    return match o {
+    case Ordering.Less    { "Less" }
+    case Ordering.Equal   { "Equal" }
+    case Ordering.Greater { "Greater" }
+    }
+}
+
+# ── Tests ──
+
+@test
+function void test_order_of_integers() {
+    assert(Order.of(1, 2) == Ordering.Less)
+    assert(Order.of(2, 2) == Ordering.Equal)
+    assert(Order.of(3, 2) == Ordering.Greater)
+}
+
+@test
+function void test_order_of_strings() {
+    assert(Order.of("apple", "banana") == Ordering.Less)
+    assert(Order.of("hello", "hello") == Ordering.Equal)
+    assert(Order.of("zebra", "ant") == Ordering.Greater)
+}
+
+@test
+function void test_order_reverse() {
+    assert(Order.reverse(Ordering.Less) == Ordering.Greater)
+    assert(Order.reverse(Ordering.Greater) == Ordering.Less)
+    assert(Order.reverse(Ordering.Equal) == Ordering.Equal)
+}
+
+@test
+function void test_order_then_tiebreaker() {
+    Ordering tied = Order.then(Ordering.Equal, Ordering.Less)
+    assert(tied == Ordering.Less, "when first is Equal, uses second")
+
+    Ordering decided = Order.then(Ordering.Greater, Ordering.Less)
+    assert(decided == Ordering.Greater, "when first is decided, ignores second")
+}
+
+@test
+function void test_order_predicates() {
+    Ordering less = Order.of(1, 10)
+    assert(Order.is_less(less))
+    assert(Order.is_less_or_equal(less))
+    assert(!Order.is_greater(less))
+    assert(!Order.is_equal(less))
+}

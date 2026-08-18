@@ -683,7 +683,7 @@ struct OpcodeExpectation {
 };
 
 // clang-format off
-constexpr std::array<OpcodeExpectation, 105> k_opcode_expectations{{
+constexpr std::array<OpcodeExpectation, 99> k_opcode_expectations{{
     {Op::Constant, OperandCategory::Constant, OperandLayout::U16, false,false,true,false,false,false,false,false, true, 1},
     {Op::ConstantLong, OperandCategory::Constant, OperandLayout::U32Long, false,false,true,false,false,false,false,false, true, 1},
     {Op::Pop, OperandCategory::None, OperandLayout::Simple, false,false,true,false,false,false,false,false, true, -1},
@@ -719,12 +719,6 @@ constexpr std::array<OpcodeExpectation, 105> k_opcode_expectations{{
     {Op::Not, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, false, 0},
     {Op::And, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, false, 0},
     {Op::Or, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, false, 0},
-    {Op::BitwiseAnd, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, true, -1},
-    {Op::BitwiseOr, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, true, -1},
-    {Op::BitwiseXor, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, true, -1},
-    {Op::BitwiseNot, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, false, 0},
-    {Op::ShiftLeft, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, true, -1},
-    {Op::ShiftRight, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, true, -1},
     {Op::Concatenate, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, true, -1},
     {Op::Interpolate, OperandCategory::None, OperandLayout::U8, false,false,false,false,false,false,false,false, false, 0},
     {Op::MakeArray, OperandCategory::None, OperandLayout::U16, false,false,false,false,false,false,false,false, false, 0},

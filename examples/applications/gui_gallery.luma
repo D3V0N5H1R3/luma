@@ -100,7 +100,7 @@ function widget view_header(dictionary model) {
     string clock = Dictionary.get_or(model, "clock", "--:--:--")
     return GraphicalUi.toolbar([
         GraphicalUi.icon("sparkles", 22),
-        GraphicalUi.heading("GraphicalUi Gallery", 1),
+        GraphicalUi.heading("GraphicalUi Gallery", 1, {"white_space": "nowrap"}),
         GraphicalUi.badge("kitchen sink"),
         GraphicalUi.flexible_space(),
         GraphicalUi.row([
@@ -940,7 +940,7 @@ function any download_report(dictionary model) {
 function any open_gallery_site(dictionary model) {
     return GraphicalUi.with_command(
         Dictionary.set(model, "status", "Open URL command dispatched"),
-        GraphicalUi.open_url("https://luma-lang.org"))
+        GraphicalUi.open_url("https://github.com/D3V0N5H1R3/luma"))
 }
 
 function any print_gallery(dictionary model) {

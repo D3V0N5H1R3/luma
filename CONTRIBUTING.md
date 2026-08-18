@@ -11,6 +11,7 @@ uphold this code.
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
+- [Required Knowledge](#required-knowledge)
 - [Project Documentation](#project-documentation)
 - [Getting Started](#getting-started)
     - [Code Quality and Linting](#code-quality-and-linting)
@@ -62,6 +63,47 @@ Some optional components need extra tooling:
   ESLint, Prettier) — **Node.js 20 or later** (CI builds with Node 22).
 - **Zed extension** — **Rust** via [rustup](https://rustup.rs/) with the
   `wasm32-wasip1` target (`rustup target add wasm32-wasip1`).
+
+---
+
+## Required Knowledge
+
+The project spans several technologies. You don't need all of them — only the
+ones relevant to the area you're working on. The matrix below maps each area to
+the languages, tools, and concepts you should be comfortable with before
+contributing to it.
+
+### By Area
+
+| Area | Languages | Key Technologies & Concepts |
+| ---- | --------- | --------------------------- |
+| **Interpreter core** (`core/`) | C++20 | Lexers and tokenisation, recursive-descent parsing, ASTs, static type checking, bytecode compilation, stack-based virtual machines, RAII and smart pointers (`unique_ptr`, `shared_ptr`), value semantics, closures (upvalue capture) |
+| **Concurrency runtime** (`core/runtime/concurrency/`) | C++20 | Threads (`std::thread`), mutexes, condition variables, atomics, cooperative cancellation, channel/CSP patterns, thread pools |
+| **Standard library** (`core/runtime/stdlib/`) | C++20 | The Luma language itself (to design API surfaces), platform APIs (sockets, file I/O, processes), data format specifications (JSON, CSV, XML), IEEE-754 floating-point, regular expressions, cryptographic hashing |
+| **Language server** (`language-server/`) | C++20 | [Language Server Protocol (LSP)](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/), JSON-RPC, incremental parsing, red-green trees, semantic tokens, UTF-16 position encoding |
+| **Debugger** (`debugger/`) | C++20 | [Debug Adapter Protocol (DAP)](https://microsoft.github.io/debug-adapter-protocol/specification), breakpoint management, call stacks and stack frames, expression evaluation, thread-safe state machines, mutex lock ordering |
+| **VS Code extension** (`extensions/vscode/`) | TypeScript | VS Code Extension API (`vscode` module), extension activation and lifecycle, language client (`vscode-languageclient`), debug adapter integration, webviews, TextMate grammars |
+| **Zed extension** (`extensions/zed/`) | Rust | Zed Extension API (`zed_extension_api` crate), WebAssembly (`wasm32-wasip1` target), Tree-sitter grammars and queries, WASI |
+| **Build system** (`CMakeLists.txt`, `cmake/`) | CMake | CMake presets, target-based configuration, cross-platform builds (Windows/macOS/Linux), compiler feature detection, CTest |
+| **CI / CD** (`.github/workflows/`) | YAML | GitHub Actions, matrix builds, caching, artifact management, release automation |
+| **Test infrastructure** (`tests/`, `fuzz/`) | C++20, Luma, Python | Custom C++ test framework (`test_framework.hpp`), Luma `@test` annotations and `assert()`, snapshot testing, LibFuzzer, `pytest` (for helper scripts) |
+| **Scripts & tooling** (`scripts/`) | Python, PowerShell, Shell | Test runners, Git hooks, coverage reporting, cross-platform scripting |
+| **Documentation** (`documents/`) | Markdown | Technical writing, API reference conventions |
+
+### Cross-Cutting Concepts
+
+These apply regardless of which area you work on:
+
+- **Git** — branching (`feature/`, `fix/`, `docs/`), conventional commits
+  (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`), rebasing, and
+  squash-merging.
+- **The Luma language** — you should be able to read and write basic Luma
+  programs (see the [User Manual](documents/Luma_User_Manual.md)) since feature
+  tests, examples, and stdlib API design all require it.
+- **The interpreter pipeline** — understanding the flow
+  `Source → Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM`
+  helps even when working on tooling, because the language server and debugger
+  reuse the same front-end and runtime.
 
 ---
 
@@ -560,10 +602,10 @@ log since the previous tag, and publishes a GitHub Release with all binaries and
    version — on `main`, and commit it:
 
     ```bash
-    # e.g. bump 0.5.0 -> 0.5.1
+    # e.g. bump 0.9.0 -> 0.9.0
     git switch main && git pull
     # edit VERSION, then:
-    git commit -am "chore: bump version to 0.5.1"
+    git commit -am "chore: bump version to 0.9.0"
     git push
     ```
 
@@ -582,8 +624,8 @@ log since the previous tag, and publishes a GitHub Release with all binaries and
     `v`, and push it:
 
     ```bash
-    git tag -a v0.5.1 -m "Release version 0.5.1"
-    git push origin v0.5.1
+    git tag -a v0.9.0 -m "Release version 0.9.0"
+    git push origin v0.9.0
     ```
 
 3. Watch the **Release** workflow run under

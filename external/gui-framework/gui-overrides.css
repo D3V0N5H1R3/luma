@@ -1197,6 +1197,8 @@ body {
 /* ── Toast: floating notification (extends .gui-alert). ─ */
 .gui-toast {
     box-shadow: var(--gui-elevation-4);
+    background: var(--gui-bg);
+    border-color: var(--gui-border);
 }
 
 /* Inline action button (e.g. "Undo") on a toast or alert. */

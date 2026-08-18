@@ -2999,10 +2999,6 @@
         },
         {
           "type": "STRING",
-          "value": "binary_tree"
-        },
-        {
-          "type": "STRING",
           "value": "key_value_store"
         },
         {

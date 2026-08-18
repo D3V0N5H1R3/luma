@@ -16,7 +16,7 @@ export const CONFIG_DEFAULTS = {
     "path": "",
     "dap.path": "",
     "diagnostics.onSave": false,
-    "inlayHints.enabled": true,
+    "inlayHints.enabled": false,
     "codeLens.enabled": true,
     "playground.enabled": true,
     "playground.timeout": 10000,

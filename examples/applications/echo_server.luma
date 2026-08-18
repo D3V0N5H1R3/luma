@@ -1,0 +1,128 @@
+# ═══════════════════════════════════════════════════════════
+# TCP Echo Server
+#
+# Demonstrates the Socket module — a simple TCP echo server
+# that accepts one connection, reads lines, and echoes them
+# back in uppercase until the client disconnects.
+#
+# Run with: luma examples/applications/echo_server.luma
+# Then connect with: telnet 127.0.0.1 9000
+# ═══════════════════════════════════════════════════════════
+
+@main
+function void main() {
+    integer port = 9000
+
+    # ── Start listening ──
+    result<socket> listener_result = Socket.listen("127.0.0.1", port)
+
+    socket listener = match listener_result {
+    success(s) { s }
+    failure(err) {
+        print("Failed to listen: ${err}")
+        Process.exit(1)
+        # Unreachable, but satisfies the type checker.
+        Result.unwrap(listener_result)
+    }
+    }
+
+    print("Echo server listening on 127.0.0.1:${port}")
+    print("Waiting for a connection...")
+
+    # ── Accept one client ──
+    result<socket> client_result = Socket.accept(listener)
+
+    socket client = match client_result {
+    success(s) { s }
+    failure(err) {
+        print("Accept failed: ${err}")
+        Socket.close(listener)
+        Process.exit(1)
+        Result.unwrap(client_result)
+    }
+    }
+
+    string remote = Socket.remote_address(client) ?? "unknown"
+    print("Client connected from ${remote}")
+
+    # ── Echo loop ──
+    mutable boolean running = true
+
+    while running {
+        result<string> line = Socket.receive_line(client)
+
+        match line {
+        success(data) {
+            if String.is_empty(String.trim(data)) {
+                print("Client sent empty line — closing.")
+                running = false
+            } else {
+                string response = String.uppercase(String.trim(data))
+                print("  Received: ${String.trim(data)}")
+
+                result<integer> _ = Socket.send(client, "${response}\n")
+            }
+        }
+        failure(_err) {
+            print("Client disconnected.")
+            running = false
+        }
+        }
+    }
+
+    # ── Cleanup ──
+    Socket.close(client)
+    Socket.close(listener)
+    print("Server stopped.")
+}
+
+# ── Tests (run without network) ──
+
+@test
+function void test_socket_listen_and_connect() {
+    # Listen on a random high port.
+    result<socket> server = Socket.listen("127.0.0.1", 0)
+    assert(Result.is_success(server))
+
+    socket srv = Result.unwrap(server)
+
+    # Get the actual assigned port.
+    result<string> addr = Socket.local_address(srv)
+    assert(Result.is_success(addr))
+
+    # Parse port from "127.0.0.1:NNNNN".
+    string addr_str = Result.unwrap(addr)
+    array<string> parts = String.split(addr_str, ":")
+    integer port = Result.unwrap(Converter.to_integer(parts[1]))
+
+    # Connect a client.
+    result<socket> client = Socket.connect("127.0.0.1", port)
+    assert(Result.is_success(client), "client should connect")
+
+    # Accept on server side.
+    result<socket> accepted = Socket.accept(srv)
+    assert(Result.is_success(accepted), "accept should succeed")
+
+    # Send data client → server.
+    socket c = Result.unwrap(client)
+    socket a = Result.unwrap(accepted)
+
+    result<integer> sent = Socket.send(c, "hello\n")
+    assert(Result.is_success(sent))
+
+    result<string> received = Socket.receive_line(a)
+    assert(Result.is_success(received))
+    assert(String.trim(Result.unwrap(received)) == "hello")
+
+    # Cleanup.
+    Socket.close(c)
+    Socket.close(a)
+    Socket.close(srv)
+}
+
+@test
+function void test_socket_connect_failure() {
+    # Connecting to a port with no listener should fail.
+    result<socket> bad = Socket.connect("127.0.0.1", 1)
+    assert(Result.is_failure(bad), "connect to closed port must fail")
+}

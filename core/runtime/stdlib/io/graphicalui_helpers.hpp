@@ -122,11 +122,11 @@ build_http_response_record_gui(int status, std::string body,
 [[nodiscard]] Value build_wheel_delta_record(const DictionaryValue& payload);
 
 // graphicalui_widgets*.cpp
-void register_graphicalui_widgets(const EnvPtr& env);
+void register_graphicalui_widgets(const EnvPtr& env, bool sandbox);
 void register_basic_widgets(const EnvPtr& env);
 void register_layout_widgets(const EnvPtr& env);
 void register_chart_widgets(const EnvPtr& env);
-void register_commands_and_subscriptions(const EnvPtr& env);
+void register_commands_and_subscriptions(const EnvPtr& env, bool sandbox);
 void register_advanced_widgets(const EnvPtr& env);
 void register_or_defer_command_callback(std::shared_ptr<DictionaryValue>& w, const Value& cb_arg);
 

@@ -1,7 +1,7 @@
 id = "luma"
 name = "Luma"
 description = "Syntax highlighting, language configuration, snippets, and language server integration for the Luma programming language."
-version = "0.7.0"
+version = "0.9.0"
 schema_version = 1
 authors = ["Luma Contributors"]
 repository = "https://github.com/d3v0n5h1r3/luma"

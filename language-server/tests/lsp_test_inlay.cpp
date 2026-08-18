@@ -94,7 +94,12 @@ struct InlayFixture {
           transport_wrapper(std::make_unique<NullTransport>(), initialized),
           ctx{state_mutex,   doc_store,       analysis_cache,
               pending_uris,  stdlib_registry, semantic_token_cache,
-              configuration, workspace,       transport_wrapper} {}
+              configuration, workspace,       transport_wrapper} {
+        // Inlay hints are off by default; enable them so these tests exercise
+        // the hint-generation logic rather than the disabled short-circuit.
+        configuration.config().apply_lsp_settings(
+            JsonValue::parse(R"({"luma":{"inlayHints":{"enabled":true}}})"));
+    }
 
     void analyze_and_cache(const std::string& uri, const std::string& source) {
         analysis_cache.insert(uri, service.analyze(uri, source));
@@ -198,12 +203,43 @@ void test_inlay_hint_absent_range_returns_all_hints() {
     ASSERT_EQ(without_range.as_array().size(), with_range.as_array().size());
 }
 
+// Function declarations must not receive parameter-name inlay hints — those are
+// reserved for call sites. Before the fix, `Identifier LeftParen` in a function
+// declaration was mistaken for a function call.
+void test_inlay_hint_no_param_hints_on_function_declaration() {
+    InlayFixture fx;
+    const std::string uri = "file:///test/inlay_decl.luma";
+    const std::string source = "@main\n"
+                               "function string format_money(number amount) {\n"
+                               "    return \"hello\"\n"
+                               "}\n";
+    fx.analyze_and_cache(uri, source);
+
+    const auto hints = fx.request_hints(make_range_params(uri, 0, 0, 100, 0));
+    ASSERT_TRUE(hints.is_array());
+
+    // No parameter-name hints (kind 2) should appear on the declaration line.
+    for (const auto& hint : hints.as_array()) {
+        if (!hint.is_object() || !hint.has("kind")) {
+            continue;
+        }
+        const int kind = static_cast<int>(hint["kind"].as_integer());
+        // InlayHintKind::Parameter == 2
+        if (kind == 2) {
+            const int line = static_cast<int>(hint["position"]["line"].as_integer());
+            // Line 1 is the function declaration (0-based).
+            ASSERT_NE(line, 1);
+        }
+    }
+}
+
 } // namespace
 
 int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_inlay_hint_full_range_returns_multiple_lines);
     RUN(test_inlay_hint_respects_requested_range);
     RUN(test_inlay_hint_absent_range_returns_all_hints);
+    RUN(test_inlay_hint_no_param_hints_on_function_declaration);
 
     return SUMMARY();
 }

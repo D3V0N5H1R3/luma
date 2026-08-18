@@ -18,8 +18,7 @@ namespace luma::protocol {
 //   │   ├── luma::JsonParseError (JSON syntax errors)
 //   │   └── protocol::ParseError (framing / header errors)
 //   └── TransportError           (I/O and connection errors)
-//       ├── ConnectionClosed
-//       └── TimeoutError
+//       └── ConnectionClosed
 //
 // Callers can catch luma::ParseError to handle all parsing
 // failures uniformly, or catch protocol::ParseError /
@@ -45,12 +44,6 @@ public:
 class ParseError : public luma::ParseError {
 public:
     using luma::ParseError::ParseError;
-};
-
-// A read or connection attempt exceeded its time limit.
-class TimeoutError : public TransportError {
-public:
-    using TransportError::TransportError;
 };
 
 } // namespace luma::protocol

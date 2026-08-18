@@ -2819,7 +2819,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 
 ## 36 — Statistics
 
-Descriptive and inferential statistics over numeric arrays. Split out of `Math`
+Descriptive statistics over numeric arrays. Split out of `Math`
 so the four maths modules each cover one cohesive domain: `Math` (scalar
 arithmetic, trigonometry, number theory, geometry), `Calculus`, `LinearAlgebra`,
 and `Statistics` (whole-dataset summaries). The plain aggregate `Math.sum` stays
@@ -2827,31 +2827,11 @@ in `Math`; every function here reduces or summarises a whole array.
 
 | Function                        | Parameter Types                  | Return Type                        | Description                                                                      |
 | ------------------------------- | -------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
-| `Statistics.correlation(xs, ys)`      | `(array<number>, array<number>)` | `result<number>`                   | Pearson correlation coefficient; fail if arrays differ in length or < 2 elements |
-| `Statistics.five_number_summary(array)` | `(array<number>)`                | `result<Statistics.FiveNumberSummary>` | Box-plot quartiles (min, Q1, median, Q3, max) in one pass; fail if empty      |
-| `Statistics.histogram(values, bins)`  | `(array<number>, integer)`       | `result<Statistics.Histogram>`     | Bin `values` into `bins` equal-width half-open bins; fail if empty or `bins < 1` |
-| `Statistics.linear_fit(xs, ys)`       | `(array<number>, array<number>)` | `result<Statistics.LineFit>`       | Ordinary least-squares line fit; fail on unequal lengths, < 2 points, or zero x-variance |
 | `Statistics.mean(array)`                | `(array<number>)`                | `result<number>`                   | Arithmetic mean; fail if empty                                                   |
 | `Statistics.median(array)`              | `(array<number>)`                | `result<number>`                   | Median value; fail if empty                                                      |
 | `Statistics.mode(array)`                | `(array<number>)`                | `result<number>`                   | Most frequent value; fail if empty                                               |
-| `Statistics.percentile(array, p)`       | `(array<number>, number)`        | `result<number>`                   | p-th percentile; fail if empty or `p` outside [0, 100]                           |
 | `Statistics.standard_deviation(array)`  | `(array<number>)`                | `result<number>`                   | Standard deviation; fail if empty                                                |
-| `Statistics.summarize(array)`           | `(array<number>)`                | `result<Statistics.Summary>`       | Descriptive statistics (count, min, max, mean, median, std. dev.) in one pass; fail if empty |
 | `Statistics.variance(array)`            | `(array<number>)`                | `result<number>`                   | Variance; fail if empty                                                          |
-
-`Statistics.Summary` record fields: `count: integer`, `minimum: number`, `maximum: number`, `mean: number`, `median: number`, `standard_deviation: number` (population standard deviation).
-
-`Statistics.FiveNumberSummary` is the box-plot sibling of `Statistics.Summary` — `minimum: number`, `q1: number`, `median: number`, `q3: number`, `maximum: number` — returned by `Statistics.five_number_summary(array)` (fails on an empty array). The quartiles use the same linear-interpolation method as `Statistics.percentile`, so `Statistics.five_number_summary(v)` agrees with `Statistics.percentile(v, 25/50/75)` — a single typed answer for the five order statistics a box plot needs.
-
-`Statistics.Histogram { bin_edges: array<number>, counts: array<integer>, bin_width: number }` is the binned frequency distribution behind every bar chart. `Statistics.histogram(values, bins)` splits the data range `[min, max]` into `bins` equal-width half-open bins and tallies how many samples fall in each — `counts[i]` is the number of values in `[bin_edges[i], bin_edges[i+1])`, so `bin_edges` always has one more element than `counts`, and the final bin is closed on the right so the maximum is counted. It fails on an empty array or `bins < 1`. When every value is identical (a zero-width range) the range is widened by half a unit on each side so the bins stay positive-width. The `integer` counts and `number` edges respect the numeric convention, and the shape feeds the GraphicalUi bar chart directly. Mirrors `Statistics.summarize` / `Statistics.five_number_summary`: pure data returned by one pipe-first `result`-typed call.
-
-```luma
-Statistics.Histogram h = Result.unwrap(Statistics.histogram([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3))
-assert(Array.length(h.bin_edges) == 4)   # one more edge than counts
-assert(Array.length(h.counts) == 3)
-```
-
-`Statistics.LineFit` is the ordinary least-squares regression result — `slope: number`, `intercept: number`, `r_squared: number` — returned by `Statistics.linear_fit(xs, ys)` for the trend line `y = slope · x + intercept`. It fails on mismatched array lengths, fewer than two points, or a zero x-variance (a vertical line). Mirrors `Statistics.Summary`: a plain returned record built by a single call.
 
 ---
 

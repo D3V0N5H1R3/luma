@@ -88,11 +88,11 @@ function string status_text(dictionary model) {
 
 # ─── View ──────────────────────────────────────────────────
 
-function dictionary<string> toggle_style(boolean running) {
+function dictionary<string> toggle_style(boolean _running) {
     return {
         "id": "btn-toggle",
         "min_width": "120px",
-        "variant": if running { GraphicalUi.SECONDARY } else { GraphicalUi.PRIMARY }
+        "variant": GraphicalUi.PRIMARY
     }
 }
 
@@ -100,7 +100,7 @@ function dictionary<string> reset_style() {
     return {
         "id": "btn-reset",
         "min_width": "120px",
-        "variant": GraphicalUi.SECONDARY
+        "variant": GraphicalUi.DANGER
     }
 }
 

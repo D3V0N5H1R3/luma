@@ -56,8 +56,7 @@ constexpr CancelPairPattern k_cancel_pair_patterns[] = {
     //   Negate;Negate `-(-x)`     — safe_negate promotes INT64_MIN to a number, so
     //                               cancelling keeps the raw INT64_MIN integer and
     //                               changes the result's type.
-    //   BitwiseNot;BitwiseNot `~~x`,
-    //   One;IntDivide `x // 1`    — `~` and `//` require integer operands; an
+    //   One;IntDivide `x // 1`    — `//` requires integer operands; an
     //                               overflow-promoted number raises at runtime, but
     //                               the cancel would return it unchanged.
     //   Not;Not `!!x`             — `!` coerces via truthiness, so `!!v` is a

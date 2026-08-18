@@ -251,9 +251,15 @@ bool TlsConnection::send_data(const std::string& data) {
             &ssl, reinterpret_cast<const unsigned char*>(data.data() + sent), remaining);
 
         if (ret < 0) {
-            if (ret == MBEDTLS_ERR_SSL_WANT_WRITE) {
+            if (ret == MBEDTLS_ERR_SSL_WANT_WRITE || ret == MBEDTLS_ERR_SSL_WANT_READ) {
                 continue;
             }
+
+#if defined(MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
+            if (ret == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET) {
+                continue;
+            }
+#endif
 
             return false;
         }
@@ -265,10 +271,29 @@ bool TlsConnection::send_data(const std::string& data) {
 }
 
 int TlsConnection::recv_data(char* buf, std::size_t len) {
-    const int ret = mbedtls_ssl_read(&ssl, reinterpret_cast<unsigned char*>(buf), len);
+    int ret{};
 
-    if (ret == MBEDTLS_ERR_SSL_WANT_READ) {
-        return 0;
+    // Loop to handle TLS 1.3 post-handshake messages (e.g. NewSessionTicket)
+    // that mbedtls surfaces as non-fatal "retry" codes.  Without the loop, the
+    // very first ssl_read after a TLS 1.3 handshake would return one of these
+    // codes (most servers send a ticket immediately), causing the HTTP response
+    // reader to interpret it as EOF and report failure.
+    constexpr int k_max_retry = 64;
+
+    for (int attempt = 0; attempt < k_max_retry; ++attempt) {
+        ret = mbedtls_ssl_read(&ssl, reinterpret_cast<unsigned char*>(buf), len);
+
+        if (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE) {
+            continue;
+        }
+
+#if defined(MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
+        if (ret == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET) {
+            continue;
+        }
+#endif
+
+        break;
     }
 
     if (ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || ret == 0) {

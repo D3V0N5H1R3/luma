@@ -58,21 +58,6 @@ enum class Op : std::uint8_t {
     And, // a && b (short-circuit)
     Or,  // a || b (short-circuit)
 
-    // ─── Bitwise ───
-    // TODO(cleanup): the `& | ^ ~ << >>` operators were removed from the language
-    // (R06 — bit manipulation moved to the Bits stdlib module), so the compiler no
-    // longer emits these opcodes. They are retained (here, in `opcode_table` + its
-    // static_asserts, the VM handlers in `vm_dispatch_table.cpp`, and
-    // `optimizer_constant_fold.cpp`) only to avoid renumbering the opcode enum,
-    // which would change the persisted `.lumc` bytecode format. Remove them in a
-    // dedicated follow-up that also bumps `k_bytecode_format_version`.
-    BitwiseAnd, // a & b  (unemitted — see TODO above)
-    BitwiseOr,  // a | b  (unemitted)
-    BitwiseXor, // a ^ b  (unemitted)
-    BitwiseNot, // ~a     (unemitted)
-    ShiftLeft,  // a << b (unemitted)
-    ShiftRight, // a >> b (unemitted)
-
     // ─── Strings ───
     Concatenate, // string + string
     Interpolate, // Build interpolated string: Interpolate <u8 part_count>
@@ -288,12 +273,6 @@ inline constexpr std::array<OpcodeInfo, opcode_count> opcode_table{{
     {Op::Not, "Not", 1, OperandCategory::None, OperandLayout::Simple, 0, false, 0},
     {Op::And, "And", 1, OperandCategory::None, OperandLayout::Simple, 0, false, 0},
     {Op::Or, "Or", 1, OperandCategory::None, OperandLayout::Simple, 0, false, 0},
-    {Op::BitwiseAnd, "BitwiseAnd", 1, OperandCategory::None, OperandLayout::Simple, 0, true, -1},
-    {Op::BitwiseOr, "BitwiseOr", 1, OperandCategory::None, OperandLayout::Simple, 0, true, -1},
-    {Op::BitwiseXor, "BitwiseXor", 1, OperandCategory::None, OperandLayout::Simple, 0, true, -1},
-    {Op::BitwiseNot, "BitwiseNot", 1, OperandCategory::None, OperandLayout::Simple, 0, false, 0},
-    {Op::ShiftLeft, "ShiftLeft", 1, OperandCategory::None, OperandLayout::Simple, 0, true, -1},
-    {Op::ShiftRight, "ShiftRight", 1, OperandCategory::None, OperandLayout::Simple, 0, true, -1},
     {Op::Concatenate, "Concatenate", 1, OperandCategory::None, OperandLayout::Simple, 0, true, -1},
     {Op::Interpolate, "Interpolate", 2, OperandCategory::None, OperandLayout::U8, 0, false, 0},
     {Op::MakeArray, "MakeArray", 3, OperandCategory::None, OperandLayout::U16, 0, false, 0},
@@ -379,7 +358,6 @@ static_assert(opcode_table[static_cast<std::size_t>(Op::None)].code           ==
 static_assert(opcode_table[static_cast<std::size_t>(Op::Add)].code            == Op::Add,            "opcode_table: Add position mismatch");
 static_assert(opcode_table[static_cast<std::size_t>(Op::Equal)].code          == Op::Equal,          "opcode_table: Equal position mismatch");
 static_assert(opcode_table[static_cast<std::size_t>(Op::Not)].code            == Op::Not,            "opcode_table: Not position mismatch");
-static_assert(opcode_table[static_cast<std::size_t>(Op::BitwiseAnd)].code     == Op::BitwiseAnd,     "opcode_table: BitwiseAnd position mismatch");
 static_assert(opcode_table[static_cast<std::size_t>(Op::Concatenate)].code    == Op::Concatenate,    "opcode_table: Concatenate position mismatch");
 static_assert(opcode_table[static_cast<std::size_t>(Op::MakeArray)].code      == Op::MakeArray,      "opcode_table: MakeArray position mismatch");
 static_assert(opcode_table[static_cast<std::size_t>(Op::MakeRecord)].code     == Op::MakeRecord,     "opcode_table: MakeRecord position mismatch");

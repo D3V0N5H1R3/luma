@@ -105,7 +105,7 @@ The CLI module selects one of several modes based on command-line arguments. Eac
 | Strict check    | `luma --check --strict <file>`  | Lexer → Parser → Include Resolver → Type Checker → Linter (warnings are errors)                 |
 | Test            | `luma --test, -t <file.luma>`   | Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM Test Runner           |
 | Sandbox         | `luma --box, -b <file.luma>`    | Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM (OS modules disabled) |
-| Package init    | `luma pkg init`                 | Creates a `luma.json` manifest in the current directory                                         |
+| Project init    | `luma init`                     | Creates a `luma.json` project configuration in the current directory                            |
 | REPL            | `luma`                          | Loop: Lexer → Parser → Compiler → VM (`:file` adds Include Resolver)                            |
 | REPL (explicit) | `luma --repl, -r`               | Loop: Lexer → Parser → Compiler → VM (`:file` adds Include Resolver)                            |
 | Eval (stdin)    | `luma --eval, -e`               | Stdin → Lexer → Parser → Type Checker → Compiler → VM (no `@main` required)                     |
@@ -495,7 +495,7 @@ _Note:_ The Type Checker operates on the merged AST produced by the Include Reso
 
 ### 4.11 Standard Library
 
-**Responsibility:** Provide all built-in functions and constants organised into 36 namespaces defined by the language (String, Array, Dictionary, Math, Result, Converter, DateTime, Decimal, Console, FileSystem, RegularExpression, Process, Random, Encoder, Resource, Set, Channel, Task, Terminal, GraphicalUi, Socket, Optional, Reference, Queue, Stack, Log, Json, Csv, Xml, LinearAlgebra, Calculus, Hash, Compression, Http, KeyValueStore, BinaryTree) plus the core built-ins (`print`, `assert`, `type_of`) — 37 registration units in total. Note: `success` and `failure` are language keywords parsed into dedicated AST nodes (`SuccessExpression`, `FailureExpression`), not runtime functions.
+**Responsibility:** Provide all built-in functions and constants organised into 39 namespaces defined by the language (Array, Bits, Calculus, Channel, Color, Compression, Console, Converter, Csv, DateTime, Decimal, Dictionary, Encoder, FileSystem, GraphicalUi, Hash, Http, Json, KeyValueStore, LinearAlgebra, Log, Math, Optional, Order, Queue, Random, Reference, RegularExpression, Resource, Result, Set, Socket, Stack, Statistics, String, Task, Terminal, Xml) plus the core built-ins (`print`, `assert`, `type_of`) — 40 registration units in total. Note: `success` and `failure` are language keywords parsed into dedicated AST nodes (`SuccessExpression`, `FailureExpression`), not runtime functions.
 
 **Interface:**
 
@@ -915,7 +915,6 @@ Value = variant {
     int64_t             : integer primitive
     string              : string (stored inline, not heap-allocated)
     ArrayValue          : shared_ptr<Array>          # Array = { vector<Value> }
-    BinaryTreeValue     : shared_ptr<BinaryTree>     # BinaryTree = { BST nodes }
     ChannelValue        : shared_ptr<Channel>        # Channel = { thread-safe queue }
     ChoiceValue         : shared_ptr<Choice>         # Choice = { type_name, variant_name, fields }
     DictionaryValue     : shared_ptr<Dictionary>     # Dictionary = { vector<pair<string, Value>>, hash index }
@@ -940,7 +939,7 @@ Value = variant {
 
 - Primitive values (`none`, `boolean`, `integer`, `number`) are stored inline — no heap allocation.
 - Strings are stored inline as `std::string` — no heap indirection beyond the string's own internal buffer.
-- Compound values (`array`, `binary_tree`, `channel`, `choice`, `dictionary`, `function`, `key_value_store`, `queue`, `range`, `record`, `reference`, `result`, `set`, `socket`, `stack`, `task`, `tuple`, `xml`) use `std::shared_ptr` for shared ownership within the interpreter (e.g., closures capturing outer variables, channels shared between tasks).
+- Compound values (`array`, `channel`, `choice`, `dictionary`, `function`, `key_value_store`, `queue`, `range`, `record`, `reference`, `result`, `set`, `socket`, `stack`, `task`, `tuple`, `xml`) use `std::shared_ptr` for shared ownership within the interpreter (e.g., closures capturing outer variables, channels shared between tasks).
 
 ### 5.5 Bytecode Data Structures
 
@@ -987,7 +986,6 @@ CallFrame {
 | Arithmetic      | 9     | `Add`, `Subtract`, `Multiply`, `Divide`, `IntDivide`, `Modulo`, `Negate`, `Increment`, `Decrement`        |
 | Comparison      | 6     | `Equal`, `NotEqual`, `Less`, `LessEqual`, `Greater`, `GreaterEqual`                                       |
 | Logical         | 3     | `Not`, `And`, `Or`                                                                                        |
-| Bitwise         | 6     | `BitwiseAnd`, `BitwiseOr`, `BitwiseXor`, `BitwiseNot`, `ShiftLeft`, `ShiftRight`                          |
 | Strings         | 2     | `Concatenate`, `Interpolate`                                                                              |
 | Collections     | 8     | `MakeArray`, `MakeDict`, `MakeTuple`, `MakeRange`, `MakeRangeInc`, `IndexGet`, `IndexSet`, `IndexGetOpt`  |
 | Records         | 5     | `MakeRecord`, `GetField`, `SetField`, `GetFieldOpt`, `RecordWith`                                         |
@@ -1623,17 +1621,6 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 | `And`  | —        | `(a b → bool)` | Logical AND. The compiler also uses `JumpIfFalse` for short-circuit evaluation. |
 | `Or`   | —        | `(a b → bool)` | Logical OR. The compiler also uses `JumpIfTrue` for short-circuit evaluation.   |
 
-#### Bitwise
-
-| Opcode       | Operands | Stack Effect  | Description              |
-| ------------ | -------- | ------------- | ------------------------ |
-| `BitwiseAnd` | —        | `(a b → int)` | Bitwise AND on integers. |
-| `BitwiseOr`  | —        | `(a b → int)` | Bitwise OR on integers.  |
-| `BitwiseXor` | —        | `(a b → int)` | Bitwise XOR on integers. |
-| `BitwiseNot` | —        | `(a → int)`   | Bitwise NOT on integer.  |
-| `ShiftLeft`  | —        | `(a b → int)` | Left shift on integers.  |
-| `ShiftRight` | —        | `(a b → int)` | Right shift on integers. |
-
 #### Strings
 
 | Opcode        | Operands | Stack Effect                 | Description                                          |
@@ -1850,7 +1837,7 @@ The interpreter uses C++ RAII and smart pointers for fully automatic memory mana
 | Lambdas/closures | `std::shared_ptr` | Closures own a deep-copied environment snapshot that must outlive them.                                                          |
 | Records          | `std::shared_ptr` | Records can be passed by reference to functions.                                                                                 |
 | Results          | `std::shared_ptr` | Results flow through pipelines and match arms.                                                                                   |
-| Stdlib values    | `std::shared_ptr` | Queue, Stack, Set, BinaryTree, KeyValueStore, Xml, Reference — all use shared pointers.              |
+| Stdlib values    | `std::shared_ptr` | Queue, Stack, Set, KeyValueStore, Xml, Reference — all use shared pointers.              |
 | Tasks            | `std::shared_ptr` | Tasks are shared between the spawning scope and the thread pool.                                                                 |
 | Tuples           | `std::shared_ptr` | Same as arrays.                                                                                                                  |
 
@@ -1916,26 +1903,30 @@ The standard library is organised as a flat collection of namespace modules. Eac
 ```text
 Standard Library
 ├── Array module             — Array.map, Array.filter, Array.push, ...
-├── BinaryTree module        — BinaryTree.new, BinaryTree.insert, BinaryTree.remove, BinaryTree.inorder, ...
+├── Bits module              — Bits.and, Bits.or, Bits.xor, Bits.not, Bits.shift_left, ...
 ├── Calculus module          — Calculus.derivative, Calculus.integrate, Calculus.root, ...
 ├── Channel module           — Channel.new, Channel.send, Channel.receive, ...
+├── Color module             — Color.from_hex, Color.to_hex, Color.mix, Color.lighten, Color.contrast_ratio, ...
 ├── Compression module       — Compression.deflate, Compression.inflate, Compression.gzip, Compression.encode_rle, ...
+├── Console module           — Console.prompt, Console.read_from_stdin, Console.write_to_stdout, ...
 ├── Converter module         — Converter.to_string, Converter.to_integer, ...
 ├── Core built-ins           — print, assert, type_of
 ├── Csv module               — Csv.deserialize, Csv.serialize, Csv.deserialize_records, Csv.header, ...
 ├── DateTime module          — DateTime.milliseconds_since_start, DateTime.now_iso_string, DateTime.to_iso_string, DateTime.add_months, DateTime.difference_days, DateTime.to_offset, DateTime.from_offset, DateTime.to_iso_string_offset, DateTime.from_parts_offset, DateTime.offset_hours, ...
+├── Decimal module           — Decimal.from_string, Decimal.add, Decimal.subtract, Decimal.round, ...
 ├── Dictionary module        — Dictionary.get, Dictionary.set, Dictionary.keys, ...
 ├── Encoder module           — Encoder.encode_base64, Encoder.decode_base64, Encoder.encode_base64url, Encoder.encode_url, ...
 ├── FileSystem module        — FileSystem.list_directories, FileSystem.create_directory, FileSystem.delete_directory, FileSystem.rename_directory, ...
+├── GraphicalUi module       — GraphicalUi.app, GraphicalUi.text, GraphicalUi.button, GraphicalUi.column, ...
 ├── Hash module              — Hash.md5, Hash.sha256, Hash.sha512, Hash.hmac_sha256, Hash.verify, ...
 ├── Http module              — Http.get, Http.post, Http.parse_url, Http.download, ...
-├── Console module          — Console.prompt, Console.read_from_stdin, Console.write_to_stdout, ...
 ├── Json module              — Json.serialize, Json.deserialize, Json.is_valid, ...
 ├── KeyValueStore module     — KeyValueStore.open, KeyValueStore.get, KeyValueStore.set, KeyValueStore.save, ...
 ├── LinearAlgebra module     — LinearAlgebra.add, LinearAlgebra.dot, LinearAlgebra.solve, ...
 ├── Log module               — Log.information, Log.warning, Log.error, Log.set_level, ...
 ├── Math module              — Math.floor, Math.square_root, Math.pi, ...
 ├── Optional module          — Optional.is_some, Optional.is_none, Optional.unwrap, Optional.unwrap_or, ...
+├── Order module             — Order.sort_by, Order.min_by, Order.max_by, Order.group_by, ...
 ├── Process module           — Process.run, Process.get_environment_variable, Process.exit, ...
 ├── Queue module             — Queue.new, Queue.enqueue, Queue.dequeue, Queue.peek, ...
 ├── Random module            — Random.generate_number, Random.generate_integer, Random.choice, ...
@@ -1946,6 +1937,7 @@ Standard Library
 ├── Set module               — Set.from_array, Set.length, Set.contains, Set.union, Set.intersection, Set.add, Set.remove, ...
 ├── Socket module            — Socket.connect, Socket.listen, Socket.accept, Socket.send, Socket.receive, Socket.close, ...
 ├── Stack module             — Stack.new, Stack.push, Stack.pop, Stack.peek, ...
+├── Statistics module        — Statistics.mean, Statistics.median, Statistics.standard_deviation, ...
 ├── String module            — String.length, String.uppercase, String.trim, String.byte_length, String.is_whitespace, ...
 ├── Task module              — Task.all, Task.race, Task.timeout, Task.delay, Task.retry, ...
 ├── Terminal module           — Terminal.move_to, Terminal.move_to_row, Terminal.color, Terminal.read_key, Terminal.enable_mouse, ...
@@ -2013,7 +2005,7 @@ When the interpreter is started with `--box` (or `-b`), the `register_all` funct
 - `Socket` — TCP and UDP networking
 - `Xml` — XML file I/O
 
-All other modules (`Array`, `BinaryTree`, `Calculus`, `Channel`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `Hash`, `Json`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, and `Hash.sha512_file`. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
+All other modules (`Array`, `Bits`, `Calculus`, `Channel`, `Color`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `GraphicalUi`, `Hash`, `Json`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, and `Hash.sha512_file`. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
 
 Attempting to call a function from a sandbox-blocked module produces a clear error message (`'Module.function' is not available in sandbox mode (--box)`) instead of the generic "undefined variable" error. The `Environment` class maintains a set of blocked module prefixes that is checked during variable lookup.
 

@@ -60,8 +60,7 @@ luma --box, -b <file.luma>    # run in sandbox mode (no I/O, network, or process
 luma --box --test <file>      # run tests in sandbox mode
 luma --optimize, -O <file>    # optimization level (0=none, 1=peephole, 2=full; default: 1)
 luma --verify <file.luma>     # verify bytecode integrity before execution
-luma pkg init                 # create a new luma.json manifest in the current directory
-luma pkg help                 # print package manager usage
+luma init                     # create a luma.json project configuration in the current directory
 luma --version, -v            # print version
 luma --help, -h               # print usage
 ```
