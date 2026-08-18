@@ -94,7 +94,12 @@ struct InlayFixture {
           transport_wrapper(std::make_unique<NullTransport>(), initialized),
           ctx{state_mutex,   doc_store,       analysis_cache,
               pending_uris,  stdlib_registry, semantic_token_cache,
-              configuration, workspace,       transport_wrapper} {}
+              configuration, workspace,       transport_wrapper} {
+        // Inlay hints are off by default; enable them so these tests exercise
+        // the hint-generation logic rather than the disabled short-circuit.
+        configuration.config().apply_lsp_settings(
+            JsonValue::parse(R"({"luma":{"inlayHints":{"enabled":true}}})"));
+    }
 
     void analyze_and_cache(const std::string& uri, const std::string& source) {
         analysis_cache.insert(uri, service.analyze(uri, source));
