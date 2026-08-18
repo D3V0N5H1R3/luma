@@ -558,7 +558,8 @@ extensions/zed/
 │       ├── outline.scm    # Symbol outline queries
 │       ├── overrides.scm  # Scope override queries
 │       ├── redactions.scm # Sensitive data redaction queries
-│       ├── runnables.scm  # Runnable detection queries
+│       ├── runnables.scm  # Runnable detection queries (@main/@test → task tags)
+│       ├── tasks.json     # Task templates for the runnable tags (run/test)
 │       └── textobjects.scm # Vim text-object queries
 │
 └── src/
