@@ -62,8 +62,7 @@
             {
                 "language": "luma",
                 "scopeName": "source.luma",
-                "path": "./syntaxes/luma.tmLanguage.json",
-                "semanticHighlighting": true
+                "path": "./syntaxes/luma.tmLanguage.json"
             },
             {
                 "scopeName": "markdown.luma.codeblock",
@@ -94,6 +93,11 @@
                 "path": "./themes/luma-light-color-theme.json"
             }
         ],
+        "configurationDefaults": {
+            "[luma]": {
+                "editor.semanticHighlighting.enabled": false
+            }
+        },
         "configuration": {
             "title": "Luma",
             "properties": {
@@ -124,13 +128,13 @@
                 },
                 "luma.inlayHints.enabled": {
                     "type": "boolean",
-                    "default": true,
-                    "markdownDescription": "Show inferred type annotations as inlay hints."
+                    "default": false,
+                    "markdownDescription": "Show inferred type annotations and parameter names as inlay hints. Disabled by default because hints render in the minimap and can make the editor look cluttered."
                 },
                 "luma.codeLens.enabled": {
                     "type": "boolean",
-                    "default": true,
-                    "markdownDescription": "Show reference counts above functions and types."
+                    "default": false,
+                    "markdownDescription": "Show reference counts above functions and types. Disabled by default because code lenses render in the minimap as white text."
                 },
                 "luma.playground.enabled": {
                     "type": "boolean",

@@ -84,16 +84,16 @@
         },
         "inlayHints.enabled": {
             "type": "boolean",
-            "default": true,
-            "description": "Show inferred type annotations as inlay hints in the editor.",
+            "default": false,
+            "description": "Show inferred type annotations and parameter names as inlay hints in the editor. Disabled by default because hints also render in the minimap and can make the editor look cluttered.",
             "vscode": {
-                "markdownDescription": "Show inferred type annotations as inlay hints."
+                "markdownDescription": "Show inferred type annotations and parameter names as inlay hints. Disabled by default because hints render in the minimap and can make the editor look cluttered."
             }
         },
         "codeLens.enabled": {
             "type": "boolean",
-            "default": true,
-            "description": "Show reference counts above functions and types as code lenses.",
+            "default": false,
+            "description": "Show reference counts above functions and types as code lenses. Disabled by default because code lenses render in the minimap as white text.",
             "vscode": {
                 "markdownDescription": "Show reference counts above functions and types."
             }

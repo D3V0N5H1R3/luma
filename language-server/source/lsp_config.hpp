@@ -17,8 +17,8 @@ using luma::json::JsonValue;
 // because a snapshot is never mutated after construction — readers
 // always obtain a complete, consistent copy via LspConfig::get().
 struct ConfigSnapshot {
-    bool inlay_hints_enabled{true};
-    bool code_lens_enabled{true};
+    bool inlay_hints_enabled{false};
+    bool code_lens_enabled{false};
     bool diagnostics_on_save{false};
     int analysis_debounce_ms{50};
     int analysis_timeout_ms{10000}; // 10 s default
