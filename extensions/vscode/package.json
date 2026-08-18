@@ -95,7 +95,9 @@
         ],
         "configurationDefaults": {
             "[luma]": {
-                "editor.semanticHighlighting.enabled": false
+                "editor.semanticHighlighting.enabled": false,
+                "editor.minimap.showRegionSectionHeaders": false,
+                "editor.minimap.showMarkSectionHeaders": false
             }
         },
         "configuration": {
