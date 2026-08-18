@@ -21,8 +21,8 @@ Luma has not yet reached a stable 1.0 release. Security fixes are applied only t
 
 | Version | Supported |
 | ------- | --------- |
-| 0.7.x   | ✓         |
-| < 0.7   | ✗         |
+| 0.8.x   | ✓         |
+| < 0.8   | ✗         |
 
 ---
 

@@ -47,6 +47,7 @@ Index of the design, reference, and guide documents for the Luma programming lan
 | [Debugger](Luma_Debugger.md)                       | Debug Adapter Protocol (DAP) debug adapter design and implementation. |
 | [Language Server](Luma_Language_Server.md)         | Language Server Protocol (LSP) server design and implementation.      |
 | [Syntax Highlighting](Luma_Syntax_Highlighting.md) | Editor grammars and the Visual Studio Code and Zed extensions.        |
+| [Manual Tests](Luma_Manual_Tests.md)               | Manual test plan for the interpreter, tooling, and editor extensions. |
 
 ---
 

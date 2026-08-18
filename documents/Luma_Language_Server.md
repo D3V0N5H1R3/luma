@@ -1128,7 +1128,7 @@ The `initialize` response advertises these server capabilities:
             "range": true
         }
     },
-    "serverInfo": { "name": "luma-lsp", "version": "0.7.0" }
+    "serverInfo": { "name": "luma-lsp", "version": "0.8.0" }
 }
 ```
 
