@@ -11,7 +11,7 @@ Patterns, pitfalls, and non-obvious knowledge discovered during development sess
 
 ## Project Identity
 
-- Luma is a statically typed, expression-oriented, interpreted programming language for beginners — "as easy as Python, as safe as Rust." Implemented in C++20 with a bytecode compiler and stack-based VM. Status: Alpha (0.7) — language, stdlib, and interpreter feature-complete; tooling under active development.
+- Luma is a statically typed, expression-oriented, interpreted programming language for beginners — "as easy as Python, as safe as Rust." Implemented in C++20 with a bytecode compiler and stack-based VM. Status: Alpha (0.8) — language, stdlib, and interpreter feature-complete; tooling under active development.
 - The project spans ~150K+ lines across interpreter core, 39 stdlib module namespaces (27 always-available + 4 sandbox-aware + 8 OS-only), an LSP language server (`luma_lsp`), a DAP debugger (`luma_dap`), and editor extensions for VS Code and Zed.
 
 ## Architecture & Pipeline

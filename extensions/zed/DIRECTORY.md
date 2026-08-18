@@ -93,14 +93,14 @@ Use the provided download script to fetch the binary:
 
 ```bash
 cd extensions/zed
-LUMA_VERSION=v0.7.0 ./scripts/download_binaries.sh
+LUMA_VERSION=v0.8.0 ./scripts/download_binaries.sh
 ```
 
 On Windows (PowerShell):
 
 ```powershell
 cd extensions\zed
-$env:LUMA_VERSION = "v0.7.0"
+$env:LUMA_VERSION = "v0.8.0"
 pwsh scripts\Download-Binaries.ps1
 ```
 

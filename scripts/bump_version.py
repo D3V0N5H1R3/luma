@@ -4,7 +4,8 @@
 Updates the version number in:
   - VERSION                                          (interpreter, language server, debugger)
   - extensions/vscode/package.json                   (VS Code extension)
-  - extensions/zed/extension.toml                    (Zed extension)
+  - extensions/zed/extension.toml                    (Zed extension manifest)
+  - extensions/zed/Cargo.toml                        (Zed extension crate)
 
 Also updates version references in documentation:
   - instructions/learnings.instructions.md           ("Alpha (X.Y)" status line)
@@ -21,9 +22,9 @@ Also updates version references in documentation:
 
 Usage:
     python scripts/bump_version.py 0.8.0          # set an explicit version
-    python scripts/bump_version.py --major        # bump major (0.7.0 -> 1.0.0)
-    python scripts/bump_version.py --minor        # bump minor (0.7.0 -> 0.8.0)
-    python scripts/bump_version.py --patch        # bump patch (0.7.0 -> 0.7.1)
+    python scripts/bump_version.py --major        # bump major (0.8.0 -> 1.0.0)
+    python scripts/bump_version.py --minor        # bump minor (0.8.0 -> 0.9.0)
+    python scripts/bump_version.py --patch        # bump patch (0.8.0 -> 0.8.1)
     python scripts/bump_version.py --current      # print current version and exit
 
 Exit codes:
@@ -43,6 +44,7 @@ from _common import REPO_ROOT
 VERSION_FILE: Path = REPO_ROOT / "VERSION"
 VSCODE_PACKAGE_JSON: Path = REPO_ROOT / "extensions" / "vscode" / "package.json"
 ZED_EXTENSION_TOML: Path = REPO_ROOT / "extensions" / "zed" / "extension.toml"
+ZED_CARGO_TOML: Path = REPO_ROOT / "extensions" / "zed" / "Cargo.toml"
 
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
@@ -99,6 +101,25 @@ def update_zed_extension_toml(new_version: str) -> None:
     if updated == content:
         sys.exit("Error: Could not find 'version = \"...\"' in extension.toml.")
     ZED_EXTENSION_TOML.write_text(updated, encoding="utf-8")
+
+
+def update_zed_cargo_toml(new_version: str) -> None:
+    """Update the 'version' field in the Zed extension Cargo.toml.
+
+    Only replaces the first ``version = "..."`` (the [package] version),
+    leaving dependency version fields untouched.
+    """
+    content = ZED_CARGO_TOML.read_text(encoding="utf-8")
+    updated = re.sub(
+        r'^(version\s*=\s*")([^"]+)(")',
+        rf"\g<1>{new_version}\3",
+        content,
+        count=1,
+        flags=re.MULTILINE,
+    )
+    if updated == content:
+        sys.exit("Error: Could not find 'version = \"...\"' in Cargo.toml.")
+    ZED_CARGO_TOML.write_text(updated, encoding="utf-8")
 
 
 DOC_VERSION_FILES: list[Path] = [
@@ -183,12 +204,14 @@ def main() -> None:
     update_version_file(new_version)
     update_vscode_package_json(new_version)
     update_zed_extension_toml(new_version)
+    update_zed_cargo_toml(new_version)
     doc_updates = update_doc_version_references(current, new_version)
 
     print(f"Version bumped: {current} -> {new_version}")
     print("  Updated: VERSION")
     print("  Updated: extensions/vscode/package.json")
     print("  Updated: extensions/zed/extension.toml")
+    print("  Updated: extensions/zed/Cargo.toml")
     for doc_path in doc_updates:
         print(f"  Updated: {doc_path}")
 

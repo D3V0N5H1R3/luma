@@ -191,12 +191,36 @@ void emit_catch_var_hint(const AnalysisResult& cached, const std::vector<Token>&
     return param_names;
 }
 
+// True when the Identifier at index `i` is the name in a function
+// declaration rather than a call site.  Scans backward on the same line for
+// the `function` keyword, skipping over the (possibly multi-token) return
+// type annotation.  Assumes the declaration fits on a single line, which
+// Luma style conventions enforce — a multi-line split between `function`
+// and the name would not be detected.
+bool is_function_declaration(const std::vector<Token>& tokens, std::size_t i) {
+    const int decl_line = tokens[i].location.line;
+    for (std::size_t k = i; k > 0; --k) {
+        if (tokens[k - 1].location.line != decl_line) {
+            break;
+        }
+        if (tokens[k - 1].type == TokenType::Function) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Parameter-name hints at a call site: `Identifier LeftParen args...`.
 void emit_call_param_name_hints(const AnalysisResult& cached, const StdlibRegistry& stdlib,
                                 const std::vector<Token>& tokens, std::size_t i,
                                 JsonValue::ArrayType& hints) {
     if (tokens[i].type != TokenType::Identifier || i + 1 >= tokens.size() ||
         tokens[i + 1].type != TokenType::LeftParen) {
+        return;
+    }
+
+    // Skip function declarations — only emit parameter hints at call sites.
+    if (is_function_declaration(tokens, i)) {
         return;
     }
     const auto param_names = resolve_call_param_names(cached, stdlib, tokens, i, tokens[i].lexeme);

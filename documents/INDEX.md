@@ -196,6 +196,20 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 23 — Platform-Specific Handling | 1214–1228 |
 | See Also | 1229–1235 |
 
+## Luma_Manual_Tests.md
+
+| Section | Lines |
+| ------- | ----- |
+| Prerequisites | 5–156 |
+| Part 1 — Interpreter | 158–457 |
+| Part 2 — Language Server (VS Code) | 460–578 |
+| Part 3 — Debugger (VS Code) | 581–660 |
+| Part 4 — VS Code Extension Features | 663–719 |
+| Part 5 — Zed Extension | 722–773 |
+| Part 6 — Cross-Cutting & Regression Tests | 776–808 |
+| Execution Checklist | 811–823 |
+| Reporting Issues | 825–832 |
+
 ## Luma_Performance_Guide.md
 
 | Section | Lines |

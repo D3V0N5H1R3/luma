@@ -61,7 +61,10 @@ impl LumaExtension {
         recovery_hint: &str,
     ) -> zed::Result<BinarySource> {
         if let Some(path) = worktree.which(binary_name) {
-            return Ok(BinarySource::Path(path));
+            return Ok(BinarySource::Path(crate::util::normalize_path(
+                path,
+                self.platform.0,
+            )));
         }
 
         if !generated::config::AUTO_DOWNLOAD_ENABLED {
