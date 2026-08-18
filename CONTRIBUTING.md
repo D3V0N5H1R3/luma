@@ -479,7 +479,7 @@ cp -r extensions/zed ~/.local/share/zed/extensions/luma
 
 **Building, running, and testing:** Zed has no built-in CMake integration; use the integrated terminal and the commands in [Build](#3-build) and [Test Your Changes](#4-test-your-changes).
 
-**Debugging Luma programs:** Open a `.luma` file, set breakpoints, then Command Palette → **debugger: start** → select **Debug Current File**. Ensure `luma_dap` is on your `PATH`.
+**Debugging Luma programs:** Open a `.luma` file, set breakpoints, then Command Palette → **debugger: start** → select the **Luma** adapter and the **Launch** request. (The extension also registers a locator, so the ▶ run affordance on a `@main` function can start a debug session too.) Ensure `luma_dap` is on your `PATH`, or let the extension download it. See [extensions/zed/DIRECTORY.md](extensions/zed/DIRECTORY.md#debugger-setup) for a `debug.json` example.
 
 **Formatting:** Configure clang-format as an external formatter in your Zed `settings.json`:
 

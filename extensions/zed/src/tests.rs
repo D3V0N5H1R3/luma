@@ -1547,3 +1547,273 @@ fn grammar_declared_only_in_extension_toml() {
         "extension.toml must declare the grammar via [grammars.luma]"
     );
 }
+
+// ── DAP: manifest, request kind, scenario conversion, locator ─────
+
+use super::luma_launch_config;
+use zed::Extension as _;
+
+fn dap_ext() -> LumaExtension {
+    LumaExtension {
+        platform: (zed::Os::Mac, zed::Architecture::Aarch64),
+    }
+}
+
+fn launch_config(program: &str, args: &[&str], cwd: Option<&str>) -> zed::DebugConfig {
+    zed::DebugConfig {
+        label: "Debug Current File".to_string(),
+        adapter: "Luma".to_string(),
+        request: zed::DebugRequest::Launch(zed::LaunchRequest {
+            program: program.to_string(),
+            cwd: cwd.map(str::to_string),
+            args: args.iter().map(|arg| arg.to_string()).collect(),
+            envs: vec![],
+        }),
+        stop_on_entry: None,
+    }
+}
+
+fn parse_config(config: &str) -> zed::serde_json::Value {
+    zed::serde_json::from_str(config).expect("scenario config must be valid JSON")
+}
+
+#[test]
+fn manifest_registers_debug_adapter_and_locator() {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let extension_toml =
+        std::fs::read_to_string(std::path::Path::new(manifest_dir).join("extension.toml"))
+            .expect("extension.toml should be readable");
+
+    // The Zed manifest schema registers debug adapters under [debug_adapters.*];
+    // the legacy [debuggers.*] section is silently ignored, so it must not exist.
+    assert!(
+        extension_toml.contains("[debug_adapters.Luma]"),
+        "extension.toml must register the debug adapter via [debug_adapters.Luma]"
+    );
+    assert!(
+        extension_toml.contains("[debug_locators.luma]"),
+        "extension.toml must register the debug locator via [debug_locators.luma]"
+    );
+    assert!(
+        !extension_toml.contains("[debuggers."),
+        "the legacy [debuggers.*] section is not a valid Zed manifest key and must not exist"
+    );
+
+    // A JSON schema is mandatory for a debug adapter, and it must parse.
+    let schema_path = std::path::Path::new(manifest_dir).join("debug_adapter_schemas/luma.json");
+    let schema =
+        std::fs::read_to_string(&schema_path).expect("debug_adapter_schemas/luma.json must exist");
+    let _: zed::serde_json::Value =
+        zed::serde_json::from_str(&schema).expect("debug adapter schema must be valid JSON");
+}
+
+#[test]
+fn dap_request_kind_defaults_to_launch() {
+    let mut ext = dap_ext();
+    let kind = ext
+        .dap_request_kind(
+            "Luma".to_string(),
+            zed::serde_json::json!({ "program": "a.luma" }),
+        )
+        .expect("missing request should default to launch");
+    assert!(matches!(
+        kind,
+        zed::StartDebuggingRequestArgumentsRequest::Launch
+    ));
+}
+
+#[test]
+fn dap_request_kind_honours_explicit_launch() {
+    let mut ext = dap_ext();
+    let kind = ext
+        .dap_request_kind(
+            "Luma".to_string(),
+            zed::serde_json::json!({ "request": "launch" }),
+        )
+        .expect("launch request should be accepted");
+    assert!(matches!(
+        kind,
+        zed::StartDebuggingRequestArgumentsRequest::Launch
+    ));
+}
+
+#[test]
+fn dap_request_kind_rejects_attach() {
+    let mut ext = dap_ext();
+    let result = ext.dap_request_kind(
+        "Luma".to_string(),
+        zed::serde_json::json!({ "request": "attach" }),
+    );
+    assert!(
+        result.is_err(),
+        "attach must be rejected — luma_dap is launch-only"
+    );
+}
+
+#[test]
+fn dap_config_to_scenario_builds_launch_config() {
+    let mut ext = dap_ext();
+    let mut config = launch_config("main.luma", &["--verbose"], Some("/work"));
+    config.stop_on_entry = Some(true);
+
+    let scenario = ext
+        .dap_config_to_scenario(config)
+        .expect("launch config should convert");
+
+    assert_eq!(scenario.adapter, "Luma");
+    assert_eq!(scenario.label, "Debug Current File");
+    assert!(scenario.build.is_none());
+
+    let json = parse_config(&scenario.config);
+    assert_eq!(json["request"], "launch");
+    assert_eq!(json["program"], "main.luma");
+    assert_eq!(json["cwd"], "/work");
+    assert_eq!(json["stopOnEntry"], true);
+    assert_eq!(json["args"][0], "--verbose");
+}
+
+#[test]
+fn dap_config_to_scenario_omits_empty_optionals() {
+    let mut ext = dap_ext();
+    let scenario = ext
+        .dap_config_to_scenario(launch_config("main.luma", &[], None))
+        .expect("launch config should convert");
+
+    let json = parse_config(&scenario.config);
+    assert_eq!(json["program"], "main.luma");
+    assert!(json.get("args").is_none(), "empty args must be omitted");
+    assert!(json.get("cwd").is_none(), "absent cwd must be omitted");
+    assert!(
+        json.get("stopOnEntry").is_none(),
+        "unset stopOnEntry must be omitted"
+    );
+}
+
+#[test]
+fn dap_config_to_scenario_rejects_attach() {
+    let mut ext = dap_ext();
+    let config = zed::DebugConfig {
+        label: "Attach".to_string(),
+        adapter: "Luma".to_string(),
+        request: zed::DebugRequest::Attach(zed::AttachRequest { process_id: None }),
+        stop_on_entry: None,
+    };
+    assert!(
+        ext.dap_config_to_scenario(config).is_err(),
+        "attach must be rejected — luma_dap is launch-only"
+    );
+}
+
+fn run_task(command: &str, args: &[&str]) -> zed::TaskTemplate {
+    zed::TaskTemplate {
+        label: "run main".to_string(),
+        command: command.to_string(),
+        args: args.iter().map(|arg| arg.to_string()).collect(),
+        env: vec![],
+        cwd: Some("/work".to_string()),
+    }
+}
+
+#[test]
+fn dap_locator_converts_run_task() {
+    let mut ext = dap_ext();
+    let scenario = ext
+        .dap_locator_create_scenario(
+            "luma".to_string(),
+            run_task("luma", &["examples/hello.luma", "arg1"]),
+            "run main".to_string(),
+            "Luma".to_string(),
+        )
+        .expect("a `luma <file>` run task must yield a debug scenario");
+
+    assert_eq!(scenario.adapter, "Luma");
+    let json = parse_config(&scenario.config);
+    assert_eq!(json["program"], "examples/hello.luma");
+    assert_eq!(json["cwd"], "/work");
+    assert_eq!(json["args"][0], "arg1");
+}
+
+#[test]
+fn dap_locator_handles_absolute_interpreter_path() {
+    let mut ext = dap_ext();
+    let scenario = ext.dap_locator_create_scenario(
+        "luma".to_string(),
+        run_task("/usr/local/bin/luma", &["main.luma"]),
+        "run main".to_string(),
+        "Luma".to_string(),
+    );
+    assert!(
+        scenario.is_some(),
+        "an absolute path to the interpreter must still be recognised"
+    );
+}
+
+#[test]
+fn dap_locator_ignores_test_task() {
+    let mut ext = dap_ext();
+    let scenario = ext.dap_locator_create_scenario(
+        "luma".to_string(),
+        run_task("luma", &["--test", "main.luma"]),
+        "test main".to_string(),
+        "Luma".to_string(),
+    );
+    assert!(
+        scenario.is_none(),
+        "a --test run is not a debuggable launch"
+    );
+}
+
+#[test]
+fn dap_locator_ignores_foreign_commands_and_locators() {
+    let mut ext = dap_ext();
+    assert!(
+        ext.dap_locator_create_scenario(
+            "luma".to_string(),
+            run_task("python", &["main.luma"]),
+            "run".to_string(),
+            "Luma".to_string(),
+        )
+        .is_none(),
+        "a non-interpreter command must be ignored"
+    );
+    assert!(
+        ext.dap_locator_create_scenario(
+            "cargo".to_string(),
+            run_task("luma", &["main.luma"]),
+            "run".to_string(),
+            "Luma".to_string(),
+        )
+        .is_none(),
+        "a foreign locator name must be ignored"
+    );
+    assert!(
+        ext.dap_locator_create_scenario(
+            "luma".to_string(),
+            run_task("luma", &["main.luma"]),
+            "run".to_string(),
+            "CodeLLDB".to_string(),
+        )
+        .is_none(),
+        "our locator must not feed a .luma task to a foreign adapter"
+    );
+}
+
+#[test]
+fn luma_launch_config_omits_defaults_and_sets_request() {
+    let minimal = parse_config(&luma_launch_config("m.luma", &[], None, None));
+    assert_eq!(minimal["request"], "launch");
+    assert_eq!(minimal["program"], "m.luma");
+    assert!(minimal.get("args").is_none());
+    assert!(minimal.get("cwd").is_none());
+    assert!(minimal.get("stopOnEntry").is_none());
+
+    let full = parse_config(&luma_launch_config(
+        "m.luma",
+        &["a".to_string()],
+        Some("/w"),
+        Some(false),
+    ));
+    assert_eq!(full["args"][0], "a");
+    assert_eq!(full["cwd"], "/w");
+    assert_eq!(full["stopOnEntry"], false);
+}
