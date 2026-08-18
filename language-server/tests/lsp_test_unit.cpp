@@ -57,7 +57,7 @@ void test_json_rejects_leading_zeros() {
 void test_config_defaults() {
     const LspConfig config;
     const auto snap = config.get();
-    ASSERT_TRUE(snap->inlay_hints_enabled);
+    ASSERT_FALSE(snap->inlay_hints_enabled);
     ASSERT_TRUE(snap->code_lens_enabled);
     ASSERT_EQ(snap->analysis_debounce_ms, 50);
     ASSERT_EQ(snap->analysis_timeout_ms, 10000);

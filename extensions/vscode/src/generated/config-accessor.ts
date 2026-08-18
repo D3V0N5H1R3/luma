@@ -44,7 +44,7 @@ export class LumaConfig {
         return this.config.get<boolean>("diagnostics.onSave", CONFIG_DEFAULTS["diagnostics.onSave"]);
     }
 
-    /** Show inferred type annotations as inlay hints in the editor. */
+    /** Show inferred type annotations and parameter names as inlay hints. Disabled by default to keep the source uncluttered. */
     get inlay_hints_enabled(): boolean {
         return this.config.get<boolean>("inlayHints.enabled", CONFIG_DEFAULTS["inlayHints.enabled"]);
     }
