@@ -22,11 +22,14 @@ language_ids = { Luma = "luma" }
 path = "bin/luma_lsp"
 fetch_script = "scripts/download_binaries.sh"
 
-[debuggers.luma-dap]
-name = "Luma Debug"
-languages = ["Luma"]
-transport = "stdio"
-command = "luma_dap"
-templates = [
-  { label = "Debug Current File", body = { program = "{file}" } },
-]
+# Debug Adapter Protocol support. The adapter name ("Luma") is what appears in
+# Zed's debugger picker (New Process modal / debug.json `adapter` field). The
+# `luma_dap` binary is resolved in `get_dap_binary` (PATH first, then download),
+# so no `command` is declared here. A JSON schema is mandatory; it powers
+# completion and validation of the launch configuration in debug.json.
+[debug_adapters.Luma]
+schema_path = "debug_adapter_schemas/luma.json"
+
+# Locator that turns the Luma "run" task (see languages/luma/tasks.json) into a
+# debug session, so the editor can offer "Debug" wherever it offers "Run".
+[debug_locators.luma]

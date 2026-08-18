@@ -207,6 +207,92 @@ impl zed::Extension for LumaExtension {
             request_args,
         })
     }
+
+    fn dap_request_kind(
+        &mut self,
+        _adapter_name: String,
+        config: zed::serde_json::Value,
+    ) -> Result<zed::StartDebuggingRequestArgumentsRequest, String> {
+        // Luma debugging is launch-only — `luma_dap` has no attach handler (see
+        // debugger/source/dap_server_lifecycle.cpp). A missing or "launch"
+        // request maps to launch; an explicit attach is rejected.
+        match config.get("request").and_then(|value| value.as_str()) {
+            Some("attach") => Err("The Luma debugger cannot attach to a running process; \
+                 use \"request\": \"launch\"."
+                .to_string()),
+            _ => Ok(zed::StartDebuggingRequestArgumentsRequest::Launch),
+        }
+    }
+
+    fn dap_config_to_scenario(
+        &mut self,
+        config: zed::DebugConfig,
+    ) -> Result<zed::DebugScenario, String> {
+        // Translates the adapter-agnostic config from Zed's New Process modal
+        // into a Luma launch scenario.
+        let zed::DebugRequest::Launch(launch) = config.request else {
+            return Err(
+                "The Luma debugger only supports launching a program, not attaching.".to_string(),
+            );
+        };
+
+        Ok(zed::DebugScenario {
+            adapter: config.adapter,
+            label: config.label,
+            config: luma_launch_config(
+                &launch.program,
+                &launch.args,
+                launch.cwd.as_deref(),
+                config.stop_on_entry,
+            ),
+            build: None,
+            tcp_connection: None,
+        })
+    }
+
+    fn dap_locator_create_scenario(
+        &mut self,
+        locator_name: String,
+        build_task: zed::TaskTemplate,
+        resolved_label: String,
+        debug_adapter_name: String,
+    ) -> Option<zed::DebugScenario> {
+        // Only act for our own locator paired with our own adapter, so Zed can
+        // never hand a .luma run task to a foreign debug adapter.
+        if locator_name != "luma" || debug_adapter_name != "Luma" {
+            return None;
+        }
+
+        // The Luma "run" task (languages/luma/tasks.json) invokes the
+        // interpreter as `luma <file> [args...]`. Only convert tasks that run
+        // the interpreter on a .luma file, and never a `--test` run, which is
+        // not a debuggable launch.
+        let command_is_interpreter = std::path::Path::new(&build_task.command)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .is_some_and(|stem| stem == generated::config::BINARY_INTERPRETER);
+        if !command_is_interpreter || build_task.args.iter().any(|arg| arg == "--test") {
+            return None;
+        }
+
+        let program_index = build_task
+            .args
+            .iter()
+            .position(|arg| arg.ends_with(".luma"))?;
+
+        Some(zed::DebugScenario {
+            adapter: debug_adapter_name,
+            label: resolved_label,
+            config: luma_launch_config(
+                &build_task.args[program_index],
+                &build_task.args[program_index + 1..],
+                build_task.cwd.as_deref(),
+                None,
+            ),
+            build: None,
+            tcp_connection: None,
+        })
+    }
 }
 
 zed::register_extension!(LumaExtension);
@@ -224,6 +310,32 @@ fn env_for(binary: &BinarySource, worktree: &zed::Worktree) -> Vec<(String, Stri
         BinarySource::Path(_) => worktree.shell_env(),
         BinarySource::Downloaded(_) => vec![],
     }
+}
+
+/// Builds the JSON launch configuration understood by `luma_dap`'s `launch`
+/// request (see `parse_launch_config` in debugger/source/dap_helpers.hpp).
+///
+/// `request` is always `"launch"` — Luma debugging is launch-only. Optional
+/// fields are omitted when empty so the adapter falls back to its own defaults.
+fn luma_launch_config(
+    program: &str,
+    args: &[String],
+    cwd: Option<&str>,
+    stop_on_entry: Option<bool>,
+) -> String {
+    let mut config = zed::serde_json::Map::new();
+    config.insert("request".to_string(), "launch".into());
+    config.insert("program".to_string(), program.into());
+    if !args.is_empty() {
+        config.insert("args".to_string(), args.to_vec().into());
+    }
+    if let Some(cwd) = cwd {
+        config.insert("cwd".to_string(), cwd.into());
+    }
+    if let Some(stop_on_entry) = stop_on_entry {
+        config.insert("stopOnEntry".to_string(), stop_on_entry.into());
+    }
+    zed::serde_json::Value::Object(config).to_string()
 }
 
 /// Read a boolean from a nested path within a JSON value, falling back to `default`.

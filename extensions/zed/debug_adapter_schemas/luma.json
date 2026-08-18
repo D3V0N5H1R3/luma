@@ -1,0 +1,45 @@
+{
+  "required": ["program"],
+  "properties": {
+    "request": {
+      "type": "string",
+      "description": "Debug session type. The Luma debugger only supports launching a program.",
+      "enum": ["launch"],
+      "default": "launch"
+    },
+    "program": {
+      "type": "string",
+      "description": "Path to the Luma program (.luma file) to debug.",
+      "default": "$ZED_FILE"
+    },
+    "args": {
+      "type": "array",
+      "description": "Command-line arguments passed to the program (available via Process.get_arguments()).",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "cwd": {
+      "type": "string",
+      "description": "Working directory for the debugged program.",
+      "default": "$ZED_WORKTREE_ROOT"
+    },
+    "stopOnEntry": {
+      "type": "boolean",
+      "description": "Pause on the first executable line.",
+      "default": false
+    },
+    "noDebug": {
+      "type": "boolean",
+      "description": "Run the program without stopping at breakpoints.",
+      "default": false
+    },
+    "timeTravel": {
+      "type": "boolean",
+      "description": "Record execution history to enable stepping backwards.",
+      "default": false
+    }
+  },
+  "additionalProperties": false
+}

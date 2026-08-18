@@ -344,7 +344,7 @@ A concrete `launch.json` example that uses these attributes is maintained in [CO
 
 ### Zed
 
-The Zed extension adds a debug adapter entry to `extension.toml` pointing to the `luma_dap` binary, using `"custom"` transport with stdio.
+The Zed extension (`extensions/zed/`) registers the debug adapter in `extension.toml` under `[debug_adapters.Luma]`, with a mandatory configuration schema at `debug_adapter_schemas/luma.json`. The `luma_dap` binary is resolved at runtime by the extension's `get_dap_binary` (PATH first, then GitHub download) and driven over stdio. The extension also registers a `[debug_locators.luma]` locator so the editor's ▶ run affordance can start a debug session directly. Zed debugging is launch-only; a concrete `debug.json` example lives in [extensions/zed/DIRECTORY.md](../extensions/zed/DIRECTORY.md#debugger-setup).
 
 ---
 
