@@ -49,7 +49,7 @@ Download the archives and the checksum file from the [latest GitHub release](htt
 Also download:
 
 - **`SHA256SUMS`** — checksum file for verifying archive integrity.
-- **`luma-language-0.8.0.vsix`** — VS Code extension (if using VS Code).
+- **`luma-language-0.9.0.vsix`** — VS Code extension (if using VS Code).
 
 ---
 
@@ -224,7 +224,7 @@ Add the line to `~/.bashrc`, `~/.zshrc`, or `~/.profile` to make it permanent.
 Install the extension from the `.vsix` file:
 
 ```bash
-code --install-extension luma-language-0.8.0.vsix
+code --install-extension luma-language-0.9.0.vsix
 ```
 
 Alternatively, in VS Code: open the Command Palette (`Ctrl+Shift+P`), select **Extensions: Install from VSIX…**, and choose the `.vsix` file.
