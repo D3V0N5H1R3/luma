@@ -18,8 +18,8 @@ pub const DEFAULT_DAP_PATH: &str = "";
 /// Only report linter warnings on save (not while typing). Syntax and type errors are always reported immediately.
 pub const DEFAULT_DIAGNOSTICS_ON_SAVE: bool = false;
 
-/// Show inferred type annotations as inlay hints in the editor.
-pub const DEFAULT_INLAY_HINTS_ENABLED: bool = true;
+/// Show inferred type annotations and parameter names as inlay hints. Disabled by default to keep the source uncluttered.
+pub const DEFAULT_INLAY_HINTS_ENABLED: bool = false;
 
 /// Show reference counts above functions and types as code lenses.
 pub const DEFAULT_CODE_LENS_ENABLED: bool = true;

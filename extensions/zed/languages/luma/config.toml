@@ -3,15 +3,3 @@ grammar = "luma"
 path_suffixes = ["luma"]
 line_comments = ["# "]
 tab_size = 4
-
-[[tasks]]
-label = "run $ZED_SYMBOL"
-command = "luma"
-args = ["$ZED_FILE"]
-tags = ["main"]
-
-[[tasks]]
-label = "test $ZED_SYMBOL"
-command = "luma"
-args = ["--test", "$ZED_FILE"]
-tags = ["test"]

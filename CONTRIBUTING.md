@@ -602,10 +602,10 @@ log since the previous tag, and publishes a GitHub Release with all binaries and
    version — on `main`, and commit it:
 
     ```bash
-    # e.g. bump 0.8.0 -> 0.8.0
+    # e.g. bump 0.9.0 -> 0.9.0
     git switch main && git pull
     # edit VERSION, then:
-    git commit -am "chore: bump version to 0.8.0"
+    git commit -am "chore: bump version to 0.9.0"
     git push
     ```
 
@@ -624,8 +624,8 @@ log since the previous tag, and publishes a GitHub Release with all binaries and
     `v`, and push it:
 
     ```bash
-    git tag -a v0.8.0 -m "Release version 0.8.0"
-    git push origin v0.8.0
+    git tag -a v0.9.0 -m "Release version 0.9.0"
+    git push origin v0.9.0
     ```
 
 3. Watch the **Release** workflow run under

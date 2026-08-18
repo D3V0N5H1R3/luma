@@ -156,6 +156,7 @@ __pycache__/
 # ── Extension build artifacts ──
 *.tgz
 *.vsix
+.vscode-test/
 
 # ── Code coverage artifacts ──
 *.gcda
