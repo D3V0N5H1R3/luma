@@ -6,6 +6,17 @@ schema_version = 1
 authors = ["Luma Contributors"]
 repository = "https://github.com/d3v0n5h1r3/luma"
 
+# Declares that this extension ships a compiled Rust/WASM library. Zed only
+# builds and loads the WASM component when `kind = "Rust"` is present, and the
+# debug adapter (get_dap_binary and the dap_* hooks in src/lib.rs) is registered
+# solely for extensions with a loaded WASM component. Without this section the
+# Luma adapter never appears in the "debugger: start" picker. The `version` is
+# the zed_extension_api version and is refreshed from the compiled WASM at build
+# time; it is pinned here to match Cargo.toml.
+[lib]
+kind = "Rust"
+version = "0.7.0"
+
 snippets = ["snippets/luma.json"]
 
 [grammars.luma]

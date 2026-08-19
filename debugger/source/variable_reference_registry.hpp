@@ -1,6 +1,7 @@
 #ifndef LUMA_DAP_VARIABLE_REFERENCE_REGISTRY_HPP
 #define LUMA_DAP_VARIABLE_REFERENCE_REGISTRY_HPP
 
+#include <limits>
 #include <optional>
 #include <unordered_map>
 #include <utility>
@@ -57,6 +58,11 @@ inline constexpr int default_purge_generation_interval =
 template <typename T> class VariableReferenceRegistry {
 public:
     [[nodiscard]] int allocate(T value) {
+        if (next_id_ == std::numeric_limits<int>::max()) {
+            next_id_ = 1; // wrap safely instead of UB
+            entries_.clear();
+        }
+
         const int id = next_id_++;
         entries_[id] = GenerationalEntry<T>{std::move(value), generation_};
         return id;

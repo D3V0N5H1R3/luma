@@ -106,16 +106,21 @@ struct ParsedUrl {
             result.port = scheme_default_port;
         }
     } else {
-        auto colon = authority.rfind(':');
+        // Strip userinfo (user:pass@) before searching for the port colon.
+        auto at_pos = authority.find('@');
+        auto host_authority =
+            (at_pos != std::string::npos) ? authority.substr(at_pos + 1) : authority;
+
+        auto colon = host_authority.rfind(':');
 
         if (colon != std::string::npos) {
-            result.host = authority.substr(0, colon);
+            result.host = host_authority.substr(0, colon);
 
-            const auto port_str = authority.substr(colon + 1);
+            const auto port_str = host_authority.substr(colon + 1);
 
             result.port = parse_port_or(port_str, scheme_default_port);
         } else {
-            result.host = authority;
+            result.host = std::string(host_authority);
             result.port = scheme_default_port;
         }
     }
