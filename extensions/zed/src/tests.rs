@@ -1630,6 +1630,42 @@ fn manifest_declares_rust_library() {
 }
 
 #[test]
+fn workspace_debug_json_uses_registered_adapter_name() {
+    // Zed filters saved scenarios in `.zed/debug.json` down to those whose
+    // `adapter` is a currently-registered adapter name, and the match is
+    // case-sensitive (crates/debugger_ui/src/new_process_modal.rs:
+    // `valid_adapters.contains(&scenario.adapter)`). The extension registers the
+    // adapter as `Luma` (see [debug_adapters.Luma] in extension.toml), so a
+    // scenario referencing the lowercase `luma` is silently dropped from the
+    // "debugger: start" picker. Guard the repo-root workspace config against
+    // that drift.
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let debug_json_path = std::path::Path::new(manifest_dir)
+        .join("../../.zed/debug.json")
+        .canonicalize()
+        .expect("repo-root .zed/debug.json should exist");
+    let debug_json =
+        std::fs::read_to_string(&debug_json_path).expect(".zed/debug.json should be readable");
+    let scenarios: Vec<zed::serde_json::Value> =
+        zed::serde_json::from_str(&debug_json).expect(".zed/debug.json must be valid JSON");
+
+    for scenario in &scenarios {
+        let label = scenario.get("label").and_then(|l| l.as_str()).unwrap_or("");
+        let adapter = scenario
+            .get("adapter")
+            .and_then(|a| a.as_str())
+            .unwrap_or("");
+        if label.starts_with("Luma") {
+            assert_eq!(
+                adapter, "Luma",
+                "scenario {label:?} must reference the registered adapter \"Luma\" (matching \
+                 [debug_adapters.Luma]); a case-mismatched name is filtered out of the picker"
+            );
+        }
+    }
+}
+
+#[test]
 fn dap_request_kind_defaults_to_launch() {
     let mut ext = dap_ext();
     let kind = ext
