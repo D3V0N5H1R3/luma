@@ -99,6 +99,12 @@ constexpr std::uint8_t k_ipv6_ula_value = 0xFC;
     if ((ip >> 24) == k_ipv4_current_net_prefix) {
         return true; // 0.0.0.0/8
     }
+    if ((ip >> 28) == 0xE) {
+        return true; // 224.0.0.0/4  multicast
+    }
+    if ((ip >> 28) == 0xF) {
+        return true; // 240.0.0.0/4  reserved/broadcast
+    }
     return false;
 }
 

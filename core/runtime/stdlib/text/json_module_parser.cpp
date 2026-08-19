@@ -178,6 +178,10 @@ private:
         std::string result;
 
         while (pos_ < input_.size() && input_[pos_] != '"') {
+            if (static_cast<unsigned char>(input_[pos_]) < 0x20) {
+                throw std::runtime_error{"unescaped control character in string"};
+            }
+
             if (input_[pos_] == '\\') {
                 ++pos_;
 

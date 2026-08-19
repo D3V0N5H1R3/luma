@@ -391,7 +391,11 @@ DecodeResult gzip_decompress_checked(const std::string& input) {
             ++offset;
         }
 
-        ++offset;
+        if (offset >= input.size()) {
+            return DecodeResult::err(DecodeError::Truncated);
+        }
+
+        ++offset; // skip null terminator
     }
 
     // FCOMMENT.
@@ -400,7 +404,11 @@ DecodeResult gzip_decompress_checked(const std::string& input) {
             ++offset;
         }
 
-        ++offset;
+        if (offset >= input.size()) {
+            return DecodeResult::err(DecodeError::Truncated);
+        }
+
+        ++offset; // skip null terminator
     }
 
     // FHCRC.

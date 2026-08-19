@@ -1,7 +1,6 @@
 #include "custom_visualizer.hpp"
 
 #include <fstream>
-#include <regex>
 #include <sstream>
 #include <stdexcept>
 
@@ -15,31 +14,40 @@ using luma::json::try_extract_field;
 
 namespace {
 
-// Convert a glob-style pattern to a regex string.
-// Only '*' is treated as a wildcard; all regex metacharacters are escaped.
-std::string glob_to_regex(std::string_view pattern) {
-    std::string result;
+// Linear-time glob match supporting only '*' as a wildcard.
+// Avoids regex compilation and eliminates backtracking risk (ReDoS).
+bool glob_match(std::string_view pattern, std::string_view text) {
+    std::size_t px = 0;
+    std::size_t tx = 0;
+    std::size_t star_px = std::string_view::npos;
+    std::size_t star_tx = 0;
 
-    for (const char ch : pattern) {
-        if (ch == '*') {
-            result += ".*";
-        } else if (ch == '?' || ch == '.' || ch == '(' || ch == ')' || ch == '[' || ch == ']' ||
-                   ch == '{' || ch == '}' || ch == '+' || ch == '^' || ch == '$' || ch == '|' ||
-                   ch == '\\') {
-            result += '\\';
-            result += ch;
+    while (tx < text.size()) {
+        if (px < pattern.size() && pattern[px] == '*') {
+            star_px = px++;
+            star_tx = tx;
+        } else if (px < pattern.size() && pattern[px] == text[tx]) {
+            ++px;
+            ++tx;
+        } else if (star_px != std::string_view::npos) {
+            px = star_px + 1;
+            tx = ++star_tx;
         } else {
-            result += ch;
+            return false;
         }
     }
 
-    return result;
+    while (px < pattern.size() && pattern[px] == '*') {
+        ++px;
+    }
+
+    return px == pattern.size();
 }
 
-// Parse visualizer rules from a JSON array, compiling glob patterns to regex.
+// Parse visualizer rules from a JSON array.
 std::vector<CustomVisualizer::CompiledRule>
 parse_visualizer_rules(const JsonValue& root,
-                       const std::function<void(std::string_view)>& log_error) {
+                       [[maybe_unused]] const std::function<void(std::string_view)>& log_error) {
     std::vector<CustomVisualizer::CompiledRule> rules;
 
     for (const auto& entry : root.as_array()) {
@@ -58,14 +66,7 @@ parse_visualizer_rules(const JsonValue& root,
         rule.display_template = entry.get_or<std::string>("displayTemplate", "");
         rule.summary_template = entry.get_or<std::string>("summaryTemplate", "");
 
-        try {
-            auto regex_str = glob_to_regex(rule.type_pattern);
-            std::regex compiled(regex_str, std::regex_constants::nosubs);
-            rules.push_back({.rule = std::move(rule), .pattern = std::move(compiled)});
-        } catch (const std::regex_error& e) {
-            log_error("invalid regex pattern for glob '" + rule.type_pattern + "': " + e.what());
-            continue;
-        }
+        rules.push_back({.rule = std::move(rule)});
     }
 
     return rules;
@@ -119,7 +120,7 @@ std::optional<VisualizerRule> CustomVisualizer::find_rule(std::string_view type_
     std::optional<VisualizerRule> result;
 
     for (const auto& entry : compiled_rules_) {
-        if (std::regex_match(type_name.begin(), type_name.end(), entry.pattern)) {
+        if (glob_match(entry.rule.type_pattern, type_name)) {
             result = entry.rule;
             break;
         }
