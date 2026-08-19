@@ -131,6 +131,8 @@ The extension registers a **Luma** debug adapter (backed by the `luma_dap` binar
 
 Because the extension also registers a debug _locator_, the ▶ run affordance on a `@main` function (from [tasks.json](languages/luma/tasks.json)) can be launched as a debug session too, without writing any configuration.
 
+> **Manifest requirement:** the debug adapter is a WASM-only feature. Zed registers debug adapters only for extensions whose Rust/WASM library is loaded, and it only builds that library when `extension.toml` declares `[lib]` with `kind = "Rust"`. That section must stay present — without it the adapter silently never appears in the `debug: start` picker even though the LSP (resolved via a manifest binary path) keeps working.
+
 ### Configuration
 
 For repeatable setups, add a `.zed/debug.json` to your worktree. The adapter accepts these fields (schema: [debug_adapter_schemas/luma.json](debug_adapter_schemas/luma.json)):
@@ -151,6 +153,8 @@ For repeatable setups, add a `.zed/debug.json` to your worktree. The adapter acc
 ```
 
 The Luma debugger is **launch-only** — it starts a fresh interpreter for the program and cannot attach to an already-running process.
+
+> **`adapter` must be exactly `"Luma"`** (capitalised, matching `[debug_adapters.Luma]` in [extension.toml](extension.toml)). Zed filters saved scenarios down to registered adapter names with a case-sensitive match, so a lowercase `"luma"` (the _locator_ name, a different namespace) is silently dropped from the `debugger: start` picker.
 
 ## Keybindings
 

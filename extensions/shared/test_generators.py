@@ -157,7 +157,7 @@ class ConfigCodeGenerator(unittest.TestCase):
         self.assertIn("#![allow(dead_code)]", rs)
         self.assertIn('pub const DEFAULT_LSP_PATH: &str = "";', rs)
         self.assertIn("pub const DEFAULT_LSP_AUTO_UPDATE: bool = true;", rs)
-        self.assertIn("pub const DEFAULT_INLAY_HINTS_ENABLED: bool = true;", rs)
+        self.assertIn("pub const DEFAULT_INLAY_HINTS_ENABLED: bool = false;", rs)
         # Schema-only settings (generated:false) are excluded.
         self.assertNotIn("DEFAULT_LSP_ENABLED", rs)
 

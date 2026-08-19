@@ -136,10 +136,37 @@ void read_body_by_content_length(Connection& conn, std::string& raw, std::size_t
 // Read a chunked-transfer body until the terminal chunk, then decode it in
 // place, replacing the chunked bytes in `raw` with the decoded body.
 void read_and_decode_chunked_body(Connection& conn, std::string& raw, std::size_t body_start) {
-    // Read chunked transfer encoding until we see the terminal "0\r\n".
+    // Read chunked transfer encoding by incrementally parsing chunk headers
+    // to find the terminal 0-length chunk.  This avoids false matches on
+    // payload data that happens to contain "\r\n0\r\n".
     read_response_chunks(conn, raw, [body_start](const std::string& data) {
-        return data.find("0\r\n\r\n", body_start) != std::string::npos ||
-               data.find("\r\n0\r\n", body_start) != std::string::npos;
+        auto pos = body_start;
+
+        while (pos < data.size()) {
+            auto line_end = data.find("\r\n", pos);
+
+            if (line_end == std::string::npos) {
+                return false; // incomplete chunk header — need more data
+            }
+
+            const auto size_str = data.substr(pos, line_end - pos);
+            std::size_t chunk_size = 0;
+
+            try {
+                chunk_size = std::stoull(size_str, nullptr, 16);
+            } catch (...) {
+                return true; // malformed — stop reading, let decoder handle it
+            }
+
+            if (chunk_size == 0) {
+                return true; // terminal chunk found
+            }
+
+            // Skip past: chunk-size CRLF chunk-data CRLF
+            pos = line_end + 2 + chunk_size + 2;
+        }
+
+        return false; // need more data
     });
 
     // Decode chunked body.

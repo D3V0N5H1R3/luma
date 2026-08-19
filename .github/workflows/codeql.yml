@@ -40,7 +40,7 @@ jobs:
       matrix:
         include:
           - language: c-cpp
-            build-mode: none
+            build-mode: manual
           - language: actions
             build-mode: none
           - language: javascript-typescript
@@ -60,6 +60,16 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Build C++ (CodeQL manual mode)
+        if: matrix.language == 'c-cpp'
+        run: |
+          cmake --preset default
+          cmake --build --preset default -- -j2
+
+      - name: Ensure CodeQL trap cache directory exists
+        if: matrix.language == 'c-cpp'
+        run: mkdir -p "$RUNNER_TEMP/trapCaches/cpp/tarballs"
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7

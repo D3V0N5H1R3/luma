@@ -541,8 +541,6 @@ void cmd_load_stylesheet(AppState& state, const DictionaryValue& d) {
         return;
     }
 
-    state.loaded_stylesheet_paths.insert(resolved_str);
-
     // Check file size before reading to enforce the 1 MB limit without
     // loading potentially large files into memory.
     std::error_code size_ec;
@@ -577,6 +575,9 @@ void cmd_load_stylesheet(AppState& state, const DictionaryValue& d) {
         auto js = std::format("__gui_inject_css('{}')", luma::js_string_escape(sanitised));
         webview_eval(state.webview, js.c_str());
     }
+
+    // Record only after successful load — allows retry on transient failures.
+    state.loaded_stylesheet_paths.insert(resolved_str);
 }
 
 void cmd_font_face(AppState& state, const DictionaryValue& d) {

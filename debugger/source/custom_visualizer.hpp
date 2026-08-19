@@ -4,7 +4,6 @@
 #include <functional>
 #include <mutex>
 #include <optional>
-#include <regex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -32,7 +31,6 @@ class CustomVisualizer {
 public:
     struct CompiledRule {
         VisualizerRule rule;
-        std::regex pattern;
     };
 
     // Set a callback for non-fatal diagnostic messages.  If not set,
