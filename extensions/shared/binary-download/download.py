@@ -252,9 +252,7 @@ def _safe_extract_tar(archive_path: Path, dest_dir: Path) -> None:
     with tarfile.open(archive_path, "r:gz") as tf:
         for member in tf.getmembers():
             if member.issym() or member.islnk() or member.isdev() or member.isfifo():
-                raise ValueError(
-                    f"Unsafe archive member type ({member.type!r}) for: {member.name}"
-                )
+                raise ValueError(f"Unsafe archive member type ({member.type!r}) for: {member.name}")
             _reject_unsafe_member((dest_dir / member.name).resolve(), dest_real, member.name)
         if hasattr(tarfile, "data_filter"):
             tf.extractall(dest_dir, filter="data")
