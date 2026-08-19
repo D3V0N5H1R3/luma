@@ -1608,6 +1608,28 @@ fn manifest_registers_debug_adapter_and_locator() {
 }
 
 #[test]
+fn manifest_declares_rust_library() {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let extension_toml =
+        std::fs::read_to_string(std::path::Path::new(manifest_dir).join("extension.toml"))
+            .expect("extension.toml should be readable");
+
+    // Zed only compiles and loads the WASM component for extensions that declare
+    // a Rust library, and debug adapters are registered exclusively for
+    // extensions with a loaded WASM component. Without [lib] kind = "Rust" the
+    // Luma adapter never reaches the "debugger: start" picker.
+    assert!(
+        extension_toml.contains("[lib]"),
+        "extension.toml must declare a [lib] section"
+    );
+    assert!(
+        extension_toml.contains("kind = \"Rust\""),
+        "extension.toml must declare [lib] kind = \"Rust\" so Zed builds and loads the WASM \
+         component that registers the debug adapter"
+    );
+}
+
+#[test]
 fn dap_request_kind_defaults_to_launch() {
     let mut ext = dap_ext();
     let kind = ext
