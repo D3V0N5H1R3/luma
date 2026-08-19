@@ -67,6 +67,10 @@ jobs:
           cmake --preset default
           cmake --build --preset default -- -j2
 
+      - name: Ensure CodeQL trap cache directory exists
+        if: matrix.language == 'c-cpp'
+        run: mkdir -p "$RUNNER_TEMP/trapCaches/cpp/tarballs"
+
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
