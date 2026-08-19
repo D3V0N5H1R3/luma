@@ -205,6 +205,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 luma_validate_agent_and_effort
+if [[ "$is_dry_run" != true ]]; then
+    luma_require_agent "$agent"
+fi
 
 case "$convergence_max_passes" in
     ''|*[!0-9]*)

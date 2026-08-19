@@ -235,3 +235,11 @@ if (-not $DryRun) {
 Write-PhaseBanner -Title 'Audit summary'
 $Results | Format-Table -AutoSize Order, Id, Status
 Write-Output $Results
+
+$HasFailures = ($Results | Where-Object { $_.Status -eq 'failed' -or $_.Status -eq 'error' }).Count -gt 0
+if ($HasFailures) {
+    Write-Warning 'Completed with one or more failed phases.'
+    exit 1
+}
+Write-Host 'All selected phases completed.' -ForegroundColor Green
+exit 0
