@@ -154,6 +154,8 @@ For repeatable setups, add a `.zed/debug.json` to your worktree. The adapter acc
 
 The Luma debugger is **launch-only** — it starts a fresh interpreter for the program and cannot attach to an already-running process.
 
+> **`adapter` must be exactly `"Luma"`** (capitalised, matching `[debug_adapters.Luma]` in [extension.toml](extension.toml)). Zed filters saved scenarios down to registered adapter names with a case-sensitive match, so a lowercase `"luma"` (the _locator_ name, a different namespace) is silently dropped from the `debugger: start` picker.
+
 ## Keybindings
 
 Zed extensions cannot register keybindings automatically. See [KEYBINDINGS.md](KEYBINDINGS.md) for suggested key bindings you can add to your `keymap.json`.
