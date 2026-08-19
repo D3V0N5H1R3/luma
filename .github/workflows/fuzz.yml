@@ -74,6 +74,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Pipeline targets
           - target: fuzz_lexer
             time: 120
           - target: fuzz_parser
@@ -94,6 +95,47 @@ jobs:
             time: 120
           - target: fuzz_structured
             time: 300
+          # Stdlib and external-input boundary targets
+          - target: fuzz_bytecode_deserializer
+            time: 120
+          - target: fuzz_json
+            time: 120
+          - target: fuzz_json_stdlib
+            time: 120
+          - target: fuzz_csv
+            time: 120
+          - target: fuzz_xml
+            time: 120
+          - target: fuzz_datetime
+            time: 120
+          - target: fuzz_protocol
+            time: 120
+          - target: fuzz_compression
+            time: 120
+          - target: fuzz_encoder
+            time: 120
+          - target: fuzz_graphicalui_css
+            time: 120
+          - target: fuzz_keyvaluestore
+            time: 120
+          - target: fuzz_hash
+            time: 120
+          - target: fuzz_path
+            time: 120
+          - target: fuzz_decimal
+            time: 120
+          - target: fuzz_random
+            time: 120
+          - target: fuzz_http
+            time: 120
+          - target: fuzz_process
+            time: 120
+          - target: fuzz_regex
+            time: 120
+          - target: fuzz_string
+            time: 120
+          - target: fuzz_terminal
+            time: 120
 
     steps:
       - name: Download fuzzers
