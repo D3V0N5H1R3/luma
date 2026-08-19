@@ -170,12 +170,39 @@ std::size_t hash_value_structural(const Value& v, int depth) noexcept {
         return h;
     }
 
-    // Remaining structured types — collection subtypes (Set/Queue/Stack and the
-    // by-reference Xml/KeyValueStore), plus functions, channels, tasks,
-    // sockets, and references.  These are rarely used
-    // as Set elements or dictionary keys; return the type tag to place all values
-    // of the same type in one bucket, and let ValueEqual distinguish them through
-    // structural (or identity) comparison.
+    if (v.is_set()) {
+        // Order-independent: XOR element hashes (mirrors Set equality).
+        const auto& elems = v.as_set()->elements;
+        std::size_t elem_xor = 0;
+        for (const auto& elem : elems) {
+            elem_xor ^= hash_value_structural(elem, depth + 1);
+        }
+        return hash_combine(type_seed, hash_combine(std::hash<std::size_t>{}(elems.size()), elem_xor));
+    }
+
+    if (v.is_queue()) {
+        const auto& elems = v.as_queue()->elements;
+        std::size_t h = hash_combine(type_seed, std::hash<std::size_t>{}(elems.size()));
+        for (const auto& elem : elems) {
+            h = hash_combine(h, hash_value_structural(elem, depth + 1));
+        }
+        return h;
+    }
+
+    if (v.is_stack()) {
+        const auto& elems = v.as_stack()->elements;
+        std::size_t h = hash_combine(type_seed, std::hash<std::size_t>{}(elems.size()));
+        for (const auto& elem : elems) {
+            h = hash_combine(h, hash_value_structural(elem, depth + 1));
+        }
+        return h;
+    }
+
+    // Remaining structured types — by-reference types (Xml/KeyValueStore),
+    // plus functions, channels, tasks, sockets, and references.  These are
+    // rarely used as Set elements or dictionary keys; return the type tag to
+    // place all values of the same type in one bucket, and let ValueEqual
+    // distinguish them through identity comparison.
     return type_seed;
 }
 

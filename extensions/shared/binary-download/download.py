@@ -247,12 +247,19 @@ def _safe_extract_zip(archive_path: Path, dest_dir: Path) -> None:
 
 
 def _safe_extract_tar(archive_path: Path, dest_dir: Path) -> None:
-    """Extract a tar archive, rejecting entries with path-traversal components."""
+    """Extract a tar archive, rejecting entries with path-traversal components or unsafe links."""
     dest_real = dest_dir.resolve()
     with tarfile.open(archive_path, "r:gz") as tf:
         for member in tf.getmembers():
+            if member.issym() or member.islnk() or member.isdev() or member.isfifo():
+                raise ValueError(
+                    f"Unsafe archive member type ({member.type!r}) for: {member.name}"
+                )
             _reject_unsafe_member((dest_dir / member.name).resolve(), dest_real, member.name)
-        tf.extractall(dest_dir)
+        if hasattr(tarfile, "data_filter"):
+            tf.extractall(dest_dir, filter="data")
+        else:
+            tf.extractall(dest_dir)
 
 
 def extract_archive(archive_path: Path, dest_dir: Path) -> None:
@@ -329,7 +336,11 @@ def main() -> None:
 
     # Verify checksum
     expected_hash = fetch_expected_checksum(release, asset_name, constants["checksums"]["filename"])
-    if expected_hash and not verify_checksum(archive_path, expected_hash):
+    if not expected_hash:
+        emit_progress("error", f"Checksum verification failed: no hash available for '{asset_name}'")
+        archive_path.unlink(missing_ok=True)
+        sys.exit(2)
+    if not verify_checksum(archive_path, expected_hash):
         archive_path.unlink(missing_ok=True)
         sys.exit(2)
 
