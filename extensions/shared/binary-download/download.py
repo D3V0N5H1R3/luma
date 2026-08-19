@@ -337,7 +337,9 @@ def main() -> None:
     # Verify checksum
     expected_hash = fetch_expected_checksum(release, asset_name, constants["checksums"]["filename"])
     if not expected_hash:
-        emit_progress("error", f"Checksum verification failed: no hash available for '{asset_name}'")
+        emit_progress(
+            "error", f"Checksum verification failed: no hash available for '{asset_name}'"
+        )
         archive_path.unlink(missing_ok=True)
         sys.exit(2)
     if not verify_checksum(archive_path, expected_hash):

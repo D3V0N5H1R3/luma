@@ -108,9 +108,8 @@ struct ParsedUrl {
     } else {
         // Strip userinfo (user:pass@) before searching for the port colon.
         auto at_pos = authority.find('@');
-        auto host_authority = (at_pos != std::string::npos)
-                                  ? authority.substr(at_pos + 1)
-                                  : authority;
+        auto host_authority =
+            (at_pos != std::string::npos) ? authority.substr(at_pos + 1) : authority;
 
         auto colon = host_authority.rfind(':');
 

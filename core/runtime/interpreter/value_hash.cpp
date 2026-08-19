@@ -177,7 +177,8 @@ std::size_t hash_value_structural(const Value& v, int depth) noexcept {
         for (const auto& elem : elems) {
             elem_xor ^= hash_value_structural(elem, depth + 1);
         }
-        return hash_combine(type_seed, hash_combine(std::hash<std::size_t>{}(elems.size()), elem_xor));
+        return hash_combine(type_seed,
+                            hash_combine(std::hash<std::size_t>{}(elems.size()), elem_xor));
     }
 
     if (v.is_queue()) {
