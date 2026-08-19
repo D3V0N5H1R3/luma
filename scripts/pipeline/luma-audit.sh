@@ -117,6 +117,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 luma_validate_agent_and_effort
+if [[ "$is_dry_run" != true ]]; then
+    luma_require_agent "$agent"
+fi
 
 repo_root="$(luma_repo_root "$SCRIPT_DIR")"
 
@@ -256,7 +259,19 @@ fi
 
 luma_write_banner "Audit summary"
 printf '%-6s %-32s %s\n' "Order" "Id" "Status"
+has_failures=0
 for r in ${results[@]+"${results[@]}"}; do
     IFS='|' read -r -a row <<< "$r"
     printf '%-6s %-32s %s\n' "${row[0]}" "${row[1]}" "${row[3]}"
+    case "${row[3]}" in
+        error|failed) has_failures=1 ;;
+    esac
 done
+
+if [[ "$has_failures" -ne 0 ]]; then
+    printf '%sCompleted with one or more failed phases.%s\n' \
+        "$LUMA_CLR_WARN" "$LUMA_CLR_OFF"
+    exit 1
+fi
+luma_ok 'All selected phases completed.'
+exit 0

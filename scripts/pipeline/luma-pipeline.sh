@@ -152,6 +152,27 @@ luma_agent_exe() {
     return 1
 }
 
+# Verify that the agent CLI and its runtime dependencies are available. Call
+# this once before entering the phase loop so missing prerequisites surface as a
+# single clear diagnostic instead of one failure per phase.
+luma_require_agent() {
+    local agent="$1"
+    if ! luma_agent_exe "$agent" >/dev/null; then
+        local hint='install it, or set LUMA_COPILOT / LUMA_CLAUDE'
+        printf 'Error: %s CLI not found on PATH (%s).\n' "$agent" "$hint" >&2
+        exit 127
+    fi
+    # The copilot CLI is an npm shim that exec's into node. If node itself is
+    # missing (common in Git Bash on Windows where the npm shim is on PATH but
+    # node is not), every invocation will fail with "exec: node: not found".
+    # Detect this early.
+    if [[ "$agent" == copilot ]] && ! command -v node >/dev/null 2>&1; then
+        printf 'Error: the copilot CLI requires node, but node is not on PATH.\n' >&2
+        printf '  Ensure Node.js is installed and its bin directory is in your PATH.\n' >&2
+        exit 127
+    fi
+}
+
 # Run one prompt phase through the selected agent CLI (copilot or claude).
 #
 # Positional arguments:
