@@ -36,16 +36,28 @@ luma_discover_cmake() {
 
     local candidates=()
 
+    # Resolve Program Files — works under Git Bash, MSYS2, and WSL.
+    local pf="${PROGRAMFILES:-}"
+    if [[ -z "$pf" ]]; then
+        # Git Bash / MSYS2 typically mount C: as /c.
+        if [[ -d "/c/Program Files" ]]; then
+            pf="/c/Program Files"
+        elif [[ -d "/mnt/c/Program Files" ]]; then
+            pf="/mnt/c/Program Files"
+        fi
+    fi
+    [[ -z "$pf" ]] && return 1
+
     # Visual Studio bundled CMake (any edition/year).
-    if [[ -d "/c/Program Files/Microsoft Visual Studio" ]]; then
+    if [[ -d "$pf/Microsoft Visual Studio" ]]; then
         while IFS= read -r -d '' f; do
             candidates+=("$f")
-        done < <(find "/c/Program Files/Microsoft Visual Studio" \
+        done < <(find "$pf/Microsoft Visual Studio" \
             -path "*/CMake/CMake/bin/cmake.exe" -print0 2>/dev/null)
     fi
     # Standalone CMake install.
-    if [[ -x "/c/Program Files/CMake/bin/cmake.exe" ]]; then
-        candidates+=("/c/Program Files/CMake/bin/cmake.exe")
+    if [[ -x "$pf/CMake/bin/cmake.exe" ]]; then
+        candidates+=("$pf/CMake/bin/cmake.exe")
     fi
 
     for exe in "${candidates[@]}"; do
