@@ -1,45 +1,20 @@
 #ifndef LUMA_RUNTIME_CLI_TERMINAL_HPP
 #define LUMA_RUNTIME_CLI_TERMINAL_HPP
 
-#include <cstdio>
 #include <string_view>
 
-#ifdef _WIN32
-#include <io.h>
-#else
-#include <unistd.h>
-#endif
+#include "common/platform_utils.hpp"
 
 namespace luma::term {
 
-namespace detail {
-
-[[nodiscard]] inline int portable_fileno(std::FILE* stream) noexcept {
-#ifdef _WIN32
-    return _fileno(stream);
-#else
-    return fileno(stream);
-#endif
-}
-
-[[nodiscard]] inline bool portable_isatty(int fd) noexcept {
-#ifdef _WIN32
-    return _isatty(fd) != 0;
-#else
-    return isatty(fd) != 0;
-#endif
-}
-
-} // namespace detail
-
 // Returns true when stderr is connected to an interactive terminal.
 [[nodiscard]] inline bool stderr_is_tty() noexcept {
-    return detail::portable_isatty(detail::portable_fileno(stderr));
+    return is_stderr_terminal();
 }
 
 // Returns true when stdout is connected to an interactive terminal.
 [[nodiscard]] inline bool stdout_is_tty() noexcept {
-    return detail::portable_isatty(detail::portable_fileno(stdout));
+    return is_stdout_terminal();
 }
 
 // Named ANSI escape-code constants.

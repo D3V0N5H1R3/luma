@@ -10,6 +10,7 @@
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
+#include "common/platform_utils.hpp"
 #include "runtime/stdlib/io/platform_terminal.hpp"
 
 namespace luma::platform_terminal {
@@ -22,11 +23,11 @@ termios original_termios{};
 } // namespace
 
 bool stdout_is_terminal() {
-    return isatty(STDOUT_FILENO) != 0;
+    return is_stdout_terminal();
 }
 
 bool stdin_is_terminal() {
-    return isatty(STDIN_FILENO) != 0;
+    return is_stdin_terminal();
 }
 
 void enable_vt_processing() {
@@ -43,7 +44,7 @@ void query_terminal_size(int& cols, int& rows) {
 }
 
 void enter_raw_mode(const SourceLocation& loc) {
-    if (!isatty(STDIN_FILENO)) {
+    if (!is_stdin_terminal()) {
         throw RuntimeError{"Terminal.enable_raw_mode: stdin is not a terminal", loc,
                            "stdin must be connected to a terminal device"};
     }

@@ -6,10 +6,15 @@
 
 #include "analysis/errors/error.hpp"
 #include "analysis/source/source_location.hpp"
+#include "common/platform_utils.hpp"
 #include "runtime/stdlib/io/platform_terminal.hpp"
 
+#ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <io.h>
 #include <windows.h>
 
@@ -24,11 +29,11 @@ DWORD original_stdout_mode{0};
 } // namespace
 
 bool stdout_is_terminal() {
-    return _isatty(_fileno(stdout)) != 0;
+    return is_stdout_terminal();
 }
 
 bool stdin_is_terminal() {
-    return _isatty(_fileno(stdin)) != 0;
+    return is_stdin_terminal();
 }
 
 void enable_vt_processing() {
