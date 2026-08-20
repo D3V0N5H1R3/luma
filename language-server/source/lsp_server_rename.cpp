@@ -22,15 +22,20 @@ namespace luma::lsp {
 // Rename — validation and conflict detection helpers
 // ═══════════════════════════════════════════════════════════
 
-namespace {
-
 // Check whether `new_name` conflicts with an existing name in the
-// same scope. Returns true if a conflict is detected.
-[[nodiscard]] bool has_rename_conflict(const AnalysisResult& result, const std::string& new_name,
-                                       bool is_local,
-                                       const std::optional<std::string>& enclosing_fn,
-                                       const std::string& rename_ns,
-                                       const LspAnalysisCache& cache) {
+// same scope. Returns true if a conflict is detected. `target_name` is the
+// symbol's current (pre-rename) name: renaming a symbol to its own name is
+// always a no-op, never a conflict, but the definition/locals maps queried
+// below necessarily already contain that name (it names the very symbol
+// being renamed), so that case must be excluded up front or every rename
+// to an unchanged name would be misreported as colliding with itself.
+bool has_rename_conflict(const AnalysisResult& result, const std::string& new_name,
+                         const std::string& target_name, bool is_local,
+                         const std::optional<std::string>& enclosing_fn,
+                         const std::string& rename_ns, const LspAnalysisCache& cache) {
+    if (new_name == target_name) {
+        return false;
+    }
     if (is_local && enclosing_fn.has_value()) {
         auto fl_it = result.semantic.locals.function_locals.find(*enclosing_fn);
         if (fl_it != result.semantic.locals.function_locals.end() &&
@@ -61,8 +66,6 @@ namespace {
     }
     return false;
 }
-
-} // namespace
 
 // ═══════════════════════════════════════════════════════════
 // Rename symbol
@@ -120,8 +123,8 @@ JsonValue LspRenameHandler::handle_rename(const JsonValue& params) {
 
         // Conflict detection: reject rename if the new name already exists
         // in the same scope (would create shadowing or duplicate definitions).
-        if (has_rename_conflict(result_ref, new_name, is_local, enclosing_fn, rename_ns,
-                                *ctx.cache)) {
+        if (has_rename_conflict(result_ref, new_name, target_name, is_local, enclosing_fn,
+                                rename_ns, *ctx.cache)) {
             return {};
         }
 
