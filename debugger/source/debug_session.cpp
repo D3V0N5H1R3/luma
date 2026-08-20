@@ -319,7 +319,19 @@ Variable DebugSession::evaluate(int frame_id, const std::string& expression,
 
         actual_index = mapping->frame_index;
     } else {
-        target_vm = execution_engine_->vm();
+        // No frame mapping (e.g. a stale or zero frame_id): fall back to the
+        // main thread. Lock the main thread's state for the same reason as
+        // the mapping-hit path above — reading state->vm under its lock
+        // ensures target_vm cannot be destroyed between capture and use
+        // (TOCTOU race), since terminate() nulls it under this same lock
+        // (ThreadStateManager::null_all_vms) before destroying the VM.
+        auto main_state = thread_state_manager_.get_thread(k_main_thread_id);
+
+        if (main_state) {
+            const auto lock = thread_state_manager_.lock_state(*main_state);
+            target_vm = main_state->vm;
+            return expression_evaluator_->evaluate(target_vm, actual_index, expression, context);
+        }
     }
 
     return expression_evaluator_->evaluate(target_vm, actual_index, expression, context);
