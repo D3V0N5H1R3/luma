@@ -28,6 +28,37 @@ else
     LUMA_CLR_OFF=''
 fi
 
+# Discover CMake from well-known locations (Visual Studio bundled CMake, Program
+# Files) and prepend its directory to PATH so that subsequent `command -v cmake`
+# checks succeed. No-op if cmake is already on PATH.
+luma_discover_cmake() {
+    command -v cmake >/dev/null 2>&1 && return 0
+
+    local candidates=()
+
+    # Visual Studio bundled CMake (any edition/year).
+    if [[ -d "/c/Program Files/Microsoft Visual Studio" ]]; then
+        while IFS= read -r -d '' f; do
+            candidates+=("$f")
+        done < <(find "/c/Program Files/Microsoft Visual Studio" \
+            -path "*/CMake/CMake/bin/cmake.exe" -print0 2>/dev/null)
+    fi
+    # Standalone CMake install.
+    if [[ -x "/c/Program Files/CMake/bin/cmake.exe" ]]; then
+        candidates+=("/c/Program Files/CMake/bin/cmake.exe")
+    fi
+
+    for exe in "${candidates[@]}"; do
+        local dir
+        dir="$(dirname "$exe")"
+        export PATH="$dir:$PATH"
+        if command -v cmake >/dev/null 2>&1; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Print a warning to stderr without aborting the caller.
 luma_warn() {
     printf '%sWarning:%s %s\n' "$LUMA_CLR_WARN" "$LUMA_CLR_OFF" "$1" >&2
@@ -550,6 +581,7 @@ luma_build_and_test() {
     # Preflight: the build toolchain must be present. Distinguish a missing
     # toolchain (nothing to build with) from a genuinely broken build, so the
     # caller's "baseline is not green" message is not misattributed to the code.
+    luma_discover_cmake
     if ! command -v cmake >/dev/null 2>&1; then
         luma_warn 'cmake is not on PATH; the build + test gate cannot run. Install CMake and a C++ toolchain, or pass --skip-baseline to skip the gate.'
         return 1
@@ -638,6 +670,7 @@ luma_ensure_compile_db() {
     [[ -f "$build_db" ]] && return 0
     # No clang-tidy: lint.py skips it regardless, so a database would be moot.
     command -v clang-tidy >/dev/null 2>&1 || return 0
+    luma_discover_cmake
     if ! command -v cmake >/dev/null 2>&1; then
         luma_warn 'cmake not found; cannot generate compile_commands.json (clang-tidy will be skipped).'
         return 0
