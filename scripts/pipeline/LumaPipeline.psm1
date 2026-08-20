@@ -73,6 +73,79 @@ function Get-AgentExecutable {
     return $Command.Source
 }
 
+function Resolve-CopilotModel {
+    <#
+    .SYNOPSIS
+        Resolve the effective Copilot model, falling back to 'auto' when the CLI
+        cannot select the requested model on this account.
+    .DESCRIPTION
+        The GitHub Copilot CLI validates --model against the catalogue its own
+        client is entitled to, which can differ from the VS Code / Copilot Chat
+        catalogue: on some org- or enterprise-managed accounts the CLI is served a
+        catalogue in which no model is picker-enabled, so it rejects every explicit
+        --model (not just uncommon ones) and only 'auto' works. Passing an
+        unavailable model makes each phase abort at model resolution - which is
+        exactly what silently failed every audit phase. This probes the requested
+        model once; if the CLI reports it is not available, it warns and returns
+        'auto' so the run still produces reports. The CLI validates --model during
+        start-up and aborts before any model turn when the model is not selectable,
+        so the probe is cheap in the failure case. Fails open (returns the
+        requested model) for claude, an empty or 'auto' model, a dry run, or when
+        the CLI cannot be probed. Mirrors luma_resolve_copilot_model in
+        luma-pipeline.sh.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [ValidateSet('copilot', 'claude')]
+        [string]$Agent = 'copilot',
+
+        [string]$Model,
+
+        [switch]$DryRun,
+
+        [string]$RepoRoot
+    )
+
+    if ($Agent -ne 'copilot' -or $DryRun -or [string]::IsNullOrWhiteSpace($Model) -or $Model -eq 'auto') {
+        return $Model
+    }
+
+    try { $Executable = Get-AgentExecutable -Agent 'copilot' }
+    catch { return $Model }
+
+    $ProbeArgs = @(
+        '-p', 'Reply with the single word: ok. Do not use any tools.'
+        '--model', $Model
+        '--output-format=json'
+        '--available-tools=view'
+        '--allow-all-tools'
+        '--no-ask-user'
+        '--no-color'
+    )
+
+    $Pushed = $false
+    if ($RepoRoot -and (Test-Path -LiteralPath $RepoRoot)) {
+        Push-Location -LiteralPath $RepoRoot
+        $Pushed = $true
+    }
+    try {
+        $Output = & $Executable @ProbeArgs 2>&1
+    }
+    catch {
+        $Output = $_.Exception.Message
+    }
+    finally {
+        if ($Pushed) { Pop-Location }
+    }
+
+    if (($Output | Out-String) -match '(?i)model .*is not available') {
+        Write-Warning "Copilot CLI cannot select model '$Model' for this account; model access is governed by your org/enterprise Copilot policy. Falling back to 'auto'."
+        return 'auto'
+    }
+    return $Model
+}
+
 function Write-PhaseBanner {
     <#
     .SYNOPSIS
@@ -420,7 +493,13 @@ function Invoke-AgentPhase {
                         # Output but no extractable final message: keep the raw
                         # transcript so nothing is silently dropped.
                         Write-Warning 'Could not extract a final report from Copilot output; keeping the raw JSONL transcript.'
+                        $ErrText = (Get-Content -LiteralPath $ErrFile -Raw -ErrorAction SilentlyContinue)
+                        if (-not [string]::IsNullOrWhiteSpace($ErrText)) {
+                            Write-Warning "Agent stderr: $($ErrText.Substring(0, [Math]::Min($ErrText.Length, 500)).TrimEnd())"
+                        }
                         Set-Content -LiteralPath $OutputFile -Value (@($RawOutput) -join "`n") -NoNewline -Encoding utf8
+                        # Force a failure: the agent ran but produced no usable report.
+                        if ($ExitCode -eq 0) { $ExitCode = 1 }
                     }
                     else {
                         # The agent wrote nothing to stdout: this phase did no
@@ -1148,6 +1227,7 @@ function Test-LintAndFormat {
 Export-ModuleMember -Function @(
     'Get-LumaRepoRoot'
     'Get-AgentExecutable'
+    'Resolve-CopilotModel'
     'Write-PhaseBanner'
     'Get-AuditPhase'
     'Get-FixPhase'

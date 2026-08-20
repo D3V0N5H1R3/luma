@@ -249,6 +249,11 @@ if [[ "$is_list" == true ]]; then
     exit 0
 fi
 
+# Fall back to 'auto' when the CLI cannot select the requested model, so a
+# mis-entitled or unknown model name never aborts every phase. Placed after the
+# --list early-exit so listing phases never invokes the CLI.
+model="$(luma_resolve_copilot_model "$agent" "$model" "$is_dry_run" "$repo_root")"
+
 selected=()
 if [[ ${#filters[@]} -gt 0 ]]; then
     for rec in "${records[@]}"; do

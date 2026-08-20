@@ -4,7 +4,8 @@
 .SYNOPSIS
     Run the Luma audit and then the fix pipeline back-to-back through one agent
     CLI, defaulting to the GitHub Copilot CLI driving Claude Opus 4.6 at medium
-    reasoning effort.
+    reasoning effort. When the CLI cannot select that model on the current
+    account, each runner transparently falls back to 'auto' with a warning.
 
 .DESCRIPTION
     A thin orchestrator that invokes the pipeline entry points in order:
@@ -19,15 +20,18 @@
     is skipped.
 
     The two agent knobs default to the requested configuration - the Copilot
-    CLI backend, the 'claude-opus-4.6' model (Claude Opus 4.6, selectable through
-    the Copilot CLI), and 'medium' reasoning effort - and are forwarded to every
-    runner. Preview everything first with -DryRun.
+    CLI backend, the 'claude-opus-4.6' model (Claude Opus 4.6), and 'medium'
+    reasoning effort - and are forwarded to every runner. When the CLI cannot
+    select the requested model for this account (model access is governed by the
+    org/enterprise Copilot policy), each runner falls back to 'auto'. Preview
+    everything first with -DryRun.
 
 .PARAMETER Agent
     Agent CLI backend forwarded to both runners: 'copilot' (default) or 'claude'.
 
 .PARAMETER Model
     Model passed to the agent's --model flag. Defaults to 'claude-opus-4.6'.
+    Falls back to 'auto' when the CLI cannot select it for this account.
     Pass an empty string to let the agent choose its own default.
 
 .PARAMETER Effort
