@@ -420,7 +420,13 @@ function Invoke-AgentPhase {
                         # Output but no extractable final message: keep the raw
                         # transcript so nothing is silently dropped.
                         Write-Warning 'Could not extract a final report from Copilot output; keeping the raw JSONL transcript.'
+                        $ErrText = (Get-Content -LiteralPath $ErrFile -Raw -ErrorAction SilentlyContinue)
+                        if (-not [string]::IsNullOrWhiteSpace($ErrText)) {
+                            Write-Warning "Agent stderr: $($ErrText.Substring(0, [Math]::Min($ErrText.Length, 500)).TrimEnd())"
+                        }
                         Set-Content -LiteralPath $OutputFile -Value (@($RawOutput) -join "`n") -NoNewline -Encoding utf8
+                        # Force a failure: the agent ran but produced no usable report.
+                        if ($ExitCode -eq 0) { $ExitCode = 1 }
                     }
                     else {
                         # The agent wrote nothing to stdout: this phase did no

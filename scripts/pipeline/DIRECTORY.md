@@ -169,7 +169,7 @@ bash scripts/pipeline/luma-all.sh --dry-run
 bash scripts/pipeline/luma-all.sh
 ```
 
-The three agent knobs default to `-Agent copilot`, `-Model claude-opus-4.6`, and
+The three agent knobs default to `-Agent copilot`, `-Model auto`, and
 `-Effort medium`; override any of them per run (e.g. `-Model gpt-5.4`, `-Effort high`,
 or `-Agent claude`). Run only one stage with `-SkipFix` / `--skip-fix` or
 `-SkipAudit` / `--skip-audit`, and forward extra flags to a specific stage with
@@ -331,14 +331,14 @@ options in `--kebab-case` form (`-Phase` → `--phase`, `-DryRun` → `--dry-run
 ### `Invoke-LumaAll.ps1`
 
 Runs `Invoke-LumaAudit.ps1` and then `Invoke-LumaFix.ps1` in sequence, forwarding
-the agent flags to both. Defaults to the Copilot CLI driving **Claude Opus 4.6**
-(`claude-opus-4.6`) at **medium** effort. Skips the fix if the audit exits
+the agent flags to both. Defaults to the Copilot CLI with **auto** model selection
+at **medium** effort. Skips the fix if the audit exits
 non-zero, and exits with the last stage's exit code.
 
 | Flag              | Purpose                                                                          |
 | ----------------- | ------------------------------------------------------------------------------- |
 | `-Agent <name>`   | Backend forwarded to every stage: `copilot` (default) or `claude`.              |
-| `-Model <name>`   | Model for every stage (default `claude-opus-4.6`; pass `''` to let the agent choose). |
+| `-Model <name>`   | Model for every stage (default `auto`; pass `''` to let the agent choose). |
 | `-Effort <lvl>`   | Reasoning effort for every stage (default `medium`; pass `''` to omit).            |
 | `-DryRun`         | Preview every stage; invoke nothing.                                            |
 | `-SkipAudit`      | Skip the audit stage.                                                           |

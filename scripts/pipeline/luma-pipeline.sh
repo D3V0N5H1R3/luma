@@ -313,7 +313,14 @@ luma_invoke_agent_phase() {
                     # The agent produced output but no extractable final message;
                     # keep the raw transcript so nothing is silently dropped.
                     luma_warn "could not extract a final report from Copilot output; keeping the raw JSONL transcript."
+                    if [[ -s "$err" ]]; then
+                        luma_warn "agent stderr: $(head -c 500 "$err")"
+                    fi
                     cat "$raw" >"$sink"
+                    # Force a failure: the agent ran but produced no usable report.
+                    if [[ "$exit_code" -eq 0 ]]; then
+                        exit_code=1
+                    fi
                 else
                     # The agent wrote nothing to stdout: this phase did no work.
                     # Surface the captured stderr in the report and force a
