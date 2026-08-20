@@ -294,10 +294,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install clang-format
+      - name: Install clang-format-18
         uses: ./.github/actions/apt-install
         with:
-          packages: clang-format
+          packages: clang-format-18
 
       # Mirrors the `format` target in cmake/LumaRunClangTool.cmake: clang-format
       # covers core, shared, language-server/source, debugger/source, tests, and
@@ -308,7 +308,7 @@ jobs:
           set -o pipefail
           find core shared language-server/source debugger/source tests fuzz \
             \( -name '*.cpp' -o -name '*.hpp' \) \
-            -exec clang-format --dry-run --Werror {} + \
+            -exec clang-format-18 --dry-run --Werror {} + \
             2>&1 | tee clang-format-report.txt
 
       - name: Upload clang-format report

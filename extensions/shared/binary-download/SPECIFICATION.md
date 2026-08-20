@@ -53,7 +53,7 @@ Extensions must read at minimum:
 
 | Field      | Type            | Description                          |
 | ---------- | --------------- | ------------------------------------ |
-| `tag_name` | `string`        | Version tag (e.g. `v0.9.0`)         |
+| `tag_name` | `string`        | Version tag (e.g. `v0.10.0`)         |
 | `assets`   | `array<object>` | List of downloadable asset objects   |
 
 Each asset object contains:

@@ -73,7 +73,7 @@ Once it is installed, open a **terminal** (also called a command line or shell) 
 luma --version
 ```
 
-You should see a version number, such as `Luma 0.9.0`. If you do, you are ready.
+You should see a version number, such as `Luma 0.10.0`. If you do, you are ready.
 
 ### Running a Program from a File
 
@@ -210,7 +210,7 @@ number temperature = 21.5
 
 ### String
 
-A **string** is a piece of text, written between double quotes: `"hello"`, `"Luma 0.9"`, `""` (the empty string). Strings hold names, messages, file contents — anything textual.
+A **string** is a piece of text, written between double quotes: `"hello"`, `"Luma 0.10"`, `""` (the empty string). Strings hold names, messages, file contents — anything textual.
 
 ```luma
 string greeting = "Hello"
