@@ -191,6 +191,64 @@ luma_require_agent() {
     fi
 }
 
+# Resolve the effective Copilot model for a run, falling back to 'auto' when the
+# requested model is not selectable by the CLI on this account.
+#
+# The GitHub Copilot CLI validates --model against the catalogue its OWN client
+# is entitled to, which can differ from the VS Code / Copilot Chat catalogue: on
+# some org- or enterprise-managed accounts the CLI is served a catalogue in which
+# no model is picker-enabled, so it rejects EVERY explicit --model (not just
+# uncommon ones) and only 'auto' works. Passing an unavailable model makes each
+# phase abort at model resolution - which is exactly what silently failed every
+# audit phase. To stay robust, probe the requested model once up front; if the
+# CLI reports it is not available, warn and fall back to 'auto' so the run still
+# produces reports. The CLI validates --model during start-up and aborts before
+# any model turn when the model is not selectable, so the probe is cheap in the
+# failure case. Fails open (keeps the requested model) for claude, an empty or
+# 'auto' model, a dry run, or when the CLI cannot be probed.
+#
+# Positional arguments: 1 agent  2 model  3 is_dry_run  4 repo_root (optional).
+# Echoes the model the phases should actually use.
+luma_resolve_copilot_model() {
+    local agent="$1"
+    local model="$2"
+    local is_dry_run="$3"
+    local repo_root="${4:-$PWD}"
+
+    if [[ "$agent" != copilot || "$is_dry_run" == true || -z "$model" || "$model" == auto ]]; then
+        printf '%s' "$model"
+        return 0
+    fi
+
+    local exe
+    if ! exe="$(luma_agent_exe copilot)"; then
+        printf '%s' "$model"
+        return 0
+    fi
+
+    local probe
+    probe="$(mktemp "${TMPDIR:-/tmp}/luma-model-probe.XXXXXX")"
+    local -a runner=("$exe" -p "Reply with the single word: ok. Do not use any tools."
+        --model "$model" --output-format=json --available-tools="view"
+        --allow-all-tools --no-ask-user --no-color)
+    # Bound the success-path probe so a slow model turn cannot stall the run;
+    # `timeout` is absent on stock macOS, so degrade to an unbounded call there.
+    if command -v timeout >/dev/null 2>&1; then
+        ( cd -- "$repo_root" && timeout 90 "${runner[@]}" ) >"$probe" 2>&1 || true
+    else
+        ( cd -- "$repo_root" && "${runner[@]}" ) >"$probe" 2>&1 || true
+    fi
+
+    if grep -qiE "model .*is not available" "$probe"; then
+        luma_warn "Copilot CLI cannot select model '$model' for this account; model access is governed by your org/enterprise Copilot policy. Falling back to 'auto'."
+        rm -f "$probe"
+        printf 'auto'
+        return 0
+    fi
+    rm -f "$probe"
+    printf '%s' "$model"
+}
+
 # Run one prompt phase through the selected agent CLI (copilot or claude).
 #
 # Positional arguments:

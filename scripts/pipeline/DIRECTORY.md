@@ -169,7 +169,7 @@ bash scripts/pipeline/luma-all.sh --dry-run
 bash scripts/pipeline/luma-all.sh
 ```
 
-The three agent knobs default to `-Agent copilot`, `-Model auto`, and
+The three agent knobs default to `-Agent copilot`, `-Model claude-opus-4.6`, and
 `-Effort medium`; override any of them per run (e.g. `-Model gpt-5.4`, `-Effort high`,
 or `-Agent claude`). Run only one stage with `-SkipFix` / `--skip-fix` or
 `-SkipAudit` / `--skip-audit`, and forward extra flags to a specific stage with
@@ -179,6 +179,33 @@ or `-Agent claude`). Run only one stage with `-SkipFix` / `--skip-fix` or
 > **Heads-up:** running the mutating fixer straight after the audit **skips the
 > manual triage step** the two-runner split is designed to preserve. Prefer the
 > separate runners when you want to review the reports before any code changes.
+
+### Copilot CLI model availability
+
+The GitHub Copilot **CLI** validates `--model` against the model catalogue *its
+own client* is entitled to, which can differ from what the VS Code Copilot Chat
+client sees for the same account. On org- or enterprise-managed accounts the CLI
+may be served a catalogue in which **no model is picker-enabled** — the CLI then
+logs `Successfully listed 0 models` and rejects **every** explicit `--model`
+(not just uncommon ones), so `--model claude-opus-4.6` fails with
+`Model "claude-opus-4.6" ... is not available` even though that model is enabled
+for the account in VS Code. In that state only `--model auto` runs (it resolves
+to whatever default the CLI is allowed, e.g. a Haiku model).
+
+Because a rejected `--model` makes the agent abort at model resolution — which
+would otherwise fail every phase — each runner **probes the requested model once
+and falls back to `auto` with a warning** when the CLI cannot select it
+(`luma_resolve_copilot_model` / `Resolve-CopilotModel`). To actually use Opus in
+the CLI, an org/enterprise Copilot admin must enable model access (the model
+picker / "Copilot in the CLI") for those models; individual users cannot override
+the server-side entitlement. Verify with:
+
+```bash
+copilot -p "reply ok" --model claude-opus-4.6 --allow-all-tools --no-ask-user
+```
+
+If it replies instead of printing `... is not available`, the model is selectable
+and the runners will use it.
 
 ## Pipeline order
 
@@ -331,14 +358,14 @@ options in `--kebab-case` form (`-Phase` → `--phase`, `-DryRun` → `--dry-run
 ### `Invoke-LumaAll.ps1`
 
 Runs `Invoke-LumaAudit.ps1` and then `Invoke-LumaFix.ps1` in sequence, forwarding
-the agent flags to both. Defaults to the Copilot CLI with **auto** model selection
-at **medium** effort. Skips the fix if the audit exits
+the agent flags to both. Defaults to the Copilot CLI driving **Claude Opus 4.6**
+(`claude-opus-4.6`) at **medium** effort. Skips the fix if the audit exits
 non-zero, and exits with the last stage's exit code.
 
 | Flag              | Purpose                                                                          |
 | ----------------- | ------------------------------------------------------------------------------- |
 | `-Agent <name>`   | Backend forwarded to every stage: `copilot` (default) or `claude`.              |
-| `-Model <name>`   | Model for every stage (default `auto`; pass `''` to let the agent choose). |
+| `-Model <name>`   | Model for every stage (default `claude-opus-4.6`; falls back to `auto` when the CLI cannot select it; pass `''` to let the agent choose). |
 | `-Effort <lvl>`   | Reasoning effort for every stage (default `medium`; pass `''` to omit).            |
 | `-DryRun`         | Preview every stage; invoke nothing.                                            |
 | `-SkipAudit`      | Skip the audit stage.                                                           |

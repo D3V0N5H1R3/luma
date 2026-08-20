@@ -8,7 +8,10 @@
 #   2. luma-fix.sh    (mutating, agent mode) - applies gated fixes.
 #
 # Defaults to the requested configuration: the GitHub Copilot CLI backend
-# with the agent's default model selection ('auto') at 'medium' reasoning effort.
+# driving Claude Opus 4.6 (model 'claude-opus-4.6') at 'medium' reasoning effort.
+# When the CLI cannot select that model on the current account (model access is
+# governed by the org/enterprise Copilot policy), each runner transparently falls
+# back to 'auto' with a warning, so a mis-entitled model never fails the pipeline.
 # Every knob is forwarded to each runner. The audit runs first; if it exits
 # non-zero the fix phase is skipped. This is the bash counterpart of
 # Invoke-LumaAll.ps1 and targets bash 3.2 (the stock macOS shell).
@@ -22,12 +25,14 @@ usage() {
 Usage: luma-all.sh [options] [-- passthrough-args...]
 
 Run the read-only audit and then the mutating fix pipeline in sequence through
-one agent CLI. Defaults to the Copilot CLI with the agent's default model at
-medium effort.
+one agent CLI. Defaults to the Copilot CLI driving Claude Opus 4.6 at medium
+effort; if the CLI cannot select that model on this account, each runner falls
+back to 'auto' with a warning.
 
 Options:
   --agent <name>          Agent CLI backend: copilot (default) or claude.
-  --model <name>          Model for the agent's --model flag (default: auto).
+  --model <name>          Model for the agent's --model flag (default: claude-opus-4.6).
+                          Falls back to 'auto' when the CLI cannot select it.
                           Pass an empty string to let the agent choose.
   --effort <level>        Reasoning effort (default: medium). One of low, medium, high,
                           xhigh, max for copilot; pass an empty string to omit.
@@ -53,7 +58,7 @@ need_value() {
 }
 
 agent='copilot'
-model='auto'
+model='claude-opus-4.6'
 effort='medium'
 skip_audit=false
 skip_fix=false

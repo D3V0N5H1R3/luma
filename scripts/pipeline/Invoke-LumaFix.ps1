@@ -203,6 +203,10 @@ else {
     $Selected = $AllPhases
 }
 
+# Fall back to 'auto' when the CLI cannot select the requested model, so a
+# mis-entitled or unknown model name never aborts every phase.
+$Model = Resolve-CopilotModel -Agent $Agent -Model $Model -DryRun:$DryRun -RepoRoot $RepoRoot
+
 # Resolve the artifact root and audit reports directory.
 if (-not $ArtifactRoot) {
     $ArtifactRoot = Join-Path -Path $RepoRoot -ChildPath 'pipeline-artifacts'
