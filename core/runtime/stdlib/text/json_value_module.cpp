@@ -237,7 +237,7 @@ struct LineColumn {
 // and Json.parse_detailed cannot bypass the sandbox-configured limit.
 [[nodiscard]] std::size_t json_depth_limit() {
     return std::min<std::size_t>(ResourceLimits::max_json_nesting_depth,
-                                  static_cast<std::size_t>(CompileTimeLimits::max_json_depth));
+                                 static_cast<std::size_t>(CompileTimeLimits::max_json_depth));
 }
 
 [[nodiscard]] LineColumn offset_to_line_column(std::string_view text, std::size_t offset) {

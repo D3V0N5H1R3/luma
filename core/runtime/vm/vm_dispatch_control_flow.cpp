@@ -257,9 +257,9 @@ void require_all_required_args_bound(const SmallVector<std::uint8_t>& bound,
                                      const CompiledFunction& func, SourceLocation location) {
     for (int i = 0; i < func.required_arity; ++i) {
         if (!bound[static_cast<std::size_t>(i)]) [[unlikely]] {
-            throw RuntimeError{
-                vm_errors::missing_required_named_argument(func.param_names[static_cast<std::size_t>(i)]),
-                location};
+            throw RuntimeError{vm_errors::missing_required_named_argument(
+                                   func.param_names[static_cast<std::size_t>(i)]),
+                               location};
         }
     }
 }

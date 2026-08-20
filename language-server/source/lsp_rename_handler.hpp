@@ -23,8 +23,7 @@ class LspAnalysisCache;
 [[nodiscard]] bool has_rename_conflict(const AnalysisResult& result, const std::string& new_name,
                                        const std::string& target_name, bool is_local,
                                        const std::optional<std::string>& enclosing_fn,
-                                       const std::string& rename_ns,
-                                       const LspAnalysisCache& cache);
+                                       const std::string& rename_ns, const LspAnalysisCache& cache);
 
 class LspRenameHandler {
 public:
