@@ -99,6 +99,7 @@ Several internal optimisations reduce overhead in the compiler and runtime:
 - **TypeInfo::to_string_cached()** — The type checker caches string representations of `TypeInfo` values to avoid repeated allocations when the same type appears in multiple diagnostic messages or type comparisons.
 - **Thread pool queue limits** — The thread pool enforces a maximum queue size (configurable via `ResourceLimits::max_channel_queue_size`, default 1,000,000) to prevent unbounded memory growth from unchecked channel sends.
 - **ValueHash structural hashing** — The `ValueHash` implementation uses depth-limited recursive hashing (max depth 8) to prevent pathological cost on deeply nested structures. Values beyond the depth limit are hashed by type tag only. Cross-type int/double normalisation ensures consistent hashing when values compare equal.
+- **Named/default argument binding avoids `std::vector<bool>`** — `VM::handle_call_named()` tracks which parameter slots have been filled using a `SmallVector<std::uint8_t>` rather than a `std::vector<bool>`. `std::vector<bool>` is a bit-packed specialisation with no small-size optimisation, so every named or default-parameter call paid a heap allocation plus per-element bit-shift/mask overhead just to track "is this slot bound yet". `std::uint8_t` keeps the same value-initialised-to-false semantics while fitting `SmallVector`'s inline stack storage for the common small-arity case, avoiding the allocation entirely.
 
 ---
 
