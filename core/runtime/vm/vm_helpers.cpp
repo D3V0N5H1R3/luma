@@ -38,6 +38,17 @@ void VM::call_function(const FunctionValue& func, int arg_count) {
             runtime_error(vm_errors::call_stack_overflow(ResourceLimits::max_call_depth));
         }
 
+        // The type checker rejects a call with too few required arguments at
+        // the source level, but the REPL skips type checking and a crafted
+        // .lumc can carry an arbitrary Call arg_count, so the VM must reject
+        // it here too — otherwise a missing required parameter would silently
+        // run as `none` instead of raising a clear error.
+        const auto required_arity = func.compiled->required_arity;
+
+        if (arg_count < required_arity) [[unlikely]] {
+            runtime_error(vm_errors::missing_required_arguments(required_arity, arg_count));
+        }
+
         // Pad missing optional parameters with None values.
         const auto arity = func.compiled->arity;
 
