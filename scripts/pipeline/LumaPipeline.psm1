@@ -560,6 +560,47 @@ function Invoke-AgentPhase {
     }
 }
 
+function Find-CMake {
+    <#
+    .SYNOPSIS
+        Discover CMake from well-known locations and add it to PATH.
+    .DESCRIPTION
+        If cmake is already on PATH, does nothing. Otherwise searches Visual
+        Studio bundled CMake and standalone install paths, prepending the first
+        found directory to $env:PATH.
+    #>
+    [CmdletBinding()]
+    param()
+
+    if (Get-Command -Name 'cmake' -CommandType Application -ErrorAction SilentlyContinue) {
+        return
+    }
+
+    $Candidates = @()
+
+    # Visual Studio bundled CMake (any edition/year).
+    $VsBase = "${env:ProgramFiles}\Microsoft Visual Studio"
+    if (Test-Path -LiteralPath $VsBase) {
+        $Candidates += Get-ChildItem -Path $VsBase -Filter 'cmake.exe' -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like '*\CMake\CMake\bin\cmake.exe' } |
+            Select-Object -ExpandProperty FullName
+    }
+
+    # Standalone CMake install.
+    $Standalone = "${env:ProgramFiles}\CMake\bin\cmake.exe"
+    if (Test-Path -LiteralPath $Standalone) {
+        $Candidates += $Standalone
+    }
+
+    foreach ($Exe in $Candidates) {
+        $Dir = Split-Path -Parent $Exe
+        $env:PATH = "$Dir;$env:PATH"
+        if (Get-Command -Name 'cmake' -CommandType Application -ErrorAction SilentlyContinue) {
+            return
+        }
+    }
+}
+
 function Test-BuildAndTest {
     <#
     .SYNOPSIS
@@ -604,6 +645,7 @@ function Test-BuildAndTest {
         # toolchain (nothing to build with) from a genuinely broken build, so
         # the caller's "baseline is not green" message is not misattributed to
         # the code.
+        Find-CMake
         if (-not (Get-Command -Name 'cmake' -CommandType Application -ErrorAction SilentlyContinue)) {
             Write-Warning 'cmake is not on PATH; the build + test gate cannot run. Install CMake and a C++ toolchain, or pass -SkipBaseline to skip the gate.'
             return $false
@@ -1086,6 +1128,7 @@ function Initialize-CompileDatabase {
     if (-not (Get-Command -Name 'clang-tidy' -CommandType Application -ErrorAction SilentlyContinue)) {
         return $true
     }
+    Find-CMake
     if (-not (Get-Command -Name 'cmake' -CommandType Application -ErrorAction SilentlyContinue)) {
         Write-Warning 'cmake not found; cannot generate compile_commands.json (clang-tidy will be skipped).'
         return $true
