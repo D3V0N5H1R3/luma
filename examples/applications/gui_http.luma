@@ -179,7 +179,7 @@ function widget view_http(dictionary<string> model) {
             GraphicalUi.label("Enter a URL and press GET to fetch a response.",
                 {"color": GraphicalUi.VAR_DISABLED_FG})
         )
-    ], GraphicalUi.spacing(12))
+    ], GraphicalUi.merge_styles(GraphicalUi.spacing(12), GraphicalUi.padding(16)))
 }
 
 @main

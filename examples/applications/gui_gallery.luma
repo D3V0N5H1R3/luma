@@ -29,17 +29,18 @@ function dictionary<string> button_variant(string variant) {
 }
 
 # Compact pill used by the theme toggle and the routing navigation links. The
-# active pill fills with the accent and pairs it with the framework's on-accent
-# token (var(--gui-thumb-bg)) — the same colour the built-in paginator/wizard use
-# on primary — so a custom light accent can re-pair it and keep AA contrast
-# instead of a hard-coded white that could wash out.
+# active pill fills with the accent and pairs it with the framework's explicit
+# on-accent token (var(--gui-on-accent)) — the guaranteed-contrast pairing for
+# accent backgrounds, matching gui_animation.luma — so a custom light accent
+# can re-pair it and keep AA contrast instead of a hard-coded white that could
+# wash out.
 function dictionary<string> pill_style(boolean active) {
     if active {
         return {
             "padding": "4px 12px",
             "border_radius": "999px",
             "background_color": GraphicalUi.VAR_PRIMARY,
-            "color": "var(--gui-thumb-bg)",
+            "color": "var(--gui-on-accent)",
             "font_weight": "600",
             "text_decoration": "none"
         }
@@ -55,11 +56,12 @@ function dictionary<string> pill_style(boolean active) {
 }
 
 # Muted caption used for secondary explanatory text. Uses the small type-scale
-# step and a muted content colour (accent-free mix of fg toward bg) rather than
-# the disabled-foreground token, which is reserved for genuinely disabled UI.
+# step and the disabled-foreground token for a universally-supported muted
+# colour — the previous color-mix() (CSS Level 5) risked rendering invisible
+# or falling back to plain black in older webview engines.
 function dictionary<string> caption_style() {
     return {
-        "color": "color-mix(in srgb, ${GraphicalUi.VAR_FG} 70%, ${GraphicalUi.VAR_BG})",
+        "color": GraphicalUi.VAR_DISABLED_FG,
         "font_size": GraphicalUi.VAR_TEXT_SM
     }
 }

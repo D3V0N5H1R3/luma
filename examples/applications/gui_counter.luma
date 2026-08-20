@@ -54,11 +54,12 @@ function widget view_counter(number count) {
             "text_align": "center"
         }),
 
-        # Primary controls: both increment and decrement are emphasised.
+        # Primary controls: increment is the single focal action; decrement is
+        # secondary so one call-to-action reads clearly per view.
         GraphicalUi.row([
             GraphicalUi.accessible(
                 GraphicalUi.button("− Decrement", () -> count - 1,
-                    button_style(GraphicalUi.PRIMARY, "140px")),
+                    button_style(GraphicalUi.SECONDARY, "140px")),
                 { "aria_label": "Decrement counter by one" }
             ),
             GraphicalUi.accessible(
@@ -78,7 +79,9 @@ function widget view_counter(number count) {
                 }, button_style(GraphicalUi.SECONDARY, "140px")),
                 { "aria_label": "Set counter to a random value" }
             ),
-            GraphicalUi.button("Reset", () -> 0, button_style(GraphicalUi.SECONDARY, "100px"))
+            GraphicalUi.button("Reset", () -> 0,
+                GraphicalUi.merge_styles(button_style(GraphicalUi.SECONDARY, "100px"),
+                    {"aria_label": "Reset counter to zero"}))
         ], GraphicalUi.merge_styles(GraphicalUi.center_x(), GraphicalUi.spacing(12)))
     ], GraphicalUi.merge_styles(GraphicalUi.spacing(16), GraphicalUi.padding(8)))
 }
@@ -139,6 +142,16 @@ function void test_increment_button_adds_one() {
 @test
 function void test_reset_button_returns_to_zero() {
     assert(GraphicalUi.test_click(counter_config(), 99, "Reset") == 0)
+}
+
+@test
+function void test_reset_button_has_accessible_label() {
+    # Reset now carries an explicit aria_label (ux-audit finding #6) so
+    # screen-reader users get an accessible name distinct from the plain
+    # "Reset" text.
+    dictionary reset_button = GraphicalUi.test_find(counter_config(), 0, "Reset")
+    dictionary style = Dictionary.get_or(reset_button, "style", {"_": "d"})
+    assert(Dictionary.get_or(style, "aria_label", "") == "Reset counter to zero")
 }
 
 @test

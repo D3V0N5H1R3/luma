@@ -78,9 +78,9 @@ function widget view_task_row(dictionary model, dictionary item) {
     # Completed tasks are struck through and shown checked. We keep full opacity
     # (rather than dimming the whole row) so text/checkbox contrast stays AA-safe.
     dictionary<string> row_style = if item["done"] {
-        {"text_decoration": "line-through"}
+        {"text_decoration": "line-through", "hover_background_color": "var(--gui-primary-subtle-bg)"}
     } else {
-        {"opacity": "1"}
+        {"opacity": "1", "hover_background_color": "var(--gui-primary-subtle-bg)"}
     }
 
     return GraphicalUi.keyed("task_${item["id"]}",
@@ -133,7 +133,7 @@ function widget view_todo(dictionary model) {
             GraphicalUi.flexible_space(),
             GraphicalUi.label("${done} / ${total}", {
                 "font_weight": "600",
-                "color": GraphicalUi.VAR_PRIMARY,
+                "color": GraphicalUi.VAR_FG,
                 "background_color": "var(--gui-primary-subtle-bg)",
                 "padding": "2px 12px",
                 "border_radius": "999px"
