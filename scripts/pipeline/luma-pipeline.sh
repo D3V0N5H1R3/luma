@@ -162,14 +162,32 @@ luma_require_agent() {
         printf 'Error: %s CLI not found on PATH (%s).\n' "$agent" "$hint" >&2
         exit 127
     fi
-    # The copilot CLI is an npm shim that exec's into node. If node itself is
-    # missing (common in Git Bash on Windows where the npm shim is on PATH but
-    # node is not), every invocation will fail with "exec: node: not found".
-    # Detect this early.
+    # The copilot CLI may be an npm shim (.cmd on Windows, shell script on
+    # Unix) that exec's into node, or a standalone native binary (e.g. the
+    # "GitHub Copilot CLI" .exe on Windows).  Only require node when the
+    # resolved executable looks like a shim — native binaries run without it.
     if [[ "$agent" == copilot ]] && ! command -v node >/dev/null 2>&1; then
-        printf 'Error: the copilot CLI requires node, but node is not on PATH.\n' >&2
-        printf '  Ensure Node.js is installed and its bin directory is in your PATH.\n' >&2
-        exit 127
+        local copilot_path
+        copilot_path="$(command -v "$(luma_agent_exe "$agent")" 2>/dev/null || true)"
+        # Treat .cmd/.bat (Windows npm shims) and extensionless scripts (Unix
+        # npm shims with a #! line) as node-dependent.  A .exe or native ELF
+        # binary runs standalone.
+        local is_shim=false
+        case "$copilot_path" in
+            *.cmd|*.CMD|*.bat|*.BAT) is_shim=true ;;
+            *.exe|*.EXE) ;;
+            *)
+                # Extensionless — check for a #! shebang (Unix npm shim).
+                local magic
+                magic="$(head -c2 "$copilot_path" 2>/dev/null || true)"
+                [[ "$magic" == '#!' ]] && is_shim=true
+                ;;
+        esac
+        if [[ "$is_shim" == true ]]; then
+            printf 'Error: the copilot CLI requires node, but node is not on PATH.\n' >&2
+            printf '  Ensure Node.js is installed and its bin directory is in your PATH.\n' >&2
+            exit 127
+        fi
     fi
 }
 
