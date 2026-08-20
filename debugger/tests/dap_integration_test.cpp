@@ -1383,6 +1383,49 @@ void test_evaluate_timeout_does_not_hang() {
     disconnect(proc);
 }
 
+// Regression test for a use-after-free race: DebugSession::evaluate() with a
+// frame_id that has no established frame mapping (e.g. 0, or a stale value
+// from before the program launched) previously read
+// execution_engine_->vm() without holding any ThreadState lock, unlike the
+// mapping-hit branch a few lines above it. If terminate() (fired by the
+// program running to completion, or a disconnect) resets the VM
+// concurrently, the unguarded read raced the VM's destruction. Fire
+// evaluate(frameId: 0) repeatedly while a free-running program executes to
+// completion and the session tears itself down; the fix locks the main
+// thread's ThreadState around the read (mirroring the mapping-hit branch),
+// so the adapter must not crash and must still terminate cleanly.
+void test_evaluate_no_mapping_does_not_crash() {
+    DapProcess proc;
+    initialize(proc);
+
+    (void)launch_program(proc, "long_loop.luma");
+    auto config_result = send_configuration_done(proc);
+
+    bool terminated = has_event(config_result.events, "terminated");
+
+    for (int round = 0; round < 200 && !terminated; ++round) {
+        JsonValue::ObjectType eval_args;
+        eval_args["expression"] = JsonValue(std::string("1 + 1"));
+        eval_args["frameId"] = JsonValue(0);
+        eval_args["context"] = JsonValue(std::string("watch"));
+        auto eval_result = poll_request(proc, "evaluate", JsonValue(std::move(eval_args)), 500);
+
+        if (eval_result.terminated) {
+            terminated = true;
+            break;
+        }
+    }
+
+    if (!terminated) {
+        terminated = wait_for_event(proc, "terminated", "", "", 300, 100);
+    }
+
+    // The debuggee must run to a clean finish: no adapter crash, no hang.
+    ASSERT_TRUE(terminated);
+
+    disconnect(proc);
+}
+
 // ─── noDebug launch integration test ───────────────────────────────
 
 void test_no_debug_launch() {
@@ -2490,6 +2533,7 @@ int main(int /*argc*/, char* argv[]) {
     RUN(test_evaluate_compound_expression);
     RUN(test_evaluate_global_reference);
     RUN(test_evaluate_timeout_does_not_hang);
+    RUN(test_evaluate_no_mapping_does_not_crash);
     RUN(test_no_debug_launch);
 
     // Conditional and hit-condition breakpoints.

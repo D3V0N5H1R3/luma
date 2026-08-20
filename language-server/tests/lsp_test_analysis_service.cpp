@@ -11,18 +11,22 @@
 // unconditionally and deterministically here.
 
 #include <atomic>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "analysis/diagnostics/diagnostic.hpp"
 #include "analysis/source/source_location.hpp"
 #include "json/json.hpp"
+#include "lsp_analysis_cache.hpp"
 #include "lsp_analysis_result.hpp"
 #include "lsp_analysis_service_impl.hpp"
 #include "lsp_config.hpp"
 #include "lsp_constants.hpp"
 #include "lsp_diagnostic_builder.hpp"
 #include "lsp_identifier_collector.hpp"
+#include "lsp_rename_handler.hpp"
 #include "lsp_symbol_resolver.hpp"
 #include "lsp_token_utils.hpp"
 #include "lsp_types.hpp"
@@ -662,6 +666,65 @@ void test_multiline_string_token_extents_span_lines() {
     ASSERT_NE(ext.start_line_0based, ext.end_line_0based);
 }
 
+// ─── Rename conflict: renaming to the current name is a no-op ─────
+
+void test_rename_to_same_name_is_not_a_self_conflict() {
+    // Renaming a top-level function to its OWN current name must never be
+    // reported as a conflict. has_rename_conflict's global-scope check looks
+    // up `new_name` in every cached document's `definitions`/`user_functions`
+    // maps — but those maps necessarily already contain the name being
+    // renamed (it names the very symbol under the cursor), so without an
+    // explicit self-rename exemption every no-op rename would be misreported
+    // as colliding with itself and rejected.
+    ServiceFixture fx;
+    const std::string uri = "file:///test/main.luma";
+    auto result = fx.analyze("function string greet() {\n"
+                             "    return \"hello\"\n"
+                             "}\n",
+                             uri);
+
+    luma::lsp::LspAnalysisCache cache;
+    cache.insert(uri, std::move(result));
+    const auto& cached = *cache.find(uri);
+
+    const std::optional<std::string> no_fn;
+    ASSERT_FALSE(luma::lsp::has_rename_conflict(cached, /*new_name=*/"greet",
+                                                /*target_name=*/"greet", /*is_local=*/false, no_fn,
+                                                /*rename_ns=*/"", cache));
+}
+
+// ─── Rename conflict: renaming to a distinct existing name conflicts ──
+
+void test_rename_to_distinct_existing_name_is_a_conflict() {
+    // Renaming "greet" to "existing", where "existing" already names an
+    // unrelated top-level function, must still be flagged as a genuine
+    // conflict — the self-rename exemption above must not swallow real
+    // collisions with other symbols.
+    ServiceFixture fx;
+    const std::string uri = "file:///test/main.luma";
+    auto result = fx.analyze("function string greet() {\n"
+                             "    return \"hello\"\n"
+                             "}\n"
+                             "\n"
+                             "function integer existing() {\n"
+                             "    return 0\n"
+                             "}\n",
+                             uri);
+
+    luma::lsp::LspAnalysisCache cache;
+    cache.insert(uri, std::move(result));
+    const auto& cached = *cache.find(uri);
+
+    const std::optional<std::string> no_fn;
+    ASSERT_TRUE(luma::lsp::has_rename_conflict(cached, /*new_name=*/"existing",
+                                               /*target_name=*/"greet", /*is_local=*/false, no_fn,
+                                               /*rename_ns=*/"", cache));
+    // A genuinely unused new name is still accepted.
+    ASSERT_FALSE(luma::lsp::has_rename_conflict(cached, /*new_name=*/"say_hello",
+                                                /*target_name=*/"greet", /*is_local=*/false, no_fn,
+                                                /*rename_ns=*/"", cache));
+}
+
 } // namespace
 
 int main() { // NOLINT(bugprone-exception-escape)
@@ -687,6 +750,8 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_string_literal_range_covers_quotes);
     RUN(test_find_token_at_resolves_inside_string);
     RUN(test_multiline_string_token_extents_span_lines);
+    RUN(test_rename_to_same_name_is_not_a_self_conflict);
+    RUN(test_rename_to_distinct_existing_name_is_a_conflict);
 
     return SUMMARY();
 }

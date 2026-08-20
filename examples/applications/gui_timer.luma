@@ -96,11 +96,16 @@ function dictionary<string> toggle_style(boolean _running) {
     }
 }
 
-function dictionary<string> reset_style() {
+function dictionary<string> reset_style(boolean running) {
+    # Reset is a secondary/corrective action; reserve the attention-grabbing
+    # DANGER variant for when the timer is paused or finished, where resetting
+    # is the more consequential choice. While actively running, downgrade it to
+    # SECONDARY so it doesn't compete with the PRIMARY Pause action.
     return {
         "id": "btn-reset",
         "min_width": "120px",
-        "variant": GraphicalUi.DANGER
+        "variant": if running { GraphicalUi.SECONDARY } else { GraphicalUi.DANGER },
+        "aria_label": "Reset timer"
     }
 }
 
@@ -157,9 +162,10 @@ function widget view_timer(dictionary model) {
             "text_align": "center",
             "color": GraphicalUi.VAR_DISABLED_FG
         }),
+        GraphicalUi.when(finished, GraphicalUi.alert("Time's up!", GraphicalUi.SUCCESS)),
         GraphicalUi.row([
             GraphicalUi.button(toggle_label, () -> toggle_msg, action_style),
-            GraphicalUi.button("Reset", () -> "reset", reset_style())
+            GraphicalUi.button("Reset", () -> "reset", reset_style(running))
         ], GraphicalUi.merge_styles(GraphicalUi.center_x(), GraphicalUi.spacing(16))),
         GraphicalUi.row([
             view_preset(model, 300, "5 min"),
@@ -305,4 +311,24 @@ function void test_status_text_tracks_the_lifecycle() {
     mutable dictionary finished = make_timer(60)
     finished["remaining"] = 0
     assert(status_text(finished) == "Time's up!")
+}
+
+@test
+function void test_reset_button_has_accessible_label() {
+    dictionary config = timer_config()
+    dictionary reset_button = GraphicalUi.test_find(config, timer_initial(), "Reset")
+    dictionary style = Dictionary.get_or(reset_button, "style", {"_": "d"})
+    assert(Dictionary.get_or(style, "aria_label", "") == "Reset timer")
+}
+
+@test
+function void test_reset_button_downgrades_variant_while_running() {
+    # Reset stays SECONDARY (not DANGER) while the timer is actively running, so
+    # it doesn't compete visually with the PRIMARY Pause action (ux-audit #13).
+    dictionary config = timer_config()
+    dictionary running_reset = GraphicalUi.test_find(config, running_with(100), "Reset")
+    assert(Dictionary.get_or(running_reset, "variant", "") == GraphicalUi.SECONDARY)
+
+    dictionary paused_reset = GraphicalUi.test_find(config, timer_initial(), "Reset")
+    assert(Dictionary.get_or(paused_reset, "variant", "") == GraphicalUi.DANGER)
 }

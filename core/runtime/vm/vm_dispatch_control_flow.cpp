@@ -9,6 +9,7 @@
 //   - handle_null_coalesce, handle_error_pipe, handle_pipe (new)
 //   - handle_try_catch, handle_loop (new)
 
+#include <cstdint>
 #include <format>
 #include <string>
 
@@ -206,9 +207,15 @@ namespace {
 
 /// Validates positional arg count against arity and fills the leading slots of args.
 /// The type checker enforces this at the source level; this protects against
-/// malformed bytecode.
+/// malformed bytecode. Marks each filled slot in `bound`.
+///
+/// `bound` uses `std::uint8_t` rather than `bool`: `SmallVector<bool>`'s
+/// heap-fallback storage would be a `std::vector<bool>`, whose bit-packed
+/// specialisation returns proxy references instead of `bool&` — incompatible
+/// with `SmallVector::operator[]`'s `T&` interface, and slower to read/write
+/// per-element than a plain byte on this hot per-call path.
 void bind_positional_args(SmallVector<Value>& args, SmallVector<Value>& pos_args, int full_arity,
-                          SourceLocation location) {
+                          SmallVector<std::uint8_t>& bound, SourceLocation location) {
     if (static_cast<int>(pos_args.size()) > full_arity) [[unlikely]] {
         throw RuntimeError{vm_errors::arity_error(full_arity, static_cast<int>(pos_args.size())),
                            location};
@@ -216,14 +223,17 @@ void bind_positional_args(SmallVector<Value>& args, SmallVector<Value>& pos_args
 
     for (int i = static_cast<int>(pos_args.size()) - 1; i >= 0; --i) {
         args[static_cast<std::size_t>(i)] = std::move(pos_args[static_cast<std::size_t>(i)]);
+        bound[static_cast<std::size_t>(i)] = 1;
     }
 }
 
 /// Matches each named argument to its parameter slot via the function's
-/// lazily-built param_name_index() hash map for O(1) lookups.
+/// lazily-built param_name_index() hash map for O(1) lookups. Marks each
+/// filled slot in `bound`.
 template <typename NamedPairs>
 void bind_named_args(SmallVector<Value>& args, NamedPairs& named_pairs,
-                     const CompiledFunction& func, SourceLocation location) {
+                     const CompiledFunction& func, SmallVector<std::uint8_t>& bound,
+                     SourceLocation location) {
     const auto& index_map = func.param_name_index();
 
     for (auto& [name, val] : named_pairs) {
@@ -231,8 +241,25 @@ void bind_named_args(SmallVector<Value>& args, NamedPairs& named_pairs,
 
         if (it != index_map.end()) [[likely]] {
             args[static_cast<std::size_t>(it->second)] = std::move(val);
+            bound[static_cast<std::size_t>(it->second)] = 1;
         } else [[unlikely]] {
             throw RuntimeError{vm_errors::unknown_named_argument(name), location};
+        }
+    }
+}
+
+/// Validates that every required parameter (the [0, required_arity) prefix of
+/// param_names — required parameters always precede optional ones) received a
+/// positional or named argument. The type checker enforces this at the source
+/// level; this protects the REPL (which skips type checking) and malformed
+/// bytecode from silently running a missing required parameter as `none`.
+void require_all_required_args_bound(const SmallVector<std::uint8_t>& bound,
+                                     const CompiledFunction& func, SourceLocation location) {
+    for (int i = 0; i < func.required_arity; ++i) {
+        if (!bound[static_cast<std::size_t>(i)]) [[unlikely]] {
+            throw RuntimeError{vm_errors::missing_required_named_argument(
+                                   func.param_names[static_cast<std::size_t>(i)]),
+                               location};
         }
     }
 }
@@ -266,8 +293,13 @@ void VM::handle_call_named() {
         auto pos_args = pop_sequence(static_cast<std::size_t>(pos_count));
 
         SmallVector<Value> args(static_cast<std::size_t>(compiled->arity));
-        bind_positional_args(args, pos_args, compiled->arity, current_location());
-        bind_named_args(args, named_pairs, *compiled, current_location());
+        // SmallVector value-initialises both its inline std::array and its
+        // heap-fallback std::vector, so `bound` starts all-zero without an
+        // explicit fill.
+        SmallVector<std::uint8_t> bound(static_cast<std::size_t>(compiled->arity));
+        bind_positional_args(args, pos_args, compiled->arity, bound, current_location());
+        bind_named_args(args, named_pairs, *compiled, bound, current_location());
+        require_all_required_args_bound(bound, *compiled, current_location());
 
         for (int i = 0; i < compiled->arity; ++i) {
             push(std::move(args[static_cast<std::size_t>(i)]));

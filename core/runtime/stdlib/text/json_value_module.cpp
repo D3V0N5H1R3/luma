@@ -230,6 +230,16 @@ struct LineColumn {
     std::int64_t column;
 };
 
+// Runtime-configurable nesting bound (LUMA_LIMIT_MAX_JSON_NESTING_DEPTH,
+// tightened to 32 under --box), clamped to the compile-time cap that keeps
+// json::JsonValue::parse's recursive descent within the native stack. Mirrors
+// the clamp applied by json_module_parser.cpp's Json.deserialize so Json.parse
+// and Json.parse_detailed cannot bypass the sandbox-configured limit.
+[[nodiscard]] std::size_t json_depth_limit() {
+    return std::min<std::size_t>(ResourceLimits::max_json_nesting_depth,
+                                 static_cast<std::size_t>(CompileTimeLimits::max_json_depth));
+}
+
 [[nodiscard]] LineColumn offset_to_line_column(std::string_view text, std::size_t offset) {
     offset = std::min(offset, text.size());
 
@@ -263,7 +273,7 @@ void register_json_value(const EnvPtr& env) {
             }
 
             return wrap_result_operation("Json", "parse", [&]() -> Value {
-                const json::JsonValue parsed = json::parse(args[0].as_string());
+                const json::JsonValue parsed = json::parse(args[0].as_string(), json_depth_limit());
 
                 return make_success_value(jsonvalue_to_luma(parsed));
             });
@@ -281,7 +291,7 @@ void register_json_value(const EnvPtr& env) {
             // structured Json.ParseError { message, line, column } so a caller can
             // point at the offending byte in a large document.
             try {
-                const json::JsonValue parsed = json::parse(text);
+                const json::JsonValue parsed = json::parse(text, json_depth_limit());
 
                 return make_success_value(jsonvalue_to_luma(parsed));
             } catch (const luma::JsonParseError& e) {

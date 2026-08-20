@@ -240,6 +240,18 @@ constexpr std::string_view await_consumed_task{"await called on an already-consu
                        got);
 }
 
+// The type checker rejects a call with too few required arguments at the
+// source level; this message is only reachable when that check is bypassed
+// (the REPL skips type checking) or the bytecode was crafted/corrupted.
+[[nodiscard]] inline std::string missing_required_arguments(int required, int got) {
+    return std::format("too few arguments: function requires at least {} but got {}", required,
+                       got);
+}
+
+[[nodiscard]] inline std::string missing_required_named_argument(std::string_view param_name) {
+    return std::format("missing required argument '{}'", param_name);
+}
+
 [[nodiscard]] inline std::string cannot_call(std::string_view type) {
     return std::format("cannot call '{}'", type);
 }

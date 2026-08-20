@@ -200,6 +200,102 @@ LUMA_TEST(vm_crafted_named_call_non_string_name_is_rejected) {
     ASSERT_TRUE(raised_runtime_error);
 }
 
+// A crafted .lumc (or a REPL call, which skips the type checker) can invoke a
+// compiled function with fewer positional arguments than its required_arity.
+// Before the fix, VM::call_function only padded up to `arity` and never
+// checked `arg_count` against `required_arity`, so a missing required
+// parameter silently ran the function body with that slot set to `none`
+// instead of raising a clear arity error.
+LUMA_TEST(vm_call_with_too_few_required_args_is_rejected) {
+    // Child function requires 2 parameters (arity == required_arity == 2) and
+    // simply returns.
+    CompiledFunction callee;
+    callee.name = "<callee>";
+    callee.arity = 2;
+    callee.required_arity = 2;
+    callee.param_names = {"a", "b"};
+    callee.build_param_name_index();
+    callee.mutable_chunk().code = {static_cast<std::uint8_t>(Op::Return)};
+
+    std::vector<CompiledFunction> functions;
+    functions.push_back(std::move(callee));
+
+    // Top-level: MakeClosure over function 0, push a single positional
+    // argument (Op::True), then Op::Call with arg_count 1 — one short of the
+    // callee's required_arity of 2.
+    auto top = make_raw_function({
+        static_cast<std::uint8_t>(Op::MakeClosure),
+        0x00U,
+        0x00U, // function index 0 (big-endian u16)
+        0x00U, // upvalue_count
+        static_cast<std::uint8_t>(Op::True),
+        static_cast<std::uint8_t>(Op::Call),
+        0x01U, // arg_count
+        static_cast<std::uint8_t>(Op::Return),
+    });
+
+    const auto env = luma::test::make_std_env();
+    VM vm{env};
+    bool raised_runtime_error = false;
+    try {
+        vm.execute(functions, top);
+    } catch (const RuntimeError&) {
+        raised_runtime_error = true;
+    } catch (const std::exception&) {
+        // Pre-fix, no error was raised at all — the function ran silently.
+    }
+    ASSERT_TRUE(raised_runtime_error);
+}
+
+// The named-call path (Op::CallNamed) builds its argument vector padded to
+// the full arity and never validated that the required parameter prefix was
+// actually bound, so `f(b: 1)` on a function requiring both `a` and `b`
+// silently ran with `a` set to `none`.
+LUMA_TEST(vm_named_call_missing_required_argument_is_rejected) {
+    CompiledFunction callee;
+    callee.name = "<callee>";
+    callee.arity = 2;
+    callee.required_arity = 2;
+    callee.param_names = {"a", "b"};
+    callee.build_param_name_index();
+    callee.mutable_chunk().code = {static_cast<std::uint8_t>(Op::Return)};
+
+    std::vector<CompiledFunction> functions;
+    functions.push_back(std::move(callee));
+
+    CompiledFunction top_fn;
+    top_fn.name = "<crafted>";
+
+    const auto name_slot = top_fn.mutable_chunk().constants.add(Value{std::string{"b"}});
+
+    top_fn.mutable_chunk().code = {
+        static_cast<std::uint8_t>(Op::MakeClosure),
+        0x00U,
+        0x00U, // function index 0 (big-endian u16)
+        0x00U, // upvalue_count
+        static_cast<std::uint8_t>(Op::Constant),
+        static_cast<std::uint8_t>((name_slot >> 8) & 0xFF),
+        static_cast<std::uint8_t>(name_slot & 0xFF), // name operand "b"
+        static_cast<std::uint8_t>(Op::True),         // value operand
+        static_cast<std::uint8_t>(Op::CallNamed),
+        0x00U, // pos_count
+        0x01U, // named_count — only "b" is supplied, "a" is missing
+        static_cast<std::uint8_t>(Op::Return),
+    };
+
+    const auto env = luma::test::make_std_env();
+    VM vm{env};
+    bool raised_runtime_error = false;
+    try {
+        vm.execute(functions, top_fn);
+    } catch (const RuntimeError&) {
+        raised_runtime_error = true;
+    } catch (const std::exception&) {
+        // Pre-fix, no error was raised at all — "a" silently ran as `none`.
+    }
+    ASSERT_TRUE(raised_runtime_error);
+}
+
 // ─── Debugger introspection ───
 
 // Regression test for the VMIntrospector dual-storage bug.  A mutable captured

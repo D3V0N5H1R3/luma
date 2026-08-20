@@ -323,7 +323,8 @@ function dictionary<string> digit_style(string id) {
         "color": GraphicalUi.VAR_FG,
         "border": "1px solid ${GraphicalUi.VAR_BORDER}",
         "border_radius": GraphicalUi.VAR_RADIUS,
-        "hover_background_color": "var(--gui-primary-subtle-bg)"
+        "hover_background_color": "var(--gui-primary-subtle-bg)",
+        "focus_outline": "2px solid ${GraphicalUi.VAR_PRIMARY}"
     })
 }
 
@@ -436,6 +437,7 @@ function widget view_calculator(dictionary model) {
             GraphicalUi.heading("Calculator", 1)
         ]),
         view_display(model),
+        GraphicalUi.spacer(4),
         view_keypad(model)
     ], GraphicalUi.merge_styles(GraphicalUi.spacing(16), GraphicalUi.padding(16)))
 }

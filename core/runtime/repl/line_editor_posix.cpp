@@ -9,6 +9,7 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include "common/platform_utils.hpp"
 #include "runtime/repl/line_editor.hpp"
 
 namespace luma {
@@ -93,7 +94,7 @@ bool LineEditor::read_escape_sequence_bytes(std::array<char, 3>& seq) {
 }
 
 bool LineEditor::stdin_is_terminal() {
-    return isatty(STDIN_FILENO) != 0;
+    return is_stdin_terminal();
 }
 
 } // namespace luma

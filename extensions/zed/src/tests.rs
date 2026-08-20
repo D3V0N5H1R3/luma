@@ -324,6 +324,16 @@ fn lookup_hash_strips_binary_mode_marker() {
 }
 
 #[test]
+fn lookup_hash_strips_binary_mode_marker_with_trailing_space() {
+    // A "*" marker followed by a space (e.g. "<hash> * <filename>") must still
+    // resolve to the bare filename, matching the VS Code parser's behavior of
+    // trimming the captured group after stripping the optional marker.
+    let content = format!("{} * luma-linux-x86_64.tar.gz\n", "e".repeat(64));
+    let hash = lookup_expected_hash(&content, "luma-linux-x86_64.tar.gz");
+    assert_eq!(hash, Some("e".repeat(64)));
+}
+
+#[test]
 fn lookup_hash_matches_shared_conformance_fixture() {
     // extensions/shared/sha256sums-sample.txt is the golden input shared by the
     // VS Code and Zed parser tests. Running the real lookup_expected_hash

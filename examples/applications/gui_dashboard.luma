@@ -22,7 +22,11 @@ function widget view_metric_card(string title, string value, string icon_name,
             GraphicalUi.panel(title, [
                 GraphicalUi.row([
                     GraphicalUi.icon(icon_name, 22),
-                    GraphicalUi.heading(value, 2)
+                    GraphicalUi.label(value, {
+                        "font_size": "28px",
+                        "font_weight": "700",
+                        "line_height": "1.1"
+                    })
                 ], {"align_items": "center"}),
                 GraphicalUi.row([
                     GraphicalUi.icon(if positive { "arrow-up" } else { "arrow-down" }, 14),
@@ -284,4 +288,13 @@ function void test_unknown_message_is_noop() {
 function void test_renders_dashboard_heading() {
     dictionary heading = GraphicalUi.test_find(dashboard_config(), dashboard_model(), "Sales Dashboard")
     assert(Dictionary.get_or(heading, "type", "") == "heading")
+}
+
+@test
+function void test_metric_value_is_not_a_heading() {
+    # ux-audit finding #21: metric-card values used <h2>, skipping heading
+    # levels before any section heading. They should render as a plain,
+    # heavily-styled label instead, reserving headings for page structure.
+    dictionary metric_value = GraphicalUi.test_find(dashboard_config(), dashboard_model(), "$21,500")
+    assert(Dictionary.get_or(metric_value, "type", "") != "heading")
 }

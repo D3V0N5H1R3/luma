@@ -1,9 +1,11 @@
 #ifndef LUMA_COMMON_PLATFORM_UTILS_HPP
 #define LUMA_COMMON_PLATFORM_UTILS_HPP
 
-// Shared Win32/POSIX helpers for UTF-8 environment access and
-// wide-string conversion.  Header-only; all functions are inline.
+// Shared Win32/POSIX helpers for UTF-8 environment access, wide-string
+// conversion, and terminal (TTY) detection.  Header-only; all functions
+// are inline.
 
+#include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <optional>
@@ -12,7 +14,10 @@
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
+#include <io.h>
 #include <windows.h>
+#else
+#include <unistd.h>
 #endif
 
 namespace luma {
@@ -56,6 +61,35 @@ namespace luma {
     }
 
     return std::nullopt;
+#endif
+}
+
+// True when the given standard stream is connected to an interactive
+// terminal (TTY) rather than a pipe, file redirect, or non-interactive
+// process host.  Consolidates the isatty()/_isatty() check that used to be
+// duplicated across the CLI colour helpers, the Terminal stdlib module, and
+// the REPL line editor.
+[[nodiscard]] inline bool is_stdin_terminal() noexcept {
+#ifdef _WIN32
+    return _isatty(_fileno(stdin)) != 0;
+#else
+    return isatty(STDIN_FILENO) != 0;
+#endif
+}
+
+[[nodiscard]] inline bool is_stdout_terminal() noexcept {
+#ifdef _WIN32
+    return _isatty(_fileno(stdout)) != 0;
+#else
+    return isatty(STDOUT_FILENO) != 0;
+#endif
+}
+
+[[nodiscard]] inline bool is_stderr_terminal() noexcept {
+#ifdef _WIN32
+    return _isatty(_fileno(stderr)) != 0;
+#else
+    return isatty(STDERR_FILENO) != 0;
 #endif
 }
 

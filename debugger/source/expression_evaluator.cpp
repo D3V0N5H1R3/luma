@@ -272,7 +272,7 @@ Variable ExpressionEvaluator::evaluate_on_scratch_vm(VM* target_vm, int frame_in
     // the backstop for the rest.
     scratch_vm.set_debug_hook([deadline, &timed_out](int, int, std::size_t) {
         if (std::chrono::steady_clock::now() >= deadline) {
-            timed_out.store(true, std::memory_order_relaxed);
+            timed_out.store(true, std::memory_order_release);
             return true; // request a pause so the pause callback can abort
         }
 
@@ -314,7 +314,7 @@ Variable ExpressionEvaluator::evaluate_on_scratch_vm(VM* target_vm, int frame_in
 
     const auto elapsed = std::chrono::steady_clock::now() - start_time;
 
-    if (runaway || timed_out.load(std::memory_order_relaxed) || elapsed > evaluation_timeout_) {
+    if (runaway || timed_out.load(std::memory_order_acquire) || elapsed > evaluation_timeout_) {
         const auto elapsed_ms =
             std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
         result.value = std::format("<timeout: {}ms>", elapsed_ms);

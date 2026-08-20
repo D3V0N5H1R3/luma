@@ -69,9 +69,10 @@ function widget user_page(dictionary<string> model) {
 }
 
 function widget not_found_page(dictionary<string> model) {
+    string route = model["route"]
     return GraphicalUi.column([
         GraphicalUi.heading("404 — Not Found", 1, {"id": "page-heading"}),
-        GraphicalUi.alert("The requested page was not found.", GraphicalUi.WARNING),
+        GraphicalUi.alert("The page '${route}' was not found.", GraphicalUi.WARNING),
         back_controls(model)
     ], GraphicalUi.spacing(12))
 }

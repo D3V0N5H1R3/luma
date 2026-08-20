@@ -184,15 +184,17 @@ function widget contact_row(dictionary model, dictionary contact, integer index)
         GraphicalUi.label(contact["email"], {"flex": "1.4"}),
         GraphicalUi.label(contact["phone"], {"flex": "1"}),
         GraphicalUi.label(contact["role"], {"flex": "1"}),
-        # A quiet GHOST trash button keeps the list calm; the DANGER accent is
-        # reserved for the confirmation dialog's Delete button. The visible glyph
-        # is labelled for assistive tech and addressable by a stable id in tests.
-        GraphicalUi.button("🗑", () -> confirm_delete(model, index), {
+        # A quiet GHOST text button keeps the list calm; the DANGER accent is
+        # reserved for the confirmation dialog's Delete button. A plain "Delete"
+        # label (rather than a trash emoji, which renders inconsistently across
+        # platforms) stays legible everywhere, with aria_label naming the
+        # specific contact for assistive tech and a stable id for tests.
+        GraphicalUi.button("Delete", () -> confirm_delete(model, index), {
             "variant": GraphicalUi.GHOST,
             "aria_label": "Delete ${contact["name"]}",
             "id": "delete-${index}"
         })
-    ], layout)
+    ], GraphicalUi.merge_styles(layout, {"hover_background_color": "var(--gui-primary-subtle-bg)"}))
 }
 
 function widget view_contact_table(dictionary model) {
@@ -336,7 +338,7 @@ function widget view_delete_dialog(dictionary model) {
                 GraphicalUi.button("Cancel",
                     () -> close_delete_dialog(model), button_variant(GraphicalUi.GHOST)),
                 GraphicalUi.button("Delete", () -> delete_selected(model),
-                    button_variant(GraphicalUi.DANGER))
+                    GraphicalUi.merge_styles(button_variant(GraphicalUi.DANGER), {"id": "confirm-delete"}))
             ], {"justify_content": "flex-end", "gap": GraphicalUi.VAR_GAP})
         ],
         model["show_delete_dialog"],
@@ -375,7 +377,7 @@ function widget view_contacts(dictionary model) {
             )
         ], {"align_items": "center"}),
 
-        GraphicalUi.label("Showing ${shown} of ${total} contacts — use each row's Delete action.",
+        GraphicalUi.label("Showing ${shown} of ${total} contacts",
             {"color": GraphicalUi.VAR_DISABLED_FG}),
 
         # Contact table
@@ -518,7 +520,7 @@ function void test_search_input_updates_query() {
 @test
 function void test_count_label_renders_integer_counts() {
     dictionary label = GraphicalUi.test_find(contacts_config(), create_default_model(),
-        "Showing 5 of 5 contacts — use each row's Delete action.")
+        "Showing 5 of 5 contacts")
     assert(Dictionary.get_or(label, "type", "") == "label")
 }
 
@@ -559,7 +561,11 @@ function void test_delete_removes_selected_contact() {
     mutable dictionary selected = create_default_model()
     selected["selected_index"] = 0
     selected["show_delete_dialog"] = true
-    dictionary outcome = GraphicalUi.test_click(contacts_config(), selected, "Delete")
+    # Addressed by the confirm dialog's stable id rather than its "Delete"
+    # label — the per-row delete buttons now also read "Delete" (ux-audit
+    # finding #16 replaced the platform-inconsistent trash emoji), so a plain
+    # text locator would be ambiguous.
+    dictionary outcome = GraphicalUi.test_click(contacts_config(), selected, "confirm-delete")
     array<dictionary> contacts = outcome["contacts"]
     assert(Array.length(contacts) == 4)
 }

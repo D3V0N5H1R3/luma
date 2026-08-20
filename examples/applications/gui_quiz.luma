@@ -53,6 +53,7 @@ function dictionary quiz_initial() {
     model["score"] = 0
     model["answered"] = false
     model["finished"] = false
+    model["invalid_attempt"] = false
     return model
 }
 
@@ -63,7 +64,19 @@ function dictionary select_answer(dictionary model, string pick) {
     }
     mutable dictionary updated = model
     updated["selected"] = pick
+    # Clear any lingering invalid-submit highlight now that a choice exists.
+    updated["invalid_attempt"] = false
     return updated
+}
+
+# Pressing Submit with no selection is not a silent no-op: it flags the hint
+# text so sighted users get a visual signal (not just the screen-reader
+# announcement) that something needs their attention (ux-audit finding #19).
+function dictionary flag_invalid_submit(dictionary model) {
+    mutable dictionary updated = model
+    updated["invalid_attempt"] = true
+    return GraphicalUi.with_command(updated,
+        GraphicalUi.announce("Select an answer to continue before submitting."))
 }
 
 function dictionary do_submit(dictionary model) {
@@ -98,6 +111,7 @@ function dictionary do_next(dictionary model) {
     updated["index"] = next_index
     updated["selected"] = ""
     updated["answered"] = false
+    updated["invalid_attempt"] = false
     # Announce the new question and move focus to the prompt so keyboard and
     # screen-reader users are carried to the next step rather than left behind.
     string prompt = Dictionary.get_or(current_question(updated), "prompt", "")
@@ -203,10 +217,11 @@ function widget action_button(dictionary model) {
     }
     if Dictionary.get_or(model, "selected", "") == "" {
         # No selection yet: instead of a silent dead click, this Submit stays a
-        # real control that announces a validation hint so the press has feedback.
+        # real control that flags the hint text (see view_feedback) and
+        # announces a validation hint so the press has both visual and
+        # screen-reader feedback.
         return GraphicalUi.button("Submit",
-            () -> GraphicalUi.with_command(model,
-                GraphicalUi.announce("Select an answer to continue before submitting.")),
+            () -> flag_invalid_submit(model),
             muted_submit_style())
     }
     return GraphicalUi.button("Submit", () -> "submit", primary_style("btn-submit"))
@@ -255,10 +270,12 @@ function widget view_answer_options(
 }
 
 function widget view_feedback(dictionary model, string feedback_color) {
+    boolean invalid_attempt = Dictionary.get_or(model, "invalid_attempt", false)
     return GraphicalUi.aria_live("polite", GraphicalUi.label(feedback_text(model), {
         "id": "feedback",
         "font_size": GraphicalUi.VAR_TEXT_SM,
-        "color": feedback_color
+        "font_weight": if invalid_attempt { "700" } else { "400" },
+        "color": if invalid_attempt { GraphicalUi.VAR_ERROR } else { feedback_color }
     }))
 }
 
@@ -383,6 +400,19 @@ function void test_submit_without_selection_is_ignored() {
     dictionary model = GraphicalUi.test_click(config, quiz_initial(), "btn-submit")
     assert(!Dictionary.get_or(model, "answered", true))
     assert(Dictionary.get_or(model, "score", -1) == 0)
+}
+
+@test
+function void test_submit_without_selection_flags_invalid_attempt() {
+    # ux-audit finding #19: a Submit press with no selection now flags the
+    # hint text (a visual signal for sighted users), and picking an answer
+    # clears the flag again.
+    dictionary config = quiz_config()
+    dictionary flagged = GraphicalUi.test_click(config, quiz_initial(), "btn-submit")
+    assert(Dictionary.get_or(flagged, "invalid_attempt", false))
+
+    dictionary cleared = select_answer(flagged, "Paris")
+    assert(!Dictionary.get_or(cleared, "invalid_attempt", true))
 }
 
 @test

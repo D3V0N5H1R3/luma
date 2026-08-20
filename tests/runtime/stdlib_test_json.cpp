@@ -1,7 +1,9 @@
 // Standard library tests: Json (Luma stdlib module).
 
 #include <cstddef>
+#include <string>
 
+#include "common/resource_limits.hpp"
 #include "runtime/stdlib/text/json_module.hpp"
 #include "stdlib_test_helpers.hpp"
 
@@ -419,6 +421,49 @@ static void test_json_value_parse_invalid_fails() {
     ASSERT_EVAL_FAILURE(R"(Json.parse("{bad}"))");
 }
 
+// Build a JSON document nested `depth` arrays deep, e.g. depth=3 -> "[[[0]]]".
+static std::string make_nested_json_array(int depth) {
+    std::string text;
+
+    for (int i = 0; i < depth; ++i) {
+        text += '[';
+    }
+
+    text += '0';
+
+    for (int i = 0; i < depth; ++i) {
+        text += ']';
+    }
+
+    return text;
+}
+
+static void test_json_value_parse_respects_nesting_depth_limit() {
+    // Regression: Json.parse (and parse_detailed) called shared::json::parse
+    // without a max_depth argument, silently falling back to the header's
+    // compiled-in default of 128 instead of the runtime/sandbox-configured
+    // ResourceLimits::max_json_nesting_depth. A document nested deeper than a
+    // lowered limit must therefore fail, matching Json.deserialize's behaviour
+    // (json_module_parser.cpp), not silently succeed up to the hard-coded 128.
+    const LimitGuard guard{ResourceLimits::max_json_nesting_depth, static_cast<std::size_t>(4)};
+
+    const std::string within_limit = "Json.parse(\"" + make_nested_json_array(3) + "\")";
+    const std::string over_limit = "Json.parse(\"" + make_nested_json_array(10) + "\")";
+
+    ASSERT_RESULT_SUCCESS(eval(within_limit));
+    ASSERT_EVAL_FAILURE(over_limit);
+}
+
+static void test_json_parse_detailed_respects_nesting_depth_limit() {
+    const LimitGuard guard{ResourceLimits::max_json_nesting_depth, static_cast<std::size_t>(4)};
+
+    const std::string over_limit = "Json.parse_detailed(\"" + make_nested_json_array(10) + "\")";
+
+    const auto v = eval(over_limit);
+    ASSERT_TRUE(v.is_result());
+    ASSERT_FALSE(v.as_result()->is_success);
+}
+
 static void test_json_parse_detailed_success() {
     const auto v = eval(R"(Json.parse_detailed("{\"a\": 1}"))");
     ASSERT_RESULT_SUCCESS(v);
@@ -637,6 +682,8 @@ int main() {
     RUN(test_json_value_parse_boolean);
     RUN(test_json_value_parse_null);
     RUN(test_json_value_parse_invalid_fails);
+    RUN(test_json_value_parse_respects_nesting_depth_limit);
+    RUN(test_json_parse_detailed_respects_nesting_depth_limit);
     RUN(test_json_parse_detailed_success);
     RUN(test_json_parse_detailed_failure_has_location);
     RUN(test_json_parse_detailed_reports_line_on_multiline);

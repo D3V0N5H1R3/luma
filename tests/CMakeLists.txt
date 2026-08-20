@@ -172,6 +172,13 @@ luma_add_test(NAME safe_getenv_test
     LIBS    ""
     LABELS  platform)
 
+# is_std{in,out,err}_terminal are cross-platform (isatty / _isatty), so this
+# runs on every OS.
+luma_add_test(NAME terminal_detection_test
+    SOURCES platform/terminal_detection_test.cpp
+    LIBS    ""
+    LABELS  platform)
+
 # wstring_to_utf8 wraps the Win32 API and only exists on Windows.
 if(WIN32)
     luma_add_test(NAME win32_utf8_test

@@ -448,7 +448,7 @@ pub(crate) fn lookup_expected_hash(checksums_content: &str, asset_name: &str) ->
         let mut parts = line.splitn(2, char::is_whitespace);
         if let (Some(hash), Some(rest)) = (parts.next(), parts.next()) {
             let name = rest.trim();
-            let name = name.strip_prefix('*').unwrap_or(name);
+            let name = name.strip_prefix('*').unwrap_or(name).trim();
             if is_sha256_hex(hash) && name == asset_name {
                 return Some(hash.to_lowercase());
             }

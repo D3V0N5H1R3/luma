@@ -16,6 +16,7 @@
 #include <io.h>
 #include <windows.h>
 
+#include "common/platform_utils.hpp"
 #include "runtime/repl/line_editor.hpp"
 
 namespace luma {
@@ -59,7 +60,7 @@ bool LineEditor::read_escape_sequence_bytes(std::array<char, 3>& seq) {
 }
 
 bool LineEditor::stdin_is_terminal() {
-    return _isatty(_fileno(stdin)) != 0;
+    return is_stdin_terminal();
 }
 
 } // namespace luma
