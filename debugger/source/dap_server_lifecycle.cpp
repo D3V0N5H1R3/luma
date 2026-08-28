@@ -90,7 +90,10 @@ HandlerResult DapLifecycleHandler::handle_restart(const JsonValue& args) {
         return HandlerResult::error(std::string{messages::request::restart_missing_program});
     }
 
-    ctx_.reset_session();
+    // Tear the old run down without emitting terminated/exited — a restart keeps
+    // the same DAP session, so those events would make the client stop instead of
+    // restart. The SendInitialized post-action below drives the new run's config.
+    ctx_.reset_session(/*emit_exit_events=*/false);
 
     // Re-launch with the same or updated arguments.
     auto result = ctx_.launch_with_config(config);

@@ -66,8 +66,8 @@ void DebugSession::configuration_done() {
     execution_engine_->configuration_done();
 }
 
-void DebugSession::terminate() {
-    execution_engine_->terminate();
+void DebugSession::terminate(bool emit_exit_events) {
+    execution_engine_->terminate(emit_exit_events);
 }
 
 // --- Breakpoint delegation ---

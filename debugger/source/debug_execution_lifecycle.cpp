@@ -151,7 +151,8 @@ std::string DebugExecutionEngine::launch(const std::string& program_path, bool s
     }
 }
 
-void DebugExecutionEngine::terminate() {
+void DebugExecutionEngine::terminate(bool emit_exit_events) {
+    suppress_exit_events_.store(!emit_exit_events, std::memory_order_relaxed);
     execution_thread_.request_stop();
 
     {

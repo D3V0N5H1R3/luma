@@ -23,9 +23,9 @@ void DapHandlerContext::create_session(
     apply_pending_breakpoints();
 }
 
-void DapHandlerContext::reset_session() {
+void DapHandlerContext::reset_session(bool emit_exit_events) {
     if (session) {
-        session->terminate();
+        session->terminate(emit_exit_events);
         session.reset();
     }
 

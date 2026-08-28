@@ -93,7 +93,7 @@ struct DapHandlerContext {
     void create_session(std::function<void(const std::string&, const JsonValue&)> event_cb,
                         std::function<void(const std::string&, const std::string&)> output_cb);
 
-    void reset_session();
+    void reset_session(bool emit_exit_events = true);
 
     void apply_pending_breakpoints();
 

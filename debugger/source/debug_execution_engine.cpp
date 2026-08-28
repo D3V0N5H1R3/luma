@@ -158,6 +158,13 @@ void DebugExecutionEngine::handle_unhandled_exception(const std::exception& e,
 void DebugExecutionEngine::handle_execution_result(int exit_code) {
     state_ = SessionState::Terminated;
 
+    // A restart / hot reload tears the old run down via terminate(false). In that
+    // case the client keeps the session and must not see terminated/exited, or it
+    // would end the debug session before the replacement run starts.
+    if (suppress_exit_events_.load(std::memory_order_relaxed)) {
+        return;
+    }
+
     event_callback_(std::string{kEventTerminated}, JsonValue(JsonValue::ObjectType{}));
 
     JsonValue::ObjectType exit_body;
