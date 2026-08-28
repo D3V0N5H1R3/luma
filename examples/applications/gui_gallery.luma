@@ -103,8 +103,8 @@ function widget view_header(dictionary model) {
     return GraphicalUi.toolbar([
         GraphicalUi.icon("sparkles", 22),
         GraphicalUi.heading("GraphicalUi Gallery", 1, {"white_space": "nowrap"}),
-        GraphicalUi.badge("kitchen sink"),
         GraphicalUi.flexible_space(),
+        GraphicalUi.badge("kitchen sink"),
         GraphicalUi.row([
             GraphicalUi.icon("clock", 16),
             GraphicalUi.label(clock, {"font_family": GraphicalUi.VAR_FONT})
