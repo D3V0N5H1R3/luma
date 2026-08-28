@@ -2141,7 +2141,13 @@ namespace Solaris {
             }
             case "toast" {
                 GraphicalUi.toast_region([
-                    GraphicalUi.toast(node.content, Solaris.emphasis_severity(node.emphasis))
+                    # Pin an opaque background so the toast stays readable over
+                    # page content. The shared .gui-toast rule already intends
+                    # var(--gui-bg), but the severity tint (.gui-alert[data-severity])
+                    # outranks it in the stylesheet, so set it inline where it wins.
+                    # Severity is still carried by the icon, text, and border colours.
+                    GraphicalUi.toast(node.content, Solaris.emphasis_severity(node.emphasis),
+                        {"background": GraphicalUi.VAR_BG})
                 ], Solaris.toast_region_style(node))
             }
             case "spacer" {
