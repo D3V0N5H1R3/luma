@@ -75,6 +75,7 @@ Powered by the Luma debug adapter (`luma_dap`), which the extension downloads an
 | `stopOnEntry` | `false`              | Pause on the first executable line.                              |
 | `args`        | `[]`                 | Arguments passed to the program (via `Process.get_arguments()`). |
 | `cwd`         | `${workspaceFolder}` | Working directory for the debugged program.                      |
+| `timeTravel`  | `false`              | Record execution history to enable Step Back / Reverse.          |
 
 - **Debug Visualizer** — the **Luma Visualizer** panel renders structured runtime values (arrays, records, trees) graphically. Run `Luma: Visualize Variable` during a debug session to inspect an expression.
 

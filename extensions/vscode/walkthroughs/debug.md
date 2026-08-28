@@ -32,6 +32,7 @@ To debug with arguments or a fixed program, add a `luma` configuration to `.vsco
 | `stopOnEntry` | `false`              | Pause on the first executable line.                              |
 | `args`        | `[]`                 | Arguments passed to the program (via `Process.get_arguments()`). |
 | `cwd`         | `${workspaceFolder}` | Working directory for the debugged program.                      |
+| `timeTravel`  | `false`              | Record execution history to enable Step Back / Reverse.          |
 
 ### Visualise structured values
 
