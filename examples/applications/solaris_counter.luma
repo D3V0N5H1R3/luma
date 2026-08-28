@@ -45,20 +45,28 @@ function View counter_view(CounterModel model) {
     return Solaris.column([
         Solaris.heading("Counter"),
         Solaris.text("${model.count}") |> Solaris.size(TextScale.Title) |> Solaris.center(),
+        # Action group: the Decrement/Increment row fixes the group's width, and
+        # the Reset button below spans it with Length.Fill — so Reset is always
+        # exactly as wide as both buttons plus the gap between them, whatever those
+        # buttons measure. The wrapping row keeps the group centred under the count.
         Solaris.row([
-            Solaris.button("- Decrement")
-                |> Solaris.on_click(CounterMsg.Decrement)
-                |> Solaris.width(Length.Fixed(140))
-                |> Solaris.primary(),
-            Solaris.button("+ Increment")
-                |> Solaris.on_click(CounterMsg.Increment)
-                |> Solaris.width(Length.Fixed(140))
-                |> Solaris.primary()
-        ]) |> Solaris.gap(Spacing.M),
-        Solaris.button("Reset")
-            |> Solaris.on_click(CounterMsg.Reset)
-            |> Solaris.width(Length.Fill)
-            |> Solaris.danger()
+            Solaris.column([
+                Solaris.row([
+                    Solaris.button("- Decrement")
+                        |> Solaris.on_click(CounterMsg.Decrement)
+                        |> Solaris.width(Length.Fixed(140))
+                        |> Solaris.primary(),
+                    Solaris.button("+ Increment")
+                        |> Solaris.on_click(CounterMsg.Increment)
+                        |> Solaris.width(Length.Fixed(140))
+                        |> Solaris.primary()
+                ]) |> Solaris.gap(Spacing.M),
+                Solaris.button("Reset")
+                    |> Solaris.on_click(CounterMsg.Reset)
+                    |> Solaris.width(Length.Fill)
+                    |> Solaris.danger()
+            ]) |> Solaris.gap(Spacing.M)
+        ])
     ]) |> Solaris.padding(Spacing.L) |> Solaris.gap(Spacing.M)
 }
 
