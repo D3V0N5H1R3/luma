@@ -158,7 +158,11 @@ function dictionary set_source(dictionary model, string text) {
 function dictionary<string> pane_label_style() {
     return {
         "font_size": GraphicalUi.VAR_TEXT_SM,
-        "font_weight": "600"
+        "font_weight": "600",
+        # Drop the default .gui-label vertical padding so the Preview caption sits
+        # on the same line as the Source field label (.gui-field-label-text), which
+        # has none. Without this the padded caption is taller and pushes its box down.
+        "padding": "0"
     }
 }
 
@@ -176,8 +180,21 @@ function dictionary<string> pane_box_style() {
     }
 }
 
+# Shared pane column so the Source and Preview panes have identical outer layout:
+# equal width, equal flex growth, and the same label-to-box gap. The gap is
+# var(--gui-space-xs) to match the space GraphicalUi.field puts between the
+# "Source" label and its control, so both content boxes start on the same line
+# (and, being equal min-height, end on the same line too).
+function widget pane_column(array<widget> children) {
+    return GraphicalUi.column(children, {
+        "width": "100%",
+        "flex": GraphicalUi.fill(),
+        "gap": "var(--gui-space-xs)"
+    })
+}
+
 function widget view_editor(dictionary model) {
-    return GraphicalUi.column([
+    return pane_column([
         GraphicalUi.field(
             "Source",
             GraphicalUi.text_area(
@@ -186,7 +203,7 @@ function widget view_editor(dictionary model) {
                 pane_box_style()
             )
         )
-    ], {"width": "100%", "flex": GraphicalUi.fill(), "gap": "6px"})
+    ])
 }
 
 function widget view_preview(dictionary model) {
@@ -201,14 +218,14 @@ function widget view_preview(dictionary model) {
         GraphicalUi.column(rendered,
             GraphicalUi.merge_styles(pane_box_style(), {"id": "preview", "gap": "8px"}))
     }
-    return GraphicalUi.column([
+    return pane_column([
         GraphicalUi.label("Preview", pane_label_style()),
         # Labelled polite live region so non-visual users can find the preview and
         # hear that it changed as they type.
         GraphicalUi.aria_live("polite",
             GraphicalUi.accessible(preview_content,
                 {"role": "region", "aria_label": "Markdown preview"}))
-    ], {"width": "100%", "flex": GraphicalUi.fill(), "gap": "6px"})
+    ])
 }
 
 function widget view_markdown(dictionary model) {
