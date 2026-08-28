@@ -376,11 +376,16 @@ function widget view_display(dictionary model) {
     string display_color = if error == "" { GraphicalUi.VAR_FG } else { GraphicalUi.VAR_ERROR }
     string display_size = if error == "" { "40px" } else { "22px" }
     return GraphicalUi.column([
+        # "white_space": "pre" keeps the blank placeholder (" ") as a real line
+        # box, so the operator line always reserves exactly one line of height —
+        # whether or not an operator is pending. Without it an empty line
+        # collapses to nothing and the whole display grows the moment an operator
+        # appears and shrinks again when it clears.
         GraphicalUi.label(pending, {
             "text_align": "right",
             "color": GraphicalUi.VAR_DISABLED_FG,
             "font_size": GraphicalUi.VAR_TEXT_SM,
-            "min_height": "18px"
+            "white_space": "pre"
         }),
         GraphicalUi.aria_live("polite", GraphicalUi.label(model["entry"], {
             "text_align": "right",
