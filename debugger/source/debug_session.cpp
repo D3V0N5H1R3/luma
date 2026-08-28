@@ -140,7 +140,9 @@ void DebugSession::enable_time_travel(TimeTravelConfig config) {
 ExecutionResult DebugSession::restore_from_snapshot(int thread_id, std::size_t steps_back,
                                                     bool clamp_to_front) {
     if (!time_travel_recorder_) {
-        return ExecutionResult::error("Time-travel debugging is not enabled");
+        return ExecutionResult::error(
+            "Time-travel debugging is not enabled. Set \"timeTravel\": true in your launch "
+            "configuration.");
     }
 
     const auto snapshot = time_travel_recorder_->step_back(steps_back, clamp_to_front);
