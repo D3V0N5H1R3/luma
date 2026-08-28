@@ -162,13 +162,28 @@ function dictionary<string> pane_label_style() {
     }
 }
 
+# Shared content box so the Source editor and the Preview render in identical
+# containers: same fill, border, radius, padding, and minimum height. Applied to
+# the text area and (via merge_styles) to the preview column.
+function dictionary<string> pane_box_style() {
+    return {
+        "width": "100%",
+        "padding": "12px",
+        "background_color": "var(--gui-input-bg)",
+        "border": "1px solid ${GraphicalUi.VAR_BORDER}",
+        "border_radius": GraphicalUi.VAR_RADIUS,
+        "min_height": "320px"
+    }
+}
+
 function widget view_editor(dictionary model) {
     return GraphicalUi.column([
         GraphicalUi.field(
             "Source",
             GraphicalUi.text_area(
                 Dictionary.get_or(model, "source", ""),
-                (string text) -> set_source(model, text)
+                (string text) -> set_source(model, text),
+                pane_box_style()
             )
         )
     ], {"width": "100%", "flex": GraphicalUi.fill(), "gap": "6px"})
@@ -180,18 +195,11 @@ function widget view_preview(dictionary model) {
         |> Array.map((dictionary block) -> render_block(block))
         |> Result.unwrap()
     widget preview_content = if String.trim(source) == "" {
-        GraphicalUi.empty_state("Nothing to preview yet.")
+        GraphicalUi.column([GraphicalUi.empty_state("Nothing to preview yet.")],
+            pane_box_style())
     } else {
-        GraphicalUi.column(rendered, {
-            "id": "preview",
-            "gap": "8px",
-            "padding": "12px",
-            "background_color": "var(--gui-input-bg)",
-            "border": "1px solid ${GraphicalUi.VAR_BORDER}",
-            "border_radius": GraphicalUi.VAR_RADIUS,
-            "min_height": "320px",
-            "max_width": GraphicalUi.VAR_MEASURE
-        })
+        GraphicalUi.column(rendered,
+            GraphicalUi.merge_styles(pane_box_style(), {"id": "preview", "gap": "8px"}))
     }
     return GraphicalUi.column([
         GraphicalUi.label("Preview", pane_label_style()),
