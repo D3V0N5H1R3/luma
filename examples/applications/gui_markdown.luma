@@ -151,12 +151,14 @@ function dictionary set_source(dictionary model, string text) {
     return updated
 }
 
-function dictionary<string> caption_style() {
+# Section label for the Preview pane. Matched to the "Source" field label that
+# GraphicalUi.field renders (.gui-field-label-text: small, 600 weight, normal
+# case) so both panes are captioned identically rather than one field label and
+# one uppercase eyebrow caption.
+function dictionary<string> pane_label_style() {
     return {
-        "font_size": GraphicalUi.VAR_TEXT_XS,
-        "font_weight": "700",
-        "letter_spacing": "0.08em",
-        "color": GraphicalUi.VAR_FG
+        "font_size": GraphicalUi.VAR_TEXT_SM,
+        "font_weight": "600"
     }
 }
 
@@ -192,7 +194,7 @@ function widget view_preview(dictionary model) {
         })
     }
     return GraphicalUi.column([
-        GraphicalUi.label("PREVIEW", caption_style()),
+        GraphicalUi.label("Preview", pane_label_style()),
         # Labelled polite live region so non-visual users can find the preview and
         # hear that it changed as they type.
         GraphicalUi.aria_live("polite",
