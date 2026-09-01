@@ -328,7 +328,13 @@ std::vector<Scope> VariableInspector::get_scopes(int frame_id,
         }
     }
 
-    result.push_back(make_scope("Global", ScopeType::Global, frame_id, true, "globals"));
+    // The Global scope has no matching DAP presentationHint (the spec defines
+    // only "arguments", "locals", and "registers"), so leave it unset rather than
+    // emitting a non-standard "globals" — a strict client that models the hint as
+    // an enum rejects the whole scopes array on an unknown value, which blanks the
+    // entire variables view. Its distinct name ("Global") and expensive=true still
+    // convey its role.
+    result.push_back(make_scope("Global", ScopeType::Global, frame_id, true, ""));
 
     return result;
 }

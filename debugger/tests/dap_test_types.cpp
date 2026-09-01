@@ -363,17 +363,16 @@ void test_scope_presentation_hint_locals() {
     ASSERT_EQ(json["presentationHint"].as_string(), "locals");
 }
 
-void test_scope_presentation_hint_globals() {
+void test_scope_presentation_hint_arguments() {
     Scope scope;
-    scope.name = "Global";
+    scope.name = "Arguments";
     scope.variables_reference = 2;
-    scope.expensive = true;
-    scope.presentation_hint = "globals";
+    scope.presentation_hint = "arguments";
 
     auto json = serialise_scope(scope);
 
     ASSERT_TRUE(json.has("presentationHint"));
-    ASSERT_EQ(json["presentationHint"].as_string(), "globals");
+    ASSERT_EQ(json["presentationHint"].as_string(), "arguments");
 }
 
 void test_scope_presentation_hint_empty() {
@@ -576,7 +575,7 @@ int main() {
 
     // Scope presentationHint.
     RUN(test_scope_presentation_hint_locals);
-    RUN(test_scope_presentation_hint_globals);
+    RUN(test_scope_presentation_hint_arguments);
     RUN(test_scope_presentation_hint_empty);
 
     // ScopeType.

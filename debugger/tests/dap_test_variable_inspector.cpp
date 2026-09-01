@@ -386,10 +386,12 @@ void test_get_scopes_names_order_and_refs() {
     ASSERT_FALSE(scopes[0].expensive);
     ASSERT_EQ(scopes[0].presentation_hint, std::string("locals"));
 
-    // Global comes last, is expensive, and hints "globals".
+    // Global comes last and is expensive. It carries no presentationHint: DAP
+    // defines only "arguments"/"locals"/"registers", so a non-standard "globals"
+    // could make a strict client reject the whole scopes array.
     ASSERT_EQ(scopes[1].name, std::string("Global"));
     ASSERT_TRUE(scopes[1].expensive);
-    ASSERT_EQ(scopes[1].presentation_hint, std::string("globals"));
+    ASSERT_TRUE(scopes[1].presentation_hint.empty());
 
     // Each scope is addressable through a distinct, non-zero reference.
     ASSERT_TRUE(scopes[0].variables_reference != 0);

@@ -140,7 +140,7 @@ struct Scope {
     std::string name;
     int variables_reference{0};
     bool expensive{false};
-    std::string presentation_hint; // DAP presentationHint: "locals", "globals", "registers".
+    std::string presentation_hint; // DAP presentationHint: "arguments", "locals", or "registers".
 };
 
 struct Variable {
