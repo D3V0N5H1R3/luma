@@ -146,6 +146,27 @@ void test_serialise_variable_simple() {
     ASSERT_FALSE(json.has("indexedVariables"));
 }
 
+// DAP: the `type` field must only be emitted when the client advertised
+// supportsVariableType. serialise_variable(var, include_type=false) omits it;
+// a strict client that did not request it can otherwise show no variables.
+void test_serialise_variable_type_gated_on_capability() {
+    Variable var;
+    var.name = "x";
+    var.value = "42";
+    var.type = "integer";
+
+    const auto with_type = serialise_variable(var, /*include_type=*/true);
+    ASSERT_TRUE(with_type.has("type"));
+    ASSERT_EQ(with_type["type"].as_string(), "integer");
+
+    const auto without_type = serialise_variable(var, /*include_type=*/false);
+    ASSERT_FALSE(without_type.has("type"));
+    // name/value/variablesReference are still present — only `type` is gated.
+    ASSERT_EQ(without_type["name"].as_string(), "x");
+    ASSERT_EQ(without_type["value"].as_string(), "42");
+    ASSERT_TRUE(without_type.has("variablesReference"));
+}
+
 void test_serialise_variable_structured() {
     Variable var;
     var.name = "items";
@@ -528,6 +549,7 @@ int main() {
 
     // Variable.
     RUN(test_serialise_variable_simple);
+    RUN(test_serialise_variable_type_gated_on_capability);
     RUN(test_serialise_variable_structured);
     RUN(test_serialise_variable_named_children);
 

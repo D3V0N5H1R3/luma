@@ -163,7 +163,7 @@ struct Variable {
 [[nodiscard]] JsonValue serialise_breakpoint(const Breakpoint& bp);
 [[nodiscard]] JsonValue serialise_stack_frame(const StackFrame& frame);
 [[nodiscard]] JsonValue serialise_scope(const Scope& scope);
-[[nodiscard]] JsonValue serialise_variable(const Variable& var);
+[[nodiscard]] JsonValue serialise_variable(const Variable& var, bool include_type = true);
 
 } // namespace luma::dap
 
