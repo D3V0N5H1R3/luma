@@ -81,7 +81,7 @@ public:
                                      const std::vector<std::string>& args = {},
                                      const std::string& cwd = "");
     void configuration_done();
-    void terminate();
+    void terminate(bool emit_exit_events = true);
 
     // ─── Breakpoints (delegated to BreakpointManager) ───
 

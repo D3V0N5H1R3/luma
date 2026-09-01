@@ -1702,15 +1702,22 @@ void test_restart() {
     auto restart_result = read_until_response(proc, "restart");
     ASSERT_SUCCESS(restart_result.response);
 
-    // After restart, wait for any stopped or terminated event.
-    // The debugger may re-launch and stop, or the program may run to completion.
-    bool found_event = wait_for_event(proc, "stopped", "", "", 50, 200) ||
-                       wait_for_event(proc, "terminated", "", "", 50, 200);
+    // A restart keeps the same DAP session, so the adapter must NOT emit a
+    // terminated event while tearing down the old run — otherwise the client ends
+    // the session (stops) instead of restarting.
+    ASSERT_FALSE(has_event(restart_result.events, "terminated"));
 
-    if (found_event) {
-        (void)continue_execution(proc);
-    }
+    // The adapter re-sends `initialized` so the client re-runs configuration.
+    ASSERT_TRUE(wait_for_event(proc, "initialized"));
 
+    // Drive the new run's configuration; it must launch and stop at entry again.
+    auto restart_config = send_configuration_done(proc);
+    bool restarted_entry = has_event(restart_config.events, "stopped", "reason", "entry") ||
+                           wait_for_event(proc, "stopped", "reason", "entry");
+    ASSERT_TRUE(restarted_entry);
+
+    // Letting the restarted program run to completion does emit terminated.
+    (void)continue_execution(proc);
     (void)wait_for_event(proc, "terminated");
 
     disconnect(proc);

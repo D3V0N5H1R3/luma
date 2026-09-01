@@ -38,7 +38,7 @@ Each script carries a module-level docstring describing its full behaviour and o
 | [`run_luma_examples.py`](run_luma_examples.py)             | Run and verify every `examples/` program headlessly, including `@test` blocks.                       | [CI](../.github/workflows/ci.yml); manual                  |
 | [`run_luma_tests.py`](run_luma_tests.py)                   | Discover all `.luma` files under a directory and run each with the interpreter in `--strict --test` mode, reporting a pass/fail summary. | Manual; editor tasks                                       |
 | [`run_psscriptanalyzer.ps1`](run_psscriptanalyzer.ps1)     | Lint first-party PowerShell scripts with PSScriptAnalyzer using the repo settings.                   | [CI](../.github/workflows/ci-powershell.yml); manual       |
-| [`tsan_suppressions.txt`](tsan_suppressions.txt)           | ThreadSanitizer suppression list referenced by the CI sanitizer job. Not a script — plain-text data. | [CI](../.github/workflows/ci.yml) (`TSAN_OPTIONS`)         |
+| [`tsan_suppressions.txt`](tsan_suppressions.txt)           | ThreadSanitizer suppression list referenced by the ThreadSanitizer job. Not a script — plain-text data. | [CI](../.github/workflows/ci-tsan.yml) (`TSAN_OPTIONS`) |
 
 ## Conventions
 

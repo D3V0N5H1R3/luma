@@ -43,11 +43,19 @@ JsonValue serialise_scope(const Scope& scope) {
 // DAP convention: omitting presentationHint defaults to writable.
 // We only emit presentationHint { attributes: ["readOnly"] } when !is_mutable,
 // so read-only variables are explicitly marked and writable ones use the default.
-JsonValue serialise_variable(const Variable& var) {
+JsonValue serialise_variable(const Variable& var, bool include_type) {
     JsonValue::ObjectType obj;
     obj["name"] = JsonValue(var.name);
     obj["value"] = JsonValue(var.value);
-    obj["type"] = JsonValue(var.type);
+
+    // DAP: `type` must only be sent when the client advertised
+    // supportsVariableType. A client that did not (some editors default it off)
+    // may reject a variable carrying an unexpected `type`, leaving its Variables
+    // view empty — so gate it on the negotiated capability.
+    if (include_type) {
+        obj["type"] = JsonValue(var.type);
+    }
+
     obj["variablesReference"] = JsonValue(var.variables_reference);
 
     if (var.named_variables > 0) {

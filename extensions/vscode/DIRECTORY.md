@@ -75,6 +75,7 @@ Powered by the Luma debug adapter (`luma_dap`), which the extension downloads an
 | `stopOnEntry` | `false`              | Pause on the first executable line.                              |
 | `args`        | `[]`                 | Arguments passed to the program (via `Process.get_arguments()`). |
 | `cwd`         | `${workspaceFolder}` | Working directory for the debugged program.                      |
+| `timeTravel`  | `false`              | Record execution history to enable Step Back / Reverse.          |
 
 - **Debug Visualizer** — the **Luma Visualizer** panel renders structured runtime values (arrays, records, trees) graphically. Run `Luma: Visualize Variable` during a debug session to inspect an expression.
 
@@ -144,7 +145,7 @@ All commands are available from the Command Palette under the **Luma** category.
 Install from the Visual Studio Marketplace, or install the `.vsix` file directly:
 
 ```bash
-code --install-extension luma-language-0.10.0.vsix
+code --install-extension luma-language-0.11.0.vsix
 ```
 
 ## Building from Source
@@ -157,4 +158,4 @@ npm install
 npm run package
 ```
 
-This produces `luma-language-0.10.0.vsix` in the current directory.
+This produces `luma-language-0.11.0.vsix` in the current directory.

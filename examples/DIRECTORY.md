@@ -76,7 +76,6 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | `gui_animation`        | GraphicalUi transitions and keyframe animations    | 🔴 Advanced       |
 | `gui_calculator`       | GraphicalUi calculator with keypad and keyboard    | 🔴 Advanced       |
 | `gui_calendar`         | GraphicalUi month calendar with DateTime nav       | 🔴 Advanced       |
-| `gui_conduit`          | GraphicalUi RealWorld/Conduit blog SPA (CRUD)      | 🔴 Advanced       |
 | `gui_contacts`         | GraphicalUi contact book with table and dialogs    | 🔴 Advanced       |
 | `gui_counter`          | GraphicalUi counter application                    | 🔴 Advanced       |
 | `gui_dashboard`        | GraphicalUi dashboard with charts and tabs         | 🔴 Advanced       |
@@ -90,7 +89,6 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | `gui_timer`            | GraphicalUi Pomodoro timer with on_tick            | 🔴 Advanced       |
 | `gui_todo`             | GraphicalUi todo list application                  | 🔴 Advanced       |
 | `gui_virtual_list`     | GraphicalUi virtual scrolling for large lists      | 🔴 Advanced       |
-| `gui_website`          | GraphicalUi multi-page website with routing        | 🔴 Advanced       |
 | `matrix_calculator`    | Matrix calculator using LinearAlgebra module       | 🔴 Advanced       |
 | `mouse_draw`           | Terminal mouse drawing application                 | 🔴 Advanced       |
 | `solaris_counter`      | Solaris counter — canonical MVU surface example    | 🔴 Advanced       |

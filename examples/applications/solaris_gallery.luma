@@ -138,19 +138,19 @@ function View gallery_data(GalleryModel model) {
             Solaris.card([
                 Solaris.text("Name") |> Solaris.muted(),
                 Solaris.heading(model.name) |> Solaris.size(TextScale.Large)
-            ]),
+            ]) |> Solaris.padding(Spacing.M),
             Solaris.card([
                 Solaris.text("Language") |> Solaris.muted(),
                 Solaris.heading(model.language) |> Solaris.size(TextScale.Large)
-            ]),
+            ]) |> Solaris.padding(Spacing.M),
             Solaris.card([
                 Solaris.text("Theme") |> Solaris.muted(),
                 Solaris.heading(model.theme) |> Solaris.size(TextScale.Large)
-            ]),
+            ]) |> Solaris.padding(Spacing.M),
             Solaris.card([
                 Solaris.text("Volume") |> Solaris.muted(),
                 Solaris.heading("${model.volume}%") |> Solaris.size(TextScale.Large)
-            ])
+            ]) |> Solaris.padding(Spacing.M)
         ]) |> Solaris.gap(Spacing.M),
         Solaris.table(
             ["Field", "Value"],

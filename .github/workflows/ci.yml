@@ -405,61 +405,6 @@ jobs:
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  tsan:
-    name: ThreadSanitizer
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # ThreadSanitizer is configured correctly here — it links a
-    # position-independent executable (unlike the ASan matrix, whose -no-pie
-    # dodge of the ubuntu-24.04 high-ASLR shadow collision is actively wrong for
-    # TSan) and lowers the ASLR entropy to a libtsan-supported value
-    # (google/sanitizers#1614).
-    #
-    # It is nonetheless kept NON-BLOCKING: on the current hosted ubuntu-24.04
-    # image, libtsan cannot map its shadow memory and every luma_core-linked
-    # binary SIGSEGVs before main() with no TSan diagnostic. This reproduced
-    # across every configuration tried (ASLR off, mmap_rnd_bits=28, -no-pie, and
-    # PIE), so it is a runner-image/libtsan limitation outside this repo's
-    # control, not a data race. The gcc-13 AddressSanitizer/UBSan job is the
-    # active, gating sanitizer check; TSan is retained (correctly configured, so
-    # it self-heals automatically when a future runner image ships a working
-    # libtsan) purely as best-effort race detection. Do NOT remove
-    # continue-on-error until a run confirms TSan actually starts on the image.
-    continue-on-error: true
-
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Install Clang
-        uses: ./.github/actions/apt-install
-        with:
-          packages: clang
-
-      # ubuntu-24.04 raised the default ASLR entropy to vm.mmap_rnd_bits=32, which
-      # libtsan cannot map its shadow against; lower it to the supported value.
-      # No -no-pie here — TSan requires PIE (see the job-level comment).
-      - name: Reduce ASLR entropy for ThreadSanitizer
-        run: sudo sysctl -w vm.mmap_rnd_bits=28
-
-      - name: Configure
-        run: |
-          cmake -B build-tsan \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
-
-      - name: Build
-        run: cmake --build build-tsan --parallel "$(nproc)"
-
-      - name: Test
-        run: ctest --test-dir build-tsan --output-on-failure
-        env:
-          TSAN_OPTIONS: "suppressions=${{ github.workspace }}/scripts/tsan_suppressions.txt"
-
   # ── Optional-feature builds (exercise the LUMA_HAS_* stub paths) ──
   # The default matrix builds with every feature ON, so the disabled code paths
   # behind LUMA_HAS_TLS / LUMA_HAS_WEBVIEW are never compiled or run there. These

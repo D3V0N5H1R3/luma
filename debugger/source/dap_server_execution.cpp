@@ -142,7 +142,9 @@ HandlerResult DapExecutionHandler::handle_hot_reload() {
     // Terminate the current session and restart with the same program.
     const auto config = ctx_.last_launch_config;
 
-    ctx_.reset_session();
+    // Tear the old run down without emitting terminated/exited — hot reload keeps
+    // the same DAP session, so those events would make the client stop.
+    ctx_.reset_session(/*emit_exit_events=*/false);
 
     // Create a new session with the same callbacks, but don't stop on entry.
     auto reload_config = config;

@@ -111,7 +111,7 @@ public:
                                      const std::vector<std::string>& args = {},
                                      const std::string& cwd = "", bool no_debug = false);
     void configuration_done();
-    void terminate();
+    void terminate(bool emit_exit_events = true);
 
     // ─── Execution control ───
 
@@ -272,6 +272,12 @@ private:
     std::jthread execution_thread_;
     std::atomic<SessionState> state_{SessionState::Idle};
     std::stop_token execution_stop_token_;
+
+    // Set by terminate(emit_exit_events=false) when the old run is torn down for a
+    // restart / hot reload. handle_execution_result then suppresses the
+    // terminated/exited events, so the client keeps the debug session alive while
+    // the replacement run is launched (otherwise a restart just stops).
+    std::atomic<bool> suppress_exit_events_{false};
 
     // Configuration synchronisation (level 3 — startup only, never nested).
     mutable std::mutex config_mutex_;

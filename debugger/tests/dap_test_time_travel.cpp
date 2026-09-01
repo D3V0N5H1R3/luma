@@ -51,7 +51,9 @@ void test_step_back_without_time_travel_errors() {
     const auto result = session.step_back(1);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_EQ(result.error_message, std::string("Time-travel debugging is not enabled"));
+    ASSERT_EQ(result.error_message,
+              std::string("Time-travel debugging is not enabled. Set \"timeTravel\": true in "
+                          "your launch configuration."));
 }
 
 void test_reverse_continue_without_time_travel_errors() {
@@ -60,7 +62,9 @@ void test_reverse_continue_without_time_travel_errors() {
     const auto result = session.reverse_continue(1);
 
     ASSERT_FALSE(static_cast<bool>(result));
-    ASSERT_EQ(result.error_message, std::string("Time-travel debugging is not enabled"));
+    ASSERT_EQ(result.error_message,
+              std::string("Time-travel debugging is not enabled. Set \"timeTravel\": true in "
+                          "your launch configuration."));
 }
 
 void test_step_back_enabled_but_no_snapshots_errors() {

@@ -2,7 +2,7 @@
     "name": "luma-language",
     "displayName": "Luma Language Support",
     "description": "Syntax highlighting, language configuration, and language server integration for the Luma programming language.",
-    "version": "0.10.0",
+    "version": "0.11.0",
     "publisher": "D3V0N5H1R3",
     "license": "MIT",
     "repository": {
@@ -192,6 +192,11 @@
                                 "type": "string",
                                 "description": "Working directory for the debugged program.",
                                 "default": "${workspaceFolder}"
+                            },
+                            "timeTravel": {
+                                "type": "boolean",
+                                "description": "Record execution history to enable stepping backwards (the Step Back and Reverse buttons). Off by default because recording VM snapshots adds memory and runtime overhead.",
+                                "default": false
                             }
                         }
                     }

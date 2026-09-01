@@ -6,6 +6,7 @@ Updates the version number in:
   - extensions/vscode/package.json                   (VS Code extension)
   - extensions/zed/extension.toml                    (Zed extension manifest)
   - extensions/zed/Cargo.toml                        (Zed extension crate)
+  - extensions/zed/Cargo.lock                        (Zed extension crate lock — luma-zed entry)
 
 Also updates version references in documentation:
   - instructions/learnings.instructions.md           ("Alpha (X.Y)" status line)
@@ -45,6 +46,7 @@ VERSION_FILE: Path = REPO_ROOT / "VERSION"
 VSCODE_PACKAGE_JSON: Path = REPO_ROOT / "extensions" / "vscode" / "package.json"
 ZED_EXTENSION_TOML: Path = REPO_ROOT / "extensions" / "zed" / "extension.toml"
 ZED_CARGO_TOML: Path = REPO_ROOT / "extensions" / "zed" / "Cargo.toml"
+ZED_CARGO_LOCK: Path = REPO_ROOT / "extensions" / "zed" / "Cargo.lock"
 
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 
@@ -120,6 +122,33 @@ def update_zed_cargo_toml(new_version: str) -> None:
     if updated == content:
         sys.exit("Error: Could not find 'version = \"...\"' in Cargo.toml.")
     ZED_CARGO_TOML.write_text(updated, encoding="utf-8")
+
+
+def update_zed_cargo_lock(new_version: str) -> bool:
+    """Update the ``luma-zed`` package version in the Zed extension Cargo.lock.
+
+    The lock file records the workspace package's own version, so a version
+    bump must update it too — otherwise the committed lock drifts out of sync
+    with Cargo.toml and the next ``cargo`` invocation (e.g. building or
+    installing the dev extension in Zed) rewrites it, producing a spurious
+    diff. Only the ``[[package]] name = "luma-zed"`` entry's version is
+    touched; dependency versions are left untouched.
+
+    Returns True if the file was written, False if it is absent or already at
+    *new_version*.
+    """
+    if not ZED_CARGO_LOCK.exists():
+        return False
+    content = ZED_CARGO_LOCK.read_text(encoding="utf-8")
+    # Anchor on the luma-zed name line so only its own version line changes.
+    pattern = re.compile(r'(name = "luma-zed"\r?\nversion = ")([^"]+)(")')
+    if pattern.search(content) is None:
+        sys.exit("Error: Could not find the luma-zed package entry in Cargo.lock.")
+    updated = pattern.sub(rf"\g<1>{new_version}\3", content, count=1)
+    if updated == content:
+        return False
+    ZED_CARGO_LOCK.write_text(updated, encoding="utf-8")
+    return True
 
 
 DOC_VERSION_FILES: list[Path] = [
@@ -205,6 +234,7 @@ def main() -> None:
     update_vscode_package_json(new_version)
     update_zed_extension_toml(new_version)
     update_zed_cargo_toml(new_version)
+    lock_updated = update_zed_cargo_lock(new_version)
     doc_updates = update_doc_version_references(current, new_version)
 
     print(f"Version bumped: {current} -> {new_version}")
@@ -212,6 +242,8 @@ def main() -> None:
     print("  Updated: extensions/vscode/package.json")
     print("  Updated: extensions/zed/extension.toml")
     print("  Updated: extensions/zed/Cargo.toml")
+    if lock_updated:
+        print("  Updated: extensions/zed/Cargo.lock")
     for doc_path in doc_updates:
         print(f"  Updated: {doc_path}")
 

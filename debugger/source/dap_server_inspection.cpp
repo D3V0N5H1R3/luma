@@ -98,7 +98,8 @@ HandlerResult DapInspectionHandler::handle_variables(const JsonValue& args) {
         apply_variable_formatting(vars, request.format_hex);
 
         for (const auto& var : vars) {
-            vars_array.push_back(serialise_variable(var));
+            vars_array.push_back(
+                serialise_variable(var, ctx_.feature_manager.client_supports_variable_type()));
         }
     }
 

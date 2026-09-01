@@ -27,7 +27,7 @@ This document defines when each Luma editor extension should use each error seve
 | Binary not on PATH (will attempt download)  | "luma_lsp not found on PATH. Enable auto_download."       |
 | Unsupported platform (no pre-built binary)  | "No pre-built binary for this platform. Build from source." |
 | Configuration fallback applied              | "luma.lsp.path is invalid — falling back to PATH lookup." |
-| Update available                            | "luma_lsp v0.10.0 available (current: v0.10.0)."           |
+| Update available                            | "luma_lsp v0.11.0 available (current: v0.11.0)."           |
 | Download failed (non-security)              | "Failed to download luma_lsp. Check your connection."     |
 | Unknown configuration key                   | "luma.setup(): unknown config key 'foo'."                 |
 
@@ -43,7 +43,7 @@ This document defines when each Luma editor extension should use each error seve
 | Available assets listed on asset mismatch | "Available: luma_lsp-linux-x86_64.tar.gz, …"           |
 | Checksum verification succeeded           | "Checksum verified for luma_lsp-macos-aarch64.tar.gz." |
 | Binary not found after extraction         | "Extraction succeeded but luma_lsp not found in /…"    |
-| Auto-update check skipped (already current) | "luma_lsp is up to date (v0.10.0)."                   |
+| Auto-update check skipped (already current) | "luma_lsp is up to date (v0.11.0)."                   |
 | Detailed error context for failures       | "SHA256SUMS does not contain an entry for …"           |
 
 ### Silent (No Output)
