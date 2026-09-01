@@ -1,0 +1,84 @@
+# ─────────────────────────────────────────────────────────────
+# Luma — ThreadSanitizer Workflow
+#
+# Best-effort data-race detection for the concurrent runtime
+# (channels, tasks, thread pool). Builds the whole test suite with
+# -fsanitize=thread and runs it under libtsan.
+#
+# This is DEACTIVATED from per-push/PR CI on purpose: on the current
+# hosted ubuntu-24.04 image, libtsan cannot map its shadow memory and
+# every luma_core-linked binary SIGSEGVs before main() with no TSan
+# diagnostic (reproduced across ASLR off, mmap_rnd_bits=28, -no-pie,
+# and PIE). That is a runner-image/libtsan limitation outside this
+# repo's control, not a data race — so running it on every push only
+# burned ~12 min and showed a permanent red job. It now runs weekly
+# and on demand (workflow_dispatch) instead. The gcc-13
+# AddressSanitizer/UBSan entry in ci.yml remains the gating sanitizer
+# check.
+#
+# The job stays correctly configured (PIE + supported ASLR entropy,
+# see google/sanitizers#1614), so it self-heals automatically once a
+# future runner image ships a working libtsan: the weekly run will
+# start passing, at which point drop continue-on-error to make it a
+# real signal (and consider adding it back to ci.yml as a gate).
+# ─────────────────────────────────────────────────────────────
+
+name: CI — ThreadSanitizer
+
+on:
+  schedule:
+    - cron: "17 5 * * 1" # Weekly Monday 05:17 UTC.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tsan:
+    name: ThreadSanitizer
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Kept NON-BLOCKING until a run confirms TSan actually starts on the
+    # image (see the file header). continue-on-error keeps the weekly run
+    # green while libtsan cannot initialize, so it neither fails the run
+    # nor sends failure notifications; inspect the job steps to see whether
+    # TSan initialized. Do NOT remove continue-on-error until a run
+    # confirms TSan starts.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Clang
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang
+
+      # ubuntu-24.04 raised the default ASLR entropy to vm.mmap_rnd_bits=32, which
+      # libtsan cannot map its shadow against; lower it to the supported value.
+      # No -no-pie here — TSan requires PIE (unlike the ASan matrix in ci.yml).
+      - name: Reduce ASLR entropy for ThreadSanitizer
+        run: sudo sysctl -w vm.mmap_rnd_bits=28
+
+      - name: Configure
+        run: |
+          cmake -B build-tsan \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_CXX_FLAGS="-fsanitize=thread -g -O1" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+
+      - name: Build
+        run: cmake --build build-tsan --parallel "$(nproc)"
+
+      - name: Test
+        run: ctest --test-dir build-tsan --output-on-failure
+        env:
+          TSAN_OPTIONS: "suppressions=${{ github.workspace }}/scripts/tsan_suppressions.txt"
