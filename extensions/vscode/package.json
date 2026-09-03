@@ -10,7 +10,7 @@
         "url": "https://github.com/d3v0n5h1r3/luma"
     },
     "engines": {
-        "vscode": "^1.125.0"
+        "vscode": "^1.134.0"
     },
     "capabilities": {
         "untrustedWorkspaces": {
