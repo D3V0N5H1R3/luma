@@ -10,7 +10,7 @@
         "url": "https://github.com/d3v0n5h1r3/luma"
     },
     "engines": {
-        "vscode": "^1.125.0"
+        "vscode": "^1.134.0"
     },
     "capabilities": {
         "untrustedWorkspaces": {
@@ -510,23 +510,23 @@
         "package": "npm run compile && vsce package"
     },
     "dependencies": {
-        "vscode-languageclient": "10.1.0"
+        "vscode-languageclient": "10.1.1"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@types/mocha": "^10.0.10",
-        "@types/node": "^26.2.0",
-        "@types/vscode": "^1.125.0",
+        "@types/node": "^26.4.0",
+        "@types/vscode": "^1.134.0",
         "@vscode/test-electron": "^3.1.0",
         "@vscode/vsce": "^3.9.2",
         "esbuild": "^0.28.2",
-        "eslint": "^10.8.1",
+        "eslint": "^10.9.1",
         "glob": "^13.0.6",
         "globals": "^17.11.0",
         "mocha": "^11.8.0",
         "prettier": "^3.9.6",
         "typescript": "^5.9.3",
-        "typescript-eslint": "^8.67.0"
+        "typescript-eslint": "^8.68.0"
     },
     "overrides": {
         "serialize-javascript": "^7.0.5",
