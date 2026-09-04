@@ -206,6 +206,16 @@ void AnalysisPipeline::analyze_single_uri(const std::string& uri) {
 
     AnalysisResult result = analysis_service_->analyze(uri, source, deadline);
 
+    // Cancellation means a newer edit arrived mid-analysis (common at startup as
+    // documents open in quick succession). The result is stale, so re-schedule
+    // the URI for a fresh pass and skip committing/publishing — publishing here
+    // would either wipe good diagnostics or surface a misleading warning.
+    if (result.metadata.cancelled) {
+        with_unique_lock(state_.state_mutex, [&] { state_.pending_uris.insert(uri); });
+        analysis_cv_.notify_one();
+        return;
+    }
+
     const auto elapsed = std::chrono::steady_clock::now() - start;
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed);
 
