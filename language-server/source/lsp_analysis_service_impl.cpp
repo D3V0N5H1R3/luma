@@ -300,6 +300,19 @@ AnalysisResult LspAnalysisService::analyze(const std::string& uri, const std::st
         return std::move(result);
     };
 
+    // Build a quiet, stale result when analysis was aborted because a newer
+    // edit (or a freshly opened document at startup) requested cancellation.
+    // Unlike a real timeout, cancellation is a routine internal event, so it
+    // must never inject a warning diagnostic or pop a "timed out" message —
+    // the caller re-schedules the URI and skips publishing this result.
+    auto cancelled_result = [&]() -> AnalysisResult {
+        result.metadata.cancelled = true;
+        callbacks_.log(std::format("Analysis cancelled for {}", uri));
+        build_token_index(result);
+        build_identifier_index(result);
+        return std::move(result);
+    };
+
     const auto line_starts = compute_line_starts(source);
 
     // Retain the analysed source and its line offsets so request/response
@@ -330,7 +343,10 @@ AnalysisResult LspAnalysisService::analyze(const std::string& uri, const std::st
         // Timeout exceptions thrown by check_cancellation_and_deadline — return
         // partial results with a warning rather than treating as an internal error.
         const std::string_view msg{e.what()};
-        if (msg.starts_with("Analysis timeout") || msg == "Analysis cancelled") {
+        if (msg == "Analysis cancelled") {
+            return cancelled_result();
+        }
+        if (msg.starts_with("Analysis timeout")) {
             return timeout_result();
         }
         callbacks_.log(std::format("Analysis pipeline error for {}: {}", uri, e.what()));

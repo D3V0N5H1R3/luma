@@ -11,6 +11,7 @@
 // unconditionally and deterministically here.
 
 #include <atomic>
+#include <chrono>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -725,6 +726,60 @@ void test_rename_to_distinct_existing_name_is_a_conflict() {
                                                 /*rename_ns=*/"", cache));
 }
 
+// ─── Cancellation vs timeout: distinct handling ────────────────────
+
+void test_cancellation_is_quiet_and_flagged() {
+    // When a newer edit requests cancellation mid-analysis (routine at startup
+    // as documents open in quick succession), the aborted result must be a
+    // silent, stale result — flagged for the caller to discard — never a
+    // user-facing "timed out" popup or warning diagnostic.
+    LspConfig config;
+    std::atomic<bool> cancel_flag{true}; // request cancellation up front
+    bool notified = false;
+    LspAnalysisService service(
+        config, cancel_flag,
+        AnalysisCallbacks{.log = [](const std::string&) {},
+                          .notify = [&](std::string_view method, const JsonValue&) {
+                              if (method == "window/showMessage") {
+                                  notified = true;
+                              }
+                          }});
+
+    const auto result =
+        service.analyze("file:///test/main.luma", "@main\nfunction void main() {\n}\n");
+
+    ASSERT_TRUE(result.metadata.cancelled);
+    ASSERT_FALSE(notified);
+    ASSERT_FALSE(any_message_contains(result, "timed out"));
+}
+
+void test_timeout_warns_and_is_not_flagged_cancelled() {
+    // A genuine deadline overrun is a real, user-relevant condition: it must
+    // surface the warning popup and diagnostic, and must not be mistaken for a
+    // routine cancellation.
+    LspConfig config;
+    std::atomic<bool> cancel_flag{false};
+    bool notified = false;
+    LspAnalysisService service(
+        config, cancel_flag,
+        AnalysisCallbacks{.log = [](const std::string&) {},
+                          .notify = [&](std::string_view method, const JsonValue&) {
+                              if (method == "window/showMessage") {
+                                  notified = true;
+                              }
+                          }});
+
+    // A deadline already in the past trips the timeout branch at the first
+    // phase check.
+    const auto past = std::chrono::steady_clock::now() - std::chrono::seconds(1);
+    const auto result =
+        service.analyze("file:///test/main.luma", "@main\nfunction void main() {\n}\n", past);
+
+    ASSERT_FALSE(result.metadata.cancelled);
+    ASSERT_TRUE(notified);
+    ASSERT_TRUE(any_message_contains(result, "timed out"));
+}
+
 } // namespace
 
 int main() { // NOLINT(bugprone-exception-escape)
@@ -752,6 +807,8 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_multiline_string_token_extents_span_lines);
     RUN(test_rename_to_same_name_is_not_a_self_conflict);
     RUN(test_rename_to_distinct_existing_name_is_a_conflict);
+    RUN(test_cancellation_is_quiet_and_flagged);
+    RUN(test_timeout_warns_and_is_not_flagged_cancelled);
 
     return SUMMARY();
 }

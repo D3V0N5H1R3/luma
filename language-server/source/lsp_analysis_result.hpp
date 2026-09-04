@@ -181,6 +181,11 @@ struct AnalysisMetadata {
     // Byte offset of the start of each line in `source_text` (0-based line
     // index). Precomputed during analysis for O(1) line slicing in the encoder.
     std::vector<std::size_t> line_starts;
+    // Set when analysis aborted because a newer edit requested cancellation
+    // (as opposed to exceeding the deadline). A cancelled result is stale by
+    // definition — the caller re-schedules the URI and skips publishing so no
+    // misleading "timed out" warning surfaces to the user.
+    bool cancelled{false};
 };
 
 // ─── Combined result (backward-compatible) ───
