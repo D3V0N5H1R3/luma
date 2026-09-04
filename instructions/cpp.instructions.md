@@ -155,7 +155,6 @@ A third-party library may be added when **all** of the following criteria are me
 | -------- | ------------------------------------------ | -------------------------------------------- |
 | miniz    | Deflate/inflate/gzip compression           | Compression algorithms beyond stdlib scope   |
 | Mbed TLS | TLS/HTTPS and cryptographic hashing        | Cryptographic primitives beyond stdlib scope |
-| webview  | Native webview embedding for `GraphicalUi` | Native GUI integration beyond stdlib scope   |
 
 ### 7.2 Standard Library Usage
 

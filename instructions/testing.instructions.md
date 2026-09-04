@@ -363,7 +363,6 @@ Fuzz tests live in `fuzz/` and use LLVM's libFuzzer to find crashes, hangs, and 
 | `fuzz_protocol`              | Content-Length message framing               |
 | `fuzz_compression`           | deflate/gzip/RLE decode round-trip oracle    |
 | `fuzz_encoder`               | Base64/URL decode round-trip oracle          |
-| `fuzz_graphicalui_css`       | Stylesheet sanitiser monotonicity oracle     |
 | `fuzz_keyvaluestore`         | `.kv` parse and glob round-trip oracle       |
 | `fuzz_hash`                  | CRC32 and hex round-trip / known-answer      |
 | `fuzz_path`                  | Sandbox path validation agreement oracle     |

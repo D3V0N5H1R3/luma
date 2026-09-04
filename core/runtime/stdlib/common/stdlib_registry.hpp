@@ -20,7 +20,6 @@
 #include "runtime/stdlib/io/color_module.hpp"
 #include "runtime/stdlib/io/console_module.hpp"
 #include "runtime/stdlib/io/filesystem_module.hpp"
-#include "runtime/stdlib/io/graphicalui_module.hpp"
 #include "runtime/stdlib/io/http_module.hpp"
 #include "runtime/stdlib/io/socket_module.hpp"
 #include "runtime/stdlib/io/terminal_module.hpp"
@@ -112,10 +111,6 @@ inline constexpr ModuleEntry kModules[] = {
     {"Decimal", register_decimal_ns, nullptr, false, false},
     {"Dictionary", register_dictionary_ns, nullptr, false, false},
     {"Encoder", register_encoder_ns, nullptr, false, false},
-    // Registered under the "GraphicalUi" name: this is the low-level web-view engine
-    // that the built-in Solaris prelude (gui_prelude) reconciles onto.  Uses
-    // define_native directly instead of ModuleBuilder — see graphicalui_module.hpp.
-    {"GraphicalUi", nullptr, register_graphicalui_ns, false, true},
     {"Json", register_json_ns, nullptr, false, false},
     {"LinearAlgebra", register_linearalgebra_ns, nullptr, false, false},
     {"Math", register_math_ns, nullptr, false, false},

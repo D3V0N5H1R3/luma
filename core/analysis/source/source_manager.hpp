@@ -112,13 +112,12 @@ public:
     // touches the filesystem — see the note on is_loaded().
     [[nodiscard]] std::optional<FileId> find_file_id(std::string_view path) const;
 
-    // Register in-memory text as a virtual source file under a synthetic `name`
-    // (e.g. "<gui-prelude>"), assigning it a fresh file_id without touching the
-    // filesystem or canonicalising the name.  Used for compiler-injected code
-    // such as the built-in Solaris prelude so that its source locations
-    // attribute to a stable virtual file and its diagnostics still render with
-    // real source context.  Idempotent by `name`: a repeated call returns the
-    // previously registered entry.
+    // Register in-memory text as a virtual source file under a synthetic `name`,
+    // assigning it a fresh file_id without touching the filesystem or
+    // canonicalising the name.  Used for compiler-injected code so that its
+    // source locations attribute to a stable virtual file and its diagnostics
+    // still render with real source context.  Idempotent by `name`: a repeated
+    // call returns the previously registered entry.
     const SourceFile& load_virtual(std::string_view name, std::string text);
 
     // Return true when any loaded source file's text contains `needle`.  Used

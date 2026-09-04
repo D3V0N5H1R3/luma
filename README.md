@@ -11,7 +11,7 @@ Luma is currently in **alpha**. The language, interpreter, standard library, and
 
 | Component         | Status                    | Notes                                                                                                                                                     |
 | ----------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Language & Stdlib | ✅ Feature-Complete | 39 standard library modules including GraphicalUi, plus the Solaris beginner-first GUI surface built on it — with commands, subscriptions, components, routing, and accessibility. See [User Manual][manual] and [Standard Library Reference][stdlib]. |
+| Language & Stdlib | ✅ Feature-Complete | 38 standard library modules covering text, collections, math, files, networking, concurrency, terminal I/O, and more. See [User Manual][manual] and [Standard Library Reference][stdlib]. |
 | Interpreter       | ✅ Feature-Complete | Bytecode compiler and stack-based VM. See [Architecture][arch] for details.                                                                               |
 | REPL              | ✅ Feature-Complete | Includes history, multi-line input, and file loading.                                                                                                     |
 | Debugger (DAP)    | ✅ Feature-Complete | Supports breakpoints, stepping, and variable inspection.                                                                                                  |
@@ -104,14 +104,8 @@ build from these tools alone — every third-party library is vendored.
 > Debian 12 ("bookworm"), install GCC 13 or newer and select it when configuring
 > (`-DCMAKE_CXX_COMPILER=g++-13`).
 
-Two optional extras pull in more tooling:
+One optional extra pulls in more tooling:
 
-- **`GraphicalUi` on Linux** needs the WebKitGTK development headers and
-  `pkg-config` — for example `sudo apt-get install libwebkit2gtk-4.1-dev pkg-config`
-  on Debian/Ubuntu. Without them the build still succeeds, but the `GraphicalUi`
-  module is disabled (compiled as a stub); pass `-DLUMA_FEATURE_WEBVIEW=OFF` to
-  disable it deliberately. Windows (WebView2) and macOS (WebKit) need no extra
-  package.
 - The Python helper scripts under `scripts/` (test runners, coverage, and the
   Git hook installer) need **Python 3.10 or later**.
 
@@ -191,7 +185,7 @@ On Windows, replace `build/luma` with `build\Release\luma.exe` in the commands a
 | ------------------------------------ | --------------------------------------------------------- |
 | [Installation Guide](documents/Luma_Installation_Guide.md) | Pre-built binary setup for Windows, macOS, and Linux.  |
 | [User Manual][manual]                | Complete language reference and tutorial.                 |
-| [Standard Library Reference][stdlib] | All 39 standard library modules and built-in functions.   |
+| [Standard Library Reference][stdlib] | All 38 standard library modules and built-in functions.   |
 | [Software Architecture][arch]        | Interpreter pipeline and module design.                   |
 | [Performance Guide](documents/Luma_Performance_Guide.md) | Performance characteristics and optimisation advice.  |
 | [Error Handling](documents/Luma_Error_Handling.md)       | Error categories and `result` / `optional` conventions. |
@@ -214,7 +208,7 @@ luma/
 ├── documents/         # Architecture, manual, debugger, and design documents
 ├── examples/          # Example Luma programs and sample applications
 ├── extensions/        # Editor integrations and grammar fixtures
-├── external/          # Vendored third-party libraries (mbedtls, miniz, webview, etc.)
+├── external/          # Vendored third-party libraries (mbedtls, miniz, etc.)
 ├── fuzz/              # Optional fuzz targets and corpora
 ├── instructions/      # Coding and tooling guidelines for contributors
 ├── language-server/   # Language Server Protocol implementation and tests
@@ -229,7 +223,7 @@ Additional indexes:
 - [documents/DIRECTORY.md](documents/DIRECTORY.md) indexes the architecture, reference, and guide documents.
 - [examples/DIRECTORY.md](examples/DIRECTORY.md) explains the example categories.
 - [extensions/tests/DIRECTORY.md](extensions/tests/DIRECTORY.md) documents the shared grammar fixture corpus.
-- [external/DIRECTORY.md](external/DIRECTORY.md) inventories the vendored third-party libraries and GraphicalUi web assets.
+- [external/DIRECTORY.md](external/DIRECTORY.md) inventories the vendored third-party libraries.
 - [fuzz/DIRECTORY.md](fuzz/DIRECTORY.md) covers the LibFuzzer fuzz targets and corpus management.
 - [tests/DIRECTORY.md](tests/DIRECTORY.md) explains the C++ and Luma test suite layout.
 

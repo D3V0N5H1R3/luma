@@ -109,35 +109,6 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 9 — Interpreter Implementation Policy | 469–527 |
 | See Also | 528–538 |
 
-## Luma_GraphicalUi_Guide.md
-
-| Section | Lines |
-| ------- | ----- |
-| Table of Contents | 13–41 |
-| 1 — Overview | 42–68 |
-| 2 — Architecture — The Elm Pattern | 69–130 |
-| 3 — Getting Started | 131–245 |
-| 4 — Widgets | 246–419 |
-| 5 — Layout Containers | 420–446 |
-| 6 — Nearby / Overlay Elements | 447–468 |
-| 7 — Sizing, Alignment, and Spacing | 469–517 |
-| 8 — Styling and Theming | 518–919 |
-| 9 — Charts | 920–966 |
-| 10 — Commands (Side Effects) | 967–1091 |
-| 11 — Subscriptions | 1092–1158 |
-| 12 — Components and Routing | 1159–1210 |
-| 13 — Animation | 1211–1273 |
-| 14 — Accessibility | 1274–1386 |
-| 15 — Virtual Lists | 1387–1415 |
-| 16 — Layout Debugging | 1416–1432 |
-| 17 — Responsive Design | 1433–1481 |
-| 18 — Layout & Styling Best Practices | 1482–1539 |
-| 19 — Performance Tips | 1540–1559 |
-| 20 — Examples | 1560–1586 |
-| 21 — Testing Without a Window | 1587–1708 |
-| 22 — Icon Reference | 1709–1759 |
-| See Also | 1760–1766 |
-
 ## Luma_Initial_Concept.md
 
 | Section | Lines |
@@ -267,64 +238,6 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 19 — Design Decisions and Rationale | 2330–2421 |
 | See Also | 2422–2431 |
 
-## Luma_Solaris_Architecture.md
-
-| Section | Lines |
-| ------- | ----- |
-| Table of Contents | 26–42 |
-| 1. Design Philosophy | 43–65 |
-| 2. Architecture & Implementation | 66–131 |
-| 3. The MVU Loop, Messages & Effects | 132–318 |
-| 4. UI Components | 319–401 |
-| 5. Layout Mechanisms | 402–479 |
-| 6. Styling Mechanisms | 480–550 |
-| 7. Default Layouts & Stylings (Design Tokens) | 551–645 |
-| 8. Security, Safety & Accessibility | 646–717 |
-| 9. Complete Examples | 718–809 |
-| 10. Limitations & Non-Goals | 810–835 |
-| 11. Implementation Roadmap | 836–856 |
-| 12. Inspiration Summary | 857–883 |
-| See Also | 884–893 |
-
-## Luma_Solaris_Guide.md
-
-| Section | Lines |
-| ------- | ----- |
-| Table of Contents | 18–33 |
-| 1 — Quick Start | 34–79 |
-| 2 — The Three Concepts | 80–149 |
-| 3 — Components | 150–348 |
-| 4 — Modifiers | 349–423 |
-| 5 — Design Tokens | 424–477 |
-| 6 — Effects, Subscriptions, and Startup | 478–574 |
-| 7 — Theming, Windows, and Persistence | 575–659 |
-| 8 — Running and Testing | 660–733 |
-| 9 — How Solaris Relates to GraphicalUi | 734–754 |
-| 10 — Limitations | 755–780 |
-| 11 — See Also | 781–787 |
-
-## Luma_Solaris_Tutorial.md
-
-| Section | Lines |
-| ------- | ----- |
-| Table of Contents | 7–26 |
-| 1 — What a GUI Is, and What Solaris Is | 27–48 |
-| 2 — How a Solaris App Thinks | 49–89 |
-| 3 — Your First Window | 90–145 |
-| 4 — Making It Interactive | 146–236 |
-| 5 — A Field Guide to Controls | 237–358 |
-| 6 — Laying Out Your Interface | 359–442 |
-| 7 — Styling with Design Tokens | 443–515 |
-| 8 — Showing Lists of Data | 516–598 |
-| 9 — Navigation and Overlays | 599–662 |
-| 10 — Effects and Subscriptions | 663–765 |
-| 11 — Configuring and Theming the App | 766–823 |
-| 12 — Testing Your App | 824–931 |
-| 13 — Project — A To-Do App | 932–1136 |
-| 14 — Where to Go Next | 1137–1152 |
-| 15 — Glossary | 1153–1180 |
-| See Also | 1181–1189 |
-
 ## Luma_Standard_Library_Reference.md
 
 | Section | Lines |
@@ -345,32 +258,31 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 13 — Dictionary | 673–715 |
 | 14 — Encoder | 716–746 |
 | 15 — FileSystem | 747–834 |
-| 16 — Solaris and GraphicalUi | 835–1643 |
-| 17 — Hash | 1644–1685 |
-| 18 — Http | 1686–1793 |
-| 19 — Json | 1794–1890 |
-| 20 — KeyValueStore | 1891–1918 |
-| 21 — LinearAlgebra | 1919–1977 |
-| 22 — Log | 1978–2003 |
-| 23 — Math | 2004–2139 |
-| 24 — Optional | 2140–2196 |
-| 25 — Order | 2197–2260 |
-| 26 — Process | 2261–2359 |
-| 27 — Queue | 2360–2386 |
-| 28 — Random | 2387–2442 |
-| 29 — Reference | 2443–2499 |
-| 30 — RegularExpression | 2500–2602 |
-| 31 — Resource | 2603–2655 |
-| 32 — Result | 2656–2688 |
-| 33 — Set | 2689–2723 |
-| 34 — Socket | 2724–2791 |
-| 35 — Stack | 2792–2819 |
-| 36 — Statistics | 2820–2837 |
-| See Also | 2838–2849 |
-| 37 — String | 2850–2955 |
-| 38 — Task | 2956–3025 |
-| 39 — Terminal | 3026–3242 |
-| 40 — Xml | 3243–3321 |
+| 16 — Hash | 1644–1685 |
+| 17 — Http | 1686–1793 |
+| 18 — Json | 1794–1890 |
+| 19 — KeyValueStore | 1891–1918 |
+| 20 — LinearAlgebra | 1919–1977 |
+| 21 — Log | 1978–2003 |
+| 22 — Math | 2004–2139 |
+| 23 — Optional | 2140–2196 |
+| 24 — Order | 2197–2260 |
+| 25 — Process | 2261–2359 |
+| 26 — Queue | 2360–2386 |
+| 27 — Random | 2387–2442 |
+| 28 — Reference | 2443–2499 |
+| 29 — RegularExpression | 2500–2602 |
+| 30 — Resource | 2603–2655 |
+| 31 — Result | 2656–2688 |
+| 32 — Set | 2689–2723 |
+| 33 — Socket | 2724–2791 |
+| 34 — Stack | 2792–2819 |
+| 35 — Statistics | 2820–2837 |
+| 36 — String | 2850–2955 |
+| 37 — Task | 2956–3025 |
+| 38 — Terminal | 3026–3242 |
+| 39 — Xml | 3243–3321 |
+| See Also | 3322–3330 |
 
 ## Luma_Syntax_Highlighting.md
 

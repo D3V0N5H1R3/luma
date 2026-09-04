@@ -114,8 +114,6 @@ jobs:
             time: 120
           - target: fuzz_encoder
             time: 120
-          - target: fuzz_graphicalui_css
-            time: 120
           - target: fuzz_keyvaluestore
             time: 120
           - target: fuzz_hash

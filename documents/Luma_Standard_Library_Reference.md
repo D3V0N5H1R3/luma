@@ -23,31 +23,30 @@ This reference was previously part of the [User Manual](Luma_User_Manual.md). Fo
 13. [Dictionary](#13--dictionary)
 14. [Encoder](#14--encoder)
 15. [FileSystem](#15--filesystem)
-16. [Solaris and GraphicalUi](#16--solaris-and-graphicalui)
-17. [Hash](#17--hash)
-18. [Http](#18--http)
-19. [Json](#19--json)
-20. [KeyValueStore](#20--keyvaluestore)
-21. [LinearAlgebra](#21--linearalgebra)
-22. [Log](#22--log)
-23. [Math](#23--math)
-24. [Optional](#24--optional)
-25. [Order](#25--order)
-26. [Process](#26--process)
-27. [Queue](#27--queue)
-28. [Random](#28--random)
-29. [Reference](#29--reference)
-30. [RegularExpression](#30--regularexpression)
-31. [Resource](#31--resource)
-32. [Result](#32--result)
-33. [Set](#33--set)
-34. [Socket](#34--socket)
-35. [Stack](#35--stack)
-36. [Statistics](#36--statistics)
-37. [String](#37--string)
-38. [Task](#38--task)
-39. [Terminal](#39--terminal)
-40. [Xml](#40--xml)
+16. [Hash](#16--hash)
+17. [Http](#17--http)
+18. [Json](#18--json)
+19. [KeyValueStore](#19--keyvaluestore)
+20. [LinearAlgebra](#20--linearalgebra)
+21. [Log](#21--log)
+22. [Math](#22--math)
+23. [Optional](#23--optional)
+24. [Order](#24--order)
+25. [Process](#25--process)
+26. [Queue](#26--queue)
+27. [Random](#27--random)
+28. [Reference](#28--reference)
+29. [RegularExpression](#29--regularexpression)
+30. [Resource](#30--resource)
+31. [Result](#31--result)
+32. [Set](#32--set)
+33. [Socket](#33--socket)
+34. [Stack](#34--stack)
+35. [Statistics](#35--statistics)
+36. [String](#36--string)
+37. [Task](#37--task)
+38. [Terminal](#38--terminal)
+39. [Xml](#39--xml)
 
 - [See Also](#see-also)
 
@@ -238,9 +237,9 @@ These are runtime errors catchable with `try`/`catch`. Use `Channel.is_closed(ch
 
 ## 6 — Color
 
-A typed RGBA colour value with validating constructors and derivations. Every value serialises to a CSS string the GraphicalUi web-view already accepts, so `Solaris` themes can be _computed_ rather than hand-written. Like `Decimal`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
+A typed RGBA colour value with validating constructors and derivations. Every value can serialise to a CSS-compatible string, making `Color` useful anywhere validated colour data is needed. Like `Decimal`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
 
-> **Color vs Terminal.Color** — `Color` is a general RGBA value for GUI/CSS work. `Terminal.Color` is a fixed choice of 16 named ANSI terminal colours, used only by the `Terminal` module.
+> **Color vs Terminal.Color** — `Color` is a general RGBA value with CSS-compatible string formatting. `Terminal.Color` is a fixed choice of 16 named ANSI terminal colours, used only by the `Terminal` module.
 
 | Function                        | Parameter Types                             | Return Type          | Description                                                              |
 | ------------------------------- | ------------------------------------------- | -------------------- | ------------------------------------------------------------------------ |
@@ -277,11 +276,11 @@ A typed RGBA colour value with validating constructors and derivations. Every va
 | `Color.triadic(c)`              | `(Color.Color)`                             | `array<Color.Color>` | `[base, hue +120°, hue +240°]` — a triadic colour scheme                |
 | `Color.with_alpha(c, alpha)`    | `(Color.Color, number)`                     | `Color.Color`        | Set alpha to `alpha` (clamped to [0, 1])                                 |
 
-`rgb` / `rgba` / `from_hex` are validating constructors returning `result<Color.Color>`; the derivations (`lighten` / `darken` / `mix`) take already-validated colours and clamp their `amount` / `t` argument, so they return a `Color.Color` directly. `contrast_ratio` computes the WCAG 2.x relative-luminance ratio (alpha ignored) — black on white is 21:1, a colour against itself is 1:1 — feeding accessibility checks. The `to_css` output drops straight into the theme and per-widget style dictionaries the webview already consumes.
+`rgb` / `rgba` / `from_hex` are validating constructors returning `result<Color.Color>`; the derivations (`lighten` / `darken` / `mix`) take already-validated colours and clamp their `amount` / `t` argument, so they return a `Color.Color` directly. `contrast_ratio` computes the WCAG 2.x relative-luminance ratio (alpha ignored) — black on white is 21:1, a colour against itself is 1:1 — for accessibility checks. The `to_css` output is a CSS-compatible colour string.
 
 **Analysis, accessibility, and scheme helpers.** `Color.luminance` exposes the same WCAG relative luminance `contrast_ratio` uses internally, and `Color.brightness` gives the simpler perceived-brightness weighting (`0.299R + 0.587G + 0.114B`) — both normalised to [0, 1]. `Color.is_light` / `Color.is_dark` threshold the relative luminance at 0.5, and `Color.readable_text_color(background)` returns black or white — whichever has the higher contrast against `background` — the one-call way to keep label text legible on a computed background. `Color.saturate` / `Color.desaturate` nudge HSL saturation by an amount (clamped to [0, 1]) and `Color.grayscale` drops it to zero while preserving lightness; all three keep the original alpha. `Color.with_alpha` sets the alpha channel outright while `Color.fade` reduces it by an amount (both clamped to [0, 1]), and `Color.invert` flips each RGB channel (leaving alpha untouched). For palettes, `Color.complement` returns the opposite hue, while `Color.complementary` (`[base, +180°]`), `Color.triadic` (`[base, +120°, +240°]`), and `Color.analogous` (`[base, −30°, +30°]`) return ready-made colour schemes as arrays — the hue maths that is awkward in RGB, done for you.
 
-**`Color.Hsl`** is the hue/saturation/lightness sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `lightness: number` (0–1 ratios). `Color.to_hsl` / `Color.from_hsl` convert between the two spaces, and `Color.rotate_hue(c, degrees)` shifts the hue (wrapping at 360°) while preserving saturation, lightness, and the original alpha — the natural way to build a rainbow, pastel, or complementary colour that is awkward in RGB. HSL drops alpha (so `to_hsl` discards it and `from_hsl` produces an opaque colour); everything still serialises through the same RGBA `to_css` path the webview consumes.
+**`Color.Hsl`** is the hue/saturation/lightness sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `lightness: number` (0–1 ratios). `Color.to_hsl` / `Color.from_hsl` convert between the two spaces, and `Color.rotate_hue(c, degrees)` shifts the hue (wrapping at 360°) while preserving saturation, lightness, and the original alpha — the natural way to build a rainbow, pastel, or complementary colour that is awkward in RGB. HSL drops alpha (so `to_hsl` discards it and `from_hsl` produces an opaque colour); values still serialise through the same RGBA `to_css` path.
 
 **`Color.Hsv`** is the hue/saturation/**value** (HSB) sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `value: number` (0–1 ratios). It is the model most colour pickers and palette generators use, so `Color.to_hsv` / `Color.from_hsv` are the natural pair for building tints and shades by "value". Like HSL it drops alpha (`from_hsv` produces an opaque colour), and both spaces serialise through the same RGBA `to_css` path.
 
@@ -832,816 +831,8 @@ failure(_other) { print("could not read config") }
 
 > **Security note** — `append_file`, `read_bytes`, `read_file`, `read_lines`, `write_bytes`, `write_file`, and `write_lines` validate that the resolved path stays within the current working directory, which blocks cross-directory symlink traversal (e.g. a symlink pointing to `/etc/passwd` is rejected). However, a symbolic link that points to another file **within** the working directory is followed transparently. If your program accepts a user-supplied file path, validate that the resolved path refers to the expected file before reading or writing.
 
-## 16 — Solaris and GraphicalUi
 
-Luma's GUI story is two layers under one section:
-
-- **`Solaris`** — the beginner-first authoring surface (§14.1). A built-in
-  module (no `include`) following the Model-View-Update pattern: typed `record`
-  models, `choice` messages, an immutable `View` tree, fluent `|>` modifiers, and
-  semantic design tokens. Full guide: [Solaris Guide](Luma_Solaris_Guide.md).
-- **`GraphicalUi`** — the low-level webview engine beneath the surface (§14.2):
-  widgets, layouts, charts, theming, commands, subscriptions, and the headless
-  test harness. Full guide: [GraphicalUi Guide](Luma_GraphicalUi_Guide.md).
-
-**Platform support (both layers).** Requires platform webview support: WebView2 on Windows, WebKit on macOS, WebKitGTK on Linux. When the interpreter is built without webview support (`LUMA_HAS_WEBVIEW` not defined), the GUI functions throw a descriptive error at runtime.
-
-### 14.1 — Solaris (beginner surface)
-
-The surface ships built in: the moment a program refers to `Solaris`, its
-design tokens, the `View` record, and the `Solaris` functions are available.
-The `Model` is a `record`, each `Message` is a `choice` type, and `view` is a
-pure `(Model) -> View`. `update` is a pure `(Model, Msg) -> Model`, or
-`(Model, Msg) -> any` when a branch returns a `(model, command)` pair (see
-_Effects_ below).
-
-**Global design tokens** (top-level `choice` types — written unqualified, e.g. `Spacing.L`):
-
-| Token | Variants |
-|---|---|
-| `Emphasis` | `Normal`, `Primary`, `Secondary`, `Success`, `Warning`, `Danger`, `Muted` |
-| `TextScale` | `Caption`, `Body`, `Large`, `Heading`, `Title` |
-| `Weight` | `Regular`, `Bold` |
-| `Spacing` | `None`, `XS`, `S`, `M`, `L`, `XL` |
-| `Align` | `Start`, `Center`, `End`, `Stretch` |
-| `Justify` | `Start`, `Center`, `End`, `SpaceBetween`, `SpaceAround` |
-| `Length` | `Shrink`, `Fill`, `Fixed(number value)`, `FillPortion(integer weight)` |
-| `Radius` | `None`, `Small`, `Medium`, `Large`, `Full` |
-| `Scheme` | `Light`, `Dark`, `Auto` |
-| `Variant` | `Solid`, `Outline`, `Ghost`, `Link` (button fill style) |
-| `Color` | `Primary`, `Success`, `Warning`, `Danger`, `Muted`, `Custom(string hex)` |
-| `Icon` | common Lucide glyphs (`Home`, `Search`, `Settings`, …), `Custom(string name)` |
-| `Validation` | `Valid`, `Invalid(string message)`, `Pending` |
-| `Font` | `System`, `Sans`, `Serif`, `Mono`, `Custom(string family)` |
-| `TextAlign` | `Left`, `Center`, `Right`, `Justify` |
-| `TextDecoration` | `None`, `Underline`, `Strikethrough` |
-| `ImageFit` | `Fill`, `Contain`, `Cover`, `ScaleDown` |
-| `InputType` | `Text`, `Password`, `Email`, `Number`, `Tel`, `Url`, `Search` |
-| `Motion` | `None`, `Fade`, `SlideUp`, `SlideDown`, `Grow` |
-| `Orientation` | `Horizontal`, `Vertical` |
-| `Placement` | `Top`, `Bottom`, `TopStart`, `TopEnd`, `BottomStart`, `BottomEnd`, `Center` |
-
-Typed **records** for structured data: `DataPoint { string label, number value }`,
-`Series { string name, array<DataPoint> points, Color color }`,
-`Option { string label, string value }`,
-`NavItem { Icon icon, string label, any message, boolean active }`,
-`MenuItem { Icon icon, string label, any message, boolean disabled }`, and
-`Insets { Spacing top, right, bottom, left }`.
-
-`View` is a global `record` describing one piece of UI; `view` returns a tree of them.
-
-**Constructors** (each returns a `View`; containers take `array<View>`):
-
-| Function | Signature | Purpose |
-|---|---|---|
-| `Solaris.text` | `(string content) -> View` | A run of body text |
-| `Solaris.heading` | `(string content) -> View` | A prominent section title |
-| `Solaris.badge` | `(string text) -> View` | A small status pill |
-| `Solaris.icon` | `(string name) -> View` | A named glyph (size with `icon_size`) |
-| `Solaris.icon_of` | `(Icon glyph) -> View` | A glyph from the typed `Icon` palette |
-| `Solaris.icon_name` | `(Icon glyph) -> string` | Resolve an `Icon` to its Lucide name |
-| `Solaris.spinner` | `(string label) -> View` | An indeterminate busy indicator |
-| `Solaris.divider` | `() -> View` | A rule (horizontal, or vertical via `orientation`) |
-| `Solaris.button` | `(string label) -> View` | A clickable action (pair with `on_click`) |
-| `Solaris.text_field` | `(string value) -> View` | Single-line input (pair with `on_change`) |
-| `Solaris.text_area` | `(string value) -> View` | Multi-line input (pair with `on_change`) |
-| `Solaris.checkbox` | `(string label) -> View` | A boolean toggle (pair with `checked`/`on_toggle`) |
-| `Solaris.switch` | `(string label, boolean state) -> View` | An on/off switch (pair with `on_toggle`) |
-| `Solaris.radio` | `(array<string> options, string chosen) -> View` | Single choice (pair with `on_select`) |
-| `Solaris.radio_of` | `(array<Option> options, string chosen) -> View` | Single choice with distinct label/value |
-| `Solaris.dropdown` | `(array<string> options, string chosen) -> View` | Compact single choice (pair with `on_select`) |
-| `Solaris.dropdown_of` | `(array<Option> options, string chosen) -> View` | Compact single choice with distinct label/value |
-| `Solaris.slider` | `(number value, number min, number max) -> View` | Numeric range (pair with `on_slide`) |
-| `Solaris.date_picker` | `(string value) -> View` | Date input (pair with `on_change`) |
-| `Solaris.spacer` | `() -> View` | Flexible empty space |
-| `Solaris.column` | `(array<View> children) -> View` | Stacks children vertically |
-| `Solaris.row` | `(array<View> children) -> View` | Arranges children horizontally |
-| `Solaris.grid` | `(integer columns, array<View> children) -> View` | Fixed-column grid |
-| `Solaris.z_stack` | `(array<View> children) -> View` | Layers children on top of each other |
-| `Solaris.scroll` | `(array<View> children) -> View` | A vertically scrollable region |
-| `Solaris.card` | `(array<View> children) -> View` | A padded, elevated group |
-| `Solaris.list` | `(array<View> items) -> View` | A vertical list |
-| `Solaris.panel` | `(string title, array<View> children) -> View` | A titled, bordered group |
-| `Solaris.table` | `(array<string> headers, array<array<string>> rows) -> View` | A read-only data grid |
-| `Solaris.progress` | `(number value, number max) -> View` | A determinate progress bar |
-| `Solaris.image` | `(string source) -> View` | A picture from a path or URL |
-| `Solaris.line_chart` | `(array<string> labels, array<number> values) -> View` | A line chart plotting `values` over `labels` |
-| `Solaris.bar_chart` | `(array<string> labels, array<number> values) -> View` | A vertical bar chart, one bar per label |
-| `Solaris.pie_chart` | `(array<string> labels, array<number> values) -> View` | A pie chart, one slice per label |
-| `Solaris.line_chart_series` | `(array<Series> series) -> View` | A multi-series line chart |
-| `Solaris.bar_chart_series` | `(array<Series> series) -> View` | A multi-series bar chart |
-| `Solaris.tabs` | `(array<string> labels, integer active, array<View> panels) -> View` | Panel switcher (pair with `on_tab`) |
-| `Solaris.menu` | `(string label, array<string> items) -> View` | In-page dropdown menu (pair with `on_select`) |
-| `Solaris.menu_of` | `(string label, array<MenuItem> items) -> View` | Typed dropdown menu: each item carries an optional icon, routes its own message, and may be disabled |
-| `Solaris.dialog` | `(string title, boolean open, array<View> children) -> View` | A modal (pair with `on_close`) |
-| `Solaris.toast` | `(string message) -> View` | A transient notification banner |
-| `Solaris.sidebar` | `(array<View> children) -> View` | A fixed-width navigation rail |
-| `Solaris.nav` | `(array<NavItem> items) -> View` | A typed navigation rail (icon + label per item, active entry marked `aria-current`) |
-| `Solaris.app_shell` | `(View side, View content) -> View` | Full-height sidebar-plus-content layout |
-
-**Modifiers** (take the piped `View` first, return a new `View`; chain with `|>`):
-
-| Function | Effect |
-|---|---|
-| `on_click(View, any msg)` | Send `message` when a button is clicked |
-| `on_change(View, function(string) -> any)` | Handle each edit of a text field/area or date |
-| `on_toggle(View, function(boolean) -> any)` | Handle a checkbox/switch toggle |
-| `on_select(View, function(string) -> any)` | Handle a radio/dropdown/menu choice |
-| `on_slide(View, function(number) -> any)` | Handle a slider change |
-| `on_tab(View, function(integer) -> any)` | Handle a tab switch |
-| `on_close(View, any msg)` | Send `message` when a dialog is dismissed |
-| `level(View, integer)` | Heading level (1–6) |
-| `size(View, TextScale)` · `weight(View, Weight)` · `bold(View)` | Typography |
-| `primary` · `secondary` · `danger` · `muted` · `emphasis(View, Emphasis)` | Semantic emphasis |
-| `variant(View, Variant)` | Button fill style (`Solid`/`Outline`/`Ghost`/`Link`) — orthogonal to `emphasis` |
-| `gap(View, Spacing)` · `padding(View, Spacing)` | Container spacing |
-| `padding_each(View, Insets)` | Per-side container padding |
-| `width(View, Length)` · `height(View, Length)` | Sizing |
-| `align(View, Align)` · `justify(View, Justify)` · `center(View)` | Layout alignment |
-| `text_align(View, TextAlign)` | Text alignment inside a text/heading block |
-| `decoration(View, TextDecoration)` | Underline/strikethrough on running text |
-| `rounded(View, Radius)` | Corner rounding |
-| `fit(View, ImageFit)` | Image object-fit |
-| `input_type(View, InputType)` | Text-field input kind (HTML input `type`) |
-| `motion(View, Motion)` | Enter-animation preset (reduced-motion-aware) |
-| `orientation(View, Orientation)` | Divider axis (horizontal/vertical) |
-| `placement(View, Placement)` | Toast/overlay anchor position |
-| `validation(View, Validation)` | Input validity (message + danger styling + `aria-invalid`) |
-| `checked(View, boolean)` · `placeholder(View, string)` · `icon_size(View, integer)` | Input/glyph state |
-| `key(View, string)` · `label(View, string)` | Identity (keyed reconciliation) and accessible label |
-
-**Application and configuration** (build a config with `app`, refine it with `|>`, then `run`):
-
-| Function | Signature | Description |
-|---|---|---|
-| `Solaris.app` | `(string title, any model, function(any, any) -> any update, function(any) -> View view) -> dictionary` | Build a runnable app config |
-| `Solaris.run` | `(dictionary config) -> void` | Open the window and run the MVU loop |
-| `Solaris.render` | `(View node) -> widget` | Reconcile a view tree into a root widget |
-| `Solaris.window` · `min_size` · `max_size` | `(dictionary, integer w, integer h) -> dictionary` | Window size and bounds |
-| `Solaris.resizable` | `(dictionary, boolean) -> dictionary` | Whether the window may be resized |
-| `Solaris.fullscreen` · `devtools` | `(dictionary) -> dictionary` | Start fullscreen / open the inspector |
-| `Solaris.accent` · `font` | `(dictionary, string) -> dictionary` | Accent colour / UI font |
-| `Solaris.font_of` | `(dictionary, Font) -> dictionary` | UI font from a typed `Font` |
-| `Solaris.accent_color` | `(dictionary, Color) -> dictionary` | Accent from a typed `Color` (semantic token or `Solaris.hex`) |
-| `Solaris.hex` | `(string) -> Color` | Build a `Color.Custom` from any CSS colour string |
-| `Solaris.color_value` | `(Color) -> string` | Resolve a `Color` to its CSS string (for any `theme` override) |
-| `Solaris.color_scheme` | `(dictionary, Scheme) -> dictionary` | Pin light/dark or follow the OS |
-| `Solaris.theme` | `(dictionary, dictionary overrides) -> dictionary` | Advanced token overrides |
-| `Solaris.persist` | `(dictionary, string path) -> dictionary` | Save/restore the model across runs |
-| `Solaris.on_error` | `(dictionary, function(string) -> View) -> dictionary` | Custom error view (keep last good frame) |
-| `Solaris.subscribe` | `(dictionary, function(any) -> array<any>) -> dictionary` | Register timers/keyboard subscriptions |
-| `Solaris.on_start` | `(dictionary, any command) -> dictionary` | Run a command once at launch |
-
-**Effects** (commands returned from `update`/`on_start`, and subscriptions from `subscribe`):
-
-| Function | Signature | Effect |
-|---|---|---|
-| `Solaris.no_command` | `() -> any` | An explicit empty effect |
-| `Solaris.with_command` | `(any model, any command) -> any` | Return the next model plus a command |
-| `Solaris.batch` | `(array<any> commands) -> any` | Run several commands at once |
-| `Solaris.after` | `(integer ms, any msg) -> any` | Send `message` once after a delay |
-| `Solaris.fetch` | `(string url, function(any) -> any) -> any` | HTTP GET, then map the reply to a `Msg` |
-| `Solaris.notify` | `(string title, string body) -> any` | An OS desktop notification |
-| `Solaris.set_scheme` | `(Scheme) -> any` | Switch light/dark/auto at runtime |
-| `Solaris.every` | `(string id, integer ms, any msg) -> any` | A repeating-timer subscription |
-| `Solaris.on_key_press` | `(string id, string key, any msg) -> any` | A global keyboard-shortcut subscription |
-
-**Testing.** Because `update`/`view` are pure, test logic by calling `update` directly. To test wiring end to end, use the engine's headless harness — `GraphicalUi.test_click`, `GraphicalUi.test_input`, `GraphicalUi.test_render`, `GraphicalUi.test_count`, etc. (see §14.2) — which drive the same reconciler without opening a window. Set `LUMA_GUI_HEADLESS=1` to render once and exit.
-
-### 14.2 — GraphicalUi (low-level engine)
-
-Declarative graphical user interface engine following the Elm architecture (Model–Update–View). Build native-window GUI applications with widgets, layouts, charts, and theming — rendered via an embedded HTML/CSS/JS webview. This is the engine the `Solaris` surface (§14.1) compiles down to; reach for it directly only for advanced scenarios the surface does not yet expose.
-
-> **Full guide.** This section summarises the engine's API. For comprehensive usage — widgets, layouts, charts, theming, routing, animation, and accessibility — see the [GraphicalUi Guide](Luma_GraphicalUi_Guide.md).
-
-**Architecture.** A GraphicalUi application has three parts:
-
-- `model` — the initial application state (any value)
-- `view` — a function `(model) -> widget` that builds the widget tree
-- `update` — a function `(model, msg) -> model` that produces a new model from an event
-
-**Callback returns.** Event callbacks — button clicks, input changes, keyboard and timer subscriptions, and command results — return either a **new model**, applied directly, or a **message** (a string) that is routed through `update(model, msg)`. This lets the Elm message pattern (a button `() -> "inc"`) and direct model updates (a reset `() -> 0`) coexist. If the model is itself a string, return models directly and omit `update`, because a string return is always interpreted as a message.
-
-**Widgets are dictionaries.** Every widget, layout, chart, style, command, and helper function in this module returns a value typed `widget` — the module's universal value type. At runtime a `widget` is a plain dictionary, so the type checker treats `widget` and `dictionary` as interchangeable: a `widget` result may be stored in a `dictionary` variable, and a `dictionary` may be passed wherever a `widget` is expected. This is why style and layout helpers such as `GraphicalUi.center()`, `GraphicalUi.merge_styles(...)`, and `GraphicalUi.responsive(...)` are typed `widget` yet produce plain style dictionaries you pass directly as a `style` argument, and why data helpers such as `GraphicalUi.classify_device(...)` and `GraphicalUi.undo(...)` return inspectable `{ ... }` dictionaries.
-
-Use the provided constants as config dictionary keys instead of raw strings.
-
-```luma
-# ── App config key constants ──
-GraphicalUi.MODEL   # string — "model"
-GraphicalUi.VIEW    # string — "view"
-GraphicalUi.UPDATE  # string — "update"
-GraphicalUi.TITLE   # string — "title"
-GraphicalUi.THEME   # string — "theme"
-
-# ── Subscription config key constant ──
-GraphicalUi.SUBSCRIBE  # string — "subscribe"
-
-# ── Init config key constant ──
-GraphicalUi.INIT       # string — "init"
-
-# ── Alert severity constants ──
-GraphicalUi.INFO     # string — "info"
-GraphicalUi.WARNING  # string — "warning"
-GraphicalUi.ERROR    # string — "error"
-GraphicalUi.SUCCESS  # string — "success"
-
-# ── Button variant constants (button "variant" style key) ──
-GraphicalUi.PRIMARY    # string — "primary"
-GraphicalUi.SECONDARY  # string — "secondary"
-GraphicalUi.GHOST      # string — "ghost"
-GraphicalUi.DANGER     # string — "danger"
-
-# ── CSS variable reference constants ──
-GraphicalUi.VAR_PRIMARY        # string — "var(--gui-primary)"
-GraphicalUi.VAR_PRIMARY_HOVER  # string — "var(--gui-primary-hover)"
-GraphicalUi.VAR_BG             # string — "var(--gui-bg)"
-GraphicalUi.VAR_FG             # string — "var(--gui-fg)"
-GraphicalUi.VAR_BORDER         # string — "var(--gui-border)"
-GraphicalUi.VAR_INPUT_BG       # string — "var(--gui-input-bg)"
-GraphicalUi.VAR_INPUT_BORDER   # string — "var(--gui-input-border)"
-GraphicalUi.VAR_INPUT_FOCUS    # string — "var(--gui-input-focus)"
-GraphicalUi.VAR_RADIUS         # string — "var(--gui-radius)"
-GraphicalUi.VAR_SHADOW         # string — "var(--gui-shadow)"
-GraphicalUi.VAR_SHADOW_NONE    # string — "none"                   (Solaris Shadow.None)
-GraphicalUi.VAR_SHADOW_SM      # string — "var(--gui-elevation-1)" (Solaris Shadow.Small)
-GraphicalUi.VAR_SHADOW_MD      # string — "var(--gui-elevation-3)" (Solaris Shadow.Medium)
-GraphicalUi.VAR_SHADOW_LG      # string — "var(--gui-elevation-6)" (Solaris Shadow.Large)
-GraphicalUi.VAR_GAP            # string — "var(--gui-gap)"
-GraphicalUi.VAR_DISABLED_BG    # string — "var(--gui-disabled-bg)"
-GraphicalUi.VAR_DISABLED_FG    # string — "var(--gui-disabled-fg)"
-GraphicalUi.VAR_SUCCESS        # string — "var(--gui-success)"
-GraphicalUi.VAR_WARNING        # string — "var(--gui-warning)"
-GraphicalUi.VAR_ERROR          # string — "var(--gui-error)"
-GraphicalUi.VAR_FONT           # string — "var(--gui-font)"
-
-# ── Spacing scale constants (4px base) ──
-GraphicalUi.VAR_SPACE_XS       # string — "var(--gui-space-xs)"  (0.25rem / 4px)
-GraphicalUi.VAR_SPACE_SM       # string — "var(--gui-space-sm)"  (0.5rem / 8px)
-GraphicalUi.VAR_SPACE_MD       # string — "var(--gui-space-md)"  (1rem / 16px)
-GraphicalUi.VAR_SPACE_LG       # string — "var(--gui-space-lg)"  (1.5rem / 24px)
-GraphicalUi.VAR_SPACE_XL       # string — "var(--gui-space-xl)"  (2rem / 32px)
-
-# ── Radius scale constants (named corners) ──
-GraphicalUi.VAR_RADIUS_NONE    # string — "var(--gui-radius-none)"  (0, square)
-GraphicalUi.VAR_RADIUS_SM      # string — "var(--gui-radius-sm)"    (0.25rem / 4px)
-GraphicalUi.VAR_RADIUS_MD      # string — "var(--gui-radius-md)"    (0.5rem / 8px)
-GraphicalUi.VAR_RADIUS_LG      # string — "var(--gui-radius-lg)"    (1rem / 16px)
-GraphicalUi.VAR_RADIUS_FULL    # string — "var(--gui-radius-full)"  (999px, pill)
-
-# ── Type scale constants ──
-GraphicalUi.VAR_TEXT_XS        # string — "var(--gui-font-size-xs)"  (0.75rem / 12px)
-GraphicalUi.VAR_TEXT_SM        # string — "var(--gui-font-size-sm)"  (0.875rem / 14px)
-GraphicalUi.VAR_TEXT_MD        # string — "var(--gui-font-size-md)"  (1rem / 16px, base)
-GraphicalUi.VAR_TEXT_LG        # string — "var(--gui-font-size-lg)"  (1.25rem / 20px)
-GraphicalUi.VAR_TEXT_XL        # string — "var(--gui-font-size-xl)"  (1.5rem / 24px)
-GraphicalUi.VAR_TEXT_2XL       # string — "var(--gui-font-size-2xl)" (2rem / 32px)
-
-# ── Secondary / de-emphasised text colour ──
-GraphicalUi.VAR_TEXT_MUTED     # string — "var(--gui-text-muted)"  (captions, hints, metadata)
-
-# ── Reading measure (line-length cap) ──
-GraphicalUi.VAR_MEASURE        # string — "var(--gui-measure)"  (65ch)
-```
-
-The `VAR_*` constants return CSS `var()` references that resolve to the current theme values at render time. Use them in style dictionaries to keep widgets theme-aware.
-
-### App Lifecycle
-
-| Function                        | Parameter Types | Return Type  | Description                                     |
-| ------------------------------- | --------------- | ------------ | ----------------------------------------------- |
-| `GraphicalUi.app(configuration)`       | `(dictionary)`  | `none`       | Open a window and run the Elm-architecture loop |
-| `GraphicalUi.style(properties)` | `(dictionary)`  | `widget`     | Identity helper — validates and returns a style |
-
-The `configuration` dictionary accepts these keys:
-
-| Key           | Type                              | Default              | Description                                              |
-| ------------- | --------------------------------- | -------------------- | -------------------------------------------------------- |
-| `"height"`    | integer                           | `600`                | Window height in pixels                                  |
-| `"max_height"` / `"max_width"` | integer          | optional             | Maximum window size (resizable windows only)             |
-| `"min_height"` / `"min_width"` | integer          | optional             | Minimum window size (resizable windows only)             |
-| `"model"`     | any                               | `null`               | Initial application state                                |
-| `"persist"`   | string (file path)                | optional             | Save the model to a JSON file on exit and restore it on the next launch |
-| `"resizable"` | boolean                           | `true`               | Allow window resize; `false` fixes the size              |
-| `"fullscreen"` / `"maximized"` | boolean                           | `false`              | Start the window maximised / full screen                 |
-| `"allow_remote_images"` | boolean                           | `false`              | Load remote `http(s)` `image()`/`avatar()` sources; off by default (only `data:`/`blob:` and relative URLs load) |
-| `"subscribe"` | `func(model) -> array<sub>`       | optional             | Subscription function (see Subscriptions below)          |
-| `"theme"`     | dictionary                        | optional             | Theme overrides (see Theme below)                        |
-| `"title"`     | string                            | `"Luma Application"` | Window title                                             |
-| `"init"`      | `func(model) -> model\|pair`      | optional             | Initialisation function; may return a command pair       |
-| `"update"`    | `func(model, msg) -> model\|pair` | optional             | Update function; may return model or `with_command` pair |
-| `"on_error"`  | `func(string) -> widget`          | optional             | Custom error view shown when `view`/`update` raises      |
-| `"view"`      | `func(model) -> widget`           | _required_           | View function returning a widget tree                    |
-| `"width"`     | integer                           | `800`                | Window width in pixels                                   |
-
-> **Headless testing.** Setting the environment variable `LUMA_GUI_HEADLESS=1` makes `GraphicalUi.app` run the application's `init` → `view` → `subscribe` lifecycle once and then return, without creating a window. This lets GUI programs be exercised in automated tests and CI. The optional `LUMA_GUI_MESSAGES` variable (comma-separated, for example `inc,dec`) drives scripted `update` messages after the initial render. When these variables are unset, `app` opens a window and runs normally.
-
-### Interaction Testing
-
-For finer-grained verification than the headless lifecycle above, the `GraphicalUi.test_*` functions drive an application **without opening a window** by rendering its view, simulating a real interaction, and returning the resulting model. Each call is stateless and takes the same `configuration` dictionary that `GraphicalUi.app` consumes, so examples and tests can assert that user actions produce the expected state. Widgets are located by their visible text (label, placeholder, value, name, title) or by a unique style `id`. When several widgets share a locator, a 0-based `index` selects which one to act on (use `test_count` to count them); alternatively, give a widget a style `id` to address it by identity.
-
-| Function                                                       | Parameter Types                                | Return Type  | Description                                                                                                                                       |
-| -------------------------------------------------------------- | ---------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GraphicalUi.test_init(configuration)`                                | `(dictionary)`                                 | `any`        | Run `init` (or fall back to the configured model) and return the initial model                                                                   |
-| `GraphicalUi.test_render(configuration, model)`                       | `(dictionary, any)`                            | `dictionary` | Render `view(model)` and return the widget tree for structural assertions                                                                        |
-| `GraphicalUi.test_count(configuration, model, locator)`               | `(dictionary, any, string)`                    | `integer`    | Count the widgets matching `locator` (the same matching `test_find` uses) for disambiguating duplicates before addressing one by index           |
-| `GraphicalUi.test_find(configuration, model, locator, index?)`        | `(dictionary, any, string, integer?)`          | `dictionary` | Return the matching widget's rendered dictionary so tests can assert on its serialized state (value, type, `_element_id`, …) without acting on it |
-| `GraphicalUi.test_click(configuration, model, locator, index?)`       | `(dictionary, any, string, integer?)`          | `any`        | Click the `index`-th widget matching `locator` (default 0) and return the new model                                                              |
-| `GraphicalUi.test_input(configuration, model, locator, value, index?)`| `(dictionary, any, string, any, integer?)`     | `any`        | Send `value` to the widget matching `locator` (text input, checkbox, toggle, slider, dropdown) and return the new model                          |
-| `GraphicalUi.test_event(configuration, model, locator, event, args?, index?)` | `(dictionary, any, string, string, array<any>?, integer?)` | `any` | Fire `event` on the matching widget, forwarding optional `args`, and return the new model                                                        |
-| `GraphicalUi.test_key(configuration, model, key)`                     | `(dictionary, any, string)`                    | `any`        | Deliver `key` to the application's keyboard subscriptions (`on_key`) and return the new model                                                     |
-| `GraphicalUi.test_drag(configuration, model, phase, data?)`           | `(dictionary, any, string, string?)`           | `any`        | Deliver a drag event of `phase` (`"start"`/`"move"`/`"end"`/`"enter"`/`"leave"`/`"drop"`) carrying optional `data` to the drag subscriptions (`on_drag`) and return the new model |
-| `GraphicalUi.test_message(configuration, model, message)`             | `(dictionary, any, any)`                       | `any`        | Deliver `message` to `update(model, message)` and return the new model                                                                           |
-
-`test_click`, `test_input`, and `test_event` fire the widget's own callback and resolve its return value exactly as a live app does — a returned message (string) is routed through `update`, while a returned model or `with_command` pair is applied directly; command side effects are inert without a window, so the model update is deterministic. `test_event` covers the secondary handlers a widget exposes: valid `event` names are `click`, `change`, `double_click`, `right_click`, `mouse_enter`, `mouse_leave`, `mouse_move` (pointer handlers declared in the style dictionary), plus `close` (a `dialog`'s `on_close`) and `clear` (a `search_input`'s `on_clear`). The optional `args` array is forwarded to the handler so handlers of any arity (e.g. `on_mouse_move(x, y)`) can be tested. `test_key` drives the keyboard path end-to-end (subscribe → matching `on_key` / `on_key_typed` callback → `update`), so keyboard shortcuts are verified through the same dispatch the live runtime uses; a typed `on_key_typed` subscription receives a `GraphicalUi.KeyEvent` record (with modifiers defaulting to false under `test_key`). `test_drag` drives the drag path the same way (subscribe → matching `on_drag` / `on_drag_typed` callback → `update`); a typed `on_drag_typed` subscription receives a `GraphicalUi.DragEvent` record whose `phase` is set from the `phase` argument, `data` from the optional `data` argument, and coordinates default to 0. `test_storage` drives the storage path (`on_storage_change` / `on_storage_change_typed`, filtered by `key`); a typed subscription receives a `GraphicalUi.StorageEvent` record built from the `key`, optional `old_value`, and optional `new_value` arguments (pass `none` for an added or cleared value). `test_wheel` drives `on_wheel_typed` with a `GraphicalUi.WheelDelta` built from the `delta_x` / `delta_y` arguments, and `test_visibility` drives `on_visibility_change` / `on_visibility_change_typed` with the given `visible` boolean (a typed subscription receives a `GraphicalUi.VisibilityState` choice). `test_message` exercises the `update` function directly, and `test_find` returns rendered widget state for assertions. A locator that matches no widget (or an out-of-range `index`) raises a runtime error.
-
-### Style Parameter
-
-Most widget functions accept an optional `style?` dictionary as their last parameter. Keys are CSS property names written with underscores (converted to hyphens at render time). Values are strings.
-
-### Basic Widgets
-
-| Function                                       | Parameter Types                   | Return Type | Description                              |
-| ---------------------------------------------- | --------------------------------- | ----------- | ---------------------------------------- |
-| `GraphicalUi.heading(text, level?, style?)`    | `(string, integer?, dictionary?)` | `widget`    | Heading (level 1–6, default 1)           |
-| `GraphicalUi.image(source, style?)`            | `(string, dictionary?)`           | `widget`    | Image from URL or data URI               |
-| `GraphicalUi.label(text, style?)`              | `(string, dictionary?)`           | `widget`    | Static text span                         |
-| `GraphicalUi.progress(value, maximum, style?)`     | `(number, number, dictionary?)`   | `widget`    | Progress bar                             |
-| `GraphicalUi.progress_bar(value, maximum, style?)` | `(number, number, dictionary?)`   | `widget`    | Progress bar (alias for `progress`)      |
-| `GraphicalUi.spinner(label?, style?)`          | `(string?, dictionary?)`          | `widget`    | Indeterminate busy indicator (default label `"Loading…"`) |
-| `GraphicalUi.separator(style?)`                | `(dictionary?)`                   | `widget`    | Horizontal rule                          |
-| `GraphicalUi.spacer(height?, style?)`          | `(integer?, dictionary?)`         | `widget`    | Vertical spacing (default 16 px)         |
-| `GraphicalUi.horizontal_spacer(width?)`        | `(integer?)`                      | `widget`    | Horizontal spacing (default 16 px)       |
-| `GraphicalUi.flexible_space(style?)`           | `(dictionary?)`                   | `widget`    | Fills remaining space in a row or column |
-
-### Interactive Widgets
-
-| Function                                                         | Parameter Types                                   | Return Type | Description                               |
-| ---------------------------------------------------------------- | ------------------------------------------------- | ----------- | ----------------------------------------- |
-| `GraphicalUi.button(label, on_click, style?)`                    | `(string, function, dictionary?)`                 | `widget`    | Clickable button (`"variant"` style key: `primary`/`secondary`/`ghost`/`danger`) |
-| `GraphicalUi.checkbox(label, checked, on_toggle, style?)`        | `(string, boolean, function, dictionary?)`        | `widget`    | Checkbox toggle                           |
-| `GraphicalUi.color_picker(value, on_change)`                     | `(string, func(string) -> any)`                   | `widget`    | Colour picker input                       |
-| `GraphicalUi.date_picker(value, on_change)`                      | `(string, func(string) -> any)`                   | `widget`    | Date picker input                         |
-| `GraphicalUi.dropdown(options, value, on_select, style?)`        | `(array<string>, string, function, dictionary?)`  | `widget`    | Select dropdown                           |
-| `GraphicalUi.file_input(on_select, accept?)`                     | `(func(string) -> any, string?)`                  | `widget`    | File chooser; `accept` filters file types |
-| `GraphicalUi.radio_group(options, selected, on_select, style?)`  | `(array<string>, string, function, dictionary?)`  | `widget`    | Radio button group                        |
-| `GraphicalUi.slider(value, minimum, maximum, on_change, style?)`         | `(number, number, number, function, dictionary?)` | `widget`    | Range slider                              |
-| `GraphicalUi.text_area(value, on_change, on_commit?, style?)`    | `(string, function, function?, dictionary?)`      | `widget`    | Multi-line text input (optional `on_commit` fires on blur / Ctrl+Enter) |
-| `GraphicalUi.text_input(value, on_change, placeholder?, on_commit?, style?)` | `(string, function, string?, function?, dictionary?)` | `widget`    | Single-line text input (optional `on_commit` fires on blur / Enter) |
-| `GraphicalUi.time_picker(value, on_change)`                      | `(string, func(string) -> any)`                   | `widget`    | Time picker input                         |
-| `GraphicalUi.toggle(label, checked, on_toggle, style?)`          | `(string, boolean, function, dictionary?)`        | `widget`    | Toggle switch                             |
-
-### Layout Containers
-
-Layout containers accept `array<widget>` for their `children` parameter. A `result<array<widget>>` is also accepted and automatically unwrapped, so piped `Array.map` / `Array.filter` results can be passed directly.
-
-| Function                                                        | Parameter Types                                                  | Return Type | Description                          |
-| --------------------------------------------------------------- | ---------------------------------------------------------------- | ----------- | ------------------------------------ |
-| `GraphicalUi.column(children, style?)`                          | `(array<widget>, dictionary?)`                                   | `widget`    | Vertical flex container              |
-| `GraphicalUi.grid(columns, children, style?)`                   | `(integer, array<widget>, dictionary?)`                          | `widget`    | CSS grid layout with N columns       |
-| `GraphicalUi.panel(title, children, style?)`                    | `(string, array<widget>, dictionary?)`                           | `widget`    | Bordered card with title             |
-| `GraphicalUi.row(children, style?)`                             | `(array<widget>, dictionary?)`                                   | `widget`    | Horizontal flex container            |
-| `GraphicalUi.scroll_column(children, style?)`                   | `(array<widget>, dictionary?)`                                   | `widget`    | Vertical scroll container            |
-| `GraphicalUi.scroll_row(children, style?)`                      | `(array<widget>, dictionary?)`                                   | `widget`    | Horizontal scroll container          |
-| `GraphicalUi.tabs(labels, active, on_select, children, style?)` | `(array<string>, integer, function, array<widget>, dictionary?)` | `widget`    | Tabbed container                     |
-| `GraphicalUi.toolbar(children, style?)`                         | `(array<widget>, dictionary?)`                                   | `widget`    | Horizontal toolbar                   |
-| `GraphicalUi.wrapped_row(children, style?)`                     | `(array<widget>, dictionary?)`                                   | `widget`    | Row that wraps children to next line |
-
-### Nearby / Overlay Elements
-
-Nearby functions position an overlay widget relative to a child widget using absolute CSS positioning. The child is rendered normally and the overlay floats on top of (or beside) it. Each function produces a `nearby` widget with a different `position` value.
-
-| Function                                       | Parameter Types                 | Return Type | Description                                  |
-| ---------------------------------------------- | ------------------------------- | ----------- | -------------------------------------------- |
-| `GraphicalUi.above(child, overlay, style?)`    | `(widget, widget, dictionary?)` | `widget`    | Overlay positioned above the child           |
-| `GraphicalUi.below(child, overlay, style?)`    | `(widget, widget, dictionary?)` | `widget`    | Overlay positioned below the child           |
-| `GraphicalUi.on_left(child, overlay, style?)`  | `(widget, widget, dictionary?)` | `widget`    | Overlay positioned to the left of the child  |
-| `GraphicalUi.on_right(child, overlay, style?)` | `(widget, widget, dictionary?)` | `widget`    | Overlay positioned to the right of the child |
-| `GraphicalUi.in_front(child, overlay, style?)` | `(widget, widget, dictionary?)` | `widget`    | Overlay centred on top of the child          |
-| `GraphicalUi.behind(child, overlay, style?)`   | `(widget, widget, dictionary?)` | `widget`    | Overlay behind the child (lower z-index)     |
-
-### Typed Sizing Helpers
-
-Sizing helpers return CSS `flex` shorthand strings or dictionaries that can be passed as style values to control how a widget fills its container.
-
-| Function                                 | Parameter Types      | Return Type  | Description                               |
-| ---------------------------------------- | -------------------- | ------------ | ----------------------------------------- |
-| `GraphicalUi.fill()`                     | `()`                 | `string`     | Fill available space equally (`"1 1 0%"`) |
-| `GraphicalUi.fill_portion(n)`            | `(integer)`          | `string`     | Fill with weight `n` (`"n 1 0%"`)         |
-| `GraphicalUi.shrink()`                   | `()`                 | `string`     | Shrink to content size (`"0 1 auto"`)     |
-| `GraphicalUi.px(n)`                      | `(integer)`          | `string`     | Fixed pixel size (`"npx"`)                |
-| `GraphicalUi.constrained_fill(minimum, maximum)` | `(integer, integer)` | `widget`     | Fill with min/max width constraints       |
-
-### Typed Alignment Helpers
-
-Alignment helpers return style dictionaries with the appropriate CSS alignment properties. Pass the result as a style dictionary (or merge it with other styles) to align widgets within their container.
-
-| Function                     | Parameter Types | Return Type  | Description                                          |
-| ---------------------------- | --------------- | ------------ | ---------------------------------------------------- |
-| `GraphicalUi.center()`       | `()`            | `widget`     | Centre both axes (`align_items` + `justify_content`) |
-| `GraphicalUi.center_x()`     | `()`            | `widget`     | Centre along the main axis (`justify_content`)       |
-| `GraphicalUi.center_y()`     | `()`            | `widget`     | Centre along the cross axis (`align_items`)          |
-| `GraphicalUi.align_left()`   | `()`            | `widget`     | Align to start of cross axis (`align_self`)          |
-| `GraphicalUi.align_right()`  | `()`            | `widget`     | Align to end of cross axis (`align_self`)            |
-| `GraphicalUi.align_top()`    | `()`            | `widget`     | Align to start of cross axis (`align_self`)          |
-| `GraphicalUi.align_bottom()` | `()`            | `widget`     | Align to end of cross axis (`align_self`)            |
-
-### Spacing Helpers
-
-Spacing helpers return style dictionaries that control gap and padding within containers. They can be passed directly as the style parameter or merged with other styles via `GraphicalUi.merge_styles`.
-
-| Function                       | Parameter Types      | Return Type  | Description                                                 |
-| ------------------------------ | -------------------- | ------------ | ----------------------------------------------------------- |
-| `GraphicalUi.space_evenly()`   | `()`                 | `widget`     | Distribute children with equal space around each            |
-| `GraphicalUi.space_between()`  | `()`                 | `widget`     | Place equal space between children, none at edges           |
-| `GraphicalUi.space_around()`   | `()`                 | `widget`     | Place equal space around each child                         |
-| `GraphicalUi.spacing(pixels)`  | `(integer)`          | `widget`     | Uniform gap between children                                |
-| `GraphicalUi.spacing_xy(x, y)` | `(integer, integer)` | `widget`     | Separate horizontal (`column_gap`) and vertical (`row_gap`) |
-| `GraphicalUi.padding(pixels)`  | `(integer)`          | `widget`     | Uniform padding on all sides                                |
-| `GraphicalUi.padding_xy(x, y)` | `(integer, integer)` | `widget`     | Horizontal and vertical padding                             |
-
-### Layout Debugging
-
-| Function                           | Parameter Types         | Return Type | Description                                                   |
-| ---------------------------------- | ----------------------- | ----------- | ------------------------------------------------------------- |
-| `GraphicalUi.debug(child, style?)` | `(widget, dictionary?)` | `widget`    | Wrap a widget tree with coloured outlines to visualise layout |
-
-`debug` renders coloured borders around every element in the subtree, cycling through red, blue, and green at each nesting depth. Useful for diagnosing alignment and sizing issues during development.
-
-### Device Classification
-
-| Function                                     | Parameter Types      | Return Type  | Description                                                                   |
-| -------------------------------------------- | -------------------- | ------------ | ----------------------------------------------------------------------------- |
-| `GraphicalUi.classify_device(width, height)` | `(integer, integer)` | `widget`     | Classify viewport into `"phone"`, `"tablet"`, `"desktop"`, or `"big_desktop"` |
-| `GraphicalUi.classify_device_typed(width, height)` | `(integer, integer)` | `GraphicalUi.DeviceInfo` | Typed classifier — returns a `DeviceInfo` record with choice-typed `class`/`orientation` |
-
-Returns a dictionary with `class` (device category), `orientation` (`"portrait"` or `"landscape"`), `width`, and `height`. Combine with `on_resize` to build responsive layouts:
-
-| Width Range | Class           |
-| ----------- | --------------- |
-| < 640       | `"phone"`       |
-| 640 – 1023  | `"tablet"`      |
-| 1024 – 1919 | `"desktop"`     |
-| ≥ 1920      | `"big_desktop"` |
-
-`GraphicalUi.classify_device_typed(width, height)` returns a `GraphicalUi.DeviceInfo` record — `class` (`GraphicalUi.DeviceClass`: `Phone`, `Tablet`, `Desktop`, `BigDesktop`), `orientation` (`GraphicalUi.Orientation`: `Portrait`, `Landscape`), `width` (`integer`), `height` (`integer`) — using the same breakpoints, so responsive branching is an exhaustive `match` instead of magic-string comparison.
-
-### Typed choices and bridges
-
-Several stringly-typed GraphicalUi APIs have typed companions whose choices the type checker can close, so a typo is a compile error rather than a silent runtime miss. The original string forms and the `GraphicalUi.INFO/WARNING/ERROR/SUCCESS` and `GraphicalUi.PRIMARY/SECONDARY/GHOST/DANGER` constants are unchanged.
-
-| Function                                                     | Parameter Types                                    | Return Type | Description                                                          |
-| ------------------------------------------------------------ | -------------------------------------------------- | ----------- | ------------------------------------------------------------------- |
-| `GraphicalUi.alert_of(message, severity, style?)`            | `(string, GraphicalUi.Severity, dictionary?)`      | `widget`    | Typed `alert` — takes a `Severity` choice instead of a string       |
-| `GraphicalUi.toast_of(message, severity, ...)`               | `(string, GraphicalUi.Severity, ...)`              | `widget`    | Typed `toast` — takes a `Severity` choice; same trailing arguments  |
-| `GraphicalUi.severity_to_string(severity)`                   | `(GraphicalUi.Severity)`                            | `string`    | Bridge from `Severity` to the `"info"`/`"warning"`/… string         |
-| `GraphicalUi.button_of(label, on_click, variant, style?)`    | `(string, func() -> any, GraphicalUi.ButtonVariant, dictionary?)` | `widget` | Typed `button` — takes a `ButtonVariant` choice for the hierarchy   |
-| `GraphicalUi.button_variant_to_string(variant)`              | `(GraphicalUi.ButtonVariant)`                       | `string`    | Bridge from `ButtonVariant` to the `"primary"`/`"secondary"`/… string |
-
-`GraphicalUi.Severity` is a closed choice with four variants: `Information`, `Warning`, `Error`, `Success`. `GraphicalUi.ButtonVariant` is a closed choice with four variants: `Primary`, `Secondary`, `Ghost`, `Danger`.
-
-### Display Widgets
-
-| Function                                                          | Parameter Types                                                 | Return Type | Description                                                                |
-| ----------------------------------------------------------------- | --------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------- |
-| `GraphicalUi.alert(message, severity?, style?)`                   | `(string, string?, dictionary?)`                                | `widget`    | Styled alert box                                                           |
-| `GraphicalUi.badge(text)`                                         | `(string)`                                                      | `widget`    | Small inline status badge                                                  |
-| `GraphicalUi.dialog(title, children, is_open, on_close?, style?)` | `(string, array<widget>, boolean, function?, dictionary?)`      | `widget`    | Modal dialog; clicking overlay triggers `on_close`                         |
-| `GraphicalUi.icon(name, size?, style?)`                           | `(string, integer?, dictionary?)`                               | `widget`    | Lucide SVG icon by kebab-case `name` (e.g. `"trending-up"`); see Guide §22 |
-| `GraphicalUi.link(text, on_click_or_url, style?)`                 | `(string, string\|function, dictionary?)`                       | `widget`    | String opens URL; function dispatches message to `update`                  |
-| `GraphicalUi.list(items, on_select?, style?)`                     | `(array<string\|widget>, function?, dictionary?)`               | `widget`    | Vertical list (items may be strings or widgets)                            |
-| `GraphicalUi.table(headers, rows, on_row_click?, options?)`       | `(array<string>, array<array<string>>, function?, dictionary?)` | `widget`    | Data table (sticky header + zebra by default; `options`: `align`, `selected`, `on_sort`, `sort_column`, `sort_direction`) |
-| `GraphicalUi.tooltip(text, child, style?)`                        | `(string, widget, dictionary?)`                                 | `widget`    | Hover tooltip                                                              |
-
-### Composite & Advanced Widgets
-
-Higher-level widgets composed from the primitives above. Each is a first-class
-catalog function with a browser renderer; callbacks are dispatched through the
-same `update` cycle as the basic widgets.
-
-| Function                                                              | Parameter Types                                  | Return Type | Description                                                     |
-| --------------------------------------------------------------------- | ------------------------------------------------ | ----------- | --------------------------------------------------------------- |
-| `GraphicalUi.accordion(sections)`                                     | `(array<dictionary>)`                            | `widget`    | Stack of collapsible sections (each: `title`/`label` + content) |
-| `GraphicalUi.animate(child, keyframes, options?)`                     | `(widget, array<dictionary>, dictionary?)`       | `widget`    | Apply keyframe animations to a child                            |
-| `GraphicalUi.avatar(name, url?)`                                      | `(string, string?)`                              | `widget`    | Circular avatar — image when `url` is given, else name initials |
-| `GraphicalUi.breadcrumb(items, on_navigate?)`                         | `(array<string>, func(string) -> any)`           | `widget`    | Navigation trail; non-final items are clickable                 |
-| `GraphicalUi.card(children)`                                          | `(array<widget>)`                                | `widget`    | Bordered surface that stacks its children (a titleless panel)   |
-| `GraphicalUi.combobox(value, options, on_change, on_select?)`         | `(string, array<string>, func(string) -> any, func(string) -> any)` | `widget`    | Autocomplete text input with a filtered, keyboard-navigable list |
-| `GraphicalUi.confirm(title, message, on_confirm, on_cancel?, options?)` | `(string, string, func() -> any, func() -> any, dictionary?)`   | `widget`    | Modal confirmation dialog (`role="alertdialog"`); `options`: `confirm_label`/`cancel_label`/`danger` |
-| `GraphicalUi.draggable(child, data)`                                  | `(widget, string)`                               | `widget`    | Marks a child as a drag source carrying `data`                  |
-| `GraphicalUi.drop_target(child, on_drop)`                             | `(widget, func(string) -> any)`                  | `widget`    | Drop zone; `on_drop` receives the dragged data string           |
-| `GraphicalUi.drop_target_typed(child, on_drop)`                       | `(widget, func(GraphicalUi.DropEvent) -> any)`   | `widget`    | Typed `drop_target`; `on_drop` receives a `GraphicalUi.DropEvent` with the drop location |
-| `GraphicalUi.empty_state(message, options?)`                          | `(string, dictionary?)`                          | `widget`    | Placeholder for a blank list/panel; `options`: `title`/`icon`/`action_label`/`on_action` |
-| `GraphicalUi.field(label, control, options?)`                        | `(string, widget, dictionary?)`                  | `widget`    | Labelled form control; `options`: `required`/`help`/`error`     |
-| `GraphicalUi.field_error(message)`                                    | `(string)`                                       | `widget`    | Inline form validation message (icon + text)                    |
-| `GraphicalUi.form(children, on_submit)`                               | `(array<widget>, func() -> any)`                 | `widget`    | Form container; submits on Enter or a submit button             |
-| `GraphicalUi.infinite_scroll(items, item_height, on_load_more)`       | `(array, integer, func() -> any)`                | `widget`    | Scrolling list that requests more items near the end            |
-| `GraphicalUi.inspect(child)`                                          | `(widget)`                                       | `widget`    | Wraps a child with a debug inspector overlay                    |
-| `GraphicalUi.menu(label, items, on_select)`                          | `(string, array<string>, func(string) -> any)`   | `widget`    | Click-to-open action menu; arrow-key + Esc keyboard support     |
-| `GraphicalUi.number_input(value, minimum, maximum, on_change)`                | `(number, number, number, func(number) -> any)`  | `widget`    | Numeric input field                                             |
-| `GraphicalUi.paginator(current_page, total_pages, on_page_change)`    | `(integer, integer, func(integer) -> any)`       | `widget`    | Page navigation control                                         |
-| `GraphicalUi.popover(label, content)`                                | `(string, widget)`                               | `widget`    | Click-to-open floating panel; closes on outside-click or Esc    |
-| `GraphicalUi.search_input(value, on_change, on_clear?)`               | `(string, func(string) -> any, func() -> any)`   | `widget`    | Text field with an optional clear button                        |
-| `GraphicalUi.skeleton(width?, height?)`                               | `(integer?, integer?)`                           | `widget`    | Shimmering placeholder block for loading states                 |
-| `GraphicalUi.switch(label, checked, on_toggle)`                       | `(string, boolean, func(boolean) -> any)`        | `widget`    | On/off switch (a toggle with the `switch` ARIA role)            |
-| `GraphicalUi.toast(message, severity?, duration?, action_label?, on_action?, style?)` | `(string, string?, integer?, string?, func() -> any, dictionary?)` | `widget`    | Transient notification (reuses the alert severity palette); optional inline action (e.g. "Undo") |
-| `GraphicalUi.toast_region(toasts, options?)`                          | `(array<widget>, dictionary?)`                   | `widget`    | Fixed-position stack of toasts; `options.position` (default `bottom-right`); schedule auto-dismiss with `delay` |
-| `GraphicalUi.transition(child, properties)`                           | `(widget, dictionary)`                           | `widget`    | Animate CSS property changes on a child                         |
-| `GraphicalUi.virtual_list(items, item_height, visible_count, style?)` | `(array, integer, integer, dictionary?)`         | `widget`    | Windowed list that renders only visible rows                    |
-| `GraphicalUi.when(condition, widget)`                                 | `(boolean, widget)`                              | `widget`    | Render `widget` only when `condition` is true                   |
-| `GraphicalUi.wizard(steps, active_step, on_step_change)`              | `(array<widget>, integer, func(integer) -> any)` | `widget`    | Multi-step flow with a step indicator                           |
-
-### Chart Widgets
-
-All charts are rendered as inline SVG. The `labels` array provides category names and the `values` array provides the corresponding numeric data points; both arrays must have the same length. A `result<array<T>>` is also accepted and automatically unwrapped.
-
-| Function                                                                   | Parameter Types                                                 | Return Type | Description            |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------- | ---------------------- |
-| `GraphicalUi.area_chart(labels, values, style?)`                           | `(array<string>, array<number>, dictionary?)`                   | `widget`    | Filled area chart      |
-| `GraphicalUi.donut_chart(labels, values, center_label?, style?)`           | `(array<string>, array<number>, string?, dictionary?)`          | `widget`    | Donut chart            |
-| `GraphicalUi.horizontal_bar_chart(labels, values, style?)`                 | `(array<string>, array<number>, dictionary?)`                   | `widget`    | Horizontal bar chart   |
-| `GraphicalUi.line_chart(labels, values, style?)`                           | `(array<string>, array<number>, dictionary?)`                   | `widget`    | Line chart with points |
-| `GraphicalUi.pie_chart(labels, values, style?)`                            | `(array<string>, array<number>, dictionary?)`                   | `widget`    | Pie chart with legend  |
-| `GraphicalUi.scatter_plot(x_values, y_values, x_label?, y_label?, style?)` | `(array<number>, array<number>, string?, string?, dictionary?)` | `widget`    | Scatter plot           |
-| `GraphicalUi.vertical_bar_chart(labels, values, style?)`                   | `(array<string>, array<number>, dictionary?)`                   | `widget`    | Vertical bar chart     |
-| `GraphicalUi.line_chart_multi(labels, series_names, series_values, series_colors, style?)` | `(array<string>, array<string>, array<array<number>>, array<string>, dictionary?)` | `widget` | Multi-series line chart |
-| `GraphicalUi.vertical_bar_chart_multi(labels, series_names, series_values, series_colors, style?)` | `(array<string>, array<string>, array<array<number>>, array<string>, dictionary?)` | `widget` | Multi-series bar chart |
-
-Charts show a hover tooltip by default. The trailing dictionary also accepts the
-presentation options `x_label`, `y_label`, `legend` (boolean), and `tooltip`
-(boolean, default `true`); any other key is treated as CSS on the chart container.
-
-### Theme
-
-Pass a `"theme"` dictionary in the app config to customise the visual appearance.
-Keys map to CSS custom properties. The defaults derive from the bundled
-[Pico CSS](https://picocss.com/) theme; the swatches show the light-mode rendering
-and dark mode flips automatically (see below).
-
-| Theme Key             | CSS Variable          | Default (Pico-derived)                                |
-| --------------------- | --------------------- | ----------------------------------------------------- |
-| `accent_hover`        | `--gui-primary-hover` | `var(--pico-primary-hover)` (≈ `#015887`)             |
-| `accent`              | `--gui-primary`       | `var(--pico-primary)` (≈ `#0172ad`)                   |
-| `background`          | `--gui-bg`            | `var(--pico-background-color)` (≈ `#fff`)             |
-| `border`              | `--gui-border`        | `var(--pico-muted-border-color)`                      |
-| `disabled_background` | `--gui-disabled-bg`   | `var(--pico-form-element-disabled-background-color)`  |
-| `disabled_text`       | `--gui-disabled-fg`   | `var(--pico-muted-color)`                             |
-| `error`               | `--gui-error`         | `hsl(0 85% 60%)` (≈ `#ef4444`)                        |
-| `font`                | `--gui-font`          | `var(--pico-font-family)` (system stack)             |
-| `gap`                 | `--gui-gap`           | `0.5rem` (8px)                                        |
-| `input_background`    | `--gui-input-bg`      | `var(--pico-form-element-background-color)`           |
-| `input_border`        | `--gui-input-border`  | `var(--pico-form-element-border-color)`               |
-| `input_focus`         | `--gui-input-focus`   | `var(--pico-primary)` (≈ `#0172ad`)                   |
-| `radius`              | `--gui-radius`        | `var(--pico-border-radius)` (`0.25rem` / 4px)         |
-| `shadow`              | `--gui-shadow`        | `var(--pico-box-shadow)`                              |
-| `success`             | `--gui-success`       | `hsl(160 84% 39%)` (≈ `#10b981`)                      |
-| `text_color`          | `--gui-fg`            | `var(--pico-color)` (≈ `#373c44`)                     |
-| `text_muted`          | `--gui-text-muted`    | `var(--pico-muted-color)` (secondary / muted text)    |
-| `warning`             | `--gui-warning`       | `hsl(38 92% 50%)` (≈ `#f59e0b`)                       |
-
-Dark mode is applied automatically via `@media (prefers-color-scheme: dark)` with adjusted defaults. Explicit theme keys override both light and dark defaults.
-
-Theme values can also be specified per mode using a dictionary with `"light"` and `"dark"` keys.
-
-Custom theme variables use the `custom_` prefix and are exposed as `--gui-custom-*` CSS properties.
-
-Set `"animations": false` in the theme to disable **all** framework motion (transitions and animations), independent of the OS reduced-motion setting, which is always honoured. Omit the key or set it to `true` to keep motion enabled.
-
-### Styling
-
-Styling functions provide advanced control over widget appearance — style composition, responsive layouts, external stylesheets, CSS validation, and theme mode switching.
-
-| Function                                       | Parameter Types                 | Return Type          | Description                                                                    |
-| ---------------------------------------------- | ------------------------------- | -------------------- | ------------------------------------------------------------------------------ |
-| `GraphicalUi.merge_styles(base, overrides...)` | `(dictionary, dictionary, ...)` | `widget`             | Merge style dictionaries; later values override earlier ones                   |
-| `GraphicalUi.stylesheet(css)`                  | `(string)`                      | `command`            | Inject a CSS `<style>` block (deduplicated by content hash)                    |
-| `GraphicalUi.load_stylesheet(path)`            | `(string)`                      | `command`            | Load a `.css` file from a relative path                                        |
-| `GraphicalUi.font_face(path, family, opts?)`   | `(string, string, dictionary)`  | `command`            | Embed a local `.woff2`/`.woff`/`.ttf`/`.otf` font file, optionally as the default UI font |
-| `GraphicalUi.set_theme_mode(mode)`             | `(string)`                      | `command`            | Force `"light"`, `"dark"`, or `"auto"` mode                                    |
-| `GraphicalUi.set_theme_mode_of(mode)`          | `(GraphicalUi.ThemeMode)`       | `command`            | Typed `set_theme_mode` — takes a `GraphicalUi.ThemeMode` choice instead of a string |
-| `GraphicalUi.theme_mode_to_string(mode)`       | `(GraphicalUi.ThemeMode)`       | `string`             | Bridge from `ThemeMode` to the `"light"`/`"dark"`/`"auto"` string              |
-| `GraphicalUi.responsive(breakpoints)`          | `(dictionary)`                  | `widget`             | Select a style based on window width (mobile-first breakpoints)                |
-| `GraphicalUi.validate_style(style)`            | `(dictionary)`                  | `result<widget>`     | Validate CSS property names; suggests corrections on failure                   |
-| `GraphicalUi.if_dark(dark_value, light_value)` | `(string, string)`              | `widget`             | Theme-conditional value: `dark_value` in dark mode, else `light_value`         |
-| `GraphicalUi.transition_preset(name)`          | `(string)`                      | `widget`             | Preset transition style (`ease`, `spring`, `bounce`, `fade`, `slide`, `scale`) |
-
-**Notes.** `stylesheet` rejects `<script>` tags, `javascript:` URLs, and `expression()` calls; `load_stylesheet` accepts only relative `.css` paths. `font_face` accepts only relative font paths (no absolute paths, remote URLs, or `..` traversal), inlines the file as a `data:`-URI `@font-face` rule, and by default sets the family as the UI font — options are `{"weight", "style", "default"}` (an explicit theme `font` still wins). For `responsive`, the `"0"` key is the base style, merged with the best matching breakpoint. See the [GraphicalUi Guide](Luma_GraphicalUi_Guide.md) §8 for worked styling examples.
-
-### Pseudo-Class Styles
-
-Style dictionary keys can use pseudo-class prefixes to apply styles on hover, focus, and other states. The prefix is separated from the property name by an underscore:
-
-| Prefix      | CSS Pseudo-Class |
-| ----------- | ---------------- |
-| `hover_`    | `:hover`         |
-| `focus_`    | `:focus`         |
-| `active_`   | `:active`        |
-| `disabled_` | `:disabled`      |
-| `checked_`  | `:checked`       |
-
-### CSS Classes
-
-The `"class"` key in a style dictionary assigns one or more CSS class names to the widget element. Use this together with `stylesheet` or `load_stylesheet` for class-based styling.
-
-### Commands (Side Effects)
-
-Commands represent side effects that the runtime executes on behalf of the application. Instead of performing effects directly in `update`, return a `(model, command)` pair via `GraphicalUi.with_command` so the runtime manages the effect and delivers the result as a message.
-
-| Function                                                           | Parameter Types                                                        | Return Type  | Description                                                     |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------- | ------------ | --------------------------------------------------------------- |
-| `GraphicalUi.none()`                                               | `()`                                                                   | `command`    | No-op command (no side effect)                                  |
-| `GraphicalUi.batch(commands)`                                      | `(array<command>)`                                                     | `command`    | Execute multiple commands                                       |
-| `GraphicalUi.http_get(url, on_result, headers?, timeout?)`         | `(string, func(result<string>) -> any, dictionary?, integer?)`         | `command`    | HTTP GET; optional headers and timeout                          |
-| `GraphicalUi.http_post(url, body, on_result, headers?, timeout?)`  | `(string, string, func(result<string>) -> any, dictionary?, integer?)` | `command`    | HTTP POST with body; optional headers and timeout               |
-| `GraphicalUi.http_get_full(url, on_result, headers?, timeout?)`    | `(string, func(result<GraphicalUi.HttpResponse>) -> any, dictionary?, integer?)`         | `command`    | Like `http_get`, but the result carries status, headers, and body |
-| `GraphicalUi.http_post_full(url, body, on_result, headers?, timeout?)` | `(string, string, func(result<GraphicalUi.HttpResponse>) -> any, dictionary?, integer?)` | `command`    | Like `http_post`, but the result carries status, headers, and body |
-| `GraphicalUi.delay(milliseconds, on_done)`                         | `(integer, func(result<string>) -> any)`                               | `command`    | Wait for `milliseconds`, then invoke callback                   |
-| `GraphicalUi.write_clipboard(text)`                                | `(string)`                                                             | `command`    | Copy text to the system clipboard                               |
-| `GraphicalUi.random(minimum, maximum, on_result)`                          | `(number, number, func(number) -> any)`                                | `command`    | Generate a random number in `[min, max]`                        |
-| `GraphicalUi.focus(widget_id)`                                     | `(string)`                                                             | `command`    | Move keyboard focus to the widget with the given `id`           |
-| `GraphicalUi.blur(widget_id)`                                      | `(string)`                                                             | `command`    | Remove keyboard focus from the widget with the given `id`       |
-| `GraphicalUi.scroll_to(widget_id, behavior?)`                      | `(string, string?)`                                                    | `command`    | Scroll the widget with the given `id` into view (`behavior`: `"smooth"` default or `"instant"`) |
-| `GraphicalUi.scroll_to_of(widget_id, behavior)`                    | `(string, GraphicalUi.ScrollBehavior)`                                 | `command`    | Typed `scroll_to` — takes a `GraphicalUi.ScrollBehavior` choice instead of a string |
-| `GraphicalUi.announce(text)`                                       | `(string)`                                                             | `command`    | Announce text to screen readers via a live region               |
-| `GraphicalUi.debounce(id, milliseconds, callback)`                 | `(string, integer, func(result<string>) -> any)`                       | `command`    | Run `callback` only after `milliseconds` of inactivity for `id` |
-| `GraphicalUi.download_file(url, filename)`                         | `(string, string)`                                                     | `command`    | Download a URL to a local file named `filename`                 |
-| `GraphicalUi.get_local_storage(key, on_result)`                    | `(string, func(string) -> any)`                                        | `command`    | Read a browser local-storage value by `key`                     |
-| `GraphicalUi.http_delete(url, on_result, headers?, timeout?)`      | `(string, func(result<string>) -> any, dictionary?, integer?)`         | `command`    | HTTP DELETE; optional headers and timeout                       |
-| `GraphicalUi.http_patch(url, body, on_result, headers?, timeout?)` | `(string, string, func(result<string>) -> any, dictionary?, integer?)` | `command`    | HTTP PATCH with body; optional headers and timeout              |
-| `GraphicalUi.http_put(url, body, on_result, headers?, timeout?)`   | `(string, string, func(result<string>) -> any, dictionary?, integer?)` | `command`    | HTTP PUT with body; optional headers and timeout                |
-| `GraphicalUi.notify(title, body?, icon?)`                          | `(string, string?, string?)`                                           | `command`    | Show a system desktop notification                              |
-| `GraphicalUi.open_url(url)`                                        | `(string)`                                                             | `command`    | Open a URL in the default browser                               |
-| `GraphicalUi.print()`                                              | `()`                                                                   | `command`    | Open the browser print dialog                                   |
-| `GraphicalUi.read_clipboard(on_result)`                            | `(func(result<string>) -> any)`                                        | `command`    | Read text from the system clipboard                             |
-| `GraphicalUi.set_local_storage(key, value)`                        | `(string, string)`                                                     | `command`    | Write a browser local-storage value                             |
-| `GraphicalUi.remove_local_storage(key)`                            | `(string)`                                                             | `command`    | Remove a browser local-storage value by `key`                   |
-| `GraphicalUi.clear_local_storage()`                                | `()`                                                                   | `command`    | Clear all browser local-storage values                          |
-| `GraphicalUi.set_title(title)`                                     | `(string)`                                                             | `command`    | Set the application window title                                |
-| `GraphicalUi.with_command(model, command)`                         | `(any, command)`                                                       | `widget`     | Pair a new model with a command for the runtime to run          |
-
-The `update` function may return either a plain model (no side effect) or a `with_command` pair.
-
-`GraphicalUi.http_get` / `http_post` deliver only the response body (a `result<string>`). Use the `_full` variants — `GraphicalUi.http_get_full` / `http_post_full` — when you need to branch on the status code or read response headers: they deliver a `result<GraphicalUi.HttpResponse>` instead. `GraphicalUi.HttpResponse` fields: `status` (`integer`, the HTTP status code), `headers` (`dictionary<string>`), `body` (`string`) — the same shape as `Http.Response`.
-
-### Subscriptions
-
-Subscriptions let an application react to external events that are not tied to a specific widget — timers, keyboard input, window resize, and focus changes. Provide a `"subscribe"` function in the app config that returns an array of active subscriptions based on the current model. The runtime diffs subscription arrays across renders and automatically sets up or tears down listeners.
-
-| Function                                            | Parameter Types                             | Return Type    | Description                                                              |
-| --------------------------------------------------- | ------------------------------------------- | -------------- | ------------------------------------------------------------------------ |
-| `GraphicalUi.on_tick(id, interval_milliseconds, on_tick)`     | `(string, integer, func() -> any)`          | `subscription` | Fire `on_tick` every `interval_milliseconds` milliseconds                          |
-| `GraphicalUi.on_key(id, key_filter, on_key)`        | `(string, string, func(string) -> any)`     | `subscription` | Fire on key press; `"*"` matches any key                                 |
-| `GraphicalUi.on_key_typed(id, key_filter, on_key)`  | `(string, string, func(GraphicalUi.KeyEvent) -> any)` | `subscription` | Like `on_key`, but the callback receives a typed `GraphicalUi.KeyEvent` record |
-| `GraphicalUi.on_resize(id, on_resize)`              | `(string, func(integer, integer) -> any)`   | `subscription` | Fire when the window is resized with `(width, height)`                   |
-| `GraphicalUi.on_resize_typed(id, on_resize)`        | `(string, func(GraphicalUi.WindowSize) -> any)` | `subscription` | Like `on_resize`, but the callback receives a typed `GraphicalUi.WindowSize` record |
-| `GraphicalUi.on_focus(id, on_focus)`                | `(string, func(boolean) -> any)`            | `subscription` | Fire when the window gains or loses focus                                |
-| `GraphicalUi.on_mouse(id, event_type, on_event)`    | `(string, string, func(dictionary) -> any)` | `subscription` | Fire on mouse events (`"click"`, `"move"`, `"down"`, `"up"`, `"scroll"`) |
-| `GraphicalUi.on_mouse_typed(id, event_type, on_event)` | `(string, string, func(GraphicalUi.MouseEvent) -> any)` | `subscription` | Like `on_mouse`, but the callback receives a typed `GraphicalUi.MouseEvent` record |
-| `GraphicalUi.on_mouse_of(id, event_type, on_event)` | `(string, GraphicalUi.MouseEventType, func(dictionary) -> any)` | `subscription` | Like `on_mouse`, but `event_type` is a typo-proof `GraphicalUi.MouseEventType` choice |
-| `GraphicalUi.mouse_event_type_to_string(event_type)` | `(GraphicalUi.MouseEventType)`             | `string`       | Bridge a `GraphicalUi.MouseEventType` to its `on_mouse` event string     |
-| `GraphicalUi.on_animation_frame(id, on_frame)`      | `(string, func() -> any)`                   | `subscription` | Fire before each browser animation frame                                 |
-| `GraphicalUi.on_drag(id, event_type, on_drag)`      | `(string, string, func(dictionary) -> any)` | `subscription` | Fire on drag events; `event_type` selects the phase                      |
-| `GraphicalUi.on_drag_typed(id, on_drag)`            | `(string, func(GraphicalUi.DragEvent) -> any)` | `subscription` | Like `on_drag`, but the callback receives a typed `GraphicalUi.DragEvent` record |
-| `GraphicalUi.on_idle(id, timeout_milliseconds, on_idle)`      | `(string, integer, func() -> any)`          | `subscription` | Fire after `timeout_milliseconds` of user inactivity                               |
-| `GraphicalUi.on_media_query(id, query, on_match)`   | `(string, string, func(boolean) -> any)`    | `subscription` | Fire when a CSS media-query match state changes                          |
-| `GraphicalUi.on_offline(id, on_offline)`            | `(string, func() -> any)`                   | `subscription` | Fire when the browser goes offline                                       |
-| `GraphicalUi.on_online(id, on_online)`              | `(string, func() -> any)`                   | `subscription` | Fire when the browser comes online                                       |
-| `GraphicalUi.on_scroll(id, on_scroll)`              | `(string, func(dictionary) -> any)`         | `subscription` | Fire on window scroll with the scroll position                           |
-| `GraphicalUi.on_scroll_typed(id, on_scroll)`        | `(string, func(GraphicalUi.ScrollPosition) -> any)` | `subscription` | Like `on_scroll`, but the callback receives a typed `GraphicalUi.ScrollPosition` record |
-| `GraphicalUi.on_wheel_typed(id, on_wheel)`          | `(string, func(GraphicalUi.WheelDelta) -> any)` | `subscription` | Fire on scroll-wheel with a typed `GraphicalUi.WheelDelta` (deltas) |
-| `GraphicalUi.on_storage_change(id, key, on_change)` | `(string, string, func(string) -> any)`     | `subscription` | Fire when local-storage `key` changes (e.g. another tab)                 |
-| `GraphicalUi.on_storage_change_typed(id, key, on_change)` | `(string, string, func(GraphicalUi.StorageEvent) -> any)` | `subscription` | Like `on_storage_change`, but the callback receives a typed `GraphicalUi.StorageEvent` record |
-| `GraphicalUi.on_visibility_change(id, on_change)`   | `(string, func(boolean) -> any)`            | `subscription` | Fire when page visibility changes (tab shown/hidden)                     |
-| `GraphicalUi.on_visibility_change_typed(id, on_change)` | `(string, func(GraphicalUi.VisibilityState) -> any)` | `subscription` | Like `on_visibility_change`, but the callback receives a typed `GraphicalUi.VisibilityState` choice |
-| `GraphicalUi.visibility_state_to_string(state)`     | `(GraphicalUi.VisibilityState)`             | `string`       | Bridge a `GraphicalUi.VisibilityState` to `"visible"` / `"hidden"`       |
-
-The `on_mouse` callback receives a dictionary with `x`, `y`, `button` (`"left"`, `"middle"`, `"right"`), and modifier keys (`ctrl`, `shift`, `alt`).
-
-`GraphicalUi.on_mouse_typed` is an additive, type-safe companion to `on_mouse`: it delivers the same mouse events, but the callback receives a typed `GraphicalUi.MouseEvent` record instead of a raw dictionary, so fields are autocompleted and typo-proof and the button can be matched exhaustively. Prefer it in new code; `on_mouse` stays for dynamic/dictionary handlers.
-
-`GraphicalUi.MouseEvent` record fields: `x` (`number`), `y` (`number`), `button` (`GraphicalUi.MouseButton`), `control` (`boolean`), `shift` (`boolean`), `alt` (`boolean`). Coordinates are device-pixel measurements (a `number`, not an index).
-
-`GraphicalUi.MouseButton` is a closed choice with three variants, so a `match` over it is exhaustively checked by the type checker: `Left`, `Middle`, `Right`.
-
-```luma
-GraphicalUi.on_mouse_typed("canvas", "down", (GraphicalUi.MouseEvent e) -> match e.button {
-    case GraphicalUi.MouseButton.Left   { paint(e.x, e.y) }
-    case GraphicalUi.MouseButton.Middle { pan(e.x, e.y) }
-    case GraphicalUi.MouseButton.Right  { show_menu(e.x, e.y) }
-})
-```
-
-Each subscription requires a unique `id` string. The runtime uses the `id` to match subscriptions across renders — if the `id` disappears from the returned array, the listener is removed.
-
-`GraphicalUi.on_scroll_typed(id, on_scroll)` is the type-safe companion to `on_scroll`: its callback receives a typed `GraphicalUi.ScrollPosition` record instead of a raw dictionary. `GraphicalUi.ScrollPosition` fields: `x` (`number`), `y` (`number`) — the horizontal and vertical scroll offsets in device pixels.
-
-`GraphicalUi.on_key_typed(id, key_filter, on_key)` is the type-safe companion to `on_key`: it delivers the same key presses (with the same `key_filter`, where `"*"` matches any key), but the callback receives a typed `GraphicalUi.KeyEvent` record instead of a bare key string, giving structured access to the modifier state the browser already tracks. Prefer it when a shortcut depends on modifiers (e.g. `Ctrl+S`); `on_key` stays for simple single-key handlers.
-
-`GraphicalUi.KeyEvent` record fields: `key` (`string`, the pressed key's name — e.g. `"s"`, `"Enter"`, `"ArrowUp"`), `control` (`boolean`), `shift` (`boolean`), `alt` (`boolean`), `meta` (`boolean`).
-
-```luma
-GraphicalUi.on_key_typed("editor", "*", (GraphicalUi.KeyEvent e) -> {
-    if e.control and e.key == "s" { "save" } else { "" }
-})
-```
-
-`GraphicalUi.on_resize_typed(id, on_resize)` is the type-safe companion to `on_resize`: its callback receives a single typed `GraphicalUi.WindowSize` record instead of two loose integer arguments, so the last size can be stored or passed around as one value and the width/height ordering trap disappears. `GraphicalUi.WindowSize` fields: `width` (`integer`), `height` (`integer`) — discrete device-pixel counts.
-
-`GraphicalUi.on_mouse_of(id, event_type, on_event)` is a typo-proof companion to `on_mouse`: it takes a `GraphicalUi.MouseEventType` choice instead of an open event-type string, so a misspelling like `"mouseup"` becomes a compile error rather than a silently dead subscription. The callback still receives the same raw dictionary (pair it with `on_mouse_typed` for a typed payload). `GraphicalUi.mouse_event_type_to_string(event_type)` bridges a `MouseEventType` back to the `"click"` / `"move"` / `"down"` / `"up"` / `"scroll"` string the string-based `on_mouse` API accepts. `GraphicalUi.MouseEventType` is a closed choice with five variants, exhaustively checked by the type checker: `Click`, `Move`, `Down`, `Up`, `Scroll`.
-
-`GraphicalUi.on_drag_typed(id, on_drag)` is the type-safe companion to `on_drag`: its callback receives a typed `GraphicalUi.DragEvent` record instead of an untyped position dictionary, with the drag phase as an exhaustively-matchable choice. Both fire for every drag phase; the plain `on_drag` callback receives a raw `{event, x, y, data}` dictionary (where `event` is the phase string and `data` is the dragged text, populated on the `"drop"` phase). `GraphicalUi.DragEvent` fields: `x` (`number`), `y` (`number`), `data` (`string`, the dragged payload), `phase` (`GraphicalUi.DragPhase`). `GraphicalUi.DragPhase` is a closed choice with six variants: `Start`, `Move`, `End`, `Enter`, `Leave`, `Drop`.
-
-`GraphicalUi.drop_target_typed(child, on_drop)` is the type-safe companion to `drop_target`: its `on_drop` callback receives a typed `GraphicalUi.DropEvent` record instead of the bare dragged-data string, adding the drop location so reordering and drop-to-position interactions are possible. `GraphicalUi.DropEvent` fields: `data` (`string`, the dragged payload), `x` (`number`), `y` (`number`) — device-pixel drop coordinates, mirroring `DragEvent`.
-
-`GraphicalUi.on_storage_change_typed(id, key, on_change)` is the type-safe companion to `on_storage_change`: both fire (filtered by `key`) when another tab rewrites a `localStorage` key, but the typed callback receives a `GraphicalUi.StorageEvent` record instead of the bare new-value string, so a beginner can see what a value changed from and confirm which key fired. `GraphicalUi.StorageEvent` fields: `key` (`string`, the changed key), `old_value` (`optional<string>`), `new_value` (`optional<string>`) — the old/new values are `optional` because a key can be added (no old value) or cleared (no new value).
-
-```luma
-GraphicalUi.on_storage_change_typed("sync", "theme", (GraphicalUi.StorageEvent e) -> match e.new_value {
-    case some(v) { "theme is now ${v}" }
-    case none    { "theme was cleared" }
-})
-```
-
-`GraphicalUi.on_wheel_typed(id, on_wheel)` reports scroll-wheel deltas as a typed `GraphicalUi.WheelDelta` record — the wheel delta the untyped mouse `"scroll"` event never exposes, enabling custom zoom, horizontal-scroll, and carousel interactions. `GraphicalUi.WheelDelta` fields: `delta_x` (`number`), `delta_y` (`number`) — device-pixel wheel deltas, mirroring the DOM `WheelEvent.deltaX` / `deltaY`.
-
-`GraphicalUi.on_visibility_change_typed(id, on_change)` is the type-safe companion to `on_visibility_change`: both fire when the page is shown or hidden, but the typed callback receives a `GraphicalUi.VisibilityState` choice instead of a bare boolean, removing the "which way does the flag point?" trap. `GraphicalUi.visibility_state_to_string(state)` bridges it to `"visible"` / `"hidden"`. `GraphicalUi.VisibilityState` is a closed choice with two variants, exhaustively checked by the type checker: `Visible`, `Hidden`.
-
-```luma
-GraphicalUi.on_visibility_change_typed("page", (GraphicalUi.VisibilityState s) -> match s {
-    case GraphicalUi.VisibilityState.Visible { "resume" }
-    case GraphicalUi.VisibilityState.Hidden  { "pause" }
-})
-```
-
-`GraphicalUi.set_theme_mode_of(mode)` and `GraphicalUi.theme_mode_to_string(mode)` are the typed companions to `set_theme_mode`: the former takes a `GraphicalUi.ThemeMode` choice and the latter bridges it back to the `"light"` / `"dark"` / `"auto"` string, so a typo like `set_theme_mode("drak")` becomes a compile error. `GraphicalUi.ThemeMode` is a closed choice with three variants: `Light`, `Dark`, `Automatic`.
-
-`GraphicalUi.scroll_to_of(widget_id, behavior)` is the typo-proof companion to `scroll_to`: it takes a `GraphicalUi.ScrollBehavior` choice instead of an open behavior string, lowering it to the same `"smooth"` / `"instant"` / `"auto"` value. `GraphicalUi.ScrollBehavior` is a closed choice with three variants: `Smooth`, `Instant`, `Automatic`.
-
-`GraphicalUi.sort_direction_to_string(direction)` bridges a `GraphicalUi.SortDirection` choice to the `"asc"` / `"desc"` string the `table` `sort_direction` option carries; the `table` widget also accepts a `SortDirection` choice directly for that option, so the model can store a typed sort direction. `GraphicalUi.SortDirection` is a closed choice with two variants: `Ascending`, `Descending`.
-
-### State History
-
-Undo/redo helpers manage a history stack of model states outside the widget
-tree. Each returns a `{model, history}` dictionary — assign the new model and
-history back into application state inside `update`.
-
-| Function                                | Parameter Types | Return Type  | Description                                                   |
-| --------------------------------------- | --------------- | ------------ | ------------------------------------------------------------- |
-| `GraphicalUi.undo(model, undo_history)` | `(any, array)`  | `widget`     | Restore the previous model; returns a `{model, history}` pair |
-| `GraphicalUi.redo(model, redo_history)` | `(any, array)`  | `widget`     | Reapply an undone model; returns a `{model, history}` pair    |
-
-### Components
-
-Components encapsulate a slice of the model and a render function into a reusable widget. The runtime memoizes components by `id` — if the same `id` is rendered again with an identical `model_slice` (compared by JSON serialisation), the cached widget is returned without invoking `render_function`.
-
-| Function                                            | Parameter Types                      | Return Type | Description                                    |
-| --------------------------------------------------- | ------------------------------------ | ----------- | ---------------------------------------------- |
-| `GraphicalUi.component(id, model_slice, render_function)` | `(string, any, func(any) -> widget)` | `widget`    | Reusable component with identity-based caching |
-
-### Routing
-
-Routing enables multi-page navigation within a single-window application. The `router` widget renders the child that matches the current route. Route values may be callables `func() -> widget` or pre-built widgets. Parameterised routes use `{name}` placeholders — the matched segments are passed as a dictionary to the callable.
-
-Use `navigate` and `navigate_back` commands to change routes, and `navigation_link` to create clickable navigation elements.
-
-| Function                                             | Parameter Types              | Return Type | Description                                        |
-| ---------------------------------------------------- | ---------------------------- | ----------- | -------------------------------------------------- |
-| `GraphicalUi.router(route, routes)`                  | `(string, dictionary)`       | `widget`    | Render the widget matching the current `route` key |
-| `GraphicalUi.navigate(route)`                        | `(string)`                   | `command`   | Command to navigate to a route                     |
-| `GraphicalUi.navigate_back()`                        | `()`                         | `command`   | Command to navigate to the previous route          |
-| `GraphicalUi.navigation_link(text, message, style?)` | `(string, any, dictionary?)` | `widget`    | Styled link that dispatches `message` when clicked |
-
-### Keyed Lists
-
-When rendering dynamic lists, wrap each item in `keyed` to give it a stable identity. This allows the DOM-diffing algorithm to match elements efficiently when the list is reordered, inserted into, or filtered.
-
-| Function                        | Parameter Types    | Return Type | Description                              |
-| ------------------------------- | ------------------ | ----------- | ---------------------------------------- |
-| `GraphicalUi.keyed(key, child)` | `(string, widget)` | `widget`    | Assign a stable identity key to a widget |
-
-### Error Boundaries
-
-Wrap a view function in `error_boundary` to catch rendering errors gracefully. If `view_function` throws, `fallback_function` is called with the error message instead of crashing the entire view.
-
-| Function                                           | Parameter Types                              | Return Type | Description                                   |
-| -------------------------------------------------- | -------------------------------------------- | ----------- | --------------------------------------------- |
-| `GraphicalUi.error_boundary(fallback_function, view_function)` | `(func(string) -> widget, func() -> widget)` | `widget`    | Catch rendering errors with a fallback widget |
-
-### Accessibility
-
-Accessibility functions add ARIA attributes, manage focus, and provide screen reader announcements.
-
-| Function                                       | Parameter Types        | Return Type | Description                                                     |
-| ---------------------------------------------- | ---------------------- | ----------- | --------------------------------------------------------------- |
-| `GraphicalUi.accessible(child, attributes)`    | `(widget, dictionary)` | `widget`    | Wrap a widget with ARIA attributes (`role`, `aria_label`, etc.) |
-| `GraphicalUi.aria_describedby(description_id, child)` | `(string, widget)`     | `widget`    | Link a child to a description element by `id`                   |
-| `GraphicalUi.aria_live(level, child)`          | `(string, widget)`     | `widget`    | Mark a child as an ARIA live region (`"polite"`/`"assertive"`)  |
-| `GraphicalUi.focus(widget_id)`                 | `(string)`             | `command`   | Move keyboard focus to a widget (see Commands)                  |
-| `GraphicalUi.announce(text)`                   | `(string)`             | `command`   | Announce text to screen readers (see Commands)                  |
-
-The `attributes` dictionary accepts `"role"` and any key starting with `"aria_"` (underscores are converted to hyphens in the rendered HTML).
-
-## 17 — Hash
+## 16 — Hash
 
 Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 
@@ -1683,7 +874,7 @@ print(d.hexadecimal)                                     # the 64-char hex strin
 match d.algorithm { case Hash.Algorithm.Sha256 { print("sha-256") } else { print("other") } }
 ```
 
-## 18 — Http
+## 17 — Http
 
 Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https://` URLs return an error result.
 
@@ -1791,7 +982,7 @@ result<Http.Response> r = Http.get_with(
 > **Security note** — HTTP header names and values are validated to reject carriage-return (`\r`) and line-feed (`\n`) characters. Supplying headers that contain these characters returns a `failure` result to prevent CRLF header injection.
 > **Proxy support** — When the `HTTPS_PROXY`, `HTTP_PROXY`, or `ALL_PROXY` environment variables are set (lower-case variants are also honoured), requests are routed through the named HTTP proxy: `https` URLs use a `CONNECT` tunnel (TLS remains end-to-end with the origin server, so certificate verification is unaffected), and plain `http` URLs are forwarded with an absolute-form request line. `NO_PROXY` (comma-separated host or domain suffixes) bypasses the proxy for matching hosts. Proxy credentials supplied in the proxy URL's userinfo are sent via `Proxy-Authorization`. SSRF protection still applies to the request target: requests resolving to private, loopback, or otherwise reserved addresses are rejected even when a proxy is configured.
 
-## 19 — Json
+## 18 — Json
 
 Serialise and deserialise Luma values as JSON.
 
@@ -1888,7 +1079,7 @@ match Json.parse_detailed(user_input) {
 }
 ```
 
-## 20 — KeyValueStore
+## 19 — KeyValueStore
 
 Persistent file-backed key-value store. Keys and values are strings. The store uses a tab-separated format with proper escaping. Mutation functions (`set`, `remove`, `set_many`, `clear`) return `result<key_value_store>` — `success` with a new copy of the store, or `failure` if the store is read-only.
 
@@ -1916,7 +1107,7 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.update(s, key, function)`          | `(key_value_store, string, function(optional<string>) -> string)` | `result<key_value_store>` | Set key to `fn(current-or-none)`; fail if read-only |
 | `KeyValueStore.values(s)`                   | `(key_value_store)`                     | `array<string>`           | All values                                        |
 
-## 21 — LinearAlgebra
+## 20 — LinearAlgebra
 
 Vector and matrix operations using arrays of numbers.
 
@@ -1975,7 +1166,7 @@ Vector and matrix operations using arrays of numbers.
 | `LinearAlgebra.transpose(matrix)`          | `(array<array<number>>)`                       | `array<array<number>>`         | Transpose matrix                |
 | `LinearAlgebra.zero_matrix(r, c)`     | `(integer, integer)`                           | `array<array<number>>`         | r×c zero matrix                 |
 
-## 22 — Log
+## 21 — Log
 
 Structured logging with configurable levels. Messages are written to stderr by default.
 
@@ -2001,7 +1192,7 @@ Levels are ordered: `Debug` < `Information` < `Warning` < `Error` < `Off`. The `
 
 `Log.set_output` also accepts a `Log.Output` choice in place of the string, mirroring how `Log.set_level` accepts `Log.Level`. The choice has three variants: `Log.Output.Stderr`, `Log.Output.Stdout`, and `Log.Output.File(path: string)`. The typed form removes the ambiguity of the string overload — where a mistyped stream name such as `"stdrr"` is silently treated as a file path — because a stream and a file path are now distinct variants: `Log.set_output(Log.Output.File("app.log"))` can only mean a file.
 
-## 23 — Math
+## 22 — Math
 
 | Function                              | Parameter Types                  | Return Type       | Description                                                                      |
 | ------------------------------------- | -------------------------------- | ----------------- | -------------------------------------------------------------------------------- |
@@ -2137,7 +1328,7 @@ case Sign.Positive { "rising" }
 | `Math.max_number` | `number` | 1.7976931348623157e308 (largest finite `number`) |
 | `Math.min_number` | `number` | 2.2250738585072014e-308 (smallest positive normal `number`; the most-negative `number` is `-Math.max_number`) |
 
-## 24 — Optional
+## 23 — Optional
 
 Functions for working with `optional<T>` values. All functions are available as `Optional.function_name(...)` without a `use` declaration.
 
@@ -2194,7 +1385,7 @@ string label = some(42)
 print(label) # "positive: 42"
 ```
 
-## 25 — Order
+## 24 — Order
 
 Comparison utilities built around the `Ordering` choice type, a self-documenting
 alternative to raw `-1` / `0` / `1` comparison numbers. All functions are available
@@ -2258,7 +1449,7 @@ array<Person> sorted = Result.unwrap(
 The existing numeric comparator convention (a `function(T, T) -> number` returning a
 negative, zero, or positive value) still works unchanged; `Order` is purely additive.
 
-## 26 — Process
+## 25 — Process
 
 | Function                                        | Parameter Types    | Return Type                     | Description                                                              |
 | ----------------------------------------------- | ------------------ | ------------------------------- | ------------------------------------------------------------------------ |
@@ -2357,7 +1548,7 @@ failure(_e)  { print("could not signal that process") }
 }
 ```
 
-## 27 — Queue
+## 26 — Queue
 
 Immutable FIFO (first-in, first-out) queue. All mutating operations return a new queue, leaving the original unchanged.
 
@@ -2384,7 +1575,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Queue.reverse(queue)`          | `(queue)`                         | `queue`                  | New queue with the element order reversed              |
 | `Queue.to_array(queue)`         | `(queue)`                         | `array<T>`               | Convert to array                                       |
 
-## 28 — Random
+## 27 — Random
 
 | Function                          | Parameter Types       | Return Type        | Description                                                                     |
 | --------------------------------- | --------------------- | ------------------ | ------------------------------------------------------------------------------- |
@@ -2440,7 +1631,7 @@ Random.Uuid id = Random.uuid_typed()
 result<Random.Uuid> parsed = Random.parse_uuid("550e8400-e29b-41d4-a716-446655440000")
 ```
 
-## 29 — Reference
+## 28 — Reference
 
 Mutable reference cells — shared mutable containers that preserve identity across closure capture boundaries. All functions are available as `Reference.function_name(...)` without a `use` declaration.
 
@@ -2497,7 +1688,7 @@ integer value = Reference.new(42) |> Reference.get()       # 42
 string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 ```
 
-## 30 — RegularExpression
+## 29 — RegularExpression
 
 | Function                                          | Parameter Types            | Return Type                              | Description                                                   |
 | ------------------------------------------------- | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
@@ -2600,7 +1791,7 @@ result<boolean> spans =
 
 The ReDoS guard and pattern-size limit apply to the `*_with` variants exactly as they do to the flagless functions.
 
-## 31 — Resource
+## 30 — Resource
 
 `Resource.with` guarantees that a cleanup function is called after a body function runs, regardless of whether the body throws a runtime error. It is the Luma equivalent of a `finally`-based cleanup block, expressed as a library function.
 
@@ -2653,7 +1844,7 @@ string content = Resource.using(
 )
 ```
 
-## 32 — Result
+## 31 — Result
 
 Combinators for transforming and inspecting `result<T>` values without explicit `match`. For the `result<T>` type itself (creation via `success()`/`failure()`, pattern matching, propagation with `?`, and the `??`/`!>` operators), see the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--result-and-optional).
 
@@ -2686,7 +1877,7 @@ Combinators for transforming and inspecting `result<T>` values without explicit 
 | `Result.unwrap_or(r, default)` | `(result<T>, T)`                                    | `T`            | Extract success value or use `default`                                   |
 | `Result.zip(r1, r2)`           | `(result<T>, result<U>)`                            | `result<(T, U)>` | Combine two successes into a tuple; short-circuit on first failure      |
 
-## 33 — Set
+## 32 — Set
 
 `Set` values are a distinct type (not arrays). Use `Set.from_array` to create a set and `Set.to_array` to convert back.
 
@@ -2721,7 +1912,7 @@ Combinators for transforming and inspecting `result<T>` values without explicit 
 | `Set.to_array(set)`                    | `(set)`                         | `array<T>`           | Convert to array                                               |
 | `Set.union(set, other)`                | `(set, set)`                    | `set`                | Elements in `s` or `other`                                     |
 
-## 34 — Socket
+## 33 — Socket
 
 Cross-platform TCP and UDP networking.
 
@@ -2789,7 +1980,7 @@ match Socket.connect_typed("127.0.0.1", 8080) {
 
 ---
 
-## 35 — Stack
+## 34 — Stack
 
 Immutable LIFO (last-in, first-out) stack. All mutating operations return a new stack.
 
@@ -2817,7 +2008,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `Stack.reverse(stack)`          | `(stack)`                         | `stack`                  | Reverse element order (top becomes bottom)                      |
 | `Stack.to_array(stack)`         | `(stack)`                         | `array<T>`               | Convert to array                                                |
 
-## 36 — Statistics
+## 35 — Statistics
 
 Descriptive statistics over numeric arrays. Split out of `Math`
 so the four maths modules each cover one cohesive domain: `Math` (scalar
@@ -2833,21 +2024,7 @@ in `Math`; every function here reduces or summarises a whole array.
 | `Statistics.standard_deviation(array)`  | `(array<number>)`                | `result<number>`                   | Standard deviation; fail if empty                                                |
 | `Statistics.variance(array)`            | `(array<number>)`                | `result<number>`                   | Variance; fail if empty                                                          |
 
----
-
-## See Also
-
-- [Tutorial](Luma_Tutorial.md) — a beginner-friendly introduction that uses these modules step by step
-- [User Manual](Luma_User_Manual.md) — language syntax and semantics
-- [Error Handling](Luma_Error_Handling.md) — `result` / `optional` conventions used throughout the library
-- [Solaris Guide](Luma_Solaris_Guide.md) — the beginner-first `Solaris` GUI surface
-- [GraphicalUi Guide](Luma_GraphicalUi_Guide.md) — the low-level webview engine beneath the surface
-- [Performance Guide](Luma_Performance_Guide.md) — runtime costs of standard library operations
-- [Coding Guidelines](Luma_Coding_Guidelines.md) — idiomatic use of the standard library
-- [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) — debugging tasks and channels that use these modules
-- [REPL Guide](Luma_REPL_Guide.md) — explore these functions interactively
-
-## 37 — String
+## 36 — String
 
 | Function                            | Parameter Types                | Return Type       | Description                                                                     |
 | ----------------------------------- | ------------------------------ | ----------------- | ------------------------------------------------------------------------------- |
@@ -2953,7 +2130,7 @@ string letter = Result.unwrap(Random.choice(letters))
 boolean is_punct = String.contains(String.punctuation, "!")
 ```
 
-## 38 — Task
+## 37 — Task
 
 Concurrency combinators for `spawn`/`await` tasks.
 
@@ -3023,7 +2200,7 @@ Using `spawn` outside a `task_scope` still works (fire-and-forget) but produces 
 
 > **Resource limit** — The internal task queue holds a bounded number of pending tasks (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`). Spawning beyond this limit throws a runtime error (`task queue is full — too many pending tasks`). Design your program to await tasks before spawning more to stay within this limit.
 
-## 39 — Terminal
+## 38 — Terminal
 
 Terminal UI control — cursor movement, colors, styling, screen management, and mouse input.
 
@@ -3186,7 +2363,7 @@ result<boolean> _ = Terminal.set_cursor_style(Terminal.CursorStyle.SteadyBar)
 
 ### Interaction Testing
 
-The `Terminal.test_*` functions drive an imperative Terminal/TUI program without a real terminal, so its input loop and rendering can be verified by feeding scripted input and asserting on captured output. They are the imperative counterpart to the `GraphicalUi.test_*` API: instead of threading a model through pure view/update functions, they intercept the console I/O primitives — a scripted-input queue replaces `read_key` / `read_key_timeout` / `get_input`, and a capture buffer replaces `write` / `overwrite_line` / `bell` (and any `emit`-based ANSI output).
+The `Terminal.test_*` functions drive an imperative Terminal/TUI program without a real terminal, so its input loop and rendering can be verified by feeding scripted input and asserting on captured output. They intercept the console I/O primitives: a scripted-input queue replaces `read_key` / `read_key_timeout` / `get_input`, and a capture buffer replaces `write` / `overwrite_line` / `bell` (and any `emit`-based ANSI output).
 
 | Function                    | Parameter Types   | Return Type | Description                                                              |
 | --------------------------- | ----------------- | ----------- | ----------------------------------------------------------------------- |
@@ -3240,7 +2417,7 @@ function void test_counter_responds_to_keys() {
 
 The same machinery is reachable without Luma code via the `LUMA_TERMINAL_INPUT` environment variable (one key per line), which the example runner (`scripts/run_luma_examples.py`) uses to drive the raw-mode example programs unattended.
 
-## 40 — Xml
+## 39 — Xml
 
 Parse, build, query, and serialise XML documents. XML nodes are opaque `xml` values; decode one into a typed `Xml.Node` choice with `Xml.to_node` when you need to `match` over its structure.
 
@@ -3318,3 +2495,11 @@ case Xml.Node.CData(content)            { print(content) }
 `Xml.find_descendant` / `Xml.find_all_descendants` are the recursive counterparts to `Xml.find` / `Xml.find_all`: they match elements at any depth in document (pre-order) order, not just among direct children. `Xml.get_path` walks a `/`-separated tag path starting from the element's children — for example `"book/title"` — and accepts an optional 0-based `[n]` index to disambiguate repeated tags, as in `"book[1]/title"`; it fails if any segment is missing. `Xml.inner_text` returns the concatenated text of an element and every descendant text and CDATA node (the DOM `textContent`), whereas `Xml.text` reads only the element's own direct text children. `Xml.remove_child` and `Xml.replace_child` are immutable like `Xml.add_child`: they return a new element with the child element at the given 0-based index (indexing the same element-only sequence `Xml.children` exposes) removed or replaced, and fail when the index is out of bounds. `Xml.escape` escapes the five predefined XML entities (`&` first, then `< > " '`), and `Xml.unescape` decodes named references (`&amp; &lt; &gt; &quot; &apos;`) plus decimal and hexadecimal numeric character references, failing on any unknown or unterminated entity.
 
 ---
+
+## See Also
+
+- [User Manual](Luma_User_Manual.md) — language syntax and semantics
+- [Error Handling](Luma_Error_Handling.md) — standard library error conventions
+- [Performance Guide](Luma_Performance_Guide.md) — per-module operations and their costs
+- [Software Architecture](Luma_Software_Architecture.md) — standard library registration and runtime architecture
+- [Documentation Index](DIRECTORY.md) — index of all Luma documentation

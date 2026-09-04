@@ -80,8 +80,7 @@ if(LUMA_FEATURE_LTO)
 
     # Promote the detection result to module-level state so luma_apply_lto()
     # reads it explicitly instead of inheriting the directory-scoped
-    # _lto_supported from its call site (mirrors LUMA_WEBVIEW_AVAILABLE in
-    # cmake/LumaWebView.cmake).
+    # _lto_supported from its call site.
     set(LUMA_LTO_SUPPORTED ${_lto_supported} CACHE INTERNAL
         "Whether the toolchain supports interprocedural (link-time) optimisation")
 
@@ -233,5 +232,4 @@ function(luma_apply_coverage target_name)
 endfunction()
 
 # Target-creation helpers (luma_add_executable / luma_add_library /
-# luma_add_tool_library) live in cmake/LumaTargetHelpers.cmake. WebView support
-# is provided by the luma_webview INTERFACE target from cmake/LumaWebView.cmake.
+# luma_add_tool_library) live in cmake/LumaTargetHelpers.cmake.

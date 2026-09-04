@@ -342,51 +342,6 @@ void test_clean_program_has_no_error_diagnostics() {
     ASSERT_TRUE(result.find_function("main").has_value());
 }
 
-// ─── Solaris prelude: programs using the surface analyse cleanly ───
-//
-// A program that mentions `Solaris` gets the built-in GUI prelude injected
-// before type-checking. The prelude is tagged with its own file id and lives
-// outside the user's document, so this exercises two guarantees at once:
-// (a) its element constructors must resolve — otherwise every `Solaris.*` call
-// would be an unknown-symbol error — and (b) no diagnostic originating in the
-// prelude may be attributed to the user's document, where the service maps
-// diagnostics by line and a prelude location would otherwise paint onto the
-// wrong line. Both hold when the analysis is free of error diagnostics while
-// the user's own functions are still collected.
-void test_solaris_program_analyses_without_errors() {
-    ServiceFixture fx;
-
-    const auto result =
-        fx.analyze("choice Msg { Inc }\n"
-                   "\n"
-                   "record Model {\n"
-                   "    integer count = 0\n"
-                   "}\n"
-                   "\n"
-                   "function Model update(Model model, Msg msg) {\n"
-                   "    return match msg {\n"
-                   "        case Msg.Inc { model with { count = model.count + 1 } }\n"
-                   "    }\n"
-                   "}\n"
-                   "\n"
-                   "function View view(Model model) {\n"
-                   "    return Solaris.column([\n"
-                   "        Solaris.heading(\"Count: ${model.count}\"),\n"
-                   "        Solaris.button(\"+\") |> Solaris.on_click(Msg.Inc)\n"
-                   "    ])\n"
-                   "}\n"
-                   "\n"
-                   "@main\n"
-                   "function void main() {\n"
-                   "    Solaris.run(Solaris.app(\"Demo\", Model { count = 0 }, update, view))\n"
-                   "}\n");
-
-    ASSERT_FALSE(has_error_diagnostic(result));
-    ASSERT_TRUE(result.find_function("update").has_value());
-    ASSERT_TRUE(result.find_function("view").has_value());
-    ASSERT_TRUE(result.find_function("main").has_value());
-}
-
 // ─── Parse-error recovery: symbols survive ─────────────────────────
 
 void test_symbols_survive_parse_errors() {
@@ -793,7 +748,6 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_find_definition_accessor);
     RUN(test_type_error_produces_error_diagnostic);
     RUN(test_clean_program_has_no_error_diagnostics);
-    RUN(test_solaris_program_analyses_without_errors);
     RUN(test_symbols_survive_parse_errors);
     RUN(test_lexer_error_recovery);
     RUN(test_empty_source_is_safe);

@@ -116,31 +116,6 @@ def git_ls(*patterns: str) -> list[str]:
     return [line for line in result.stdout.splitlines() if line]
 
 
-def npx_tool_installed(tool: str) -> bool:
-    """Report whether *tool* can be resolved by ``npx`` without installing it.
-
-    Used for Node tools that are expected to be installed locally rather than
-    auto-downloaded (for example Stylelint, whose shared config cannot be
-    supplied by an on-demand ``npx --yes`` install). Returns ``False`` when
-    ``npx`` itself is missing.
-    """
-    npx = which("npx")
-    if npx is None:
-        return False
-    try:
-        probe = subprocess.run(
-            [npx, "--no-install", tool, "--version"],
-            cwd=REPO_ROOT,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=120,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return probe.returncode == 0
-
-
 def _rule(label: str = "") -> str:
     """Return a box-drawing rule, optionally captioned with *label*."""
     if not label:
@@ -192,7 +167,7 @@ def _print_list(gates: list[Gate]) -> None:
 
 # Conservative budget for a single command line, kept well under the Windows
 # CreateProcess hard limit of 32,767 characters. File-list gates (clang-format,
-# clang-tidy, cmakelint, shellcheck, stylelint) can exceed that on a large tree,
+# clang-tidy, cmakelint, shellcheck) can exceed that on a large tree,
 # so their file arguments are split into batches — the same way CI drives the
 # tools through `find … -exec … {} +`.
 _MAX_CMDLINE = 30_000

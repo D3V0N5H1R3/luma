@@ -16,11 +16,10 @@ namespace luma {
 
 namespace {
 
-// The traversal itself lives in json_writer::write_value (json_value_writer.hpp),
-// shared with the GraphicalUi serialiser.  ModuleJsonPolicy carries the Json
-// module's differences: no slash-escaping, "null" (not a throw) past the
-// nesting-depth limit, and only nullary choices serialise (as a bare string;
-// choices with fields become null).
+// The traversal itself lives in json_writer::write_value (json_value_writer.hpp).
+// ModuleJsonPolicy carries the Json module's behaviour: no slash-escaping,
+// "null" (not a throw) past the nesting-depth limit, and only nullary choices
+// serialise (as a bare string; choices with fields become null).
 struct ModuleJsonPolicy {
     static void escape(std::string_view s, std::string& out) {
         // JsonEscapePolicy<false> — forward slashes are left bare.

@@ -617,8 +617,8 @@ LUMA_TEST(vm_string_index_out_of_bounds) {
 
 // ─── Index type-mismatch guards ───
 // The type checker normally rejects these, but a mistyped value can reach an
-// index operation at runtime through dynamic paths (e.g. a GraphicalUi update
-// receiving an unexpected type). The VM must surface a clean RuntimeError
+// index operation at runtime through dynamic paths (e.g. a dynamically typed
+// value reaching an index op). The VM must surface a clean RuntimeError
 // rather than crash on an unchecked std::variant access (bad_variant_access).
 // The unchecked eval() path reproduces that dynamic situation.
 

@@ -188,55 +188,55 @@ static void test_source_manager_get_file_negative_id() {
 
 static void test_contains_identifier_token() {
     // Standalone occurrences match, including at the very start and end.
-    ASSERT_TRUE(contains_identifier_token("Solaris.text()", "Solaris"));
-    ASSERT_TRUE(contains_identifier_token("use Solaris", "Solaris"));
-    ASSERT_TRUE(contains_identifier_token("a Solaris b", "Solaris"));
+    ASSERT_TRUE(contains_identifier_token("Marker.text()", "Marker"));
+    ASSERT_TRUE(contains_identifier_token("use Marker", "Marker"));
+    ASSERT_TRUE(contains_identifier_token("a Marker b", "Marker"));
 
     // Embedded in a longer identifier (letter, digit, or underscore adjacent)
     // must not match.
-    ASSERT_FALSE(contains_identifier_token("mySolarisHelper", "Solaris"));
-    ASSERT_FALSE(contains_identifier_token("Solaris2", "Solaris"));
-    ASSERT_FALSE(contains_identifier_token("Solaris_x", "Solaris"));
-    ASSERT_FALSE(contains_identifier_token("_Solaris", "Solaris"));
+    ASSERT_FALSE(contains_identifier_token("myMarkerHelper", "Marker"));
+    ASSERT_FALSE(contains_identifier_token("Marker2", "Marker"));
+    ASSERT_FALSE(contains_identifier_token("Marker_x", "Marker"));
+    ASSERT_FALSE(contains_identifier_token("_Marker", "Marker"));
 
     // A later standalone occurrence still matches past an embedded one.
-    ASSERT_TRUE(contains_identifier_token("mySolarisHelper; Solaris.run()", "Solaris"));
+    ASSERT_TRUE(contains_identifier_token("myMarkerHelper; Marker.run()", "Marker"));
 
     // Degenerate inputs.
     ASSERT_FALSE(contains_identifier_token("anything", ""));
-    ASSERT_FALSE(contains_identifier_token("", "Solaris"));
+    ASSERT_FALSE(contains_identifier_token("", "Marker"));
 }
 
 // ─── SourceManager::any_source_contains{,_word} ───
 
 static void test_source_manager_any_source_contains() {
     SourceManager sm;
-    sm.load_virtual("<a>", "value |> Solaris.text(\"hi\")");
+    sm.load_virtual("<a>", "value |> Marker.text(\"hi\")");
 
     // Plain substring gate matches, even a prefix of a longer identifier.
-    ASSERT_TRUE(sm.any_source_contains("Solaris"));
-    ASSERT_TRUE(sm.any_source_contains("Solar"));
+    ASSERT_TRUE(sm.any_source_contains("Marker"));
+    ASSERT_TRUE(sm.any_source_contains("Mark"));
     ASSERT_FALSE(sm.any_source_contains("Missing"));
 }
 
 static void test_source_manager_any_source_contains_word() {
     SourceManager sm;
-    sm.load_virtual("<a>", "value |> Solaris.text(\"hi\")");
+    sm.load_virtual("<a>", "value |> Marker.text(\"hi\")");
 
     // Whole-word gate matches a standalone identifier but not a substring of
     // a longer one.
-    ASSERT_TRUE(sm.any_source_contains_word("Solaris"));
-    ASSERT_FALSE(sm.any_source_contains_word("Solar"));
+    ASSERT_TRUE(sm.any_source_contains_word("Marker"));
+    ASSERT_FALSE(sm.any_source_contains_word("Mark"));
 }
 
 static void test_source_manager_any_source_contains_word_rejects_embedded() {
     SourceManager sm;
-    sm.load_virtual("<a>", "function mySolarisHelper() {}");
+    sm.load_virtual("<a>", "function myMarkerHelper() {}");
 
     // The trigger name is embedded in a longer identifier: the whole-word gate
     // must not fire, while the plain substring gate still does.
-    ASSERT_FALSE(sm.any_source_contains_word("Solaris"));
-    ASSERT_TRUE(sm.any_source_contains("Solaris"));
+    ASSERT_FALSE(sm.any_source_contains_word("Marker"));
+    ASSERT_TRUE(sm.any_source_contains("Marker"));
 }
 
 int main() {

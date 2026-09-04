@@ -73,26 +73,8 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | `xml_processing`       | Xml module — parsing and generating XML            | 🟡 Intermediate   |
 | `chat_server`          | Socket-based multi-client chat server              | 🔴 Advanced       |
 | `data_pipeline`        | Multi-stage data processing pipeline               | 🔴 Advanced       |
-| `gui_animation`        | GraphicalUi transitions and keyframe animations    | 🔴 Advanced       |
-| `gui_calculator`       | GraphicalUi calculator with keypad and keyboard    | 🔴 Advanced       |
-| `gui_calendar`         | GraphicalUi month calendar with DateTime nav       | 🔴 Advanced       |
-| `gui_contacts`         | GraphicalUi contact book with table and dialogs    | 🔴 Advanced       |
-| `gui_counter`          | GraphicalUi counter application                    | 🔴 Advanced       |
-| `gui_dashboard`        | GraphicalUi dashboard with charts and tabs         | 🔴 Advanced       |
-| `gui_gallery`          | GraphicalUi gallery of every widget and modifier   | 🔴 Advanced       |
-| `gui_http`             | GraphicalUi HTTP integration demo                  | 🔴 Advanced       |
-| `gui_layout`           | GraphicalUi elm-ui-inspired layout features demo   | 🔴 Advanced       |
-| `gui_markdown`         | GraphicalUi Markdown editor with live preview      | 🔴 Advanced       |
-| `gui_quiz`             | GraphicalUi multiple-choice quiz with scoring      | 🔴 Advanced       |
-| `gui_router`           | GraphicalUi client-side routing                    | 🔴 Advanced       |
-| `gui_styled`           | GraphicalUi styling, theming, and responsive demo  | 🔴 Advanced       |
-| `gui_timer`            | GraphicalUi Pomodoro timer with on_tick            | 🔴 Advanced       |
-| `gui_todo`             | GraphicalUi todo list application                  | 🔴 Advanced       |
-| `gui_virtual_list`     | GraphicalUi virtual scrolling for large lists      | 🔴 Advanced       |
 | `matrix_calculator`    | Matrix calculator using LinearAlgebra module       | 🔴 Advanced       |
 | `mouse_draw`           | Terminal mouse drawing application                 | 🔴 Advanced       |
-| `solaris_counter`      | Solaris counter — canonical MVU surface example    | 🔴 Advanced       |
-| `solaris_gallery`      | Solaris gallery: every component, effects, theming | 🔴 Advanced       |
 | `sudoku_solver`        | Sudoku solver using backtracking                   | 🔴 Advanced       |
 | `tic_tac_toe`          | Tic-tac-toe with a minimax AI opponent             | 🔴 Advanced       |
 
@@ -159,42 +141,8 @@ It runs each program end to end and checks that it completes successfully:
 
 - Console examples (such as `calculator`, `guess_the_number`, `todo_list`) are driven with scripted stdin.
 - Terminal raw-mode examples (`process_and_terminal`, `mouse_draw`, `editor`) are driven through the headless Terminal harness: scripted keys are fed to `read_key` / `get_input` via `LUMA_TERMINAL_INPUT`, so the real input loop runs unattended.
-- GUI examples (`gui_*` and `solaris_*`) run in **headless mode**, executing their full `init` / `view` / `subscribe` lifecycle without opening a window.
 - Any example that declares `@test` functions is additionally run with `luma --test`, so its embedded assertions are verified — not just that `@main` completes.
 - One example is intentionally skipped (`multi_file_utils`, an include-only helper); the script reports why.
-
-Headless GUI execution is controlled by two environment variables, so a single GUI example can also be run unattended by hand:
-
-| Variable              | Effect                                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------------------ |
-| `LUMA_GUI_HEADLESS=1` | Run a GUI app without a window: render the initial view, evaluate subscriptions, then return.            |
-| `LUMA_GUI_MESSAGES`   | Optional comma-separated `update` messages applied after the initial render (for example, `inc,inc,dec`). |
-
-```bash
-LUMA_GUI_HEADLESS=1 build/luma examples/applications/gui_counter.luma
-```
-
-> **Note:** These variables only affect headless test runs. When unset, a GUI app opens a real window as usual.
-
-### Testing GUI interactions
-
-The headless variables above run a GUI app's lifecycle, but to *verify behaviour* — that clicking a button or typing into a field produces the right state — use the `GraphicalUi.test_*` family. These render a view without a window, simulate a real interaction, and return the resulting model, so GUI logic can be asserted in `@test` blocks (see `gui_counter` for a worked example):
-
-| Function                                                | Returns      | Simulates                                                         |
-| ------------------------------------------------------- | ------------ | ---------------------------------------------------------------- |
-| `GraphicalUi.test_init(config)`                           | model        | Running `init` (or the configured initial model)                 |
-| `GraphicalUi.test_render(config, model)`                  | widget tree  | Rendering `view(model)` for structural assertions                |
-| `GraphicalUi.test_click(config, model, label)`            | new model    | Clicking the widget whose text matches `label`                   |
-| `GraphicalUi.test_input(config, model, locator, value)`   | new model    | Entering `value` into a text field, checkbox, toggle, or dropdown |
-| `GraphicalUi.test_message(config, model, message)`        | new model    | Delivering `message` to `update(model, message)`                 |
-
-```luma
-@test
-function void test_increment_button() {
-    # counter_config() is the same dictionary passed to GraphicalUi.app.
-    assert(GraphicalUi.test_click(counter_config(), 41, "+ Increment") == 42)
-}
-```
 
 ### Testing Terminal interactions
 

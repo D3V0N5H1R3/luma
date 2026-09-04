@@ -26,7 +26,7 @@ Diagnose and fix a bug in a Luma editor extension. Two extensions live under `ex
     **VS Code** (`extensions/vscode/`):
     - Activation & feature wiring (`src/extension.ts`, `src/utils/feature-registry.ts`) — feature not registered or activated?
     - LSP client (`src/lsp/client-manager.ts`, `src/lsp/commands.ts`, `src/lsp/code-actions.ts`, `src/lsp/types.ts`) — client lifecycle, server restart, command, or client-side code action wrong?
-    - DAP debugging (`src/debugger/debug.ts`, `src/debugger/visualizer.ts`, `src/debugger/visualizer-renderers.ts`) — debug adapter wiring or the debug visualiser webview wrong?
+    - DAP debugging (`src/debugger/debug.ts`, `src/debugger/visualizer.ts`, `src/debugger/visualizer-renderers.ts`) — debug adapter wiring or the debug visualiser wrong?
     - Test runner (`src/testing/testing.ts`, `src/testing/coverage.ts`, and **generated** `src/generated/test-discovery.ts` for the `@test`/`@main` match patterns) — test discovery, run, or coverage wrong?
     - Tasks & playground (`src/tasks.ts`, `src/playground/`) — task provider or playground command wrong?
     - Binary download (`src/utils/binary-download.ts`, `src/utils/checksum.ts`, `src/utils/http.ts`, the hand-written `src/utils/binary/` helpers, and **generated** `src/generated/platform.ts` for the platform→asset map and `src/generated/download-constants.ts` for the checksum-manifest name) — platform detection, checksum, or download flow wrong?
@@ -51,7 +51,7 @@ Diagnose and fix a bug in a Luma editor extension. Two extensions live under `ex
     - **The VS Code TextMate grammar is the deliberate exception** — it is hand-maintained (VS Code has no native tree-sitter) and must be edited directly in `syntaxes/luma.tmLanguage.json`, keeping `src/test/suite/grammar.test.ts` passing.
     - **Keep editors consistent.** Shared defaults, download constants, and platform mappings are validated across editors by `extensions/tests/validate-*.test.mjs`; a one-editor change to shared data will break them.
     - **Respect the binary-asset contract** in [BINARY_ASSETS.md](../../extensions/BINARY_ASSETS.md) when touching any download path.
-    - **Follow the per-language style guide** for the file you edit: [typescript.instructions.md](../../instructions/typescript.instructions.md) / [javascript.instructions.md](../../instructions/javascript.instructions.md) (VS Code), [rust.instructions.md](../../instructions/rust.instructions.md) (Zed), and [css.instructions.md](../../instructions/css.instructions.md) for any webview styling.
+    - **Follow the per-language style guide** for the file you edit: [typescript.instructions.md](../../instructions/typescript.instructions.md) / [javascript.instructions.md](../../instructions/javascript.instructions.md) (VS Code), and [rust.instructions.md](../../instructions/rust.instructions.md) (Zed).
 
 5. **Add a regression test** in the affected editor's suite:
     - VS Code: a `*.test.ts` file under `extensions/vscode/src/test/suite/` (Mocha) — e.g. `grammar.test.ts` for grammar/scope regressions, `binary-download.test.ts` for download logic.

@@ -40,7 +40,6 @@ set(luma_analysis_sources
     types/generic_resolver.cpp
     source/source_manager.cpp
     resolver/resolver.cpp
-    prelude/gui_prelude.cpp
     linter/lint_rule.cpp
     linter/lint_plugin.cpp
     linter/builtin_plugins.cpp

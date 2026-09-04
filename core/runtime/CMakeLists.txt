@@ -134,20 +134,6 @@ luma_add_stdlib_library(utility
         stdlib/system/log_module.cpp
         stdlib/collections/keyvaluestore_module.cpp
         stdlib/io/color_module.cpp
-        stdlib/io/graphicalui_helpers.cpp
-        stdlib/io/graphicalui_module.cpp
-        stdlib/io/graphicalui_css_properties.cpp
-        stdlib/io/graphicalui_css_sanitiser.cpp
-        stdlib/io/graphicalui_commands.cpp
-        stdlib/io/graphicalui_commands_registration.cpp
-        stdlib/io/graphicalui_events.cpp
-        stdlib/io/graphicalui_serialization.cpp
-        stdlib/io/graphicalui_widgets.cpp
-        stdlib/io/graphicalui_widgets_basic.cpp
-        stdlib/io/graphicalui_widgets_layout.cpp
-        stdlib/io/graphicalui_widgets_charts.cpp
-        stdlib/io/graphicalui_widgets_advanced.cpp
-        stdlib/io/graphicalui_testing.cpp
 )
 
 # OBJECT libraries don't inherit include directories from their consumers
@@ -232,21 +218,6 @@ target_sources(luma_core PRIVATE
     $<TARGET_OBJECTS:luma_stdlib_concurrency>
     $<TARGET_OBJECTS:luma_stdlib_utility>
 )
-
-# WebView backend (WebView2/WebKit/WebKitGTK), exposed as the luma_webview
-# INTERFACE target carrying the bundled headers, the LUMA_HAS_WEBVIEW define, and
-# any required compile options. Both luma_core and the luma_stdlib_utility OBJECT
-# library link it PRIVATE: the GraphicalUi code they compile needs those usage
-# requirements, but they must NOT leak to consumers of luma_core. The platform
-# libraries are linked PUBLIC on luma_core separately (via LUMA_WEBVIEW_LINK_LIBRARIES)
-# so they still reach the final binaries.
-include(${PROJECT_SOURCE_DIR}/cmake/LumaWebView.cmake)
-
-target_link_libraries(luma_stdlib_utility PRIVATE luma_webview)
-target_link_libraries(luma_core PRIVATE luma_webview)
-if(LUMA_WEBVIEW_LINK_LIBRARIES)
-    target_link_libraries(luma_core PUBLIC ${LUMA_WEBVIEW_LINK_LIBRARIES})
-endif()
 
 target_link_libraries(luma_core PUBLIC luma_analysis Threads::Threads PRIVATE luma_shared)
 

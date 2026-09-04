@@ -24,7 +24,7 @@ The **single source of truth** for AI agent project context. Loaded automaticall
 
 ### [`CODEOWNERS`](CODEOWNERS)
 
-Defines code ownership for automated review requests. Auto-assigns the maintainer (`@D3V0N5H1R3`) to PRs touching owned paths. Vendored third-party code under `external/` is intentionally unowned (no review gate), while the first-party `external/gui-framework/` is owned.
+Defines code ownership for automated review requests. Auto-assigns the maintainer (`@D3V0N5H1R3`) to PRs touching owned paths. Vendored third-party code under `external/` is intentionally unowned (no review gate).
 
 ### [`PULL_REQUEST_TEMPLATE.md`](PULL_REQUEST_TEMPLATE.md)
 
