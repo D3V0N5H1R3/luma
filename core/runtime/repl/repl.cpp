@@ -18,7 +18,6 @@
 #include "analysis/errors/error.hpp"
 #include "analysis/lexer/lexer.hpp"
 #include "analysis/parser/parser.hpp"
-#include "analysis/prelude/gui_prelude.hpp"
 #include "analysis/source/source_manager.hpp"
 #include "analysis/types/type_checker.hpp"
 #include "common/path_utils.hpp"
@@ -196,14 +195,6 @@ void load_and_execute_file(const std::string& file_path, SourceManager& source_m
             return;
         }
 
-        // Make the built-in Solaris surface available to a loaded file that
-        // references it, mirroring CLI execution.  Gated on the file's own text
-        // (not the whole session, whose virtual prelude file also mentions the
-        // trigger) and guarded against double injection inside the prelude.
-        if (prelude::source_uses_gui(source_file.text)) {
-            prelude::inject_gui_prelude(*file_program, source_manager);
-        }
-
         auto value = repl_detail::compile_and_run(*file_program, checker, vm);
 
         if (!value) {
@@ -278,15 +269,6 @@ void handle_expression(const std::string& input, SourceManager& source_manager,
 
         if (!program) {
             return;
-        }
-
-        // Make the built-in Solaris surface available to an interactive line
-        // that references it, mirroring --eval and file execution.  Each REPL
-        // input is an independent program (the type checker resets per line), so
-        // the prelude is injected per input; the shared session SourceManager
-        // reuses one virtual "<gui-prelude>" file for stable diagnostics.
-        if (prelude::source_uses_gui(input)) {
-            prelude::inject_gui_prelude(*program, source_manager);
         }
 
         auto value = repl_detail::compile_and_run(*program, checker, vm);
@@ -630,16 +612,6 @@ int run_eval(bool sandbox) {
 
         if (!program) {
             return exit_code::syntax_error;
-        }
-
-        // Make the built-in Solaris surface available to --eval snippets that
-        // reference it, mirroring file execution. A local SourceManager gives the
-        // injected prelude its own virtual file id; --eval reports diagnostics by
-        // message, so no persistent source context is required.
-        SourceManager eval_source_manager;
-
-        if (prelude::source_uses_gui(source)) {
-            prelude::inject_gui_prelude(*program, eval_source_manager);
         }
 
         if (!repl_detail::compile_and_run(*program, checker, vm)) {

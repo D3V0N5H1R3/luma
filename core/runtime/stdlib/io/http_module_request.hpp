@@ -49,8 +49,8 @@ do_http_request_typed(const std::string& method, const std::string& url, const s
 
 // Plain-data result of an HTTP request: the response body on transport success,
 // or an error message. Unlike do_http_request this builds no Luma Value, so it
-// is suitable for callers (such as the GraphicalUi runtime) that need the raw
-// body without constructing interpreter objects.
+// is suitable for callers that need the raw body without constructing
+// interpreter objects.
 struct HttpFetchResult {
     bool ok{false};
     int status_code{0};
@@ -61,8 +61,8 @@ struct HttpFetchResult {
 
 // Perform a full HTTP request and return the response body as plain text.
 // On transport success the body is returned regardless of HTTP status code
-// (mirroring the browser fetch().text() semantics the GraphicalUi http
-// commands previously relied on); on failure an error message is returned.
+// (mirroring the browser fetch().text() semantics); on failure an error
+// message is returned.
 [[nodiscard]] HttpFetchResult
 do_http_fetch_text(const std::string& method, const std::string& url, const std::string& body,
                    const std::vector<std::pair<std::string, std::string>>& extra_headers,

@@ -54,13 +54,8 @@ the Git hook installer, and coverage).
 
 Some optional components need extra tooling:
 
-- **`GraphicalUi` on Linux** — the WebKitGTK development headers and `pkg-config`
-  (e.g. `sudo apt-get install libwebkit2gtk-4.1-dev pkg-config`). Without them
-  the build succeeds but the module is disabled (compiled as a stub); pass
-  `-DLUMA_FEATURE_WEBVIEW=OFF` to disable it deliberately. Windows (WebView2) and
-  macOS (WebKit) need no extra package.
-- **VS Code extension and the Node-based linters** (markdownlint, Stylelint,
-  ESLint, Prettier) — **Node.js 20 or later** (CI builds with Node 22).
+- **VS Code extension and the Node-based linters** (markdownlint, ESLint,
+  Prettier) — **Node.js 20 or later** (CI builds with Node 22).
 - **Zed extension** — **Rust** via [rustup](https://rustup.rs/) with the
   `wasm32-wasip1` target (`rustup target add wasm32-wasip1`).
 
@@ -200,7 +195,7 @@ Run sandbox tests (verify safe modules work in `--box` mode):
 build/luma --box --test tests/features/language/sandbox.luma
 ```
 
-Run **and verify every example** end to end — including ones that need user input. Console examples are driven with scripted stdin, Terminal/TUI examples through the headless Terminal harness, and `GraphicalUi` examples in headless mode; any example with `@test` blocks also has its assertions checked:
+Run **and verify every example** end to end — including ones that need user input. Console examples are driven with scripted stdin and Terminal/TUI examples through the headless Terminal harness; any example with `@test` blocks also has its assertions checked:
 
 ```bash
 python scripts/run_luma_examples.py
@@ -264,7 +259,6 @@ below, then invoke it as CI does:
 | Shell                       | ShellCheck           | auto-discovered            | `ci-shell.yml`        |
 | PowerShell                  | PSScriptAnalyzer     | `PSScriptAnalyzerSettings` | `ci-powershell.yml`   |
 | CMake                       | cmakelint            | `.cmakelintrc`             | `ci-cmake.yml`        |
-| CSS                         | Stylelint            | `stylelint.config.mjs`     | `ci-css.yml`          |
 | Markdown                    | markdownlint-cli2    | `.markdownlint-cli2.jsonc` | `ci-markdown.yml`     |
 
 The exact commands each gate runs (with the pinned tool versions) live in each
@@ -300,9 +294,8 @@ shellcheck $(git ls-files '*.sh' '*.bash' ':!:external/**')
 # PowerShell — PSScriptAnalyzer (pwsh: Install-Module PSScriptAnalyzer)
 pwsh -c "Invoke-ScriptAnalyzer -Path . -Recurse -Settings ./PSScriptAnalyzerSettings.psd1"
 
-# Markdown and CSS — markdownlint-cli2 and Stylelint (require Node.js)
+# Markdown — markdownlint-cli2 (requires Node.js)
 npx markdownlint-cli2
-npx stylelint external/gui-framework/gui-overrides.css
 ```
 
 ### Git Hooks
@@ -384,8 +377,7 @@ Available fuzz targets:
 | `fuzz_decimal`               | `Decimal` base-10 parser        |
 | `fuzz_protocol`              | `shared/protocol` transport     |
 | `fuzz_compression`           | `Compression` codec             |
-| `fuzz_encoder`               | `Encoder` Base64 / URL codecs   |
-| `fuzz_graphicalui_css`       | `GraphicalUi` CSS sanitiser     |
+| `fuzz_encoder`              | `Encoder` Base64 / URL codecs   |
 | `fuzz_keyvaluestore`         | `KeyValueStore` `.kv` codec     |
 | `fuzz_hash`                  | `Hash` CRC32 / hex codec        |
 | `fuzz_path`                  | `FileSystem` path validator     |

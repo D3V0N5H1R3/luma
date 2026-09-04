@@ -91,9 +91,9 @@ private:
 
     // Type-checks `program`, appending errors and warnings (and any phase
     // failure) to the result's diagnostics.  Diagnostics whose primary location
-    // belongs to `prelude_file_id` (the injected Solaris surface) are dropped:
-    // the prelude is not part of the user's document, so its locations cannot be
-    // rendered against `source`.  Pass 0 when no prelude was injected.
+    // belongs to `prelude_file_id` are dropped: an injected prelude is not part
+    // of the user's document, so its locations cannot be rendered against
+    // `source`.  Pass 0 when no prelude was injected.
     void type_check_phase(Program& program, AnalysisResult& result, const std::string& source,
                           const std::string& uri, FileId prelude_file_id);
 
@@ -103,8 +103,8 @@ private:
 
     // Runs the linter and appends its warnings (and any phase failure) to the
     // result's diagnostics.  Diagnostics whose primary location belongs to
-    // `prelude_file_id` (the injected Solaris surface) are dropped for the same
-    // reason as in type_check_phase.  Pass 0 when no prelude was injected.
+    // `prelude_file_id` are dropped for the same reason as in type_check_phase.
+    // Pass 0 when no prelude was injected.
     void lint_phase(const Program& program, AnalysisResult& result, const std::string& source,
                     const std::string& uri, const std::vector<std::size_t>& line_starts,
                     FileId prelude_file_id);

@@ -10,8 +10,8 @@
 // the inline expect_*, make_failure_value(), clone_array(), or
 // container_* helpers defined in native_function.hpp.
 //
-// Typical consumers: vm.hpp, graphicalui_internal.hpp, or any header
-// that stores a NativeCallable but never calls stdlib helpers directly.
+// Typical consumers: vm.hpp or any header that stores a NativeCallable but
+// never calls stdlib helpers directly.
 
 #include <functional>
 #include <memory>

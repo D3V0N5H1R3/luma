@@ -159,29 +159,6 @@ namespace {
                 return TypeInfo::make_named(K::Choice, "Terminal.CursorStyle");
             }
 
-            if (desc.named_type == "GraphicalUi.Severity") {
-                return TypeInfo::make_named(K::Choice, "GraphicalUi.Severity");
-            }
-
-            if (desc.named_type == "GraphicalUi.ButtonVariant") {
-                return TypeInfo::make_named(K::Choice, "GraphicalUi.ButtonVariant");
-            }
-
-            if (desc.named_type == "GraphicalUi.MouseEventType") {
-                return TypeInfo::make_named(K::Choice, "GraphicalUi.MouseEventType");
-            }
-            if (desc.named_type == "GraphicalUi.ThemeMode") {
-                return TypeInfo::make_named(K::Choice, "GraphicalUi.ThemeMode");
-            }
-            if (desc.named_type == "GraphicalUi.ScrollBehavior") {
-                return TypeInfo::make_named(K::Choice, "GraphicalUi.ScrollBehavior");
-            }
-            if (desc.named_type == "GraphicalUi.SortDirection") {
-                return TypeInfo::make_named(K::Choice, "GraphicalUi.SortDirection");
-            }
-            if (desc.named_type == "GraphicalUi.VisibilityState") {
-                return TypeInfo::make_named(K::Choice, "GraphicalUi.VisibilityState");
-            }
             if (desc.named_type == "Compression.Format") {
                 return TypeInfo::make_named(K::Choice, "Compression.Format");
             }

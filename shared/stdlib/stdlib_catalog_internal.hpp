@@ -400,62 +400,6 @@ namespace named {
     return ReturnTypeDesc::named("MouseEvent");
 }
 
-// GraphicalUi.classify_device_typed returns this record (bare name, like
-// mouse_event()/input_event() — records resolve by their short name).
-[[nodiscard]] inline ReturnTypeDesc gui_device_info() {
-    return ReturnTypeDesc::named("DeviceInfo");
-}
-
-// GraphicalUi.Severity — the typed alert/toast severity accepted by
-// GraphicalUi.alert_of / toast_of / severity_to_string.  Needs a matching branch
-// in stdlib_type_signatures.cpp.
-[[nodiscard]] inline ReturnTypeDesc gui_severity() {
-    return ReturnTypeDesc::named("GraphicalUi.Severity");
-}
-
-// GraphicalUi.ButtonVariant — the typed button-hierarchy style accepted by
-// GraphicalUi.button_of / button_variant_to_string.  Needs a matching branch in
-// stdlib_type_signatures.cpp.
-[[nodiscard]] inline ReturnTypeDesc gui_button_variant() {
-    return ReturnTypeDesc::named("GraphicalUi.ButtonVariant");
-}
-
-// GraphicalUi.MouseEventType — the typed pointer-event kind accepted by
-// GraphicalUi.on_mouse_of / mouse_event_type_to_string.  Needs a matching branch
-// in stdlib_type_signatures.cpp.
-[[nodiscard]] inline ReturnTypeDesc gui_mouse_event_type() {
-    return ReturnTypeDesc::named("GraphicalUi.MouseEventType");
-}
-
-// GraphicalUi.ThemeMode — the typed theme-mode override accepted by
-// GraphicalUi.set_theme_mode_of / theme_mode_to_string.  Needs a matching branch
-// in stdlib_type_signatures.cpp.
-[[nodiscard]] inline ReturnTypeDesc gui_theme_mode() {
-    return ReturnTypeDesc::named("GraphicalUi.ThemeMode");
-}
-
-// GraphicalUi.ScrollBehavior — the typed scroll behaviour accepted by
-// GraphicalUi.scroll_to_of.  Needs a matching branch in
-// stdlib_type_signatures.cpp.
-[[nodiscard]] inline ReturnTypeDesc gui_scroll_behavior() {
-    return ReturnTypeDesc::named("GraphicalUi.ScrollBehavior");
-}
-
-// GraphicalUi.SortDirection — the typed table sort direction accepted by
-// GraphicalUi.sort_direction_to_string.  Needs a matching branch in
-// stdlib_type_signatures.cpp.
-[[nodiscard]] inline ReturnTypeDesc gui_sort_direction() {
-    return ReturnTypeDesc::named("GraphicalUi.SortDirection");
-}
-
-// GraphicalUi.VisibilityState — the typed page-visibility state delivered to
-// GraphicalUi.on_visibility_change_typed and accepted by
-// GraphicalUi.visibility_state_to_string.  Needs a matching branch in
-// stdlib_type_signatures.cpp.
-[[nodiscard]] inline ReturnTypeDesc gui_visibility_state() {
-    return ReturnTypeDesc::named("GraphicalUi.VisibilityState");
-}
-
 // Terminal.parse_key returns this choice directly, so — like json_value() and
 // file_kind() — it uses the fully-qualified name (choices resolve qualified;
 // records such as input_event()/mouse_event() resolve by bare name).
@@ -689,9 +633,6 @@ void register_log_functions(std::vector<FunctionSpec>& specs, const ModuleBuilde
 
 void register_terminal_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                  const ParamShorthands& p);
-
-void register_graphical_ui_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
-                                     const ParamShorthands& p);
 
 void register_result_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                const ParamShorthands& p);

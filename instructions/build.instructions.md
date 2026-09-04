@@ -210,7 +210,6 @@ Run a fuzzer with an optional corpus directory:
 | ------------------------- | ------- | ------------------------------------------------- |
 | `LUMA_BUILD_TESTS`        | `ON`    | Build and register C++ unit and integration tests |
 | `LUMA_FEATURE_TLS`        | `ON`    | Enable HTTPS support via Mbed TLS                 |
-| `LUMA_FEATURE_WEBVIEW`    | `ON`    | Enable the GraphicalUi module via the platform WebView backend |
 | `LUMA_BUILD_FUZZ`         | `OFF`   | Build LibFuzzer fuzz targets (Clang only)         |
 | `LUMA_FEATURE_SANITIZERS` | `OFF`   | Enable ASan + UBSan (Clang/GCC only)              |
 | `LUMA_FEATURE_COVERAGE`   | `OFF`   | Enable code coverage instrumentation (Clang/GCC)  |

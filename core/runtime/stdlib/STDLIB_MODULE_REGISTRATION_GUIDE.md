@@ -99,9 +99,9 @@ Use `define_native` directly (bypassing both builders) only when one or more of 
 | Constraint | Example |
 |---|---|
 | **Global / unqualified names** | `print`, `assert`, `type_of` — no module prefix |
-| **Blocking lifecycle** | `GraphicalUi.app` runs an OS event loop that blocks until the window closes |
-| **Conditional compilation** | Module guarded by `#ifdef LUMA_HAS_WEBVIEW`; stub path registers placeholder names from a list |
-| **Shared mutable state** | Thread-local webview handle captured across many lambdas |
+| **Blocking lifecycle** | `Socket.accept` blocks waiting for an incoming connection |
+| **Conditional compilation** | Module guarded by `#ifdef LUMA_HAS_TLS`; stub path registers placeholder names from a list |
+| **Shared mutable state** | Thread-local terminal state captured across many lambdas |
 | **Split implementation** | Module delegates to many helper files; builder's single-chain assumption doesn't apply |
 
 ```cpp
@@ -113,7 +113,7 @@ define_native(env, "print", [](std::span<const Value> args, SourceLocation) -> V
 });
 ```
 
-When using `define_native` for a non-trivial module, add a comment at the top of the `.hpp` explaining which constraints apply (see `graphicalui_module.hpp` for the reference example).
+When using `define_native` for a non-trivial module, add a comment at the top of the `.hpp` explaining which constraints apply (see `core_builtins_module.hpp` for the reference example).
 
 ---
 
@@ -156,7 +156,7 @@ Keep the public header (`<module_lower>_module.hpp`) small: it only declares `re
 | `_serializer.cpp` | Serialisation (JSON writer, XML writer, CSV writer) |
 | `_internal.hpp` | Shared internal helpers used across split files — not part of the public API |
 
-The `_parser.cpp` / `_serializer.cpp` spellings are preferred, but the equivalent `_parsing.cpp` / `_serialization.cpp` forms are also accepted, as used by `http_module_parsing.cpp` and `graphicalui_serialization.cpp` below.
+The `_parser.cpp` / `_serializer.cpp` spellings are preferred, but the equivalent `_parsing.cpp` / `_serialization.cpp` forms are also accepted, as used by `http_module_parsing.cpp` below.
 
 Real examples in the codebase:
 
@@ -175,16 +175,6 @@ xml_module_serializer.cpp    — XML serialisation, search, and navigation
 
 http_module.cpp              — registration + core requests
 http_module_parsing.cpp      — response parsing helpers
-
-graphicalui_module.cpp       — registration
-graphicalui_internal.hpp     — shared state, widget tree, helpers
-graphicalui_widgets.cpp      — core widget management
-graphicalui_widgets_basic.cpp
-graphicalui_events.cpp
-graphicalui_css_properties.cpp
-graphicalui_css_sanitiser.cpp
-graphicalui_serialization.cpp
-graphicalui_commands.cpp
 ```
 
 ### Shared internal helpers

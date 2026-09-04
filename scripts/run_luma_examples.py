@@ -13,14 +13,9 @@ successfully — including examples that would normally require user input:
   ``editor``) are driven through the headless Terminal harness: scripted keys
   are fed to ``read_key`` / ``get_input`` via ``LUMA_TERMINAL_INPUT`` (one key
   per line), so the real input loop runs unattended and exercises its logic.
-* **GraphicalUi** examples (``gui_*`` and ``solaris_*``) are run with ``LUMA_GUI_HEADLESS=1`` so
-  the interpreter executes the full init / view / subscribe lifecycle without
-  opening a window. They must exit 0 and print ``initial render OK``.
 * Any example that declares ``@test`` functions is *additionally* run with
   ``luma --test`` so its embedded assertions are verified — not just that
-  ``@main`` completes. GUI examples drive their UI through the headless
-  ``GraphicalUi.test_*`` interaction API, so button clicks and input are
-  simulated and the resulting model is asserted on.
+  ``@main`` completes.
 * A couple of examples are intentionally skipped (documented below).
 
 Usage:
@@ -55,12 +50,8 @@ from _common import (
 # ── Categories ────────────────────────────────────────────────────────
 RUN = "run"  # Run directly, expect exit 0.
 STDIN = "stdin"  # Feed scripted stdin, expect exit 0.
-GUI = "gui"  # Run headless (LUMA_GUI_HEADLESS=1), expect exit 0 + render marker.
 TERMINAL = "terminal"  # Drive a raw-mode TUI via LUMA_TERMINAL_INPUT, expect exit 0.
 SKIP = "skip"  # Do not run; report why.
-
-# Marker printed by the headless GraphicalUi lifecycle.
-GUI_MARKER = "initial render OK"
 
 
 @dataclass(frozen=True)
@@ -78,8 +69,7 @@ class ExampleSpec:
 
 
 # Per-example overrides keyed by file basename. Anything not listed here uses
-# the default ExampleSpec() (run directly, expect exit 0), except gui_* and
-# solaris_* files which are auto-classified as headless GUI runs.
+# the default ExampleSpec() (run directly, expect exit 0).
 OVERRIDES: dict[str, ExampleSpec] = {
     # ── Terminal raw-mode TUIs (driven via the headless Terminal harness) ──
     # LUMA_TERMINAL_INPUT feeds scripted keys (one per line) to
@@ -140,12 +130,6 @@ def spec_for(path: Path) -> ExampleSpec:
     name = path.name
     if name in OVERRIDES:
         return OVERRIDES[name]
-    if name.startswith(("gui_", "solaris_")):
-        return ExampleSpec(
-            category=GUI,
-            env={"LUMA_GUI_HEADLESS": "1"},
-            expect_substring=GUI_MARKER,
-        )
     return ExampleSpec()
 
 

@@ -127,7 +127,6 @@ configure time with `-DLUMA_FUZZ_QUICK_TIME=<secs>`.
 | `fuzz_path`             | `FileSystem` path validator              | Resolves arbitrary bytes as sandbox-relative paths; accepted paths must stay inside the working directory (oracle) |
 | `fuzz_random`           | `Random` bounded-integer core            | Draws a uniform integer in an untrusted `[lo, hi]` range; spans never overflow or divide by zero and draws stay in range (oracle) |
 | `fuzz_http`             | `Http` URL parser                        | Parses arbitrary bytes as a URL; parse→reconstruct→parse must converge (oracle) |
-| `fuzz_graphicalui_css`  | `GraphicalUi` CSS sanitiser              | Sanitises arbitrary bytes as a user-loaded stylesheet; the allowlist filter only ever drops bytes, so output never grows (oracle) |
 | `fuzz_keyvaluestore`    | `KeyValueStore` `.kv` codec              | Parses arbitrary bytes as `.kv` store content; escape/unescape inverts and serialise→parse round-trips, and the glob matcher never crashes (oracle) |
 | `fuzz_process`          | `Process` command tokenizer              | Tokenizes arbitrary bytes into argv for `Process.run`; re-quote→tokenize round-trips (oracle) |
 | `fuzz_regex`            | `RegularExpression` ReDoS heuristic      | Walks arbitrary bytes as a regex pattern through the nested-quantifier guard; idempotent, never flags a group-free pattern, and fixed safe/dangerous known answers hold (oracle) |
@@ -136,7 +135,7 @@ configure time with `-DLUMA_FUZZ_QUICK_TIME=<secs>`.
 
 ### Trust boundaries and oracles
 
-The last twenty targets close gaps beyond the compile pipeline:
+The last nineteen targets close gaps beyond the compile pipeline:
 
 - **`fuzz_bytecode_deserializer`** feeds arbitrary bytes to
   `BytecodeSerializer::deserialize` — the hand-written binary reader behind the
@@ -268,18 +267,6 @@ The last twenty targets close gaps beyond the compile pipeline:
   a scheme-default port, collapsing a missing path to `/`, folding an unparseable
   port back to the default), the second and third parses must agree exactly, so
   any non-convergence is a genuine parser inconsistency.
-- **`fuzz_graphicalui_css`** drives the `GraphicalUi` CSS sanitiser
-  (`core/runtime/stdlib/io/graphicalui_css.hpp`) behind `GraphicalUi.load_stylesheet`.
-  `sanitise_loaded_css` is a hand-written allowlist tokeniser that walks an
-  untrusted, user-loaded stylesheet — skipping HTML tags and CSS comments,
-  validating at-rules against an allowlist, dropping unknown CSS functions and
-  rejecting unsafe `url()` schemes with manual `substr` / `find` and
-  balanced-paren / balanced-brace arithmetic — so arbitrary bytes must never
-  crash it; the sibling `is_known_css_property` and `suggest_css_property`
-  helpers (the latter a Levenshtein scan) are walked over the same bytes. A
-  length-monotonicity oracle additionally checks that the sanitiser only ever
-  drops bytes, so its output — and a second pass over that output — can never
-  grow.
 - **`fuzz_keyvaluestore`** drives the `KeyValueStore` `.kv` codec
   (`core/runtime/stdlib/collections/keyvaluestore_codec.hpp`) behind `KeyValueStore.open`,
   `KeyValueStore.open_read_only` and `KeyValueStore.reload` (through the

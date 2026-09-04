@@ -7,7 +7,6 @@
 #include "analysis/parser/parser.hpp"
 #include "analysis/pipeline/pipeline.hpp"
 #include "analysis/pipeline/type_checker_pass.hpp"
-#include "analysis/prelude/gui_prelude.hpp"
 #include "analysis/source/source_manager.hpp"
 #include "runtime/compiler/compiler.hpp"
 #include "runtime/compiler/compiler_pass.hpp"
@@ -150,15 +149,6 @@ compile_program_pipeline(SourceManager& source_manager, const std::string& path,
                 collect_error_messages(include_resolver.get_diagnostics(), error_out,
                                        "Include resolution errors", detailed_errors);
                 return std::nullopt;
-            }
-
-            // Make the built-in Solaris surface available to debugged
-            // programs that reference it, mirroring normal execution, so that
-            // breakpoint expressions type-check against its declarations. Gated
-            // on the program (root plus includes) mentioning Solaris and
-            // guarded against double injection inside inject_gui_prelude.
-            if (source_manager.any_source_contains_word("Solaris")) {
-                prelude::inject_gui_prelude(program, source_manager);
             }
 
             return run_pipeline(program, error_out, "Compilation errors", detailed_errors);

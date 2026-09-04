@@ -1324,7 +1324,6 @@ These are just the beginner essentials. Luma has dozens of modules; here are som
 | `Stack`     | last-in-first-out sequences                          |
 | `Log`       | structured logging                                   |
 | `Terminal`  | rich, colourful terminal interfaces                  |
-| `GraphicalUi` and `Solaris` | graphical desktop applications       |
 
 The [Standard Library Reference](Luma_Standard_Library_Reference.md) documents every module and every function, with the exact types. Get comfortable skimming it — knowing *where to look* is a real programming skill.
 
@@ -1731,7 +1730,6 @@ When you're ready for more, here's the path onward:
 - **Deepen the language.** The [User Manual](Luma_User_Manual.md) covers everything this tutorial simplified or skipped: named arguments, type aliases, **interfaces** (shared shapes across types), **generics** (functions and types that work for *any* element type), and **ownership** for fine-grained safety.
 - **Handle errors like a pro.** The [Error Handling](Luma_Error_Handling.md) guide goes deep on `result`, `optional`, and when to reach for `try`/`catch`.
 - **Do more at once.** Luma has first-class **concurrency** — `task`s and `channel`s for doing several things in parallel. See the [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) and the User Manual.
-- **Build something graphical.** The [Solaris Guide](Luma_Solaris_Guide.md) teaches a beginner-friendly way to build desktop apps with buttons, text, and charts, atop the lower-level [GraphicalUi](Luma_GraphicalUi_Guide.md) engine.
 - **Learn the tools.** Explore the [REPL Guide](Luma_REPL_Guide.md) for interactive experimentation, and set up the editor extensions for live error-checking as you type.
 
 Above all: **keep writing programs.** Pick something small you'd find useful — a tip calculator, a to-do list, a dice roller — and build it. Every program teaches you something no tutorial can.
@@ -1788,7 +1786,6 @@ A quick reference for the terms introduced in this tutorial.
 - [User Manual](Luma_User_Manual.md) — the complete, precise reference for every language feature introduced here
 - [Standard Library Reference](Luma_Standard_Library_Reference.md) — the full catalogue of built-in modules and functions
 - [REPL Guide](Luma_REPL_Guide.md) — experiment with the language interactively as you learn
-- [Solaris Tutorial](Luma_Solaris_Tutorial.md) — put these language basics to work building a graphical desktop app
 - [Contributing](../CONTRIBUTING.md) — install and build Luma, and set up an editor
 - [Coding Guidelines](Luma_Coding_Guidelines.md) — idiomatic style and conventions to grow into
 - [Error Handling](Luma_Error_Handling.md) — a deeper look at `result`, `optional`, and recovery

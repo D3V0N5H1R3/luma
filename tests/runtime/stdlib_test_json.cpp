@@ -159,10 +159,9 @@ static void test_json_serialize_pretty_layout() {
 }
 
 // ─── Divergent-branch characterization (choice / record / tuple / depth) ───
-// These pin the Json module serialiser where it deliberately differs from the
-// GraphicalUi serialiser: only nullary choices serialise (to a bare string,
-// non-nullary → null), strings do NOT slash-escape, and exceeding the
-// nesting-depth limit yields "null" rather than throwing.
+// These pin the Json module serialiser's policy: only nullary choices serialise
+// (to a bare string, non-nullary → null), strings do NOT slash-escape, and
+// exceeding the nesting-depth limit yields "null" rather than throwing.
 
 static void test_json_serialize_nullary_choice_string() {
     const auto v = eval(R"(choice Color { Red, Green, Blue } Json.serialize(Color.Green))");
@@ -186,7 +185,7 @@ static void test_json_serialize_tuple_array() {
 }
 
 static void test_json_serialize_string_no_slash_escape() {
-    // Unlike the GUI serialiser, the Json module leaves forward slashes bare.
+    // The Json module leaves forward slashes bare.
     ASSERT_EQ(eval(R"(Json.serialize("</script>"))").as_string(), R"("</script>")");
 }
 

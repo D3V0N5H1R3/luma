@@ -31,7 +31,7 @@ This prompt covers creating the module skeleton and wiring it into the runtime, 
 6. Add C++ unit tests in a `tests/runtime/stdlib_test_<module_lower>.cpp` file and wire it into CMake.
 7. Add a Luma feature test at `tests/features/stdlib/<module_lower>_functions.luma`.
 8. **When warranted, add fuzz and/or benchmark coverage.** Add a fuzz target in `fuzz/` only if the module parses or decodes *untrusted input* (a new parser/decoder/codec entry point). Add `time_it` cases to a `bench_<topic>.luma` in `benchmarks/` only if the module is performance-sensitive. Skip both for pure-logic modules.
-9. Document the module in `Luma_Standard_Library_Reference.md` under the standard library section. If the module is large enough to warrant its own guide (e.g. `GraphicalUi` → `Luma_GraphicalUi_Guide.md`), add one.
+9. Document the module in `Luma_Standard_Library_Reference.md` under the standard library section. If the module is large enough to warrant its own guide, add one.
 10. Build and verify: `cmake --build --preset default`, then `ctest --preset default` for the C++ tests and `build/Release/luma --test tests/features/stdlib/<module_lower>_functions.luma` for the Luma test. Confirm everything passes before finishing.
 
 ## Verification Tiers

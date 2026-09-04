@@ -2,11 +2,9 @@
 """PreToolUse agent hook: block edits to vendored code under ``external/``.
 
 The project's boundary — stated across the agent guides and enforced in review
-— is: **never modify vendored, third-party code in ``external/``**, with the
-single exception of the first-party GraphicalUi front-end in
-``external/gui-framework/``. This hook turns that guideline into a
-deterministic gate: a file-mutating tool (edit / write / create) that targets
-``external/`` (outside ``gui-framework/``) is denied *before* it runs.
+— is: **never modify vendored, third-party code in ``external/``**. This hook
+turns that guideline into a deterministic gate: a file-mutating tool (edit /
+write / create) that targets ``external/`` is denied *before* it runs.
 
 Design: the hook is deliberately **fail-open**. It denies only when it is
 confident the operation is a file write to a protected path. Reads, searches,
@@ -31,9 +29,8 @@ from pathlib import Path
 # notebook variants).
 PATH_KEYS = ("file_path", "path", "filePath", "notebook_path", "notebookPath")
 
-# The protected top-level directory and the one first-party exception within it.
+# The protected top-level directory.
 PROTECTED_TOP = "external"
-EXCEPTION_SUBDIR = "gui-framework"
 
 
 def read_payload() -> dict:
@@ -93,7 +90,7 @@ def find_repo_root(start: Path) -> Path:
 
 
 def is_protected(raw_path: str, base: Path) -> bool:
-    """True when ``raw_path`` resolves under ``external/`` but not ``external/gui-framework/``."""
+    """True when ``raw_path`` resolves under ``external/``."""
     candidate = Path(raw_path)
     if not candidate.is_absolute():
         candidate = base / candidate
@@ -107,14 +104,7 @@ def is_protected(raw_path: str, base: Path) -> bool:
     except ValueError:
         return False  # Outside the repository — not this hook's concern.
     parts = rel.parts
-    if not parts or parts[0].casefold() != PROTECTED_TOP:
-        return False
-    # external/gui-framework/... is first-party and editable; everything
-    # else under external/ is vendored and protected. Case-fold the segments
-    # so the guard does not depend on Path.resolve() having canonicalised the
-    # on-disk case (which it cannot do when external/ is an unpopulated
-    # submodule dir) to stay correct on case-insensitive filesystems.
-    return not (len(parts) >= 2 and parts[1].casefold() == EXCEPTION_SUBDIR)
+    return bool(parts) and parts[0].casefold() == PROTECTED_TOP
 
 
 def deny(reason: str) -> int:
@@ -157,8 +147,7 @@ def main() -> int:
         if is_protected(raw_path, base):
             return deny(
                 f"Editing vendored code under '{PROTECTED_TOP}/' is blocked by the "
-                f"protect-vendored-paths hook (target: {raw_path}). Only "
-                f"'{PROTECTED_TOP}/{EXCEPTION_SUBDIR}/' is first-party and editable. "
+                f"protect-vendored-paths hook (target: {raw_path}). "
                 "If this change is genuinely required, make it deliberately and "
                 "outside the agent."
             )

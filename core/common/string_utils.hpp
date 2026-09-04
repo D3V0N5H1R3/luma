@@ -39,7 +39,7 @@ namespace luma {
 // that is, not immediately preceded or followed by an identifier character
 // ([A-Za-z0-9_]).  Used to gate name-triggered behaviour (e.g. built-in prelude
 // injection) on a whole-word match so that a longer identifier such as
-// `mySolarisHelper` does not falsely match `Solaris`.  This is a
+// `mySpecialHelper` does not falsely match `Special`.  This is a
 // deliberately cheap lexical heuristic, not a tokenizer: the word still matches
 // inside a comment or string literal, which is acceptable for its gating use.
 [[nodiscard]] inline bool contains_identifier_token(std::string_view haystack,

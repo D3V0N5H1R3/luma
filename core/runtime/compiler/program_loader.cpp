@@ -13,7 +13,6 @@
 #include "analysis/diagnostics/renderer.hpp"
 #include "analysis/lexer/lexer.hpp"
 #include "analysis/parser/parser.hpp"
-#include "analysis/prelude/gui_prelude.hpp"
 #include "analysis/source/source_manager.hpp"
 #include "common/path_utils.hpp"
 #include "runtime/compiler/compiler_config.hpp"
@@ -121,14 +120,6 @@ ProgramLoadResult load_program(const std::string& path, SourceManager& source_ma
     }
 
     auto resolved = resolve_includes(std::move(parsed.program), source_manager, warnings);
-
-    // Inject the built-in Solaris surface when the program references
-    // it, so `namespace Solaris`, the design tokens, and the `View` record
-    // are available with no include. Conditional so non-GUI programs are
-    // unaffected and unpolluted; guarded internally against double injection.
-    if (resolved.ok() && source_manager.any_source_contains_word("Solaris")) {
-        prelude::inject_gui_prelude(resolved.program, source_manager);
-    }
 
     render_all_warnings(warnings, source_manager);
     return resolved;

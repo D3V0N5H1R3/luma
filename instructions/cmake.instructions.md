@@ -234,7 +234,7 @@ Luma keeps every third-party dependency **vendored** under `external/` and build
 from source as part of the normal CMake configure. Dependencies are never downloaded
 at configure or build time, so the project always builds offline and reproducibly. See
 `cpp.instructions.md` §7.1 for the policy and the current list of vendored libraries
-(miniz, Mbed TLS, webview).
+(miniz, Mbed TLS).
 
 Wrap each vendored library in a static target that points at the sources under
 `external/`, then link it with a namespaced alias:

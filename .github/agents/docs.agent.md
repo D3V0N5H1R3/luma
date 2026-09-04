@@ -35,8 +35,6 @@ You are a technical writer for the Luma programming language. You read source co
 | `Luma_Language_Server.md`            | LSP implementation                                        |
 | `Luma_Syntax_Highlighting.md`        | Editor extension design                                   |
 | `Luma_REPL_Guide.md`                 | Interactive REPL usage                                    |
-| `Luma_Solaris_Guide.md`              | Solaris high-level surface guide (beginner-first MVU)     |
-| `Luma_GraphicalUi_Guide.md`          | GraphicalUi low-level webview engine guide                |
 | `Luma_Initial_Concept.md`            | Original design vision (historical)                       |
 | `CONTRIBUTING.md`                    | Development environment setup (all editors)               |
 | `documents/DIRECTORY.md`                | Documentation index (this folder)                         |

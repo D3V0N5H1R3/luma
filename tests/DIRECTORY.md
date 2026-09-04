@@ -44,7 +44,7 @@ All of these are registered with CTest from `tests/CMakeLists.txt`.
 - **Purpose:** test the language from a user's perspective. These tests are written in Luma, use the `@test` annotation with `assert()`, and act as a living specification of the language's behaviour.
 - **Location:** `tests/features/`, split into `language/` and `stdlib/`. Each `.luma` file is one self-contained suite.
 - **Execution:** every suite runs through the `luma` interpreter with `--strict --test`. The `sandbox.luma` suite additionally runs under `--box`, so its "operation blocked" assertions exercise the real restricted environment.
-- **CTest registration:** each suite is registered as `luma_<name>` with a 30-second timeout (configurable via the `LUMA_FEATURE_TEST_TIMEOUT` cache variable) and the labels `feature` plus `feature_language` or `feature_stdlib`. GraphicalUi suites are skipped when no WebView backend is available.
+- **CTest registration:** each suite is registered as `luma_<name>` with a 30-second timeout (configurable via the `LUMA_FEATURE_TEST_TIMEOUT` cache variable) and the labels `feature` plus `feature_language` or `feature_stdlib`.
 
 ## 4. Running Tests
 

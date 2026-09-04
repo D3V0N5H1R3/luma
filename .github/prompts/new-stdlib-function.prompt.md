@@ -24,12 +24,12 @@ Add a new built-in function to a Luma standard library module. Follow the existi
 8. **When warranted, add fuzz and/or benchmark coverage.** Most pure-logic functions (e.g. `String.reverse`) need neither — skip both by default.
     - **Fuzz** — only if the function decodes or parses *untrusted input* (a new parser/decoder entry point, regex, compression, etc.). Extend the existing module's target in `fuzz/` (e.g. `fuzz_json.cpp`, `fuzz_xml.cpp`, `fuzz_string.cpp`) and its seed corpus — the targets are trust-boundary/codec-scoped, not per-function, so do not add a new target for one function.
     - **Benchmark** — only if the function is performance-sensitive or on a hot path. Add a `time_it` case to the relevant `bench_<topic>.luma` in `benchmarks/` (e.g. `bench_strings.luma`); do not create a new file for a single case. CI fails on a >10% regression against the cached baseline.
-9. Document the function in `Luma_Standard_Library_Reference.md` under the module's section. If the module has its own dedicated guide (e.g. `GraphicalUi` → `Luma_GraphicalUi_Guide.md`), update that guide's detailed reference too.
+9. Document the function in `Luma_Standard_Library_Reference.md` under the module's section. If the module has its own dedicated guide, update that guide's detailed reference too.
 10. Build and verify: `cmake --build --preset default`, then run the relevant tests (`ctest --preset default` for the C++ unit test and `build/Release/luma --test <your-feature-test>.luma` for the Luma test). Confirm everything passes before finishing.
 
 ## For a Named Constant
 
-A named constant (e.g. `Math.pi`, `Math.tau`, `GraphicalUi.PRIMARY`) is a nullary, bodyless variation on the steps above — it lives in the same runtime module and catalog files as a function, **not** in the type-arities `storage()` used by [new-stdlib-type.prompt.md](new-stdlib-type.prompt.md). Follow the same workflow with these differences:
+A named constant (e.g. `Math.pi`, `Math.tau`) is a nullary, bodyless variation on the steps above — it lives in the same runtime module and catalog files as a function, **not** in the type-arities `storage()` used by [new-stdlib-type.prompt.md](new-stdlib-type.prompt.md). Follow the same workflow with these differences:
 
 1. **Register (runtime).** Instead of `.func(...).extract_body(...)`, bind the value with `ModuleBuilder`'s `.constant("name", Value{...})` (or a direct `env->define("Module.name", Value{...}, false)` for special cases). There is no argument validation and no body.
 2. **Add catalog metadata.** Use `m.constant("name", return_type)` (e.g. `m.constant("pi", R::number_type())`) in `shared/stdlib/stdlib_catalog_<module>.cpp` instead of `m.fn(...)`. This records `arity = 0` and `is_constant = true` and remains the single source of truth for the type checker and language server (completions, hover).
