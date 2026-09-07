@@ -2,10 +2,9 @@
 # Luma — Dev Container image
 #
 # Ubuntu 24.04 (Noble) ships the exact toolchain Luma's CI pins, straight from
-# the distribution archives — GCC 14, CMake 3.28 (>= 3.21 required),
-# clang-format/clang-tidy 18, and libwebkit2gtk-4.1-dev for the GraphicalUi
-# backend — so this image needs no external apt repositories or PPAs and builds
-# fully offline against the vendored dependencies in external/.
+# the distribution archives — GCC 14, CMake 3.28 (>= 3.21 required), and
+# clang-format/clang-tidy 18 — so this image needs no external apt repositories
+# or PPAs and builds fully offline against the vendored dependencies in external/.
 # ─────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
@@ -16,8 +15,6 @@ ARG DEBIAN_FRONTEND=noninteractive
 # One apt layer installs the complete build / test / lint toolchain:
 #   gcc-14 g++-14 ........... primary compiler pair (ci.yml's main Linux job)
 #   cmake ninja-build make .. build system + the default (Make) and ninja presets
-#   pkg-config .............. GraphicalUi / WebKitGTK discovery
-#   libwebkit2gtk-4.1-dev ... enables GraphicalUi (else it compiles to a stub)
 #   clang-format-18 ......... C++ formatting gate (Formatting job in ci.yml)
 #   clang-tidy-18 ........... C++ static-analysis gate (Static Analysis job)
 #   gdb ..................... native debugging of the interpreter (CONTRIBUTING.md §Debugging the C++ Interpreter)
@@ -30,8 +27,6 @@ RUN apt-get update \
         cmake \
         ninja-build \
         make \
-        pkg-config \
-        libwebkit2gtk-4.1-dev \
         clang-format-18 \
         clang-tidy-18 \
         gdb \

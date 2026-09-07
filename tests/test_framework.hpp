@@ -398,8 +398,7 @@ private:
 // RAII guard that sets an environment variable for the duration of a scope and
 // restores the previous value — or removes the variable if it was previously
 // unset — on destruction, even if an exception is thrown. Test-only helper for
-// exercising code that reads the environment (e.g. LUMA_PATH resolution or the
-// GraphicalUi headless mode toggled by LUMA_GUI_HEADLESS).
+// exercising code that reads the environment (e.g. LUMA_PATH resolution).
 //
 // Keyed on _WIN32 (not _MSC_VER) so it uses the portable _putenv_s on every
 // Windows toolchain — including MinGW/clang, where the POSIX setenv/unsetenv

@@ -1,15 +1,15 @@
 ---
-description: "Research other languages, libraries, and GUI frameworks read-only and produce a prioritized, actionable list of candidate additions — language features, stdlib modules, types, and functions — that fit Luma's philosophy, without changing any code"
+description: "Research other languages and libraries read-only and produce a prioritized, actionable list of candidate additions — language features, stdlib modules, types, and functions — that fit Luma's philosophy, without changing any code"
 agent: "agent"
 tools: ["search", "read"]
-argument-hint: "Optional focus, e.g. 'string handling', 'concurrency', 'GraphicalUi', or 'the whole language and stdlib'"
+argument-hint: "Optional focus, e.g. 'string handling', 'concurrency', 'Terminal', or 'the whole language and stdlib'"
 version: 1
 lastUpdated: "2026-08-01"
 ---
 
 # New Requirements
 
-Research how other programming languages, their standard libraries, and Elm-architecture GUI frameworks solve problems Luma's users face — and produce a **prioritized list of candidate additions** to Luma. This prompt is the discovery counterpart to the four implementation prompts it feeds: [new-language-feature.prompt.md](new-language-feature.prompt.md), [new-stdlib-module.prompt.md](new-stdlib-module.prompt.md), [new-stdlib-type.prompt.md](new-stdlib-type.prompt.md), and [new-stdlib-function.prompt.md](new-stdlib-function.prompt.md). This one *finds, filters, and ranks* candidate capabilities and routes each to the right builder; those *implement* a single chosen item end-to-end with the test suite green. It mirrors the two-step [refactor-audit](refactor-audit.prompt.md) → [refactor](refactor.prompt.md) and [bug-search](bug-search.prompt.md) → [bug-fix](bug-fix.prompt.md) pairings.
+Research how other programming languages and their standard libraries solve problems Luma's users face — and produce a **prioritized list of candidate additions** to Luma. This prompt is the discovery counterpart to the four implementation prompts it feeds: [new-language-feature.prompt.md](new-language-feature.prompt.md), [new-stdlib-module.prompt.md](new-stdlib-module.prompt.md), [new-stdlib-type.prompt.md](new-stdlib-type.prompt.md), and [new-stdlib-function.prompt.md](new-stdlib-function.prompt.md). This one *finds, filters, and ranks* candidate capabilities and routes each to the right builder; those *implement* a single chosen item end-to-end with the test suite green. It mirrors the two-step [refactor-audit](refactor-audit.prompt.md) → [refactor](refactor.prompt.md) and [bug-search](bug-search.prompt.md) → [bug-fix](bug-fix.prompt.md) pairings.
 
 This is a **read-only study**. Make no code changes, and no build is required. The deliverable is a ranked report, not a diff — proving a candidate out is the first step of whichever implementation prompt picks it up.
 
@@ -26,8 +26,6 @@ Luma is opinionated. A capability that is idiomatic in another language is only 
 - [Luma_Error_Handling.md](../../documents/Luma_Error_Handling.md) — the `result`/`optional` conventions and error categories any fallible new capability must adopt (§6 Standard Library Conventions, §8 Anti-Patterns).
 - [learnings.instructions.md](../../instructions/learnings.instructions.md) and [software-architecture.instructions.md](../../instructions/software-architecture.instructions.md) — established patterns, the **deliberate non-goals** that must not be reintroduced, and the over-engineering discipline (a capability must pay for itself; no speculative generality).
 
-If the focus is the GUI, read [Luma_Solaris_Guide.md](../../documents/Luma_Solaris_Guide.md) first and then [Luma_GraphicalUi_Guide.md](../../documents/Luma_GraphicalUi_Guide.md): **Solaris** is Luma's beginner-first authoring surface — a built-in stdlib module following the **Model-View-Update (Elm) architecture** (typed `record` models, `choice` messages, `|>` modifier chains) and the primary way apps are written — while `GraphicalUi` is the lower-level webview engine beneath it that you reach for only in advanced scenarios the surface does not yet expose. Both **already are** Elm-architecture, so mine Elm-style frameworks for *widgets, layouts, commands, subscriptions, theming, and accessibility* they lack — do **not** propose re-architecting them to Elm — and prefer landing a beginner-first GUI candidate on the Solaris surface, dropping to `GraphicalUi` only when the surface cannot express it. It renders through an **embedded HTML/CSS/JS webview** (WebView2 on Windows, WebKit on macOS, WebKitGTK on Linux) that turns widgets into DOM, so a GUI candidate is cheap when it maps onto what that substrate can already draw and effectively out of scope when it would need native rendering outside the webview — weigh that in every GUI candidate's fit and effort. To gauge effort and placement, skim [Luma_Software_Architecture.md](../../documents/Luma_Software_Architecture.md) for where each kind of addition lives in the pipeline and stdlib.
-
 ## 2 — Scope and Ground Rules
 
 - **Default scope** is the whole language and standard library. If the invocation names a focus area (a domain like "dates and time", a module like "String", or a theme like "concurrency"), restrict the study to it and its immediate neighbours.
@@ -38,17 +36,16 @@ If the focus is the GUI, read [Luma_Solaris_Guide.md](../../documents/Luma_Solar
 
 ## 3 — Where to Research
 
-Draw candidates from three wells, and label each finding's inspiration so the builder can consult the source:
+Draw candidates from two wells, and label each finding's inspiration so the builder can consult the source:
 
 1. **Peer languages and their standard libraries.** Survey what beginners reach for in **C, C++, Carbon, Java, C#, Kotlin, JavaScript, TypeScript, Rust, Swift, and Python** — and how their stdlibs package it. Favour capabilities that appear across *several* of them (a sign they are broadly useful, not niche) and that a Luma beginner would expect to find. Adapt the ergonomics to Luma: a Python method becomes a pipe-first free function, a Rust `Result`-returning API maps onto Luma's `result<T>`, a Swift optional-chaining idiom onto Luma's `optional<T>`.
-2. **Elm-architecture / model-update-view GUI frameworks.** Mine **Elm** (and `elm-ui`), **Iced** (Rust), **SwiftUI**, **Jetpack Compose**, **Flutter**, and **Redux/React** for widgets, layout primitives, commands, subscriptions, theming, animation, and accessibility affordances that Luma's GUI — the beginner-first **Solaris** surface and the `GraphicalUi` engine beneath it — does not yet expose, expressed in Luma's existing Elm model, not a new paradigm. Because that model renders through a webview, also mine **webview-based app frameworks** (Tauri, Electron, Wails, Neutralino) and the **web platform** itself — HTML form controls, CSS capabilities, the Web Animations model, and WAI-ARIA accessibility — for affordances that translate directly into the DOM `GraphicalUi` already emits.
-3. **Novel and creative approaches.** Do not limit yourself to imitation. Propose original ideas — new syntax, a new stdlib abstraction, a new safety affordance — where they serve Luma's beginner-first, safety-first mission better than any borrowed one. Hold these to the *same* fit bar as borrowed ideas (§6), and mark their inspiration as "Novel".
+2. **Novel and creative approaches.** Do not limit yourself to imitation. Propose original ideas — new syntax, a new stdlib abstraction, a new safety affordance — where they serve Luma's beginner-first, safety-first mission better than any borrowed one. Hold these to the *same* fit bar as borrowed ideas (§6), and mark their inspiration as "Novel".
 
 ## 4 — What to Look For (and How to Route It)
 
 Scan for gaps across the capability areas below, then classify each candidate into exactly one of the four **kinds** — the kind determines which implementation prompt receives the handoff.
 
-**Capability areas to scan:** text and string handling; collections and iteration (arrays, dictionaries, sets, queues, stacks, trees, graphs); numerics and math (integers, numbers, linear algebra, calculus, random); dates, times, and durations; data formats and serialization (JSON, CSV, XML, encoding, compression, hashing); files, processes, networking, and other OS surfaces (all sandbox-aware); error handling and control flow; concurrency and structured parallelism; the GUI (the beginner-first `Solaris` surface and the `GraphicalUi` engine beneath it); and developer-facing ergonomics (logging, testing, reflection-free introspection).
+**Capability areas to scan:** text and string handling; collections and iteration (arrays, dictionaries, sets, queues, stacks, trees, graphs); numerics and math (integers, numbers, linear algebra, calculus, random); dates, times, and durations; data formats and serialization (JSON, CSV, XML, encoding, compression, hashing); files, processes, networking, terminal/console interaction, and other OS surfaces (all sandbox-aware); error handling and control flow; concurrency and structured parallelism; and developer-facing ergonomics (logging, testing, reflection-free introspection).
 
 **The four kinds — pick the smallest one that delivers the value:**
 
@@ -120,7 +117,7 @@ Then, one detailed entry per candidate:
 
 - **Kind:** <Language feature | Stdlib module | Stdlib type | Stdlib function> <(target module, for stdlib kinds)>
 - **Priority:** <High | Medium | Low>
-- **Inspiration:** <language(s) / library / GUI framework, or "Novel">
+- **Inspiration:** <language(s) / library, or "Novel">
 - **Gap:** <the beginner task this enables and how it is done today — the awkward workaround, or "not currently possible">
 - **Proposal:** <concrete sketch. For stdlib: the signature(s) in catalog style, e.g. `Math.gcd(a: integer, b: integer) -> integer`. For a language feature: a short Luma snippet plus the rough grammar and how it parses alongside existing syntax.>
 - **Philosophy fit:** <how it satisfies §6 — beginner value, safety, data/behaviour separation, error model — and, if it needed reshaping to fit, what you changed from the source idiom>

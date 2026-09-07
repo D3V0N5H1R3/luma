@@ -70,7 +70,7 @@ Every architectural decision follows the principles defined in the Software Arch
 | Constraint          | Description                                                                                                                                  |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Language            | The interpreter is written in modern C++ (C++20 or later).                                                                                   |
-| Minimal third-party | Third-party libraries only as exceptions for functionality beyond the C++ standard library and OS APIs (e.g., compression, TLS, native GUI). |
+| Minimal third-party | Third-party libraries only as exceptions for functionality beyond the C++ standard library and OS APIs (e.g., compression and TLS). |
 | Single entry point  | Every Luma program has exactly one `@main`-annotated function.                                                                               |
 | Bytecode execution  | The interpreter uses a bytecode compiler and stack-based VM execution backend.                                                               |
 
@@ -495,7 +495,7 @@ _Note:_ The Type Checker operates on the merged AST produced by the Include Reso
 
 ### 4.11 Standard Library
 
-**Responsibility:** Provide all built-in functions and constants organised into 39 namespaces defined by the language (Array, Bits, Calculus, Channel, Color, Compression, Console, Converter, Csv, DateTime, Decimal, Dictionary, Encoder, FileSystem, GraphicalUi, Hash, Http, Json, KeyValueStore, LinearAlgebra, Log, Math, Optional, Order, Queue, Random, Reference, RegularExpression, Resource, Result, Set, Socket, Stack, Statistics, String, Task, Terminal, Xml) plus the core built-ins (`print`, `assert`, `type_of`) — 40 registration units in total. Note: `success` and `failure` are language keywords parsed into dedicated AST nodes (`SuccessExpression`, `FailureExpression`), not runtime functions.
+**Responsibility:** Provide all built-in functions and constants organised into 38 namespaces defined by the language (String, Array, Bits, Calculus, Channel, Color, Compression, Console, Converter, Csv, DateTime, Decimal, Dictionary, Encoder, FileSystem, Hash, Http, Json, KeyValueStore, LinearAlgebra, Log, Math, Optional, Order, Process, Queue, Random, Reference, RegularExpression, Resource, Result, Set, Socket, Stack, Statistics, Task, Terminal, Xml) plus the core built-ins (`print`, `assert`, `type_of`) — 39 registration units in total. Note: `success` and `failure` are language keywords parsed into dedicated AST nodes (`SuccessExpression`, `FailureExpression`), not runtime functions.
 
 **Interface:**
 
@@ -506,19 +506,7 @@ _Note:_ The Type Checker operates on the merged AST produced by the Include Reso
 
 - Each built-in function is implemented as a `NativeFunction` — a callable value that receives a vector of runtime `Value` arguments and returns a `Value`.
 - Native functions validate their arguments at runtime (argument count, argument types). On invalid input, they either return a `result<T>` containing `failure(...)` (for recoverable errors) or throw a C++ exception that the VM catches and converts into a `RuntimeError` with full source location (for unrecoverable errors such as wrong argument count or type).
-- Larger modules are split into multiple files for maintainability. For example, the `GraphicalUi` module is conditionally compiled behind `LUMA_HAS_WEBVIEW` and renders via an embedded webview using HTML/CSS/JS. It is the most architecturally involved module because it spans a **C++/JavaScript boundary**: the C++ side builds widgets and drives the application loop, while a bundled JavaScript renderer turns them into DOM. Its source is decomposed by responsibility — widget builders (`graphicalui_widgets_{basic,layout,advanced,charts,interaction}.cpp`), command execution (`graphicalui_commands.cpp`), the event bridge (`graphicalui_events.cpp`), JSON serialisation (`graphicalui_serialization.cpp`), the headless test API (`graphicalui_testing.cpp`), and CSS validation (`graphicalui_css_properties.cpp` for the property catalog and typo suggestions, `graphicalui_css_sanitiser.cpp` for security sanitisation) — behind the umbrella `graphicalui_internal.hpp`. The module implements the Elm Architecture (Model–Update–View) loop with several subsystems:
-    - **Rendering pipeline** — a `view(model)` function returns a widget, which is just a nested dictionary tree (`type` plus properties). The runtime serialises it to JSON, hands it to the embedded [lit-html](https://lit.dev) based renderer, which builds a template and **diffs it against the previous tree to patch only the DOM nodes that changed**. `view` is re-invoked after every `update`, so the UI is a pure function of the model.
-    - **Event/callback bridge** — interactive widgets carry Luma callbacks. During serialisation each callback is registered on the `AppState` under an allocated numeric id (e.g. `_callback_id`), and only the id crosses into JSON. When the user interacts, the JavaScript renderer calls back through the `__gui_event` webview binding with `{type, id, value}`; the host looks up the callback by id, invokes it, and routes the result through `update` (a string return is an Elm message; any other value is the new model directly).
-    - **Commands** — side effects (HTTP requests, clipboard writes, delays, random numbers, focus management, screen reader announcements) are represented as data. The `update` function returns a `(model, command)` pair via `with_command`; the runtime executes the command and delivers the result as a message.
-    - **Subscriptions** — timer ticks, keyboard input, window resize, focus changes, and mouse events are managed declaratively. A `subscribe` function returns the active subscription array; the runtime diffs it against the previous array and sets up or tears down JavaScript listeners accordingly. Subscription callbacks are refreshed on every render cycle to capture the latest model state.
-    - **Components** — `component(id, model_slice, render_fn)` provides identity-based caching for reusable widget subtrees. The runtime memoizes by `id` and only re-invokes `render_fn` when `model_slice` changes (compared by JSON serialisation).
-    - **Routing** — `router` selects a child widget by route key; supports both callable and pre-built widget values, and parameterised routes with `{name}` placeholders. `navigate` and `navigate_back` commands update the current route using immutable model copies.
-    - **Accessibility** — `accessible` wraps widgets with ARIA attributes; `focus` and `announce` commands manage keyboard focus and screen reader live regions.
-    - **Keyed lists** — `keyed(key, child)` assigns stable DOM identities for efficient list diffing.
-    - **Error boundaries** — `error_boundary(fallback_fn, view_fn)` catches rendering exceptions and renders a fallback widget instead of crashing the entire view.
-    - **Embedded front-end assets** — the renderer, chart bridge, subscription manager, Pico CSS, lit-html, uPlot, and the Lucide icon set are compressed and baked into `graphicalui_assets.hpp` at build time by `scripts/generate_gui_assets.mjs` (a manual dev step), then decompressed via miniz at runtime — so a single binary ships the whole web front-end with no external files. `LUMA_GUI_DEV_ASSETS` reads the raw files from disk instead, allowing front-end iteration without a C++ rebuild.
-    - **Theming** — a bundled Pico CSS base is bridged to semantic `--gui-*` design tokens (colour, spacing, type scale) in `gui-overrides.css`; dark mode follows `prefers-color-scheme` automatically, and developer-supplied CSS is validated and sanitised by the shared helpers in `graphicalui_css_sanitiser.cpp`.
-    - **Headless execution & conditional compilation** — `LUMA_GUI_HEADLESS=1` runs the full lifecycle (init → view → subscribe, plus scripted `update` messages) with no window, and the `GraphicalUi.test_*` API drives interactions against a throwaway app for automated tests. When the platform has no webview support (`LUMA_HAS_WEBVIEW` undefined), a stub path registers every function to throw a descriptive "not available" error, while the pure constants and CSS-validation helpers still work.
+- Larger modules are split into multiple files for maintainability where doing so keeps each source file focused and testable.
 - Namespace functions are registered with their qualified name (e.g., `String.length`, `Array.map`) so that they are accessible via qualified calls and via `use` imports.
 - Pure namespace constants (e.g., `Math.pi`, `Math.e`, `Math.tau`, `Math.infinity`) are registered as immutable bindings in the global scope.
 
@@ -1917,7 +1905,6 @@ Standard Library
 ├── Dictionary module        — Dictionary.get, Dictionary.set, Dictionary.keys, ...
 ├── Encoder module           — Encoder.encode_base64, Encoder.decode_base64, Encoder.encode_base64url, Encoder.encode_url, ...
 ├── FileSystem module        — FileSystem.list_directories, FileSystem.create_directory, FileSystem.delete_directory, FileSystem.rename_directory, ...
-├── GraphicalUi module       — GraphicalUi.app, GraphicalUi.text, GraphicalUi.button, GraphicalUi.column, ...
 ├── Hash module              — Hash.md5, Hash.sha256, Hash.sha512, Hash.hmac_sha256, Hash.verify, ...
 ├── Http module              — Http.get, Http.post, Http.parse_url, Http.download, ...
 ├── Json module              — Json.serialize, Json.deserialize, Json.is_valid, ...
@@ -2005,7 +1992,7 @@ When the interpreter is started with `--box` (or `-b`), the `register_all` funct
 - `Socket` — TCP and UDP networking
 - `Xml` — XML file I/O
 
-All other modules (`Array`, `Bits`, `Calculus`, `Channel`, `Color`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `GraphicalUi`, `Hash`, `Json`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, and `Hash.sha512_file`. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
+All other modules (`Array`, `Bits`, `Calculus`, `Channel`, `Color`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `Hash`, `Json`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, and `Hash.sha512_file`. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
 
 Attempting to call a function from a sandbox-blocked module produces a clear error message (`'Module.function' is not available in sandbox mode (--box)`) instead of the generic "undefined variable" error. The `Environment` class maintains a set of blocked module prefixes that is checked during variable lookup.
 
@@ -2251,7 +2238,7 @@ luma/
 ├── benchmarks/          # Luma benchmark programs and shared harness
 ├── fuzz/                # LibFuzzer targets (Clang only)
 ├── extensions/          # editor extensions — vscode and zed — and shared assets
-├── external/            # vendored third-party libraries (webview + GUI assets, mbedTLS, miniz)
+├── external/            # vendored third-party libraries (mbedTLS, miniz)
 ├── scripts/             # build, test, and code-generation helper scripts
 ├── instructions/        # coding and tooling guidelines
 └── documents/           # project design and reference documents (this set)

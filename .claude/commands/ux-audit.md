@@ -1,6 +1,6 @@
 ---
-description: "Audit a Luma application or example for user-experience, usability, and visual-design quality — especially GraphicalUi apps"
-argument-hint: "File or directory to review, e.g. 'examples/applications/gui_todo.luma' or 'examples/applications/' (defaults to the GraphicalUi examples)"
+description: "Audit a Luma application or example for user-experience, usability, and visual-design quality for Terminal and Console interfaces"
+argument-hint: "File or directory to review, e.g. 'examples/applications/text_adventure.luma' or 'examples/applications/' (defaults to Terminal and Console examples)"
 ---
 
 Follow the workflow defined in the Luma prompt file below, which is the single

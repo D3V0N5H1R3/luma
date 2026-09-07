@@ -49,15 +49,12 @@
 # ── Vendored third-party code: intentionally UNOWNED ──
 # A bare pattern (no owner) removes code-owner review, so routine
 # vendored-dependency bumps don't require maintainer sign-off. This
-# covers the genuinely third-party trees under external/: lit-html,
-# lucide, mbedtls, miniz, pico-css, uplot, and webview.
+# covers the genuinely third-party trees under external/: mbedtls
+# and miniz.
 /external/
 
-# First-party code that happens to live under external/ IS owned. These
-# more-specific rules override the blanket /external/ rule above (last
+# First-party code that happens to live under external/ IS owned. This
+# more-specific rule overrides the blanket /external/ rule above (last
 # match wins):
-#   - gui-framework/ : the project's own GraphicalUi renderer and charts
-#     (JS/CSS/tests), which has its own CI gate (ci-gui-framework.yml).
-#   - DIRECTORY.md      : the project's own doc describing the vendored deps.
-/external/gui-framework/  @D3V0N5H1R3
+#   - DIRECTORY.md : the project's own doc describing the vendored deps.
 /external/DIRECTORY.md       @D3V0N5H1R3

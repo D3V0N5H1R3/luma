@@ -90,7 +90,6 @@ endfunction()
 set(LUMA_ANALYSIS_TESTS
     lexer_test
     parser_test
-    gui_prelude_test
     type_checker_test_basics
     type_checker_test_functions
     type_checker_test_advanced
@@ -260,31 +259,6 @@ foreach(test IN LISTS LUMA_RUNTIME_TESTS)
         LIBS    luma_core
         LABELS  ${_label})
 endforeach()
-
-# GraphicalUi: the comprehensive suite drives the live webview-backed module and
-# is registered only when a WebView backend is available. When webview is
-# disabled (LUMA_FEATURE_WEBVIEW=OFF) or no backend is found, luma_core compiles
-# the GraphicalUi stub instead, so a dedicated stub test verifies the
-# "module unavailable" behaviour (constants still resolve; every function throws).
-if(LUMA_WEBVIEW_AVAILABLE)
-    luma_add_test(NAME stdlib_test_graphicalui_widgets
-        SOURCES runtime/stdlib_test_graphicalui_widgets.cpp
-        LIBS    luma_core
-        LABELS  runtime stdlib)
-    luma_add_test(NAME stdlib_test_graphicalui_styling
-        SOURCES runtime/stdlib_test_graphicalui_styling.cpp
-        LIBS    luma_core
-        LABELS  runtime stdlib)
-    luma_add_test(NAME stdlib_test_graphicalui_app
-        SOURCES runtime/stdlib_test_graphicalui_app.cpp
-        LIBS    luma_core
-        LABELS  runtime stdlib)
-else()
-    luma_add_test(NAME stdlib_test_graphicalui_stub
-        SOURCES runtime/stdlib_test_graphicalui_stub.cpp
-        LIBS    luma_core
-        LABELS  runtime stdlib)
-endif()
 
 # cli_test needs a custom working directory.
 luma_add_test(NAME cli_test
@@ -480,8 +454,6 @@ set(LUMA_FEATURE_TESTS_STDLIB
     decimal_functions.luma
     encoder_functions.luma
     filesystem_functions.luma
-    graphicalui_functions.luma
-    graphicalui_interaction.luma
     hash_functions.luma
     http_functions.luma
     json_functions.luma
@@ -500,7 +472,6 @@ set(LUMA_FEATURE_TESTS_STDLIB
     result_functions.luma
     set_functions.luma
     socket_functions.luma
-    solaris_functions.luma
     stack_functions.luma
     statistics_functions.luma
     string_functions.luma
@@ -516,15 +487,6 @@ function(luma_register_feature_tests subdir label)
     foreach(_test_file_name ${ARGN})
         set(_test_rel "tests/features/${subdir}/${_test_file_name}")
         get_filename_component(_test_name ${_test_file_name} NAME_WE)
-
-        # The GraphicalUi feature tests — and the Solaris surface tests, which
-        # render through the same engine — drive the live webview module; skip
-        # them when only the stub is compiled (no LUMA_HAS_WEBVIEW), since every
-        # widget call throws "not available" there. The stub path is covered
-        # separately by the stdlib_test_graphicalui_stub C++ test.
-        if(_test_name MATCHES "^(graphicalui|solaris)" AND NOT LUMA_WEBVIEW_AVAILABLE)
-            continue()
-        endif()
 
         if(_test_name STREQUAL "sandbox")
             # Sandbox tests require restricted environment (no filesystem access).

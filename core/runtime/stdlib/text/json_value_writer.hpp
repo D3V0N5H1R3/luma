@@ -5,22 +5,19 @@
 // Shared Value → JSON walker (policy-parameterised)
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Two stdlib serialisers walk a Value and emit JSON with the SAME per-kind
-// structure but differ only in policy:
+// The Json module's serialiser walks a Value and emits JSON, parameterised by a
+// Policy so the per-kind traversal is captured once while escaping and limit
+// behaviour stay pluggable:
 //
-//   * GraphicalUi widget-tree serialiser (graphicalui_serialization.cpp)
-//       — slash-escapes strings ("</script>" → "<\/script>") for <script>
-//         safety, THROWS past the nesting-depth limit, and encodes every
-//         choice as the rich {"variant":…,"fields":[…]} form.
 //   * Json module's Json.serialize (json_module_serializer.cpp)
 //       — no slash-escaping, appends "null" past the depth limit, supports
 //         pretty-printing, and encodes only nullary choices (as a bare string;
 //         choices with fields become null).
 //
-// This template captures the single traversal; each caller supplies a Policy
-// that carries its differences, mirroring the escape_string_impl<Policy>
-// precedent for "same algorithm, different escaping/limits".  The observable
-// output of each caller is preserved exactly.
+// This template captures the single traversal; the caller supplies a Policy
+// that carries its escaping and limit behaviour, mirroring the
+// escape_string_impl<Policy> precedent for "same algorithm, different
+// escaping/limits".  The observable output is preserved exactly.
 //
 // Policy contract:
 //   static void escape(std::string_view s, std::string& out);
@@ -186,9 +183,7 @@ void write_value(const Value& val, std::string& out, int indent, int depth, bool
         const double n = val.as_number();
 
         // JSON has no NaN/Infinity; non-finite doubles coerce to null (matching
-        // JSON.stringify).  For the GUI this also keeps the eval'd model — which
-        // is embedded as a JS object literal — valid: a bare "nan"/"inf" token
-        // would raise a ReferenceError and wipe the whole render.
+        // JSON.stringify).
         if (!std::isfinite(n)) {
             out += "null";
         } else {

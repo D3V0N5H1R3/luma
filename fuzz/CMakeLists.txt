@@ -121,7 +121,6 @@ luma_add_fuzz_target(fuzz_datetime               fuzz_datetime.cpp              
 luma_add_fuzz_target(fuzz_protocol               fuzz_protocol.cpp               luma_core)
 luma_add_fuzz_target(fuzz_compression            fuzz_compression.cpp            luma_core)
 luma_add_fuzz_target(fuzz_encoder                fuzz_encoder.cpp                luma_core)
-luma_add_fuzz_target(fuzz_graphicalui_css        fuzz_graphicalui_css.cpp        luma_core)
 
 # KeyValueStore `.kv` codec trust boundary.  parse_store / serialize_store, the
 # escape/unescape line codec and glob_match are declared in

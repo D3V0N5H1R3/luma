@@ -15,7 +15,6 @@ Perform a thorough code review of the specified file(s). Read the relevant codin
 
 - [cpp.instructions.md](../../instructions/cpp.instructions.md) (`.cpp`, `.hpp`, `.h`) for C++ style and idioms.
 - [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines) for general C++ best practices.
-- [css.instructions.md](../../instructions/css.instructions.md) (`.css`) for CSS style and idioms.
 - [javascript.instructions.md](../../instructions/javascript.instructions.md) (`.js`, `.mjs`, `.cjs`) for JavaScript style and idioms.
 - [rust.instructions.md](../../instructions/rust.instructions.md) (`.rs`) for Rust style and idioms.
 - [typescript.instructions.md](../../instructions/typescript.instructions.md) (`.ts`, `.tsx`) for TypeScript style and idioms.
@@ -33,7 +32,6 @@ Perform a thorough code review of the specified file(s). Read the relevant codin
 Verify that:
 
 - **C++ code** follows `cpp.instructions.md` and the C++ Core Guidelines. Flag any deviations.
-- **CSS code** follows `css.instructions.md` (including its checklist). Flag any deviations.
 - **JavaScript code** follows `javascript.instructions.md` (including its checklist). Flag any deviations.
 - **Rust code** follows `rust.instructions.md` (including its checklist). Flag any deviations.
 - **TypeScript code** follows `typescript.instructions.md` (including its checklist). Flag any deviations.
@@ -149,15 +147,6 @@ The bullets below are a quick reference for the reviewer. The authoritative rule
 - Objects output — not formatted text. `Write-Verbose` for diagnostics, not `Write-Host`.
 - No array `+=` in loops. No `Invoke-Expression` on untrusted input. Paths via `Join-Path`.
 
-**CSS:**
-
-- Class names follow BEM or a consistent methodology — no IDs for styling.
-- All colours and spacing use custom properties — no hardcoded values in components.
-- Specificity is low and predictable — no `!important`, no deeply nested selectors.
-- Layout uses Flexbox or Grid — no floats for layout purposes.
-- Responsive design is mobile-first with `min-width` breakpoints.
-- Focus styles visible on all interactive elements. `prefers-reduced-motion` respected.
-
 **Luma:**
 
 - Naming conventions per `luma.instructions.md` (`snake_case` variables/functions, `PascalCase` records/choices/interfaces).
@@ -226,7 +215,7 @@ The bullets below are a quick reference for the reviewer. The authoritative rule
 - Public contracts are documented — preconditions, ownership/lifetime, and error/`result` semantics stated where they are not obvious from the signature.
 - Diagnostics and error messages are a first-class surface — specific, actionable, and located (point at the source span); suggest a fix where possible ("did you mean?"). Applies especially to lexer, parser, type checker, linter, LSP, and DAP output.
 - Public-interface changes preserve backward compatibility, or the break is intentional and called out.
-- Accessibility is honored where code renders UI (GraphicalUi/CSS) — focus states, reduced-motion, semantic structure.
+- Accessibility is honored where code renders user-facing interfaces — focus order, clear status, and semantic structure.
 
 ## Output Format
 

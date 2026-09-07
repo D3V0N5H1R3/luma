@@ -13,7 +13,7 @@ Each hook is a small JSON registration paired with a standalone Python script un
 | Hook                                                       | Event         | Script                                                                          | What it does                                                                                              |
 | ---------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | [`format-cpp-on-edit.json`](format-cpp-on-edit.json)       | `PostToolUse` | [`format_cpp_on_edit.py`](../../scripts/agent-hooks/format_cpp_on_edit.py)      | Runs `clang-format` (18+) over any `.cpp`/`.hpp` file the agent just edited, so edits land already clean. |
-| [`protect-vendored-paths.json`](protect-vendored-paths.json) | `PreToolUse`  | [`protect_vendored_paths.py`](../../scripts/agent-hooks/protect_vendored_paths.py) | Denies file-mutating tool calls that target vendored code under `external/` (except `external/gui-framework/`). |
+| [`protect-vendored-paths.json`](protect-vendored-paths.json) | `PreToolUse`  | [`protect_vendored_paths.py`](../../scripts/agent-hooks/protect_vendored_paths.py) | Denies file-mutating tool calls that target vendored code under `external/`. |
 
 ## How it works
 
@@ -36,7 +36,7 @@ After the agent edits a file, this hook reads the edited path from the payload a
 
 ### `protect-vendored-paths` (PreToolUse)
 
-The project boundary is: **never modify vendored, third-party code in `external/`**, with the single exception of the first-party GraphicalUi front-end in `external/gui-framework/`. This hook enforces that deterministically — a file-mutating tool (edit / write / create) that targets `external/` outside `gui-framework/` is denied before it runs, with a message explaining the boundary. Shell-based mutation (for example `rm external/…`) is out of scope by design: detecting it reliably would require parsing shell commands and would risk blocking legitimate reads such as `cat`/`grep` over `external/`.
+The project boundary is: **never modify vendored, third-party code in `external/`**. This hook enforces that deterministically — a file-mutating tool (edit / write / create) that targets `external/` is denied before it runs, with a message explaining the boundary. Shell-based mutation (for example `rm external/…`) is out of scope by design: detecting it reliably would require parsing shell commands and would risk blocking legitimate reads such as `cat`/`grep` over `external/`.
 
 ## Testing a hook
 
@@ -46,11 +46,11 @@ PowerShell (Windows):
 
 ```powershell
 # Guard: a write into external/ is denied (prints a deny decision)…
-'{ "tool_name": "Write", "tool_input": { "file_path": "external/zlib/x.c" } }' |
+'{ "tool_name": "Write", "tool_input": { "file_path": "external/mbedtls/x.c" } }' |
     python scripts/agent-hooks/protect_vendored_paths.py
 
-# …but the gui-framework exception, reads, and edits elsewhere are allowed (no output).
-'{ "tool_name": "Write", "tool_input": { "file_path": "external/gui-framework/a.js" } }' |
+# …but reads and edits elsewhere are allowed (no output).
+'{ "tool_name": "Write", "tool_input": { "file_path": "core/runtime/vm/vm.cpp" } }' |
     python scripts/agent-hooks/protect_vendored_paths.py
 ```
 
