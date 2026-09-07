@@ -24,7 +24,6 @@ include "bench_generics.luma"
 include "bench_stdlib.luma"
 include "bench_converter.luma"
 include "bench_startup.luma"
-include "bench_graphicalui.luma"
 include "bench_data_formats.luma"
 include "bench_filesystem.luma"
 include "bench_process.luma"
@@ -63,7 +62,6 @@ function void run_benchmarks() {
     st = run_stdlib_benchmarks(st)
     st = run_converter_benchmarks(st)
     st = run_startup_benchmarks(st)
-    st = run_graphicalui_benchmarks(st)
     st = run_data_format_benchmarks(st)
     st = run_filesystem_benchmarks(st)
     st = run_process_benchmarks(st)

@@ -54,7 +54,7 @@ Implement a new language feature in Luma. Follow the interpreter pipeline and mo
     - [Luma_Performance_Guide.md](../../documents/Luma_Performance_Guide.md) — if it has notable performance characteristics.
     - The root [README.md](../../README.md) — if it changes the advertised feature set or a showcased example.
 
-    (The [Standard Library Reference](../../documents/Luma_Standard_Library_Reference.md) covers stdlib surface, not language features. The REPL, Language Server, Debugger, GraphicalUi, and Concurrent Debugging guides — and their subsystem READMEs — only need updates if you changed those subsystems.)
+    (The [Standard Library Reference](../../documents/Luma_Standard_Library_Reference.md) covers stdlib surface, not language features. The REPL, Language Server, Debugger, and Concurrent Debugging guides — and their subsystem READMEs — only need updates if you changed those subsystems.)
 10. Build and run all tests to verify nothing is broken — see [build-and-test.prompt.md](build-and-test.prompt.md) for the canonical workflow. Because a language feature touches the whole pipeline (and you added fuzz seeds in step 8), finish with the deeper [full-test-sweep.prompt.md](full-test-sweep.prompt.md), which also exercises the fuzz smoke tests, benchmarks, and examples that `ctest` does not cover.
 
 ## Verification Tiers

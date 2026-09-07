@@ -21,8 +21,8 @@ namespace {
 // and the C0 control range.  It deliberately does NOT escape '/', U+2028, or
 // U+2029 — those matter only when JSON is embedded in an HTML <script> element
 // or evaluated as a JavaScript literal, which never happens on the wire.  A
-// caller embedding output in HTML/JS (e.g. the GraphicalUi renderer) must use
-// the slash-escaping variant (luma::json_escape) instead.
+// caller embedding output in HTML/JS must use the slash-escaping variant
+// (luma::json_escape) instead.
 void escape_json_string(std::string_view s, std::string& out) {
     out.reserve(out.size() + s.size() + 2);
     out += '"';

@@ -2,9 +2,8 @@
 //
 // A Color record { red, green, blue, alpha } (channels 0–255, alpha 0–1) with
 // validating constructors and derivations.  Every value serialises to a CSS
-// string the GraphicalUi web-view already accepts, so Solaris themes can be
-// computed rather than hand-written.  Data + free functions, no operator
-// overloading — the same philosophy as Decimal.
+// colour string.  Data + free functions, no operator overloading — the same
+// philosophy as Decimal.
 
 #include "runtime/stdlib/io/color_module.hpp"
 

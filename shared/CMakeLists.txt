@@ -36,7 +36,6 @@ luma_add_library(luma_stdlib_catalog OBJECT
     stdlib/stdlib_catalog_encoding.cpp
     stdlib/stdlib_catalog_numerics.cpp
     stdlib/stdlib_catalog_log_terminal.cpp
-    stdlib/stdlib_catalog_graphical_ui.cpp
     stdlib/stdlib_catalog_error_handling.cpp
     stdlib/stdlib_catalog_task.cpp
     stdlib/stdlib_catalog_channel.cpp

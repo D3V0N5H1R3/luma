@@ -12,7 +12,7 @@ Refactor code anywhere in the Luma project — the interpreter core, the languag
 
 1. Read [Luma_Software_Architecture.md](../../documents/Luma_Software_Architecture.md) to understand module boundaries and the pipeline design. Then, **if the refactoring touches a specific subsystem**, also read the matching design doc to learn the behaviour that must be preserved:
     - Lexer, parser, type checker, compiler, or VM → [Luma_User_Manual.md](../../documents/Luma_User_Manual.md) for the language semantics.
-    - Standard library (`core/runtime/stdlib/`) → [Luma_Standard_Library_Reference.md](../../documents/Luma_Standard_Library_Reference.md), plus [Luma_GraphicalUi_Guide.md](../../documents/Luma_GraphicalUi_Guide.md) for the GraphicalUi module.
+    - Standard library (`core/runtime/stdlib/`) → [Luma_Standard_Library_Reference.md](../../documents/Luma_Standard_Library_Reference.md).
     - Error-handling paths, runtime errors, exit codes, or stdlib failure conventions → [Luma_Error_Handling.md](../../documents/Luma_Error_Handling.md) for the conventions and policy to preserve.
     - Language server (`language-server/source/`) → [Luma_Language_Server.md](../../documents/Luma_Language_Server.md).
     - Debugger (`debugger/source/`) → [Luma_Debugger.md](../../documents/Luma_Debugger.md).
@@ -28,7 +28,7 @@ Refactor code anywhere in the Luma project — the interpreter core, the languag
     The reusable composite actions `.github/actions/cmake-build`, `build-vscode-extension`, and `build-zed-extension`, together with each extension's CI workflow under `.github/workflows/`, are the authoritative source for these commands and their pinned tool versions.
 4. Make changes incrementally:
     - Restructure code without changing observable behaviour.
-    - Follow the naming and style conventions of the language you are editing: `instructions/cpp.instructions.md` for all first-party C++ (interpreter core, language server, debugger, and `shared/`), `instructions/javascript.instructions.md` and `instructions/css.instructions.md` for the GraphicalUi front-end assets (`external/gui-framework/`), `instructions/typescript.instructions.md` for the VS Code extension, `instructions/rust.instructions.md` for Zed, and `instructions/cmake.instructions.md` for build files.
+    - Follow the naming and style conventions of the language you are editing: `instructions/cpp.instructions.md` for all first-party C++ (interpreter core, language server, debugger, and `shared/`), `instructions/typescript.instructions.md` and `instructions/javascript.instructions.md` for the VS Code extension, `instructions/rust.instructions.md` for Zed, and `instructions/cmake.instructions.md` for build files.
     - Keep each step small enough that tests remain meaningful checkpoints.
     - Commit or stash each green checkpoint so any regression is easy to roll back.
 5. After each significant change, rebuild and rerun the relevant test suite (the C++ `ctest` run, or the extension's own build and tests) to catch regressions early — a clean compile is the first checkpoint, passing tests the second.

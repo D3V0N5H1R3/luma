@@ -54,9 +54,9 @@ static void test_json_escape_forward_slash() {
 }
 
 static void test_json_escape_closes_script_tag() {
-    // GraphicalUi embeds value_to_json output inside a <script> element, so the
-    // slash-escaping must turn "</script>" into "<\/script>" to prevent a
-    // script-tag breakout / XSS. Pin that property at the escape layer.
+    // The slash-escaping variant is intended for embedding JSON inside an HTML
+    // <script> element, so it must turn "</script>" into "<\/script>" to prevent
+    // a script-tag breakout / XSS. Pin that property at the escape layer.
     ASSERT_EQ(json_escape("</script>"), std::string("<\\/script>"));
 }
 

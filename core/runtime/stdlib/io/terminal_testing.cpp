@@ -2,11 +2,9 @@
 //
 // These functions let Luma code drive a Terminal program without a real
 // terminal, so Terminal/TUI examples can be tested by feeding scripted key (and
-// mouse) input and asserting on the captured output.  This is the imperative
-// counterpart to GraphicalUi.test_*: where the GUI harness threads a model
-// through pure view/update functions, the Terminal harness intercepts the
-// imperative I/O primitives — scripted input replaces console reads and a
-// capture buffer replaces console writes.
+// mouse) input and asserting on the captured output.  The Terminal harness
+// intercepts the imperative I/O primitives — scripted input replaces console
+// reads and a capture buffer replaces console writes.
 //
 // A session is bracketed by Terminal.test_start(keys) ... Terminal.test_stop():
 //   * read_key / read_key_timeout / get_input consume `keys` in order, then

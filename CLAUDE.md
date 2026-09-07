@@ -86,7 +86,6 @@ for reference:
 - `instructions/learnings-stdlib.instructions.md` — stdlib infrastructure, module registration, common utilities, and sandbox mode (`{core/runtime/stdlib/**,shared/stdlib/**}`).
 - `instructions/learnings-lsp.instructions.md` — language server architecture, symbol resolution, and column/range pitfalls (`language-server/**`).
 - `instructions/learnings-dap.instructions.md` — debug adapter architecture, thread safety, expression evaluation, and breakpoint semantics (`debugger/**`).
-- `instructions/learnings-gui.instructions.md` — GraphicalUi module, Solaris prelude, headless testing, and renderer pitfalls (`{core/runtime/stdlib/**/graphicalui*,core/analysis/prelude/**,external/gui-framework/**}`).
 - `instructions/learnings-extensions.instructions.md` — VS Code and Zed editor extensions, Tree-sitter queries, and highlight pitfalls (`extensions/**`).
 
 **Languages:**

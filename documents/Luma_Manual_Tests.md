@@ -699,7 +699,7 @@ function void main() {
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 4.5.1 | Open Playground | Command Palette → "Luma: Open Playground" | Playground webview opens |
+| 4.5.1 | Open Playground | Command Palette → "Luma: Open Playground" | Playground panel opens |
 | 4.5.2 | Execute code | Type a simple expression in the playground, execute | Output appears in result panel |
 | 4.5.3 | Timeout | Write an infinite loop, execute | Stops after configured timeout with error message |
 

@@ -16,7 +16,6 @@ here, read the matching guides:
 - `instructions/learnings-compiler.instructions.md` — compiler, optimizer, bytecode, and the scratch-slot invariant (for `core/runtime/compiler/`).
 - `instructions/learnings-vm.instructions.md` — VM architecture, dispatch table, and component decomposition (for `core/runtime/vm/`).
 - `instructions/learnings-stdlib.instructions.md` — stdlib infrastructure, module registration, and common utilities (for `core/runtime/stdlib/`).
-- `instructions/learnings-gui.instructions.md` — GraphicalUi module, Solaris prelude, and renderer pitfalls (for `core/runtime/stdlib/**/graphicalui*` and `core/analysis/prelude/`).
 
 When editing this subtree's `CMakeLists.txt`, also follow
 `instructions/cmake.instructions.md` (target-based configuration) and
