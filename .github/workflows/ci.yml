@@ -70,8 +70,7 @@ jobs:
         # The first three entries are the primary per-platform builds: normal
         # optimized executables that are tested and uploaded as the downloadable
         # binaries (luma-<os>-<compiler>). Only the Ubuntu GCC 14 job also runs
-        # the headless example sweep (scripts/run_luma_examples.py), so it alone
-        # installs WebKitGTK for the GraphicalUi examples.
+        # the headless example sweep (scripts/run_luma_examples.py).
         #
         # The fourth entry (Ubuntu GCC 13 + sanitizers) is a runtime-safety
         # check, NOT a build meant for use: it enables AddressSanitizer + UBSan
@@ -138,17 +137,6 @@ jobs:
         with:
           packages: ${{ matrix.cc }} ${{ matrix.cxx }}
 
-      # Only the gcc-14 job runs the headless example sweep, which includes the
-      # GraphicalUi (gui_*, solaris_*) examples. Without WebKitGTK the module
-      # compiles to its "unavailable" stub and every GUI example fails, so this
-      # job needs the WebKit development package that provides webkit2gtk-4.1.
-      # macOS (system WebKit) and Windows (WebView2) already have a backend.
-      - name: Install WebKitGTK (headless GUI examples)
-        if: matrix.compiler == 'gcc-14'
-        uses: ./.github/actions/apt-install
-        with:
-          packages: libwebkit2gtk-4.1-dev
-
       # AddressSanitizer reserves a large shadow-memory region at a fixed
       # address. CI runners with high ASLR entropy (vm.mmap_rnd_bits up to 32)
       # can place the randomized PIE executable over that region, crashing every
@@ -191,10 +179,10 @@ jobs:
         run: ctest --output-on-failure -C Release
 
       # Runs only on the primary Linux build. scripts/run_luma_examples.py executes
-      # every program under examples/ headlessly — GUI via LUMA_GUI_HEADLESS,
-      # terminal TUIs via scripted keys, console programs via scripted stdin —
-      # and additionally runs any embedded @test blocks. It owns the single
-      # skip list, so CI gets the same coverage developers get locally.
+      # every program under examples/ headlessly — terminal TUIs via scripted keys,
+      # console programs via scripted stdin — and additionally runs any embedded
+      # @test blocks. It owns the single skip list, so CI gets the same coverage
+      # developers get locally.
       - name: Set up Python
         if: matrix.compiler == 'gcc-14'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -407,10 +395,9 @@ jobs:
 
   # ── Optional-feature builds (exercise the LUMA_HAS_* stub paths) ──
   # The default matrix builds with every feature ON, so the disabled code paths
-  # behind LUMA_HAS_TLS / LUMA_HAS_WEBVIEW are never compiled or run there. These
-  # jobs build with each feature OFF and run the full test suite so the stub
-  # paths (Http "requires TLS", Random.secure_* failures, GraphicalUi
-  # unavailable) stay implemented and green.
+  # behind LUMA_HAS_TLS are never compiled or run there. These jobs build with
+  # each feature OFF and run the full test suite so the stub paths (Http
+  # "requires TLS", Random.secure_* failures) stay implemented and green.
   feature-flags:
     name: Feature Flag Build (${{ matrix.label }})
     runs-on: ubuntu-latest
@@ -422,8 +409,6 @@ jobs:
         include:
           - label: no-tls
             args: -DLUMA_FEATURE_TLS=OFF
-          - label: no-webview
-            args: -DLUMA_FEATURE_WEBVIEW=OFF
 
     steps:
       - name: Checkout source

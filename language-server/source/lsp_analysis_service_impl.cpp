@@ -20,7 +20,6 @@
 #include "analysis/lexer/token_type.hpp"
 #include "analysis/linter/linter.hpp"
 #include "analysis/parser/parser.hpp"
-#include "analysis/prelude/gui_prelude.hpp"
 #include "analysis/source/source_location.hpp"
 #include "analysis/types/type_checker.hpp"
 #include "lsp_constants.hpp"
@@ -427,25 +426,8 @@ bool LspAnalysisService::run_pipeline_phases(const std::string& uri, const std::
     check_cancellation_and_deadline(deadline, "call-graph");
     call_graph_phase(program, result);
 
-    // Phase 4c: Inject the built-in Solaris surface so programs that use it
-    // type-check and lint cleanly in the editor. Gated on the source mentioning
-    // Solaris and guarded against double injection. The prelude AST owns all its
-    // strings (tokens copy their lexemes), so it needs no backing SourceManager;
-    // we tag it with a file id past the include range (user code is id 0,
-    // includes are 1..N) so prelude-origin diagnostics can be told apart and
-    // dropped below — the LSP renders diagnostics by line against the user's own
-    // document, where a prelude location would otherwise paint on the wrong line.
-    // Injected after symbol, origin, and call-graph collection so those views
-    // stay scoped to the user's own file.
+    // Phase 4c: no built-in prelude is injected; user code is compiled as-is.
     FileId prelude_file_id = 0;
-    if (prelude::source_uses_gui(source)) {
-        check_cancellation_and_deadline(deadline, "gui-prelude");
-        const FileId candidate = result.semantic.includes.next_file_id;
-        if (prelude::inject_gui_prelude_tagged(program, candidate)) {
-            result.semantic.includes.next_file_id = candidate + 1;
-            prelude_file_id = candidate;
-        }
-    }
 
     // Phase 5: Type checking.
     check_cancellation_and_deadline(deadline, "type-check");

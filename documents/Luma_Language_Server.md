@@ -207,12 +207,12 @@ URIs are stored as-is from the LSP client. The server does not resolve file path
 
 ## 10 — Standard Library Support
 
-The type checker's `stdlib_signatures_` registry contains 700+ function entries mapping `"Module.function"` to their return types. The server exposes these for:
+The type checker's `stdlib_signatures_` registry contains hundreds of function entries mapping `"Module.function"` to their return types. The server exposes these for:
 
 - **Hover:** showing the return type of a stdlib call.
 - **Completion:** listing all functions within a module when the user types `Module.`.
 
-The 39 standard library modules (`Array`, `Bits`, `Calculus`, `Channel`, `Color`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `GraphicalUi`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, `Xml`) are covered by this registry.
+The 38 standard library modules (`String`, `Array`, `Bits`, `Calculus`, `Channel`, `Color`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `Task`, `Terminal`, `Xml`) are covered by this registry.
 
 ---
 
@@ -448,7 +448,6 @@ shared/
 │   ├── stdlib_catalog_dictionary.cpp # Dictionary module metadata
 │   ├── stdlib_catalog_encoding.cpp # Encoder, Hash, Compression metadata
 │   ├── stdlib_catalog_error_handling.cpp # Result, Optional, Reference, Resource metadata
-│   ├── stdlib_catalog_graphical_ui.cpp # GraphicalUi module metadata
 │   ├── stdlib_catalog_internal.hpp # Internal catalog helpers
 │   ├── stdlib_catalog_io.cpp     # I/O module metadata
 │   ├── stdlib_catalog_log_terminal.cpp # Log, Terminal module metadata

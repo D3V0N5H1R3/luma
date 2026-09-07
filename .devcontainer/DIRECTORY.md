@@ -14,8 +14,6 @@ Everything needed to build and test the interpreter, language server, and
 debugger, matching the versions the CI workflows pin:
 
 - **GCC 14** (`gcc-14` / `g++-14`), **CMake**, **Ninja**, and **Make**.
-- **libwebkit2gtk-4.1-dev** and **pkg-config**, so the `GraphicalUi` module
-  builds as the real WebKitGTK backend rather than the disabled stub.
 - **clang-format 18** and **clang-tidy 18** — the C++ formatting and
   static-analysis gates.
 - **GDB** and **lcov** for native debugging and the coverage preset.
@@ -61,12 +59,9 @@ so opening a Codespace skips the initial compile.
 
 ## Limitations
 
-- **Linux only.** Codespaces cannot exercise the MSVC (Windows / WebView2) or
-  Apple-Clang (macOS / WebKit) code paths, so it complements — but does not
-  replace — building on those platforms before a release.
-- **Headless GUI.** `GraphicalUi` and Solaris apps run only in headless mode
-  (`LUMA_GUI_HEADLESS=1`) and through the `GraphicalUi.test_*` / `Terminal.test_*`
-  APIs; there is no on-screen webview window without adding a desktop/VNC feature.
+- **Linux only.** Codespaces cannot exercise the MSVC (Windows) or Apple-Clang
+  (macOS) code paths, so it complements — but does not replace — building on
+  those platforms before a release.
 
 ## Customization
 

@@ -1745,7 +1745,7 @@ integer           safe    = Optional.unwrap_or(s, "default")      # "default"
 result<integer>   r       = Optional.to_result(none, "missing")   # failure("missing")
 ```
 
-See the [Standard Library Reference — §25 Optional](Luma_Standard_Library_Reference.md#25--optional) for the full function reference.
+See the [Standard Library Reference — §23 Optional](Luma_Standard_Library_Reference.md#23--optional) for the full function reference.
 
 ---
 
@@ -2647,7 +2647,6 @@ string t = format_title("hello")
 - `Dictionary`
 - `Encoder`
 - `FileSystem`
-- `GraphicalUi`
 - `Hash`
 - `Http`
 - `Json`
@@ -2673,7 +2672,7 @@ string t = format_title("hello")
 - `Terminal`
 - `Xml`
 
-All 39 are available fully qualified without `use`.
+All 38 are available fully qualified without `use`.
 
 ---
 
@@ -2826,7 +2825,7 @@ An included file may contain top-level statements in addition to declarations. T
 
 The complete standard library reference now lives in its own document: **[Luma — Standard Library Reference](Luma_Standard_Library_Reference.md)**.
 
-It documents all built-in functions and every standard library module — `String`, `Array`, `Dictionary`, `Math`, `GraphicalUi`, and more — with parameter types, return types, and descriptions.
+It documents all built-in functions and every standard library module — including `String`, `Array`, `Dictionary`, and `Math` — with parameter types, return types, and descriptions.
 
 ---
 
@@ -3833,8 +3832,6 @@ From lowest to highest:
 - [Coding Guidelines](Luma_Coding_Guidelines.md) — idiomatic Luma style and conventions
 - [Performance Guide](Luma_Performance_Guide.md) — runtime performance characteristics
 - [REPL Guide](Luma_REPL_Guide.md) — interactive exploration of the language
-- [Solaris Guide](Luma_Solaris_Guide.md) — building graphical applications the beginner-first way
-- [GraphicalUi Guide](Luma_GraphicalUi_Guide.md) — the low-level webview GUI engine beneath Solaris
 - [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) — debugging tasks and channels
 - [Software Architecture](Luma_Software_Architecture.md) — how the interpreter executes the language
 - [Initial Concept](Luma_Initial_Concept.md) — the original design goals and motivation

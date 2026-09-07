@@ -21,7 +21,7 @@ Before judging what looks wrong, learn the behaviour the code is meant to have, 
 
 - [Luma_Software_Architecture.md](../../documents/Luma_Software_Architecture.md) — especially §6 (Processing Pipeline) and §7 (Bytecode Compiler and Virtual Machine Internals): the one-directional pipeline and the phase contracts a bug must have violated.
 - [Luma_User_Manual.md](../../documents/Luma_User_Manual.md) — the language semantics (lexer→VM) that any correct behaviour, and therefore any fix, must preserve.
-- [Luma_Standard_Library_Reference.md](../../documents/Luma_Standard_Library_Reference.md) and [Luma_GraphicalUi_Guide.md](../../documents/Luma_GraphicalUi_Guide.md) — the stdlib contracts: signatures, return types, and documented error behaviour a built-in may deviate from.
+- [Luma_Standard_Library_Reference.md](../../documents/Luma_Standard_Library_Reference.md) — the stdlib contracts: signatures, return types, and documented error behaviour a built-in may deviate from.
 - [Luma_Error_Handling.md](../../documents/Luma_Error_Handling.md) — the error categories, exit codes, and `result`/`optional` conventions a bug may break.
 - [learnings.instructions.md](../../instructions/learnings.instructions.md) — the known pitfalls (see **C++ Pitfalls Discovered**, **Hash & Equality Invariants**, **Non-Obvious Patterns**) that make excellent bug signatures, and crucially the **deliberate decisions that look like bugs but are not** (see §6).
 - [cpp.instructions.md](../../instructions/cpp.instructions.md) — the C++ idioms whose violation is frequently the defect.

@@ -192,7 +192,7 @@ std::optional<FileId> SourceManager::find_file_id(std::string_view path) const {
 const SourceFile& SourceManager::load_virtual(std::string_view name, std::string text) {
     // Virtual sources are keyed by their synthetic `name` verbatim — no
     // canonicalisation, no filesystem access.  A real file path could never
-    // normalise to a bracketed sentinel such as "<gui-prelude>", so there is no
+    // normalise to a bracketed sentinel such as "<repl>", so there is no
     // risk of colliding with a genuine on-disk file.
     const std::string key{name};
     const auto it = path_to_id_.find(key);

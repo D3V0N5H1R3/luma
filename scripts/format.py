@@ -8,7 +8,7 @@ linters — so a contributor can bring a working tree into shape before running
 
 As with ``lint.py``, a formatter whose tool is not installed is reported as
 *skipped* rather than failing. A gate that exits non-zero here means the tool
-could not fix everything (for example Stylelint or markdownlint hitting an error
+could not fix everything (for example markdownlint hitting an error
 that has no auto-fix); the remaining issues are surfaced by ``lint.py``.
 
 Usage:
@@ -27,7 +27,7 @@ from __future__ import annotations
 import sys
 
 from _common import REPO_ROOT
-from _gates import Gate, git_ls, npm_script_gate, npx_tool_installed, run_cli, skip, which
+from _gates import Gate, git_ls, npm_script_gate, run_cli, skip, which
 
 VSCODE_DIR = REPO_ROOT / "extensions" / "vscode"
 ZED_DIR = REPO_ROOT / "extensions" / "zed"
@@ -86,21 +86,6 @@ def _cargo_fmt_gate() -> Gate:
     return Gate(name, description, [cargo, "fmt"], cwd=ZED_DIR)
 
 
-def _stylelint_gate() -> Gate:
-    """Stylelint --fix over first-party CSS.
-
-    Skipped unless Stylelint is already installed locally: its shared config
-    (stylelint-config-standard) cannot be supplied by an on-demand npx install.
-    """
-    name, description = "stylelint", "CSS auto-fix (Stylelint)"
-    files = git_ls("*.css", ":!:*.min.css")
-    if not files:
-        return skip(name, description, "no CSS files tracked")
-    if not npx_tool_installed("stylelint"):
-        return skip(name, description, "stylelint not installed locally (see CONTRIBUTING.md)")
-    return Gate(name, description, [which("npx"), "stylelint", "--fix"], files=files)
-
-
 def _markdownlint_gate() -> Gate:
     """markdownlint-cli2 --fix over first-party Markdown.
 
@@ -134,7 +119,6 @@ def build_gates() -> list[Gate]:
             missing_hint="run `npm ci` in extensions/vscode first",
         ),
         _cargo_fmt_gate(),
-        _stylelint_gate(),
         _markdownlint_gate(),
     ]
 

@@ -291,7 +291,7 @@ whose tool is not installed is likewise skipped, so the gate enforces exactly th
 toolchain you have locally, the same way CI does. Pass `-SkipLintFormat` /
 `--skip-lint-format` to opt out of the gate entirely.
 
-`format.py` mechanically fixes the auto-fixable linters (ruff, ESLint, Stylelint,
+`format.py` mechanically fixes the auto-fixable linters (ruff, ESLint,
 markdownlint) alongside the formatters, so those findings never reach `lint.py`.
 The detect-only tools it cannot auto-fix — clang-tidy, shellcheck, cmakelint,
 `tsc`, clippy, and the warning-sync consistency check — are what the agent is

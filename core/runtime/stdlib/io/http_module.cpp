@@ -40,8 +40,7 @@ namespace luma {
 
 namespace {
 
-// Default request timeout for the Http module.  Deliberately larger than the
-// GraphicalUi HTTP commands' 8 s default, which run synchronously on the UI thread.
+// Default request timeout for the Http module.
 constexpr int k_http_default_timeout_ms = 30000;
 
 // Resolves an `Http.Method` choice variant to its uppercase HTTP verb.  Backs
