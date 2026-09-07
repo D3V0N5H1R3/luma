@@ -17,3 +17,14 @@
 # with a named directory prefix (e.g. "docs/README.md"), excluding
 # relative parent refs like "../README.md" which point to the root.
 [a-z][a-z0-9._-]*/README\.md
+
+# GraphicalUi and Luma Solaris were removed (2026-09). These patterns catch
+# any lingering documentation reference to the deleted modules, assets,
+# prelude, generators, CMake module, and CSS lint infrastructure.
+graphicalui[a-z0-9_]*\.(cpp|hpp)
+gui_prelude
+generate_gui_assets\.mjs
+generate_prelude_asset\.mjs
+external/gui-framework
+LumaWebView\.cmake
+stylelint\.config\.mjs

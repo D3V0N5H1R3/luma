@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 
 from _common import REPO_ROOT
-from _gates import Gate, git_ls, npm_script_gate, npx_tool_installed, run_cli, skip, which
+from _gates import Gate, git_ls, npm_script_gate, run_cli, skip, which
 
 VSCODE_DIR = REPO_ROOT / "extensions" / "vscode"
 ZED_DIR = REPO_ROOT / "extensions" / "zed"
@@ -174,21 +174,6 @@ def _markdownlint_gate() -> Gate:
     return Gate(name, description, [npx, "--yes", MARKDOWNLINT_SPEC])
 
 
-def _stylelint_gate() -> Gate:
-    """Stylelint over first-party CSS, mirroring ci-css.yml.
-
-    Skipped unless Stylelint is already installed locally: its shared config
-    (stylelint-config-standard) cannot be supplied by an on-demand npx install.
-    """
-    name, description = "stylelint", "CSS lint (Stylelint)"
-    files = git_ls("*.css", ":!:*.min.css")
-    if not files:
-        return skip(name, description, "no CSS files tracked")
-    if not npx_tool_installed("stylelint"):
-        return skip(name, description, "stylelint not installed locally (see CONTRIBUTING.md)")
-    return Gate(name, description, [which("npx"), "stylelint"], files=files)
-
-
 def _vscode_npm_gate(name: str, description: str, script: str) -> Gate:
     """Build a gate that runs an npm script in extensions/vscode."""
     return npm_script_gate(
@@ -254,7 +239,6 @@ def build_gates() -> list[Gate]:
         _cmakelint_gate(),
         _shellcheck_gate(),
         _markdownlint_gate(),
-        _stylelint_gate(),
         _vscode_npm_gate("eslint", "TypeScript lint (ESLint, VS Code extension)", "lint:eslint"),
         _vscode_npm_gate(
             "prettier", "TS/JS format check (Prettier, VS Code extension)", "format:check"

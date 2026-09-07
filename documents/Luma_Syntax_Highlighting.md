@@ -351,7 +351,7 @@ extensions/vscode/
 │   │   ├── commands.ts            # LSP-related commands
 │   │   └── types.ts               # LSP type definitions and guards
 │   ├── playground/
-│   │   ├── playground.ts          # Playground webview panel
+│   │   ├── playground.ts          # Playground editor panel
 │   │   └── playground-html.ts     # Playground HTML/CSS/JS template
 │   ├── testing/
 │   │   ├── coverage.ts            # Test coverage support

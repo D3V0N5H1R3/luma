@@ -98,7 +98,6 @@ Run the [lint-and-format](lint-and-format.prompt.md) prompt (including its Deep 
 - Ruff (`ruff check` and `ruff format`) on Python.
 - ShellCheck on shell scripts.
 - PSScriptAnalyzer on PowerShell scripts.
-- Stylelint on CSS.
 - rustfmt and Clippy on Rust.
 - Prettier and ESLint on TypeScript and JavaScript.
 - `luma --strict` on Luma sources.
@@ -118,6 +117,6 @@ Stop only when a complete pass satisfies every condition below:
 - [ ] All benchmarks execute without errors.
 - [ ] All examples parse and type-check in strict mode.
 - [ ] No clang-tidy bugs or security warnings remain.
-- [ ] All language formatters and linters report clean (Python, Shell, PowerShell, CSS, Rust, TypeScript/JavaScript, Luma).
+- [ ] All language formatters and linters report clean (Python, Shell, PowerShell, Rust, TypeScript/JavaScript, Luma).
 - [ ] All Markdown documents follow project formatting rules.
 - [ ] Documentation matches implementation (both directions).

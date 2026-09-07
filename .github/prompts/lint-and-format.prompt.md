@@ -1,5 +1,5 @@
 ---
-description: "Lint and format all first-party source code and documentation across every language in the repository (C++, Luma, Python, TypeScript/JavaScript, Rust, CSS, PowerShell, Shell, CMake, Markdown)."
+description: "Lint and format all first-party source code and documentation across every language in the repository (C++, Luma, Python, TypeScript/JavaScript, Rust, PowerShell, Shell, CMake, Markdown)."
 agent: "agent"
 version: 1
 lastUpdated: "2026-08-01"
@@ -25,7 +25,6 @@ Lint and format every first-party language in the repository. Run the sections f
 | Python                | Ruff              | Ruff              | `ruff.toml`                     |
 | TypeScript/JavaScript | ESLint            | Prettier          | `extensions/vscode`             |
 | Rust                  | Clippy            | rustfmt           | `extensions/zed`                |
-| CSS                   | Stylelint         | Stylelint         | `stylelint.config.mjs`          |
 | PowerShell            | PSScriptAnalyzer  | PSScriptAnalyzer  | `PSScriptAnalyzerSettings.psd1` |
 | Shell                 | ShellCheck        | —                 | —                               |
 | CMake                 | cmakelint         | —                 | `.cmakelintrc`                  |
@@ -159,20 +158,6 @@ Run from `extensions/zed` (the Zed extension is the only first-party Rust crate)
     cargo clippy --target wasm32-wasip1 -- -D warnings
     ```
 
-## CSS — Stylelint
-
-Stylelint both lints and fixes. Install the CI-pinned versions with `npm install --no-save stylelint@17.13.0 stylelint-config-standard@40.0.0`. Rules live in [stylelint.config.mjs](../../stylelint.config.mjs); vendored `*.min.css` is excluded by the config.
-
-```bash
-npx stylelint --fix $(git ls-files '*.css' ':!:*.min.css')
-```
-
-On Windows, use PowerShell:
-
-```powershell
-npx stylelint --fix @(git ls-files '*.css' ':!:*.min.css')
-```
-
 ## PowerShell — PSScriptAnalyzer
 
 PSScriptAnalyzer lints and applies fixable rules in one pass. Settings live in [PSScriptAnalyzerSettings.psd1](../../PSScriptAnalyzerSettings.psd1).
@@ -226,7 +211,7 @@ cmakelint --config=.cmakelintrc @(git ls-files 'CMakeLists.txt' '**/CMakeLists.t
 
 ## Verify
 
-After applying fixes, confirm nothing regressed — most important where you used an autofix (`clang-tidy --fix`, `ruff check --fix`, `eslint --fix`, `stylelint --fix`, PSScriptAnalyzer `-Fix`), since those can alter behaviour.
+After applying fixes, confirm nothing regressed — most important where you used an autofix (`clang-tidy --fix`, `ruff check --fix`, `eslint --fix`, PSScriptAnalyzer `-Fix`), since those can alter behaviour.
 
 - **C++ and Luma:** one CTest run covers both. It builds and runs the C++ unit tests *and* every `.luma` feature test under `tests/features/` — each is registered as its own CTest case:
 
@@ -237,7 +222,7 @@ After applying fixes, confirm nothing regressed — most important where you use
 
 - **TypeScript:** the extension's unit tests are not part of CTest, so they are run separately via `npm run test:unit` (already covered in the TypeScript section above).
 
-- **Other languages:** Rust, CSS, PowerShell, Shell, CMake, and Markdown have no test suite in their CI gate — the lint and format commands in their sections are the full check. (The Zed crate does have `cargo test`; CI does not run it, but run it manually for extra confidence after a Rust autofix.)
+- **Other languages:** Rust, PowerShell, Shell, CMake, and Markdown have no test suite in their CI gate — the lint and format commands in their sections are the full check. (The Zed crate does have `cargo test`; CI does not run it, but run it manually for extra confidence after a Rust autofix.)
 
 ---
 
@@ -254,17 +239,14 @@ observable behaviour, and keep each diff minimal and reviewable.
 - **Include** first-party sources under `core/`, `shared/`, `language-server/`,
   `debugger/`, `tests/`, `fuzz/`, `scripts/`, `examples/`, `benchmarks/`,
   `extensions/`, `cmake/`, `documents/`, `instructions/`, and the repository root.
-  One file inside an otherwise-excluded tree is first-party and *is* in scope:
-  the GraphicalUi override stylesheet `external/gui-framework/gui-overrides.css`
-  (project-authored; linted by `ci-css.yml`).
 - **Exclude** vendored, generated, and fixture code: `external/`, `build/`,
   `build-*/` (e.g. `build-fuzz/`), `node_modules/`, `target/` (Rust build output
   under `extensions/zed/`), and `fuzz/corpus/` (intentionally malformed fuzzer
   seeds — never lint or format these), plus any other build, output, or
   vendored-dependency directory.
 - **Do not modify** tool configuration files (e.g. `.clang-format`, `.clang-tidy`,
-  `.cmakelintrc`, `ruff.toml`, `stylelint.config.mjs`,
-  `.markdownlint-cli2.jsonc`, `PSScriptAnalyzerSettings.psd1`, and the
+  `.cmakelintrc`, `ruff.toml`, `.markdownlint-cli2.jsonc`,
+  `PSScriptAnalyzerSettings.psd1`, and the
   `extensions/vscode` / `extensions/zed` configs).
 
 ### General Rules

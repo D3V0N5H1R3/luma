@@ -1,6 +1,6 @@
 ---
-description: "Research other languages, libraries, and GUI frameworks read-only and produce a prioritized, actionable list of candidate additions — language features, stdlib modules, types, and functions — that fit Luma's philosophy, without changing any code"
-argument-hint: "Optional focus, e.g. 'string handling', 'concurrency', 'GraphicalUi', or 'the whole language and stdlib'"
+description: "Research other languages and libraries read-only and produce a prioritized, actionable list of candidate additions — language features, stdlib modules, types, and functions — that fit Luma's philosophy, without changing any code"
+argument-hint: "Optional focus, e.g. 'string handling', 'concurrency', 'Terminal', or 'the whole language and stdlib'"
 ---
 
 Follow the workflow defined in the Luma prompt file below, which is the single

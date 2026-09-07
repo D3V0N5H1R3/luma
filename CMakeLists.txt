@@ -46,8 +46,6 @@ option(LUMA_FEATURE_COVERAGE
     "Enable code coverage instrumentation (GCC/Clang)" OFF)
 option(LUMA_FEATURE_TLS
     "Enable HTTPS support via Mbed TLS" ON)
-option(LUMA_FEATURE_WEBVIEW
-    "Enable the GraphicalUi module via the platform WebView backend" ON)
 
 # Note: Fuzz targets (fuzz/) are not included in the standard build.
 # They require Clang with -fsanitize=fuzzer support. Build them by
@@ -116,7 +114,6 @@ message(STATUS "  Sanitizers:   ${LUMA_FEATURE_SANITIZERS}")
 message(STATUS "  Coverage:     ${LUMA_FEATURE_COVERAGE}")
 message(STATUS "  LTO:          ${LUMA_FEATURE_LTO}")
 message(STATUS "  TLS:          ${LUMA_FEATURE_TLS}")
-message(STATUS "  WebView:      ${LUMA_FEATURE_WEBVIEW}")
 message(STATUS "================================")
 message(STATUS "")
 

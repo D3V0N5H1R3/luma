@@ -566,36 +566,6 @@ static void test_run_eval_reports_runtime_error() {
     ASSERT_EQ(code, exit_code::runtime_error);
 }
 
-// The built-in Solaris surface is injected for --eval snippets that
-// reference it (mirroring file execution), so a program using the surface
-// type-checks and runs without any include.
-static void test_run_eval_injects_gui_surface() {
-    std::string out;
-    const int code = run_eval_capture("function View greeting() {\n"
-                                      "    return Solaris.heading(\"Hi\") |> Solaris.center()\n"
-                                      "}\n"
-                                      "print(\"kind=${greeting().kind}\")\n",
-                                      out);
-
-    ASSERT_EQ(code, exit_code::success);
-    ASSERT_TRUE(out.find("kind=heading") != std::string::npos);
-}
-
-// The injection trigger is a whole-word match, so a program that merely embeds
-// the trigger inside a longer identifier (and defines its own `View` record)
-// must NOT get the prelude injected — otherwise the prelude's global `View`
-// would collide with the user's. Regression test for the substring-trigger bug.
-static void test_run_eval_embedded_trigger_does_not_inject() {
-    std::string out;
-    const int code = run_eval_capture("record View { integer n = 0 }\n"
-                                      "function integer mySolarisHelper() { return 7 }\n"
-                                      "print(\"n=${mySolarisHelper()}\")\n",
-                                      out);
-
-    ASSERT_EQ(code, exit_code::success);
-    ASSERT_TRUE(out.find("n=7") != std::string::npos);
-}
-
 // ─── validate_file_path — pathological / OS-unresolvable input ───
 // The :file command must reject a malformed path cleanly (return false) rather
 // than letting a std::filesystem_error escape and tear down the whole REPL
@@ -703,8 +673,6 @@ int main() {
     RUN(test_run_eval_runs_multiple_statements);
     RUN(test_run_eval_reports_syntax_error);
     RUN(test_run_eval_reports_runtime_error);
-    RUN(test_run_eval_injects_gui_surface);
-    RUN(test_run_eval_embedded_trigger_does_not_inject);
 
     // :file path validation.
     RUN(test_validate_file_path_rejects_unresolvable_path);

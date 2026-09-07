@@ -109,4 +109,3 @@ Several internal optimisations reduce overhead in the compiler and runtime:
 - [Standard Library Reference](Luma_Standard_Library_Reference.md) — per-module operations and their costs
 - [Software Architecture](Luma_Software_Architecture.md) — interpreter pipeline and internal resource limits
 - [Coding Guidelines](Luma_Coding_Guidelines.md) — writing efficient, idiomatic Luma
-- [GraphicalUi Guide](Luma_GraphicalUi_Guide.md) — performance considerations for GUI applications

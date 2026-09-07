@@ -141,13 +141,12 @@ conan/
 node_modules/
 vcpkg_installed/
 
-# Root-level Node artifacts from the CSS/Markdown lint flow. The ci-css.yml
+# Root-level Node artifacts from the Markdown lint flow. The ci-markdown.yml
 # workflow writes a throwaway package.json (and npm a lockfile) at the repo
 # root; the real extension manifests under extensions/ are tracked and, being
 # unanchored above, are unaffected by these root-anchored rules.
 /package.json
 /package-lock.json
-.stylelintcache
 
 # ── Python artifacts ──
 __pycache__/

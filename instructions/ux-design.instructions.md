@@ -1,13 +1,13 @@
 ---
-description: "Use when designing or reviewing any user interface — Luma Solaris or GraphicalUi apps, CSS, editor extensions, CLI/REPL output, or documentation layout. Covers user experience, usability, and graphic design principles: colour, typography, spacing, hierarchy, layout, Gestalt laws, interaction, feedback, accessibility, and the usability heuristics."
+description: "Use when designing or reviewing any user interface — Terminal/Console TUIs, CSS, editor extensions, CLI/REPL output, or documentation layout. Covers user experience, usability, and graphic design principles: colour, typography, spacing, hierarchy, layout, Gestalt laws, interaction, feedback, accessibility, and the usability heuristics."
 priority: reference
 ---
 
 # Working with UX and Visual Design
 
-A reference for the user experience, usability, and graphic design principles every interface in this project should follow. This guide has no `applyTo` file pattern because design principles are conceptual and cross-cutting — consult it whenever you design or review something a human looks at or interacts with: a `Solaris` or `GraphicalUi` application, a CSS stylesheet, an editor-extension panel, REPL or CLI output, an error message, or a documentation page.
+A reference for the user experience, usability, and graphic design principles every interface in this project should follow. This guide has no `applyTo` file pattern because design principles are conceptual and cross-cutting — consult it whenever you design or review something a human looks at or interacts with: a Terminal or Console application, a CSS stylesheet, an editor-extension panel, REPL or CLI output, an error message, or a documentation page.
 
-It is the _why_ behind the _how_. For implementation detail, pair it with the relevant guide: [css.instructions.md](css.instructions.md) for stylesheets, [luma.instructions.md](luma.instructions.md) with the [Solaris Guide](../documents/Luma_Solaris_Guide.md) (and the [GraphicalUi Guide](../documents/Luma_GraphicalUi_Guide.md) for the lower-level engine beneath it) for Luma GUIs, and [software-architecture.instructions.md](software-architecture.instructions.md) for the same simplicity-first mindset applied to code.
+It is the _why_ behind the _how_. For implementation detail, pair it with the relevant guide: [css.instructions.md](css.instructions.md) for stylesheets, [luma.instructions.md](luma.instructions.md) for Luma applications, and [software-architecture.instructions.md](software-architecture.instructions.md) for the same simplicity-first mindset applied to code.
 
 ---
 

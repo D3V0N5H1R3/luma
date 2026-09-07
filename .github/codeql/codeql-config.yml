@@ -5,13 +5,7 @@
 # excluded libraries are built from upstream source and are not
 # maintained in this repository, so their findings are not
 # actionable here and must not be patched locally (that would
-# fork upstream). The minified JS bundles in particular
-# (lucide.min.js ~351 KB, uPlot.iife.min.js ~49 KB) are
-# extremely expensive for CodeQL's dataflow analysis and caused
-# the javascript-typescript job to time out without exclusion.
-#
-# external/gui-framework/ is intentionally NOT excluded — it is
-# first-party code maintained in this repository.
+# fork upstream).
 #
 # This mirrors how the clang-tidy HeaderFilterRegex restricts
 # diagnostics to first-party directories.
@@ -25,11 +19,6 @@
 name: "Luma CodeQL config"
 
 paths-ignore:
-  - "external/lit-html/**"
-  - "external/lucide/**"
   - "external/mbedtls/**"
   - "external/miniz/**"
-  - "external/pico-css/**"
-  - "external/uplot/**"
-  - "external/webview/**"
   - "benchmarks/**"
