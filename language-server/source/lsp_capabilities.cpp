@@ -66,10 +66,6 @@ CapabilitiesBuilder& CapabilitiesBuilder::references() {
     return enable("referencesProvider");
 }
 
-CapabilitiesBuilder& CapabilitiesBuilder::document_highlight() {
-    return enable("documentHighlightProvider");
-}
-
 CapabilitiesBuilder& CapabilitiesBuilder::type_definition() {
     return enable("typeDefinitionProvider");
 }
@@ -80,10 +76,6 @@ CapabilitiesBuilder& CapabilitiesBuilder::implementation() {
 
 CapabilitiesBuilder& CapabilitiesBuilder::document_symbol() {
     return enable("documentSymbolProvider");
-}
-
-CapabilitiesBuilder& CapabilitiesBuilder::workspace_symbol() {
-    return enable("workspaceSymbolProvider");
 }
 
 CapabilitiesBuilder& CapabilitiesBuilder::rename(bool prepare_support) {
@@ -101,22 +93,6 @@ CapabilitiesBuilder& CapabilitiesBuilder::code_action() {
     return enable("codeActionProvider");
 }
 
-CapabilitiesBuilder& CapabilitiesBuilder::linked_editing_range() {
-    return enable("linkedEditingRangeProvider");
-}
-
-CapabilitiesBuilder& CapabilitiesBuilder::call_hierarchy() {
-    return enable("callHierarchyProvider");
-}
-
-CapabilitiesBuilder& CapabilitiesBuilder::type_hierarchy() {
-    return enable("typeHierarchyProvider");
-}
-
-CapabilitiesBuilder& CapabilitiesBuilder::selection_range() {
-    return enable("selectionRangeProvider");
-}
-
 CapabilitiesBuilder& CapabilitiesBuilder::document_link(bool resolve_provider) {
     capabilities_["documentLinkProvider"] = JsonValue(JsonValue::ObjectType{
         {"resolveProvider", JsonValue(resolve_provider)},
@@ -126,10 +102,6 @@ CapabilitiesBuilder& CapabilitiesBuilder::document_link(bool resolve_provider) {
 
 CapabilitiesBuilder& CapabilitiesBuilder::folding_range() {
     return enable("foldingRangeProvider");
-}
-
-CapabilitiesBuilder& CapabilitiesBuilder::inlay_hint() {
-    return enable("inlayHintProvider");
 }
 
 CapabilitiesBuilder&
@@ -151,19 +123,8 @@ CapabilitiesBuilder::semantic_tokens(const std::vector<std::string>& token_types
     return *this;
 }
 
-CapabilitiesBuilder& CapabilitiesBuilder::code_lens(bool resolve_provider) {
-    capabilities_["codeLensProvider"] = JsonValue(JsonValue::ObjectType{
-        {"resolveProvider", JsonValue(resolve_provider)},
-    });
-    return *this;
-}
-
 CapabilitiesBuilder& CapabilitiesBuilder::document_formatting() {
     return enable("documentFormattingProvider");
-}
-
-CapabilitiesBuilder& CapabilitiesBuilder::document_range_formatting() {
-    return enable("documentRangeFormattingProvider");
 }
 
 CapabilitiesBuilder&

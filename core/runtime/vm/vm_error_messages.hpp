@@ -42,10 +42,6 @@ constexpr std::string_view stack_underflow{"stack underflow"};
                        actual);
 }
 
-[[nodiscard]] inline std::string stack_restore_too_large(std::size_t n, std::size_t max) {
-    return std::format("cannot restore stack: size {} exceeds maximum {}", n, max);
-}
-
 // ─── Bytecode / internal errors ──────────────────────────────────────────────
 
 constexpr std::string_view jump_target_beyond_bounds{"jump target beyond bytecode bounds"};

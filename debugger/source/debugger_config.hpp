@@ -33,29 +33,6 @@ inline constexpr int k_default_purge_entry_threshold = 10'000;
 inline constexpr int k_default_purge_generation_interval = 10;
 } // namespace variable
 
-// Time-travel recording defaults.
-namespace time_travel {
-// Take a snapshot every N source lines executed.
-inline constexpr std::size_t k_default_snapshot_interval = 1;
-
-// Maximum number of snapshots to retain (ring buffer size).
-inline constexpr std::size_t k_default_max_snapshots = 10000;
-
-// Maximum total memory budget for snapshots (bytes) — 64 MB.
-inline constexpr std::size_t k_default_max_memory_bytes = std::size_t{64} * 1024 * 1024;
-
-// Upper bound on memory-budget evictions performed while making room for a
-// single new snapshot.  Bounds the eviction loop so one capture cannot spin
-// indefinitely if estimates and the budget disagree.
-inline constexpr int k_max_evictions_per_snapshot = 1000;
-} // namespace time_travel
-
-// Hot-reload polling.
-namespace hot_reload {
-// Minimum interval between filesystem polls.
-inline constexpr auto k_min_check_interval = std::chrono::milliseconds(500);
-} // namespace hot_reload
-
 // Breakpoint management.
 namespace breakpoint {
 // Session-assigned breakpoint IDs start at this value.

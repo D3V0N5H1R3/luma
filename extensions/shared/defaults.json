@@ -82,22 +82,6 @@
             "description": "Maximum file size in bytes for which analysis is performed. Files exceeding this limit are skipped to avoid performance issues.",
             "generated": false
         },
-        "inlayHints.enabled": {
-            "type": "boolean",
-            "default": false,
-            "description": "Show inferred type annotations and parameter names as inlay hints. Disabled by default to keep the source uncluttered.",
-            "vscode": {
-                "markdownDescription": "Show inferred type annotations and parameter names as inlay hints. Disabled by default to keep the source uncluttered."
-            }
-        },
-        "codeLens.enabled": {
-            "type": "boolean",
-            "default": true,
-            "description": "Show reference counts above functions and types as code lenses.",
-            "vscode": {
-                "markdownDescription": "Show reference counts above functions and types."
-            }
-        },
         "autoDownload.enabled": {
             "type": "boolean",
             "default": true,
@@ -111,37 +95,6 @@
             "description": "Version tag to download. Use 'latest' for the most recent release, or a specific tag like 'v0.5.0'.",
             "examples": ["latest", "v0.5.0"],
             "generated": false
-        },
-        "playground.enabled": {
-            "type": "boolean",
-            "default": true,
-            "description": "Enable the Luma playground for interactive code execution.",
-            "generated": false,
-            "vscode": {
-                "markdownDescription": "Enable the Luma Playground for interactive code execution."
-            }
-        },
-        "playground.timeout": {
-            "type": "integer",
-            "default": 10000,
-            "minimum": 1000,
-            "maximum": 120000,
-            "description": "Maximum execution time in milliseconds for playground snippets.",
-            "generated": false,
-            "vscode": {
-                "markdownDescription": "Maximum execution time (in milliseconds) for playground snippets."
-            }
-        },
-        "playground.maxOutputSize": {
-            "type": "integer",
-            "default": 1048576,
-            "minimum": 1024,
-            "maximum": 10485760,
-            "description": "Maximum output buffer size in bytes for playground snippets.",
-            "generated": false,
-            "vscode": {
-                "markdownDescription": "Maximum output buffer size (in bytes) for playground snippets."
-            }
         }
     },
 

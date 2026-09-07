@@ -34,11 +34,6 @@
       "type": "boolean",
       "description": "Run the program without stopping at breakpoints.",
       "default": false
-    },
-    "timeTravel": {
-      "type": "boolean",
-      "description": "Record execution history to enable stepping backwards.",
-      "default": false
     }
   },
   "additionalProperties": false

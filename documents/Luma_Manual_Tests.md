@@ -506,30 +506,26 @@ function void main() {
 | 2.5.2 | Go to Definition (include) | In `include_main.luma`, F12 on `greet` | Opens `include_helper.luma` at the function |
 | 2.5.3 | Find References | Right-click `factorial` → Find All References | Panel shows all usages (definition + calls + test) |
 | 2.5.4 | Go to Type Definition | F12-type-def on a variable of type `Shape` | Jumps to the `choice Shape` declaration |
-| 2.5.5 | Document Highlight | Click on `amount` in `format_money` | All occurrences of `amount` in that function are highlighted |
 
 ### 2.6 Symbols & Outline
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
 | 2.6.1 | Document Symbols | Open `types.luma`, open Outline panel (Ctrl+Shift+O) | Shows `Point`, `Shape`, `area`, `main` hierarchically |
-| 2.6.2 | Workspace Symbols | Ctrl+T, type `factorial` | Shows `factorial` from `tests.luma` |
-| 2.6.3 | Breadcrumbs | Click in `area` function body | Breadcrumb bar shows `types.luma > area` |
+| 2.6.2 | Breadcrumbs | Click in `area` function body | Breadcrumb bar shows `types.luma > area` |
 
-### 2.7 Code Actions & Refactoring
+### 2.7 Code Actions & Rename
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
 | 2.7.1 | Quick Fix | Introduce a fixable error (e.g., missing `mutable`), click lightbulb | Offers to add `mutable` |
 | 2.7.2 | Rename symbol | F2 on `greeting` in `hello.luma`, type `message`, Enter | All occurrences renamed |
-| 2.7.3 | Add type annotation | On a variable without explicit type (`x = 5`), invoke code action | Offers "Add type annotation" |
 
 ### 2.8 Formatting
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
 | 2.8.1 | Format Document | Mess up indentation, then Shift+Alt+F | Indentation corrected to 4 spaces |
-| 2.8.2 | Format Selection | Select a block, right-click → Format Selection | Only selected block reformatted |
 
 ### 2.9 Folding
 
@@ -538,43 +534,13 @@ function void main() {
 | 2.9.1 | Function folding | Click fold icon on function `area` in `types.luma` | Function body collapses |
 | 2.9.2 | Block folding | Fold a `match` block | Block collapses showing first line |
 
-### 2.10 Inlay Hints
+### 2.10 Semantic Highlighting
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 2.10.1 | Variable type hint | In `math.luma`, `result` should show inferred type | Ghost text `: number` after variable name |
-| 2.10.2 | Parameter name hint | At call `add(3.0, 4.5)` | Ghost text `a:` before `3.0`, `b:` before `4.5` |
-| 2.10.3 | No hints on declarations | Function parameters `(number a, number b)` | No parameter name hints on the declaration itself |
-| 2.10.4 | Disable inlay hints | Set `luma.inlayHints.enabled: false` | All inlay hints disappear |
-
-### 2.11 Semantic Highlighting
-
-| # | Test | Steps | Expected |
-|---|------|-------|----------|
-| 2.11.1 | Consistent minimap | Open a long `.luma` file, check minimap | Colors are consistent — no "scrambled" sections with different font sizes |
-| 2.11.2 | Type coloring | Record/choice names colored differently from variables | Distinct semantic token colors for types vs variables |
-| 2.11.3 | Function call coloring | `add(...)` at call site colored as function | Distinct color from variable names |
-
-### 2.12 Code Lens
-
-| # | Test | Steps | Expected |
-|---|------|-------|----------|
-| 2.12.1 | Reference count | Ensure `luma.codeLens.enabled: true`, open `tests.luma` | "N references" appears above `factorial` |
-| 2.12.2 | Click lens | Click the "N references" lens | Shows references panel |
-
-### 2.13 Call & Type Hierarchy
-
-| # | Test | Steps | Expected |
-|---|------|-------|----------|
-| 2.13.1 | Call Hierarchy | Right-click `factorial` → Show Call Hierarchy | Shows incoming calls (from tests and main) |
-| 2.13.2 | Type Hierarchy | On a record that implements an interface, Show Type Hierarchy | Shows supertypes/subtypes |
-
-### 2.14 Selection & Linked Editing
-
-| # | Test | Steps | Expected |
-|---|------|-------|----------|
-| 2.14.1 | Expand selection | Place cursor inside `"Hello, world!"`, press Shift+Alt+→ repeatedly | Selection grows: word → string content → full string → expression → statement → function body → function → file |
-| 2.14.2 | Linked editing | Enable linked editing, double-click a variable name | All same-name occurrences in scope edit simultaneously |
+| 2.10.1 | Consistent minimap | Open a long `.luma` file, check minimap | Colors are consistent — no "scrambled" sections with different font sizes |
+| 2.10.2 | Type coloring | Record/choice names colored differently from variables | Distinct semantic token colors for types vs variables |
+| 2.10.3 | Function call coloring | `add(...)` at call site colored as function | Distinct color from variable names |
 
 ---
 
@@ -614,9 +580,8 @@ function void main() {
 | 3.2.2 | Conditional breakpoint | Right-click gutter → Conditional Breakpoint → `n > 3` on `return n * factorial(n-1)` in `tests.luma`, F5 | Only pauses when `n > 3` |
 | 3.2.3 | Hit count breakpoint | Right-click gutter → Hit Count → enter `3` on recursive `factorial` call | Pauses on 3rd hit |
 | 3.2.4 | Log point | Right-click gutter → Log Point → enter `n = {n}` on factorial line | Messages appear in Debug Console without pausing |
-| 3.2.5 | Function breakpoint | Debug panel → Breakpoints → "+" → type `add` | Pauses when `add()` is called |
-| 3.2.6 | Disable/enable breakpoint | Uncheck a breakpoint in the Breakpoints panel | Breakpoint is skipped during execution |
-| 3.2.7 | Remove breakpoint | Click a red dot in the gutter | Breakpoint removed |
+| 3.2.5 | Disable/enable breakpoint | Uncheck a breakpoint in the Breakpoints panel | Breakpoint is skipped during execution |
+| 3.2.6 | Remove breakpoint | Click a red dot in the gutter | Breakpoint removed |
 
 ### 3.3 Execution Control
 
@@ -695,27 +660,13 @@ function void main() {
 | 4.4.2 | Test task | Terminal → Run Task → select "luma: test" | Tests run, results shown |
 | 4.4.3 | Problem matcher | Run a file with errors via task | Problems panel shows parsed diagnostics |
 
-### 4.5 Playground
+### 4.5 File Association & Icons
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 4.5.1 | Open Playground | Command Palette → "Luma: Open Playground" | Playground panel opens |
-| 4.5.2 | Execute code | Type a simple expression in the playground, execute | Output appears in result panel |
-| 4.5.3 | Timeout | Write an infinite loop, execute | Stops after configured timeout with error message |
-
-### 4.6 Walkthrough
-
-| # | Test | Steps | Expected |
-|---|------|-------|----------|
-| 4.6.1 | Getting Started | Command Palette → "Welcome: Open Walkthrough" → "Luma" | 7-step walkthrough loads with markdown content |
-
-### 4.7 File Association & Icons
-
-| # | Test | Steps | Expected |
-|---|------|-------|----------|
-| 4.7.1 | File icon | Create a `.luma` file in Explorer | Shows Luma file icon |
-| 4.7.2 | Language detection | Open a `.luma` file | Status bar shows "Luma" as language mode |
-| 4.7.3 | Markdown code blocks | Open a `.md` file with ` ```luma ` fence | Code block has Luma syntax highlighting |
+| 4.5.1 | File icon | Create a `.luma` file in Explorer | Shows Luma file icon |
+| 4.5.2 | Language detection | Open a `.luma` file | Status bar shows "Luma" as language mode |
+| 4.5.3 | Markdown code blocks | Open a `.md` file with ` ```luma ` fence | Code block has Luma syntax highlighting |
 
 ---
 
@@ -744,8 +695,7 @@ function void main() {
 | 5.2.7 | Rename | `gc r` (or F2) on a variable | Rename prompt; all occurrences updated |
 | 5.2.8 | Code Actions | On a diagnostic, invoke code action | Quick fix offered |
 | 5.2.9 | Format buffer | `cmd+shift+i` (or `:format`) | Document formatted |
-| 5.2.10 | Inlay hints | Toggle inlay hints (`toggle_inlay_hints`) | Type annotations and parameter names appear/disappear |
-| 5.2.11 | Document outline | `cmd+shift+o` (symbols) | Shows functions, types, namespaces |
+| 5.2.10 | Document outline | `cmd+shift+o` (symbols) | Shows functions, types, namespaces |
 
 ### 5.3 Task Runner
 
@@ -780,7 +730,6 @@ function void main() {
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
 | 6.1.1 | Minimap rendering | Open a long `.luma` file in VS Code, look at minimap | All text rendered in same consistent small-font style with colors — no "scrambled" sections |
-| 6.1.2 | Inlay hints in minimap | With inlay hints enabled, check minimap | No visual artifacts or differently-sized text from hints |
 
 ### 6.2 Multi-file Workspace
 
@@ -788,15 +737,12 @@ function void main() {
 |---|------|-------|----------|
 | 6.2.1 | Include resolution | Open `include_main.luma`, F12 on `greet` | Navigates to `include_helper.luma` |
 | 6.2.2 | Cross-file references | Find References on `greet` | Shows usage in `include_main.luma` |
-| 6.2.3 | Workspace symbols | Ctrl+T, search for a function name from another file | Found and navigable |
 
 ### 6.3 Settings Responsiveness
 
 | # | Test | Steps | Expected |
 |---|------|-------|----------|
-| 6.3.1 | Toggle inlay hints | Change `luma.inlayHints.enabled` from true→false→true | Hints disappear and reappear without restart |
-| 6.3.2 | Toggle code lens | Change `luma.codeLens.enabled` | Lenses disappear and reappear |
-| 6.3.3 | Custom binary path | Set `luma.path` to a wrong path, then fix it | Error shown, then normal operation resumes |
+| 6.3.1 | Custom binary path | Set `luma.path` to a wrong path, then fix it | Error shown, then normal operation resumes |
 
 ### 6.4 Error Recovery
 
@@ -815,12 +761,12 @@ Use this summary to track progress:
 | Area | Total Tests | Passed | Failed | Skipped |
 |------|-------------|--------|--------|---------|
 | 1. Interpreter | 58 | | | |
-| 2. Language Server | 40 | | | |
+| 2. Language Server | 26 | | | |
 | 3. Debugger | 22 | | | |
 | 4. VS Code Extension | 16 | | | |
-| 5. Zed Extension | 16 | | | |
-| 6. Cross-Cutting | 9 | | | |
-| **Total** | **161** | | | |
+| 5. Zed Extension | 15 | | | |
+| 6. Cross-Cutting | 6 | | | |
+| **Total** | **143** | | | |
 
 ## Reporting Issues
 

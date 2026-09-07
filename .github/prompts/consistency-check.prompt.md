@@ -50,7 +50,7 @@ Also verify:
 
 ## 4. Language Server vs Implementation
 
-- The language server handles all current language constructs across its full feature surface — diagnostics, hover, completions, signature help, go-to-definition, references, rename, document/workspace symbols, semantic tokens, code actions / quick fixes, code lens, formatting, folding, inlay hints, call/type hierarchy, and linked editing all reflect the current parser, type checker, and stdlib.
+- The language server handles all current language constructs across its full feature surface — diagnostics, hover, completions, signature help, go-to-definition, go-to-type-definition, go-to-implementation, references, rename, document symbols, semantic tokens, code actions / quick fixes, document formatting, and folding all reflect the current parser, type checker, and stdlib.
 - New syntax or keywords added to the pipeline are supported by the language server. In particular, the keyword catalog (`lsp_keyword_catalog.cpp`) stays in sync with the lexer keywords (`core/analysis/lexer/lexer.cpp`) — a keyword added to the lexer is reflected in completions, hover, and rename-keyword rejection (the `reserved_keyword_names()` test hook exists to enforce this).
 - The semantic token classifier and legend (`lsp_token_classifier.hpp` and the `SemanticTokenType` legend in `lsp_constants.hpp`) classify every token type the lexer can produce — a new token type is mapped to a semantic category rather than left unclassified.
 - The server's advertised capabilities (`lsp_capabilities.cpp`) match the handlers actually registered — no capability is announced without a handler, and no implemented handler is omitted from the advertised capabilities.
@@ -61,7 +61,7 @@ Also verify:
 - The debugger correctly handles all current value types, runtime structures, and stdlib modules — in particular, the variable inspector (`variable_inspector.cpp`) displays every `Value` kind the VM can produce.
 - Opcodes referenced by the debugger match the current compiler output.
 - New language features (e.g., new expression types, new value kinds) are reflected in the debugger's variable display, stepping, and evaluation. The expression evaluator (`expression_compiler.cpp`) supports the current expression syntax.
-- The debugger's advertised capabilities (`dap_feature_manager.hpp`) match the features actually implemented — e.g. conditional/hit/function/data breakpoints, logpoints, step-back, and configuration-done are only announced when the corresponding handler exists.
+- The debugger's advertised capabilities (`dap_feature_manager.hpp`) match the features actually implemented — e.g. conditional/hit breakpoints, logpoints, and configuration-done are only announced when the corresponding handler exists.
 
 ## 6. Language Server and Debugger Consistency
 

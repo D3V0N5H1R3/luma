@@ -411,33 +411,33 @@ fn merge_json_adds_new_key() {
 fn merge_json_deep_merge() {
     let mut base = zed::serde_json::json!({
         "luma": {
-            "inlayHints": { "enabled": true }
+            "diagnostics": { "onSave": true }
         }
     });
     let overrides = zed::serde_json::json!({
         "luma": {
-            "inlayHints": { "enabled": false }
+            "diagnostics": { "onSave": false }
         }
     });
     merge_json(&mut base, &overrides);
-    assert_eq!(base["luma"]["inlayHints"]["enabled"], false);
+    assert_eq!(base["luma"]["diagnostics"]["onSave"], false);
 }
 
 #[test]
 fn merge_json_preserves_unrelated_keys() {
     let mut base = zed::serde_json::json!({
         "luma": {
-            "inlayHints": { "enabled": true },
+            "diagnostics": { "onSave": true },
             "other": "value"
         }
     });
     let overrides = zed::serde_json::json!({
         "luma": {
-            "inlayHints": { "enabled": false }
+            "diagnostics": { "onSave": false }
         }
     });
     merge_json(&mut base, &overrides);
-    assert_eq!(base["luma"]["inlayHints"]["enabled"], false);
+    assert_eq!(base["luma"]["diagnostics"]["onSave"], false);
     assert_eq!(base["luma"]["other"], "value");
 }
 
@@ -445,12 +445,12 @@ fn merge_json_preserves_unrelated_keys() {
 fn merge_json_no_overrides_keeps_defaults() {
     let mut base = zed::serde_json::json!({
         "luma": {
-            "inlayHints": { "enabled": true }
+            "diagnostics": { "onSave": true }
         }
     });
     let overrides = zed::serde_json::json!({});
     merge_json(&mut base, &overrides);
-    assert_eq!(base["luma"]["inlayHints"]["enabled"], true);
+    assert_eq!(base["luma"]["diagnostics"]["onSave"], true);
 }
 
 // ── bool_setting helper tests ─────────────────────────────────
@@ -459,25 +459,25 @@ use super::bool_setting;
 
 #[test]
 fn bool_setting_reads_nested_value() {
-    let v = zed::serde_json::json!({"inlayHints": {"enabled": false}});
-    assert!(!bool_setting(Some(&v), &["inlayHints", "enabled"], true));
+    let v = zed::serde_json::json!({"diagnostics": {"onSave": false}});
+    assert!(!bool_setting(Some(&v), &["diagnostics", "onSave"], true));
 }
 
 #[test]
 fn bool_setting_falls_back_on_missing_key() {
-    let v = zed::serde_json::json!({"inlayHints": {}});
-    assert!(bool_setting(Some(&v), &["inlayHints", "enabled"], true));
+    let v = zed::serde_json::json!({"diagnostics": {}});
+    assert!(bool_setting(Some(&v), &["diagnostics", "onSave"], true));
 }
 
 #[test]
 fn bool_setting_falls_back_on_none() {
-    assert!(bool_setting(None, &["inlayHints", "enabled"], true));
+    assert!(bool_setting(None, &["diagnostics", "onSave"], true));
 }
 
 #[test]
 fn bool_setting_falls_back_on_non_bool() {
-    let v = zed::serde_json::json!({"inlayHints": {"enabled": "yes"}});
-    assert!(bool_setting(Some(&v), &["inlayHints", "enabled"], true));
+    let v = zed::serde_json::json!({"diagnostics": {"onSave": "yes"}});
+    assert!(bool_setting(Some(&v), &["diagnostics", "onSave"], true));
 }
 
 // ── build_workspace_config tests ──────────────────────────────
@@ -485,24 +485,9 @@ fn bool_setting_falls_back_on_non_bool() {
 use super::build_workspace_config;
 
 #[test]
-fn build_workspace_config_never_sends_code_lens() {
-    // Zed does not support code lens (VS Code only, per FEATURE_PARITY.md).
-    // The workspace configuration sent to the LSP must not include a
-    // `codeLens` key regardless of user settings, since Zed has no way to
-    // request or render code lenses.
-    let config = build_workspace_config(None);
-    assert!(config["luma"].get("codeLens").is_none());
-
-    let user_settings = zed::serde_json::json!({"luma": {"codeLens": {"enabled": true}}});
+fn build_workspace_config_reads_diagnostics() {
+    let user_settings = zed::serde_json::json!({"luma": {"diagnostics": {"onSave": true}}});
     let config = build_workspace_config(Some(&user_settings));
-    assert!(config["luma"].get("codeLens").is_none());
-}
-
-#[test]
-fn build_workspace_config_reads_inlay_hints_and_diagnostics() {
-    let user_settings = zed::serde_json::json!({"luma": {"inlayHints": {"enabled": false}, "diagnostics": {"onSave": true}}});
-    let config = build_workspace_config(Some(&user_settings));
-    assert_eq!(config["luma"]["inlayHints"]["enabled"], false);
     assert_eq!(config["luma"]["diagnostics"]["onSave"], true);
 }
 

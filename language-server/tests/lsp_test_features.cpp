@@ -99,81 +99,6 @@ void test_signature_help() {
     (void)request_and_assert(session, "textDocument/signatureHelp", make_td_position(uri, 2, 15));
 }
 
-// ─── Inlay hint ────────────────────────────────────────────────────
-
-void test_inlay_hint() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/inlay.luma";
-    const auto* resp = session.request_and_run("textDocument/inlayHint", uri, k_main,
-                                               make_range_params(uri, 0, 0, 10, 0));
-    assert_result_is_array(resp);
-}
-
-// ─── Code lens ────────────────────────────────────────────────────
-
-void test_code_lens() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/lens.luma";
-    session.open_document(uri, "function greet(name: string) -> string {\n"
-                               "    return \"Hi\"\n"
-                               "}\n"
-                               "\n"
-                               "@main\n"
-                               "function main() {\n"
-                               "    greet(\"world\")\n"
-                               "}\n");
-    const auto* resp = request_and_assert(session, "textDocument/codeLens", make_td_params(uri));
-    ASSERT_TRUE((*resp)["result"].is_array());
-}
-
-// ─── Selection range ──────────────────────────────────────────────
-
-void test_selection_range() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/selrange.luma";
-    session.open_document(uri, k_main);
-    const std::string params =
-        R"({"textDocument":{"uri":")" + uri + R"("},"positions":[{"line":2,"character":4}]})";
-    const auto id = session.request("textDocument/selectionRange", params);
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    assert_result_is_array(resp);
-    ASSERT_GE((*resp)["result"].as_array().size(), static_cast<std::size_t>(1));
-}
-
-// ─── Semantic tokens range ────────────────────────────────────────
-
-void test_semantic_tokens_range() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/tokrange.luma";
-    const auto* resp = session.request_and_run("textDocument/semanticTokens/range", uri, k_main,
-                                               make_range_params(uri, 0, 0, 3, 0));
-    assert_has_result(resp);
-    ASSERT_TRUE((*resp)["result"].has("data"));
-}
-
-// A client may send a range whose end line precedes its start line. Internally
-// this made `last` precede `first`, so building a std::span from the inverted
-// [first, last) iterator pair produced a huge (negative) size. The handler must
-// instead treat an inverted range as selecting no tokens and return an empty
-// data set — not an internal error (which the oversized reserve used to raise)
-// nor an out-of-bounds read.
-void test_semantic_tokens_range_inverted() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/tokrange_inverted.luma";
-    const auto* resp = session.request_and_run("textDocument/semanticTokens/range", uri, k_main,
-                                               make_range_params(uri, 3, 0, 0, 0));
-    assert_has_result(resp);
-    ASSERT_TRUE((*resp)["result"].has("data"));
-    ASSERT_TRUE((*resp)["result"]["data"].as_array().empty());
-}
-
 // ─── Prepare rename ───────────────────────────────────────────────
 
 void test_prepare_rename() {
@@ -195,17 +120,6 @@ void test_document_link() {
     const auto* resp =
         request_and_assert(session, "textDocument/documentLink", make_td_params(uri));
     ASSERT_TRUE((*resp)["result"].is_array());
-}
-
-// ─── Linked editing range ─────────────────────────────────────────
-
-void test_linked_editing_range() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/linked.luma";
-    const auto* resp = session.request_and_run("textDocument/linkedEditingRange", uri,
-                                               k_main_with_usage, make_td_position(uri, 2, 4));
-    assert_has_result(resp);
 }
 
 // ─── Execute command ──────────────────────────────────────────────
@@ -368,29 +282,6 @@ void test_find_identifier_range_fallback_counts_codepoints() {
     ASSERT_EQ(r.end.character, 8); // 4 + 4 codepoints (byte-based bug → 9)
 }
 
-// ─── Namespace inlay hints ────────────────────────────────────────
-
-void test_namespace_inlay_hints() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/nshint.luma";
-    session.open_document(uri, "namespace Utils {\n"
-                               "    function add(a: integer, b: integer) -> integer {\n"
-                               "        return a + b\n"
-                               "    }\n"
-                               "}\n"
-                               "\n"
-                               "@main\n"
-                               "function main() {\n"
-                               "    Utils.add(1, 2)\n"
-                               "}\n");
-    const auto id = session.request("textDocument/inlayHint", make_range_params(uri, 0, 0, 10, 0));
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    assert_result_is_array(resp);
-}
-
 // ─── Partial analysis on parse error ──────────────────────────────
 
 void test_partial_analysis_on_parse_error() {
@@ -496,55 +387,6 @@ void test_pipe_signature_help() {
     }
 }
 
-// ─── Semantic tokens delta ─────────────────────────────────────────
-
-void test_semantic_tokens_delta() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/tokdelta.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    x = 42\n}\n");
-
-    // First: request full tokens to get the initial resultId.
-    const auto full_id = session.request("textDocument/semanticTokens/full", make_td_params(uri));
-
-    // Then request delta relative to a previous resultId.
-    const std::string delta_params =
-        R"({"textDocument":{"uri":")" + uri + R"("},"previousResultId":"0"})";
-    const auto delta_id = session.request("textDocument/semanticTokens/full/delta", delta_params);
-    (void)session.run();
-
-    const auto* full_resp = session.find_response(full_id);
-    ASSERT_NE(full_resp, nullptr);
-    ASSERT_TRUE(full_resp->has("result"));
-    ASSERT_TRUE((*full_resp)["result"].has("data"));
-
-    const auto* delta_resp = session.find_response(delta_id);
-    ASSERT_NE(delta_resp, nullptr);
-    ASSERT_TRUE(delta_resp->has("result"));
-
-    // Delta response should have either "edits" (incremental) or "data" (full).
-    const auto& delta_result = (*delta_resp)["result"];
-    ASSERT_TRUE(delta_result.has("edits") || delta_result.has("data"));
-}
-
-// ─── Range formatting ─────────────────────────────────────────────
-
-void test_range_formatting() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/rangefmt.luma";
-    session.open_document(uri, "@main\nfunction main() {\nif true {\nx = 1\n}\n}\n");
-    const std::string params =
-        R"({"textDocument":{"uri":")" + uri +
-        R"("},"range":{"start":{"line":2,"character":0},"end":{"line":4,"character":1}},)"
-        R"("options":{"tabSize":4,"insertSpaces":true}})";
-    const auto id = session.request("textDocument/rangeFormatting", params);
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    assert_result_is_array(resp);
-}
-
 // ─── Code action: unused variable ─────────────────────────────────
 
 void test_code_action_unused_variable() {
@@ -581,96 +423,6 @@ void test_code_action_type_error() {
 
     const auto* resp = session.find_response(id);
     assert_result_is_array(resp);
-}
-
-// ─── Code lens: reference count ───────────────────────────────────
-
-void test_code_lens_references() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/lens_refs.luma";
-    session.open_document(uri, "function helper() -> integer {\n"
-                               "    return 42\n"
-                               "}\n"
-                               "\n"
-                               "@main\n"
-                               "function main() {\n"
-                               "    helper()\n"
-                               "    helper()\n"
-                               "    helper()\n"
-                               "}\n");
-    const auto id = session.request("textDocument/codeLens", make_td_params(uri));
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    assert_result_is_array(resp);
-
-    // Code lens availability depends on analysis timing.
-    const auto& lenses = (*resp)["result"].as_array();
-    for (const auto& lens : lenses) {
-        ASSERT_TRUE(lens.has("range"));
-    }
-}
-
-// Characterization: a code-lens title encodes the reference count with correct
-// singular/plural wording and appends " | @test" for @test-annotated functions.
-// Exercises R06's count_references_to + has_test_annotation extraction.  Guarded
-// on lens presence because analysis completion is timing-dependent in the mock
-// harness (mirrors test_hover / test_code_lens_references).
-void test_code_lens_title_format() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/lens_titles.luma";
-    session.open_document(uri, "function helper() -> integer {\n"
-                               "    return 42\n"
-                               "}\n"
-                               "\n"
-                               "function solo() -> integer {\n"
-                               "    return 1\n"
-                               "}\n"
-                               "\n"
-                               "@test\n"
-                               "function my_test() {\n"
-                               "    helper()\n"
-                               "    helper()\n"
-                               "    solo()\n"
-                               "}\n"
-                               "\n"
-                               "@main\n"
-                               "function main() {\n"
-                               "    helper()\n"
-                               "}\n");
-    const auto id = session.request("textDocument/codeLens", make_td_params(uri));
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    assert_result_is_array(resp);
-
-    const auto& lenses = (*resp)["result"].as_array();
-    if (lenses.empty()) {
-        return; // Analysis had not completed; nothing to characterize.
-    }
-
-    bool saw_plural = false;   // helper: referenced 3 times
-    bool saw_singular = false; // solo: referenced exactly once
-    bool saw_test = false;     // my_test: unreferenced, @test-annotated
-    for (const auto& lens : lenses) {
-        ASSERT_TRUE(lens.has("command"));
-        const std::string title = lens["command"]["title"].as_string();
-        if (title == "3 references") {
-            saw_plural = true;
-        }
-        if (title == "1 reference") {
-            saw_singular = true;
-        }
-        if (title == "0 references | @test") {
-            saw_test = true;
-        }
-    }
-
-    ASSERT_TRUE(saw_plural);
-    ASSERT_TRUE(saw_singular);
-    ASSERT_TRUE(saw_test);
 }
 
 // ─── Folding range: nested blocks ─────────────────────────────────
@@ -723,116 +475,6 @@ void test_folding_range_comments() {
     ASSERT_GE(ranges.size(), static_cast<std::size_t>(1));
 }
 
-// ─── Selection range: multiple positions ──────────────────────────
-
-void test_selection_range_multiple() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/selrange_multi.luma";
-    session.open_document(uri, k_main_with_usage);
-    const std::string params =
-        R"({"textDocument":{"uri":")" + uri +
-        R"("},"positions":[{"line":2,"character":4},{"line":3,"character":4}]})";
-    const auto id = session.request("textDocument/selectionRange", params);
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    assert_result_is_array(resp);
-
-    // One selection range per position.
-    const auto& results = (*resp)["result"].as_array();
-    ASSERT_EQ(results.size(), static_cast<std::size_t>(2));
-
-    // Each selection range should have a "range" and optionally a "parent".
-    for (const auto& sel : results) {
-        ASSERT_TRUE(sel.has("range"));
-    }
-}
-
-// ─── Selection range: expanding hierarchy ─────────────────────────
-
-void test_selection_range_hierarchy() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/selrange_hier.luma";
-    session.open_document(uri, "@main\n"
-                               "function main() {\n"
-                               "    if true {\n"
-                               "        x = 42\n"
-                               "    }\n"
-                               "}\n");
-    const std::string params =
-        R"({"textDocument":{"uri":")" + uri + R"("},"positions":[{"line":3,"character":12}]})";
-    const auto id = session.request("textDocument/selectionRange", params);
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    assert_has_result(resp);
-
-    const auto& results = (*resp)["result"].as_array();
-    ASSERT_GE(results.size(), static_cast<std::size_t>(1));
-
-    // Selection range on a deeply nested expression should have parent chain.
-    const auto& sel = results[0];
-    ASSERT_TRUE(sel.has("range"));
-    // In a nested context, there should be a parent range expanding outward.
-    if (sel.has("parent")) {
-        ASSERT_TRUE(sel["parent"].has("range"));
-    }
-}
-
-// ─── Linked editing: function name ────────────────────────────────
-
-void test_linked_editing_function_name() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/linked_fn.luma";
-    session.open_document(uri, "function greet() -> string {\n"
-                               "    return \"hi\"\n"
-                               "}\n"
-                               "\n"
-                               "@main\n"
-                               "function main() {\n"
-                               "    greet()\n"
-                               "}\n");
-    const auto id = session.request("textDocument/linkedEditingRange", make_td_position(uri, 6, 5));
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    assert_has_result(resp);
-
-    const auto& result = (*resp)["result"];
-    if (!result.is_null() && result.has("ranges")) {
-        const auto& ranges = result["ranges"].as_array();
-        // Should link the definition (line 0) and usage (line 6).
-        ASSERT_GE(ranges.size(), static_cast<std::size_t>(2));
-    }
-}
-
-// ─── Linked editing: keyword rejection ────────────────────────────
-
-void test_linked_editing_keyword_rejected() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/linked_kw.luma";
-    session.open_document(uri, "@main\nfunction main() {\n    if true {\n    }\n}\n");
-    // Position on the "if" keyword — should not provide linked editing.
-    const auto id = session.request("textDocument/linkedEditingRange", make_td_position(uri, 2, 4));
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    ASSERT_NE(resp, nullptr);
-
-    // Should return null result for non-renamable tokens.
-    if (resp->has("result")) {
-        const auto& result = (*resp)["result"];
-        if (!result.is_null() && result.has("ranges")) {
-            // If ranges are returned, they must be empty for a keyword.
-            ASSERT_TRUE(result["ranges"].as_array().empty());
-        }
-    }
-}
-
 // ─── Execute command: unknown command ─────────────────────────────
 
 void test_execute_command_unknown() {
@@ -846,62 +488,6 @@ void test_execute_command_unknown() {
     ASSERT_NE(resp, nullptr);
     // Should return result (null) or error for unknown command.
     ASSERT_TRUE(resp->has("result") || resp->has("error"));
-}
-
-// ─── Inlay hints: function parameters ─────────────────────────────
-
-void test_inlay_hint_parameters() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/inlay_params.luma";
-    session.open_document(uri, "function add(a: integer, b: integer) -> integer {\n"
-                               "    return a + b\n"
-                               "}\n"
-                               "\n"
-                               "@main\n"
-                               "function main() {\n"
-                               "    add(1, 2)\n"
-                               "}\n");
-    const auto id = session.request("textDocument/inlayHint", make_range_params(uri, 0, 0, 10, 0));
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    assert_result_is_array(resp);
-
-    // Should include parameter name hints at the call site.
-    const auto& hints = (*resp)["result"].as_array();
-    for (const auto& hint : hints) {
-        ASSERT_TRUE(hint.has("position"));
-        ASSERT_TRUE(hint.has("label"));
-    }
-}
-
-// ─── Inlay hints: type inference ──────────────────────────────────
-
-void test_inlay_hint_type_inference() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/inlay_type.luma";
-    session.open_document(uri, "@main\nfunction main() {\n"
-                               "    x = 42\n"
-                               "    name = \"hello\"\n"
-                               "    flag = true\n"
-                               "}\n");
-    const auto id = session.request("textDocument/inlayHint", make_range_params(uri, 0, 0, 10, 0));
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    assert_result_is_array(resp);
-
-    // Should provide type hints for x, name, and flag.
-    const auto& hints = (*resp)["result"].as_array();
-    if (!hints.empty()) {
-        // Verify hint structure: each should have position, label, and kind.
-        for (const auto& hint : hints) {
-            ASSERT_TRUE(hint.has("position"));
-            ASSERT_TRUE(hint.has("label"));
-        }
-    }
 }
 
 // ─── Hover: record type ───────────────────────────────────────────
@@ -1293,34 +879,6 @@ void test_hover_socket_type() {
     }
 }
 
-// ─── Code action: add type annotation ────────────────────────────
-
-void test_code_action_add_type_annotation() {
-    LspTestSession session;
-
-    const std::string uri = "file:///test/action_type_ann.luma";
-    session.open_document(uri, "function void main() {\n"
-                               "    x = 42\n"
-                               "}\n");
-    const auto id = session.request("textDocument/codeAction", make_range_params(uri, 1, 0, 1, 10));
-    (void)session.run();
-
-    const auto* resp = session.find_response(id);
-    assert_result_is_array(resp);
-
-    // Check if a "Add type annotation" action is present.
-    bool found_add_type = false;
-    for (const auto& action : (*resp)["result"].as_array()) {
-        if (action.has("title") &&
-            action["title"].as_string().find("Add type annotation") != std::string::npos) {
-            found_add_type = true;
-        }
-    }
-    // NOTE: Analysis completion is timing-dependent; this assertion is
-    // intentionally suppressed to avoid flaky test failures.
-    (void)found_add_type;
-}
-
 // ─── Hover on whitespace ──────────────────────────────────────────
 
 void test_hover_on_whitespace() {
@@ -1366,14 +924,8 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_rename);
     RUN(test_code_action);
     RUN(test_signature_help);
-    RUN(test_inlay_hint);
-    RUN(test_code_lens);
-    RUN(test_selection_range);
-    RUN(test_semantic_tokens_range);
-    RUN(test_semantic_tokens_range_inverted);
     RUN(test_prepare_rename);
     RUN(test_document_link);
-    RUN(test_linked_editing_range);
     RUN(test_execute_command);
     RUN(test_execute_command_hostile_position);
     RUN(test_semantic_tokens_annotation);
@@ -1383,27 +935,16 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_name_range_subtraction);
     RUN(test_token_range_counts_codepoints_not_bytes);
     RUN(test_find_identifier_range_fallback_counts_codepoints);
-    RUN(test_namespace_inlay_hints);
     RUN(test_partial_analysis_on_parse_error);
     RUN(test_loop_variable_type_inference);
     RUN(test_doc_comment_hover);
     RUN(test_pipe_signature_help);
     RUN(test_match_formatting);
-    RUN(test_semantic_tokens_delta);
-    RUN(test_range_formatting);
     RUN(test_code_action_unused_variable);
     RUN(test_code_action_type_error);
-    RUN(test_code_lens_references);
-    RUN(test_code_lens_title_format);
     RUN(test_folding_range_nested);
     RUN(test_folding_range_comments);
-    RUN(test_selection_range_multiple);
-    RUN(test_selection_range_hierarchy);
-    RUN(test_linked_editing_function_name);
-    RUN(test_linked_editing_keyword_rejected);
     RUN(test_execute_command_unknown);
-    RUN(test_inlay_hint_parameters);
-    RUN(test_inlay_hint_type_inference);
     RUN(test_hover_record);
     RUN(test_hover_choice);
     RUN(test_hover_local_variable);
@@ -1417,7 +958,6 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_semantic_tokens_modifiers);
     RUN(test_hover_reference_type);
     RUN(test_hover_socket_type);
-    RUN(test_code_action_add_type_annotation);
     RUN(test_hover_on_whitespace);
     RUN(test_definition_nonexistent_symbol);
 

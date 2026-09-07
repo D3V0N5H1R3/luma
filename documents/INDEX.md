@@ -71,27 +71,27 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 1 — Overview | 37–46 |
 | 2 — Goals | 47–60 |
 | 3 — Non-Goals | 61–69 |
-| 4 — Architecture | 70–115 |
-| 5 — Supported DAP Requests | 116–176 |
-| 6 — Breakpoints | 177–207 |
-| 7 — Stepping | 208–222 |
-| 8 — Variable Inspection | 223–238 |
-| 9 — Concurrency Support | 239–253 |
-| 10 — Exception Handling | 254–270 |
-| 11 — Platform Support | 271–280 |
-| 12 — Usage | 281–308 |
-| 13 — Editor Integration | 309–353 |
-| 14 — File Layout | 354–445 |
-| 15 — Module Responsibilities | 446–789 |
-| 16 — Data Flow | 790–821 |
-| 17 — VM Instrumentation | 822–880 |
-| 18 — Local Variable Names | 881–897 |
-| 19 — Output Capture | 898–905 |
-| 20 — Error Handling | 906–918 |
-| 21 — CMake Integration | 919–940 |
-| 22 — Testing Strategy | 941–988 |
-| 23 — Future Extensions | 989–998 |
-| See Also | 999–1004 |
+| 4 — Architecture | 70–112 |
+| 5 — Supported DAP Requests | 113–172 |
+| 6 — Breakpoints | 173–203 |
+| 7 — Stepping | 204–218 |
+| 8 — Variable Inspection | 219–234 |
+| 9 — Concurrency Support | 235–249 |
+| 10 — Exception Handling | 250–266 |
+| 11 — Platform Support | 267–276 |
+| 12 — Usage | 277–304 |
+| 13 — Editor Integration | 305–349 |
+| 14 — File Layout | 350–428 |
+| 15 — Module Responsibilities | 429–768 |
+| 16 — Data Flow | 769–800 |
+| 17 — VM Instrumentation | 801–859 |
+| 18 — Local Variable Names | 860–876 |
+| 19 — Output Capture | 877–884 |
+| 20 — Error Handling | 885–897 |
+| 21 — CMake Integration | 898–919 |
+| 22 — Testing Strategy | 920–965 |
+| 23 — Future Extensions | 966–975 |
+| See Also | 976–981 |
 
 ## Luma_Error_Handling.md
 
@@ -146,26 +146,26 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 2 — Goals | 45–54 |
 | 3 — Non-Goals | 55–62 |
 | 4 — Architecture | 63–86 |
-| 5 — Supported LSP Methods | 87–154 |
-| 6 — Diagnostics | 155–175 |
-| 7 — Hover | 176–187 |
-| 8 — Completion | 188–199 |
-| 9 — Document Management | 200–207 |
-| 10 — Standard Library Support | 208–218 |
-| 11 — Platform Support | 219–226 |
-| 12 — Usage | 227–286 |
-| 13 — Editor Integration | 287–298 |
-| 14 — File Layout | 299–469 |
-| 15 — Module Responsibilities | 470–894 |
-| 16 — Data Flow | 895–1019 |
-| 17 — JSON-RPC Dispatch | 1020–1077 |
-| 18 — Capability Negotiation | 1078–1138 |
-| 19 — Stdlib Signature Access | 1139–1151 |
-| 20 — Build Integration | 1152–1189 |
-| 21 — Error Handling | 1190–1200 |
-| 22 — Logging | 1201–1213 |
-| 23 — Platform-Specific Handling | 1214–1228 |
-| See Also | 1229–1235 |
+| 5 — Supported LSP Methods | 87–139 |
+| 6 — Diagnostics | 140–160 |
+| 7 — Hover | 161–172 |
+| 8 — Completion | 173–184 |
+| 9 — Document Management | 185–192 |
+| 10 — Standard Library Support | 193–203 |
+| 11 — Platform Support | 204–211 |
+| 12 — Usage | 212–267 |
+| 13 — Editor Integration | 268–279 |
+| 14 — File Layout | 280–438 |
+| 15 — Module Responsibilities | 439–860 |
+| 16 — Data Flow | 861–985 |
+| 17 — JSON-RPC Dispatch | 986–1028 |
+| 18 — Capability Negotiation | 1029–1079 |
+| 19 — Stdlib Signature Access | 1080–1092 |
+| 20 — Build Integration | 1093–1130 |
+| 21 — Error Handling | 1131–1141 |
+| 22 — Logging | 1142–1154 |
+| 23 — Platform-Specific Handling | 1155–1169 |
+| See Also | 1170–1175 |
 
 ## Luma_Manual_Tests.md
 
@@ -173,13 +173,13 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | ------- | ----- |
 | Prerequisites | 5–156 |
 | Part 1 — Interpreter | 158–457 |
-| Part 2 — Language Server (VS Code) | 460–578 |
-| Part 3 — Debugger (VS Code) | 581–660 |
-| Part 4 — VS Code Extension Features | 663–719 |
-| Part 5 — Zed Extension | 722–773 |
-| Part 6 — Cross-Cutting & Regression Tests | 776–808 |
-| Execution Checklist | 811–823 |
-| Reporting Issues | 825–832 |
+| Part 2 — Language Server (VS Code) | 460–544 |
+| Part 3 — Debugger (VS Code) | 547–625 |
+| Part 4 — VS Code Extension Features | 628–670 |
+| Part 5 — Zed Extension | 673–723 |
+| Part 6 — Cross-Cutting & Regression Tests | 726–754 |
+| Execution Checklist | 757–769 |
+| Reporting Issues | 771–779 |
 
 ## Luma_Performance_Guide.md
 
@@ -242,47 +242,46 @@ are 50–100 KB and reading them in full consumes significant context budget.
 
 | Section | Lines |
 | ------- | ----- |
-| Table of Contents | 9–55 |
-| 1 — Core Built-Ins | 56–68 |
-| 2 — Array | 69–139 |
-| 3 — Bits | 140–168 |
-| 4 — Calculus | 169–198 |
-| 5 — Channel | 199–238 |
-| 6 — Color | 239–301 |
-| 7 — Compression | 302–350 |
-| 8 — Console | 351–372 |
-| 9 — Converter | 373–397 |
-| 10 — Csv | 398–440 |
-| 11 — DateTime | 441–583 |
-| 12 — Decimal | 584–672 |
-| 13 — Dictionary | 673–715 |
-| 14 — Encoder | 716–746 |
-| 15 — FileSystem | 747–834 |
-| 16 — Hash | 1644–1685 |
-| 17 — Http | 1686–1793 |
-| 18 — Json | 1794–1890 |
-| 19 — KeyValueStore | 1891–1918 |
-| 20 — LinearAlgebra | 1919–1977 |
-| 21 — Log | 1978–2003 |
-| 22 — Math | 2004–2139 |
-| 23 — Optional | 2140–2196 |
-| 24 — Order | 2197–2260 |
-| 25 — Process | 2261–2359 |
-| 26 — Queue | 2360–2386 |
-| 27 — Random | 2387–2442 |
-| 28 — Reference | 2443–2499 |
-| 29 — RegularExpression | 2500–2602 |
-| 30 — Resource | 2603–2655 |
-| 31 — Result | 2656–2688 |
-| 32 — Set | 2689–2723 |
-| 33 — Socket | 2724–2791 |
-| 34 — Stack | 2792–2819 |
-| 35 — Statistics | 2820–2837 |
-| 36 — String | 2850–2955 |
-| 37 — Task | 2956–3025 |
-| 38 — Terminal | 3026–3242 |
-| 39 — Xml | 3243–3321 |
-| See Also | 3322–3330 |
+| Table of Contents | 9–54 |
+| 1 — Core Built-Ins | 55–67 |
+| 2 — Array | 68–138 |
+| 3 — Bits | 139–167 |
+| 4 — Calculus | 168–197 |
+| 5 — Channel | 198–237 |
+| 6 — Compression | 238–286 |
+| 7 — Console | 287–308 |
+| 8 — Converter | 309–333 |
+| 9 — Csv | 334–376 |
+| 10 — DateTime | 377–519 |
+| 11 — Decimal | 520–608 |
+| 12 — Dictionary | 609–651 |
+| 13 — Encoder | 652–682 |
+| 14 — FileSystem | 683–770 |
+| 15 — Hash | 771–812 |
+| 16 — Http | 813–920 |
+| 17 — Json | 921–1017 |
+| 18 — KeyValueStore | 1018–1045 |
+| 19 — LinearAlgebra | 1046–1104 |
+| 20 — Log | 1105–1130 |
+| 21 — Math | 1131–1266 |
+| 22 — Optional | 1267–1323 |
+| 23 — Order | 1324–1387 |
+| 24 — Process | 1388–1486 |
+| 25 — Queue | 1487–1513 |
+| 26 — Random | 1514–1569 |
+| 27 — Reference | 1570–1626 |
+| 28 — RegularExpression | 1627–1729 |
+| 29 — Resource | 1730–1782 |
+| 30 — Result | 1783–1815 |
+| 31 — Set | 1816–1850 |
+| 32 — Socket | 1851–1918 |
+| 33 — Stack | 1919–1946 |
+| 34 — Statistics | 1947–1962 |
+| 35 — String | 1963–2068 |
+| 36 — Task | 2069–2138 |
+| 37 — Terminal | 2139–2355 |
+| 38 — Xml | 2356–2434 |
+| See Also | 2435–2440 |
 
 ## Luma_Syntax_Highlighting.md
 

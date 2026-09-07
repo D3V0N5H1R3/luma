@@ -88,32 +88,6 @@ HandlerResult DapBreakpointHandler::handle_set_breakpoints(const JsonValue& args
     return HandlerResult::ok(make_breakpoints_response(breakpoints_array));
 }
 
-HandlerResult DapBreakpointHandler::handle_set_function_breakpoints(const JsonValue& args) {
-    auto requests = parse_breakpoint_requests(args);
-
-    // Store names for pre-launch re-application.
-    ctx_.pending_function_bp_requests = requests;
-
-    JsonValue::ArrayType breakpoints_array;
-
-    if (ctx_.has_session()) {
-        auto result = ctx_.session->set_function_breakpoints(requests);
-
-        for (const auto& bp : result) {
-            breakpoints_array.push_back(serialise_breakpoint(bp));
-        }
-    } else {
-        // No session yet — return unverified breakpoints.
-        apply_pending_or_unverified(
-            breakpoints_array, requests, "", [](const BreakpointRequest& /*req*/) { return 0; },
-            [](const BreakpointRequest& req) {
-                return std::format("Function '{}' will be verified at launch", req.name);
-            });
-    }
-
-    return HandlerResult::ok(make_breakpoints_response(breakpoints_array));
-}
-
 HandlerResult DapBreakpointHandler::handle_set_exception_breakpoints(const JsonValue& args) {
     auto filters = parse_exception_filters(args);
 
@@ -173,82 +147,6 @@ HandlerResult DapBreakpointHandler::handle_breakpoint_locations(const JsonValue&
     }
 
     return HandlerResult::ok(make_breakpoints_response(locations_array));
-}
-
-// ─── Data breakpoints ───
-
-HandlerResult DapBreakpointHandler::handle_data_breakpoint_info(const JsonValue& args) {
-    JsonValue::ObjectType body;
-
-    const auto name = args.get_or<std::string>("name", "");
-
-    if (name.empty()) {
-        body["dataId"] = JsonValue();
-        body["description"] = JsonValue(std::string("Data breakpoints require a variable name"));
-        body["accessTypes"] = JsonValue(JsonValue::ArrayType{});
-        return HandlerResult::ok(JsonValue(std::move(body)));
-    }
-
-    // Return a data ID that the client can use to set the breakpoint.
-    // Format: "varname" — the session will watch for writes to this variable.
-    body["dataId"] = JsonValue(name);
-    body["description"] = JsonValue(std::format("Break on write to '{}'", name));
-
-    JsonValue::ArrayType access_types;
-    access_types.emplace_back(std::string("write"));
-    access_types.emplace_back(std::string("readWrite"));
-    body["accessTypes"] = JsonValue(std::move(access_types));
-
-    return HandlerResult::ok(JsonValue(std::move(body)));
-}
-
-HandlerResult DapBreakpointHandler::handle_set_data_breakpoints(const JsonValue& args) {
-    if (!args.is_object() || !args.has("breakpoints") || !args["breakpoints"].is_array()) {
-        return HandlerResult::error(
-            std::string{messages::request::set_data_breakpoints_missing_array});
-    }
-
-    // setDataBreakpoints replaces the full set, so rebuild the pending mirror
-    // from scratch.  Mirroring (like the line/function/exception handlers) lets
-    // apply_pending_breakpoints() restore them when the session is recreated,
-    // e.g. on luma/hotReload — otherwise the reloaded program loses them.
-    ctx_.pending_data_breakpoints.clear();
-
-    if (ctx_.has_session()) {
-        ctx_.session->clear_data_breakpoints();
-    }
-
-    JsonValue::ArrayType breakpoints_array;
-    const auto& bp_list = args["breakpoints"].as_array();
-
-    for (const auto& bp : bp_list) {
-        JsonValue::ObjectType bp_result;
-
-        const auto data_id = bp.get_or<std::string>("dataId", "");
-
-        if (!data_id.empty()) {
-            const auto access_type = bp.get_or<std::string>("accessType", "write");
-            const auto condition = bp.get_or<std::string>("condition", "");
-
-            ctx_.pending_data_breakpoints.push_back(
-                DataBreakpointRequest{data_id, access_type, condition});
-
-            if (ctx_.has_session()) {
-                // Register the data breakpoint with the session.
-                ctx_.session->set_data_breakpoint(data_id, access_type, condition);
-            }
-
-            bp_result["verified"] = JsonValue(true);
-            bp_result["id"] = JsonValue(static_cast<int64_t>(breakpoints_array.size() + 1));
-        } else {
-            bp_result["verified"] = JsonValue(false);
-            bp_result["message"] = JsonValue(std::string("Missing dataId"));
-        }
-
-        breakpoints_array.emplace_back(std::move(bp_result));
-    }
-
-    return HandlerResult::ok(make_breakpoints_response(breakpoints_array));
 }
 
 } // namespace luma::dap

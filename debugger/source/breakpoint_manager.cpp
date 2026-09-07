@@ -11,7 +11,7 @@ namespace luma::dap {
 
 // ─── Construction ───
 
-BreakpointManager::BreakpointManager() : line_mgr_(&ctx_), func_mgr_(&ctx_), data_mgr_(&ctx_) {}
+BreakpointManager::BreakpointManager() : line_mgr_(&ctx_) {}
 
 // ─── Configuration ───
 
@@ -43,32 +43,8 @@ BreakpointManager::set_breakpoints(const std::string& path,
     return result;
 }
 
-std::vector<Breakpoint>
-BreakpointManager::set_function_breakpoints(const std::vector<BreakpointRequest>& requests) {
-    auto result = func_mgr_.set_function_breakpoints(requests);
-    update_breakpoints_active_flag();
-    return result;
-}
-
 void BreakpointManager::set_exception_breakpoints(const std::vector<std::string>& filters) {
     exception_settings_.set_exception_breakpoints(filters);
-}
-
-void BreakpointManager::set_data_breakpoint(const std::string& variable_name,
-                                            const std::string& access_type,
-                                            const std::string& condition) {
-    data_mgr_.set_data_breakpoint(variable_name, access_type, condition);
-    update_breakpoints_active_flag();
-}
-
-void BreakpointManager::clear_data_breakpoints() {
-    data_mgr_.clear_data_breakpoints();
-    update_breakpoints_active_flag();
-}
-
-bool BreakpointManager::check_data_breakpoint(const std::string& variable_name,
-                                              const ConditionEvaluatorFn& eval_condition) const {
-    return data_mgr_.check_data_breakpoint(variable_name, eval_condition);
 }
 
 // ─── Cache pre-population ───
@@ -105,11 +81,6 @@ void BreakpointManager::resolve_pending_breakpoints() {
     update_breakpoints_active_flag();
 }
 
-void BreakpointManager::resolve_function_breakpoints() {
-    func_mgr_.resolve_function_breakpoints();
-    update_breakpoints_active_flag();
-}
-
 // ─── Runtime check ───
 
 BreakpointManager::BreakpointCheckResult
@@ -119,18 +90,11 @@ BreakpointManager::check_breakpoint(int file_id, int line,
     // condition fields *without* recording a hit yet — a conditional breakpoint
     // only counts as hit when its condition holds (DAP semantics).
     std::optional<BreakpointSnapshot> match;
-    bool is_line_bp = false;
 
     {
         const std::scoped_lock lock(ctx_.mutex);
 
         match = line_mgr_.find_matching_breakpoint(file_id, line, /*record_hit=*/false);
-
-        if (match) {
-            is_line_bp = true;
-        } else {
-            match = func_mgr_.find_matching_breakpoint(file_id, line, /*record_hit=*/false);
-        }
     }
 
     if (!match) {
@@ -154,8 +118,7 @@ BreakpointManager::check_breakpoint(int file_id, int line,
     {
         const std::scoped_lock lock(ctx_.mutex);
 
-        hit = is_line_bp ? line_mgr_.find_matching_breakpoint(file_id, line, /*record_hit=*/true)
-                         : func_mgr_.find_matching_breakpoint(file_id, line, /*record_hit=*/true);
+        hit = line_mgr_.find_matching_breakpoint(file_id, line, /*record_hit=*/true);
     }
 
     // The breakpoint may have been removed by a concurrent setBreakpoints call
@@ -195,14 +158,12 @@ bool BreakpointManager::has_breakpoints_in_file(const std::string& source_path) 
         return false;
     }
 
-    return line_mgr_.has_breakpoints_for_file_id(file_id) ||
-           func_mgr_.has_breakpoints_for_file_id(file_id);
+    return line_mgr_.has_breakpoints_for_file_id(file_id);
 }
 
 bool BreakpointManager::has_breakpoints_for_file_id(int file_id) const {
     const std::scoped_lock lock(ctx_.mutex);
-    return line_mgr_.has_breakpoints_for_file_id(file_id) ||
-           func_mgr_.has_breakpoints_for_file_id(file_id);
+    return line_mgr_.has_breakpoints_for_file_id(file_id);
 }
 
 std::vector<int> BreakpointManager::get_breakpoint_locations(const std::string& path,
@@ -215,8 +176,7 @@ std::vector<int> BreakpointManager::get_breakpoint_locations(const std::string& 
 void BreakpointManager::update_breakpoints_active_flag() {
     const std::scoped_lock lock(ctx_.mutex);
 
-    const bool active = line_mgr_.has_any_breakpoints() || func_mgr_.has_any_breakpoints() ||
-                        data_mgr_.has_any_breakpoints();
+    const bool active = line_mgr_.has_any_breakpoints();
 
     breakpoints_active_.store(active, std::memory_order_release);
 }

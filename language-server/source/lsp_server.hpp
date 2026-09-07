@@ -7,7 +7,6 @@
 #include <shared_mutex>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <vector>
 
 // Forward declarations — types used only behind unique_ptr in this header.
@@ -19,9 +18,7 @@ class LspCodeActionHandler;
 class LspCompletionHandler;
 class LspFoldingHandler;
 class LspFormattingHandler;
-class LspHierarchyHandler;
 class LspHoverHandler;
-class LspInlayHintHandler;
 class LspNavigationHandler;
 class LspRenameHandler;
 class LspSemanticTokensHandler;
@@ -75,16 +72,14 @@ struct LspServerConfig {
 // Handler classes:
 //   LspHoverHandler           – textDocument/hover
 //   LspCompletionHandler      – textDocument/completion, resolve, signatureHelp
-//   LspNavigationHandler      – definition, references, highlight, typeDefinition,
-//                                implementation, documentLink, selectionRange
-//   LspSymbolHandler          – documentSymbol, workspaceSymbol
-//   LspFormattingHandler      – formatting, rangeFormatting
-//   LspSemanticTokensHandler  – semantic tokens (full, delta, range)
-//   LspRenameHandler          – rename, prepareRename, linkedEditingRange
-//   LspHierarchyHandler       – call/type hierarchy
+//   LspNavigationHandler      – definition, references, typeDefinition,
+//                                implementation, documentLink
+//   LspSymbolHandler          – documentSymbol
+//   LspFormattingHandler      – formatting
+//   LspSemanticTokensHandler  – semantic tokens (full)
+//   LspRenameHandler          – rename, prepareRename
 //   LspFoldingHandler         – foldingRange
-//   LspCodeActionHandler      – codeAction, codeLens, executeCommand
-//   LspInlayHintHandler       – inlayHint
+//   LspCodeActionHandler      – codeAction, executeCommand
 //   LspWorkspaceHandler       – workspace features, watched files, configuration
 //   LspSyncHandler            – didOpen, didChange, didClose
 //
@@ -153,7 +148,6 @@ private:
     // Declared before analysis_service_/analysis_pipeline_ so it outlives them.
     std::atomic<bool> analysis_cancel_flag_{false};
 
-    std::thread scan_thread_;
     CancellationManager cancellation_manager_;
 
     // ═══ Analysis Cache ═══
@@ -213,10 +207,8 @@ private:
     std::unique_ptr<LspFormattingHandler> formatting_handler_;
     std::unique_ptr<LspSemanticTokensHandler> semantic_tokens_handler_;
     std::unique_ptr<LspRenameHandler> rename_handler_;
-    std::unique_ptr<LspHierarchyHandler> hierarchy_handler_;
     std::unique_ptr<LspFoldingHandler> folding_handler_;
     std::unique_ptr<LspCodeActionHandler> code_action_handler_;
-    std::unique_ptr<LspInlayHintHandler> inlay_hint_handler_;
     std::unique_ptr<LspWorkspaceHandler> workspace_handler_;
     std::unique_ptr<LspSyncHandler> sync_handler_;
 

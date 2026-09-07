@@ -99,8 +99,6 @@ private:
 
     void doc_comment_phase(AnalysisResult& result, const std::string& source);
 
-    void call_graph_phase(const Program& program, AnalysisResult& result);
-
     // Runs the linter and appends its warnings (and any phase failure) to the
     // result's diagnostics.  Diagnostics whose primary location belongs to
     // `prelude_file_id` are dropped for the same reason as in type_check_phase.
@@ -109,8 +107,8 @@ private:
                     const std::string& uri, const std::vector<std::size_t>& line_starts,
                     FileId prelude_file_id);
 
-    // Runs the lex → parse → include → symbol → doc → call-graph → type-check →
-    // lint sequence.  Returns true when the caller should return `result`
+    // Runs the lex → parse → include → symbol → doc → type-check → lint
+    // sequence.  Returns true when the caller should return `result`
     // immediately (parse errors produced a best-effort partial result); false
     // when the full pipeline completed and post-processing should continue.
     [[nodiscard]] bool run_pipeline_phases(const std::string& uri, const std::string& source,
@@ -128,9 +126,6 @@ private:
     void collect_local_vars(const std::vector<std::unique_ptr<Statement>>& stmts,
                             AnalysisResult& result, const std::string& enclosing_function = "",
                             int scope_start = 0, int scope_end = 0);
-
-    void collect_call_graph(const std::vector<std::unique_ptr<Declaration>>& decls,
-                            AnalysisResult& result, std::string_view prefix = "");
 
     // Matches records against interfaces and populates interface_implementations.
     void build_interface_implementations(AnalysisResult& result);

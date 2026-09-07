@@ -8,7 +8,7 @@
 // (and some other standard libraries) do not yet provide it.  This helper
 // feature-tests for clock_cast and falls back to rebasing the file-clock time
 // point onto the system clock, keeping the conversion in one place for every
-// caller (stdlib FileSystem module, LSP persisted index).
+// caller (the stdlib FileSystem module).
 
 #include <chrono>
 #include <filesystem>

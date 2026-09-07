@@ -39,20 +39,6 @@ Canonical configuration reference for both Luma editor extensions. Each editor m
 | `diagnostics.onSave` | `boolean` | `false` | Only report linter warnings on save. Syntax and type errors are always immediate. |
 | `diagnostics.maxFileSize` | `integer` | `1048576` | Maximum file size (bytes) for analysis. Files exceeding this are skipped. |
 
-### Editor Features
-
-| Setting | Type | Default | Description |
-| --- | --- | --- | --- |
-| `inlayHints.enabled` | `boolean` | `true` | Show inferred type annotations as inlay hints. |
-| `codeLens.enabled` | `boolean` | `true` | Show reference counts above functions and types. |
-
-### Playground
-
-| Setting | Type | Default | Description |
-| --- | --- | --- | --- |
-| `playground.timeout` | `integer` | `10000` | Maximum execution time (ms) for playground snippets. Range: 1000–120000. |
-| `playground.maxOutputSize` | `integer` | `1048576` | Maximum output buffer (bytes) for playground snippets. Range: 1024–10485760. |
-
 ### Auto-Download
 
 | Setting | Type | Default | Description |
@@ -73,10 +59,6 @@ Settings use the `luma.` prefix in `contributes.configuration` (defined in `exte
 | `dap.path` | `luma.dap.path` | Supports `${workspaceFolder}` variables. |
 | `interpreter.path` | `luma.path` | Note: uses `luma.path` not `luma.interpreter.path`. |
 | `diagnostics.onSave` | `luma.diagnostics.onSave` | — |
-| `inlayHints.enabled` | `luma.inlayHints.enabled` | — |
-| `codeLens.enabled` | `luma.codeLens.enabled` | — |
-| `playground.timeout` | `luma.playground.timeout` | — |
-| `playground.maxOutputSize` | `luma.playground.maxOutputSize` | — |
 | `lsp.enabled` | *(implicit)* | Untrusted workspaces disable LSP via `restrictedConfigurations`. |
 | `dap.enabled` | *(implicit)* | Controlled by workspace trust. |
 | `lsp.trace` | `luma.trace.server` | VS Code uses standard language client trace setting. |

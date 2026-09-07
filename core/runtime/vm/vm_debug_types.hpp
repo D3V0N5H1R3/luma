@@ -17,8 +17,6 @@
 //   ExceptionHook      — fires when a RuntimeError is about to be caught
 //                        by try/catch.  Receives (message, is_caught) and
 //                        returns true to pause (exception breakpoints).
-//   DataBreakpointHook — fires when a named variable is written.  Receives
-//                        the variable name and returns true to pause.
 //   TaskSpawnHook      — fires when a new task is spawned.  Receives the
 //                        child VM and task ID.  Used to track threads.
 //   TaskExitHook       — fires when a task completes.  Receives the task
@@ -52,10 +50,6 @@ using PauseCallback = std::function<bool()>;
 // exception breakpoints.  Signature: (message, is_caught) → should_pause.
 using ExceptionHook = std::function<bool(const std::string&, bool)>;
 
-// Data breakpoint hook: called when a named variable is written.
-// Returns true if the write should trigger a pause.
-using DataBreakpointHook = std::function<bool(const std::string&)>;
-
 // Task hooks: called when a task is spawned or completes.
 // Used by the debugger to track threads.
 using TaskSpawnHook = std::function<void(VM&, int)>;
@@ -66,7 +60,6 @@ struct DebugCallbacks {
     DebugHook debug_hook;
     PauseCallback pause_callback;
     ExceptionHook exception_hook;
-    DataBreakpointHook data_breakpoint_hook;
     TaskSpawnHook task_spawn_hook;
     TaskExitHook task_exit_hook;
 };

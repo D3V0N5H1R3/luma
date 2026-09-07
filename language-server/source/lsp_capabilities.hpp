@@ -33,9 +33,6 @@ public:
     /// Enable find references.
     CapabilitiesBuilder& references();
 
-    /// Enable document highlight.
-    CapabilitiesBuilder& document_highlight();
-
     /// Enable type definition.
     CapabilitiesBuilder& type_definition();
 
@@ -45,26 +42,11 @@ public:
     /// Enable document symbol.
     CapabilitiesBuilder& document_symbol();
 
-    /// Enable workspace symbol.
-    CapabilitiesBuilder& workspace_symbol();
-
     /// Enable rename with optional prepare support.
     CapabilitiesBuilder& rename(bool prepare_support = true);
 
     /// Enable code actions.
     CapabilitiesBuilder& code_action();
-
-    /// Enable linked editing range.
-    CapabilitiesBuilder& linked_editing_range();
-
-    /// Enable call hierarchy.
-    CapabilitiesBuilder& call_hierarchy();
-
-    /// Enable type hierarchy.
-    CapabilitiesBuilder& type_hierarchy();
-
-    /// Enable selection range.
-    CapabilitiesBuilder& selection_range();
 
     /// Enable document link with optional resolve.
     CapabilitiesBuilder& document_link(bool resolve_provider = false);
@@ -72,22 +54,13 @@ public:
     /// Enable folding range.
     CapabilitiesBuilder& folding_range();
 
-    /// Enable inlay hints.
-    CapabilitiesBuilder& inlay_hint();
-
-    /// Enable semantic tokens (full, delta, range) with the given legend.
+    /// Enable semantic tokens (full) with the given legend.
     CapabilitiesBuilder& semantic_tokens(const std::vector<std::string>& token_types,
                                          const std::vector<std::string>& token_modifiers,
-                                         bool full_delta = true, bool range = true);
-
-    /// Enable code lens with optional resolve.
-    CapabilitiesBuilder& code_lens(bool resolve_provider = false);
+                                         bool full_delta = false, bool range = false);
 
     /// Enable document formatting.
     CapabilitiesBuilder& document_formatting();
-
-    /// Enable document range formatting.
-    CapabilitiesBuilder& document_range_formatting();
 
     /// Enable execute command with the given command IDs.
     CapabilitiesBuilder& execute_command(const std::vector<std::string>& commands);

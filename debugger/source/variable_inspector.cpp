@@ -6,7 +6,6 @@
 #include <string>
 
 #include "common/narrow_int.hpp"
-#include "custom_visualizer.hpp"
 #include "dap_types.hpp"
 #include "debug_session.hpp"
 #include "debugger_messages.hpp"
@@ -273,16 +272,6 @@ Variable VariableInspector::make_variable(const std::string& name, const Value& 
                                           bool is_mutable, int depth) const {
     Variable var = make_base_variable(name, val);
     var.is_mutable = is_mutable;
-
-    // Apply custom visualizer if a matching rule exists.  The display template
-    // replaces the value verbatim; placeholder expansion is not supported.
-    if (custom_visualizer_ != nullptr && custom_visualizer_->has_rules()) {
-        auto rule = custom_visualizer_->find_rule(var.type);
-
-        if (rule.has_value() && !rule->display_template.empty()) {
-            var.value = rule->display_template;
-        }
-    }
 
     if (is_structured(val) && depth < max_expansion_depth_) {
         var.variables_reference =

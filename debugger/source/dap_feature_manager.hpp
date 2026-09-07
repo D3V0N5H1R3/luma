@@ -32,21 +32,15 @@ namespace luma::dap {
 
 // ─── Feature identifiers ───
 // Strongly-typed enum for every DAP feature the Luma debugger knows about.
-// Keeps call sites readable:  `if (features.is_enabled(Feature::StepBack))`
+// Keeps call sites readable:  `if (features.is_enabled(Feature::StepInTargets))`
 
 enum class Feature : int {
     ConfigurationDone,
-    FunctionBreakpoints,
     ConditionalBreakpoints,
     HitConditionalBreakpoints,
     EvaluateForHovers,
-    StepBack,
     SetVariable,
-    RestartFrame,
     RestartRequest,
-    GotoTargets,
-    Completions,
-    Modules,
     ExceptionOptions,
     ExceptionInfo,
     LogPoints,
@@ -55,9 +49,6 @@ enum class Feature : int {
     BreakpointLocations,
     InvalidatedEvent,
     ValueFormattingOptions,
-    SingleThreadExecution,
-    DataBreakpoints,
-    InstructionBreakpoints,
     StepInTargets,
     Count_, // sentinel — must be last
 };
@@ -128,31 +119,22 @@ public:
         // ─── Breakpoints ───
         set("supportsConditionalBreakpoints", Feature::ConditionalBreakpoints);
         set("supportsHitConditionalBreakpoints", Feature::HitConditionalBreakpoints);
-        set("supportsFunctionBreakpoints", Feature::FunctionBreakpoints);
         set("supportsLogPoints", Feature::LogPoints);
         set("supportsBreakpointLocationsRequest", Feature::BreakpointLocations);
-        set("supportsDataBreakpoints", Feature::DataBreakpoints);
-        set("supportsInstructionBreakpoints", Feature::InstructionBreakpoints);
 
         // ─── Execution control ───
         set("supportsConfigurationDoneRequest", Feature::ConfigurationDone);
         set("supportsRestartRequest", Feature::RestartRequest);
-        set("supportsRestartFrame", Feature::RestartFrame);
         set("supportsTerminateRequest", Feature::Terminate);
-        set("supportsStepBack", Feature::StepBack);
         set("supportsStepInTargetsRequest", Feature::StepInTargets);
-        set("supportsGotoTargetsRequest", Feature::GotoTargets);
-        set("supportsSingleThreadExecutionRequests", Feature::SingleThreadExecution);
 
         // ─── Inspection ───
         set("supportsEvaluateForHovers", Feature::EvaluateForHovers);
         set("supportsSetVariable", Feature::SetVariable);
-        set("supportsCompletionsRequest", Feature::Completions);
         set("supportsValueFormattingOptions", Feature::ValueFormattingOptions);
 
         // ─── Sources and modules ───
         set("supportsLoadedSourcesRequest", Feature::LoadedSources);
-        set("supportsModulesRequest", Feature::Modules);
 
         // ─── Events and exceptions ───
         set("supportsInvalidatedEvent", Feature::InvalidatedEvent);
@@ -249,14 +231,11 @@ private:
 
         // Features the server always provides.
         enable(Feature::ConfigurationDone);
-        enable(Feature::FunctionBreakpoints);
         enable(Feature::ConditionalBreakpoints);
         enable(Feature::HitConditionalBreakpoints);
         enable(Feature::EvaluateForHovers);
-        enable(Feature::StepBack);
         enable(Feature::SetVariable);
         enable(Feature::RestartRequest);
-        enable(Feature::Completions);
         enable(Feature::ExceptionOptions);
         enable(Feature::ExceptionInfo);
         enable(Feature::LogPoints);
@@ -264,7 +243,6 @@ private:
         enable(Feature::Terminate);
         enable(Feature::BreakpointLocations);
         enable(Feature::ValueFormattingOptions);
-        enable(Feature::DataBreakpoints);
         enable(Feature::StepInTargets);
 
         // Features gated on client support.

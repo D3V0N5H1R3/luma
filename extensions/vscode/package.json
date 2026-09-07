@@ -120,35 +120,6 @@
                     "type": "boolean",
                     "default": false,
                     "markdownDescription": "When enabled, only report linter warnings on save (not while typing). Syntax and type errors are always reported immediately."
-                },
-                "luma.inlayHints.enabled": {
-                    "type": "boolean",
-                    "default": false,
-                    "markdownDescription": "Show inferred type annotations and parameter names as inlay hints. Disabled by default to keep the source uncluttered."
-                },
-                "luma.codeLens.enabled": {
-                    "type": "boolean",
-                    "default": true,
-                    "markdownDescription": "Show reference counts above functions and types."
-                },
-                "luma.playground.enabled": {
-                    "type": "boolean",
-                    "default": true,
-                    "markdownDescription": "Enable the Luma Playground for interactive code execution."
-                },
-                "luma.playground.timeout": {
-                    "type": "integer",
-                    "default": 10000,
-                    "minimum": 1000,
-                    "maximum": 120000,
-                    "markdownDescription": "Maximum execution time (in milliseconds) for playground snippets."
-                },
-                "luma.playground.maxOutputSize": {
-                    "type": "integer",
-                    "default": 1048576,
-                    "minimum": 1024,
-                    "maximum": 10485760,
-                    "markdownDescription": "Maximum output buffer size (in bytes) for playground snippets."
                 }
             }
         },
@@ -192,11 +163,6 @@
                                 "type": "string",
                                 "description": "Working directory for the debugged program.",
                                 "default": "${workspaceFolder}"
-                            },
-                            "timeTravel": {
-                                "type": "boolean",
-                                "description": "Record execution history to enable stepping backwards (the Step Back and Reverse buttons). Off by default because recording VM snapshots adds memory and runtime overhead.",
-                                "default": false
                             }
                         }
                     }
@@ -225,16 +191,6 @@
                 ]
             }
         ],
-        "views": {
-            "debug": [
-                {
-                    "type": "webview",
-                    "id": "luma.debugVisualizer",
-                    "name": "Luma Visualizer",
-                    "when": "debugType == 'luma'"
-                }
-            ]
-        },
         "commands": [
             {
                 "command": "luma.restartServer",
@@ -267,18 +223,6 @@
                 "command": "luma.showReferences",
                 "title": "Show References",
                 "category": "Luma"
-            },
-            {
-                "command": "luma.visualizeVariable",
-                "title": "Visualize Variable",
-                "category": "Luma",
-                "icon": "$(graph)"
-            },
-            {
-                "command": "luma.openPlayground",
-                "title": "Open Playground",
-                "category": "Luma",
-                "icon": "$(play)"
             }
         ],
         "keybindings": [
@@ -373,71 +317,6 @@
                     "message": 2,
                     "code": 1
                 }
-            }
-        ],
-        "walkthroughs": [
-            {
-                "id": "luma.gettingStarted",
-                "title": "Getting Started with Luma",
-                "description": "Learn how to write, run, and test Luma programs.",
-                "steps": [
-                    {
-                        "id": "luma.gettingStarted.install",
-                        "title": "Install the Language Server",
-                        "description": "The Luma extension automatically downloads the language server on first use. If it can't be downloaded, [build from source](https://github.com/d3v0n5h1r3/luma#build-and-test) or configure the path manually.\n\n[Open Settings](command:workbench.action.openSettings?%5B%22luma.lsp.path%22%5D)",
-                        "media": {
-                            "markdown": "walkthroughs/install.md"
-                        }
-                    },
-                    {
-                        "id": "luma.gettingStarted.hello",
-                        "title": "Write Your First Program",
-                        "description": "Create a `.luma` file with an `@main` function and hit Run.\n\n[Create hello.luma](command:workbench.action.files.newUntitledFile)",
-                        "media": {
-                            "markdown": "walkthroughs/hello.md"
-                        }
-                    },
-                    {
-                        "id": "luma.gettingStarted.edit",
-                        "title": "Explore Editing Features",
-                        "description": "As you write, the language server offers completions, hover, go to definition, rename, and quick fixes.\n\n[Go to Symbol in Editor](command:workbench.action.gotoSymbol)",
-                        "media": {
-                            "markdown": "walkthroughs/edit.md"
-                        }
-                    },
-                    {
-                        "id": "luma.gettingStarted.run",
-                        "title": "Run a Luma File",
-                        "description": "Use the play button in the editor title bar or the command palette.\n\n[Run Current File](command:luma.runFile)",
-                        "media": {
-                            "markdown": "walkthroughs/run.md"
-                        }
-                    },
-                    {
-                        "id": "luma.gettingStarted.debug",
-                        "title": "Debug a Program",
-                        "description": "Set breakpoints, then press F5 to launch the debugger — step through code and inspect variables.\n\n[Start Debugging](command:workbench.action.debug.start)",
-                        "media": {
-                            "markdown": "walkthroughs/debug.md"
-                        }
-                    },
-                    {
-                        "id": "luma.gettingStarted.test",
-                        "title": "Write and Run Tests",
-                        "description": "Add `@test` annotated functions and discover them in the Test Explorer.\n\n[Run Tests](command:luma.runTests)",
-                        "media": {
-                            "markdown": "walkthroughs/test.md"
-                        }
-                    },
-                    {
-                        "id": "luma.gettingStarted.playground",
-                        "title": "Try the Playground",
-                        "description": "Experiment with Luma snippets interactively, without creating a file.\n\n[Open Playground](command:luma.openPlayground)",
-                        "media": {
-                            "markdown": "walkthroughs/playground.md"
-                        }
-                    }
-                ]
             }
         ],
         "semanticTokenScopes": [

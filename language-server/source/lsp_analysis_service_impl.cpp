@@ -227,10 +227,6 @@ void LspAnalysisService::doc_comment_phase(AnalysisResult& result, const std::st
     }
 }
 
-void LspAnalysisService::call_graph_phase(const Program& program, AnalysisResult& result) {
-    collect_call_graph(program.declarations, result);
-}
-
 void LspAnalysisService::lint_phase(const Program& program, AnalysisResult& result,
                                     const std::string& source, const std::string& uri,
                                     const std::vector<std::size_t>& line_starts,
@@ -393,10 +389,7 @@ bool LspAnalysisService::run_pipeline_phases(const std::string& uri, const std::
     if (!parser.get_errors().empty()) {
         // Collect symbols from the valid portion of the AST so that
         // hover, go-to-definition, and completion still work.
-        const auto sym_error = run_phase([&] {
-            symbol_phase(program, result);
-            collect_call_graph(program.declarations, result);
-        });
+        const auto sym_error = run_phase([&] { symbol_phase(program, result); });
         if (!sym_error.empty()) {
             callbacks_.log(std::format("Symbol collection failed after parse errors for {}: {}",
                                        uri, sym_error));
@@ -422,11 +415,7 @@ bool LspAnalysisService::run_pipeline_phases(const std::string& uri, const std::
     // Phase 4a2: Build symbol origins from file_id_to_path.
     build_symbol_origins(result);
 
-    // Phase 4b: Call graph extraction.
-    check_cancellation_and_deadline(deadline, "call-graph");
-    call_graph_phase(program, result);
-
-    // Phase 4c: no built-in prelude is injected; user code is compiled as-is.
+    // Phase 4b: no built-in prelude is injected; user code is compiled as-is.
     FileId prelude_file_id = 0;
 
     // Phase 5: Type checking.

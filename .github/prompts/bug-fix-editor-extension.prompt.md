@@ -10,11 +10,11 @@ lastUpdated: "2026-08-01"
 
 Diagnose and fix a bug in a Luma editor extension. Two extensions live under `extensions/`: **VS Code** (`extensions/vscode/`, TypeScript) and **Zed** (`extensions/zed/`, Rust → WebAssembly + tree-sitter grammar). They share canonical data and code generators in `extensions/shared/`, so a bug may live in one editor, in the shared grammar, or in generated code that drifted from its source. Follow a structured approach:
 
-1. **Reproduce** the bug with a minimal `.luma` document and the exact editor interaction that misbehaves (syntax highlighting, indentation, folding, bracket matching, LSP feature, DAP session, test runner, playground, binary download, snippet, or keybinding). Note which editor(s) show the bug — a fault present in **both** usually lives in the shared grammar or shared data, while an editor-specific fault lives in that editor's source.
+1. **Reproduce** the bug with a minimal `.luma` document and the exact editor interaction that misbehaves (syntax highlighting, indentation, folding, bracket matching, LSP feature, DAP session, test runner, binary download, snippet, or keybinding). Note which editor(s) show the bug — a fault present in **both** usually lives in the shared grammar or shared data, while an editor-specific fault lives in that editor's source.
 
 2. **Isolate the editor and layer** where the bug occurs.
 
-    **First, decide whether the bug is shared or editor-specific.** Check [extensions/FEATURE_PARITY.md](../../extensions/FEATURE_PARITY.md) — some differences are intentional (for example, code lens, the playground, and the debug visualiser are VS Code only). A genuine bug present across editors points at the shared layer:
+    **First, decide whether the bug is shared or editor-specific.** Check [extensions/FEATURE_PARITY.md](../../extensions/FEATURE_PARITY.md) — some differences are intentional (for example, the test-runner UX differs: VS Code uses run/test tasks, Zed uses tree-sitter runnables). A genuine bug present across editors points at the shared layer:
 
     - Shared tree-sitter grammar (`extensions/zed/grammars/tree-sitter-luma/grammar.js`) — the **single source of truth** for syntax; Zed derives highlighting from it (VS Code is the exception — it uses its own hand-maintained TextMate grammar, see below). Wrong node structure breaks Zed highlighting, folding, and indentation.
     - Shared canonical data (`extensions/shared/defaults.json`, `download-constants.json`, `resolution-order.json`, `platform-map.json`, `keybindings.json`, `snippets/luma.json`, `queries/highlights.scm`) — wrong defaults, download constants, platform mapping, snippets, or shared queries.
@@ -25,10 +25,9 @@ Diagnose and fix a bug in a Luma editor extension. Two extensions live under `ex
 
     **VS Code** (`extensions/vscode/`):
     - Activation & feature wiring (`src/extension.ts`, `src/utils/feature-registry.ts`) — feature not registered or activated?
-    - LSP client (`src/lsp/client-manager.ts`, `src/lsp/commands.ts`, `src/lsp/code-actions.ts`, `src/lsp/types.ts`) — client lifecycle, server restart, command, or client-side code action wrong?
-    - DAP debugging (`src/debugger/debug.ts`, `src/debugger/visualizer.ts`, `src/debugger/visualizer-renderers.ts`) — debug adapter wiring or the debug visualiser wrong?
-    - Test runner (`src/testing/testing.ts`, `src/testing/coverage.ts`, and **generated** `src/generated/test-discovery.ts` for the `@test`/`@main` match patterns) — test discovery, run, or coverage wrong?
-    - Tasks & playground (`src/tasks.ts`, `src/playground/`) — task provider or playground command wrong?
+    - LSP client (`src/lsp/client-manager.ts`, `src/lsp/commands.ts`, `src/lsp/status.ts`, `src/lsp/types.ts`) — client lifecycle, server restart, command, or status wrong?
+    - DAP debugging (`src/debugger/debug.ts`) — debug adapter wiring wrong?
+    - Tasks & test running (`src/tasks.ts`, and **generated** `src/generated/test-discovery.ts` for the `@test`/`@main` match patterns) — task provider, run/test task, or test discovery wrong?
     - Binary download (`src/utils/binary-download.ts`, `src/utils/checksum.ts`, `src/utils/http.ts`, the hand-written `src/utils/binary/` helpers, and **generated** `src/generated/platform.ts` for the platform→asset map and `src/generated/download-constants.ts` for the checksum-manifest name) — platform detection, checksum, or download flow wrong?
     - Config (`src/utils/config.ts`, `src/utils/constants.ts`, and **generated** `src/generated/config.ts`, `config-accessor.ts`) — setting read or default wrong?
     - TextMate grammar (`syntaxes/luma.tmLanguage.json`, `syntaxes/luma.markdown-injection.json`) — **hand-maintained by design** (VS Code lacks native tree-sitter); guarded by `src/test/suite/grammar.test.ts`. Wrong scope or rule ordering?

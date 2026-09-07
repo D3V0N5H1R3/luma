@@ -2637,7 +2637,6 @@ string t = format_title("hello")
 - `Bits`
 - `Calculus`
 - `Channel`
-- `Color`
 - `Compression`
 - `Console`
 - `Converter`

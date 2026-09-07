@@ -9,7 +9,6 @@
 // copy the callback, then release the lock before invoking it to avoid
 // holding the mutex during potentially blocking callback execution.
 
-#include <optional>
 #include <shared_mutex>
 #include <string>
 
@@ -37,10 +36,6 @@ void VM::set_pause_callback(PauseCallback callback) {
 
 void VM::set_exception_hook(ExceptionHook hook) {
     debug_.set_callback(&DebugCallbacks::exception_hook, std::move(hook));
-}
-
-void VM::set_data_breakpoint_hook(DataBreakpointHook hook) {
-    debug_.set_callback(&DebugCallbacks::data_breakpoint_hook, std::move(hook));
 }
 
 void VM::set_task_spawn_hook(TaskSpawnHook hook) {
@@ -101,44 +96,6 @@ bool VM::check_debug_hooks() {
     }
 
     return false;
-}
-
-// ─────────── Data-breakpoint notifications ───────────
-
-// Shared implementation: copies the data-breakpoint hook under a shared lock,
-// invokes the name provider to obtain the variable name, calls the hook, and
-// requests a pause if the hook returns true.
-template <typename NameProvider> void VM::notify_data_breakpoint_impl(NameProvider name_provider) {
-    // THREAD_SAFETY: snapshot captured under shared_lock; safe to use across threads.
-    auto hook_copy = debug_.copy_hook(&DebugCallbacks::data_breakpoint_hook);
-    if (!hook_copy) {
-        return;
-    }
-    auto name = name_provider();
-    if (!name) {
-        return;
-    }
-    if (hook_copy(*name)) {
-        debug_.last_line = -1;
-        debug_.pause_requested.store(true, std::memory_order_release);
-    }
-}
-
-void VM::notify_local_data_breakpoint(const CallFrame& cf, std::uint16_t slot) {
-    notify_data_breakpoint_impl([&]() -> std::optional<std::string> {
-        if (slot >= cf.function->debug_info.local_names.size()) {
-            return std::nullopt;
-        }
-        const auto& vname = cf.function->debug_info.local_names[slot];
-        if (vname.empty()) {
-            return std::nullopt;
-        }
-        return std::string{vname};
-    });
-}
-
-void VM::notify_global_data_breakpoint(std::string_view name) {
-    notify_data_breakpoint_impl([&]() -> std::optional<std::string> { return std::string{name}; });
 }
 
 } // namespace luma

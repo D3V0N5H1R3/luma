@@ -24,7 +24,7 @@ import codegen_common as cc
 
 class CaseHelpers(unittest.TestCase):
     def test_camel_to_snake(self) -> None:
-        self.assertEqual(cc.camel_to_snake("inlayHints"), "inlay_hints")
+        self.assertEqual(cc.camel_to_snake("maxFileSize"), "max_file_size")
         self.assertEqual(cc.camel_to_snake("autoUpdate"), "auto_update")
         self.assertEqual(cc.camel_to_snake("path"), "path")
         # A leading capital must not produce a leading underscore.
@@ -34,14 +34,18 @@ class CaseHelpers(unittest.TestCase):
 
     def test_dotted_to_screaming_snake(self) -> None:
         self.assertEqual(cc.dotted_to_screaming_snake("lsp.autoUpdate"), "LSP_AUTO_UPDATE")
-        self.assertEqual(cc.dotted_to_screaming_snake("inlayHints.enabled"), "INLAY_HINTS_ENABLED")
+        self.assertEqual(
+            cc.dotted_to_screaming_snake("diagnostics.maxFileSize"), "DIAGNOSTICS_MAX_FILE_SIZE"
+        )
         self.assertEqual(cc.dotted_to_screaming_snake("interpreter.path"), "INTERPRETER_PATH")
-        self.assertEqual(cc.dotted_to_screaming_snake("codeLens.enabled"), "CODE_LENS_ENABLED")
+        self.assertEqual(
+            cc.dotted_to_screaming_snake("autoDownload.version"), "AUTO_DOWNLOAD_VERSION"
+        )
         # A dot already adjacent to a capital must not double the separator.
         self.assertEqual(cc.dotted_to_screaming_snake("a.Bc"), "A_BC")
 
     def test_snake_accessor(self) -> None:
-        self.assertEqual(cc.snake_accessor("inlayHints.enabled"), "inlay_hints_enabled")
+        self.assertEqual(cc.snake_accessor("diagnostics.maxFileSize"), "diagnostics_max_file_size")
         self.assertEqual(cc.snake_accessor("lsp.autoUpdate"), "lsp_auto_update")
         self.assertEqual(cc.snake_accessor("interpreter.path"), "interpreter_path")
 

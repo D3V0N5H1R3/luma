@@ -140,7 +140,7 @@ const std::vector<KeywordInfo>& keyword_catalog() {
          .hover_doc = "```luma\ncase\n```\n\nA pattern arm inside a `match` expression.\n\n"
                       "Supports booleans (`case true`), integers (`case 1`), "
                       "strings (`case \"quit\"`), comparisons (`case >= 90`), "
-                      "choice variants (`case Color.Red`), `some(x)`, and `none`.",
+                      "choice variants (`case Terminal.Color.Red`), `some(x)`, and `none`.",
          .snippet = "",
          .detail = "Pattern arm in a match expression",
          .context = KeywordContext::Always},

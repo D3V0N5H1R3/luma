@@ -256,8 +256,6 @@ void test_thread_state_default_fields() {
     ASSERT_FALSE(ts.is_exception_terminated);
     ASSERT_FALSE(ts.pending.stop_on_entry);
     ASSERT_FALSE(ts.pending.pause);
-    ASSERT_FALSE(ts.pending.data_breakpoint);
-    ASSERT_TRUE(ts.pending.data_breakpoint_name.empty());
     ASSERT_EQ(ts.step.mode, StepMode::None);
     ASSERT_EQ(ts.step.reference_depth, static_cast<std::size_t>(0));
     ASSERT_EQ(ts.step.reference_line, -1);

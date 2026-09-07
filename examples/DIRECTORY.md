@@ -103,8 +103,6 @@ Minimal programs that exercise the debugger and stepping workflows described in 
 | --------------------- | ------------------------------------------------------ |
 | `breakpoint_basic`    | Setting a line breakpoint on a single statement        |
 | `conditional_loop`    | Conditional breakpoints gated on a loop variable       |
-| `function_breakpoint` | Function breakpoints on named functions                |
-| `data_breakpoint`     | Data breakpoints that watch a variable change          |
 | `step_into_function`  | Stepping into a function call from `main`              |
 | `step_over_loop`      | Stepping over the iterations of a loop                 |
 | `variables_basic`     | Inspecting variables across the built-in types         |

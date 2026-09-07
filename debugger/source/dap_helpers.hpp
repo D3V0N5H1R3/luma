@@ -56,7 +56,6 @@ struct LaunchConfig {
     std::string program;
     bool stop_on_entry{false};
     bool no_debug{false};
-    bool time_travel{false};
     std::vector<std::string> args;
     std::string cwd;
 };
@@ -73,7 +72,6 @@ struct LaunchConfig {
     config.program = args.get_or<std::string>("program", "");
     config.stop_on_entry = args.get_or<bool>("stopOnEntry", false);
     config.no_debug = args.get_or<bool>("noDebug", false);
-    config.time_travel = args.get_or<bool>("timeTravel", false);
 
     const auto& arg_array = args.get("args");
     if (arg_array.is_array()) {
@@ -95,7 +93,6 @@ struct LaunchConfig {
 [[nodiscard]] inline BreakpointRequest parse_breakpoint_request(const JsonValue& bp) {
     BreakpointRequest req;
     req.line = bp.get_or<int>("line", 0);
-    req.name = bp.get_or<std::string>("name", "");
     req.condition = bp.get_or<std::string>("condition", "");
     req.hit_condition = bp.get_or<std::string>("hitCondition", "");
     req.log_message = bp.get_or<std::string>("logMessage", "");

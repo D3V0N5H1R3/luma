@@ -27,13 +27,6 @@
 
 namespace luma::lsp {
 
-// LSP DocumentHighlightKind values.
-namespace highlight_kind {
-[[maybe_unused]] constexpr int text = 1;
-constexpr int read = 2;
-constexpr int write = 3;
-} // namespace highlight_kind
-
 using luma::protocol::path_to_uri;
 using luma::protocol::uri_to_path;
 using response::make_empty_array_result;
@@ -76,38 +69,6 @@ JsonValue LspNavigationHandler::handle_definition(const JsonValue& params) {
 // ═══════════════════════════════════════════════════════════
 
 namespace {
-
-// Check whether the token at `idx` is a write (assignment target or declaration site).
-[[nodiscard]] bool is_write_occurrence(const std::vector<Token>& tokens, std::size_t idx,
-                                       const AnalysisResultView& view,
-                                       const std::string& target_name) {
-    // Assignment target: next token is '='.
-    if (idx + 1 < tokens.size() && tokens[idx + 1].type == TokenType::Equals) {
-        return true;
-    }
-    // Declaration site: preceded by 'mutable', 'function', 'for', or 'catch'.
-    if (idx > 0) {
-        const auto prev_type = tokens[idx - 1].type;
-        if (prev_type == TokenType::Mutable || prev_type == TokenType::Function ||
-            prev_type == TokenType::For || prev_type == TokenType::Catch) {
-            return true;
-        }
-    }
-    // Definition site: the stored definition location is anchored at the
-    // declaration keyword, not the name, so compare the token against the
-    // resolved NAME range rather than the raw keyword-anchored location.
-    auto def_ref = view.find_definition(target_name);
-
-    if (!def_ref) {
-        return false;
-    }
-
-    const Range name_range = find_declaration_name_range(tokens, def_ref->location, target_name);
-    const Range tok_rng = token_range(tokens[idx]);
-
-    return tok_rng.start.line == name_range.start.line &&
-           tok_rng.start.character == name_range.start.character;
-}
 
 // Bundled parameters for collect_references_from() to reduce argument count.
 struct ReferenceCollectionContext {
@@ -194,58 +155,6 @@ JsonValue LspNavigationHandler::handle_references(const JsonValue& params) {
             return JsonValue(std::move(locations));
         },
         empty_array);
-}
-
-// ═══════════════════════════════════════════════════════════
-// Document highlight
-// ═══════════════════════════════════════════════════════════
-
-JsonValue LspNavigationHandler::handle_document_highlight(const JsonValue& params) {
-    return ctx_.resolve_token_context(
-        params,
-        [&](const TokenContext& ctx) -> JsonValue {
-            const auto& [uri, result, idx, token_ptr, cache] = ctx;
-            const AnalysisResultView view{*result};
-            const auto& tokens = view.tokens();
-            const auto& target = *token_ptr;
-            if (target.type != TokenType::Identifier) {
-                return make_empty_array_result();
-            }
-
-            // DocumentHighlightKind: 1 = Text, 2 = Read, 3 = Write.
-            // We mark assignment targets and declarations as Write, everything else as Read.
-            JsonValue::ArrayType highlights;
-
-            // Use identifier index for O(1) lookup.
-            auto occurrences = view.find_identifier_occurrences(target.lexeme);
-            if (!occurrences) {
-                return make_empty_array_result();
-            }
-
-            // For local variables, use block-level scope to filter highlights.
-            const bool is_local = view.is_local_variable(target.lexeme);
-
-            for (const std::size_t i : *occurrences) {
-                const int tok_line_1 = tokens[i].location.line; // 1-based
-
-                // Skip occurrences outside the cursor's block scope.
-                if (is_local && !view.is_in_scope(target.lexeme, tok_line_1)) {
-                    continue;
-                }
-
-                const int kind = is_write_occurrence(tokens, i, view, target.lexeme)
-                                     ? highlight_kind::write
-                                     : highlight_kind::read;
-
-                highlights.emplace_back(JsonValue::ObjectType{
-                    {"range", serialise_range(result->to_wire(token_range(tokens[i])))},
-                    {"kind", JsonValue(static_cast<int64_t>(kind))},
-                });
-            }
-
-            return JsonValue(std::move(highlights));
-        },
-        make_empty_array_result());
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -397,138 +306,6 @@ JsonValue LspNavigationHandler::handle_document_link(const JsonValue& params) {
     }
 
     return JsonValue(std::move(links));
-}
-
-// ═══════════════════════════════════════════════════════════
-// Selection range
-// ═══════════════════════════════════════════════════════════
-
-JsonValue LspNavigationHandler::handle_selection_range(const JsonValue& params) {
-    const auto uri_opt = extraction::extract_text_document_uri(params);
-    if (!uri_opt || !params.has("positions")) {
-        return JsonValue(JsonValue::ArrayType{});
-    }
-    const auto& uri = *uri_opt;
-
-    auto state = ctx_.acquire_read_lock();
-    const auto cached = ctx_.find_analysis(uri);
-
-    // Build selection ranges from brace nesting in the token stream.
-    // For each requested position, find enclosing brace pairs from
-    // innermost to outermost, forming a parent chain.
-    const std::vector<Token>* token_ptr = nullptr;
-    if (cached) {
-        token_ptr = &cached->semantic.tokens;
-    }
-
-    // Build a list of brace-pair ranges from the token stream.
-    struct BracePair {
-        int start_line;
-        int start_col;
-        int end_line;
-        int end_col;
-    };
-
-    std::vector<BracePair> brace_pairs;
-    if (token_ptr != nullptr) {
-        std::vector<std::pair<int, int>> stack; // (line, col)
-        for (const auto& tok : *token_ptr) {
-            if (tok.type == TokenType::LeftBrace) {
-                const int l = tok.location.line - 1;
-                const int c = tok.location.column - 1 - lexeme_column_width(tok.lexeme);
-                stack.emplace_back(l, c);
-            } else if (tok.type == TokenType::RightBrace && !stack.empty()) {
-                auto [sl, sc] = stack.back();
-                stack.pop_back();
-                const int el = tok.location.line - 1;
-                const int ec = tok.location.column - 1;
-                brace_pairs.push_back(
-                    {.start_line = sl, .start_col = sc, .end_line = el, .end_col = ec});
-            }
-        }
-    }
-
-    // Also get the full document range.
-    const auto* doc_ptr = ctx_.doc_store.get_content(state.token(), uri);
-    int total_lines = 0;
-    if (doc_ptr != nullptr) {
-        for (const char c : *doc_ptr) {
-            if (c == '\n') {
-                ++total_lines;
-            }
-        }
-    }
-
-    JsonValue::ArrayType result;
-    for (const auto& pos : params["positions"].as_array()) {
-        const int pl = util::clamp_to_int(pos["line"].as_integer());
-        const int pc = util::clamp_to_int(pos["character"].as_integer());
-        // Brace-pair columns are codepoint-based; convert the incoming UTF-16
-        // cursor column to codepoint space before the containment test.
-        const int pc_cp = cached ? cached->to_codepoint_col(pl, pc) : pc;
-
-        // Find all brace pairs containing this position, sorted innermost first.
-        std::vector<const BracePair*> enclosing;
-        for (const auto& bp : brace_pairs) {
-            if (bp.start_line < pl || (bp.start_line == pl && bp.start_col <= pc_cp)) {
-                if (bp.end_line > pl || (bp.end_line == pl && bp.end_col >= pc_cp)) {
-                    enclosing.push_back(&bp);
-                }
-            }
-        }
-
-        // Sort innermost (smallest range) first.
-        std::ranges::sort(enclosing, [](const BracePair* a, const BracePair* b) {
-            if (a->start_line != b->start_line) {
-                return a->start_line > b->start_line;
-            }
-            if (a->start_col != b->start_col) {
-                return a->start_col > b->start_col;
-            }
-            if (a->end_line != b->end_line) {
-                return a->end_line < b->end_line;
-            }
-            return a->end_col < b->end_col;
-        });
-
-        // Also find the token at cursor for the innermost range.
-        std::optional<Range> tok_range;
-        if (token_ptr != nullptr) {
-            auto idx = find_token_at(*cached, pl, pc);
-            if (idx.has_value()) {
-                tok_range = cached->to_wire(token_range((*token_ptr)[*idx]));
-            }
-        }
-
-        // Build the chain: token → brace pairs → full document.
-        JsonValue current = JsonValue(JsonValue::ObjectType{
-            {"range", serialise_range(Range{.start = Position{.line = 0, .character = 0},
-                                            .end = Position{.line = total_lines, .character = 0}})},
-        });
-
-        // Outermost brace pair to innermost.
-        for (auto bp : std::views::reverse(enclosing)) {
-            current = JsonValue(JsonValue::ObjectType{
-                {"range", serialise_range(cached->to_wire(Range{
-                              .start = Position{.line = bp->start_line, .character = bp->start_col},
-                              .end = Position{.line = bp->end_line, .character = bp->end_col}}))},
-                {"parent", std::move(current)},
-            });
-        }
-
-        // Innermost: token range.
-        if (tok_range.has_value()) {
-            current = JsonValue(JsonValue::ObjectType{
-                // NOLINTNEXTLINE(bugprone-unchecked-optional-access): guarded by has_value() above.
-                {"range", serialise_range(*tok_range)},
-                {"parent", std::move(current)},
-            });
-        }
-
-        result.push_back(std::move(current));
-    }
-
-    return JsonValue(std::move(result));
 }
 
 } // namespace luma::lsp

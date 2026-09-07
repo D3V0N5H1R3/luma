@@ -32,7 +32,7 @@ namespace luma::dap {
 //
 //   4. Domain-specific enums — multi-outcome operations where the
 //      caller must distinguish between several failure modes.
-//      Example: WatchResult in HotReloader.
+//      Example: an enum result with more than two distinct outcomes.
 //
 // When adding new error-producing code, prefer (3) for operations
 // invoked by DAP request handlers, (2) for pure lookups, (4) when

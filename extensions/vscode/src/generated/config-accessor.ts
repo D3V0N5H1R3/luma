@@ -43,31 +43,6 @@ export class LumaConfig {
     get diagnostics_on_save(): boolean {
         return this.config.get<boolean>("diagnostics.onSave", CONFIG_DEFAULTS["diagnostics.onSave"]);
     }
-
-    /** Show inferred type annotations and parameter names as inlay hints. Disabled by default to keep the source uncluttered. */
-    get inlay_hints_enabled(): boolean {
-        return this.config.get<boolean>("inlayHints.enabled", CONFIG_DEFAULTS["inlayHints.enabled"]);
-    }
-
-    /** Show reference counts above functions and types as code lenses. */
-    get code_lens_enabled(): boolean {
-        return this.config.get<boolean>("codeLens.enabled", CONFIG_DEFAULTS["codeLens.enabled"]);
-    }
-
-    /** Enable the Luma playground for interactive code execution. */
-    get playground_enabled(): boolean {
-        return this.config.get<boolean>("playground.enabled", CONFIG_DEFAULTS["playground.enabled"]);
-    }
-
-    /** Maximum execution time in milliseconds for playground snippets. */
-    get playground_timeout(): number {
-        return this.config.get<number>("playground.timeout", CONFIG_DEFAULTS["playground.timeout"]);
-    }
-
-    /** Maximum output buffer size in bytes for playground snippets. */
-    get playground_max_output_size(): number {
-        return this.config.get<number>("playground.maxOutputSize", CONFIG_DEFAULTS["playground.maxOutputSize"]);
-    }
 }
 
 /** Singleton instance of the Luma configuration accessor. */

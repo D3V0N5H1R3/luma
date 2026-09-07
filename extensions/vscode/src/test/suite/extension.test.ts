@@ -3,10 +3,10 @@ import * as vscode from "vscode";
 import { testFunctionPattern } from "../../generated/test-discovery";
 
 // Integration suites only. Pure-logic checks that used to live here (checksum
-// parsing, test-discovery regexes, code-action patterns, platform asset names,
-// path resolution) now bind to the real implementations in dedicated unit
-// suites (checksum/test-discovery/code-actions/util/binary tests), so they are
-// not duplicated here with hand-copied regexes.
+// parsing, test-discovery regexes, platform asset names, path resolution) now
+// bind to the real implementations in dedicated unit suites
+// (checksum/test-discovery/util/binary tests), so they are not duplicated here
+// with hand-copied regexes.
 
 suite("Extension Activation", () => {
     test("Extension should be present", () => {
@@ -83,40 +83,6 @@ suite("Configuration", () => {
     });
 });
 
-suite("Code Action Provider", () => {
-    test("Should suggest mutable for immutable variable diagnostic", async () => {
-        const doc = await vscode.workspace.openTextDocument({
-            language: "luma",
-            content: "integer count = 0\ncount = 1\n",
-        });
-        await vscode.window.showTextDocument(doc);
-
-        // Simulate a diagnostic on an immutable variable declaration.
-        const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>(
-            "vscode.executeCodeActionProvider",
-            doc.uri,
-            new vscode.Range(0, 0, 0, 7),
-        );
-        // Actions may be empty without a running LSP; test that the provider doesn't throw.
-        assert.ok(Array.isArray(actions));
-    });
-
-    test("Should not suggest mutable for already mutable declaration", async () => {
-        const doc = await vscode.workspace.openTextDocument({
-            language: "luma",
-            content: "mutable integer count = 0\n",
-        });
-        await vscode.window.showTextDocument(doc);
-
-        const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>(
-            "vscode.executeCodeActionProvider",
-            doc.uri,
-            new vscode.Range(0, 0, 0, 7),
-        );
-        assert.ok(Array.isArray(actions));
-    });
-});
-
 suite("Test Discovery", () => {
     test("Should discover @test on same line as function", async () => {
         const content = "@test\nfunction void test_a() {\n    assert(true)\n}\n";
@@ -126,7 +92,7 @@ suite("Test Discovery", () => {
         });
         await vscode.window.showTextDocument(doc);
 
-        // The regex should match test_a (same as testing.ts TEST_FUNCTION_PATTERN).
+        // The regex should match test_a (same as the tasks.ts TEST_FUNCTION_PATTERN).
         const regex = testFunctionPattern();
         const match = regex.exec(content);
         assert.ok(match, "Test function should be discovered");
@@ -135,7 +101,7 @@ suite("Test Discovery", () => {
 
     test("Should discover @test with function on same line", async () => {
         const content = "@test function void test_b() {\n    assert(true)\n}\n";
-        // Use the same regex that testing.ts uses.
+        // Use the same generated test-discovery regex the extension uses.
         const regex = testFunctionPattern();
         const match = regex.exec(content);
         assert.ok(match, "Test function on same line should be discovered");

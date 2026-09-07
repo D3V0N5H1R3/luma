@@ -11,9 +11,7 @@
 #include "lsp_document_synchronizer.hpp"
 #include "lsp_folding_handler.hpp"
 #include "lsp_formatting_handler.hpp"
-#include "lsp_hierarchy_handler.hpp"
 #include "lsp_hover_handler.hpp"
-#include "lsp_inlay_hint_handler.hpp"
 #include "lsp_navigation_handler.hpp"
 #include "lsp_rename_handler.hpp"
 #include "lsp_semantic_tokens_handler.hpp"
@@ -60,10 +58,8 @@ LspServer::LspServer(std::unique_ptr<Transport> transport)
       formatting_handler_(std::make_unique<LspFormattingHandler>(handler_ctx_)),
       semantic_tokens_handler_(std::make_unique<LspSemanticTokensHandler>(handler_ctx_)),
       rename_handler_(std::make_unique<LspRenameHandler>(handler_ctx_)),
-      hierarchy_handler_(std::make_unique<LspHierarchyHandler>(handler_ctx_)),
       folding_handler_(std::make_unique<LspFoldingHandler>(handler_ctx_)),
-      code_action_handler_(std::make_unique<LspCodeActionHandler>(handler_ctx_)),
-      inlay_hint_handler_(std::make_unique<LspInlayHintHandler>(handler_ctx_)) {
+      code_action_handler_(std::make_unique<LspCodeActionHandler>(handler_ctx_)) {
     // ── Analysis subsystem construction ──
     // The cancel flag (analysis_cancel_flag_) is owned by LspServer and shared
     // by reference with both the analysis service (reader) and the pipeline
@@ -110,9 +106,9 @@ LspServer::LspServer(std::unique_ptr<Transport> transport)
                 }},
         analysis_service_.get());
 
-    // Build the workspace handler (needs pipeline, service, running flag).
+    // Build the workspace handler (needs pipeline and service).
     workspace_handler_ = std::make_unique<LspWorkspaceHandler>(handler_ctx_, *analysis_pipeline_,
-                                                               *analysis_service_, running_);
+                                                               *analysis_service_);
 
     // Build the document synchronizer.
     doc_sync_ = std::make_unique<DocumentSynchronizer>(
@@ -144,10 +140,6 @@ LspServer::LspServer(std::unique_ptr<Transport> transport)
 LspServer::~LspServer() noexcept {
     running_.store(false);
     analysis_pipeline_->notify();
-
-    if (scan_thread_.joinable()) {
-        scan_thread_.join();
-    }
 
     // Explicit destruction order: pipeline must stop before service is destroyed,
     // because the pipeline holds a raw pointer to the service.

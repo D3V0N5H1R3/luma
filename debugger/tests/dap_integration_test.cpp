@@ -676,20 +676,6 @@ ReadResult launch_program(DapProcess& proc, const std::string& filename, bool st
     return read_until_response(proc, "launch");
 }
 
-ReadResult launch_with_time_travel(DapProcess& proc, const std::string& filename,
-                                   bool stop_on_entry = false) {
-    JsonValue::ObjectType args;
-    args["program"] = JsonValue(example_path(filename));
-    args["timeTravel"] = JsonValue(true);
-
-    if (stop_on_entry) {
-        args["stopOnEntry"] = JsonValue(true);
-    }
-
-    proc.send_message(make_request("launch", JsonValue(std::move(args))));
-    return read_until_response(proc, "launch");
-}
-
 ReadResult send_configuration_done(DapProcess& proc) {
     proc.send_message(make_request("configurationDone"));
     return read_until_response(proc, "configurationDone");
@@ -756,22 +742,6 @@ ReadResult set_log_breakpoint(DapProcess& proc, const std::string& program_path,
     return read_until_response(proc, "setBreakpoints");
 }
 
-ReadResult set_function_breakpoints(DapProcess& proc,
-                                    const std::vector<std::string>& function_names) {
-    JsonValue::ArrayType bps;
-
-    for (const auto& name : function_names) {
-        JsonValue::ObjectType bp;
-        bp["name"] = JsonValue(name);
-        bps.push_back(JsonValue(std::move(bp)));
-    }
-
-    JsonValue::ObjectType args;
-    args["breakpoints"] = JsonValue(std::move(bps));
-    proc.send_message(make_request("setFunctionBreakpoints", JsonValue(std::move(args))));
-    return read_until_response(proc, "setFunctionBreakpoints");
-}
-
 ReadResult continue_execution(DapProcess& proc, int thread_id = 1) {
     JsonValue::ObjectType args;
     args["threadId"] = JsonValue(thread_id);
@@ -825,7 +795,6 @@ void test_initialize_capabilities() {
     ASSERT_TRUE(body["supportsConditionalBreakpoints"].as_bool());
     ASSERT_TRUE(body["supportsHitConditionalBreakpoints"].as_bool());
     ASSERT_TRUE(body["supportsSetVariable"].as_bool());
-    ASSERT_TRUE(body["supportsCompletionsRequest"].as_bool());
     ASSERT_TRUE(body["supportsRestartRequest"].as_bool());
     ASSERT_TRUE(body["supportsExceptionInfoRequest"].as_bool());
     ASSERT_TRUE(body["supportsLogPoints"].as_bool());
@@ -1555,28 +1524,6 @@ void test_conditional_and_hit_condition_breakpoint() {
     disconnect(proc);
 }
 
-// ─── Function breakpoint integration test ──────────────────────────
-
-void test_function_breakpoint() {
-    DapProcess proc;
-    initialize(proc);
-
-    // Verify function breakpoint request is accepted and returns a response.
-    auto bp_result = set_function_breakpoints(proc, {"double_value", "triple_value"});
-    ASSERT_SUCCESS(bp_result.response);
-
-    // Verify the response contains breakpoint entries for each function.
-    ASSERT_TRUE(bp_result.response["body"].has("breakpoints"));
-    auto& bps = bp_result.response["body"]["breakpoints"].as_array();
-    ASSERT_EQ(bps.size(), static_cast<std::size_t>(2));
-
-    // Clear function breakpoints with empty list.
-    auto clear_result = set_function_breakpoints(proc, {});
-    ASSERT_SUCCESS(clear_result.response);
-
-    disconnect(proc);
-}
-
 // ─── Set variable integration test ─────────────────────────────────
 
 void test_set_variable() {
@@ -1784,46 +1731,6 @@ void test_pause() {
     disconnect(proc);
 }
 
-// ─── Completions integration test ──────────────────────────────────
-
-void test_completions() {
-    DapProcess proc;
-    initialize(proc);
-
-    // Set breakpoint and launch to get a paused state.
-    auto program_path = example_path("variables_basic.luma");
-    (void)set_line_breakpoint(proc, program_path, test_lines::variables_basic_stop);
-
-    (void)launch_program(proc, "variables_basic.luma");
-    auto config_result = send_configuration_done(proc);
-
-    bool found_bp = has_event(config_result.events, "stopped", "reason", "breakpoint") ||
-                    wait_for_event(proc, "stopped", "reason", "breakpoint");
-    ASSERT_TRUE(found_bp);
-
-    // Get frame ID for completions context.
-    auto st_result = get_stack_trace(proc);
-    auto frame_id = st_result.response["body"]["stackFrames"].as_array()[0]["id"].as_integer();
-
-    // Request completions for "co" prefix.
-    JsonValue::ObjectType comp_args;
-    comp_args["frameId"] = JsonValue(static_cast<int>(frame_id));
-    comp_args["text"] = JsonValue(std::string("co"));
-    comp_args["column"] = JsonValue(3);
-    proc.send_message(make_request("completions", JsonValue(std::move(comp_args))));
-    auto comp_result = read_until_response(proc, "completions");
-    ASSERT_SUCCESS(comp_result.response);
-
-    // Should return a targets array.
-    ASSERT_TRUE(comp_result.response["body"].has("targets"));
-    ASSERT_TRUE(comp_result.response["body"]["targets"].is_array());
-
-    (void)continue_execution(proc);
-    (void)wait_for_event(proc, "terminated");
-
-    disconnect(proc);
-}
-
 // ─── Exception info: caught exception ──────────────────────────────
 
 void test_exception_info_caught() {
@@ -2018,204 +1925,6 @@ void test_task_spawn_exit_stress() {
 
     // The debuggee must run to a clean finish: no adapter crash, no hang.
     ASSERT_TRUE(terminated);
-
-    disconnect(proc);
-}
-
-void test_data_breakpoint() {
-    DapProcess proc;
-    initialize(proc);
-
-    // Launch with stopOnEntry so we can set data breakpoints while paused.
-    auto launch_result = launch_program(proc, "data_breakpoint.luma", true);
-    ASSERT_SUCCESS(launch_result.response);
-
-    auto config_result = send_configuration_done(proc);
-
-    bool found_entry = has_event(launch_result.events, "stopped", "reason", "entry") ||
-                       has_event(config_result.events, "stopped", "reason", "entry") ||
-                       wait_for_event(proc, "stopped", "reason", "entry");
-    ASSERT_TRUE(found_entry);
-
-    // Query dataBreakpointInfo for the variable "counter".
-    JsonValue::ObjectType info_args;
-    info_args["name"] = JsonValue(std::string("counter"));
-    proc.send_message(make_request("dataBreakpointInfo", JsonValue(std::move(info_args))));
-    auto info_result = read_until_response(proc, "dataBreakpointInfo");
-    ASSERT_SUCCESS(info_result.response);
-
-    auto& info_body = info_result.response["body"];
-    ASSERT_TRUE(info_body.has("dataId"));
-    ASSERT_TRUE(info_body["dataId"].is_string());
-    ASSERT_TRUE(info_body.has("accessTypes"));
-
-    auto data_id = info_body["dataId"].as_string();
-
-    // Set a data breakpoint on "counter".
-    JsonValue::ArrayType data_bps;
-    JsonValue::ObjectType data_bp;
-    data_bp["dataId"] = JsonValue(data_id);
-    data_bp["accessType"] = JsonValue(std::string("write"));
-    data_bps.push_back(JsonValue(std::move(data_bp)));
-
-    JsonValue::ObjectType set_data_args;
-    set_data_args["breakpoints"] = JsonValue(std::move(data_bps));
-    proc.send_message(make_request("setDataBreakpoints", JsonValue(std::move(set_data_args))));
-    auto set_data_result = read_until_response(proc, "setDataBreakpoints");
-    ASSERT_SUCCESS(set_data_result.response);
-
-    // Verify the breakpoint was registered.
-    auto& data_bp_list = set_data_result.response["body"]["breakpoints"].as_array();
-    ASSERT_FALSE(data_bp_list.empty());
-    ASSERT_TRUE(data_bp_list[0]["verified"].as_bool());
-
-    // Continue — should stop on data breakpoint when counter is written.
-    auto cont_result = continue_execution(proc);
-
-    bool found_data_bp = has_event(cont_result.events, "stopped", "reason", "data breakpoint") ||
-                         wait_for_event(proc, "stopped", "reason", "data breakpoint", 100, 200);
-    ASSERT_TRUE(found_data_bp);
-
-    // Continue past the data breakpoint to termination.
-    (void)continue_execution(proc);
-    (void)wait_for_event(proc, "terminated");
-
-    disconnect(proc);
-}
-
-// Data breakpoints must survive session recreation (B02). Set a data breakpoint,
-// trigger luma/hotReload (which resets and relaunches the session), and confirm
-// the reloaded program still stops on the watched write. Line, function, and
-// exception breakpoints were mirrored into pending state and reapplied on reload,
-// but data breakpoints were not, so they were silently dropped and the reloaded
-// program ran straight to termination.
-void test_data_breakpoint_survives_hot_reload() {
-    DapProcess proc;
-    initialize(proc);
-
-    // Launch stopped on entry so we can register the data breakpoint while paused.
-    auto launch_result = launch_program(proc, "data_breakpoint.luma", true);
-    ASSERT_SUCCESS(launch_result.response);
-
-    auto config_result = send_configuration_done(proc);
-
-    bool found_entry = has_event(launch_result.events, "stopped", "reason", "entry") ||
-                       has_event(config_result.events, "stopped", "reason", "entry") ||
-                       wait_for_event(proc, "stopped", "reason", "entry");
-    ASSERT_TRUE(found_entry);
-
-    // Resolve the dataId for "counter", then set a write breakpoint on it.
-    JsonValue::ObjectType info_args;
-    info_args["name"] = JsonValue(std::string("counter"));
-    proc.send_message(make_request("dataBreakpointInfo", JsonValue(std::move(info_args))));
-    auto info_result = read_until_response(proc, "dataBreakpointInfo");
-    ASSERT_SUCCESS(info_result.response);
-    auto data_id = info_result.response["body"]["dataId"].as_string();
-
-    JsonValue::ArrayType data_bps;
-    JsonValue::ObjectType data_bp;
-    data_bp["dataId"] = JsonValue(data_id);
-    data_bp["accessType"] = JsonValue(std::string("write"));
-    data_bps.push_back(JsonValue(std::move(data_bp)));
-    JsonValue::ObjectType set_data_args;
-    set_data_args["breakpoints"] = JsonValue(std::move(data_bps));
-    proc.send_message(make_request("setDataBreakpoints", JsonValue(std::move(set_data_args))));
-    auto set_data_result = read_until_response(proc, "setDataBreakpoints");
-    ASSERT_SUCCESS(set_data_result.response);
-
-    // Hot reload tears down the session (and its breakpoint manager) and relaunches
-    // free-running.  The mirrored data breakpoint must be reapplied to the new
-    // session so the reloaded program still stops on the write to "counter".
-    proc.send_message(make_request("luma/hotReload"));
-    auto reload_result = read_until_response(proc, "luma/hotReload");
-    ASSERT_SUCCESS(reload_result.response);
-
-    bool found_data_bp = has_event(reload_result.events, "stopped", "reason", "data breakpoint") ||
-                         wait_for_event(proc, "stopped", "reason", "data breakpoint", 200, 100);
-    ASSERT_TRUE(found_data_bp);
-
-    // Drive the reloaded program to a clean finish.
-    (void)continue_execution(proc);
-    (void)wait_for_event(proc, "terminated");
-
-    disconnect(proc);
-}
-
-// Time-travel + concurrency race regression guard (B01). With timeTravel the main
-// VM's line hook is propagated into spawned task VMs; if the hook captured the main
-// VM by reference, a task worker thread would snapshot the main thread's stack
-// concurrently — a data race on the main VM.  Each thread must record against its
-// own VM. The program is driven free-running to a clean `terminated`; the CI
-// sanitizer job surfaces the race deterministically, and locally this guards
-// against crashes and hangs.
-void test_time_travel_concurrent_tasks() {
-    DapProcess proc;
-    initialize(proc);
-
-    auto launch_result = launch_with_time_travel(proc, "time_travel_tasks.luma");
-    ASSERT_SUCCESS(launch_result.response);
-
-    auto config_result = send_configuration_done(proc);
-
-    bool terminated = has_event(launch_result.events, "terminated") ||
-                      has_event(config_result.events, "terminated") ||
-                      wait_for_event(proc, "terminated", "", "", 300, 100);
-    ASSERT_TRUE(terminated);
-
-    disconnect(proc);
-}
-
-// Reverse stepping must invalidate cached watch state (B03). The forward
-// continue/step path calls invalidate_watches()/invalidate_refs() before
-// resuming, emitting an `invalidated` event so the client refetches variables;
-// the time-travel path previously only emitted `stopped`, so a rewind left the
-// watch cache and generational references stale.  After the fix a stepBack
-// flushes them and emits `invalidated`, exactly like the forward path.
-void test_step_back_invalidates_watch_state() {
-    DapProcess proc;
-    initialize(proc);
-
-    auto program_path = example_path("conditional_loop.luma");
-
-    // Stop a few iterations into the loop so there is recorded history to rewind
-    // and `total` has changed, then launch with time travel enabled.
-    auto bp_result =
-        set_conditional_breakpoint(proc, program_path, test_lines::conditional_loop_body, "", "5");
-    ASSERT_SUCCESS(bp_result.response);
-
-    auto launch_result = launch_with_time_travel(proc, "conditional_loop.luma");
-    ASSERT_SUCCESS(launch_result.response);
-
-    auto config_result = send_configuration_done(proc);
-
-    bool found_bp = has_event(launch_result.events, "stopped", "reason", "breakpoint") ||
-                    has_event(config_result.events, "stopped", "reason", "breakpoint") ||
-                    wait_for_event(proc, "stopped", "reason", "breakpoint");
-    ASSERT_TRUE(found_bp);
-
-    // Resolve a frame and read a watch expression so references/watch entries exist.
-    auto st_result = get_stack_trace(proc);
-    auto frame_id = st_result.response["body"]["stackFrames"].as_array()[0]["id"].as_integer();
-
-    JsonValue::ObjectType eval_args;
-    eval_args["expression"] = JsonValue(std::string("total"));
-    eval_args["frameId"] = JsonValue(static_cast<int>(frame_id));
-    eval_args["context"] = JsonValue(std::string("watch"));
-    proc.send_message(make_request("evaluate", JsonValue(std::move(eval_args))));
-    auto eval_result = read_until_response(proc, "evaluate");
-    ASSERT_SUCCESS(eval_result.response);
-
-    // Step back one snapshot: the fix flushes the watch cache/refs and emits an
-    // `invalidated` event (before the stopped event) just like the forward path.
-    JsonValue::ObjectType step_args;
-    step_args["threadId"] = JsonValue(1);
-    proc.send_message(make_request("stepBack", JsonValue(std::move(step_args))));
-    auto step_result = read_until_response(proc, "stepBack");
-    ASSERT_SUCCESS(step_result.response);
-
-    bool invalidated = has_event(step_result.events, "invalidated") ||
-                       wait_for_event(proc, "invalidated", "", "", 50, 100);
-    ASSERT_TRUE(invalidated);
 
     disconnect(proc);
 }
@@ -2548,9 +2257,6 @@ int main(int /*argc*/, char* argv[]) {
     RUN(test_hit_condition_breakpoint);
     RUN(test_conditional_and_hit_condition_breakpoint);
 
-    // Function breakpoints.
-    RUN(test_function_breakpoint);
-
     // Set variable.
     RUN(test_set_variable);
     RUN(test_set_variable_respects_type);
@@ -2564,23 +2270,12 @@ int main(int /*argc*/, char* argv[]) {
     // Pause.
     RUN(test_pause);
 
-    // Completions.
-    RUN(test_completions);
-
     // Exception info.
     RUN(test_exception_info_caught);
 
     // Concurrent tasks threads.
     RUN(test_concurrent_tasks_threads);
     RUN(test_task_spawn_exit_stress);
-
-    // Data breakpoints.
-    RUN(test_data_breakpoint);
-    RUN(test_data_breakpoint_survives_hot_reload);
-
-    // Time-travel debugging.
-    RUN(test_time_travel_concurrent_tasks);
-    RUN(test_step_back_invalidates_watch_state);
 
     // Breakpoint locations.
     RUN(test_breakpoint_locations);

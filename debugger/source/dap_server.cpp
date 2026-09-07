@@ -31,16 +31,11 @@ DapServer::DapServer(protocol::Transport& transport)
     init_dispatch_table();
 }
 
-void DapServer::enable_auth(std::string token) {
-    ctx_.auth_token = std::move(token);
-}
-
 void DapServer::init_dispatch_table() {
     // Common handler wrapper factory.  Wraps any handler callable with
-    // auth checking and result conversion.  Exceptions thrown by a handler
-    // propagate to DapProtocolHandler::dispatch_request, which provides the
-    // single dispatch-level error boundary (auth check happens first so an
-    // unauthenticated request never reaches the handler).
+    // result conversion.  Exceptions thrown by a handler propagate to
+    // DapProtocolHandler::dispatch_request, which provides the single
+    // dispatch-level error boundary.
     // Handlers that accept `const JsonValue&` are forwarded the request
     // args; handlers that take no arguments are called directly.
     auto make_handler = [this](const std::string& command, auto handler_fn) {
@@ -48,10 +43,6 @@ void DapServer::init_dispatch_table() {
             command,
             [this, handler_fn](const JsonValue& args
                                [[maybe_unused]]) -> DapProtocolHandler::HandlerResult {
-                if (ctx_.auth_failed) {
-                    return DapProtocolHandler::HandlerResult::error(std::string(kErrorAuthFailed));
-                }
-
                 HandlerResult result = [&]() {
                     if constexpr (std::is_invocable_v<decltype(handler_fn), const JsonValue&>) {
                         return handler_fn(args);
@@ -78,20 +69,11 @@ void DapServer::init_dispatch_table() {
     // --- Breakpoints ---
     make_handler("setBreakpoints",
                  [this](const JsonValue& a) { return breakpoints_.handle_set_breakpoints(a); });
-    make_handler("setFunctionBreakpoints", [this](const JsonValue& a) {
-        return breakpoints_.handle_set_function_breakpoints(a);
-    });
     make_handler("setExceptionBreakpoints", [this](const JsonValue& a) {
         return breakpoints_.handle_set_exception_breakpoints(a);
     });
     make_handler("breakpointLocations", [this](const JsonValue& a) {
         return breakpoints_.handle_breakpoint_locations(a);
-    });
-    make_handler("dataBreakpointInfo", [this](const JsonValue& a) {
-        return breakpoints_.handle_data_breakpoint_info(a);
-    });
-    make_handler("setDataBreakpoints", [this](const JsonValue& a) {
-        return breakpoints_.handle_set_data_breakpoints(a);
     });
 
     // --- Execution control ---
@@ -99,9 +81,6 @@ void DapServer::init_dispatch_table() {
     make_handler("next", [this](const JsonValue& a) { return execution_.handle_next(a); });
     make_handler("stepIn", [this](const JsonValue& a) { return execution_.handle_step_in(a); });
     make_handler("stepOut", [this](const JsonValue& a) { return execution_.handle_step_out(a); });
-    make_handler("stepBack", [this](const JsonValue& a) { return execution_.handle_step_back(a); });
-    make_handler("reverseContinue",
-                 [this](const JsonValue& a) { return execution_.handle_reverse_continue(a); });
     make_handler("pause", [this](const JsonValue& a) { return execution_.handle_pause(a); });
 
     // --- State inspection ---
@@ -114,8 +93,6 @@ void DapServer::init_dispatch_table() {
     make_handler("evaluate", [this](const JsonValue& a) { return inspection_.handle_evaluate(a); });
     make_handler("setVariable",
                  [this](const JsonValue& a) { return inspection_.handle_set_variable(a); });
-    make_handler("completions",
-                 [this](const JsonValue& a) { return inspection_.handle_completions(a); });
 
     // --- Sources ---
     make_handler("loadedSources",
@@ -131,7 +108,6 @@ void DapServer::init_dispatch_table() {
                  [this](const JsonValue& a) { return inspection_.handle_step_in_targets(a); });
 
     // --- Custom Luma extensions ---
-    make_handler("luma/hotReload", [this]() { return execution_.handle_hot_reload(); });
     make_handler("luma/concurrencyState",
                  [this]() { return execution_.handle_concurrency_state(); });
 }

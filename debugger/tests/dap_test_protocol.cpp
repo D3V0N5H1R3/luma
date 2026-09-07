@@ -124,7 +124,6 @@ void test_capabilities_structure() {
     caps["supportsHitConditionalBreakpoints"] = JsonValue(true);
     caps["supportsEvaluateForHovers"] = JsonValue(true);
     caps["supportsSetVariable"] = JsonValue(true);
-    caps["supportsCompletionsRequest"] = JsonValue(true);
     caps["supportsExceptionOptions"] = JsonValue(true);
     caps["supportsLogPoints"] = JsonValue(true);
     caps["supportsLoadedSourcesRequest"] = JsonValue(true);
@@ -154,7 +153,6 @@ void test_capabilities_structure() {
     ASSERT_TRUE(json["supportsHitConditionalBreakpoints"].as_bool());
     ASSERT_TRUE(json["supportsEvaluateForHovers"].as_bool());
     ASSERT_TRUE(json["supportsSetVariable"].as_bool());
-    ASSERT_TRUE(json["supportsCompletionsRequest"].as_bool());
     ASSERT_TRUE(json["supportsExceptionOptions"].as_bool());
     ASSERT_TRUE(json["supportsLogPoints"].as_bool());
     ASSERT_TRUE(json["supportsLoadedSourcesRequest"].as_bool());
@@ -639,52 +637,6 @@ void test_handler_result_error() {
     ASSERT_EQ(result.error_message, "something failed");
 }
 
-// ─── Completions request/response ──────────────────────────────────
-
-void test_completions_request_structure() {
-    // completions request with text, column, and frameId.
-    JsonValue::ObjectType args;
-    args["frameId"] = JsonValue(1);
-    args["text"] = JsonValue(std::string("coun"));
-    args["column"] = JsonValue(5);
-
-    auto json = JsonValue(std::move(args));
-
-    ASSERT_EQ(json["frameId"].as_integer(), 1);
-    ASSERT_EQ(json["text"].as_string(), "coun");
-    ASSERT_EQ(json["column"].as_integer(), 5);
-}
-
-void test_completions_response_structure() {
-    // completions response with multiple items.
-    JsonValue::ArrayType targets;
-
-    JsonValue::ObjectType item1;
-    item1["label"] = JsonValue(std::string("count"));
-    item1["type"] = JsonValue(std::string("variable"));
-    targets.push_back(JsonValue(std::move(item1)));
-
-    JsonValue::ObjectType item2;
-    item2["label"] = JsonValue(std::string("counter"));
-    item2["type"] = JsonValue(std::string("variable"));
-    targets.push_back(JsonValue(std::move(item2)));
-
-    JsonValue::ObjectType item3;
-    item3["label"] = JsonValue(std::string("concat"));
-    item3["type"] = JsonValue(std::string("function"));
-    targets.push_back(JsonValue(std::move(item3)));
-
-    JsonValue::ObjectType body;
-    body["targets"] = JsonValue(std::move(targets));
-
-    auto json = JsonValue(std::move(body));
-
-    ASSERT_TRUE(json.has("targets"));
-    ASSERT_EQ(json["targets"].as_array().size(), static_cast<std::size_t>(3));
-    ASSERT_EQ(json["targets"].as_array()[0]["label"].as_string(), "count");
-    ASSERT_EQ(json["targets"].as_array()[2]["type"].as_string(), "function");
-}
-
 // ─── Restart request args ──────────────────────────────────────────
 
 void test_restart_request_structure() {
@@ -819,10 +771,6 @@ int main() {
     // Handler result.
     RUN(test_handler_result_success);
     RUN(test_handler_result_error);
-
-    // Completions.
-    RUN(test_completions_request_structure);
-    RUN(test_completions_response_structure);
 
     // Restart request.
     RUN(test_restart_request_structure);

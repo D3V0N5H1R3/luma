@@ -1,7 +1,6 @@
 #include "debug_session.hpp"
 
 #include <filesystem>
-#include <limits>
 
 #include "analysis/source/source_manager.hpp"
 #include "dap_error_handler.hpp"
@@ -9,7 +8,6 @@
 #include "expression_evaluator.hpp"
 #include "runtime/vm/vm.hpp"
 #include "runtime/vm/vm_introspection.hpp"
-#include "time_travel.hpp"
 #include "vm_hook_registry.hpp"
 
 namespace luma::dap {
@@ -54,10 +52,6 @@ VariableInspector::ThreadResolver DebugSession::make_thread_resolver() const {
 
 std::string DebugSession::launch(const std::string& program_path, const DebugSessionConfig& config,
                                  const std::vector<std::string>& args, const std::string& cwd) {
-    if (config.time_travel) {
-        enable_time_travel();
-    }
-
     return execution_engine_->launch(program_path, config.stop_on_entry, args, cwd,
                                      config.no_debug);
 }
@@ -84,42 +78,21 @@ void DebugSession::set_exception_breakpoints(const std::vector<std::string>& fil
     breakpoint_manager_.set_exception_breakpoints(filters);
 }
 
-std::vector<Breakpoint>
-DebugSession::set_function_breakpoints(const std::vector<BreakpointRequest>& breakpoints) {
-    auto result = breakpoint_manager_.set_function_breakpoints(breakpoints);
-    thread_state_manager_.signal_all_vms_pause_check();
-    return result;
-}
-
-void DebugSession::set_data_breakpoint(const std::string& variable_name,
-                                       const std::string& access_type,
-                                       const std::string& condition) {
-    breakpoint_manager_.set_data_breakpoint(variable_name, access_type, condition);
-}
-
-void DebugSession::clear_data_breakpoints() {
-    breakpoint_manager_.clear_data_breakpoints();
-}
-
 // --- Execution control delegation ---
 
 ExecutionResult DebugSession::continue_execution(int thread_id) {
-    step_back_cursor_ = 0;
     return execution_engine_->continue_execution(thread_id);
 }
 
 ExecutionResult DebugSession::step_over(int thread_id) {
-    step_back_cursor_ = 0;
     return execution_engine_->step_over(thread_id);
 }
 
 ExecutionResult DebugSession::step_into(int thread_id) {
-    step_back_cursor_ = 0;
     return execution_engine_->step_into(thread_id);
 }
 
 ExecutionResult DebugSession::step_out(int thread_id) {
-    step_back_cursor_ = 0;
     return execution_engine_->step_out(thread_id);
 }
 
@@ -127,93 +100,10 @@ ExecutionResult DebugSession::pause(int thread_id) {
     return execution_engine_->pause(thread_id);
 }
 
-// --- Time-travel debugging ---
-
-void DebugSession::enable_time_travel() {
-    enable_time_travel(TimeTravelConfig{});
-}
-
-void DebugSession::enable_time_travel(TimeTravelConfig config) {
-    time_travel_recorder_ = std::make_unique<TimeTravelRecorder>(config);
-}
-
-ExecutionResult DebugSession::restore_from_snapshot(int thread_id, std::size_t steps_back,
-                                                    bool clamp_to_front) {
-    if (!time_travel_recorder_) {
-        return ExecutionResult::error(
-            "Time-travel debugging is not enabled. Set \"timeTravel\": true in your launch "
-            "configuration.");
-    }
-
-    const auto snapshot = time_travel_recorder_->step_back(steps_back, clamp_to_front);
-
-    if (!snapshot) {
-        return ExecutionResult::error("No previous state available");
-    }
-
-    auto state = thread_state_manager_.get_thread(thread_id);
-
-    if (!state) {
-        return ExecutionResult::error(error_messages::unknown_thread_id(thread_id));
-    }
-
-    {
-        const auto lock = thread_state_manager_.lock_state(*state);
-
-        if (state->vm == nullptr) {
-            return ExecutionResult::error("Thread has no active VM");
-        }
-
-        ReplayEngine::restore_snapshot(*state->vm, *snapshot);
-    }
-
-    // Restoring overwrote the VM value stack, so cached variable references and
-    // frame mappings are now stale.  Flush them (and emit `invalidated`) outside
-    // the per-thread lock, mirroring the forward resume path
-    // (prepare_for_execution_resume) which invalidates before touching threads.
-    variable_inspector_.invalidate_refs();
-    return ExecutionResult::ok();
-}
-
-ExecutionResult DebugSession::step_back(int thread_id) {
-    // Walk one snapshot further back than the previous step_back.  The cursor
-    // is reset to 0 by any forward resume, so a fresh stop starts from the
-    // latest snapshot again.
-    const std::size_t steps = step_back_cursor_ + 1;
-    auto result = restore_from_snapshot(thread_id, steps);
-
-    if (result) {
-        step_back_cursor_ = steps;
-    }
-
-    return result;
-}
-
-ExecutionResult DebugSession::reverse_continue(int thread_id) {
-    // Rewind to the earliest retained snapshot (start of recorded history).
-    // clamp_to_front=true: reaching the start of history is success, not an
-    // error, unlike a plain step_back overshoot.
-    auto result = restore_from_snapshot(thread_id, std::numeric_limits<std::size_t>::max(), true);
-
-    if (result && time_travel_recorder_) {
-        // Pin the cursor beyond the oldest snapshot so a following step_back
-        // stays clamped at the front rather than jumping forward.
-        step_back_cursor_ = time_travel_recorder_->snapshot_count();
-    }
-
-    return result;
-}
-
-const TimeTravelRecorder* DebugSession::time_travel() const {
-    return time_travel_recorder_.get();
-}
-
 HookInstallationContext DebugSession::make_hook_context() {
-    return HookInstallationContext{.time_travel_recorder = &time_travel_recorder_,
-                                   .execution_engine = execution_engine_.get(),
+    return HookInstallationContext{.execution_engine = execution_engine_.get(),
                                    .thread_state_manager = &thread_state_manager_,
                                    .breakpoint_manager = &breakpoint_manager_,
-                                   .expression_evaluator = expression_evaluator_.get(),
                                    .event_callback = event_callback_};
 }
 
@@ -369,10 +259,6 @@ bool DebugSession::is_thread_valid(int thread_id) const {
 
 bool DebugSession::is_running() const {
     return execution_engine_->is_running();
-}
-
-int DebugSession::check_for_source_changes() {
-    return execution_engine_->check_for_source_changes();
 }
 
 std::string DebugSession::last_exception_message() const {

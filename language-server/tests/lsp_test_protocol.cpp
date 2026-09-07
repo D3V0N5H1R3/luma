@@ -9,15 +9,22 @@
 namespace {
 
 // Capabilities the server must always advertise in the initialize response.
-constexpr std::array<std::string_view, 23> k_expected_capabilities = {{
-    "hoverProvider",          "completionProvider",        "signatureHelpProvider",
-    "definitionProvider",     "referencesProvider",        "renameProvider",
-    "documentSymbolProvider", "codeActionProvider",        "foldingRangeProvider",
-    "inlayHintProvider",      "workspaceSymbolProvider",   "callHierarchyProvider",
-    "semanticTokensProvider", "documentHighlightProvider", "typeDefinitionProvider",
-    "selectionRangeProvider", "codeLensProvider",          "linkedEditingRangeProvider",
-    "documentLinkProvider",   "implementationProvider",    "executeCommandProvider",
-    "typeHierarchyProvider",  "positionEncoding",
+constexpr std::array<std::string_view, 15> k_expected_capabilities = {{
+    "hoverProvider",
+    "completionProvider",
+    "signatureHelpProvider",
+    "definitionProvider",
+    "referencesProvider",
+    "renameProvider",
+    "documentSymbolProvider",
+    "codeActionProvider",
+    "foldingRangeProvider",
+    "semanticTokensProvider",
+    "typeDefinitionProvider",
+    "documentLinkProvider",
+    "implementationProvider",
+    "executeCommandProvider",
+    "positionEncoding",
 }};
 
 // Helper: verify the server handles a sequence of messages without crashing.
@@ -206,7 +213,6 @@ void test_malformed_params() {
     const auto def_id = session.request("textDocument/definition", "{}");
     const auto ref_id = session.request("textDocument/references", "{}");
     const auto ren_id = session.request("textDocument/rename", "{}");
-    const auto hl_id = session.request("textDocument/documentHighlight", "{}");
     const auto comp_id = session.request("textDocument/completion", "{}");
     const int exit_code = session.run();
 
@@ -215,7 +221,6 @@ void test_malformed_params() {
     ASSERT_NE(session.find_response(def_id), nullptr);
     ASSERT_NE(session.find_response(ref_id), nullptr);
     ASSERT_NE(session.find_response(ren_id), nullptr);
-    ASSERT_NE(session.find_response(hl_id), nullptr);
     ASSERT_NE(session.find_response(comp_id), nullptr);
 }
 
@@ -258,10 +263,9 @@ void test_cancel_request() {
 
 void test_configuration_change() {
     LspTestSession session;
-    session.notify(
-        R"({"jsonrpc":"2.0","method":"workspace/didChangeConfiguration","params":{)"
-        R"("settings":{"luma":{"inlayHints":{"enabled":false},"codeLens":{"enabled":false},"analysisDebounceMs":100}})"
-        R"(}})");
+    session.notify(R"({"jsonrpc":"2.0","method":"workspace/didChangeConfiguration","params":{)"
+                   R"("settings":{"luma":{"analysisDebounceMs":100}})"
+                   R"(}})");
     const int exit_code = session.run();
 
     ASSERT_EQ(exit_code, 0);
@@ -276,10 +280,8 @@ void test_formatting_capabilities() {
 
     const auto& caps = (*init_resp)["result"]["capabilities"];
 
-    constexpr std::array<std::string_view, 3> formatting_caps = {{
+    constexpr std::array<std::string_view, 1> formatting_caps = {{
         "documentFormattingProvider",
-        "documentRangeFormattingProvider",
-        "typeHierarchyProvider",
     }};
     assert_capabilities_present(caps, formatting_caps);
 }

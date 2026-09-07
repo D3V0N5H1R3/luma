@@ -1,4 +1,4 @@
-// LSP unit tests — config, JSON, workspace indexer, symbol resolver, path safety.
+// LSP unit tests — config, JSON, workspace manager, symbol resolver, path safety.
 
 #include <filesystem>
 #include <system_error>
@@ -17,7 +17,7 @@
 #include "lsp_symbol_resolver.hpp"
 #include "lsp_test_helpers.hpp"
 #include "lsp_token_utils.hpp"
-#include "lsp_workspace_indexer.hpp"
+#include "lsp_workspace_manager.hpp"
 
 using luma::SourceLocation;
 using luma::Token;
@@ -57,8 +57,6 @@ void test_json_rejects_leading_zeros() {
 void test_config_defaults() {
     const LspConfig config;
     const auto snap = config.get();
-    ASSERT_FALSE(snap->inlay_hints_enabled);
-    ASSERT_TRUE(snap->code_lens_enabled);
     ASSERT_EQ(snap->analysis_debounce_ms, 50);
     ASSERT_EQ(snap->analysis_timeout_ms, 10000);
 }
@@ -67,27 +65,23 @@ void test_config_apply_lsp_settings() {
     LspConfig config;
     const auto settings = JsonValue::parse(R"({
         "luma": {
-            "inlayHints": { "enabled": false },
-            "codeLens": { "enabled": false },
+            "diagnostics": { "onSave": true },
             "analysisDebounceMs": 200
         }
     })");
     config.apply_lsp_settings(settings);
     const auto snap = config.get();
-    ASSERT_FALSE(snap->inlay_hints_enabled);
-    ASSERT_FALSE(snap->code_lens_enabled);
+    ASSERT_TRUE(snap->diagnostics_on_save);
     ASSERT_EQ(snap->analysis_debounce_ms, 200);
 }
 
 void test_config_apply_project_config() {
     LspConfig config;
     const auto project = JsonValue::parse(R"({
-        "inlayHints": { "enabled": false },
         "analysisTimeoutMs": 5000
     })");
     config.apply_project_config(project);
     const auto snap = config.get();
-    ASSERT_FALSE(snap->inlay_hints_enabled);
     ASSERT_EQ(snap->analysis_timeout_ms, 5000);
 }
 
@@ -98,13 +92,14 @@ void test_config_rejects_out_of_range() {
     ASSERT_EQ(config.get()->analysis_debounce_ms, 50); // unchanged
 }
 
-// ─── WorkspaceIndexer tests ────────────────────────────────────────
+// ─── WorkspaceManager tests ────────────────────────────────────────
 
-void test_workspace_indexer_is_in_workspace() {
-    const std::vector<std::string> roots = {"C:\\projects\\myapp"};
-    ASSERT_TRUE(WorkspaceIndexer::is_in_workspace("C:\\projects\\myapp\\src\\main.luma", roots));
-    ASSERT_FALSE(WorkspaceIndexer::is_in_workspace("C:\\projects\\myapp_backup\\x.luma", roots));
-    ASSERT_FALSE(WorkspaceIndexer::is_in_workspace("C:\\other\\file.luma", roots));
+void test_workspace_manager_is_in_workspace() {
+    WorkspaceManager workspace;
+    workspace.add_root("C:\\projects\\myapp");
+    ASSERT_TRUE(workspace.is_in_workspace("C:\\projects\\myapp\\src\\main.luma"));
+    ASSERT_FALSE(workspace.is_in_workspace("C:\\projects\\myapp_backup\\x.luma"));
+    ASSERT_FALSE(workspace.is_in_workspace("C:\\other\\file.luma"));
 }
 
 // ─── SymbolResolver tests ──────────────────────────────────────────
@@ -252,34 +247,6 @@ void test_is_valid_identifier_rejects_malformed() {
     ASSERT_FALSE(is_valid_identifier("a.b"));  // dot
 }
 
-// ─── Parameter-name extraction (inlay hints) ───────────────────────
-
-void test_extract_param_name_strips_type() {
-    const auto name = luma::lsp::util::extract_param_name("count: integer");
-
-    ASSERT_TRUE(name.has_value());
-    ASSERT_EQ(*name, "count");
-}
-
-void test_extract_param_name_trims_space_before_colon() {
-    const auto name = luma::lsp::util::extract_param_name("value : number");
-
-    ASSERT_TRUE(name.has_value());
-    ASSERT_EQ(*name, "value");
-}
-
-void test_extract_param_name_without_colon_is_nullopt() {
-    ASSERT_FALSE(luma::lsp::util::extract_param_name("bareword").has_value());
-}
-
-void test_extract_param_name_from_split_signature() {
-    const auto parts = luma::lsp::util::split_param_list("(text: string, items: array<T>)");
-
-    ASSERT_EQ(parts.size(), 2U);
-    ASSERT_EQ(*luma::lsp::util::extract_param_name(parts[0]), "text");
-    ASSERT_EQ(*luma::lsp::util::extract_param_name(parts[1]), "items");
-}
-
 // ─── Position encoding: codepoint ↔ UTF-16 (LS-15) ─────────────────
 //
 // The Luma lexer records token columns as codepoint indices, but the LSP wire
@@ -390,7 +357,7 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_config_apply_lsp_settings);
     RUN(test_config_apply_project_config);
     RUN(test_config_rejects_out_of_range);
-    RUN(test_workspace_indexer_is_in_workspace);
+    RUN(test_workspace_manager_is_in_workspace);
     RUN(test_find_token_at_basic);
     RUN(test_is_local_variable_check);
     RUN(test_find_enclosing_function_basic);
@@ -402,10 +369,6 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_is_safe_resolved_path_rejects_symlink);
     RUN(test_is_valid_identifier_accepts_ascii_and_unicode);
     RUN(test_is_valid_identifier_rejects_malformed);
-    RUN(test_extract_param_name_strips_type);
-    RUN(test_extract_param_name_trims_space_before_colon);
-    RUN(test_extract_param_name_without_colon_is_nullopt);
-    RUN(test_extract_param_name_from_split_signature);
     RUN(test_position_encoder_bmp_and_supplementary);
     RUN(test_position_encoder_null_is_identity);
     RUN(test_find_token_at_supplementary_plane);

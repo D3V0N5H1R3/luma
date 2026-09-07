@@ -10,7 +10,6 @@
 #include "lsp_diagnostic_builder.hpp"
 #include "lsp_exception_utils.hpp"
 #include "lsp_lock_utils.hpp"
-#include "lsp_persisted_index.hpp"
 #include "lsp_server_state_lock.hpp"
 #include "lsp_string_utils.hpp"
 #include "lsp_types.hpp"
@@ -228,46 +227,11 @@ void AnalysisPipeline::analyze_single_uri(const std::string& uri) {
 
 // ─── Phase 3: Commit & publish ──────────────────────────────────────
 
-namespace {
-
-// Prepare the index entry and semantic token data from analysis result.
-// Returns the index entry needed for committing to the persisted index.
-[[nodiscard]] std::optional<IndexedFileEntry> prepare_index_entry(const AnalysisResult& result,
-                                                                  const std::string& uri,
-                                                                  std::size_t content_hash) {
-    const auto file_path = uri_to_path(uri);
-    if (!file_path.has_value()) {
-        return std::nullopt;
-    }
-
-    IndexedFileEntry entry;
-    entry.path = *file_path;
-    entry.content_hash = content_hash;
-    for (const auto& [name, _] : result.semantic.symbols.user_functions) {
-        entry.function_names.push_back(name);
-    }
-    for (const auto& [name, _] : result.semantic.symbols.record_definitions) {
-        entry.record_names.push_back(name);
-    }
-    for (const auto& [name, _] : result.semantic.symbols.choice_variants) {
-        entry.choice_names.push_back(name);
-    }
-    for (const auto& [name, _] : result.semantic.symbols.definitions) {
-        entry.exported_symbols.push_back(name);
-    }
-    entry.has_main = result.semantic.symbols.user_functions.contains("main");
-    return entry;
-}
-
-} // anonymous namespace
-
 // Acquire write lock, verify document is unchanged, store analysis result
-// in cache, and update the persisted index. Returns the document version
-// and whether the commit succeeded.
-AnalysisPipeline::CommitOutcome
-AnalysisPipeline::commit_to_cache(const std::string& uri, AnalysisResult result,
-                                  std::size_t content_hash,
-                                  std::optional<IndexedFileEntry> idx_entry) {
+// in cache. Returns the document version and whether the commit succeeded.
+AnalysisPipeline::CommitOutcome AnalysisPipeline::commit_to_cache(const std::string& uri,
+                                                                  AnalysisResult result,
+                                                                  std::size_t content_hash) {
     WriteStateLock state(state_.state_mutex, state_.doc_store, state_.analysis_cache,
                          state_.pending_uris);
 
@@ -281,10 +245,6 @@ AnalysisPipeline::commit_to_cache(const std::string& uri, AnalysisResult result,
     }
 
     state.documents().set_content_hash(state.token(), uri, content_hash);
-
-    if (idx_entry.has_value()) {
-        state_.workspace.persisted_index().upsert(std::move(*idx_entry));
-    }
 
     auto txn = state.cache().begin_update(uri);
     for (const auto& path : result.semantic.includes.included_paths) {
@@ -346,12 +306,10 @@ void AnalysisPipeline::commit_and_publish(const std::string& uri, AnalysisResult
     const std::vector<Diagnostic> diags_copy = result.semantic.diagnostics;
 
     // Phase 3a: Prepare data outside the lock.
-    auto idx_entry = prepare_index_entry(result, uri, content_hash);
     auto token_data = callbacks_.compute_semantic_token_data(result);
 
     // Phase 3b: Commit to cache under write lock.
-    const auto outcome =
-        commit_to_cache(uri, std::move(result), content_hash, std::move(idx_entry));
+    const auto outcome = commit_to_cache(uri, std::move(result), content_hash);
     if (!outcome.committed) {
         return;
     }

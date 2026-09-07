@@ -17,7 +17,6 @@
 #include "runtime/stdlib/common/lazy_registry.hpp"
 #include "runtime/stdlib/concurrency/channel_module.hpp"
 #include "runtime/stdlib/concurrency/task_module.hpp"
-#include "runtime/stdlib/io/color_module.hpp"
 #include "runtime/stdlib/io/console_module.hpp"
 #include "runtime/stdlib/io/filesystem_module.hpp"
 #include "runtime/stdlib/io/http_module.hpp"
@@ -105,7 +104,6 @@ inline constexpr ModuleEntry kModules[] = {
     {"Bits", register_bits_ns, nullptr, false, false},
     {"Calculus", register_calculus_ns, nullptr, false, false},
     {"Channel", register_channel_ns, nullptr, false, false},
-    {"Color", register_color_ns, nullptr, false, false},
     {"Converter", register_converter_ns, nullptr, false, false},
     {"DateTime", register_datetime_ns, nullptr, false, false},
     {"Decimal", register_decimal_ns, nullptr, false, false},

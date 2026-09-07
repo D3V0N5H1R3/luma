@@ -152,8 +152,6 @@ void VM::handle_set_global() {
             slot = new_binding;
         }
     }
-
-    notify_global_data_breakpoint(name);
 }
 
 // ─────────── Jump / Loop ───────────

@@ -133,7 +133,6 @@ luma_add_stdlib_library(utility
         stdlib/system/resource_module.cpp
         stdlib/system/log_module.cpp
         stdlib/collections/keyvaluestore_module.cpp
-        stdlib/io/color_module.cpp
 )
 
 # OBJECT libraries don't inherit include directories from their consumers

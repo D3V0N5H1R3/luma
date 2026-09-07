@@ -491,7 +491,7 @@ cp -r extensions/zed ~/.local/share/zed/extensions/luma
 }
 ```
 
-**LSP features:** Once the language server is available, completions, hover, diagnostics, inlay hints, and code snippets work automatically.
+**LSP features:** Once the language server is available, completions, hover, diagnostics, and code snippets work automatically.
 
 #### Keeping Editor Configurations in Sync
 

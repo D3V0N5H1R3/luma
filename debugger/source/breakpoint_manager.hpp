@@ -11,9 +11,7 @@
 
 #include "breakpoint_shared_context.hpp"
 #include "dap_types.hpp"
-#include "data_breakpoint_manager.hpp"
 #include "exception_breakpoint_settings.hpp"
-#include "function_breakpoint_manager.hpp"
 #include "line_breakpoint_manager.hpp"
 
 namespace luma {
@@ -29,8 +27,6 @@ namespace luma::dap {
 // The public API is unchanged.  Internally, breakpoint logic
 // is split across:
 //   • LineBreakpointManager      — source-line breakpoints
-//   • FunctionBreakpointManager  — function-name breakpoints
-//   • DataBreakpointManager      — variable-watch breakpoints
 //   • ExceptionBreakpointSettings — caught/uncaught flags
 //
 // All sub-managers share a BreakpointSharedContext that holds
@@ -63,11 +59,6 @@ public:
     [[nodiscard]] std::vector<Breakpoint>
     set_breakpoints(const std::string& path, const std::vector<BreakpointRequest>& requests);
 
-    // ─── Function breakpoints ───
-
-    [[nodiscard]] std::vector<Breakpoint>
-    set_function_breakpoints(const std::vector<BreakpointRequest>& requests);
-
     // ─── Exception breakpoint filters ───
 
     void set_exception_breakpoints(const std::vector<std::string>& filters);
@@ -83,15 +74,6 @@ public:
     // ─── Condition evaluation callback ───
 
     using ConditionEvaluatorFn = std::function<std::string(const std::string& expression)>;
-
-    // ─── Data breakpoints ───
-
-    void set_data_breakpoint(const std::string& variable_name, const std::string& access_type,
-                             const std::string& condition);
-    void clear_data_breakpoints();
-
-    [[nodiscard]] bool check_data_breakpoint(const std::string& variable_name,
-                                             const ConditionEvaluatorFn& eval_condition) const;
 
     // ─── Cache pre-population ───
 
@@ -116,10 +98,6 @@ public:
     // PRECONDITION: set_compiled_program() must have been called.
     // PRECONDITION: All path-based breakpoints must have been set via set_breakpoints().
     void resolve_pending_breakpoints();
-
-    // Resolve function-name breakpoints against the compiled function list.
-    // PRECONDITION: set_compiled_program() must have been called.
-    void resolve_function_breakpoints();
 
     // ─── Runtime check ───
 
@@ -150,8 +128,6 @@ private:
     BreakpointSharedContext ctx_;
 
     LineBreakpointManager line_mgr_;
-    FunctionBreakpointManager func_mgr_;
-    DataBreakpointManager data_mgr_;
     ExceptionBreakpointSettings exception_settings_;
 
     // Cached flag — true when at least one breakpoint is set.

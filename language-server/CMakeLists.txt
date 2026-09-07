@@ -14,7 +14,6 @@ luma_add_tool_library(lsp
         source/lsp_server_dispatch.cpp
         source/lsp_server_lifecycle.cpp
         source/lsp_server_code_actions.cpp
-        source/lsp_server_code_actions_refactoring.cpp
         source/lsp_completion_provider.cpp
         source/lsp_completion_strategy.cpp
         source/lsp_server_completion.cpp
@@ -23,8 +22,6 @@ luma_add_tool_library(lsp
         source/lsp_server_formatting.cpp
         source/lsp_server_hover.cpp
         source/lsp_hover_literals.cpp
-        source/lsp_server_hierarchy.cpp
-        source/lsp_server_inlay.cpp
         source/lsp_server_navigation.cpp
         source/lsp_server_rename.cpp
         source/lsp_server_semantic_tokens.cpp
@@ -35,12 +32,10 @@ luma_add_tool_library(lsp
         source/lsp_configuration_manager.cpp
         source/lsp_workspace_manager.cpp
         source/lsp_document_store.cpp
-        source/lsp_persisted_index.cpp
         source/lsp_stdlib_registry.cpp
         source/lsp_scope_stack.cpp
         source/lsp_identifier_collector.cpp
         source/lsp_symbol_resolver.cpp
-        source/lsp_workspace_indexer.cpp
         source/lsp_transport_wrapper.cpp
         source/lsp_document_synchronizer.cpp
         source/lsp_analysis_pipeline.cpp

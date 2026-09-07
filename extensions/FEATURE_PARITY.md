@@ -15,12 +15,8 @@ This document tracks feature availability across Luma's editor extensions.
 | Find references | ✅ | ✅ |
 | Rename symbol | ✅ | ✅ |
 | Code actions | ✅ | ✅ |
-| Inlay hints | ✅ Configurable | ✅ Configurable |
-| Code lens | ✅ | ❌ |
-| Playground | ✅ | ❌ |
-| Debug visualiser | ✅ | ❌ |
 | Auto-download LSP | ✅ Automatic | ✅ Automatic |
-| Test runner | ✅ Native | ✅ Runnables |
+| Test runner | ✅ Tasks | ✅ Runnables |
 | Semantic tokens | ✅ | ✅ |
 | Formatting | ✅ | ✅ |
 | Signature help | ✅ | ✅ |
@@ -28,17 +24,17 @@ This document tracks feature availability across Luma's editor extensions.
 | Language configuration | ✅ | ✅ |
 
 > **Note:** Most language-intelligence features (auto-complete, hover, go-to-definition,
-> find references, rename, code actions, semantic tokens, formatting, signature help, and
-> inlay hints) are provided by the shared `luma_lsp` server, so parity across editors is
-> inherent. The remaining rows — code lens, playground, debug visualiser, and test-runner
-> UX — are editor-specific integrations where capabilities genuinely differ.
+> find references, rename, code actions, semantic tokens, formatting, and signature help)
+> are provided by the shared `luma_lsp` server, so parity across editors is inherent. The
+> remaining row — test-runner UX — is an editor-specific integration where capabilities
+> genuinely differ.
 
 ## Known Gaps
 
-1. **Zed:** No code lens (reference counts above functions and types) — VS Code only
-2. **Zed:** No playground command — VS Code only
-3. **Zed:** No debug visualiser webview — VS Code only
-4. **Zed:** Test running is surfaced through inline tree-sitter runnables (`languages/luma/runnables.scm`), not a dedicated Test Explorer (VS Code)
+1. **Test running:** Both editors surface tests through lightweight, editor-native
+   mechanisms rather than a bespoke UI — VS Code via the `luma` run/test tasks (and the
+   editor-title Run buttons), Zed via inline tree-sitter runnables
+   (`languages/luma/runnables.scm`).
 
 ## Grammar Consistency
 

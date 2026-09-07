@@ -17,21 +17,11 @@ A minimal [Language Server Protocol](https://microsoft.github.io/language-server
 | Find references         | Locate all usages of a symbol in the current file                |
 | Rename                  | Rename a symbol and all its references (with prepare support)    |
 | Document symbols        | Outline view of functions, records, and choice types             |
-| Workspace symbols       | Search symbols across all open documents                         |
 | Semantic tokens         | Full semantic highlighting (annotations, types, modules, etc.)   |
-| Semantic tokens (range) | Range-scoped semantic highlighting                               |
 | Code actions            | Quick fixes for common errors (mutable, unused vars, etc.)       |
-| Code lens               | Reference counts on functions and types                          |
 | Folding ranges          | Code folding for blocks, declarations, and comments              |
-| Inlay hints             | Inferred type annotations for variables                          |
-| Document highlight      | Highlight all occurrences of a symbol in the current document    |
-| Selection range         | Smart expand/shrink selection                                    |
-| Call hierarchy          | Incoming and outgoing call graphs                                |
-| Type hierarchy          | Supertypes and subtypes for interfaces and records               |
-| Linked editing ranges   | Simultaneous editing of related identifiers                      |
 | Document links          | Clickable include paths                                          |
 | Document formatting     | Format entire document                                           |
-| Range formatting        | Format a selected range                                          |
 | Execute command         | Server-side command execution (e.g. show references)             |
 
 ## Supported Editors
@@ -133,20 +123,17 @@ source/
 ├── lsp_server_sync.cpp                   # Text document sync dispatch
 │
 │   ── Feature Handlers ──
-├── lsp_server_code_actions.cpp           # Code actions, quick fixes, and code lens
-├── lsp_server_code_actions_refactoring.cpp # Refactoring code actions
+├── lsp_server_code_actions.cpp           # Code actions and quick fixes
 ├── lsp_server_completion.cpp             # Completion trigger and filtering
 ├── lsp_server_completion_resolve.cpp     # Completion item resolve
 ├── lsp_server_folding.cpp                # Folding ranges for blocks, declarations, and comments
-├── lsp_server_formatting.cpp             # Document and range formatting
-├── lsp_server_hierarchy.cpp              # Call and type hierarchy requests
+├── lsp_server_formatting.cpp             # Document formatting
 ├── lsp_server_hover.cpp                  # Hover requests
-├── lsp_server_inlay.cpp                  # Inlay hints for inferred types and parameter names
-├── lsp_server_navigation.cpp             # Definition, references, document links, and selection range
-├── lsp_server_rename.cpp                 # Rename, prepare-rename, and linked editing
-├── lsp_server_semantic_tokens.cpp        # Semantic token encoding and delta
+├── lsp_server_navigation.cpp             # Definition, references, and document links
+├── lsp_server_rename.cpp                 # Rename and prepare-rename
+├── lsp_server_semantic_tokens.cpp        # Semantic token encoding
 ├── lsp_server_signature.cpp              # Signature help
-├── lsp_server_symbols.cpp                # Document and workspace symbols
+├── lsp_server_symbols.cpp                # Document symbols
 ├── lsp_server_workspace.cpp              # Workspace folder and file watching
 │
 │   ── Handler Interfaces ──
@@ -154,12 +141,9 @@ source/
 ├── lsp_completion_handler.hpp            # Completion handler interface
 ├── lsp_folding_handler.hpp               # Folding range handler interface
 ├── lsp_formatting_handler.hpp            # Formatting handler interface
-├── lsp_hierarchy_handler.hpp             # Hierarchy handler interface
 ├── lsp_hover_handler.hpp                 # Hover handler interface
-├── lsp_inlay_hint_handler.hpp            # Inlay hint handler interface
 ├── lsp_navigation_handler.hpp            # Navigation handler interface
 ├── lsp_quickfix_handler.hpp              # Quick fix handler interface
-├── lsp_refactoring_provider.hpp          # Refactoring provider framework
 ├── lsp_rename_handler.hpp                # Rename handler interface
 ├── lsp_semantic_tokens_handler.hpp       # Semantic tokens handler interface
 ├── lsp_symbol_handler.hpp                # Symbol handler interface
@@ -180,14 +164,11 @@ source/
 ├── lsp_symbol_lookup.hpp                 # Symbol lookup helpers
 ├── lsp_symbol_resolver.hpp/cpp           # Symbol resolution for go-to-definition
 │
-│   ── Workspace Indexing ──
-├── lsp_persisted_index.hpp/cpp           # Workspace index persistence (binary format)
-├── lsp_workspace_indexer.hpp/cpp         # Workspace-wide background indexing
-├── lsp_workspace_manager.hpp/cpp         # Multi-root workspace management
+│   ── Workspace ──
+├── lsp_workspace_manager.hpp/cpp         # Multi-root workspace management and project config
 ├── lsp_pending_uri_set.hpp               # Thread-safe pending analysis URI set
 │
 │   ── Utilities ──
-├── lsp_binary_format.hpp                 # Big-endian read/write helpers
 ├── lsp_brace_matcher.hpp                 # Bracket/brace matching
 ├── lsp_capabilities.hpp/cpp              # Server capability registration
 ├── lsp_code_action_builder.hpp           # Code action JSON builder
@@ -240,21 +221,12 @@ The server advertises these capabilities during `initialize`:
 - `referencesProvider`: true
 - `renameProvider`: true (with prepare support)
 - `documentSymbolProvider`: true
-- `workspaceSymbolProvider`: true
 - `codeActionProvider`: true
-- `codeLensProvider`: true
 - `foldingRangeProvider`: true
-- `inlayHintProvider`: true
-- `documentHighlightProvider`: true
-- `selectionRangeProvider`: true
-- `callHierarchyProvider`: true
-- `typeHierarchyProvider`: true
-- `linkedEditingRangeProvider`: true
 - `documentLinkProvider`: true
 - `documentFormattingProvider`: true
-- `documentRangeFormattingProvider`: true
 - `executeCommandProvider`: `luma.showReferences`
-- `semanticTokensProvider`: full and range tokens with legend
+- `semanticTokensProvider`: full tokens with legend
 - `positionEncoding`: UTF-16
 
 ## Further Reading

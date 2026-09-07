@@ -10,8 +10,6 @@
 #include "debug_session.hpp"
 #include "expression_compiler.hpp"
 #include "expression_evaluator.hpp"
-#include "hot_reloader.hpp"
-#include "i_filesystem_monitor.hpp"
 #include "runtime/stdlib/common/stdlib_registry.hpp"
 #include "runtime/vm/vm.hpp"
 #include "source_manager_locator.hpp"
@@ -51,31 +49,6 @@ std::string DebugExecutionEngine::validate_launch_config(const std::string& prog
     }
 
     return "";
-}
-
-void DebugExecutionEngine::setup_hot_reloader() {
-    hot_reloader_ =
-        std::make_unique<HotReloader>([this](const std::filesystem::path& changed_file) {
-            const auto filename = changed_file.filename().string();
-
-            output_callback_(std::string{kOutputConsole},
-                             std::format("Hot reload: source changed — {}\n", filename));
-
-            event_callback_(std::string{kEventInvalidated},
-                            JsonValue(JsonValue::ObjectType{
-                                {"areas", JsonValue(JsonValue::ArrayType{
-                                              JsonValue(std::string("stacks")),
-                                              JsonValue(std::string("threads")),
-                                              JsonValue(std::string("variables")),
-                                          })},
-                            }));
-        });
-
-    source_locator_->for_each_file([&](int /*fid*/, const SourceFile* file) {
-        // Best-effort watch — filesystem errors are logged inside watch()
-        // but do not prevent the debug session from starting.
-        (void)hot_reloader_->watch(file->path);
-    });
 }
 
 void DebugExecutionEngine::start_execution_thread(bool stop_on_entry,
@@ -142,7 +115,6 @@ std::string DebugExecutionEngine::launch(const std::string& program_path, bool s
         bp_mgr_.preload_canonical_paths();
         expr_eval_.set_compiled_program(compiled_functions_, compiled_top_level_);
 
-        setup_hot_reloader();
         start_execution_thread(stop_on_entry, args, cwd, no_debug);
 
         return "";
@@ -223,14 +195,6 @@ IVMControl* DebugExecutionEngine::vm_control() const {
 
 IVMIntrospection* DebugExecutionEngine::vm_introspection() const {
     return vm_adapter_.get();
-}
-
-int DebugExecutionEngine::check_for_source_changes() {
-    if (!hot_reloader_) {
-        return 0;
-    }
-
-    return hot_reloader_->check_for_changes();
 }
 
 // ─── Lock helpers ───

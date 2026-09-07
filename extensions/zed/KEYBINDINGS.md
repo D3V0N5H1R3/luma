@@ -50,7 +50,6 @@ debugger.
 | `format` | Format buffer | lsp |
 | `signatureHelp` | Signature help | lsp |
 | `typeDefinition` | Type definition | lsp |
-| `toggleInlayHints` | Toggle inlay hints | lsp |
 | `showDiagnostic` | Show diagnostic at cursor | diagnostics |
 | `previousDiagnostic` | Previous diagnostic | diagnostics |
 | `nextDiagnostic` | Next diagnostic | diagnostics |

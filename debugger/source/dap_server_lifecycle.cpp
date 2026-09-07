@@ -9,23 +9,6 @@ namespace luma::dap {
 // ═══════════════════════════════════════════════════════════
 
 HandlerResult DapLifecycleHandler::handle_initialize(const JsonValue& args) {
-    // If auth is enabled, verify the client-provided token.
-    if (!ctx_.auth_token.empty()) {
-        const auto client_token = args.get_or<std::string>("lumaAuthToken", "");
-
-        // Constant-time comparison to prevent timing side-channels.
-        const auto& expected = ctx_.auth_token;
-        bool match = (client_token.size() == expected.size());
-        for (std::size_t i = 0; i < expected.size(); ++i) {
-            match &= (client_token.size() > i) && (client_token[i] == expected[i]);
-        }
-
-        if (!match) {
-            ctx_.auth_failed = true;
-            return HandlerResult::error(std::string{messages::request::initialize_auth_failed});
-        }
-    }
-
     // Record client capabilities and build negotiated server response.
     ctx_.feature_manager.receive_client_capabilities(args);
 

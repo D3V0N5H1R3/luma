@@ -28,17 +28,13 @@ constexpr std::string_view no_active_session = "No active debug session";
 } // namespace session
 
 // Request-handler errors — invalid or missing arguments in DAP requests
-// (launch, restart, initialize, stackTrace, setVariable, setDataBreakpoints).
+// (launch, restart, initialize, stackTrace, setVariable).
 namespace request {
-constexpr std::string_view initialize_auth_failed =
-    "Authentication failed: invalid or missing lumaAuthToken";
 constexpr std::string_view launch_missing_program = "Missing 'program' argument in launch request";
 constexpr std::string_view restart_missing_program = "Missing 'program' in restart arguments";
 constexpr std::string_view invalid_thread_id = "Invalid thread ID";
 constexpr std::string_view set_variable_missing_fields =
     "setVariable requires variablesReference, name, and value";
-constexpr std::string_view set_data_breakpoints_missing_array =
-    "setDataBreakpoints: missing 'breakpoints' array";
 } // namespace request
 
 } // namespace luma::dap::messages

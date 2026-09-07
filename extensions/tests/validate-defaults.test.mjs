@@ -60,8 +60,8 @@ function generatedSettingKeys() {
  *
  * Examples:
  *   "lsp.path"           → "DEFAULT_LSP_PATH"
- *   "inlayHints.enabled" → "DEFAULT_INLAY_HINTS_ENABLED"
- *   "codeLens.enabled"   → "DEFAULT_CODE_LENS_ENABLED"
+ *   "lsp.autoUpdate"     → "DEFAULT_LSP_AUTO_UPDATE"
+ *   "diagnostics.onSave" → "DEFAULT_DIAGNOSTICS_ON_SAVE"
  */
 function settingKeyToRustConst(key) {
     return "DEFAULT_" + key

@@ -11,7 +11,6 @@ public:
     explicit LspFormattingHandler(LspHandlerContext& ctx) : ctx_(ctx) {}
 
     [[nodiscard]] JsonValue handle_formatting(const JsonValue& params);
-    [[nodiscard]] JsonValue handle_range_formatting(const JsonValue& params);
 
 private:
     LspHandlerContext& ctx_;

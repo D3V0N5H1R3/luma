@@ -303,36 +303,6 @@ namespace named {
     return ReturnTypeDesc::named("ParseError");
 }
 
-// Color.* construct and consume these RGBA colour records.  The module is named
-// Color, so the record's qualified name is Color.Color (bare short name "Color").
-[[nodiscard]] inline ReturnTypeDesc color() {
-    return ReturnTypeDesc::named("Color");
-}
-
-// Color.from_name(Color.Name) consumes this curated named-colour choice
-// (qualified "Color.Name", like the exhaustive Terminal.Color palette).
-[[nodiscard]] inline ReturnTypeDesc color_name() {
-    return ReturnTypeDesc::named("Color.Name");
-}
-
-// Color.to_hsl / from_hsl / rotate_hue pivot through this hue/saturation/lightness
-// record (bare short name "Hsl", like color()).
-[[nodiscard]] inline ReturnTypeDesc hsl() {
-    return ReturnTypeDesc::named("Hsl");
-}
-
-// Color.to_hsv / from_hsv pivot through this hue/saturation/value record (bare
-// short name "Hsv", like hsl()).
-[[nodiscard]] inline ReturnTypeDesc hsv() {
-    return ReturnTypeDesc::named("Hsv");
-}
-
-// Color.to_cmyk / from_cmyk pivot through this cyan/magenta/yellow/key record
-// (bare short name "Cmyk", like hsl() / hsv()).
-[[nodiscard]] inline ReturnTypeDesc cmyk() {
-    return ReturnTypeDesc::named("Cmyk");
-}
-
 // Encoder.encode_text / decode_text take this text-encoding selector choice.
 [[nodiscard]] inline ReturnTypeDesc encoding() {
     return ReturnTypeDesc::named("Encoder.Encoding");
@@ -647,9 +617,6 @@ void register_resource_functions(std::vector<FunctionSpec>& specs, const ModuleB
                                  const ParamShorthands& p);
 
 void register_order_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
-                              const ParamShorthands& p);
-
-void register_color_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                               const ParamShorthands& p);
 
 } // namespace luma::stdlib::detail

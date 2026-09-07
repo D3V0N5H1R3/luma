@@ -16,7 +16,6 @@
 #include "lsp_server_state_lock.hpp"
 #include "lsp_string_utils.hpp"
 #include "lsp_workspace_handler.hpp"
-#include "lsp_workspace_indexer.hpp"
 #include "protocol/uri_utils.hpp"
 
 namespace luma::lsp {
@@ -26,86 +25,8 @@ using luma::protocol::path_to_uri;
 using luma::protocol::uri_to_path;
 
 // ═══════════════════════════════════════════════════════════
-// Workspace-wide file indexing
+// Background file loading
 // ═══════════════════════════════════════════════════════════
-
-void LspWorkspaceHandler::scan_workspace_files() {
-    const std::string progress_token = "luma/indexing";
-
-    // Validate the persisted index here, on the background scan thread, so the
-    // O(files) filesystem stats do not block the main message-loop thread
-    // during initialization. This runs before any file is indexed, preserving
-    // the original validate-before-scan ordering.
-    //
-    // validate() mutates the (unsynchronized) persisted index, which the
-    // analysis worker also upserts into under the exclusive write state lock.
-    // Hold that same lock here to serialize with the worker; log the result
-    // afterwards so transport I/O stays off the lock.
-    std::size_t invalidated_entries = 0;
-    {
-        auto state = ctx_.acquire_write_lock();
-        invalidated_entries = ctx_.workspace.validate_persisted_index();
-    }
-    if (invalidated_entries > 0) {
-        ctx_.log_message(std::format("Validated persisted index ({} stale entries removed)",
-                                     invalidated_entries));
-    }
-
-    ctx_.workspace.set_indexing(true);
-    const auto start_time = std::chrono::steady_clock::now();
-    ctx_.log_message("Workspace indexing started");
-
-    // Request the progress token from the client.
-    ctx_.send_notification("window/workDoneProgress/create",
-                           JsonValue(JsonValue::ObjectType{{"token", JsonValue(progress_token)}}));
-    ctx_.send_progress_begin(progress_token, "Indexing workspace");
-
-    // Observer that routes events to the LspServer context.
-    class ScanObserver : public WorkspaceScanObserver {
-    public:
-        ScanObserver(LspWorkspaceHandler& handler, const std::string& progress_token)
-            : handler_(handler), progress_token_(progress_token) {}
-
-        void on_file_found(const std::string& path) override {
-            handler_.load_background_file(path);
-        }
-
-        void on_progress(std::size_t n) override {
-            handler_.ctx_.send_progress_report(progress_token_,
-                                               std::format("Indexed {} files...", n));
-        }
-
-        void on_log(const std::string& msg) override {
-            handler_.ctx_.log_message(msg);
-        }
-
-    private:
-        LspWorkspaceHandler& handler_;
-        const std::string& progress_token_;
-    };
-
-    ScanObserver observer(*this, progress_token);
-    WorkspaceIndexer indexer(running_);
-    const auto count = indexer.scan(ctx_.workspace.roots(), observer);
-
-    ctx_.send_progress_end(progress_token);
-    ctx_.workspace.set_indexing(false);
-
-    const auto end_time = std::chrono::steady_clock::now();
-    const auto elapsed_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
-
-    if (count > 0) {
-        ctx_.log_message(std::format("Workspace indexing complete: {} file(s) in {}.{:03d}s", count,
-                                     elapsed_ms / 1000, elapsed_ms % 1000));
-    } else {
-        ctx_.log_message(std::format("Workspace indexing complete: 0 files ({} ms)", elapsed_ms));
-    }
-
-    // Look for luma.json in each workspace root.
-    ctx_.workspace.discover_project_config(
-        ctx_.configuration.config(), [this](const std::string& msg) { ctx_.log_message(msg); });
-}
 
 void LspWorkspaceHandler::load_background_file(const std::string& path) {
     namespace fs = std::filesystem;
@@ -156,14 +77,6 @@ void LspWorkspaceHandler::load_background_file(const std::string& path) {
 
         state.documents().set_content(state.token(), uri, content);
         state.documents().mark_background(state.token(), uri);
-
-        // If the persisted index has a valid cached entry for this file,
-        // the content hasn't changed since the last session — skip analysis.
-        const auto content_hash = std::hash<std::string>{}(content);
-        if (ctx_.workspace.persisted_index().is_valid(path, content_hash)) {
-            state.documents().set_content_hash(state.token(), uri, content_hash);
-            return;
-        }
     }
 
     schedule_analysis(uri);

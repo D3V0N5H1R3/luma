@@ -13,11 +13,9 @@ class VM;
 
 namespace luma::dap {
 
-class TimeTravelRecorder;
 class DebugExecutionEngine;
 class ThreadStateManager;
 class BreakpointManager;
-class ExpressionEvaluator;
 
 // ═══════════════════════════════════════════════════════════
 // HookInstallationContext — narrow interface for VM hook setup.
@@ -28,11 +26,9 @@ class ExpressionEvaluator;
 // ═══════════════════════════════════════════════════════════
 
 struct HookInstallationContext {
-    std::unique_ptr<TimeTravelRecorder>* time_travel_recorder{nullptr};
     DebugExecutionEngine* execution_engine{nullptr};
     ThreadStateManager* thread_state_manager{nullptr};
     BreakpointManager* breakpoint_manager{nullptr};
-    ExpressionEvaluator* expression_evaluator{nullptr};
     std::function<void(const std::string&, const json::JsonValue&)> event_callback;
 };
 

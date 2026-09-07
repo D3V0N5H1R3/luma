@@ -2,7 +2,6 @@
 #define LUMA_LSP_PARAM_UTILS_HPP
 
 #include <cstddef>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -76,27 +75,6 @@ namespace luma::lsp::util {
     }
 
     return result;
-}
-
-// Extract the bare parameter name from one "name: type" fragment of a parameter
-// signature (as produced by split_param_list), trimming any spaces before the
-// colon. Returns nullopt when the fragment carries no colon and so has no name
-// to surface as a hint.
-[[nodiscard]] inline std::optional<std::string> extract_param_name(std::string_view part) {
-    const auto colon = part.find(':');
-
-    if (colon == std::string_view::npos) {
-        return std::nullopt;
-    }
-
-    std::string name{part.substr(0, colon)};
-    const auto last = name.find_last_not_of(' ');
-
-    if (last != std::string::npos) {
-        name = name.substr(0, last + 1);
-    }
-
-    return name;
 }
 
 } // namespace luma::lsp::util

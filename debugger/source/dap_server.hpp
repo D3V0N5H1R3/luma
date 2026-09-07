@@ -25,18 +25,6 @@ public:
     explicit DapServer(protocol::Transport& transport);
     ~DapServer();
 
-    // ─── Authentication ───
-    // Enable token-based authentication for remote (TCP) debugging.
-    // When set, the initialize handler checks for a matching
-    // "lumaAuthToken" field in the request arguments.  If the token
-    // does not match, an error response is sent and all subsequent
-    // requests are rejected.
-    //
-    // NOTE: For stdio-based transports this is not meaningful because
-    // the editor and debugger share the same process pipe.  This is
-    // provided for future TCP mode where the transport is network-facing.
-    void enable_auth(std::string token);
-
     // Run the message loop until disconnect. Returns exit code.
     [[nodiscard]] int run();
 

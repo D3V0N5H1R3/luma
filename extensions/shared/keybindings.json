@@ -41,11 +41,6 @@
                 "action": "typeDefinition",
                 "description": "Type definition",
                 "vscode": { "key": null, "when": "resourceLangId == luma" }
-            },
-            {
-                "action": "toggleInlayHints",
-                "description": "Toggle inlay hints",
-                "vscode": { "key": null, "when": "resourceLangId == luma" }
             }
         ],
         "diagnostics": [

@@ -221,7 +221,6 @@ set(LUMA_RUNTIME_TESTS
     stdlib_test_datetime
     stdlib_test_order
     stdlib_test_encoder
-    stdlib_test_color
     stdlib_test_hash
     stdlib_test_json
     stdlib_test_log
@@ -317,13 +316,11 @@ set(LUMA_LSP_TESTS
     lsp_test_completion
     lsp_test_navigation
     lsp_test_features
-    lsp_test_inlay
     lsp_test_unit
     lsp_test_text_formatter
     lsp_test_analysis_pipeline
     lsp_test_analysis_service
     lsp_test_analysis_cache
-    lsp_test_persisted_index
     lsp_test_document_store
 )
 
@@ -347,9 +344,6 @@ set(LUMA_DAP_TESTS
     dap_test_variable_inspector
     dap_test_breakpoint_manager
     dap_test_misc
-    dap_test_time_travel
-    dap_test_custom_visualizer
-    dap_test_hot_reloader
     dap_test_expression_compiler
 )
 
@@ -359,15 +353,6 @@ foreach(test IN LISTS LUMA_DAP_TESTS)
         LIBS     luma_dap_lib
         LABELS   dap)
 endforeach()
-
-# TCP transport test — drives accept_client() from a client thread over a
-# loopback socket. Registered separately with a timeout so a failed handshake
-# can never hang CI on the blocking ::accept call.
-luma_add_test(NAME dap_test_tcp_transport
-    SOURCES  ${PROJECT_SOURCE_DIR}/debugger/tests/dap_test_tcp_transport.cpp
-    LIBS     luma_dap_lib
-    TIMEOUT  60
-    LABELS   dap)
 
 # DAP integration test — spawns luma_dap as a subprocess and sends
 # scripted DAP messages over stdio to verify end-to-end behavior.
@@ -445,7 +430,6 @@ set(LUMA_FEATURE_TESTS_STDLIB
     bits_functions.luma
     calculus_functions.luma
     channel_functions.luma
-    color_functions.luma
     compression_functions.luma
     console_functions.luma
     converter_functions.luma

@@ -31,7 +31,6 @@ public:
     explicit LspSymbolHandler(LspHandlerContext& ctx) : ctx_(ctx) {}
 
     [[nodiscard]] JsonValue handle_document_symbol(const JsonValue& params);
-    [[nodiscard]] JsonValue handle_workspace_symbol(const JsonValue& params);
 
     // Shared helpers used by other handlers (e.g., navigation).
     [[nodiscard]] Range find_block_range(const std::vector<Token>& tokens,

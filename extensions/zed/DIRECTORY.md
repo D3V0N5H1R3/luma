@@ -7,7 +7,6 @@ Syntax highlighting, language configuration, and language server integration for
 - Tree-sitter based syntax highlighting for all Luma language constructs.
 - Language configuration: comment toggling (`#`), bracket matching, indentation rules.
 - Language server integration via `luma_lsp` (completions, hover, diagnostics).
-- Inlay hints (type hints, parameter hints) via LSP.
 - 64 code snippets for common Luma patterns.
 - File association for `.luma` files.
 - Debug Adapter Protocol (DAP) support via `luma_dap`.
@@ -63,8 +62,8 @@ The extension provides default settings for the language server. You can overrid
     "luma-lsp": {
       "settings": {
         "luma": {
-          "inlayHints": {
-            "enabled": false  // disable inlay hints (default: true)
+          "diagnostics": {
+            "onSave": true  // only report linter warnings on save (default: false)
           }
         }
       }
@@ -75,11 +74,9 @@ The extension provides default settings for the language server. You can overrid
 
 | Setting                     | Type    | Default | Description                          |
 | --------------------------- | ------- | ------- | ------------------------------------ |
-| `luma.inlayHints.enabled`   | boolean | `true`  | Show inlay hints (inferred types).   |
-| `luma.codeLens.enabled`     | boolean | `true`  | Show reference-count code lenses.    |
 | `luma.diagnostics.onSave`   | boolean | `false` | Only report linter warnings on save. |
 
-All three nest under `lsp.luma-lsp.settings.luma` in `settings.json`, as shown above.
+This nests under `lsp.luma-lsp.settings.luma` in `settings.json`, as shown above.
 
 ### Automatic Download
 
@@ -146,8 +143,7 @@ For repeatable setups, add a `.zed/debug.json` to your worktree. The adapter acc
     "program": "$ZED_FILE",       // path to the .luma program (required)
     "args": [],                    // arguments passed to Process.get_arguments()
     "cwd": "$ZED_WORKTREE_ROOT",   // working directory
-    "stopOnEntry": false,          // pause on the first executable line
-    "timeTravel": false            // record history to enable stepping backwards
+    "stopOnEntry": false           // pause on the first executable line
   }
 ]
 ```

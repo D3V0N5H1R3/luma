@@ -10,7 +10,7 @@ namespace luma::dap {
 // Report a non-fatal diagnostic through an optional callback, falling back
 // to stderr when no callback is installed.  Centralises the
 // "callback-or-stderr" idiom shared by components that surface diagnostics
-// out of band (e.g. HotReloader, CustomVisualizer).
+// out of band (e.g. BreakpointManager).
 //
 // The callback may take either `const std::string&` or `std::string_view`;
 // `msg` binds to both.  `stderr_prefix` is written ahead of the message only

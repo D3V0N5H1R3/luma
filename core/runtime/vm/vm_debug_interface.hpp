@@ -12,7 +12,6 @@
 //                      DebugHook          (line-change / step notifications)
 //                      PauseCallback      (blocks until the debugger resumes)
 //                      ExceptionHook      (notifies on caught/uncaught exceptions)
-//                      DataBreakpointHook (variable-write watchpoints)
 //                      TaskSpawnHook / TaskExitHook (concurrency events)
 //   last_line        — most recently reported source line (suppresses
 //                      duplicate notifications on the same line)
@@ -27,10 +26,10 @@
 // released, so a blocking callback never holds the mutex.
 //
 // Coupling note: the frame/stack-touching NOTIFICATION logic
-// (VM::check_debug_hooks(), VM::notify_*_data_breakpoint()) stays on VM — it
-// needs the call frames, value stack, and instruction pointer to report state
-// to the debugger.  This component owns only the state and the thread-safe
-// accessors; it never touches the VM's execution state.
+// (VM::check_debug_hooks()) stays on VM — it needs the call frames, value
+// stack, and instruction pointer to report state to the debugger.  This
+// component owns only the state and the thread-safe accessors; it never
+// touches the VM's execution state.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #ifndef LUMA_VM_VM_DEBUG_INTERFACE_HPP

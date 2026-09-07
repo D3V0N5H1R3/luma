@@ -40,17 +40,17 @@ Hunt for these defect classes. The layer list mirrors [bug-fix-language-server.p
 2. **Feature-handler correctness, by layer:**
     - **Protocol transport** (`lsp_transport*`, `shared/protocol/`) — Content-Length framing or JSON-RPC parsing.
     - **Dispatch and capabilities** (`lsp_server*`, `lsp_server_dispatch.cpp`, `lsp_handler_registry.hpp`, `lsp_capabilities.*`) — a request routed to the wrong handler, a capability advertised without a handler, or a handler omitted from the advertised capabilities.
-    - **Analysis pipeline and indexing** (`lsp_analysis_*`, `lsp_analysis_result.hpp`, `lsp_token_index.hpp`, `lsp_scope_stack.*`, `lsp_identifier_collector.*`) — the token index, function-body ranges, scoped locals, identifier index, or call graph built wrong.
-    - **Symbol resolution** (`lsp_symbol_resolver.*`, `lsp_definition_resolver.hpp`, `lsp_navigation_handler.hpp`, `lsp_rename_handler.hpp`) — the scope-aware lookup (enclosing-function locals → globals, binary search for the enclosing function, cross-file) backing hover, definition, references, rename, document highlight, and linked editing.
+    - **Analysis pipeline and indexing** (`lsp_analysis_*`, `lsp_analysis_result.hpp`, `lsp_token_index.hpp`, `lsp_scope_stack.*`, `lsp_identifier_collector.*`) — the token index, function-body ranges, scoped locals, or identifier index built wrong.
+    - **Symbol resolution** (`lsp_symbol_resolver.*`, `lsp_definition_resolver.hpp`, `lsp_navigation_handler.hpp`, `lsp_rename_handler.hpp`) — the scope-aware lookup (enclosing-function locals → globals, binary search for the enclosing function, cross-file) backing hover, definition, references, and rename.
     - **Completion and signature help** (`lsp_completion_*`, `lsp_keyword_catalog.*`, `lsp_stdlib_registry.*`, `lsp_server_signature.cpp`) — wrong or missing items, wrong sort/filter text, or wrong signature help.
     - **Hover and type rendering** (`lsp_hover_*`, `lsp_type_formatter.hpp`) — the right symbol resolved but the rendered hover text or type/signature string wrong.
     - **Semantic tokens** (`lsp_semantic_tokens_handler.hpp`, `lsp_token_classifier.hpp`, `lsp_semantic_token_cache.hpp`) — wrong token type/modifier classification, or a token type the lexer can produce left unclassified.
-    - **Code actions, quick fixes, refactoring, code lens** (`lsp_code_action_*`, `lsp_quickfix_handler.hpp`, `lsp_refactoring_provider.hpp`) — a wrong or missing edit.
+    - **Code actions and quick fixes** (`lsp_code_action_*`, `lsp_quickfix_handler.hpp`) — a wrong or missing edit.
     - **Formatting** (`lsp_formatting_handler.hpp`, `lsp_text_formatter.*`) — wrong edits or ranges from the standalone line/token formatter.
-    - **Symbols and hierarchy** (`lsp_symbol_handler.hpp`, `lsp_hierarchy_handler.hpp`) — wrong outline, symbol kind, declaration range, or call/type hierarchy (which relies on the analysis call graph).
-    - **Folding, inlay hints, document links, selection ranges** (`lsp_folding_handler.hpp`, `lsp_inlay_hint_handler.hpp`, `lsp_navigation_handler.hpp`, `lsp_brace_matcher.hpp`) — wrong ranges or hint placement.
-    - **Include handling and workspace indexing** (`lsp_include_processor.*`, `lsp_workspace_*`, `lsp_persisted_index.*`) — wrong cross-file resolution, or stale/missing cross-file symbols.
-3. **Caching and staleness.** A stale analysis cache, a stale semantic-token cache, a stale persisted index (missed content-hash validation), or an incremental **ranged edit** applied in place that drifts from the full-text fallback in `lsp_document_synchronizer.*`.
+    - **Document symbols** (`lsp_symbol_handler.hpp`) — wrong outline, symbol kind, or declaration range.
+    - **Folding and document links** (`lsp_folding_handler.hpp`, `lsp_navigation_handler.hpp`, `lsp_brace_matcher.hpp`) — wrong ranges or link targets.
+    - **Include handling** (`lsp_include_processor.*`, `lsp_workspace_*`) — wrong cross-file resolution.
+3. **Caching and staleness.** A stale analysis cache, a stale semantic-token cache, or an incremental **ranged edit** applied in place that drifts from the full-text fallback in `lsp_document_synchronizer.*`.
 4. **Cancellation and concurrency.** A mishandled cancellation deadline, a partially cancelled analysis returning inconsistent results, or a data race on the shared analysis cache.
 5. **Configuration negotiation.** Client-capability negotiation or a setting read (`lsp_configuration_manager.*`, `lsp_config.hpp`) that produces the wrong default or behaviour.
 

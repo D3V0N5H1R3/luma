@@ -258,53 +258,12 @@ JsonValue folding_range(int start_line, int end_line, std::string_view kind) {
     });
 }
 
-JsonValue inlay_hint(int line, int character, std::string_view label, int kind, bool padding_left,
-                     bool padding_right) {
-    return JsonValue(JsonValue::ObjectType{
-        {"position", position(line, character)},
-        {"label", JsonValue(std::string(label))},
-        {"kind", JsonValue(static_cast<int64_t>(kind))},
-        {"paddingLeft", JsonValue(padding_left)},
-        {"paddingRight", JsonValue(padding_right)},
-    });
-}
-
 JsonValue semantic_tokens_response(JsonValue::ArrayType data, std::string_view result_id) {
     JsonValue::ObjectType obj;
     if (!result_id.empty()) {
         obj.emplace("resultId", JsonValue(std::string(result_id)));
     }
     obj.emplace("data", JsonValue(std::move(data)));
-    return JsonValue(std::move(obj));
-}
-
-JsonValue semantic_tokens_delta_response(std::string_view result_id, JsonValue::ArrayType edits) {
-    return JsonValue(JsonValue::ObjectType{
-        {"resultId", JsonValue(std::string(result_id))},
-        {"edits", JsonValue(std::move(edits))},
-    });
-}
-
-JsonValue semantic_token_edit(int64_t start, int64_t delete_count, JsonValue::ArrayType data) {
-    return JsonValue(JsonValue::ObjectType{
-        {"start", JsonValue(start)},
-        {"deleteCount", JsonValue(delete_count)},
-        {"data", JsonValue(std::move(data))},
-    });
-}
-
-JsonValue hierarchy_item(std::string_view name, SymbolKind kind, std::string_view uri,
-                         const Range& range, std::string_view data) {
-    JsonValue::ObjectType obj{
-        {"name", JsonValue(std::string(name))},
-        {"kind", JsonValue(static_cast<int64_t>(to_lsp_symbol_kind(kind)))},
-        {"uri", JsonValue(std::string(uri))},
-        {"range", serialise_range(range)},
-        {"selectionRange", serialise_range(range)},
-    };
-    if (!data.empty()) {
-        obj.emplace("data", JsonValue(std::string(data)));
-    }
     return JsonValue(std::move(obj));
 }
 

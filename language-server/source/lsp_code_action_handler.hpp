@@ -17,16 +17,12 @@ public:
     explicit LspCodeActionHandler(LspHandlerContext& ctx) : ctx_(ctx) {}
 
     [[nodiscard]] JsonValue handle_code_action(const JsonValue& params);
-    [[nodiscard]] JsonValue handle_code_lens(const JsonValue& params);
     [[nodiscard]] JsonValue handle_execute_command(const JsonValue& params);
 
     void collect_quick_fixes(const std::string& uri, const AnalysisResult& cached,
                              const LockToken& lock_token,
                              const std::vector<Diagnostic>& range_diags,
                              JsonValue::ArrayType& actions) const;
-    void collect_refactorings(const std::string& uri, const AnalysisResult& cached,
-                              const LockToken& lock_token, const JsonValue& params,
-                              JsonValue::ArrayType& actions) const;
 
 private:
     [[nodiscard]] JsonValue execute_show_references(const JsonValue& params);
