@@ -831,7 +831,6 @@ failure(_other) { print("could not read config") }
 
 > **Security note** — `append_file`, `read_bytes`, `read_file`, `read_lines`, `write_bytes`, `write_file`, and `write_lines` validate that the resolved path stays within the current working directory, which blocks cross-directory symlink traversal (e.g. a symlink pointing to `/etc/passwd` is rejected). However, a symbolic link that points to another file **within** the working directory is followed transparently. If your program accepts a user-supplied file path, validate that the resolved path refers to the expected file before reading or writing.
 
-
 ## 16 — Hash
 
 Cryptographic and non-cryptographic hash digests, HMAC, and verification.
