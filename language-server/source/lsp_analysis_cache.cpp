@@ -118,8 +118,14 @@ LspAnalysisCache::get_dependents(const std::string& include_uri) const {
 }
 
 void LspAnalysisCache::remove_dependent(const std::string& uri) {
-    for (auto& [_, deps] : include_dependents_) {
+    for (auto it = include_dependents_.begin(); it != include_dependents_.end();) {
+        auto& deps = it->second;
         deps.erase(uri);
+        if (deps.empty()) {
+            it = include_dependents_.erase(it);
+        } else {
+            ++it;
+        }
     }
 }
 
@@ -232,6 +238,7 @@ void CacheTransaction::commit() {
     finished_ = true;
 
     // Apply include-dependency edges.
+    cache_->remove_dependent(uri_);
     for (const auto& include_path : pending_include_deps_) {
         cache_->add_include_dependent(include_path, uri_);
     }

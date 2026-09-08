@@ -304,6 +304,7 @@ bool AnalysisPipeline::publish_committed_diagnostics(const std::string& uri,
 void AnalysisPipeline::commit_and_publish(const std::string& uri, AnalysisResult result,
                                           std::size_t content_hash) {
     const std::vector<Diagnostic> diags_copy = result.semantic.diagnostics;
+    const auto included_diags = result.metadata.diagnostics_by_uri;
 
     // Phase 3a: Prepare data outside the lock.
     auto token_data = callbacks_.compute_semantic_token_data(result);
@@ -321,6 +322,10 @@ void AnalysisPipeline::commit_and_publish(const std::string& uri, AnalysisResult
 
     // Phase 3c: Publish diagnostics for foreground documents.
     const bool foreground = publish_committed_diagnostics(uri, diags_copy, outcome.doc_version);
+
+    for (const auto& [included_uri, diagnostics] : included_diags) {
+        publish_committed_diagnostics(included_uri, diagnostics, 0);
+    }
 
     // Phase 3d: For foreground edits, ask the client to re-pull semantic tokens
     // now that fresh tokens have been cached, so highlighting held from the

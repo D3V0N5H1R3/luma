@@ -116,6 +116,7 @@ LspServer::LspServer(std::unique_ptr<Transport> transport)
                                           .doc_store = doc_store_,
                                           .analysis_cache = analysis_cache_,
                                           .pending_uris = pending_uris_,
+                                          .semantic_token_cache = semantic_token_cache_,
                                           .workspace = workspace_},
         DocumentSynchronizer::Callbacks{
             .schedule_analysis =

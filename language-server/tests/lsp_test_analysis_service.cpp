@@ -322,6 +322,27 @@ void test_type_error_produces_error_diagnostic() {
     ASSERT_TRUE(has_error_diagnostic(result));
 }
 
+void test_type_error_diagnostic_preserves_late_line_column() {
+    ServiceFixture fx;
+    const auto result = fx.analyze("function integer add(integer a, integer b) {\n"
+                                   "    return a + b\n"
+                                   "}\n"
+                                   "@main\n"
+                                   "function void main() {\n"
+                                   "    string note = \"café\"\n"
+                                   "    integer sum = add(1, \"bad\")\n"
+                                   "}\n");
+
+    for (const auto& diagnostic : result.semantic.diagnostics) {
+        if (diagnostic.severity == severity::error) {
+            ASSERT_EQ(diagnostic.range.start.line, 6);
+            ASSERT_GT(diagnostic.range.start.character, 0);
+            return;
+        }
+    }
+    ASSERT_TRUE(false);
+}
+
 // ─── Clean program: no error diagnostics ───────────────────────────
 
 void test_clean_program_has_no_error_diagnostics() {
@@ -747,6 +768,7 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_record_and_choice_collected);
     RUN(test_find_definition_accessor);
     RUN(test_type_error_produces_error_diagnostic);
+    RUN(test_type_error_diagnostic_preserves_late_line_column);
     RUN(test_clean_program_has_no_error_diagnostics);
     RUN(test_symbols_survive_parse_errors);
     RUN(test_lexer_error_recovery);

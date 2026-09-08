@@ -28,7 +28,7 @@ namespace {
 // "utf-32": the entire conversion layer is UTF-16-only, so reporting utf-32
 // would ship UTF-16 numbers under a utf-32 label and corrupt every position for
 // such clients.  utf-16 is universally supported and already correct.
-[[nodiscard]] JsonValue build_server_capabilities() {
+[[nodiscard]] JsonValue build_server_capabilities(const std::string& position_encoding) {
     return CapabilitiesBuilder()
         .text_document_sync(true, 2, true)
         .hover()
@@ -48,7 +48,7 @@ namespace {
                          {"definition", "readonly"}, false, false)
         .document_formatting()
         .execute_command({"luma.showReferences"})
-        .position_encoding("utf-16")
+        .position_encoding(position_encoding)
         .build();
 }
 
@@ -64,6 +64,10 @@ JsonValue LspServer::handle_initialize(const JsonValue& params) {
     // Delegate capability detection to the configuration manager.
     configuration_.detect_client_capabilities(
         params, [this](const std::string& msg) { transport_wrapper_.log_message(msg); });
+    if (!configuration_.position_encoding_supported()) {
+        throw InvalidParamsError(
+            "The Luma language server currently supports only the utf-16 position encoding");
+    }
 
     // Extract workspace root folders for background indexing.
     try {
@@ -102,7 +106,7 @@ JsonValue LspServer::handle_initialize(const JsonValue& params) {
     }
 
     return JsonValue(JsonValue::ObjectType{
-        {"capabilities", build_server_capabilities()},
+        {"capabilities", build_server_capabilities(configuration_.position_encoding())},
         {"serverInfo", JsonValue(JsonValue::ObjectType{
                            {"name", JsonValue("luma-lsp")},
                            {"version", JsonValue(std::string(luma_version))},

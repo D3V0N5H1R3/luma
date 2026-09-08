@@ -31,6 +31,8 @@ public:
     // ─── Client capabilities ───
 
     [[nodiscard]] bool snippet_support() const noexcept;
+    [[nodiscard]] const std::string& position_encoding() const noexcept;
+    [[nodiscard]] bool position_encoding_supported() const noexcept;
 
     // Extract client capabilities from the initialize params.
     void detect_client_capabilities(const JsonValue& params, const LogCallback& log = {});
@@ -43,6 +45,8 @@ public:
 private:
     LspConfig config_;
     bool snippet_support_{false};
+    std::string position_encoding_{"utf-16"};
+    bool position_encoding_supported_{true};
 };
 
 } // namespace luma::lsp

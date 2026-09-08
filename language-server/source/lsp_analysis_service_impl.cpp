@@ -147,6 +147,7 @@ void LspAnalysisService::include_phase(Program& program, const std::string& uri,
 
 void LspAnalysisService::type_check_phase(Program& program, AnalysisResult& result,
                                           const std::string& source, const std::string& uri,
+                                          const std::vector<std::size_t>& line_starts,
                                           FileId prelude_file_id) {
     const auto error = run_phase([&] {
         TypeChecker checker;
@@ -160,14 +161,14 @@ void LspAnalysisService::type_check_phase(Program& program, AnalysisResult& resu
             if (from_prelude(err)) {
                 continue;
             }
-            result.semantic.diagnostics.push_back(make_diagnostic(err, source, uri));
+            append_diagnostic(result, err, source, uri, line_starts);
         }
 
         for (const auto& warning : checker.get_warnings()) {
             if (from_prelude(warning)) {
                 continue;
             }
-            result.semantic.diagnostics.push_back(make_diagnostic(warning, source, uri));
+            append_diagnostic(result, warning, source, uri, line_starts);
         }
     });
     if (!error.empty()) {
@@ -175,6 +176,31 @@ void LspAnalysisService::type_check_phase(Program& program, AnalysisResult& resu
         result.semantic.diagnostics.push_back(make_whole_file_diagnostic(
             std::format("Type checking failed: {}", error), constants::severity::warning));
     }
+}
+
+void LspAnalysisService::append_diagnostic(
+    AnalysisResult& result, const luma::Diagnostic& diagnostic, const std::string& root_source,
+    const std::string& root_uri, const std::vector<std::size_t>& root_line_starts) {
+    const auto file_id = diagnostic.primary_location().file_id;
+    if (file_id == 0) {
+        result.semantic.diagnostics.push_back(
+            make_diagnostic(diagnostic, root_source, root_uri, root_line_starts));
+        return;
+    }
+
+    const auto path_it = result.semantic.includes.file_id_to_path.find(file_id);
+    const auto source_it = result.semantic.includes.file_id_to_source.find(file_id);
+    if (path_it == result.semantic.includes.file_id_to_path.end() ||
+        source_it == result.semantic.includes.file_id_to_source.end()) {
+        result.semantic.diagnostics.push_back(
+            make_diagnostic(diagnostic, root_source, root_uri, root_line_starts));
+        return;
+    }
+
+    const auto included_uri = luma::protocol::path_to_uri(path_it->second);
+    const auto line_starts = compute_line_starts(source_it->second);
+    result.metadata.diagnostics_by_uri[included_uri].push_back(
+        make_diagnostic(diagnostic, source_it->second, included_uri, line_starts));
 }
 
 void LspAnalysisService::doc_comment_phase(AnalysisResult& result, const std::string& source) {
@@ -238,7 +264,7 @@ void LspAnalysisService::lint_phase(const Program& program, AnalysisResult& resu
             if (prelude_file_id != 0 && lw.primary_location().file_id == prelude_file_id) {
                 continue;
             }
-            result.semantic.diagnostics.push_back(make_diagnostic(lw, source, uri, line_starts));
+            append_diagnostic(result, lw, source, uri, line_starts);
         }
     });
     if (!lint_error.empty()) {
@@ -420,7 +446,7 @@ bool LspAnalysisService::run_pipeline_phases(const std::string& uri, const std::
 
     // Phase 5: Type checking.
     check_cancellation_and_deadline(deadline, "type-check");
-    type_check_phase(program, result, source, uri, prelude_file_id);
+    type_check_phase(program, result, source, uri, line_starts, prelude_file_id);
 
     // Phase 6: Lint.
     check_cancellation_and_deadline(deadline, "lint");

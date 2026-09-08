@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cctype>
 #include <format>
 #include <optional>
 #include <string>
@@ -78,7 +79,7 @@ namespace {
     while (mod_start > limit) {
         const auto mc = static_cast<unsigned char>(text[mod_start - 1]);
 
-        if ((std::isalnum(mc) != 0) || mc == '_') {
+        if ((std::isalnum(mc) != 0) || mc == '_' || mc >= 0x80) {
             --mod_start;
         } else {
             break;
@@ -123,7 +124,7 @@ namespace {
     while (id_end > scan_start) {
         const auto ic = static_cast<unsigned char>(text[id_end - 1]);
 
-        if ((std::isalnum(ic) != 0) || ic == '_') {
+        if ((std::isalnum(ic) != 0) || ic == '_' || ic >= 0x80) {
             --id_end;
         } else {
             break;

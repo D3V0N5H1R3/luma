@@ -20,6 +20,14 @@ bool ConfigurationManager::snippet_support() const noexcept {
     return snippet_support_;
 }
 
+const std::string& ConfigurationManager::position_encoding() const noexcept {
+    return position_encoding_;
+}
+
+bool ConfigurationManager::position_encoding_supported() const noexcept {
+    return position_encoding_supported_;
+}
+
 // Extracts the snippetSupport flag from deeply nested client capabilities.
 // Uses the member API: get() returns a null JsonValue for missing keys,
 // and get_or<bool>() safely returns the default for non-object values,
@@ -36,6 +44,20 @@ void ConfigurationManager::detect_client_capabilities(const JsonValue& params,
                                                       const LogCallback& log) {
     try {
         snippet_support_ = extract_snippet_support(params);
+        const auto& general = params.get("capabilities").get("general");
+        const auto& encodings = general.get("positionEncodings");
+        position_encoding_ = "utf-16";
+        position_encoding_supported_ = true;
+        if (encodings.is_array()) {
+            position_encoding_supported_ = false;
+            for (const auto& encoding : encodings.as_array()) {
+                if (encoding.is_string() && encoding.as_string() == "utf-16") {
+                    position_encoding_ = "utf-16";
+                    position_encoding_supported_ = true;
+                    break;
+                }
+            }
+        }
     } catch (const std::exception& e) {
         // Capability negotiation is best-effort — malformed or
         // unexpected JSON in the client capabilities is non-fatal.

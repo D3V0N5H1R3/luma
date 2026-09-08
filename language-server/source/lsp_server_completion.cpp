@@ -189,8 +189,9 @@ std::optional<std::string> LspCompletionHandler::parse_module_name(const std::st
     while (name_start > line_start) {
         const char c{text[name_start - 1]};
 
+        const auto uc = static_cast<unsigned char>(c);
         if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-            c == '_') {
+            c == '_' || uc >= 0x80) {
             --name_start;
         } else {
             break;

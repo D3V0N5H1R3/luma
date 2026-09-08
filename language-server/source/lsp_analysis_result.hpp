@@ -136,6 +136,8 @@ struct IncludeInfo {
     StringMap<std::string> symbol_origins;
     // File ID → file path mapping (for include origin tracking).
     std::unordered_map<int, std::string> file_id_to_path;
+    // File ID → source text used to render diagnostics from included files.
+    std::unordered_map<int, std::string> file_id_to_source;
     // File ID counter for included files (starts at 1; 0 = main document).
     int next_file_id{1};
 };
@@ -164,6 +166,9 @@ struct AnalysisMetadata {
     std::optional<Program> cached_program;
     // Semantic token data (for full responses and delta computation).
     std::vector<int64_t> semantic_token_data;
+    // Diagnostics grouped by their originating document. Diagnostics for the
+    // root document remain in SemanticAnalysis::diagnostics for compatibility.
+    StringMap<std::vector<Diagnostic>> diagnostics_by_uri;
     // Result ID for semantic tokens delta protocol.
     std::string semantic_token_result_id;
     // Content hash of the source when semantic_token_data was last computed.

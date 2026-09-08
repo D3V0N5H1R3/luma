@@ -12,6 +12,7 @@
 #include "lsp_analysis_cache.hpp"
 #include "lsp_document_store.hpp"
 #include "lsp_pending_uri_set.hpp"
+#include "lsp_semantic_token_cache.hpp"
 #include "lsp_server_state_lock.hpp"
 #include "lsp_workspace_manager.hpp"
 
@@ -44,6 +45,7 @@ public:
         DocumentStore& doc_store;
         LspAnalysisCache& analysis_cache;
         PendingUriSet& pending_uris;
+        SemanticTokenCache& semantic_token_cache;
         WorkspaceManager& workspace;
     };
 
