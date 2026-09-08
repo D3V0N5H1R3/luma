@@ -131,9 +131,8 @@ void test_send_event_broken_pipe_invokes_disconnect_callback() {
     std::atomic<int> disconnect_calls{0};
     handler.set_disconnect_callback([&] { disconnect_calls.fetch_add(1); });
 
-    handler.register_handler("initialize", [](const JsonValue&) {
-        return DapProtocolHandler::HandlerResult::ok();
-    });
+    handler.register_handler(
+        "initialize", [](const JsonValue&) { return DapProtocolHandler::HandlerResult::ok(); });
 
     // Simulate send_event() being called from the execution thread and
     // hitting a broken pipe *before* run() is ever invoked — mirrors the
@@ -164,9 +163,8 @@ void test_send_response_broken_pipe_invokes_disconnect_callback_once() {
     std::atomic<int> disconnect_calls{0};
     handler.set_disconnect_callback([&] { disconnect_calls.fetch_add(1); });
 
-    handler.register_handler("initialize", [](const JsonValue&) {
-        return DapProtocolHandler::HandlerResult::ok();
-    });
+    handler.register_handler(
+        "initialize", [](const JsonValue&) { return DapProtocolHandler::HandlerResult::ok(); });
 
     transport.set_write_fails(true);
 
@@ -202,15 +200,15 @@ void test_recoverable_transport_error_does_not_look_like_eof() {
     transport.queue_line("");
     transport.queue_body("{x}");
 
-    const std::string request = R"({"type":"request","command":"initialize","seq":1,"arguments":{}})";
+    const std::string request =
+        R"({"type":"request","command":"initialize","seq":1,"arguments":{}})";
     transport.queue_line("Content-Length: " + std::to_string(request.size()));
     transport.queue_line("");
     transport.queue_body(request);
 
     DapProtocolHandler handler{transport};
-    handler.register_handler("initialize", [](const JsonValue&) {
-        return DapProtocolHandler::HandlerResult::ok();
-    });
+    handler.register_handler(
+        "initialize", [](const JsonValue&) { return DapProtocolHandler::HandlerResult::ok(); });
 
     ASSERT_EQ(handler.run(), 0);
     ASSERT_EQ(transport.written().size(), 1U);

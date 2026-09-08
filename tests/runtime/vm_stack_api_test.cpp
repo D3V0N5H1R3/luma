@@ -16,8 +16,8 @@
 #include <vector>
 
 #include "runtime/interpreter/value.hpp"
-#include "runtime/vm/vm_exception_handler.hpp"
 #include "runtime/vm/vm.hpp"
+#include "runtime/vm/vm_exception_handler.hpp"
 #include "runtime/vm/vm_stack.hpp"
 #include "runtime/vm/vm_stack_api.hpp"
 #include "test_framework.hpp"

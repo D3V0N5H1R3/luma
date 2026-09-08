@@ -61,7 +61,9 @@ struct ServiceFixture {
     ServiceFixture()
         : service(config, cancel_flag,
                   AnalysisCallbacks{.log = [](const std::string&) {},
-                                    .notify = [](std::string_view, const JsonValue&) {}}) {}
+                                    .notify =
+                                        [](std::string_view, const JsonValue&) {
+                                        }}) {}
 
     [[nodiscard]] AnalysisResult analyze(const std::string& source,
                                          const std::string& uri = "file:///test/main.luma") {
@@ -715,11 +717,12 @@ void test_cancellation_is_quiet_and_flagged() {
     LspAnalysisService service(
         config, cancel_flag,
         AnalysisCallbacks{.log = [](const std::string&) {},
-                          .notify = [&](std::string_view method, const JsonValue&) {
-                              if (method == "window/showMessage") {
-                                  notified = true;
-                              }
-                          }});
+                          .notify =
+                              [&](std::string_view method, const JsonValue&) {
+                                  if (method == "window/showMessage") {
+                                      notified = true;
+                                  }
+                              }});
 
     const auto result =
         service.analyze("file:///test/main.luma", "@main\nfunction void main() {\n}\n");
@@ -739,11 +742,12 @@ void test_timeout_warns_and_is_not_flagged_cancelled() {
     LspAnalysisService service(
         config, cancel_flag,
         AnalysisCallbacks{.log = [](const std::string&) {},
-                          .notify = [&](std::string_view method, const JsonValue&) {
-                              if (method == "window/showMessage") {
-                                  notified = true;
-                              }
-                          }});
+                          .notify =
+                              [&](std::string_view method, const JsonValue&) {
+                                  if (method == "window/showMessage") {
+                                      notified = true;
+                                  }
+                              }});
 
     // A deadline already in the past trips the timeout branch at the first
     // phase check.

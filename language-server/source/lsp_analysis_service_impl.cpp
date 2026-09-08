@@ -178,9 +178,11 @@ void LspAnalysisService::type_check_phase(Program& program, AnalysisResult& resu
     }
 }
 
-void LspAnalysisService::append_diagnostic(
-    AnalysisResult& result, const luma::Diagnostic& diagnostic, const std::string& root_source,
-    const std::string& root_uri, const std::vector<std::size_t>& root_line_starts) {
+void LspAnalysisService::append_diagnostic(AnalysisResult& result,
+                                           const luma::Diagnostic& diagnostic,
+                                           const std::string& root_source,
+                                           const std::string& root_uri,
+                                           const std::vector<std::size_t>& root_line_starts) {
     const auto file_id = diagnostic.primary_location().file_id;
     if (file_id == 0) {
         result.semantic.diagnostics.push_back(
