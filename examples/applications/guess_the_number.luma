@@ -73,10 +73,14 @@ function boolean ask_yes_no(string question) {
             return false
         }
 
-        print("Please answer 'y' or 'n'.")
+        print("Invalid input. Type 'y' for yes or 'n' for no.")
     }
 
     return false
+}
+
+function string replay_prompt() {
+    return "\nPlay again? Enter y to continue, n to quit: "
 }
 
 @main
@@ -100,10 +104,16 @@ function void main() {
 
         print("\nScore: ${wins}/${rounds}")
 
-        if !ask_yes_no("\nPlay again? (y/n): ") {
+        if !ask_yes_no(replay_prompt()) {
             is_playing = false
         }
     }
 
     print("\nThanks for playing! Final score: ${wins}/${rounds}")
+}
+
+@test
+function void test_replay_prompt_explains_both_choices() {
+    assert(String.contains(replay_prompt(), "Enter y to continue"))
+    assert(String.contains(replay_prompt(), "n to quit"))
 }

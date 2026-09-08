@@ -127,6 +127,7 @@ record EditorState {
 choice Command {
     Quit
     ForceQuit
+    Help
     Save
     SaveQuit
     SaveAs(string path)
@@ -141,6 +142,9 @@ function Command parse_command(string buffer) {
     }
     if buffer == "q!" {
         return Command.ForceQuit
+    }
+    if buffer == "help" {
+        return Command.Help
     }
     if buffer == "w" {
         return Command.Save
@@ -225,6 +229,11 @@ function EditorState execute_command(EditorState state) {
         }
         case Command.ForceQuit {
             updated.is_running = false
+        }
+        case Command.Help {
+            updated.status_message =
+                "Commands: :i insert  :w save  :w <file> save as  :e <file> open  :q quit  :q! force quit"
+            updated.mode = "normal"
         }
         case Command.Save {
             if String.length(updated.filename) == 0 {
@@ -525,7 +534,7 @@ function void render_editor(EditorState state, integer cols, integer rows, integ
         Terminal.write(state.status_message)
     } else {
         Terminal.write(Terminal.dim(
-            "i insert  Esc normal  :w save  :q quit  hjkl/arrows move"))
+            "Help: i insert | Esc normal | :w save | :e open | :q quit | :help commands"))
     }
 
     number display_row = state.cursor_row - state.scroll_offset + 1
@@ -583,7 +592,7 @@ function EditorState new_editor(array<string> lines) {
         cursor_col = 0,
         scroll_offset = 0,
         mode = "normal",
-        status_message = "Editor | i: insert  :e open  :w save  :q quit",
+        status_message = "Help: i insert | Esc normal | :w save | :e open | :q quit | :help commands",
         filename = "",
         is_modified = false,
         is_running = true,
@@ -761,6 +770,7 @@ function void test_loop_quit_guarded_when_modified() {
 function void test_parse_command_classifies_verbs() {
     assert(command_label(parse_command("q")) == "quit")
     assert(command_label(parse_command("q!")) == "force_quit")
+    assert(command_label(parse_command("help")) == "help")
     assert(command_label(parse_command("w")) == "save")
     assert(command_label(parse_command("wq")) == "save_quit")
     assert(command_label(parse_command("x")) == "save_quit")
@@ -781,6 +791,9 @@ function string command_label(Command command) {
         }
         case Command.ForceQuit {
             return "force_quit"
+        }
+        case Command.Help {
+            return "help"
         }
         case Command.Save {
             return "save"
