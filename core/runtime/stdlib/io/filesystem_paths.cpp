@@ -156,16 +156,20 @@ void register_filesystem_paths(const EnvPtr& env) {
 
             const auto path = std::filesystem::path{args[0].as_string()};
             const auto base = std::filesystem::path{args[1].as_string()};
+            const auto relative_path = path.lexically_relative(base);
 
-            return Value{path.lexically_relative(base).string()};
+            // Keep path values produced for later file operations inside the
+            // working-directory sandbox.
+            (void)validate_path(relative_path.string(), loc);
+
+            return Value{relative_path.string()};
         })
         .func("absolute_path", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
             const std::string& path_str = expect_string(args[0], "FileSystem.absolute_path", loc);
-            // Pure path operation — no filesystem access, so no path
-            // validation against the working directory.
             return wrap_result_operation("FileSystem", "absolute_path", [&]() -> Value {
-                return make_success_value(Value{std::filesystem::absolute(path_str).string()});
+                const auto safe_path = validate_path(path_str, loc);
+                return make_success_value(Value{safe_path.string()});
             });
         })
         .func("home_directory", 0)

@@ -683,7 +683,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 
 | Function                                  | Parameter Types           | Return Type             | Description                                           |
 | ----------------------------------------- | ------------------------- | ----------------------- | ----------------------------------------------------- |
-| `FileSystem.absolute_path(path)`          | `(string)`                | `result<string>`        | Resolve to absolute path                              |
+| `FileSystem.absolute_path(path)`          | `(string)`                | `result<string>`        | Resolve to an absolute path inside the working-directory sandbox |
 | `FileSystem.append_file(path, data)`      | `(string, string)`        | `result<boolean>`       | Append data to a file                                 |
 | `FileSystem.copy(src, dst)`               | `(string, string)`        | `result<boolean>`       | Copy a file                                           |
 | `FileSystem.copy_directory(from, to)`     | `(string, string)`        | `result<boolean>`       | Recursively copy a directory tree; fail if `to` exists or a symlink is encountered |
@@ -715,7 +715,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.read_file_limited(path, maximum)` | `(string, integer)`       | `result<string>`        | Read file; fail if it exceeds `maximum` bytes             |
 | `FileSystem.read_file_typed(path)`        | `(string)`                | `result<string, FileSystem.IoError>` | Read entire file; on failure the error is a typed `FileSystem.IoError` instead of a string |
 | `FileSystem.read_lines(path)`             | `(string)`                | `result<array<string>>` | Read file as array of lines                           |
-| `FileSystem.relative(path, base)`         | `(string, string)`        | `string`                | Relative path from `base`                             |
+| `FileSystem.relative(path, base)`         | `(string, string)`        | `string`                | Relative path from `base`; fail if the result escapes the working-directory sandbox |
 | `FileSystem.rename(old, new)`             | `(string, string)`        | `result<boolean>`       | Rename a file                                         |
 | `FileSystem.rename_directory(old, new)`   | `(string, string)`        | `result<boolean>`       | Rename a directory; fail if path is not a directory   |
 | `FileSystem.size(path)`                   | `(string)`                | `result<integer>`       | File size in bytes                                    |

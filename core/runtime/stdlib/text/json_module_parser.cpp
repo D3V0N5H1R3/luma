@@ -6,8 +6,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
-#include <cstdlib>
 #include <format>
 #include <stdexcept>
 #include <string>
@@ -23,16 +23,17 @@ namespace luma {
 
 namespace {
 
-// Convert an already-validated JSON numeric token to double.  std::stod throws
-// std::out_of_range when the magnitude is outside double's range (e.g. 1e400 or
-// the underflowing 1e-400); a valid JSON document must still parse, so fall back
-// to std::strtod, which saturates to +/-inf or 0 rather than throwing.
-[[nodiscard]] double parse_double_saturating(const std::string& num_str) {
-    try {
-        return std::stod(num_str);
-    } catch (const std::out_of_range&) {
-        return std::strtod(num_str.c_str(), nullptr);
+// Convert an already-validated JSON numeric token to a finite double. JSON
+// numbers outside the runtime's numeric domain must fail rather than becoming
+// infinity, NaN, or a silently rounded underflow.
+[[nodiscard]] double parse_double_strict(const std::string& num_str) {
+    const double value = std::stod(num_str);
+
+    if (!std::isfinite(value)) {
+        throw std::out_of_range{"JSON number is not finite"};
     }
+
+    return value;
 }
 
 // Error-reporting policy for the JSON cursor: every scanner error surfaces as a
@@ -338,14 +339,14 @@ private:
         auto num_str = std::string{input_.substr(start, pos_ - start)};
 
         if (is_float) {
-            return Value{parse_double_saturating(num_str)};
+            return Value{parse_double_strict(num_str)};
         }
 
         try {
             return Value{static_cast<std::int64_t>(std::stoll(num_str))};
         } catch (const std::out_of_range&) {
             // Integer literal too large for int64 — represent it as a double.
-            return Value{parse_double_saturating(num_str)};
+            return Value{parse_double_strict(num_str)};
         }
     }
 

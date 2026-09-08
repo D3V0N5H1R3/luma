@@ -18,6 +18,10 @@ static void test_filesystem_absolute_path() {
                 std::string_view{"some_file.txt"}.size());
 }
 
+static void test_filesystem_absolute_path_rejects_escape() {
+    ASSERT_EVAL_FAILURE(R"(FileSystem.absolute_path("../outside.txt"))");
+}
+
 static void test_filesystem_delete_directory_not_a_dir() {
     // Trying to delete a non-directory should fail.
     ASSERT_EVAL_FAILURE("FileSystem.delete_directory(\"nonexistent_dir_xyz\")");
@@ -633,6 +637,10 @@ static void test_filesystem_relative_strips_base() {
     ASSERT_EQ(eval(R"(FileSystem.relative("a/b/c", "a/b"))").as_string(), "c");
 }
 
+static void test_filesystem_relative_rejects_escape() {
+    ASSERT_THROWS(eval(R"(FileSystem.relative("a", "a/b"))"));
+}
+
 static void test_filesystem_name_returns_filename() {
     ASSERT_EQ(eval(R"(FileSystem.name("dir/sub/file.txt"))").as_string(), "file.txt");
 }
@@ -742,6 +750,7 @@ static void test_filesystem_read_file_limited_rejects_negative_max_bytes() {
 
 int main() {
     RUN(test_filesystem_absolute_path);
+    RUN(test_filesystem_absolute_path_rejects_escape);
     RUN(test_filesystem_delete_directory_not_a_dir);
     RUN(test_filesystem_exists_returns_result);
     RUN(test_filesystem_is_absolute);
@@ -798,6 +807,7 @@ int main() {
     RUN(test_filesystem_normalize_collapses_dotdot);
     RUN(test_filesystem_join_combines_segments);
     RUN(test_filesystem_relative_strips_base);
+    RUN(test_filesystem_relative_rejects_escape);
     RUN(test_filesystem_name_returns_filename);
     RUN(test_filesystem_extension_multi_dot);
     RUN(test_filesystem_is_relative_true);
