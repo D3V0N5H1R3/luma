@@ -455,7 +455,7 @@ function void main() {
 
         let mut names: Vec<String> = Vec::new();
         while let Some(m) = matches.next() {
-            for cap in m.captures {
+            for cap in m.captures() {
                 let name = query.capture_names()[cap.index as usize].to_string();
                 if !names.contains(&name) {
                     names.push(name);
@@ -586,7 +586,7 @@ function void main() {
 
         let mut results = Vec::new();
         while let Some(m) = matches.next() {
-            for cap in m.captures {
+            for cap in m.captures() {
                 let cap_name = query.capture_names()[cap.index as usize].to_string();
                 let text = cap
                     .node
@@ -635,17 +635,42 @@ function void main() {
     #[test]
     fn outline_captures_annotated_function() {
         let items = outline_capture_names("@main\nfunction void main() {}\n");
-        assert!(
+        assert_eq!(
             items
                 .iter()
-                .any(|(cap, text)| cap == "name" && text == "main"),
-            "expected annotated function 'main' in outline: {items:?}"
+                .filter(|(cap, text)| cap == "name" && text == "main")
+                .count(),
+            1,
+            "expected one annotated function 'main' in outline: {items:?}"
         );
         assert!(
             items
                 .iter()
                 .any(|(cap, text)| cap == "context" && text == "@main"),
             "expected annotation context '@main' in outline: {items:?}"
+        );
+    }
+
+    #[test]
+    fn outline_captures_annotated_and_unannotated_functions_once() {
+        let items = outline_capture_names(
+            "@test\nfunction void test_value() {}\nfunction void helper() {}\n",
+        );
+        assert_eq!(
+            items
+                .iter()
+                .filter(|(cap, text)| cap == "name" && text == "test_value")
+                .count(),
+            1,
+            "expected one annotated function item: {items:?}"
+        );
+        assert_eq!(
+            items
+                .iter()
+                .filter(|(cap, text)| cap == "name" && text == "helper")
+                .count(),
+            1,
+            "expected one unannotated function item: {items:?}"
         );
     }
 
@@ -662,7 +687,7 @@ function void main() {
 
         let mut results = Vec::new();
         while let Some(m) = matches.next() {
-            for cap in m.captures {
+            for cap in m.captures() {
                 let cap_name = query.capture_names()[cap.index as usize].to_string();
                 let text = cap
                     .node

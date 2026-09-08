@@ -19,6 +19,11 @@ function isRedirect(status: number | undefined): boolean {
     return REDIRECT_STATUS_CODES.has(status ?? 0);
 }
 
+/** Resolves a redirect location against the URL that produced it. */
+export function resolveRedirectUrl(location: string, current_url: string): string {
+    return new URL(location, current_url).toString();
+}
+
 // ─── Retry policy ─────────────────────────────────────────────────
 
 export interface RetryOptions {
@@ -85,12 +90,13 @@ export function fetchResponse(url: string, redirects = 0): Promise<http.Incoming
                         );
                         return;
                     }
-                    if (url.startsWith("https") && !res.headers.location.startsWith("https")) {
+                    const redirect_url = resolveRedirectUrl(res.headers.location, url);
+                    if (!redirect_url.startsWith("https://")) {
                         reject(new Error("Refusing HTTPS → HTTP redirect (security downgrade)"));
                         return;
                     }
                     res.resume();
-                    fetchResponse(res.headers.location, redirects + 1).then(resolve, reject);
+                    fetchResponse(redirect_url, redirects + 1).then(resolve, reject);
                     return;
                 }
                 if (res.statusCode !== 200) {

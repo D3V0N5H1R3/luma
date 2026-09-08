@@ -10,9 +10,7 @@
   name: (function_name) @name) @item
 
 (annotation_declaration
-  (annotation) @context
-  (function_declaration
-    name: (function_name) @name)) @item
+  (annotation) @context)
 
 ; ─── Records ───────────────────────────────────────────────────────
 

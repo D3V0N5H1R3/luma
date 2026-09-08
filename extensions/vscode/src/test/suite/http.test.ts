@@ -1,6 +1,6 @@
 import * as assert from "node:assert";
 
-import { withRetry, fetchResponse } from "../../utils/http";
+import { withRetry, fetchResponse, resolveRedirectUrl } from "../../utils/http";
 
 suite("withRetry", () => {
     test("should return value on first success", async () => {
@@ -112,6 +112,20 @@ suite("withRetry", () => {
 });
 
 suite("fetchResponse guards", () => {
+    test("resolves relative HTTPS redirects against the current URL", () => {
+        assert.strictEqual(
+            resolveRedirectUrl("/releases/latest", "https://example.com/api/releases"),
+            "https://example.com/releases/latest",
+        );
+    });
+
+    test("preserves HTTP scheme when resolving a downgrade target", () => {
+        assert.strictEqual(
+            resolveRedirectUrl("http://example.com/file", "https://example.com/start"),
+            "http://example.com/file",
+        );
+    });
+
     test("refuses a plain-HTTP URL (no network call)", async () => {
         await assert.rejects(
             () => fetchResponse("http://example.com/file"),
