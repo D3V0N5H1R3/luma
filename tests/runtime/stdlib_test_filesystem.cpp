@@ -637,8 +637,14 @@ static void test_filesystem_relative_strips_base() {
     ASSERT_EQ(eval(R"(FileSystem.relative("a/b/c", "a/b"))").as_string(), "c");
 }
 
-static void test_filesystem_relative_rejects_escape() {
-    ASSERT_THROWS(eval(R"(FileSystem.relative("a", "a/b"))"));
+static void test_filesystem_relative_allows_upward() {
+    // relative() is a pure lexical operation: an upward result is legitimate and
+    // must be returned verbatim, not rejected (the sandbox is enforced only at
+    // real I/O boundaries). lexically_relative uses the platform-native
+    // separator, so build the expectation the same way.
+    ASSERT_EQ(eval(R"(FileSystem.relative("a", "a/b"))").as_string(), "..");
+    const auto expected = std::filesystem::path{"../b"}.make_preferred().string();
+    ASSERT_EQ(eval(R"(FileSystem.relative("a/b", "a/c"))").as_string(), expected);
 }
 
 static void test_filesystem_name_returns_filename() {
@@ -807,7 +813,7 @@ int main() {
     RUN(test_filesystem_normalize_collapses_dotdot);
     RUN(test_filesystem_join_combines_segments);
     RUN(test_filesystem_relative_strips_base);
-    RUN(test_filesystem_relative_rejects_escape);
+    RUN(test_filesystem_relative_allows_upward);
     RUN(test_filesystem_name_returns_filename);
     RUN(test_filesystem_extension_multi_dot);
     RUN(test_filesystem_is_relative_true);

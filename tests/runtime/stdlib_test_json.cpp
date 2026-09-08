@@ -15,6 +15,14 @@ static void test_json_rejects_out_of_double_range_numbers() {
     ASSERT_FALSE(eval(R"(Json.is_valid("{\"v\": -1e400}"))").is_truthy());
     ASSERT_EVAL_FAILURE(R"(Json.deserialize("1e400"))");
     ASSERT_EVAL_FAILURE(R"(Json.deserialize("-1e400"))");
+
+    // Representable numbers — including an exact zero, which must not be
+    // mistaken for an underflow — still parse.
+    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": 0}"))").is_truthy());
+    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": 0.0}"))").is_truthy());
+    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": 1e-300}"))").is_truthy());
+    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": 1e300}"))").is_truthy());
+    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": -2.5e10}"))").is_truthy());
 }
 
 static void test_json_is_valid() {

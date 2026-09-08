@@ -156,13 +156,14 @@ void register_filesystem_paths(const EnvPtr& env) {
 
             const auto path = std::filesystem::path{args[0].as_string()};
             const auto base = std::filesystem::path{args[1].as_string()};
-            const auto relative_path = path.lexically_relative(base);
 
-            // Keep path values produced for later file operations inside the
-            // working-directory sandbox.
-            (void)validate_path(relative_path.string(), loc);
-
-            return Value{relative_path.string()};
+            // Pure lexical operation — no filesystem access. lexically_relative
+            // legitimately yields ".."-prefixed results (e.g. relative("a/b",
+            // "a/c") == "../b"), and the result is relative to `base`, not the
+            // working directory, so it must NOT be run through validate_path:
+            // the sandbox is already enforced at every real I/O boundary
+            // (read_file, write_file, ...).
+            return Value{path.lexically_relative(base).string()};
         })
         .func("absolute_path", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
