@@ -271,15 +271,20 @@ luma_resolve_copilot_model() {
 
     local probe
     probe="$(mktemp "${TMPDIR:-/tmp}/luma-model-probe.XXXXXX")"
-    local -a runner=("$exe" -p "Reply with the single word: ok. Do not use any tools."
+    # Deliver the probe prompt on stdin, not as a `-p` argv element, so it
+    # survives every launch boundary (npm .cmd shim, WSL interop) exactly like
+    # the phase prompts - otherwise a mangled probe could never observe the CLI's
+    # "model is not available" message and the fallback would misfire.
+    local probe_prompt='Reply with the single word: ok. Do not use any tools.'
+    local -a runner=("$exe"
         --model "$model" --output-format=json --available-tools="view"
         --allow-all-tools --no-ask-user --no-color)
     # Bound the success-path probe so a slow model turn cannot stall the run;
     # `timeout` is absent on stock macOS, so degrade to an unbounded call there.
     if command -v timeout >/dev/null 2>&1; then
-        ( cd -- "$repo_root" && timeout 90 "${runner[@]}" ) >"$probe" 2>&1 || true
+        printf '%s' "$probe_prompt" | ( cd -- "$repo_root" && timeout 90 "${runner[@]}" ) >"$probe" 2>&1 || true
     else
-        ( cd -- "$repo_root" && "${runner[@]}" ) >"$probe" 2>&1 || true
+        printf '%s' "$probe_prompt" | ( cd -- "$repo_root" && "${runner[@]}" ) >"$probe" 2>&1 || true
     fi
 
     if grep -qiE "model .*is not available" "$probe"; then
@@ -342,7 +347,16 @@ luma_invoke_agent_phase() {
             args+=(--effort "$effort")
         fi
     else
-        args=(-p "$instruction" --allow-all-tools --no-ask-user --no-color)
+        # The prompt is delivered on stdin, not as a `-p <text>` argv element:
+        # a multi-line prompt passed on the command line is mangled whenever the
+        # process is launched across a boundary that cannot carry newlines in an
+        # argv element - an npm `copilot.cmd` shim (cmd.exe re-splits `%*`) or the
+        # WSL/Windows interop layer - which splits the prompt's paragraphs into
+        # stray positional arguments and makes Copilot abort with "Invalid command
+        # format ... the extra words were treated as separate arguments". `-p` is
+        # omitted entirely; Copilot reads the piped stdin as the prompt and still
+        # runs non-interactively because stdin is not a TTY.
+        args=(--allow-all-tools --no-ask-user --no-color)
         if [[ "$mode" == plan ]]; then
             # Read-only audit. Do NOT use Copilot's interactive `--plan` mode
             # here: in a non-interactive `-p` run it delivers its result through
@@ -369,7 +383,13 @@ luma_invoke_agent_phase() {
         if [[ -n "$model" ]]; then
             args+=(--model="$model")
         fi
-        if [[ -n "$effort" ]]; then
+        # Copilot rejects reasoning-effort configuration for the 'auto' model, and
+        # an omitted --model also resolves to 'auto'. Passing --effort in either
+        # case aborts every phase ("Model \"auto\" does not support reasoning
+        # effort configuration"), which is what happens after
+        # luma_resolve_copilot_model falls a mis-entitled model back to 'auto'.
+        # Only forward --effort for an explicit, non-auto model that honours it.
+        if [[ -n "$effort" && -n "$model" && "$model" != auto ]]; then
             args+=(--effort="$effort")
         fi
     fi
@@ -378,6 +398,10 @@ luma_invoke_agent_phase() {
         local rendered
         rendered="$(luma_render_command "$exe_name" "${args[@]}")"
         printf '%s  [dry-run] %s%s\n' "$LUMA_CLR_DIM" "$rendered" "$LUMA_CLR_OFF"
+        # Copilot's prompt arrives on stdin; claude still carries it in argv.
+        if [[ "$agent" == copilot ]]; then
+            printf '%s  [dry-run] stdin  <- <instruction>%s\n' "$LUMA_CLR_DIM" "$LUMA_CLR_OFF"
+        fi
         if [[ "$mode" == plan ]]; then
             printf '%s  [dry-run] stdout -> %s%s\n' "$LUMA_CLR_DIM" "$sink" "$LUMA_CLR_OFF"
         else
@@ -403,7 +427,11 @@ luma_invoke_agent_phase() {
             local raw err
             raw="$(mktemp "${TMPDIR:-/tmp}/luma-report.XXXXXX")"
             err="$(mktemp "${TMPDIR:-/tmp}/luma-report-err.XXXXXX")"
-            if ( cd -- "$repo_root" && "$exe" "${args[@]}" ) >"$raw" 2>"$err"; then
+            # Feed the prompt on stdin (see the arg construction): a piped prompt
+            # reaches the CLI verbatim across every launch boundary, unlike a
+            # multi-line `-p` argv element. The pipeline's exit status is the
+            # subshell's (printf never fails), so the agent's own code stands.
+            if printf '%s' "$instruction" | ( cd -- "$repo_root" && "$exe" "${args[@]}" ) >"$raw" 2>"$err"; then
                 exit_code=0
             else
                 exit_code=$?
@@ -455,10 +483,36 @@ luma_invoke_agent_phase() {
             fi
         fi
     else
-        if ( cd -- "$repo_root" && "$exe" "${args[@]}" ) > >(tee "$sink") 2>&1; then
-            exit_code=0
+        # Mutating 'agent' mode. Copilot takes its prompt on stdin (its args
+        # carry no `-p`); claude keeps its prompt in argv, so only copilot is fed.
+        # `tee` is the LAST pipeline stage (not a `> >(tee ...)` process
+        # substitution) so $sink is fully flushed when the pipeline returns - the
+        # quota check below reads it - and the agent's own status is taken from
+        # PIPESTATUS rather than tee's exit. The `if` wrapper keeps `set -e` /
+        # pipefail from aborting on a non-zero agent exit before we capture it.
+        local -a phase_status=()
+        if [[ "$agent" == copilot ]]; then
+            if printf '%s' "$instruction" | ( cd -- "$repo_root" && "$exe" "${args[@]}" ) 2>&1 | tee "$sink"; then
+                phase_status=("${PIPESTATUS[@]}")
+            else
+                phase_status=("${PIPESTATUS[@]}")
+            fi
+            exit_code="${phase_status[1]}"
         else
-            exit_code=$?
+            if ( cd -- "$repo_root" && "$exe" "${args[@]}" ) 2>&1 | tee "$sink"; then
+                phase_status=("${PIPESTATUS[@]}")
+            else
+                phase_status=("${PIPESTATUS[@]}")
+            fi
+            exit_code="${phase_status[0]}"
+        fi
+        # Copilot exits 0 even after printing "You have exceeded your monthly
+        # quota" and doing no work; that must not be recorded as a successful
+        # phase. Surface it as a failure (which aborts the run by default) with a
+        # clear, actionable message.
+        if [[ "$agent" == copilot && "$exit_code" -eq 0 ]] && luma_transcript_quota_exhausted "$sink"; then
+            luma_warn "Copilot monthly quota exceeded; this phase did no work. Wait for the quota to reset (or switch account/model), then re-run."
+            exit_code=1
         fi
     fi
     return "$exit_code"
@@ -892,6 +946,16 @@ luma_should_abort() {
     [[ "$continue_on_failure" != true ]] && return 0
     [[ "$status" == commit-failed && "$revert_on_failure" != true ]] && return 0
     return 1
+}
+
+# Detect Copilot's monthly-quota exhaustion in a phase transcript. The CLI prints
+# "You have exceeded your monthly quota" and then exits 0 without doing the work,
+# so an agent phase relying on the exit code alone would record a hollow success.
+# Returns 0 (found) or 1 (not found / missing file).
+luma_transcript_quota_exhausted() {
+    local file="$1"
+    [[ -f "$file" ]] || return 1
+    grep -qiF 'exceeded your monthly quota' "$file"
 }
 
 # Move the pipeline artifact root aside into .git/ so the release-verification

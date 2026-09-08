@@ -114,8 +114,12 @@ function Resolve-CopilotModel {
     try { $Executable = Get-AgentExecutable -Agent 'copilot' }
     catch { return $Model }
 
+    # The probe prompt is delivered on stdin, not as a `-p` argv element, so it
+    # survives every launch boundary (npm .cmd shim, WSL interop) exactly like
+    # the phase prompts do - otherwise a mangled probe could never observe the
+    # CLI's "model is not available" message and the fallback would misfire.
+    $ProbePrompt = 'Reply with the single word: ok. Do not use any tools.'
     $ProbeArgs = @(
-        '-p', 'Reply with the single word: ok. Do not use any tools.'
         '--model', $Model
         '--output-format=json'
         '--available-tools=view'
@@ -130,7 +134,7 @@ function Resolve-CopilotModel {
         $Pushed = $true
     }
     try {
-        $Output = & $Executable @ProbeArgs 2>&1
+        $Output = $ProbePrompt | & $Executable @ProbeArgs 2>&1
     }
     catch {
         $Output = $_.Exception.Message
@@ -269,6 +273,31 @@ function Get-AgentReportFromJsonl {
     return $Report
 }
 
+function Test-CopilotQuotaExhausted {
+    <#
+    .SYNOPSIS
+        Detect Copilot's monthly-quota exhaustion in a phase transcript.
+    .DESCRIPTION
+        The Copilot CLI prints "You have exceeded your monthly quota" and then
+        exits 0 without doing the work, so an agent phase that trusts the exit
+        code alone would record a hollow success. Returns $true when the log file
+        contains the quota signature, $false otherwise (including a missing or
+        unreadable file).
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) {
+        return $false
+    }
+    $Text = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+    if ([string]::IsNullOrEmpty($Text)) { return $false }
+    return $Text.IndexOf('exceeded your monthly quota', [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+}
+
 function Build-ClaudeArgumentList {
     <#
     .SYNOPSIS
@@ -336,16 +365,24 @@ function Build-CopilotArgumentList {
         mode, isolated from Invoke-AgentPhase so the agent's contract is easy to
         compare and unit-test. The order is significant and mirrors the rendered
         -DryRun line exactly.
+
+        The instruction is deliberately NOT placed on the command line: Copilot
+        reads its prompt from stdin (the caller pipes $Instruction in). Passing a
+        multi-line prompt as a `-p <text>` argument is mangled whenever the
+        process is launched across a boundary that cannot carry newlines in an
+        argv element - an npm `copilot.cmd` shim (cmd.exe re-splits `%*`) or the
+        WSL/Windows interop layer - which splits the prompt's paragraphs into
+        stray positional arguments and makes Copilot abort with "Invalid command
+        format ... the extra words were treated as separate arguments". Stdin
+        carries the prompt verbatim through every such boundary.
     .OUTPUTS
         [System.Collections.Generic.List[string]] - the ordered arguments.
     #>
     [CmdletBinding()]
     [OutputType([System.Collections.Generic.List[string]])]
     param(
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Instruction,
-
+        # No Instruction parameter: the copilot prompt is delivered on stdin by
+        # Invoke-AgentPhase, not as an argv element (see the .DESCRIPTION note).
         [Parameter(Mandatory)]
         [ValidateSet('plan', 'agent')]
         [string]$Mode,
@@ -358,9 +395,9 @@ function Build-CopilotArgumentList {
     )
 
     $Arguments = [System.Collections.Generic.List[string]]::new()
-    $Arguments.Add('-p')
-    $Arguments.Add($Instruction)
-
+    # The prompt is delivered on stdin (see the .DESCRIPTION note); `-p` is
+    # omitted entirely, so Copilot reads the piped stdin as the prompt and still
+    # runs non-interactively because stdin is not a TTY.
     $Arguments.Add('--allow-all-tools')
     $Arguments.Add('--no-ask-user')
     $Arguments.Add('--no-color')
@@ -390,7 +427,13 @@ function Build-CopilotArgumentList {
     }
     if ($LogDir) { $Arguments.Add("--log-dir=$LogDir") }
     if ($Model) { $Arguments.Add("--model=$Model") }
-    if ($Effort) { $Arguments.Add("--effort=$Effort") }
+    # Copilot rejects reasoning-effort configuration for the 'auto' model, and an
+    # omitted --model also resolves to 'auto'. Passing --effort in either case
+    # makes every phase abort ("Model \"auto\" does not support reasoning effort
+    # configuration"), which is exactly what happens after Resolve-CopilotModel
+    # falls a mis-entitled model back to 'auto'. Only forward --effort for an
+    # explicit, non-auto model that can actually honour it.
+    if ($Effort -and $Model -and $Model -ne 'auto') { $Arguments.Add("--effort=$Effort") }
 
     # -NoEnumerate returns the List intact (an unwrapped `, $Arguments` reads to
     # the analyzer as object[], desyncing it from the declared OutputType).
@@ -448,7 +491,9 @@ function Invoke-AgentPhase {
         $Arguments = Build-ClaudeArgumentList -Instruction $Instruction -Mode $Mode -Model $Model -Effort $Effort
     }
     else {
-        $Arguments = Build-CopilotArgumentList -Instruction $Instruction -Mode $Mode -Model $Model -Effort $Effort -LogDir $LogDir
+        # Copilot receives its prompt on stdin (piped below), not as an argv
+        # element, so the builder takes no Instruction.
+        $Arguments = Build-CopilotArgumentList -Mode $Mode -Model $Model -Effort $Effort -LogDir $LogDir
     }
 
     if ($DryRun) {
@@ -458,6 +503,8 @@ function Invoke-AgentPhase {
                 else { $_ }
             }) -join ' '
         Write-Host "    [dry-run] $Agent $Rendered" -ForegroundColor DarkGray
+        # Copilot's prompt arrives on stdin; claude still carries it in argv.
+        if ($Agent -eq 'copilot') { Write-Host '    [dry-run] stdin   <- <instruction>' -ForegroundColor DarkGray }
         if ($OutputFile) { Write-Host "    [dry-run] stdout -> $OutputFile" -ForegroundColor DarkGray }
         if ($LogFile) { Write-Host "    [dry-run] tee     -> $LogFile" -ForegroundColor DarkGray }
         return [pscustomobject]@{ Mode = $Mode; ExitCode = 0; Success = $true; DryRun = $true; OutputFile = $OutputFile; LogFile = $LogFile }
@@ -478,7 +525,10 @@ function Invoke-AgentPhase {
                 # lost, and can be surfaced when the agent produces no report.
                 $ErrFile = [System.IO.Path]::GetTempFileName()
                 try {
-                    $RawOutput = & $Executable @Arguments 2> $ErrFile
+                    # Deliver the prompt on stdin (see Build-CopilotArgumentList):
+                    # a piped string reaches the CLI verbatim across every launch
+                    # boundary, unlike a multi-line `-p` argv element.
+                    $RawOutput = $Instruction | & $Executable @Arguments 2> $ErrFile
                     $ExitCode = $LASTEXITCODE
                     $Report = Get-AgentReportFromJsonl -JsonlLines @($RawOutput)
                     if (-not [string]::IsNullOrWhiteSpace($Report)) {
@@ -537,13 +587,35 @@ function Invoke-AgentPhase {
             }
         }
         else {
-            if ($LogFile) {
-                & $Executable @Arguments 2>&1 | Tee-Object -FilePath $LogFile
+            # Mutating 'agent' mode. Copilot takes its prompt on stdin (its args
+            # carry no `-p`); claude keeps its prompt in argv, so only copilot is
+            # fed here.
+            if ($Agent -eq 'copilot') {
+                if ($LogFile) {
+                    $Instruction | & $Executable @Arguments 2>&1 | Tee-Object -FilePath $LogFile
+                }
+                else {
+                    $Instruction | & $Executable @Arguments
+                }
             }
             else {
-                & $Executable @Arguments
+                if ($LogFile) {
+                    & $Executable @Arguments 2>&1 | Tee-Object -FilePath $LogFile
+                }
+                else {
+                    & $Executable @Arguments
+                }
             }
             $ExitCode = $LASTEXITCODE
+
+            # Copilot exits 0 even after printing "You have exceeded your monthly
+            # quota" and doing no work; that must not be recorded as a successful
+            # phase. When the transcript shows quota exhaustion, force a failure
+            # (which aborts the run by default) with a clear, actionable message.
+            if ($Agent -eq 'copilot' -and $ExitCode -eq 0 -and (Test-CopilotQuotaExhausted -Path $LogFile)) {
+                Write-Warning 'Copilot monthly quota exceeded; this phase did no work. Wait for the quota to reset (or switch account/model), then re-run.'
+                $ExitCode = 1
+            }
         }
     }
     finally {
