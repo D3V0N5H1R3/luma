@@ -171,9 +171,6 @@ namespace {
             if (desc.named_type == "Decimal.Error") {
                 return TypeInfo::make_named(K::Choice, "Decimal.Error");
             }
-            if (desc.named_type == "Color.Name") {
-                return TypeInfo::make_named(K::Choice, "Color.Name");
-            }
             if (desc.named_type == "Math.Angle") {
                 return TypeInfo::make_named(K::Choice, "Math.Angle");
             }

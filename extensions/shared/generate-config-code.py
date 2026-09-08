@@ -67,8 +67,8 @@ def generate_vscode_config_accessor(defaults: dict) -> str:
     """Generate the strongly-typed ``LumaConfig`` accessor and ``luma_config`` singleton.
 
     One getter is emitted per VS Code-exposed setting. The getter name is the
-    snake_case form of the canonical key (``inlayHints.enabled`` ->
-    ``inlay_hints_enabled``); the lookup/default key is the VS Code property name
+    snake_case form of the canonical key (``lsp.autoUpdate`` ->
+    ``lsp_auto_update``); the lookup/default key is the VS Code property name
     with the ``luma.`` section prefix stripped (so ``interpreter.path`` ->
     ``luma.path`` -> ``path``), matching ``CONFIG_DEFAULTS`` in config.ts.
     """

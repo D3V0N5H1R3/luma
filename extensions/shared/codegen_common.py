@@ -107,7 +107,7 @@ def banner(
 
 
 def camel_to_snake(name: str) -> str:
-    """Convert a camelCase token to snake_case (``inlayHints`` -> ``inlay_hints``)."""
+    """Convert a camelCase token to snake_case (``autoUpdate`` -> ``auto_update``)."""
     out: list[str] = []
     for ch in name:
         if ch.isupper() and out:
@@ -163,8 +163,8 @@ def ts_type(type_name: str) -> str:
 def snake_accessor(key: str) -> str:
     """Convert a canonical setting key to a snake_case accessor name.
 
-    ``inlayHints.enabled`` -> ``inlay_hints_enabled``; ``lsp.autoUpdate`` ->
-    ``lsp_auto_update``; ``interpreter.path`` -> ``interpreter_path``.
+    ``lsp.autoUpdate`` -> ``lsp_auto_update``; ``interpreter.path`` ->
+    ``interpreter_path``.
     """
     return camel_to_snake(key.replace(".", "_"))
 
@@ -203,8 +203,9 @@ def vscode_settings(defaults: dict) -> Iterator[tuple[str, str, dict]]:
     """Yield ``(canonical_key, property_key, spec)`` for VS Code-exposed settings.
 
     A setting participates in VS Code generation iff it carries a ``vscode``
-    block. This is independent of the ``generated`` flag (e.g. playground
-    settings are VS Code-only yet still belong in package.json).
+    block. This is independent of the ``generated`` flag: a setting may be
+    surfaced in ``package.json`` yet excluded from the editor constant files, or
+    vice versa.
     """
     for key, spec in defaults["settings"].items():
         if spec.get("vscode") is not None:

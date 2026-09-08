@@ -52,8 +52,6 @@ struct StepState {
 struct PendingEvents {
     bool stop_on_entry{false};
     bool pause{false};
-    bool data_breakpoint{false};
-    std::string data_breakpoint_name;
     std::string exception_message;
     bool exception_caught{false};
     int hit_breakpoint_id{0};

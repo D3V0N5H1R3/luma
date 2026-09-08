@@ -44,14 +44,6 @@ void DapHandlerContext::apply_pending_breakpoints() {
     if (!pending_exception_filters.empty()) {
         session->set_exception_breakpoints(pending_exception_filters);
     }
-
-    if (!pending_function_bp_requests.empty()) {
-        (void)session->set_function_breakpoints(pending_function_bp_requests);
-    }
-
-    for (const auto& data_bp : pending_data_breakpoints) {
-        session->set_data_breakpoint(data_bp.data_id, data_bp.access_type, data_bp.condition);
-    }
 }
 
 HandlerResult DapHandlerContext::launch_with_config(const LaunchConfig& config) {
@@ -65,7 +57,6 @@ HandlerResult DapHandlerContext::launch_with_config(const LaunchConfig& config) 
     const DebugSessionConfig session_config{
         .stop_on_entry = config.stop_on_entry,
         .no_debug = config.no_debug,
-        .time_travel = config.time_travel,
     };
 
     auto error = session->launch(config.program, session_config, config.args, config.cwd);

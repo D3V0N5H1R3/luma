@@ -13,40 +13,39 @@ This reference was previously part of the [User Manual](Luma_User_Manual.md). Fo
 3. [Bits](#3--bits)
 4. [Calculus](#4--calculus)
 5. [Channel](#5--channel)
-6. [Color](#6--color)
-7. [Compression](#7--compression)
-8. [Console](#8--console)
-9. [Converter](#9--converter)
-10. [Csv](#10--csv)
-11. [DateTime](#11--datetime)
-12. [Decimal](#12--decimal)
-13. [Dictionary](#13--dictionary)
-14. [Encoder](#14--encoder)
-15. [FileSystem](#15--filesystem)
-16. [Hash](#16--hash)
-17. [Http](#17--http)
-18. [Json](#18--json)
-19. [KeyValueStore](#19--keyvaluestore)
-20. [LinearAlgebra](#20--linearalgebra)
-21. [Log](#21--log)
-22. [Math](#22--math)
-23. [Optional](#23--optional)
-24. [Order](#24--order)
-25. [Process](#25--process)
-26. [Queue](#26--queue)
-27. [Random](#27--random)
-28. [Reference](#28--reference)
-29. [RegularExpression](#29--regularexpression)
-30. [Resource](#30--resource)
-31. [Result](#31--result)
-32. [Set](#32--set)
-33. [Socket](#33--socket)
-34. [Stack](#34--stack)
-35. [Statistics](#35--statistics)
-36. [String](#36--string)
-37. [Task](#37--task)
-38. [Terminal](#38--terminal)
-39. [Xml](#39--xml)
+6. [Compression](#6--compression)
+7. [Console](#7--console)
+8. [Converter](#8--converter)
+9. [Csv](#9--csv)
+10. [DateTime](#10--datetime)
+11. [Decimal](#11--decimal)
+12. [Dictionary](#12--dictionary)
+13. [Encoder](#13--encoder)
+14. [FileSystem](#14--filesystem)
+15. [Hash](#15--hash)
+16. [Http](#16--http)
+17. [Json](#17--json)
+18. [KeyValueStore](#18--keyvaluestore)
+19. [LinearAlgebra](#19--linearalgebra)
+20. [Log](#20--log)
+21. [Math](#21--math)
+22. [Optional](#22--optional)
+23. [Order](#23--order)
+24. [Process](#24--process)
+25. [Queue](#25--queue)
+26. [Random](#26--random)
+27. [Reference](#27--reference)
+28. [RegularExpression](#28--regularexpression)
+29. [Resource](#29--resource)
+30. [Result](#30--result)
+31. [Set](#31--set)
+32. [Socket](#32--socket)
+33. [Stack](#33--stack)
+34. [Statistics](#34--statistics)
+35. [String](#35--string)
+36. [Task](#36--task)
+37. [Terminal](#37--terminal)
+38. [Xml](#38--xml)
 
 - [See Also](#see-also)
 
@@ -235,70 +234,7 @@ Channel operations use typed exceptions instead of result types for error condit
 
 These are runtime errors catchable with `try`/`catch`. Use `Channel.is_closed(channel)` to check channel state without throwing.
 
-## 6 — Color
-
-A typed RGBA colour value with validating constructors and derivations. Every value can serialise to a CSS-compatible string, making `Color` useful anywhere validated colour data is needed. Like `Decimal`, `Color` is data plus free functions with no operator overloading. The record is `Color.Color { red: integer, green: integer, blue: integer, alpha: number }` — channels are 0–255 integers and `alpha` is a 0–1 number.
-
-> **Color vs Terminal.Color** — `Color` is a general RGBA value with CSS-compatible string formatting. `Terminal.Color` is a fixed choice of 16 named ANSI terminal colours, used only by the `Terminal` module.
-
-| Function                        | Parameter Types                             | Return Type          | Description                                                              |
-| ------------------------------- | ------------------------------------------- | -------------------- | ------------------------------------------------------------------------ |
-| `Color.analogous(c)`            | `(Color.Color)`                             | `array<Color.Color>` | `[base, hue −30°, hue +30°]` — an analogous colour scheme               |
-| `Color.brightness(c)`           | `(Color.Color)`                             | `number`             | Perceived brightness in [0, 1] (`0.299R + 0.587G + 0.114B`, normalised) |
-| `Color.complement(c)`           | `(Color.Color)`                             | `Color.Color`        | The opposite hue (equivalent to `rotate_hue(c, 180)`)                    |
-| `Color.complementary(c)`        | `(Color.Color)`                             | `array<Color.Color>` | `[base, complement]` (base plus its +180° hue)                          |
-| `Color.contrast_ratio(a, b)`    | `(Color.Color, Color.Color)`                | `number`             | WCAG contrast ratio (1:1 to 21:1)                                        |
-| `Color.darken(c, amount)`       | `(Color.Color, number)`                     | `Color.Color`        | Blend toward black by `amount` (clamped to [0, 1])                       |
-| `Color.desaturate(c, amount)`   | `(Color.Color, number)`                     | `Color.Color`        | Decrease HSL saturation by `amount` (clamped to [0, 1])                  |
-| `Color.fade(c, amount)`         | `(Color.Color, number)`                     | `Color.Color`        | Reduce alpha by `amount` (result clamped to [0, 1])                      |
-| `Color.from_cmyk(c)`            | `(Color.Cmyk)`                              | `Color.Color`        | Convert a CMYK colour to RGBA (alpha 1.0)                                |
-| `Color.from_hexadecimal(value)`           | `(string)`                                  | `result<Color.Color>` | Parse `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa` (leading `#` optional) |
-| `Color.from_hsl(h)`             | `(Color.Hsl)`                               | `Color.Color`        | Convert an HSL colour to RGBA (alpha 1.0)                                |
-| `Color.from_hsv(h)`             | `(Color.Hsv)`                               | `Color.Color`        | Convert an HSV (HSB) colour to RGBA (alpha 1.0)                          |
-| `Color.from_name(name)`         | `(Color.Name)`                              | `Color.Color`        | Build an opaque colour from a curated named colour (`Color.Name`)       |
-| `Color.grayscale(c)`            | `(Color.Color)`                             | `Color.Color`        | Fully desaturate (saturation 0), preserving lightness and alpha         |
-| `Color.invert(c)`               | `(Color.Color)`                             | `Color.Color`        | Per-channel inversion (`255 − channel`); alpha unchanged                |
-| `Color.is_dark(c)`              | `(Color.Color)`                             | `boolean`            | `true` when WCAG relative luminance ≤ 0.5                                |
-| `Color.is_light(c)`             | `(Color.Color)`                             | `boolean`            | `true` when WCAG relative luminance > 0.5                                |
-| `Color.lighten(c, amount)`      | `(Color.Color, number)`                     | `Color.Color`        | Blend toward white by `amount` (clamped to [0, 1])                       |
-| `Color.luminance(c)`            | `(Color.Color)`                             | `number`             | WCAG relative luminance in [0, 1] (alpha ignored)                       |
-| `Color.mix(a, b, t)`            | `(Color.Color, Color.Color, number)`        | `Color.Color`        | Linear blend of `a` and `b` at `t` (clamped to [0, 1])                   |
-| `Color.readable_text_color(background)` | `(Color.Color)`                             | `Color.Color`        | Black or white — whichever has higher contrast against `background`             |
-| `Color.rgb(r, g, b)`            | `(integer, integer, integer)`               | `result<Color.Color>` | Construct an opaque colour; fail if a channel is outside 0–255         |
-| `Color.rgba(r, g, b, a)`        | `(integer, integer, integer, number)`       | `result<Color.Color>` | Construct with alpha; fail if a channel is out of range or `a` ∉ [0, 1] |
-| `Color.rotate_hue(c, degrees)`  | `(Color.Color, number)`                     | `Color.Color`        | Rotate the hue by `degrees`, preserving saturation, lightness, and alpha |
-| `Color.saturate(c, amount)`     | `(Color.Color, number)`                     | `Color.Color`        | Increase HSL saturation by `amount` (clamped to [0, 1])                  |
-| `Color.to_cmyk(c)`              | `(Color.Color)`                             | `Color.Cmyk`         | Convert an RGBA colour to CMYK (alpha dropped)                           |
-| `Color.to_css(c)`               | `(Color.Color)`                             | `string`             | CSS string: `rgb(r, g, b)`, or `rgba(...)` when not fully opaque         |
-| `Color.to_hex(c)`               | `(Color.Color)`                             | `string`             | `#rrggbb`, or `#rrggbbaa` when the colour is not fully opaque            |
-| `Color.to_hsl(c)`               | `(Color.Color)`                             | `Color.Hsl`          | Convert an RGBA colour to HSL (alpha dropped)                            |
-| `Color.to_hsv(c)`               | `(Color.Color)`                             | `Color.Hsv`          | Convert an RGBA colour to HSV/HSB (alpha dropped)                        |
-| `Color.triadic(c)`              | `(Color.Color)`                             | `array<Color.Color>` | `[base, hue +120°, hue +240°]` — a triadic colour scheme                |
-| `Color.with_alpha(c, alpha)`    | `(Color.Color, number)`                     | `Color.Color`        | Set alpha to `alpha` (clamped to [0, 1])                                 |
-
-`rgb` / `rgba` / `from_hex` are validating constructors returning `result<Color.Color>`; the derivations (`lighten` / `darken` / `mix`) take already-validated colours and clamp their `amount` / `t` argument, so they return a `Color.Color` directly. `contrast_ratio` computes the WCAG 2.x relative-luminance ratio (alpha ignored) — black on white is 21:1, a colour against itself is 1:1 — for accessibility checks. The `to_css` output is a CSS-compatible colour string.
-
-**Analysis, accessibility, and scheme helpers.** `Color.luminance` exposes the same WCAG relative luminance `contrast_ratio` uses internally, and `Color.brightness` gives the simpler perceived-brightness weighting (`0.299R + 0.587G + 0.114B`) — both normalised to [0, 1]. `Color.is_light` / `Color.is_dark` threshold the relative luminance at 0.5, and `Color.readable_text_color(background)` returns black or white — whichever has the higher contrast against `background` — the one-call way to keep label text legible on a computed background. `Color.saturate` / `Color.desaturate` nudge HSL saturation by an amount (clamped to [0, 1]) and `Color.grayscale` drops it to zero while preserving lightness; all three keep the original alpha. `Color.with_alpha` sets the alpha channel outright while `Color.fade` reduces it by an amount (both clamped to [0, 1]), and `Color.invert` flips each RGB channel (leaving alpha untouched). For palettes, `Color.complement` returns the opposite hue, while `Color.complementary` (`[base, +180°]`), `Color.triadic` (`[base, +120°, +240°]`), and `Color.analogous` (`[base, −30°, +30°]`) return ready-made colour schemes as arrays — the hue maths that is awkward in RGB, done for you.
-
-**`Color.Hsl`** is the hue/saturation/lightness sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `lightness: number` (0–1 ratios). `Color.to_hsl` / `Color.from_hsl` convert between the two spaces, and `Color.rotate_hue(c, degrees)` shifts the hue (wrapping at 360°) while preserving saturation, lightness, and the original alpha — the natural way to build a rainbow, pastel, or complementary colour that is awkward in RGB. HSL drops alpha (so `to_hsl` discards it and `from_hsl` produces an opaque colour); values still serialise through the same RGBA `to_css` path.
-
-**`Color.Hsv`** is the hue/saturation/**value** (HSB) sibling of `Color.Color` — `hue: number` (degrees, 0–360), `saturation: number` and `value: number` (0–1 ratios). It is the model most colour pickers and palette generators use, so `Color.to_hsv` / `Color.from_hsv` are the natural pair for building tints and shades by "value". Like HSL it drops alpha (`from_hsv` produces an opaque colour), and both spaces serialise through the same RGBA `to_css` path.
-
-**`Color.Cmyk`** is the cyan/magenta/yellow/**key** (black) sibling of `Color.Color` — `cyan: number`, `magenta: number`, `yellow: number`, and `key: number` (all 0–1 ratios). It is the subtractive model used by print production, so `Color.to_cmyk` / `Color.from_cmyk` are the natural pair for previewing how an on-screen colour will separate to ink. Like HSL/HSV it drops alpha (`from_cmyk` produces an opaque colour), and it serialises through the same RGBA `to_css` path.
-
-**`Color.Name`** is a curated palette of common named colours as an exhaustive choice — `Black`, `White`, `Red`, `Green`, `Lime`, `Blue`, `Yellow`, `Cyan`, `Magenta`, `Gray`, `Silver`, `Orange`, `Purple`, `Pink`, `Brown` (a subset of the CSS named colours, not all 140). `Color.from_name(name)` maps a variant to its opaque `Color.Color`, giving beginners a typo-proof, autocompleted alternative to remembering hex strings — a misspelled colour is a compile error, not a runtime surprise. The values are CSS-canonical, so `Color.Name.Green` is `0,128,0` and `Color.Name.Lime` is `0,255,0` (matching the web platform). It parallels the exhaustive `Terminal.Color` palette; for any colour outside the curated set, `Color.rgb` / `Color.from_hexadecimal` remain.
-
-```luma
-Color.Color base = Result.unwrap(Color.from_hexadecimal("#0172ad"))
-string css = base |> Color.darken(0.1) |> Color.to_css()   # "rgb(1, 102, 155)"
-
-# Pick a readable text colour against a background.
-number ratio = Color.contrast_ratio(base, Result.unwrap(Color.rgb(255, 255, 255)))
-```
-
----
-
-## 7 — Compression
+## 6 — Compression
 
 Compress and decompress data using Deflate (RFC 1951), Gzip (RFC 1952), and run-length encoding.
 
@@ -347,7 +283,7 @@ match decoded {
 }
 ```
 
-## 8 — Console
+## 7 — Console
 
 | Function                       | Parameter Types | Return Type       | Description                                                               |
 | ------------------------------ | --------------- | ----------------- | ------------------------------------------------------------------------- |
@@ -369,7 +305,7 @@ match decoded {
 
 > **Console vs FileSystem:** `Console` handles console I/O — reading from stdin and writing to stdout/stderr. `FileSystem` handles file content — reading, writing, and appending data — as well as file metadata and paths (checking existence, querying size, listing directories, copying, renaming, and manipulating path components). Use `Console` for interactive console I/O; use `FileSystem` to read, write, and manage files and directories.
 
-## 9 — Converter
+## 8 — Converter
 
 Convert values between different types (e.g. string → integer, integer → string).
 
@@ -394,7 +330,7 @@ Convert values between different types (e.g. string → integer, integer → str
 | `Converter.to_roman(n)`                | `(integer)`     | `result<string>`  | Roman numeral; fail if value outside [1, 3999]               |
 | `Converter.to_string(v)`               | `(T)`           | `string`          | String representation of any value                           |
 
-## 10 — Csv
+## 9 — Csv
 
 Parse and serialise comma-separated values.
 
@@ -437,7 +373,7 @@ character).
 1-based) — so a program parsing a malformed CSV can point at the row/column that broke rather than
 surface a bare string. Mirrors `Json.parse_detailed` / `Json.ParseError`.
 
-## 11 — DateTime
+## 10 — DateTime
 
 | Function                                   | Parameter Types                                          | Return Type                  | Description                                                              |
 | ------------------------------------------ | -------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------ |
@@ -580,7 +516,7 @@ failure(_other)                             { print("that isn't a valid ISO-8601
 }
 ```
 
-## 12 — Decimal
+## 11 — Decimal
 
 Exact base-10 arithmetic. Unlike `number` (IEEE-754 binary floating point, where `0.1 + 0.2` is not exactly `0.3`), a `decimal` stores its value in base 10, so money and other decimal maths behave the way people expect. `decimal` is a distinct opaque type built on an arbitrary-precision coefficient, so it never silently loses precision the way `number` does.
 
@@ -669,7 +605,7 @@ function void main() {
 }
 ```
 
-## 13 — Dictionary
+## 12 — Dictionary
 
 Dictionaries preserve insertion order. All reads and writes use string keys.
 
@@ -712,7 +648,7 @@ Dictionaries preserve insertion order. All reads and writes use string keys.
 
 `Dictionary.KeyValue` record fields: `key: string`, `value` (the dictionary's value type `V`). It is the element type of `Dictionary.to_array`, so a program can annotate the result as `array<Dictionary.KeyValue>` and read `.key`/`.value` directly. Use `Dictionary.to_entries` instead when you want `(key, value)` tuples rather than records.
 
-## 14 — Encoder
+## 13 — Encoder
 
 Transform the representation of a string without changing its type (e.g. Base64, URL percent-encoding).
 
@@ -743,7 +679,7 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 
 `Encoder.Error` is a choice type with four variants — `InvalidBase64`, `InvalidPercentEncoding`, `InvalidUtf8`, `InvalidAscii` — that categorises _why_ a decode failed, so a program validating user-supplied encoded input can branch on the cause instead of substring-matching an opaque message. It is surfaced by the opt-in `*_typed` companions — `Encoder.decode_base64_typed`, `Encoder.decode_url_typed`, and `Encoder.decode_text_typed` — which return `result<string, Encoder.Error>`: a bad Base64 alphabet or padding is `InvalidBase64`; a malformed percent-escape is `InvalidPercentEncoding`; bytes that are not valid UTF-8 (or outside the byte domain) under `Utf8`/`Latin1` are `InvalidUtf8`; and bytes outside the ASCII range under `Ascii` are `InvalidAscii`. This is additive (mirroring `DateTime.from_iso_string_typed` / `DateTime.ParseError`): the plain `decode_base64`, `decode_url`, and `decode_text` keep their string-error `result<string>`.
 
-## 15 — FileSystem
+## 14 — FileSystem
 
 | Function                                  | Parameter Types           | Return Type             | Description                                           |
 | ----------------------------------------- | ------------------------- | ----------------------- | ----------------------------------------------------- |
@@ -831,7 +767,7 @@ failure(_other) { print("could not read config") }
 
 > **Security note** — `append_file`, `read_bytes`, `read_file`, `read_lines`, `write_bytes`, `write_file`, and `write_lines` validate that the resolved path stays within the current working directory, which blocks cross-directory symlink traversal (e.g. a symlink pointing to `/etc/passwd` is rejected). However, a symbolic link that points to another file **within** the working directory is followed transparently. If your program accepts a user-supplied file path, validate that the resolved path refers to the expected file before reading or writing.
 
-## 16 — Hash
+## 15 — Hash
 
 Cryptographic and non-cryptographic hash digests, HMAC, and verification.
 
@@ -873,7 +809,7 @@ print(d.hexadecimal)                                     # the 64-char hex strin
 match d.algorithm { case Hash.Algorithm.Sha256 { print("sha-256") } else { print("other") } }
 ```
 
-## 17 — Http
+## 16 — Http
 
 Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https://` URLs return an error result.
 
@@ -981,7 +917,7 @@ result<Http.Response> r = Http.get_with(
 > **Security note** — HTTP header names and values are validated to reject carriage-return (`\r`) and line-feed (`\n`) characters. Supplying headers that contain these characters returns a `failure` result to prevent CRLF header injection.
 > **Proxy support** — When the `HTTPS_PROXY`, `HTTP_PROXY`, or `ALL_PROXY` environment variables are set (lower-case variants are also honoured), requests are routed through the named HTTP proxy: `https` URLs use a `CONNECT` tunnel (TLS remains end-to-end with the origin server, so certificate verification is unaffected), and plain `http` URLs are forwarded with an absolute-form request line. `NO_PROXY` (comma-separated host or domain suffixes) bypasses the proxy for matching hosts. Proxy credentials supplied in the proxy URL's userinfo are sent via `Proxy-Authorization`. SSRF protection still applies to the request target: requests resolving to private, loopback, or otherwise reserved addresses are rejected even when a proxy is configured.
 
-## 18 — Json
+## 17 — Json
 
 Serialise and deserialise Luma values as JSON.
 
@@ -1078,7 +1014,7 @@ match Json.parse_detailed(user_input) {
 }
 ```
 
-## 19 — KeyValueStore
+## 18 — KeyValueStore
 
 Persistent file-backed key-value store. Keys and values are strings. The store uses a tab-separated format with proper escaping. Mutation functions (`set`, `remove`, `set_many`, `clear`) return `result<key_value_store>` — `success` with a new copy of the store, or `failure` if the store is read-only.
 
@@ -1106,7 +1042,7 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.update(s, key, function)`          | `(key_value_store, string, function(optional<string>) -> string)` | `result<key_value_store>` | Set key to `fn(current-or-none)`; fail if read-only |
 | `KeyValueStore.values(s)`                   | `(key_value_store)`                     | `array<string>`           | All values                                        |
 
-## 20 — LinearAlgebra
+## 19 — LinearAlgebra
 
 Vector and matrix operations using arrays of numbers.
 
@@ -1165,7 +1101,7 @@ Vector and matrix operations using arrays of numbers.
 | `LinearAlgebra.transpose(matrix)`          | `(array<array<number>>)`                       | `array<array<number>>`         | Transpose matrix                |
 | `LinearAlgebra.zero_matrix(r, c)`     | `(integer, integer)`                           | `array<array<number>>`         | r×c zero matrix                 |
 
-## 21 — Log
+## 20 — Log
 
 Structured logging with configurable levels. Messages are written to stderr by default.
 
@@ -1191,7 +1127,7 @@ Levels are ordered: `Debug` < `Information` < `Warning` < `Error` < `Off`. The `
 
 `Log.set_output` also accepts a `Log.Output` choice in place of the string, mirroring how `Log.set_level` accepts `Log.Level`. The choice has three variants: `Log.Output.Stderr`, `Log.Output.Stdout`, and `Log.Output.File(path: string)`. The typed form removes the ambiguity of the string overload — where a mistyped stream name such as `"stdrr"` is silently treated as a file path — because a stream and a file path are now distinct variants: `Log.set_output(Log.Output.File("app.log"))` can only mean a file.
 
-## 22 — Math
+## 21 — Math
 
 | Function                              | Parameter Types                  | Return Type       | Description                                                                      |
 | ------------------------------------- | -------------------------------- | ----------------- | -------------------------------------------------------------------------------- |
@@ -1327,7 +1263,7 @@ case Sign.Positive { "rising" }
 | `Math.max_number` | `number` | 1.7976931348623157e308 (largest finite `number`) |
 | `Math.min_number` | `number` | 2.2250738585072014e-308 (smallest positive normal `number`; the most-negative `number` is `-Math.max_number`) |
 
-## 23 — Optional
+## 22 — Optional
 
 Functions for working with `optional<T>` values. All functions are available as `Optional.function_name(...)` without a `use` declaration.
 
@@ -1384,7 +1320,7 @@ string label = some(42)
 print(label) # "positive: 42"
 ```
 
-## 24 — Order
+## 23 — Order
 
 Comparison utilities built around the `Ordering` choice type, a self-documenting
 alternative to raw `-1` / `0` / `1` comparison numbers. All functions are available
@@ -1448,7 +1384,7 @@ array<Person> sorted = Result.unwrap(
 The existing numeric comparator convention (a `function(T, T) -> number` returning a
 negative, zero, or positive value) still works unchanged; `Order` is purely additive.
 
-## 25 — Process
+## 24 — Process
 
 | Function                                        | Parameter Types    | Return Type                     | Description                                                              |
 | ----------------------------------------------- | ------------------ | ------------------------------- | ------------------------------------------------------------------------ |
@@ -1547,7 +1483,7 @@ failure(_e)  { print("could not signal that process") }
 }
 ```
 
-## 26 — Queue
+## 25 — Queue
 
 Immutable FIFO (first-in, first-out) queue. All mutating operations return a new queue, leaving the original unchanged.
 
@@ -1574,7 +1510,7 @@ Immutable FIFO (first-in, first-out) queue. All mutating operations return a new
 | `Queue.reverse(queue)`          | `(queue)`                         | `queue`                  | New queue with the element order reversed              |
 | `Queue.to_array(queue)`         | `(queue)`                         | `array<T>`               | Convert to array                                       |
 
-## 27 — Random
+## 26 — Random
 
 | Function                          | Parameter Types       | Return Type        | Description                                                                     |
 | --------------------------------- | --------------------- | ------------------ | ------------------------------------------------------------------------------- |
@@ -1630,7 +1566,7 @@ Random.Uuid id = Random.uuid_typed()
 result<Random.Uuid> parsed = Random.parse_uuid("550e8400-e29b-41d4-a716-446655440000")
 ```
 
-## 28 — Reference
+## 27 — Reference
 
 Mutable reference cells — shared mutable containers that preserve identity across closure capture boundaries. All functions are available as `Reference.function_name(...)` without a `use` declaration.
 
@@ -1687,7 +1623,7 @@ integer value = Reference.new(42) |> Reference.get()       # 42
 string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 ```
 
-## 29 — RegularExpression
+## 28 — RegularExpression
 
 | Function                                          | Parameter Types            | Return Type                              | Description                                                   |
 | ------------------------------------------------- | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- |
@@ -1790,7 +1726,7 @@ result<boolean> spans =
 
 The ReDoS guard and pattern-size limit apply to the `*_with` variants exactly as they do to the flagless functions.
 
-## 30 — Resource
+## 29 — Resource
 
 `Resource.with` guarantees that a cleanup function is called after a body function runs, regardless of whether the body throws a runtime error. It is the Luma equivalent of a `finally`-based cleanup block, expressed as a library function.
 
@@ -1843,7 +1779,7 @@ string content = Resource.using(
 )
 ```
 
-## 31 — Result
+## 30 — Result
 
 Combinators for transforming and inspecting `result<T>` values without explicit `match`. For the `result<T>` type itself (creation via `success()`/`failure()`, pattern matching, propagation with `?`, and the `??`/`!>` operators), see the [User Manual — §14 Result and Optional](Luma_User_Manual.md#14--result-and-optional).
 
@@ -1876,7 +1812,7 @@ Combinators for transforming and inspecting `result<T>` values without explicit 
 | `Result.unwrap_or(r, default)` | `(result<T>, T)`                                    | `T`            | Extract success value or use `default`                                   |
 | `Result.zip(r1, r2)`           | `(result<T>, result<U>)`                            | `result<(T, U)>` | Combine two successes into a tuple; short-circuit on first failure      |
 
-## 32 — Set
+## 31 — Set
 
 `Set` values are a distinct type (not arrays). Use `Set.from_array` to create a set and `Set.to_array` to convert back.
 
@@ -1911,7 +1847,7 @@ Combinators for transforming and inspecting `result<T>` values without explicit 
 | `Set.to_array(set)`                    | `(set)`                         | `array<T>`           | Convert to array                                               |
 | `Set.union(set, other)`                | `(set, set)`                    | `set`                | Elements in `s` or `other`                                     |
 
-## 33 — Socket
+## 32 — Socket
 
 Cross-platform TCP and UDP networking.
 
@@ -1979,7 +1915,7 @@ match Socket.connect_typed("127.0.0.1", 8080) {
 
 ---
 
-## 34 — Stack
+## 33 — Stack
 
 Immutable LIFO (last-in, first-out) stack. All mutating operations return a new stack.
 
@@ -2007,7 +1943,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `Stack.reverse(stack)`          | `(stack)`                         | `stack`                  | Reverse element order (top becomes bottom)                      |
 | `Stack.to_array(stack)`         | `(stack)`                         | `array<T>`               | Convert to array                                                |
 
-## 35 — Statistics
+## 34 — Statistics
 
 Descriptive statistics over numeric arrays. Split out of `Math`
 so the four maths modules each cover one cohesive domain: `Math` (scalar
@@ -2023,7 +1959,7 @@ in `Math`; every function here reduces or summarises a whole array.
 | `Statistics.standard_deviation(array)`  | `(array<number>)`                | `result<number>`                   | Standard deviation; fail if empty                                                |
 | `Statistics.variance(array)`            | `(array<number>)`                | `result<number>`                   | Variance; fail if empty                                                          |
 
-## 36 — String
+## 35 — String
 
 | Function                            | Parameter Types                | Return Type       | Description                                                                     |
 | ----------------------------------- | ------------------------------ | ----------------- | ------------------------------------------------------------------------------- |
@@ -2129,7 +2065,7 @@ string letter = Result.unwrap(Random.choice(letters))
 boolean is_punct = String.contains(String.punctuation, "!")
 ```
 
-## 37 — Task
+## 36 — Task
 
 Concurrency combinators for `spawn`/`await` tasks.
 
@@ -2199,7 +2135,7 @@ Using `spawn` outside a `task_scope` still works (fire-and-forget) but produces 
 
 > **Resource limit** — The internal task queue holds a bounded number of pending tasks (see the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), `LUMA_LIMIT_MAX_TASK_QUEUE_SIZE`). Spawning beyond this limit throws a runtime error (`task queue is full — too many pending tasks`). Design your program to await tasks before spawning more to stay within this limit.
 
-## 38 — Terminal
+## 37 — Terminal
 
 Terminal UI control — cursor movement, colors, styling, screen management, and mouse input.
 
@@ -2416,7 +2352,7 @@ function void test_counter_responds_to_keys() {
 
 The same machinery is reachable without Luma code via the `LUMA_TERMINAL_INPUT` environment variable (one key per line), which the example runner (`scripts/run_luma_examples.py`) uses to drive the raw-mode example programs unattended.
 
-## 39 — Xml
+## 38 — Xml
 
 Parse, build, query, and serialise XML documents. XML nodes are opaque `xml` values; decode one into a typed `Xml.Node` choice with `Xml.to_node` when you need to `match` over its structure.
 

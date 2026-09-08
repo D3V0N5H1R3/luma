@@ -157,17 +157,6 @@ VM_HOT const Value& VM::peek(std::size_t distance) const {
     return *(stack_.top - 1 - distance);
 }
 
-void VM::restore_stack(std::vector<Value> s) {
-    const auto n = s.size();
-    if (n > VMStack::k_max) [[unlikely]] {
-        runtime_error(vm_errors::stack_restore_too_large(n, VMStack::k_max));
-    }
-    for (std::size_t i = 0; i < n; ++i) {
-        stack_.base[i] = std::move(s[i]);
-    }
-    stack_.top = stack_.base + n;
-}
-
 // ─────────── Instruction helpers ───────────
 
 // The operand readers skip the per-read truncation check for verified

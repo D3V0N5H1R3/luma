@@ -33,7 +33,6 @@ constexpr std::string_view kStopReasonStep = "step";
 constexpr std::string_view kStopReasonException = "exception";
 constexpr std::string_view kStopReasonPause = "pause";
 constexpr std::string_view kStopReasonEntry = "entry";
-constexpr std::string_view kStopReasonDataBreakpoint = "data breakpoint";
 
 // Type-safe enum for stop reasons.  Use stop_reason_string() to convert
 // to the DAP protocol string when serialising stopped events.
@@ -42,8 +41,7 @@ enum class StopReason {
     Breakpoint,
     Exception,
     Pause,
-    Entry,
-    DataBreakpoint
+    Entry
 };
 
 [[nodiscard]] constexpr std::string_view stop_reason_string(StopReason reason) noexcept {
@@ -58,8 +56,6 @@ enum class StopReason {
             return kStopReasonPause;
         case StopReason::Entry:
             return kStopReasonEntry;
-        case StopReason::DataBreakpoint:
-            return kStopReasonDataBreakpoint;
     }
     return "unknown";
 }
@@ -77,7 +73,6 @@ constexpr std::string_view kOutputStdout = "stdout";
 constexpr std::string_view kOutputStderr = "stderr";
 
 // ─── Error messages ───
-constexpr std::string_view kErrorAuthFailed = "Authentication failed — connection rejected";
 constexpr std::string_view kErrorUnknownInternal = "Unknown internal error";
 
 // ─── Step modes ───
@@ -93,19 +88,9 @@ enum class StepMode {
 // Incoming breakpoint request from the editor.
 struct BreakpointRequest {
     int line{0};
-    std::string name; // For function breakpoints.
     std::string condition;
     std::string hit_condition;
     std::string log_message;
-};
-
-// Incoming data (watchpoint) breakpoint request from the editor.  Mirrored into
-// DapHandlerContext so it can be re-applied when the session is recreated (e.g.
-// luma/hotReload), matching the pending line/function/exception breakpoints.
-struct DataBreakpointRequest {
-    std::string data_id;
-    std::string access_type;
-    std::string condition;
 };
 
 struct Source {

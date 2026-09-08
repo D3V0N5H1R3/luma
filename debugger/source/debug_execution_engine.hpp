@@ -11,7 +11,6 @@
 //   - Execution control: continue, step-over/into/out, pause
 //   - Exception handling coordination
 //   - Debug hook implementation: should_break, wait_for_resume, on_exception
-//   - Hot-reload source watcher
 //
 // Holds non-owning references to session-level components
 // (ThreadStateManager, BreakpointManager, VariableInspector,
@@ -47,7 +46,6 @@ class ISourceLocator;
 class VMDebugAdapter;
 class VariableInspector;
 class ExpressionEvaluator;
-class HotReloader;
 class ThreadStateManager;
 class DebugSession; // back-reference for make_hook_context
 
@@ -150,10 +148,6 @@ public:
         return compiled_top_level_;
     }
 
-    // ─── Hot reload ───
-
-    [[nodiscard]] int check_for_source_changes();
-
     // ─── Debug hook methods — called from install_debug_hooks ───
 
     [[nodiscard]] bool should_break(int file_id, int line, std::size_t frame_depth);
@@ -199,7 +193,6 @@ private:
 
     [[nodiscard]] std::string validate_launch_config(const std::string& program_path,
                                                      const std::string& cwd);
-    void setup_hot_reloader();
     void start_execution_thread(bool stop_on_entry, const std::vector<std::string>& args,
                                 const std::string& cwd, bool no_debug);
 
@@ -274,7 +267,7 @@ private:
     std::stop_token execution_stop_token_;
 
     // Set by terminate(emit_exit_events=false) when the old run is torn down for a
-    // restart / hot reload. handle_execution_result then suppresses the
+    // restart. handle_execution_result then suppresses the
     // terminated/exited events, so the client keeps the debug session alive while
     // the replacement run is launched (otherwise a restart just stops).
     std::atomic<bool> suppress_exit_events_{false};
@@ -296,9 +289,6 @@ private:
     std::string program_path_;
     std::shared_ptr<std::vector<CompiledFunction>> compiled_functions_;
     std::shared_ptr<CompiledFunction> compiled_top_level_;
-
-    // Hot-reload file watcher (created lazily on launch).
-    std::unique_ptr<HotReloader> hot_reloader_;
 
     // Adapter that bridges SourceManager → ISourceLocator.
     std::unique_ptr<ISourceLocator> source_locator_;

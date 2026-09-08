@@ -4,7 +4,7 @@ mod labels;
 mod util;
 mod zip_extract;
 
-use crate::generated::config_defaults::{DEFAULT_DIAGNOSTICS_ON_SAVE, DEFAULT_INLAY_HINTS_ENABLED};
+use crate::generated::config_defaults::DEFAULT_DIAGNOSTICS_ON_SAVE;
 use zed_extension_api::{self as zed, lsp, CodeLabel};
 
 struct LumaExtension {
@@ -128,8 +128,8 @@ impl zed::Extension for LumaExtension {
         Ok(None)
     }
 
-    // LSP config defaults (e.g. inlayHints.enabled) are defined per-editor:
-    //   VS Code: extensions/vscode/package.json ("luma.inlayHints.enabled")
+    // LSP config defaults (e.g. diagnostics.onSave) are defined per-editor:
+    //   VS Code: extensions/vscode/package.json ("luma.diagnostics.onSave")
     //   Zed:     here (language_server_workspace_configuration)
     // Shared defaults: extensions/shared/defaults.json.
     // Error severity contract: extensions/shared/error-handling.md.
@@ -355,19 +355,11 @@ fn bool_setting(value: Option<&zed::serde_json::Value>, path: &[&str], default: 
 
 /// Build the `luma` workspace-configuration payload sent to the language
 /// server, before merging any additional raw user settings on top.
-///
-/// Deliberately omits `codeLens` — per [`extensions/FEATURE_PARITY.md`], code
-/// lens is VS Code only, so Zed must never advertise it as enabled to the LSP.
 fn build_workspace_config(
     user_settings: Option<&zed::serde_json::Value>,
 ) -> zed::serde_json::Value {
     let luma = user_settings.and_then(|s| s.get("luma"));
 
-    let inlay_hints_enabled = bool_setting(
-        luma,
-        &["inlayHints", "enabled"],
-        DEFAULT_INLAY_HINTS_ENABLED,
-    );
     let diagnostics_on_save = bool_setting(
         luma,
         &["diagnostics", "onSave"],
@@ -376,7 +368,6 @@ fn build_workspace_config(
 
     zed::serde_json::json!({
         "luma": {
-            "inlayHints": { "enabled": inlay_hints_enabled },
             "diagnostics": { "onSave": diagnostics_on_save }
         }
     })

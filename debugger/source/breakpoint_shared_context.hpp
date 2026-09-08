@@ -40,9 +40,8 @@ struct BreakpointSnapshot {
 // snapshot also records the hit by incrementing the breakpoint's saturating hit
 // counter; when false it reports the current count without advancing it (used
 // to read a conditional breakpoint's identity before its condition is known to
-// hold).  Shared by the line and function breakpoint managers, whose info
-// structs expose the same fields (and a mutable times_hit accessed under
-// ctx_->mutex).
+// hold).  Used by the line breakpoint manager, whose info struct exposes a
+// times_hit field (a mutable counter accessed under ctx_->mutex).
 template <typename BreakpointInfo>
 [[nodiscard]] BreakpointSnapshot make_breakpoint_snapshot(const BreakpointInfo& info,
                                                           bool record_hit) {

@@ -8,7 +8,6 @@
 #include "breakpoint_manager.hpp"
 #include "dap_types.hpp"
 #include "debug_stream_utils.hpp"
-#include "hot_reloader.hpp"
 #include "runtime/stdlib/system/process_module.hpp"
 #include "runtime/vm/vm.hpp"
 #include "thread_state_manager.hpp"
@@ -50,7 +49,6 @@ void DebugExecutionEngine::run_execution(const std::shared_ptr<std::vector<Compi
 
     // Resolve breakpoints now that configuration is done.
     bp_mgr_.resolve_pending_breakpoints();
-    bp_mgr_.resolve_function_breakpoints();
 
     if (!setup_program_environment(program_args, working_dir)) {
         handle_execution_result(1);
@@ -158,7 +156,7 @@ void DebugExecutionEngine::handle_unhandled_exception(const std::exception& e,
 void DebugExecutionEngine::handle_execution_result(int exit_code) {
     state_ = SessionState::Terminated;
 
-    // A restart / hot reload tears the old run down via terminate(false). In that
+    // A restart tears the old run down via terminate(false). In that
     // case the client keeps the session and must not see terminated/exited, or it
     // would end the debug session before the replacement run starts.
     if (suppress_exit_events_.load(std::memory_order_relaxed)) {

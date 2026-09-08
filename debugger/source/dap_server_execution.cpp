@@ -43,7 +43,6 @@ HandlerResult DapExecutionHandler::execute_thread_action(const JsonValue& args,
     std::optional<HandlerResult> err;
     switch (action) {
         case ExecutionAction::Continue:
-            (void)session.check_for_source_changes();
             err = try_execute([&] { return session.continue_execution(thread_id); });
             break;
         case ExecutionAction::StepOver:
@@ -99,71 +98,7 @@ HandlerResult DapExecutionHandler::handle_pause(const JsonValue& args) {
     return HandlerResult::ok();
 }
 
-HandlerResult DapExecutionHandler::complete_time_travel_step(const ExecutionResult& result,
-                                                             int thread_id) {
-    if (!result) {
-        return HandlerResult::error(result.error_message);
-    }
-
-    // Rewinding mutated the VM value stack, so flush the handler-side watch
-    // cache just as the forward resume path does (execute_thread_action).
-    // The session flushes its own variable references in restore_from_snapshot.
-    ctx_.invalidate_watches();
-
-    // Emit a stopped event so the editor refreshes state.
-    ctx_.protocol_handler.send_event(std::string{kEventStopped},
-                                     make_stopped_event_body(kStopReasonStep, thread_id, false));
-
-    return HandlerResult::ok();
-}
-
-HandlerResult DapExecutionHandler::handle_step_back(const JsonValue& args) {
-    const int thread_id = extract_thread_id(args);
-
-    return complete_time_travel_step(require_session(ctx_.session).step_back(thread_id), thread_id);
-}
-
-HandlerResult DapExecutionHandler::handle_reverse_continue(const JsonValue& args) {
-    const int thread_id = extract_thread_id(args);
-
-    return complete_time_travel_step(require_session(ctx_.session).reverse_continue(thread_id),
-                                     thread_id);
-}
-
 // ─── Custom extensions ───
-
-HandlerResult DapExecutionHandler::handle_hot_reload() {
-    auto& session = require_session(ctx_.session);
-
-    if (!session.is_running()) {
-        return HandlerResult::ok(make_status_body(false, "No running program to reload"));
-    }
-
-    // Terminate the current session and restart with the same program.
-    const auto config = ctx_.last_launch_config;
-
-    // Tear the old run down without emitting terminated/exited — hot reload keeps
-    // the same DAP session, so those events would make the client stop.
-    ctx_.reset_session(/*emit_exit_events=*/false);
-
-    // Create a new session with the same callbacks, but don't stop on entry.
-    auto reload_config = config;
-    reload_config.stop_on_entry = false;
-
-    auto result = ctx_.launch_with_config(reload_config);
-
-    if (!result.success) {
-        return HandlerResult::ok(make_status_body(false, result.error_message));
-    }
-
-    ctx_.session->configuration_done();
-
-    ctx_.protocol_handler.send_event(
-        std::string{kEventOutput},
-        make_output_event_body("console", "Hot reload: recompiled and restarted\n"));
-
-    return HandlerResult::ok(make_status_body(true, "Hot reload successful"));
-}
 
 HandlerResult DapExecutionHandler::handle_concurrency_state() {
     JsonValue::ObjectType body;

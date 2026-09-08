@@ -254,8 +254,6 @@ void VM::op_set_local() {
     auto& cf = stack_.frames.back();
     auto slot = read_u16();
     get_local_slot(cf, slot) = peek();
-
-    notify_local_data_breakpoint(cf, slot);
 }
 
 void VM::op_get_upvalue() {
@@ -724,8 +722,6 @@ void VM::op_set_local_pop() {
     auto& cf = stack_.frames.back();
     auto slot = read_u16();
     get_local_slot(cf, slot) = pop();
-
-    notify_local_data_breakpoint(cf, slot);
 }
 
 void VM::op_get_local_return() {

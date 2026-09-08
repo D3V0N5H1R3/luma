@@ -17,7 +17,6 @@ The debugger implements a broad subset of the Debug Adapter Protocol.
 | Variable inspection  | Inspect local, closure, and global variables per frame    |
 | Set variable         | Modify a variable's value while execution is paused       |
 | Expression eval      | Evaluate expressions in the context of the current frame  |
-| Console completions  | Name completions for expressions in the debug console     |
 | Output capture       | `print` output is forwarded to the editor's debug console |
 | Stop on entry        | Optionally pause at the first statement of `@main`        |
 
@@ -28,23 +27,17 @@ The debugger implements a broad subset of the Debug Adapter Protocol.
 | Conditional           | Pause only when a per-breakpoint expression is `true` |
 | Hit count             | Pause after N hits (`5`, `>3`, `>=10`, `==5`)         |
 | Log points            | Emit an interpolated message instead of pausing       |
-| Function breakpoints  | Break on entry to a named function                    |
-| Data breakpoints      | Break when a watched variable's value changes         |
 | Exception breakpoints | Break on `caught` and/or `uncaught` exceptions        |
 
 ### Specialised
 
-| Feature            | Description                                               |
-| ------------------ | --------------------------------------------------------- |
-| Reverse debugging  | Step backwards through recorded VM snapshots (`stepBack`) |
-| Concurrency        | Map each `task_scope` task to its own DAP thread          |
-| Hot reload         | Detect source edits and reload via `luma/hotReload`       |
-| Custom visualizers | Per-type value formatting loaded from a JSON config       |
-| Remote debugging   | Attach over TCP with an optional authentication token     |
+| Feature     | Description                                       |
+| ----------- | ------------------------------------------------- |
+| Concurrency | Map each `task_scope` task to its own DAP thread  |
 
 ## Architecture
 
-The editor launches `luma_dap` and exchanges Content-Length framed JSON messages with it over stdio, or over a TCP socket for remote debugging.
+The editor launches `luma_dap` and exchanges Content-Length framed JSON messages with it over stdio.
 
 ```text
 ┌───────────────────────────────────────────────┐
@@ -52,7 +45,7 @@ The editor launches `luma_dap` and exchanges Content-Length framed JSON messages
 │                  DAP client                   │
 └───────────────────────────────────────────────┘
     ▼ requests          responses + events ▲
-  Content-Length framed JSON over stdio or TCP
+      Content-Length framed JSON over stdio
 ┌───────────────────────────────────────────────┐
 │                    luma_dap                   │
 │                                               │
@@ -79,9 +72,8 @@ All sources live under `debugger/source/` and link against `luma_core`. Header a
 
 | File                        | Responsibility                                                        |
 | --------------------------- | --------------------------------------------------------------------- |
-| `main.cpp`                  | Entry point: arg parsing (`--port`, `--auth-token`), stdio/TCP wiring |
+| `main.cpp`                  | Entry point: stdio transport wiring                                   |
 | `dap_transport.hpp/cpp`     | Thread-safe Content-Length framed stdio transport                     |
-| `dap_tcp_transport.hpp/cpp` | TCP transport for remote debugging                                    |
 | `dap_types.hpp/cpp`         | DAP protocol constants and serialisation helpers                      |
 
 ### Protocol and dispatch
@@ -105,9 +97,9 @@ All sources live under `debugger/source/` and link against `luma_core`. Header a
 | `dap_handler_context.hpp/cpp` | Shared handler context (transport, session, state)           |
 | `dap_handler_types.hpp`       | Handler data types (`ExecutionResult`, `PostResponseAction`) |
 | `dap_lifecycle_handler.hpp`   | initialize, launch, restart, terminate, disconnect           |
-| `dap_execution_handler.hpp`   | continue, step, pause, hot reload, concurrency state         |
-| `dap_breakpoint_handler.hpp`  | Set and clear breakpoints of every kind                      |
-| `dap_inspection_handler.hpp`  | threads, stack, scopes, variables, evaluate, completions     |
+| `dap_execution_handler.hpp`   | continue, step, pause, concurrency state                     |
+| `dap_breakpoint_handler.hpp`  | Set and clear line and exception breakpoints                 |
+| `dap_inspection_handler.hpp`  | threads, stack, scopes, variables, evaluate                  |
 | `dap_server_breakpoints.cpp`  | Breakpoint request handler implementations                   |
 | `dap_server_execution.cpp`    | Execution-control request handler implementations            |
 | `dap_server_inspection.cpp`   | Inspection request handler implementations                   |
@@ -136,8 +128,6 @@ All sources live under `debugger/source/` and link against `luma_core`. Header a
 | `breakpoint_manager.hpp/cpp`          | Breakpoint storage and hit testing                   |
 | `breakpoint_shared_context.hpp/cpp`   | Shared breakpoint hit snapshot and response building |
 | `line_breakpoint_manager.hpp/cpp`     | Line breakpoint resolution and line snapping         |
-| `function_breakpoint_manager.hpp/cpp` | Function breakpoint resolution                       |
-| `data_breakpoint_manager.hpp/cpp`     | Data breakpoint (watchpoint) management              |
 | `exception_breakpoint_settings.hpp`   | Atomic caught/uncaught filter flags                  |
 | `compiled_breakpoint.hpp/cpp`         | Compile/validate cache for breakpoint conditions     |
 | `dap_breakpoint_validator.hpp/cpp`    | Condition / hit-count / log-message validation       |
@@ -150,14 +140,6 @@ All sources live under `debugger/source/` and link against `luma_core`. Header a
 | `variable_reference_registry.hpp` | Generational variable reference IDs          |
 | `expression_compiler.hpp/cpp`     | Compile watch expressions to bytecode        |
 | `expression_evaluator.hpp/cpp`    | Runtime evaluation for watch, hover, console |
-| `custom_visualizer.hpp/cpp`       | Configurable per-type value formatting       |
-
-### Advanced features
-
-| File                   | Responsibility                           |
-| ---------------------- | ---------------------------------------- |
-| `time_travel.hpp/cpp`  | Reverse debugging via VM state snapshots |
-| `hot_reloader.hpp/cpp` | Source-change detection for hot reload   |
 
 ### Source and interfaces
 
@@ -167,7 +149,6 @@ All sources live under `debugger/source/` and link against `luma_core`. Header a
 | `i_source_locator.hpp`           | Source-lookup abstraction                     |
 | `i_vm_control.hpp`               | VM execution-control abstraction              |
 | `i_vm_introspection.hpp`         | Read-only VM state abstraction                |
-| `i_filesystem_monitor.hpp`       | Filesystem-query abstraction (hot reload)     |
 
 ### Configuration and diagnostics
 
@@ -199,7 +180,7 @@ This produces `build/luma_dap` on Linux and macOS, or `build\Release\luma_dap.ex
 
 ## Usage
 
-In normal use you do not run `luma_dap` directly — your editor launches it automatically when you start a debug session. For remote debugging you can start it manually in TCP mode; see [Remote Debugging](#remote-debugging-tcp).
+In normal use you do not run `luma_dap` directly — your editor launches it automatically when you start a debug session.
 
 ### VS Code
 
@@ -214,16 +195,6 @@ Add a debug configuration to `.vscode/launch.json`:
     "stopOnEntry": false
 }
 ```
-
-### Remote Debugging (TCP)
-
-Start the adapter in TCP mode to debug across a network or container boundary. It listens on the given port and accepts a single client:
-
-```bash
-luma_dap --port 4711 [--auth-token <token>]
-```
-
-`--port` switches from stdio to the TCP transport. `--auth-token` is optional; when set, the client must present the matching token before any other request is processed.
 
 ### Supported DAP Requests
 
@@ -243,9 +214,6 @@ luma_dap --port 4711 [--auth-token <token>]
 | Request                   | Purpose                                               |
 | ------------------------- | ----------------------------------------------------- |
 | `setBreakpoints`          | Set source-line breakpoints for a file (replaces all) |
-| `setFunctionBreakpoints`  | Set breakpoints by function name                      |
-| `setDataBreakpoints`      | Set data breakpoints (watchpoints)                    |
-| `dataBreakpointInfo`      | Query whether a variable supports a data breakpoint   |
 | `setExceptionBreakpoints` | Configure caught/uncaught exception filters           |
 | `breakpointLocations`     | List valid breakpoint positions in a range            |
 
@@ -257,7 +225,6 @@ luma_dap --port 4711 [--auth-token <token>]
 | `next`     | Step over - execute one source line               |
 | `stepIn`   | Step into - enter function calls                  |
 | `stepOut`  | Step out - run until the current function returns |
-| `stepBack` | Step backwards (reverse debugging)                |
 | `pause`    | Pause execution immediately                       |
 
 #### State inspection
@@ -270,7 +237,6 @@ luma_dap --port 4711 [--auth-token <token>]
 | `variables`     | Return variables within a scope or structured value         |
 | `evaluate`      | Evaluate an expression in the paused frame's context        |
 | `setVariable`   | Modify a variable's value while paused                      |
-| `completions`   | Return name completions for the debug console               |
 | `stepInTargets` | List step-in targets for the current line                   |
 | `exceptionInfo` | Return details about the current exception                  |
 | `source`        | Return the contents of a source file                        |
@@ -280,7 +246,6 @@ luma_dap --port 4711 [--auth-token <token>]
 
 | Request                 | Purpose                                   |
 | ----------------------- | ----------------------------------------- |
-| `luma/hotReload`        | Reload the program after source edits     |
 | `luma/concurrencyState` | Report task and channel concurrency state |
 
 ### Events (server to client)

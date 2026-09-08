@@ -47,16 +47,10 @@ struct DapHandlerContext {
     CompiledBreakpointCache compiled_bp_cache;
     StringMap<std::vector<BreakpointRequest>> pending_breakpoints;
     std::vector<std::string> pending_exception_filters;
-    std::vector<BreakpointRequest> pending_function_bp_requests;
-    std::vector<DataBreakpointRequest> pending_data_breakpoints;
     LaunchConfig last_launch_config;
 
     // ─── Feature negotiation ───
     FeatureManager feature_manager;
-
-    // ─── Authentication state ───
-    std::string auth_token;
-    bool auth_failed{false};
 
     // ─── Protocol layer (non-owning reference) ───
     DapProtocolHandler& protocol_handler;

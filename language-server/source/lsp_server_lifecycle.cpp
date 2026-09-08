@@ -36,26 +36,17 @@ namespace {
         .signature_help({"(", ","})
         .definition()
         .references()
-        .document_highlight()
         .type_definition()
         .implementation()
         .document_symbol()
-        .workspace_symbol()
         .rename(true)
         .code_action()
-        .linked_editing_range()
-        .call_hierarchy()
-        .type_hierarchy()
-        .selection_range()
         .document_link(false)
         .folding_range()
-        .inlay_hint()
         .semantic_tokens({"namespace", "type", "function", "variable", "parameter", "keyword",
                           "string", "number", "operator", "decorator"},
-                         {"definition", "readonly"}, true, true)
-        .code_lens(false)
+                         {"definition", "readonly"}, false, false)
         .document_formatting()
-        .document_range_formatting()
         .execute_command({"luma.showReferences"})
         .position_encoding("utf-16")
         .build();
@@ -123,20 +114,12 @@ void LspServer::handle_initialized() {
     initialized_ = true;
     transport_wrapper_.log_message("Client initialized");
 
-    auto log = [this](const std::string& msg) {
-        transport_wrapper_.log_message(msg);
-    };
-
-    // Try to load the persisted index for faster workspace scanning.
+    // Discover and apply a luma.json project configuration from the workspace
+    // roots, if present.
     if (workspace_.has_roots()) {
-        (void)workspace_.load_persisted_index(log);
-    }
-
-    // Scan workspace folders for .luma files and index them in the background.
-    // Enqueue all workspace roots as pending so the analysis worker picks them
-    // up without blocking the main message-loop thread.
-    if (workspace_.has_roots()) {
-        scan_thread_ = std::thread([this] { workspace_handler_->scan_workspace_files(); });
+        workspace_.discover_project_config(configuration_.config(), [this](const std::string& msg) {
+            transport_wrapper_.log_message(msg);
+        });
     }
 }
 
@@ -144,19 +127,9 @@ JsonValue LspServer::handle_shutdown() {
     transport_wrapper_.log_message("Shutdown requested");
     shutdown_requested_ = true;
 
-    // Stop the analysis worker and scan thread.
+    // Stop the analysis worker.
     running_.store(false);
     analysis_pipeline_->notify();
-
-    if (scan_thread_.joinable()) {
-        scan_thread_.join();
-    }
-
-    // Persist the workspace index for faster startup next time.
-    if (workspace_.has_roots()) {
-        (void)workspace_.save_persisted_index(
-            [this](const std::string& msg) { transport_wrapper_.log_message(msg); });
-    }
 
     return {}; // null
 }

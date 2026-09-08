@@ -10,8 +10,6 @@
 namespace {
 
 constexpr std::string_view k_default_manifest = R"({
-    "inlayHints": { "enabled": true },
-    "codeLens": { "enabled": true },
     "diagnostics": { "onSave": false }
 }
 )";

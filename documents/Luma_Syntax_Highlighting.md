@@ -341,21 +341,12 @@ extensions/vscode/
 │
 ├── src/
 │   ├── debugger/
-│   │   ├── debug.ts               # Debug adapter integration
-│   │   ├── visualizer.ts          # Debug variable visualizer controller
-│   │   └── visualizer-renderers.ts # HTML rendering for visualizer views
+│   │   └── debug.ts               # Debug adapter integration
 │   ├── generated/                 # Auto-generated code (platform maps, config)
 │   ├── lsp/
 │   │   ├── client-manager.ts      # LSP client lifecycle management
-│   │   ├── code-actions.ts        # Quick-fix code action providers (mutable keyword, include path)
 │   │   ├── commands.ts            # LSP-related commands
 │   │   └── types.ts               # LSP type definitions and guards
-│   ├── playground/
-│   │   ├── playground.ts          # Playground editor panel
-│   │   └── playground-html.ts     # Playground HTML/CSS/JS template
-│   ├── testing/
-│   │   ├── coverage.ts            # Test coverage support
-│   │   └── testing.ts             # Test explorer integration
 │   ├── utils/
 │   │   ├── binary/                # Binary download submodules (split from binary-download.ts)
 │   │   │   ├── types.ts           # Release/asset/config types and GitHub release parsing
@@ -382,12 +373,6 @@ extensions/vscode/
 ├── themes/
 │   ├── luma-dark-color-theme.json   # Dark colour theme
 │   └── luma-light-color-theme.json  # Light colour theme
-│
-└── walkthroughs/              # Getting started walkthrough steps
-    ├── hello.md
-    ├── install.md
-    ├── run.md
-    └── test.md
 ```
 
 ### `package.json` — Extension Manifest

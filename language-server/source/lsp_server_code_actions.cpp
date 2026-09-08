@@ -661,9 +661,8 @@ JsonValue LspCodeActionHandler::handle_code_action(const JsonValue& params) {
 
     JsonValue::ArrayType actions;
 
-    // Delegate to sub-handlers for quick fixes and refactorings.
+    // Delegate to sub-handlers for quick fixes.
     collect_quick_fixes(uri, *cached, state.token(), range_diags, actions);
-    collect_refactorings(uri, *cached, state.token(), params, actions);
 
     return JsonValue(std::move(actions));
 }
@@ -696,7 +695,7 @@ void LspCodeActionHandler::collect_quick_fixes(const std::string& uri, const Ana
 }
 
 // ═══════════════════════════════════════════════════════════
-// Execute command (code lens actions)
+// Execute command (workspace/executeCommand)
 // ═══════════════════════════════════════════════════════════
 
 JsonValue LspCodeActionHandler::handle_execute_command(const JsonValue& params) {
@@ -713,9 +712,9 @@ JsonValue LspCodeActionHandler::handle_execute_command(const JsonValue& params) 
     return {};
 }
 
-// Handles the `luma.showReferences` command sent by code lens: resolves the
-// identifier at the supplied position and returns every occurrence across all
-// cached documents as Location results.
+// Handles the `luma.showReferences` command: resolves the identifier at the
+// supplied position and returns every occurrence across all cached documents
+// as Location results.
 JsonValue LspCodeActionHandler::execute_show_references(const JsonValue& params) {
     const auto& args_val = params.get("arguments");
     if (!args_val.is_array()) {
@@ -770,134 +769,6 @@ JsonValue LspCodeActionHandler::execute_show_references(const JsonValue& params)
     }
 
     return JsonValue(std::move(locations));
-}
-
-// ═══════════════════════════════════════════════════════════
-// Code lens
-// ═══════════════════════════════════════════════════════════
-
-namespace {
-
-// Count references to a user function across every cached document, skipping
-// the declaration itself.  For a namespaced name ("Ns.func"), a hit only counts
-// when the immediately preceding tokens form "Ns ." before the short name.
-[[nodiscard]] int count_references_to(LspHandlerContext& ctx, const std::string& short_name,
-                                      const std::string& ns_prefix, const std::string& decl_uri,
-                                      const SourceLocation& decl_location) {
-    int ref_count = 0;
-    auto state = ctx.acquire_read_lock();
-    for (const auto& [doc_uri, doc_result] : state.cache().entries()) {
-        auto idx_it = doc_result.metadata.identifier_index.find(short_name);
-        if (idx_it == doc_result.metadata.identifier_index.end()) {
-            continue;
-        }
-        for (const std::size_t tok_idx : idx_it->second) {
-            const auto& tok = doc_result.semantic.tokens[tok_idx];
-            // Skip the declaration itself.
-            if (doc_uri == decl_uri && tok.location.line == decl_location.line &&
-                tok.location.column == decl_location.column) {
-                continue;
-            }
-            // For qualified names, verify the preceding tokens
-            // form "Namespace." before the short name.
-            if (!ns_prefix.empty()) {
-                if (tok_idx < 2 || doc_result.semantic.tokens[tok_idx - 1].type != TokenType::Dot ||
-                    doc_result.semantic.tokens[tok_idx - 2].lexeme != ns_prefix) {
-                    continue;
-                }
-            }
-            ++ref_count;
-        }
-    }
-    return ref_count;
-}
-
-// Whether the function declared at decl_location carries an @test annotation,
-// found by walking back over the leading keyword/annotation tokens (Function,
-// Internal, Annotation) from the first same-line name token.
-[[nodiscard]] bool has_test_annotation(const AnalysisResult& analysis,
-                                       const std::string& short_name,
-                                       const SourceLocation& decl_location) {
-    const auto& tokens = analysis.semantic.tokens;
-    auto idx_it = analysis.metadata.identifier_index.find(short_name);
-    if (idx_it == analysis.metadata.identifier_index.end()) {
-        return false;
-    }
-    for (const std::size_t ti : idx_it->second) {
-        if (tokens[ti].location.line != decl_location.line) {
-            continue;
-        }
-        // Walk back over keywords (Function, Internal, Annotation).
-        std::size_t k = ti;
-        while (k > 0) {
-            --k;
-            if (tokens[k].type == TokenType::Annotation && tokens[k].lexeme == "@test") {
-                return true;
-            }
-            if (tokens[k].type != TokenType::Function && tokens[k].type != TokenType::Internal &&
-                tokens[k].type != TokenType::Annotation) {
-                break;
-            }
-        }
-        // Only the first same-line name token is considered.
-        return false;
-    }
-    return false;
-}
-
-} // namespace
-
-JsonValue LspCodeActionHandler::handle_code_lens(const JsonValue& params) {
-    if (!ctx_.configuration.config().get()->code_lens_enabled) {
-        return JsonValue(JsonValue::ArrayType{});
-    }
-
-    const auto uri_opt = extraction::extract_text_document_uri(params);
-    if (!uri_opt) {
-        return JsonValue(JsonValue::ArrayType{});
-    }
-    const auto& uri = *uri_opt;
-
-    const auto cached = ctx_.find_analysis(uri);
-    if (!cached) {
-        return JsonValue(JsonValue::ArrayType{});
-    }
-
-    const auto& user_fns = cached->semantic.symbols.user_functions;
-    const auto& tokens = cached->semantic.tokens;
-
-    JsonValue::ArrayType lenses;
-
-    for (const auto& [fn_name, fn_info] : user_fns) {
-        // Split on the last dot: "Ns.func" → namespace "Ns", member "func".
-        const auto qualified = QualifiedName::parse(fn_name);
-        const std::string& short_name = qualified.member_part;
-        const std::string& ns_prefix = qualified.namespace_part;
-
-        const int ref_count =
-            count_references_to(ctx_, short_name, ns_prefix, uri, fn_info.location);
-        // Convert the name range to the client's UTF-16 columns for the wire.
-        const Range name_rng =
-            cached->to_wire(find_declaration_name_range(tokens, fn_info.location, short_name));
-        const bool is_test = has_test_annotation(*cached, short_name, fn_info.location);
-
-        const std::string title = std::format("{} reference{}{}", ref_count,
-                                              ref_count == 1 ? "" : "s", is_test ? " | @test" : "");
-
-        lenses.emplace_back(JsonValue::ObjectType{
-            {"range", serialise_range(name_rng)},
-            {"command", JsonValue(JsonValue::ObjectType{
-                            {"title", JsonValue(title)},
-                            {"command", JsonValue("luma.showReferences")},
-                            {"arguments", JsonValue(JsonValue::ArrayType{
-                                              JsonValue(uri),
-                                              serialise_position(name_rng.start),
-                                          })},
-                        })},
-        });
-    }
-
-    return JsonValue(std::move(lenses));
 }
 
 } // namespace luma::lsp

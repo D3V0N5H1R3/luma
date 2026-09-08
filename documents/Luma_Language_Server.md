@@ -119,29 +119,14 @@ The server uses **full document sync** (`TextDocumentSyncKind.Full`). The editor
 | `textDocument/typeDefinition`            | Client → Server | Navigate to the type definition of a symbol                      |
 | `textDocument/implementation`            | Client → Server | Navigate to implementations of an interface                      |
 | `textDocument/references`                | Client → Server | Find all references to a symbol                                  |
-| `textDocument/documentHighlight`         | Client → Server | Highlight all occurrences of a symbol in the document            |
 | `textDocument/documentSymbol`            | Client → Server | Return the document outline (functions, types, namespaces)       |
 | `textDocument/codeAction`                | Client → Server | Suggest quick fixes for diagnostics                              |
-| `textDocument/codeLens`                  | Client → Server | Return code lens annotations (test counts, references)           |
 | `textDocument/formatting`                | Client → Server | Format the entire document                                       |
-| `textDocument/rangeFormatting`           | Client → Server | Format a selected range                                          |
 | `textDocument/rename`                    | Client → Server | Rename a symbol across the document                              |
 | `textDocument/prepareRename`             | Client → Server | Validate and return the range of the symbol to rename            |
 | `textDocument/foldingRange`              | Client → Server | Return foldable regions (functions, blocks, comments)            |
-| `textDocument/selectionRange`            | Client → Server | Return smart selection ranges for expand/shrink selection        |
-| `textDocument/inlayHint`                 | Client → Server | Return inline type and parameter name hints                      |
-| `textDocument/linkedEditingRange`        | Client → Server | Return linked editing ranges for simultaneous edits              |
 | `textDocument/documentLink`              | Client → Server | Return clickable links for `include` paths                       |
 | `textDocument/semanticTokens/full`       | Client → Server | Provide semantic highlighting tokens for the full document       |
-| `textDocument/semanticTokens/full/delta` | Client → Server | Provide incremental semantic token updates                       |
-| `textDocument/semanticTokens/range`      | Client → Server | Provide semantic tokens for a visible range                      |
-| `textDocument/prepareCallHierarchy`      | Client → Server | Prepare a call hierarchy item at the cursor                      |
-| `callHierarchy/incomingCalls`            | Client → Server | Return callers of a function                                     |
-| `callHierarchy/outgoingCalls`            | Client → Server | Return callees of a function                                     |
-| `textDocument/prepareTypeHierarchy`      | Client → Server | Prepare a type hierarchy item at the cursor                      |
-| `typeHierarchy/supertypes`               | Client → Server | Return supertypes (interfaces) of a type                         |
-| `typeHierarchy/subtypes`                 | Client → Server | Return subtypes (implementors) of an interface                   |
-| `workspace/symbol`                       | Client → Server | Search for symbols across the workspace                          |
 | `workspace/executeCommand`               | Client → Server | Execute a server-side command                                    |
 
 ### Cancellation
@@ -212,7 +197,7 @@ The type checker's `stdlib_signatures_` registry contains hundreds of function e
 - **Hover:** showing the return type of a stdlib call.
 - **Completion:** listing all functions within a module when the user types `Module.`.
 
-The 38 standard library modules (`String`, `Array`, `Bits`, `Calculus`, `Channel`, `Color`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `Task`, `Terminal`, `Xml`) are covered by this registry.
+The 37 standard library modules (`String`, `Array`, `Bits`, `Calculus`, `Channel`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `Task`, `Terminal`, `Xml`) are covered by this registry.
 
 ---
 
@@ -264,8 +249,6 @@ The language server reads a `luma.json` file from the workspace root for per-pro
 
 ```json
 {
-    "inlayHints": { "enabled": true },
-    "codeLens": { "enabled": true },
     "diagnostics": { "onSave": false },
     "analysisDebounceMs": 50,
     "analysisTimeoutMs": 10000
@@ -274,8 +257,6 @@ The language server reads a `luma.json` file from the workspace root for per-pro
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `inlayHints.enabled` | `boolean` | `true` | Show inline type annotations and parameter name hints. |
-| `codeLens.enabled` | `boolean` | `true` | Show reference counts and test annotations above functions. |
 | `diagnostics.onSave` | `boolean` | `false` | When `true`, diagnostics are only published on file open and save — not while typing. Analysis still runs on every keystroke (hover and completion stay fresh), but red/yellow squiggles update only on save. Useful on large files where live diagnostics are distracting. |
 | `analysisDebounceMs` | `integer` | `50` | Milliseconds to wait after the last keystroke before starting analysis. Range: 0–5000. Increase on slow machines to reduce CPU usage during rapid typing. |
 | `analysisTimeoutMs` | `integer` | `10000` | Maximum time (ms) for a single analysis pass before it is cancelled. Range: 100–60000. Increase for very large files that time out. |
@@ -311,8 +292,7 @@ language-server/
     ├── lsp_analysis_service_impl.hpp   # AnalysisServiceImpl class declaration
     ├── lsp_analysis_service_symbols.cpp # Symbol collection and AST analysis utilities
     ├── lsp_analysis_view.hpp           # Read-only facade for analysis results
-    ├── lsp_binary_format.hpp           # Binary serialisation helpers for persisted index
-    ├── lsp_brace_matcher.hpp           # Brace matching utilities
+    ├── lsp_brace_matcher.hpp           # Bracket/brace matching utilities
     ├── lsp_cancellation_manager.hpp    # Thread-safe request cancellation tracking
     ├── lsp_capabilities.cpp            # Server capability registration
     ├── lsp_capabilities.hpp            # Capabilities declaration
@@ -342,13 +322,11 @@ language-server/
     ├── lsp_hover_literals.hpp          # Hover content for literal expressions
     ├── lsp_handler_context.hpp         # Shared context passed to handlers
     ├── lsp_handler_registry.hpp        # HandlerRegistry class declaration (header-only)
-    ├── lsp_hierarchy_handler.hpp       # Hierarchy handler interface
     ├── lsp_hover_handler.hpp           # Hover handler interface
     ├── lsp_identifier_collector.cpp    # Identifier collector implementations
     ├── lsp_identifier_collector.hpp    # IdentifierCollector class declaration
     ├── lsp_include_processor.cpp       # Include processing for analysis
     ├── lsp_include_processor.hpp       # IncludeProcessor class declaration
-    ├── lsp_inlay_hint_handler.hpp      # Inlay hint handler interface
     ├── lsp_keyword_catalog.cpp         # Keyword catalog for completions
     ├── lsp_keyword_catalog.hpp         # KeywordCatalog class declaration
     ├── lsp_lexical_context.hpp         # String/comment/interpolation context for raw text
@@ -360,11 +338,8 @@ language-server/
     ├── lsp_params.hpp                  # Typed LSP request parameter classes
     ├── lsp_path_utils.hpp              # Path utility helpers
     ├── lsp_pending_uri_set.hpp         # Thread-safe set of URIs pending re-analysis
-    ├── lsp_persisted_index.cpp         # Workspace index persistence
-    ├── lsp_persisted_index.hpp         # PersistedIndex class declaration
     ├── lsp_position_utils.hpp          # Position calculation utilities
     ├── lsp_quickfix_handler.hpp        # Quick-fix code action framework
-    ├── lsp_refactoring_provider.hpp    # Refactoring provider registry framework
     ├── lsp_rename_handler.hpp          # Rename handler interface
     ├── lsp_response_helpers.hpp        # JSON-RPC response envelope construction
     ├── lsp_scope_stack.cpp             # Scope chain method implementations
@@ -373,25 +348,22 @@ language-server/
     ├── lsp_semantic_tokens_handler.hpp # Semantic tokens handler interface
     ├── lsp_server.cpp                  # LspServer: lifecycle and top-level dispatch
     ├── lsp_server.hpp                  # LspServer class declaration
-    ├── lsp_server_code_actions.cpp     # Code actions, quick fixes, and code lens
-    ├── lsp_server_code_actions_refactoring.cpp # Refactoring code action implementations
+    ├── lsp_server_code_actions.cpp     # Code actions and quick fixes
     ├── lsp_server_completion.cpp       # Completion handling
     ├── lsp_server_completion_resolve.cpp # Completion item detail resolution
     ├── lsp_server_dispatch.cpp         # Request normalisation and message dispatch
     ├── lsp_server_folding.cpp          # Folding ranges (blocks, declarations, comments)
-    ├── lsp_server_formatting.cpp       # Document and range formatting
-    ├── lsp_server_hierarchy.cpp        # Call and type hierarchy requests
+    ├── lsp_server_formatting.cpp       # Document formatting
     ├── lsp_server_hover.cpp            # Hover handling
-    ├── lsp_server_inlay.cpp            # Inlay hints (inferred types and parameter names)
     ├── lsp_server_lifecycle.cpp        # Server initialisation and capability negotiation
-    ├── lsp_server_navigation.cpp       # Definition, references, document links, and selection range
+    ├── lsp_server_navigation.cpp       # Definition, references, and document links
     ├── lsp_server_rename.cpp           # Rename requests
     ├── lsp_server_semantic_tokens.cpp  # Semantic token generation
     ├── lsp_server_signature.cpp        # Signature help
     ├── lsp_server_state_lock.hpp       # RAII wrapper for thread-safe state access
     ├── lsp_server_symbols.cpp          # AST symbol collection and document symbols
     ├── lsp_server_sync.cpp             # Text document sync handling
-    ├── lsp_server_workspace.cpp        # Workspace symbols and indexing requests
+    ├── lsp_server_workspace.cpp        # Workspace roots, configuration, and executeCommand handling
     ├── lsp_stdlib_registry.cpp         # Stdlib function registry for completions
     ├── lsp_stdlib_registry.hpp         # StdlibRegistry class declaration
     ├── lsp_string_utils.hpp            # String utility functions (to_lower, narrow_to_int)
@@ -412,8 +384,6 @@ language-server/
     ├── lsp_type_formatter.hpp          # Type annotation rendering helpers
     ├── lsp_types.cpp                   # LSP type serialisation helpers
     ├── lsp_types.hpp                   # LSP protocol type definitions
-    ├── lsp_workspace_indexer.cpp       # Workspace-wide symbol indexing
-    ├── lsp_workspace_indexer.hpp       # WorkspaceIndexer class declaration
     ├── lsp_workspace_manager.cpp       # Multi-root workspace management
     ├── lsp_workspace_manager.hpp       # WorkspaceManager class declaration
     ├── lsp_workspace_handler.hpp       # Workspace handler interface
@@ -650,7 +620,7 @@ struct WorkspaceEdit {
 
 struct CodeAction {
     std::string title;
-    std::string kind; // "quickfix", "refactor", etc.
+    std::string kind; // "quickfix"
     WorkspaceEdit edit;
     std::optional<Diagnostic> diagnostic;
 };
@@ -853,8 +823,7 @@ The following modules were added to support scalability and advanced features:
 | `lsp_analysis_service`         | Interface abstracting the analysis pipeline for testability.                                                    |
 | `lsp_analysis_service_impl`    | Concrete implementation: runs lexer → parser → type checker on worker thread.                                   |
 | `lsp_analysis_service_symbols` | Symbol collection and AST analysis utilities used during analysis.                                              |
-| `lsp_brace_matcher.hpp`        | Bracket/brace matching for linked editing ranges.                                                               |
-| `lsp_binary_format.hpp`        | Binary serialisation helpers (big-endian u32, u64, string) for the persisted index.                             |
+| `lsp_brace_matcher.hpp`        | Bracket/brace matching utilities.                                                                               |
 | `lsp_cancellation_manager.hpp` | Thread-safe bounded set for tracking client-requested cancellations.                                            |
 | `lsp_capabilities`             | Builds the server capabilities object during `initialize`.                                                      |
 | `lsp_code_action_builder.hpp`  | Fluent builder for constructing LSP code action objects.                                                        |
@@ -875,10 +844,8 @@ The following modules were added to support scalability and advanced features:
 | `lsp_optional_ref.hpp`         | Non-owning optional reference to avoid `std::optional<T&>` limitations.                                         |
 | `lsp_params.hpp`               | Typed request parameter classes for LSP methods.                                                                |
 | `lsp_path_utils.hpp`           | Path normalisation and workspace-relative path computation.                                                     |
-| `lsp_persisted_index`          | Persists the workspace symbol index to disk for fast startup.                                                   |
 | `lsp_position_utils.hpp`       | UTF-16 offset ↔ byte offset conversion for multi-byte text.                                                     |
 | `lsp_quickfix_handler.hpp`     | Framework for quick-fix code action handlers.                                                                   |
-| `lsp_refactoring_provider.hpp` | Framework for refactoring code action providers (registry of selection-driven refactorings).                    |
 | `lsp_response_helpers.hpp`     | JSON-RPC response envelope construction helpers.                                                                |
 | `lsp_scope_stack.hpp`          | Reusable scope chain abstraction for handler context.                                                           |
 | `lsp_semantic_token_cache.hpp` | Per-document semantic token result caching.                                                                     |
@@ -887,7 +854,7 @@ The following modules were added to support scalability and advanced features:
 | `lsp_symbol_lookup.hpp`        | Convenience wrapper for semantic analysis queries.                                                              |
 | `lsp_token_classifier.hpp`     | Consolidated token + symbol classification for semantic tokens.                                                 |
 | `lsp_transport_wrapper`        | Owns the transport and write mutex; serialises outgoing messages.                                               |
-| `lsp_workspace_manager`        | Tracks workspace folders, roots, and multi-root folder changes.                                                 |
+| `lsp_workspace_manager`        | Owns workspace roots and project (`luma.json`) configuration; provides `is_in_workspace()` path checks. |
 
 ---
 
@@ -1010,7 +977,7 @@ If any phase emits error diagnostics, the server converts them to LSP diagnostic
 1. Editor sends textDocument/semanticTokens/full
 2. LspServer iterates analysis_cache_[uri].tokens.
 3. For each token, map TokenType → semantic token type index (0–8).
-4. Encode the token list in LSP delta-encoded format (5 integers per token).
+4. Encode the token list in the LSP semantic tokens format (5 integers per token).
 5. Return SemanticTokens{data: uint32[]}.
 ```
 
@@ -1043,29 +1010,14 @@ textDocument/definition                   Request        handle_definition
 textDocument/typeDefinition               Request        handle_type_definition
 textDocument/implementation               Request        handle_implementation
 textDocument/references                   Request        handle_references
-textDocument/documentHighlight            Request        handle_document_highlight
 textDocument/documentSymbol               Request        handle_document_symbol
 textDocument/codeAction                   Request        handle_code_action
-textDocument/codeLens                     Request        handle_code_lens
 textDocument/formatting                   Request        handle_formatting
-textDocument/rangeFormatting              Request        handle_range_formatting
 textDocument/rename                       Request        handle_rename
 textDocument/prepareRename                Request        handle_prepare_rename
 textDocument/foldingRange                 Request        handle_folding_range
-textDocument/selectionRange               Request        handle_selection_range
-textDocument/inlayHint                    Request        handle_inlay_hint
-textDocument/linkedEditingRange           Request        handle_linked_editing_range
 textDocument/documentLink                 Request        handle_document_link
 textDocument/semanticTokens/full          Request        handle_semantic_tokens_full
-textDocument/semanticTokens/full/delta    Request        handle_semantic_tokens_delta
-textDocument/semanticTokens/range         Request        handle_semantic_tokens_range
-textDocument/prepareCallHierarchy         Request        handle_call_hierarchy_prepare
-callHierarchy/incomingCalls               Request        handle_call_hierarchy_incoming
-callHierarchy/outgoingCalls               Request        handle_call_hierarchy_outgoing
-textDocument/prepareTypeHierarchy         Request        handle_type_hierarchy_prepare
-typeHierarchy/supertypes                  Request        handle_type_hierarchy_supertypes
-typeHierarchy/subtypes                    Request        handle_type_hierarchy_subtypes
-workspace/symbol                          Request        handle_workspace_symbol
 workspace/executeCommand                  Request        handle_execute_command
 $/cancelRequest                           Notification   cancel pending request by ID
 (unknown)                                 Request        send_error(-32601)
@@ -1093,20 +1045,11 @@ The `initialize` response advertises these server capabilities:
         "typeDefinitionProvider": true,
         "implementationProvider": true,
         "referencesProvider": true,
-        "documentHighlightProvider": true,
         "renameProvider": { "prepareProvider": true },
         "codeActionProvider": true,
-        "codeLensProvider": {},
         "documentFormattingProvider": true,
-        "documentRangeFormattingProvider": true,
         "foldingRangeProvider": true,
-        "selectionRangeProvider": true,
-        "inlayHintProvider": true,
-        "linkedEditingRangeProvider": true,
         "documentLinkProvider": {},
-        "callHierarchyProvider": true,
-        "typeHierarchyProvider": true,
-        "workspaceSymbolProvider": true,
         "executeCommandProvider": { "commands": [] },
         "semanticTokensProvider": {
             "legend": {
@@ -1123,8 +1066,7 @@ The `initialize` response advertises these server capabilities:
                 ],
                 "tokenModifiers": []
             },
-            "full": { "delta": true },
-            "range": true
+            "full": true
         }
     },
     "serverInfo": { "name": "luma-lsp", "version": "0.11.0" }

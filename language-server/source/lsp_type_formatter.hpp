@@ -14,8 +14,8 @@ inline constexpr std::string_view k_unknown_type = "unknown";
 
 // True when `type` names a resolved, displayable type — i.e. it is non-empty
 // and not the "unknown" sentinel. This is the single source of truth for the
-// "is this a usable type?" predicate used across hover, inlay hints, and
-// refactorings.
+// "is this a usable type?" predicate used during symbol resolution (hover and
+// completion detail).
 [[nodiscard]] inline constexpr bool is_known_type(std::string_view type) {
     return !type.empty() && type != k_unknown_type;
 }

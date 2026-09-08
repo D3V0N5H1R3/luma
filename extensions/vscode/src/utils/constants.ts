@@ -21,19 +21,16 @@ export const COMMANDS = {
     showOutputChannel: "luma.showOutputChannel",
     updateServer: "luma.updateServer",
     showReferences: "luma.showReferences",
-    openPlayground: "luma.openPlayground",
     runFile: "luma.runFile",
     runTests: "luma.runTests",
-    visualizeVariable: "luma.visualizeVariable",
 } as const;
 
 /**
- * Stable identifiers registered with VS Code (test controller and language
- * client ids). Centralised alongside COMMANDS so the raw strings live in one
- * place rather than inline at each registration site.
+ * Stable identifiers registered with VS Code (language client id).
+ * Centralised alongside COMMANDS so the raw strings live in one place rather
+ * than inline at each registration site.
  */
 export const IDS = {
-    testController: "lumaTests",
     lspClient: "luma-lsp",
 } as const;
 

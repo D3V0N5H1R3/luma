@@ -88,11 +88,6 @@ bool DebugExecutionEngine::evaluate_step_mode(ThreadState& state, int file_id, i
                                               std::size_t frame_depth) {
     const auto lock = thread_mgr_.lock_state(state);
 
-    // Data breakpoint hit — pause immediately.
-    if (state.pending.data_breakpoint) {
-        return true;
-    }
-
     return evaluate_step_mode_depth(state.step, file_id, line, frame_depth);
 }
 
@@ -190,10 +185,6 @@ DebugExecutionEngine::StopInfo DebugExecutionEngine::resolve_stop_state(ThreadSt
         info.reason = std::string{kStopReasonException};
         info.exception_text = state.pending.exception_message;
         state.pending.exception_message.clear();
-    } else if (state.pending.data_breakpoint) {
-        info.reason = std::string{kStopReasonDataBreakpoint};
-        state.pending.data_breakpoint = false;
-        state.pending.data_breakpoint_name.clear();
     } else if (state.pending.stop_on_entry) {
         info.reason = std::string{kStopReasonEntry};
         state.pending.stop_on_entry = false;

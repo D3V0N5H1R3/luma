@@ -68,9 +68,7 @@ void ConfigurationManager::apply_settings(const JsonValue& params, const LogCall
 
         if (log) {
             const auto snap = config_.get();
-            log(std::format("Configuration updated: inlayHints={}, codeLens={}, "
-                            "diagnosticsOnSave={}, debounce={}ms",
-                            snap->inlay_hints_enabled, snap->code_lens_enabled,
+            log(std::format("Configuration updated: diagnosticsOnSave={}, debounce={}ms",
                             snap->diagnostics_on_save, snap->analysis_debounce_ms));
         }
     } catch (const std::exception& e) {

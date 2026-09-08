@@ -105,10 +105,6 @@ void VM::propagate_debug_hooks(const DebugCallbacks& parent_cbs, VM& child) {
     if (parent_cbs.exception_hook) {
         child.set_exception_hook(parent_cbs.exception_hook);
     }
-
-    if (parent_cbs.data_breakpoint_hook) {
-        child.set_data_breakpoint_hook(parent_cbs.data_breakpoint_hook);
-    }
 }
 
 Value VM::execute_spawned_callable(VM& task_vm, Value& callee, std::vector<Value>& args,

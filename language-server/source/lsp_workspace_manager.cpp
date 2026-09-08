@@ -1,5 +1,7 @@
 #include "lsp_workspace_manager.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -10,6 +12,40 @@
 namespace luma::lsp {
 
 using luma::json::JsonValue;
+
+namespace {
+
+// Case-insensitive path prefix check on Windows where drive letters and
+// directory names may differ in casing.
+[[nodiscard]] bool path_starts_with(const std::string& path, const std::string& prefix) {
+    // Strip trailing separators from prefix.
+    std::size_t prefix_len = prefix.size();
+    while (prefix_len > 0 && (prefix[prefix_len - 1] == '/' || prefix[prefix_len - 1] == '\\')) {
+        --prefix_len;
+    }
+    if (path.size() <= prefix_len) {
+        return false;
+    }
+    const auto chars_equal = [](char lhs, char rhs) {
+        const auto a = static_cast<unsigned char>(lhs);
+        const auto b = static_cast<unsigned char>(rhs);
+#ifdef _WIN32
+        return std::tolower(a) == std::tolower(b);
+#else
+        return a == b;
+#endif
+    };
+    if (!std::equal(path.begin(), path.begin() + static_cast<std::ptrdiff_t>(prefix_len),
+                    prefix.begin(), prefix.begin() + static_cast<std::ptrdiff_t>(prefix_len),
+                    chars_equal)) {
+        return false;
+    }
+    // Ensure the prefix ends at a directory boundary.
+    const auto next = path[prefix_len];
+    return next == '/' || next == '\\';
+}
+
+} // namespace
 
 // ─── Workspace roots ───
 
@@ -26,67 +62,9 @@ bool WorkspaceManager::has_roots() const noexcept {
 }
 
 bool WorkspaceManager::is_in_workspace(const std::string& path) const {
-    return WorkspaceIndexer::is_in_workspace(path, workspace_roots_);
-}
-
-// ─── Indexing state ───
-
-bool WorkspaceManager::is_indexing() const noexcept {
-    return indexing_in_progress_.load(std::memory_order_acquire);
-}
-
-void WorkspaceManager::set_indexing(bool value) noexcept {
-    indexing_in_progress_.store(value, std::memory_order_release);
-}
-
-// ─── Persisted index ───
-
-PersistedIndex& WorkspaceManager::persisted_index() noexcept {
-    return persisted_index_;
-}
-
-const PersistedIndex& WorkspaceManager::persisted_index() const noexcept {
-    return persisted_index_;
-}
-
-bool WorkspaceManager::load_persisted_index(const LogCallback& log) {
-    if (workspace_roots_.empty()) {
-        return false;
-    }
-
-    const auto index_path = PersistedIndex::default_path(workspace_roots_[0]);
-
-    if (!persisted_index_.load(index_path)) {
-        return false;
-    }
-
-    if (log) {
-        log(std::format("Loaded persisted index ({} files)", persisted_index_.size()));
-    }
-
-    return true;
-}
-
-std::size_t WorkspaceManager::validate_persisted_index() {
-    return persisted_index_.validate();
-}
-
-bool WorkspaceManager::save_persisted_index(const LogCallback& log) {
-    if (workspace_roots_.empty()) {
-        return false;
-    }
-
-    const auto index_path = PersistedIndex::default_path(workspace_roots_[0]);
-
-    if (!persisted_index_.save(index_path)) {
-        return false;
-    }
-
-    if (log) {
-        log(std::format("Saved persisted index ({} files)", persisted_index_.size()));
-    }
-
-    return true;
+    return std::ranges::any_of(workspace_roots_, [&path](const std::string& root) {
+        return path_starts_with(path, root);
+    });
 }
 
 // ─── Project configuration ───

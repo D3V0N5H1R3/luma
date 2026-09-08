@@ -44,8 +44,8 @@ const luma_middleware: LanguageClientOptions["middleware"] = {
 };
 
 // ─── LSP config defaults ─────────────────────────────────────────
-// LSP config defaults (e.g. inlayHints.enabled) are defined per-editor:
-//   VS Code:  package.json ("luma.inlayHints.enabled")
+// LSP config defaults (e.g. diagnostics.onSave) are defined per-editor:
+//   VS Code:  package.json ("luma.diagnostics.onSave")
 //   Zed:      src/lib.rs        (language_server_workspace_configuration)
 
 /** Options for creating a language client. */

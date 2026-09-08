@@ -590,8 +590,8 @@ void run_repl(bool sandbox) {
 }
 
 int run_eval(bool sandbox) {
-    // Slurp the entire program from standard input. The Playground pipes a
-    // snippet here and closes stdin, so reading to EOF returns the whole buffer.
+    // Slurp the entire program from standard input. A caller pipes a snippet
+    // here and closes stdin, so reading to EOF returns the whole buffer.
     const std::string source{std::istreambuf_iterator<char>(std::cin),
                              std::istreambuf_iterator<char>()};
 
@@ -604,7 +604,7 @@ int run_eval(bool sandbox) {
 
     // The REPL evaluation pipeline type-checks with require_main = false and
     // compiles in REPL mode, so top-level statements run without a @main
-    // function — exactly the scratch-pad semantics the Playground expects.
+    // function — exactly the scratch-pad semantics stdin evaluation expects.
     TypeChecker checker;
 
     try {

@@ -1,5 +1,5 @@
-// DAP breakpoint tests — function breakpoints, conditional breakpoints,
-// hit conditions, data breakpoints, step-in targets.
+// DAP breakpoint tests — conditional breakpoints, hit conditions,
+// log points, and step-in targets.
 
 #include <atomic>
 #include <format>
@@ -15,79 +15,6 @@ using namespace luma::dap;
 using luma::json::JsonValue;
 
 namespace {
-
-// ─── Function breakpoint capability ────────────────────────────────
-
-void test_function_breakpoint_capability() {
-    // Verify that capabilities now advertise function breakpoint support.
-    JsonValue::ObjectType caps;
-    caps["supportsFunctionBreakpoints"] = JsonValue(true);
-
-    auto json = JsonValue(std::move(caps));
-    ASSERT_TRUE(json["supportsFunctionBreakpoints"].as_bool());
-}
-
-// ─── Function breakpoint response structure ────────────────────────
-
-void test_function_breakpoint_response() {
-    // Unverified function breakpoint response.
-    Breakpoint bp;
-    bp.id = 10;
-    bp.verified = false;
-    bp.message = "Function 'foo' not found";
-
-    auto json = serialise_breakpoint(bp);
-
-    ASSERT_EQ(json["id"].as_integer(), 10);
-    ASSERT_FALSE(json["verified"].as_bool());
-    ASSERT_EQ(json["message"].as_string(), "Function 'foo' not found");
-}
-
-// ─── FunctionBreakpointInfo defaults ───────────────────────────────
-
-void test_function_breakpoint_info_defaults() {
-    // Verify a function breakpoint that is not yet verified.
-    Breakpoint bp;
-    bp.id = 5;
-    bp.verified = false;
-    bp.message = "Function 'bar' not found";
-
-    auto json = serialise_breakpoint(bp);
-
-    ASSERT_EQ(json["id"].as_integer(), 5);
-    ASSERT_FALSE(json["verified"].as_bool());
-    ASSERT_TRUE(json.has("message"));
-}
-
-// ─── Function breakpoint conditions ────────────────────────────────
-
-void test_function_breakpoint_info_conditions() {
-    // FunctionBreakpointInfo in the header should support condition/hit_condition/log_message.
-    // Verify through BreakpointRequest which now carries a name field.
-    BreakpointRequest req;
-    req.name = "my_function";
-    req.condition = "x > 5";
-    req.hit_condition = ">=3";
-    req.log_message = "Hit function: {x}";
-
-    ASSERT_EQ(req.name, "my_function");
-    ASSERT_EQ(req.condition, "x > 5");
-    ASSERT_EQ(req.hit_condition, ">=3");
-    ASSERT_EQ(req.log_message, "Hit function: {x}");
-}
-
-// ─── Function breakpoint index structure ───────────────────────────
-
-void test_function_breakpoint_index() {
-    // Function breakpoints should be indexable by (file_id, line) pair.
-    std::map<std::pair<int, int>, int> index;
-    index[{1, 5}] = 10;
-    index[{2, 12}] = 11;
-
-    ASSERT_EQ(index.count({1, 5}), static_cast<std::size_t>(1));
-    ASSERT_EQ(index.at({1, 5}), 10);
-    ASSERT_EQ(index.count({3, 1}), static_cast<std::size_t>(0));
-}
 
 // ─── Atomic breakpoint ID ──────────────────────────────────────────
 
@@ -315,81 +242,6 @@ void test_hit_condition_less_than_evaluation() {
     ASSERT_FALSE(test_evaluate_hc("<=3", 4));
 }
 
-// ─── Data breakpoint structures ────────────────────────────────────
-
-void test_data_breakpoint_info_response() {
-    // dataBreakpointInfo response: dataId, description, accessTypes.
-    JsonValue::ObjectType body;
-    body["dataId"] = JsonValue(std::string("var_x@frame1"));
-    body["description"] = JsonValue(std::string("Break when 'x' changes"));
-
-    JsonValue::ArrayType access_types;
-    access_types.push_back(JsonValue(std::string("write")));
-    access_types.push_back(JsonValue(std::string("readWrite")));
-    body["accessTypes"] = JsonValue(std::move(access_types));
-
-    auto json = JsonValue(std::move(body));
-
-    ASSERT_TRUE(json.has("dataId"));
-    ASSERT_EQ(json["dataId"].as_string(), "var_x@frame1");
-    ASSERT_EQ(json["description"].as_string(), "Break when 'x' changes");
-    ASSERT_TRUE(json.has("accessTypes"));
-    ASSERT_EQ(json["accessTypes"].as_array().size(), static_cast<std::size_t>(2));
-    ASSERT_EQ(json["accessTypes"].as_array()[0].as_string(), "write");
-}
-
-void test_data_breakpoint_info_not_available() {
-    // When a variable doesn't support data breakpoints, dataId should be null.
-    JsonValue::ObjectType body;
-    body["dataId"] = JsonValue();
-    body["description"] = JsonValue(std::string("Cannot watch this variable"));
-
-    auto json = JsonValue(std::move(body));
-
-    ASSERT_TRUE(json["dataId"].is_null());
-    ASSERT_TRUE(json.has("description"));
-}
-
-void test_set_data_breakpoints_request() {
-    // setDataBreakpoints request with multiple data breakpoints.
-    JsonValue::ArrayType breakpoints;
-
-    JsonValue::ObjectType bp1;
-    bp1["dataId"] = JsonValue(std::string("var_x@frame1"));
-    bp1["accessType"] = JsonValue(std::string("write"));
-    breakpoints.push_back(JsonValue(std::move(bp1)));
-
-    JsonValue::ObjectType bp2;
-    bp2["dataId"] = JsonValue(std::string("var_y@frame1"));
-    bp2["accessType"] = JsonValue(std::string("readWrite"));
-    bp2["condition"] = JsonValue(std::string("y > 100"));
-    breakpoints.push_back(JsonValue(std::move(bp2)));
-
-    JsonValue::ObjectType args;
-    args["breakpoints"] = JsonValue(std::move(breakpoints));
-
-    auto json = JsonValue(std::move(args));
-
-    ASSERT_TRUE(json.has("breakpoints"));
-    ASSERT_EQ(json["breakpoints"].as_array().size(), static_cast<std::size_t>(2));
-    ASSERT_EQ(json["breakpoints"].as_array()[0]["accessType"].as_string(), "write");
-    ASSERT_TRUE(json["breakpoints"].as_array()[1].has("condition"));
-}
-
-void test_data_breakpoint_stop_reason() {
-    // Stopped event with reason "data breakpoint".
-    JsonValue::ObjectType body;
-    body["reason"] = JsonValue(std::string("data breakpoint"));
-    body["threadId"] = JsonValue(1);
-    body["allThreadsStopped"] = JsonValue(true);
-    body["description"] = JsonValue(std::string("Variable 'x' was modified"));
-
-    auto json = JsonValue(std::move(body));
-
-    ASSERT_EQ(json["reason"].as_string(), "data breakpoint");
-    ASSERT_TRUE(json.has("description"));
-}
-
 // ─── Step-in targets structure ─────────────────────────────────────
 
 void test_step_in_targets_response() {
@@ -427,33 +279,6 @@ void test_step_in_targets_request() {
 
     ASSERT_TRUE(json.has("frameId"));
     ASSERT_EQ(json["frameId"].as_integer(), 42);
-}
-
-// ─── Function breakpoint set request ───────────────────────────────
-
-void test_set_function_breakpoints_request() {
-    // setFunctionBreakpoints request with names and conditions.
-    JsonValue::ArrayType breakpoints;
-
-    JsonValue::ObjectType bp1;
-    bp1["name"] = JsonValue(std::string("calculate"));
-    breakpoints.push_back(JsonValue(std::move(bp1)));
-
-    JsonValue::ObjectType bp2;
-    bp2["name"] = JsonValue(std::string("process"));
-    bp2["condition"] = JsonValue(std::string("x > 0"));
-    bp2["hitCondition"] = JsonValue(std::string(">=2"));
-    breakpoints.push_back(JsonValue(std::move(bp2)));
-
-    JsonValue::ObjectType args;
-    args["breakpoints"] = JsonValue(std::move(breakpoints));
-
-    auto json = JsonValue(std::move(args));
-
-    ASSERT_EQ(json["breakpoints"].as_array().size(), static_cast<std::size_t>(2));
-    ASSERT_EQ(json["breakpoints"].as_array()[0]["name"].as_string(), "calculate");
-    ASSERT_TRUE(json["breakpoints"].as_array()[1].has("condition"));
-    ASSERT_TRUE(json["breakpoints"].as_array()[1].has("hitCondition"));
 }
 
 // ─── Log point interpolation logic ─────────────────────────────────
@@ -619,13 +444,6 @@ void test_evaluate_hit_condition_invalid_returns_false() {
 int main() {
     luma::test::print_suite_header("DAP Breakpoint Tests");
 
-    // Function breakpoints.
-    RUN(test_function_breakpoint_capability);
-    RUN(test_function_breakpoint_response);
-    RUN(test_function_breakpoint_info_defaults);
-    RUN(test_function_breakpoint_info_conditions);
-    RUN(test_function_breakpoint_index);
-
     // Atomic breakpoint ID.
     RUN(test_atomic_breakpoint_id);
 
@@ -646,18 +464,9 @@ int main() {
     RUN(test_hit_condition_less_than_validation);
     RUN(test_hit_condition_less_than_evaluation);
 
-    // Data breakpoints.
-    RUN(test_data_breakpoint_info_response);
-    RUN(test_data_breakpoint_info_not_available);
-    RUN(test_set_data_breakpoints_request);
-    RUN(test_data_breakpoint_stop_reason);
-
     // Step-in targets.
     RUN(test_step_in_targets_response);
     RUN(test_step_in_targets_request);
-
-    // Function breakpoint set request.
-    RUN(test_set_function_breakpoints_request);
 
     // Log points.
     RUN(test_log_message_escaped_brace);

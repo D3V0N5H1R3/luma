@@ -31,7 +31,6 @@ public:
 
     [[nodiscard]] JsonValue handle_rename(const JsonValue& params);
     [[nodiscard]] JsonValue handle_prepare_rename(const JsonValue& params);
-    [[nodiscard]] JsonValue handle_linked_editing_range(const JsonValue& params);
 
 private:
     LspHandlerContext& ctx_;

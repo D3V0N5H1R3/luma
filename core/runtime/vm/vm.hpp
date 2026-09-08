@@ -228,9 +228,8 @@ class RuntimeError;
 //     Owns the debugger-integration state (the DAP callback set, last
 //     reported line/file, and the cross-thread pause flag) and the
 //     thread-safe set_*/copy_* callback accessors.  The frame/stack-touching
-//     notification logic (check_debug_hooks(), notify_local_data_breakpoint(),
-//     notify_global_data_breakpoint()) stays on VM because it needs the call
-//     frames and value stack to report state to the debugger.
+//     notification logic (check_debug_hooks()) stays on VM because it needs
+//     the call frames and value stack to report state to the debugger.
 //
 //   VMTaskManager      (vm_task_manager.hpp)  ── DONE
 //     Owns all structured-concurrency STATE: the task_scope { } LIFO stack,
@@ -312,7 +311,6 @@ public:
     using DebugHook = luma::DebugHook;
     using PauseCallback = luma::PauseCallback;
     using ExceptionHook = luma::ExceptionHook;
-    using DataBreakpointHook = luma::DataBreakpointHook;
     using TaskSpawnHook = luma::TaskSpawnHook;
     using TaskExitHook = luma::TaskExitHook;
     using DebugCallbacks = luma::DebugCallbacks;
@@ -324,7 +322,6 @@ public:
     void set_debug_hook(DebugHook hook);
     void set_pause_callback(PauseCallback callback);
     void set_exception_hook(ExceptionHook hook);
-    void set_data_breakpoint_hook(DataBreakpointHook hook);
     void set_task_spawn_hook(TaskSpawnHook hook);
     void set_task_exit_hook(TaskExitHook hook);
 
@@ -359,9 +356,6 @@ public:
     [[nodiscard]] std::span<Value> stack_mut() {
         return stack_.span_mut();
     }
-
-    // Replace the stack contents — used by the time-travel debugger to restore snapshots.
-    void restore_stack(std::vector<Value> s);
 
     // Query the currently active task scope for this thread.
     // Returns nullptr when no task_scope { } block is executing on this thread.
@@ -513,23 +507,6 @@ private:
     // Extracted from the run loop to reduce duplication between the
     // function-pointer and switch dispatch paths.
     bool check_debug_hooks();
-
-    // ─── Validation helpers (vm_helpers.cpp) ────────────────────────────────
-    // Shared type-checking and bounds-checking utilities used across
-    // dispatch files to reduce duplicated validation patterns.
-
-    // Notify the debugger of a local variable write.
-    // Triggers a pause if the debugger registered a breakpoint for `slot`.
-    void notify_local_data_breakpoint(const CallFrame& cf, std::uint16_t slot);
-
-    // Notify the debugger of a global variable write by name.
-    // Triggers a pause if a data breakpoint is set for `name`.
-    void notify_global_data_breakpoint(std::string_view name);
-
-    // Shared implementation for data-breakpoint notification.
-    // NameProvider is a callable returning std::optional<std::string>;
-    // if it returns std::nullopt the notification is silently skipped.
-    template <typename NameProvider> void notify_data_breakpoint_impl(NameProvider name_provider);
 
     // ─── Arithmetic dispatch (vm_dispatch_arithmetic.cpp) ───
     [[nodiscard]] Value numeric_binary_op(const Value& a, const Value& b, Op op) const;
@@ -910,9 +887,9 @@ private:
     // the full contract.
     //
     // Coupling note: the frame/stack-touching notification logic
-    // (check_debug_hooks(), notify_*_data_breakpoint()) stays on VM because
-    // every hook callback needs direct access to the VM's call frames, value
-    // stack, and instruction pointer to report state to the debugger.
+    // (check_debug_hooks()) stays on VM because the hook callback needs
+    // direct access to the VM's call frames, value stack, and instruction
+    // pointer to report state to the debugger.
     VMDebugInterface debug_;
 
     // ─── Task manager component ──────────────────────────────────────────

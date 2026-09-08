@@ -155,7 +155,6 @@ The protocol thread remains responsive to DAP requests while the program runs.
 | Request       | Direction       | Purpose                                       |
 | ------------- | --------------- | --------------------------------------------- |
 | `setVariable` | Client → Server | Modify a variable's value while paused        |
-| `completions` | Client → Server | Return name completions for the debug console |
 
 ### Events (Server → Client)
 
@@ -358,8 +357,6 @@ debugger/source/
 ├── breakpoint_shared_context.cpp      # Shared breakpoint response building impl
 ├── compiled_breakpoint.hpp            # CompiledBreakpoint for bytecode-level breakpoints
 ├── compiled_breakpoint.cpp            # Compiled breakpoint implementation
-├── custom_visualizer.hpp              # CustomVisualizer class declaration
-├── custom_visualizer.cpp              # Custom variable display formatting
 ├── dap_breakpoint_handler.hpp         # Breakpoint request handler group
 ├── dap_breakpoint_validator.hpp       # BreakpointValidator class declaration
 ├── dap_breakpoint_validator.cpp       # Breakpoint validation logic
@@ -384,14 +381,10 @@ debugger/source/
 ├── dap_server_lifecycle.cpp           # Lifecycle request handlers (initialize/launch/disconnect/restart)
 ├── dap_server_inspection.cpp          # Variable/stack inspection request handlers
 ├── dap_session_types.hpp              # Session type definitions (ThreadId, ThreadState)
-├── dap_tcp_transport.hpp              # TCP transport class declaration
-├── dap_tcp_transport.cpp              # TCP transport for remote debugging
 ├── dap_transport.hpp                  # Transport class declaration (Content-Length framing)
 ├── dap_transport.cpp                  # Read/write DAP messages over stdio
 ├── dap_types.hpp                      # DAP protocol type definitions and constants
 ├── dap_types.cpp                      # DAP type serialisation helpers
-├── data_breakpoint_manager.hpp        # Data breakpoint management
-├── data_breakpoint_manager.cpp        # Data breakpoint management implementation
 ├── debug_execution_control.cpp        # Execution control logic (continue, step, pause)
 ├── debug_execution_engine.hpp         # DebugExecutionEngine class declaration
 ├── debug_execution_engine.cpp         # VM execution with debug hooks
@@ -409,11 +402,6 @@ debugger/source/
 ├── expression_compiler.cpp            # Compile watch expressions to bytecode
 ├── expression_evaluator.hpp           # ExpressionEvaluator class declaration
 ├── expression_evaluator.cpp           # Runtime expression evaluation for watch and hover
-├── function_breakpoint_manager.hpp    # Function breakpoint detail types
-├── function_breakpoint_manager.cpp    # Function breakpoint resolution
-├── hot_reloader.hpp                   # HotReloader class declaration
-├── hot_reloader.cpp                   # Hot code reload (edit and continue)
-├── i_filesystem_monitor.hpp           # Filesystem monitoring interface
 ├── i_source_locator.hpp               # Source file locator interface
 ├── i_vm_control.hpp                   # VM control interface for debugging
 ├── i_vm_introspection.hpp             # VM introspection interface
@@ -424,8 +412,6 @@ debugger/source/
 ├── source_manager_locator.cpp         # Source file locator implementation
 ├── thread_state_manager.hpp           # ThreadStateManager class declaration
 ├── thread_state_manager.cpp           # Multi-thread debug state coordination
-├── time_travel.hpp                    # TimeTravel class declaration
-├── time_travel.cpp                    # Reverse debugging (step backwards)
 ├── variable_inspector.hpp             # VariableInspector class declaration
 ├── variable_inspector.cpp             # Variable scope inspection for debug views
 ├── variable_reference_registry.hpp    # Variable reference ID management
@@ -460,7 +446,7 @@ On Windows, sets `stdin`, `stdout`, and `stderr` to binary mode to prevent `\r\n
 
 `dap_transport.hpp` re-exports the shared stdio transport under the debugger's namespace: `using luma::dap::Transport = luma::protocol::StdioTransport;`. The Content-Length framing, thread-safe writes, optional read timeout, and shared JSON value type (`luma::json::JsonValue` from `shared/json/`) are exactly those the language server uses.
 
-That shared transport and JSON type are documented authoritatively in the [Language Server](Luma_Language_Server.md) design document — see §15 (Module Responsibilities) and §23 (Platform-Specific Handling). A companion `dap_tcp_transport` provides the same framing over a TCP socket for remote debugging.
+That shared transport and JSON type are documented authoritatively in the [Language Server](Luma_Language_Server.md) design document — see §15 (Module Responsibilities) and §23 (Platform-Specific Handling).
 
 ### `dap_types.hpp` / `dap_types.cpp` — Protocol Types
 
@@ -586,7 +572,6 @@ private:
 
     // ─── Modification ───
     [[nodiscard]] JsonValue handle_set_variable(const JsonValue& args);
-    [[nodiscard]] JsonValue handle_completions(const JsonValue& args);
     [[nodiscard]] JsonValue handle_loaded_sources(const JsonValue& args);
 
     // ─── Response/event helpers ───
@@ -769,16 +754,13 @@ The following modules were added to support advanced debugging features:
 | Module                            | Responsibility                                                                                                                |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `compiled_breakpoint`             | Compile/validate cache for breakpoint condition/log expressions; runtime evaluation is performed by `debug_execution_engine`. |
-| `custom_visualizer`               | User-configurable display formatting for complex values (arrays, dictionaries, records).                                      |
 | `dap_response_builders.hpp`       | Helpers to construct well-formed DAP response and event JSON.                                                                 |
 | `dap_session_types.hpp`           | Shared type definitions used across handler files.                                                                            |
 | `debug_execution_engine`          | Drives the VM with debug hooks installed; separates execution logic from session state.                                       |
 | `debug_session_state`             | WatchCache — caches evaluated watch expressions. Session state is managed directly by DapServer.                              |
 | `debug_stream_utils.hpp`          | Stream capture and redirection utilities for output events.                                                                   |
 | `expression_compiler`             | Compiles watch/hover expressions to bytecode for evaluation in a paused frame.                                                |
-| `hot_reloader`                    | Hot code reload: recompile changed source and patch the running VM without restarting.                                        |
 | `thread_state_manager`            | Coordinates debug state across multiple concurrent task threads.                                                              |
-| `time_travel`                     | Reverse debugging: records execution snapshots and restores an earlier snapshot's value stack on step-back.                   |
 | `variable_reference_registry.hpp` | Allocates and tracks variable reference IDs across inspection requests.                                                       |
 | `vm_hook_registry`                | Central registry for VM execution hooks (breakpoints, stepping, coverage).                                                    |
 
@@ -968,10 +950,8 @@ examples/debug/
 ├── closure_variables.luma     # Captured upvalues for closure-scope inspection
 ├── concurrent_tasks.luma      # task_scope with multiple tasks
 ├── conditional_loop.luma      # Loop with conditional logic for stepping
-├── data_breakpoint.luma       # Variable mutation for data breakpoint testing
 ├── exception_caught.luma      # try/catch for the 'caught' exception filter
 ├── exception_unhandled.luma   # Triggers an unhandled exception
-├── function_breakpoint.luma   # Named function for function breakpoint testing
 ├── long_loop.luma             # Long-running loop for pause testing
 ├── recursive_stack.luma       # Deep recursion for call-stack and step-out testing
 ├── set_variable.luma          # Various variable types for setVariable testing
@@ -987,7 +967,7 @@ examples/debug/
 
 Once the current implementation is stable, the following features could be added:
 
-- **Attach mode:** Connect to an already-running Luma program (TCP transport layer is already implemented).
+- **Attach mode:** Connect to an already-running Luma program.
 - **Inline values:** Report variable values inline in the editor (DAP `InlineValue` capability).
 - **Disassembly view:** Show compiled bytecode instructions.
 

@@ -310,27 +310,9 @@ completion_item(std::string_view label, int kind, std::string_view detail = "",
 // Build a FoldingRange object {startLine, endLine, kind}.
 [[nodiscard]] JsonValue folding_range(int start_line, int end_line, std::string_view kind);
 
-// Build an InlayHint object {position, label, kind, paddingLeft, paddingRight}.
-// LSP InlayHintKind: 1 = Type, 2 = Parameter.
-[[nodiscard]] JsonValue inlay_hint(int line, int character, std::string_view label, int kind,
-                                   bool padding_left = false, bool padding_right = false);
-
 // Build a semantic tokens response {data} or {resultId, data}.
 [[nodiscard]] JsonValue semantic_tokens_response(JsonValue::ArrayType data,
                                                  std::string_view result_id = "");
-
-// Build a semantic tokens delta response {resultId, edits}.
-[[nodiscard]] JsonValue semantic_tokens_delta_response(std::string_view result_id,
-                                                       JsonValue::ArrayType edits);
-
-// Build a semantic token edit object {start, deleteCount, data}.
-[[nodiscard]] JsonValue semantic_token_edit(int64_t start, int64_t delete_count,
-                                            JsonValue::ArrayType data);
-
-// Build a call/type hierarchy item {name, kind, uri, range, selectionRange} with optional data.
-[[nodiscard]] JsonValue hierarchy_item(std::string_view name, luma::SymbolKind kind,
-                                       std::string_view uri, const Range& range,
-                                       std::string_view data = "");
 
 // Build a Location JSON value from a URI and a Range.
 [[nodiscard]] inline JsonValue make_location(const std::string& uri, const Range& range) {

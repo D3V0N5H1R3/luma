@@ -20,7 +20,6 @@
 #include "lsp_configuration_manager.hpp"
 #include "lsp_document_store.hpp"
 #include "lsp_pending_uri_set.hpp"
-#include "lsp_persisted_index.hpp"
 #include "lsp_semantic_token_cache.hpp"
 #include "lsp_workspace_manager.hpp"
 
@@ -154,8 +153,7 @@ private:
 
     // Acquire write lock, verify document unchanged, store result in cache.
     CommitOutcome commit_to_cache(const std::string& uri, AnalysisResult result,
-                                  std::size_t content_hash,
-                                  std::optional<IndexedFileEntry> idx_entry);
+                                  std::size_t content_hash);
 
     // Publish diagnostics to client for foreground documents. Returns true when
     // the document was foreground (diagnostics were published), false when the

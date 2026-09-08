@@ -253,7 +253,7 @@ namespace {
     return {};
 }
 
-// Resolve hover for a choice variant access (e.g., "Color.Red").
+// Resolve hover for a choice variant access (e.g., "Terminal.Color.Red").
 [[nodiscard]] std::string hover_choice_variant(const std::string& type_name,
                                                const std::string& variant_name,
                                                const AnalysisResult& result) {

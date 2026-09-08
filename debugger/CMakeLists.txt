@@ -10,7 +10,6 @@ luma_add_tool_library(dap
         source/dap_server_inspection.cpp
         source/dap_handler_context.cpp
         source/dap_transport.cpp
-        source/dap_tcp_transport.cpp
         source/dap_types.cpp
         source/debug_session.cpp
         source/thread_state_manager.cpp
@@ -22,17 +21,12 @@ luma_add_tool_library(dap
         source/breakpoint_shared_context.cpp
         source/breakpoint_manager.cpp
         source/line_breakpoint_manager.cpp
-        source/function_breakpoint_manager.cpp
-        source/data_breakpoint_manager.cpp
         source/dap_breakpoint_validator.cpp
         source/compiled_breakpoint.cpp
         source/expression_compiler.cpp
         source/variable_inspector.cpp
         source/value_expander.cpp
         source/expression_evaluator.cpp
-        source/time_travel.cpp
-        source/custom_visualizer.cpp
-        source/hot_reloader.cpp
         source/source_manager_locator.cpp
         source/vm_debug_adapter.cpp
     DEPENDS

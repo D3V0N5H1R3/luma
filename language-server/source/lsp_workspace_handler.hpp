@@ -1,7 +1,6 @@
 #ifndef LUMA_LSP_WORKSPACE_HANDLER_HPP
 #define LUMA_LSP_WORKSPACE_HANDLER_HPP
 
-#include <atomic>
 #include <string>
 
 #include "json/json.hpp"
@@ -15,10 +14,9 @@ class AnalysisService;
 class LspWorkspaceHandler {
 public:
     LspWorkspaceHandler(LspHandlerContext& ctx, AnalysisPipeline& pipeline,
-                        AnalysisService& service, std::atomic<bool>& running)
-        : ctx_(ctx), analysis_pipeline_(pipeline), analysis_service_(service), running_(running) {}
+                        AnalysisService& service)
+        : ctx_(ctx), analysis_pipeline_(pipeline), analysis_service_(service) {}
 
-    void scan_workspace_files();
     void load_background_file(const std::string& path);
     void handle_did_change_configuration(const JsonValue& params);
     void handle_did_change_watched_files(const JsonValue& params);
@@ -31,7 +29,6 @@ private:
     LspHandlerContext& ctx_;
     AnalysisPipeline& analysis_pipeline_;
     AnalysisService& analysis_service_;
-    std::atomic<bool>& running_;
 };
 
 } // namespace luma::lsp

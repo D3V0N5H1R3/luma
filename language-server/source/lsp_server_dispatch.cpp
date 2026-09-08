@@ -6,9 +6,7 @@
 #include "lsp_constants.hpp"
 #include "lsp_folding_handler.hpp"
 #include "lsp_formatting_handler.hpp"
-#include "lsp_hierarchy_handler.hpp"
 #include "lsp_hover_handler.hpp"
-#include "lsp_inlay_hint_handler.hpp"
 #include "lsp_navigation_handler.hpp"
 #include "lsp_rename_handler.hpp"
 #include "lsp_response_helpers.hpp"
@@ -47,9 +45,6 @@ void LspServer::register_handlers() {
     handlers_.register_request("textDocument/documentSymbol", [this](const JsonValue& p) {
         return symbol_handler_->handle_document_symbol(p);
     });
-    handlers_.register_request("workspace/symbol", [this](const JsonValue& p) {
-        return symbol_handler_->handle_workspace_symbol(p);
-    });
 
     // Navigation
     handlers_.register_request("textDocument/definition", [this](const JsonValue& p) {
@@ -57,9 +52,6 @@ void LspServer::register_handlers() {
     });
     handlers_.register_request("textDocument/references", [this](const JsonValue& p) {
         return navigation_handler_->handle_references(p);
-    });
-    handlers_.register_request("textDocument/documentHighlight", [this](const JsonValue& p) {
-        return navigation_handler_->handle_document_highlight(p);
     });
     handlers_.register_request("textDocument/typeDefinition", [this](const JsonValue& p) {
         return navigation_handler_->handle_type_definition(p);
@@ -70,9 +62,6 @@ void LspServer::register_handlers() {
     handlers_.register_request("textDocument/documentLink", [this](const JsonValue& p) {
         return navigation_handler_->handle_document_link(p);
     });
-    handlers_.register_request("textDocument/selectionRange", [this](const JsonValue& p) {
-        return navigation_handler_->handle_selection_range(p);
-    });
 
     // Rename
     handlers_.register_request("textDocument/rename", [this](const JsonValue& p) {
@@ -81,16 +70,10 @@ void LspServer::register_handlers() {
     handlers_.register_request("textDocument/prepareRename", [this](const JsonValue& p) {
         return rename_handler_->handle_prepare_rename(p);
     });
-    handlers_.register_request("textDocument/linkedEditingRange", [this](const JsonValue& p) {
-        return rename_handler_->handle_linked_editing_range(p);
-    });
 
     // Code actions
     handlers_.register_request("textDocument/codeAction", [this](const JsonValue& p) {
         return code_action_handler_->handle_code_action(p);
-    });
-    handlers_.register_request("textDocument/codeLens", [this](const JsonValue& p) {
-        return code_action_handler_->handle_code_lens(p);
     });
     handlers_.register_request("workspace/executeCommand", [this](const JsonValue& p) {
         return code_action_handler_->handle_execute_command(p);
@@ -100,52 +83,15 @@ void LspServer::register_handlers() {
     handlers_.register_request("textDocument/semanticTokens/full", [this](const JsonValue& p) {
         return semantic_tokens_handler_->handle_semantic_tokens_full(p);
     });
-    handlers_.register_request(
-        "textDocument/semanticTokens/full/delta", [this](const JsonValue& p) {
-            return semantic_tokens_handler_->handle_semantic_tokens_full_delta(p);
-        });
-    handlers_.register_request("textDocument/semanticTokens/range", [this](const JsonValue& p) {
-        return semantic_tokens_handler_->handle_semantic_tokens_range(p);
-    });
 
     // Folding
     handlers_.register_request("textDocument/foldingRange", [this](const JsonValue& p) {
         return folding_handler_->handle_folding_range(p);
     });
 
-    // Inlay hints
-    handlers_.register_request("textDocument/inlayHint", [this](const JsonValue& p) {
-        return inlay_hint_handler_->handle_inlay_hint(p);
-    });
-
     // Formatting
     handlers_.register_request("textDocument/formatting", [this](const JsonValue& p) {
         return formatting_handler_->handle_formatting(p);
-    });
-    handlers_.register_request("textDocument/rangeFormatting", [this](const JsonValue& p) {
-        return formatting_handler_->handle_range_formatting(p);
-    });
-
-    // Call hierarchy
-    handlers_.register_request("textDocument/prepareCallHierarchy", [this](const JsonValue& p) {
-        return hierarchy_handler_->handle_call_hierarchy_prepare(p);
-    });
-    handlers_.register_request("callHierarchy/incomingCalls", [this](const JsonValue& p) {
-        return hierarchy_handler_->handle_call_hierarchy_incoming(p);
-    });
-    handlers_.register_request("callHierarchy/outgoingCalls", [this](const JsonValue& p) {
-        return hierarchy_handler_->handle_call_hierarchy_outgoing(p);
-    });
-
-    // Type hierarchy
-    handlers_.register_request("textDocument/prepareTypeHierarchy", [this](const JsonValue& p) {
-        return hierarchy_handler_->handle_type_hierarchy_prepare(p);
-    });
-    handlers_.register_request("typeHierarchy/supertypes", [this](const JsonValue& p) {
-        return hierarchy_handler_->handle_type_hierarchy_supertypes(p);
-    });
-    handlers_.register_request("typeHierarchy/subtypes", [this](const JsonValue& p) {
-        return hierarchy_handler_->handle_type_hierarchy_subtypes(p);
     });
 
     // ─── Notification handlers ───

@@ -279,54 +279,6 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         add_record(st, "Json.ParseError", field("string", "message"), field("integer", "line"),
                    field("integer", "column"));
 
-        // Color.rgb / rgba / from_hex / mix / lighten / darken construct these RGBA
-        // colour records (type_name "Color").  Channels are 0–255 integers; alpha is
-        // a 0–1 number.  A typed colour that serialises to CSS colour strings.
-        add_record(st, "Color.Color", field("integer", "red"), field("integer", "green"),
-                   field("integer", "blue"), field("number", "alpha"));
-
-        // Color.to_hsl / from_hsl / rotate_hue pivot through this hue/saturation/
-        // lightness record (type_name "Hsl").  Hue is an angle in degrees [0, 360)
-        // and saturation/lightness are 0–1 ratios — measurements, so every field is
-        // a number.  Mirrors Color.Color: pure data plus free-function converters.
-        add_record(st, "Color.Hsl", field("number", "hue"), field("number", "saturation"),
-                   field("number", "lightness"));
-
-        // Color.to_hsv / from_hsv pivot through this hue/saturation/value record
-        // (type_name "Hsv") — the HSB model colour pickers use.  Hue is an angle in
-        // degrees [0, 360) and saturation/value are 0–1 ratios — measurements, so
-        // every field is a number.  Sibling of Color.Hsl.
-        add_record(st, "Color.Hsv", field("number", "hue"), field("number", "saturation"),
-                   field("number", "value"));
-
-        // Color.to_cmyk / from_cmyk pivot through this cyan/magenta/yellow/key
-        // (black) record (type_name "Cmyk") — the subtractive model used by print
-        // production. Every channel is a 0–1 ratio, so every field is a number.
-        // Sibling of Color.Hsl / Color.Hsv.
-        add_record(st, "Color.Cmyk", field("number", "cyan"), field("number", "magenta"),
-                   field("number", "yellow"), field("number", "key"));
-
-        // ── Color.Name ──────────────────────────────────
-        // A curated palette of common named colours (a subset of the CSS named
-        // colours, not all 140), giving beginners a typo-proof, autocompleted
-        // alternative to remembering hex strings — the Color analogue of the
-        // exhaustive Terminal.Color palette.  Color.from_name(Color.Name) maps a
-        // variant to its Color.Color RGB value.  Variant names must match
-        // rgb_for_color_name() in core/runtime/stdlib/io/color_module.cpp exactly
-        // (PascalCase); CSS-canonical values (so Green is 0,128,0 and Lime is
-        // 0,255,0, matching the web platform).
-        {
-            auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Name");
-            for (const char* variant :
-                 {"Black", "White", "Red", "Green", "Lime", "Blue", "Yellow", "Cyan", "Magenta",
-                  "Gray", "Silver", "Orange", "Purple", "Pink", "Brown"}) {
-                ch->variants.push_back(ChoiceVariant{.name = variant, .fields = {}});
-            }
-
-            st.choice_map["Color.Name"] = ch.get();
-            st.choices.push_back(std::move(ch));
-        }
-
         // Dictionary.to_array emits these key/value pairs at runtime (each a
         // record with type_name "KeyValue").  The `value` field carries the
         // dictionary's value type V, so it has no single concrete type here — a

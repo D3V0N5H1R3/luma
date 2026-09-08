@@ -225,7 +225,6 @@ void test_breakpoint_request_defaults() {
     BreakpointRequest req;
 
     ASSERT_EQ(req.line, 0);
-    ASSERT_TRUE(req.name.empty());
     ASSERT_TRUE(req.condition.empty());
     ASSERT_TRUE(req.hit_condition.empty());
     ASSERT_TRUE(req.log_message.empty());

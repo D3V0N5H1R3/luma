@@ -65,23 +65,15 @@
 // construction and do not require ordered guards.
 //
 //   BreakpointManager::mutex_
-//       Guards all breakpoint collections (source, function, data, exception).
+//       Guards all breakpoint collections (source, exception).
 //       std::mutex — plain lock_guard.
 //
 //   CompiledBreakpoint::cache_mutex_
 //       Guards compiled condition/log-message caches.
 //       std::shared_mutex — unique_lock for writes, shared_lock for reads.
 //
-//   CustomVisualizer::cache_mutex_
-//       Guards the compiled-rule list and the type-name match cache.
-//       std::mutex — plain lock_guard.
-//
 //   DapProtocolHandler::send_mutex_
 //       Serialises DAP message sends to guarantee monotonic sequence numbers.
-//       std::mutex — plain lock_guard.
-//
-//   DapTcpTransport::write_mutex_
-//       Serialises raw TCP writes so messages are not interleaved.
 //       std::mutex — plain lock_guard.
 //
 //   DebugOutputBuffer::mutex_   (debug_stream_utils.hpp)
@@ -90,14 +82,6 @@
 //
 //   ExpressionEvaluator::cache_mutex_
 //       Guards the LRU expression compilation cache.
-//       std::mutex — plain lock_guard.
-//
-//   HotReloader::mutex_
-//       Guards watched-file list and last-check timestamp.
-//       std::mutex — plain lock_guard.
-//
-//   TimeTravel::mutex_
-//       Guards the VM snapshot deque and instruction counter.
 //       std::mutex — plain lock_guard.
 //
 //   VariableInspector::ref_mutex_

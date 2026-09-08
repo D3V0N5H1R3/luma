@@ -134,6 +134,6 @@ Follow the detailed instructions in `instructions/`:
 - String interpolation: `"value is ${expr}"`.
 - Pipe operator: `value |> Module.function()`.
 - Structured concurrency: `task_scope { }` blocks with cooperative cancellation; `Task.cancel(t)`, `Task.is_cancelled(t)`.
-- Standard library modules: `String`, `Array`, `Bits`, `Calculus`, `Channel`, `Color`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, `Xml`.
+- Standard library modules: `String`, `Array`, `Bits`, `Calculus`, `Channel`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, `Xml`.
 
 > **Note for AI assistants:** This file serves as the single source of truth for project context. See [instructions/learnings.instructions.md](../instructions/learnings.instructions.md) for accumulated development learnings and pitfalls (auto-loaded for all files).

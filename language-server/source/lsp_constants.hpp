@@ -21,7 +21,6 @@ inline constexpr std::string_view progress = "$/progress";
 inline constexpr std::string_view configuration = "workspace/configuration";
 inline constexpr std::string_view register_capability = "client/registerCapability";
 inline constexpr std::string_view refresh_semantic_tokens = "workspace/semanticTokens/refresh";
-inline constexpr std::string_view refresh_inlay_hints = "workspace/inlayHint/refresh";
 
 } // namespace method
 
@@ -125,17 +124,6 @@ inline constexpr int default_type = 3; // Info
 } // namespace log_level
 
 // ═══════════════════════════════════════════════════════════
-// LSP InlayHintKind enum values (textDocument/inlayHint)
-// ═══════════════════════════════════════════════════════════
-
-namespace inlay_hint_kind {
-
-inline constexpr int type = 1;
-inline constexpr int parameter = 2;
-
-} // namespace inlay_hint_kind
-
-// ═══════════════════════════════════════════════════════════
 // Type definition kind strings
 // ═══════════════════════════════════════════════════════════
 
@@ -174,7 +162,6 @@ namespace limits {
 inline constexpr std::size_t max_background_files = 10'000;
 inline constexpr std::uintmax_t max_file_bytes = std::uintmax_t{10} * 1024 * 1024;
 inline constexpr std::size_t max_cache_size = 600;
-inline constexpr std::size_t max_workspace_symbols = 1000;
 
 // Maximum number of characters to scan backwards when searching for an
 // enclosing call context (signature help, parameter hints).

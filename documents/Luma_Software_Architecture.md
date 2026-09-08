@@ -495,7 +495,7 @@ _Note:_ The Type Checker operates on the merged AST produced by the Include Reso
 
 ### 4.11 Standard Library
 
-**Responsibility:** Provide all built-in functions and constants organised into 38 namespaces defined by the language (String, Array, Bits, Calculus, Channel, Color, Compression, Console, Converter, Csv, DateTime, Decimal, Dictionary, Encoder, FileSystem, Hash, Http, Json, KeyValueStore, LinearAlgebra, Log, Math, Optional, Order, Process, Queue, Random, Reference, RegularExpression, Resource, Result, Set, Socket, Stack, Statistics, Task, Terminal, Xml) plus the core built-ins (`print`, `assert`, `type_of`) — 39 registration units in total. Note: `success` and `failure` are language keywords parsed into dedicated AST nodes (`SuccessExpression`, `FailureExpression`), not runtime functions.
+**Responsibility:** Provide all built-in functions and constants organised into 37 namespaces defined by the language (String, Array, Bits, Calculus, Channel, Compression, Console, Converter, Csv, DateTime, Decimal, Dictionary, Encoder, FileSystem, Hash, Http, Json, KeyValueStore, LinearAlgebra, Log, Math, Optional, Order, Process, Queue, Random, Reference, RegularExpression, Resource, Result, Set, Socket, Stack, Statistics, Task, Terminal, Xml) plus the core built-ins (`print`, `assert`, `type_of`) — 38 registration units in total. Note: `success` and `failure` are language keywords parsed into dedicated AST nodes (`SuccessExpression`, `FailureExpression`), not runtime functions.
 
 **Interface:**
 
@@ -1894,7 +1894,6 @@ Standard Library
 ├── Bits module              — Bits.and, Bits.or, Bits.xor, Bits.not, Bits.shift_left, ...
 ├── Calculus module          — Calculus.derivative, Calculus.integrate, Calculus.root, ...
 ├── Channel module           — Channel.new, Channel.send, Channel.receive, ...
-├── Color module             — Color.from_hex, Color.to_hex, Color.mix, Color.lighten, Color.contrast_ratio, ...
 ├── Compression module       — Compression.deflate, Compression.inflate, Compression.gzip, Compression.encode_rle, ...
 ├── Console module           — Console.prompt, Console.read_from_stdin, Console.write_to_stdout, ...
 ├── Converter module         — Converter.to_string, Converter.to_integer, ...
@@ -1992,7 +1991,7 @@ When the interpreter is started with `--box` (or `-b`), the `register_all` funct
 - `Socket` — TCP and UDP networking
 - `Xml` — XML file I/O
 
-All other modules (`Array`, `Bits`, `Calculus`, `Channel`, `Color`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `Hash`, `Json`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, and `Hash.sha512_file`. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
+All other modules (`Array`, `Bits`, `Calculus`, `Channel`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `Hash`, `Json`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, and `Hash.sha512_file`. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
 
 Attempting to call a function from a sandbox-blocked module produces a clear error message (`'Module.function' is not available in sandbox mode (--box)`) instead of the generic "undefined variable" error. The `Environment` class maintains a set of blocked module prefixes that is checked during variable lookup.
 
@@ -2310,7 +2309,7 @@ The threads synchronise via `std::mutex` and `std::condition_variable`. The VM's
 
 ### 18.3 Supported Capabilities
 
-The debugger implements a comprehensive DAP capability set — breakpoints (line, function, conditional, hit-count, log, and exception), full stepping including reverse debugging, variable inspection and modification, expression evaluation, and advanced features such as hot code reload and time-travel debugging. See [Luma_Debugger.md §5 — Supported DAP Requests](Luma_Debugger.md#5--supported-dap-requests) for the authoritative, complete list.
+The debugger implements a focused DAP capability set — breakpoints (line, conditional, hit-count, log, and exception), stepping (over, into, out), variable inspection and modification, expression evaluation, and concurrent debugging (each `task_scope` task mapped to its own DAP thread). See [Luma_Debugger.md §5 — Supported DAP Requests](Luma_Debugger.md#5--supported-dap-requests) for the authoritative, complete list.
 
 ---
 

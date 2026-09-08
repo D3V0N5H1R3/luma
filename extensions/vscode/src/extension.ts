@@ -9,12 +9,8 @@ import {
 } from "./utils/binary-download";
 import { luma_config } from "./utils/config";
 import { registerTaskProvider, registerRunCommand } from "./tasks";
-import { registerTestController } from "./testing/testing";
 import { registerDebugAdapter } from "./debugger/debug";
-import { registerDebugVisualizer } from "./debugger/visualizer";
-import { registerPlayground } from "./playground/playground";
 import { registerCommands } from "./lsp/commands";
-import { MutableKeywordFixer, IncludePathFixer } from "./lsp/code-actions";
 import { FeatureRegistry } from "./utils/feature-registry";
 import { ClientManager, createLanguageStatus, setStatus, ServerState } from "./lsp/client-manager";
 
@@ -48,9 +44,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         ["commands", () => registerCommands(context, output_channel, client_manager)],
         ["task provider", () => registerTaskProvider(context)],
         ["run command", () => registerRunCommand(context)],
-        ["test controller", () => registerTestController(context)],
         ["debug adapter", () => registerDebugAdapter(context, output_channel)],
-        ["debug visualizer", () => registerDebugVisualizer(context)],
     ];
 
     for (const [name, register] of features) {
@@ -61,17 +55,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         }
     }
 
-    const playground_enabled = luma_config.playground_enabled;
-    if (playground_enabled) {
-        try {
-            registerPlayground(context);
-        } catch (err) {
-            console.error("[luma] Failed to register playground:", err);
-        }
-    }
     registry.register(createConfigurationWatcher());
     registry.register(createWorkspaceFolderWatcher(context, client_manager));
-    registry.register(createCodeActionProvider());
 
     if (!vscode.workspace.isTrusted) {
         activateRestrictedMode(context, registry, client_manager, language_status, output_channel);
@@ -166,17 +151,6 @@ async function collapseToGlobalIfSingleRoot(
         }
         await manager.startGlobalClient(context);
     }
-}
-
-// ─── Code Actions ─────────────────────────────────────────────────
-
-function createCodeActionProvider(): vscode.Disposable {
-    const selector: vscode.DocumentFilter = { language: "luma", scheme: "file" };
-    const options = { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] };
-    return vscode.Disposable.from(
-        vscode.languages.registerCodeActionsProvider(selector, new MutableKeywordFixer(), options),
-        vscode.languages.registerCodeActionsProvider(selector, new IncludePathFixer(), options),
-    );
 }
 
 // ─── Workspace Trust Gate ─────────────────────────────────────────

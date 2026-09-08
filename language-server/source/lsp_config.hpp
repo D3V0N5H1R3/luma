@@ -17,8 +17,6 @@ using luma::json::JsonValue;
 // because a snapshot is never mutated after construction — readers
 // always obtain a complete, consistent copy via LspConfig::get().
 struct ConfigSnapshot {
-    bool inlay_hints_enabled{false};
-    bool code_lens_enabled{true};
     bool diagnostics_on_save{false};
     int analysis_debounce_ms{50};
     int analysis_timeout_ms{10000}; // 10 s default
@@ -78,14 +76,6 @@ private:
         // mentioned in the incoming JSON retain their previous values.
         ConfigSnapshot next{*snapshot_};
 
-        if (const auto& ih = section.get("inlayHints"); ih.is_object()) {
-            next.inlay_hints_enabled = ih.get_or<bool>("enabled", next.inlay_hints_enabled);
-        }
-
-        if (const auto& cl = section.get("codeLens"); cl.is_object()) {
-            next.code_lens_enabled = cl.get_or<bool>("enabled", next.code_lens_enabled);
-        }
-
         if (const auto& diag = section.get("diagnostics"); diag.is_object()) {
             next.diagnostics_on_save = diag.get_or<bool>("onSave", next.diagnostics_on_save);
         }
@@ -109,9 +99,6 @@ private:
 namespace code_action_kind {
 
 inline constexpr std::string_view k_quickfix = "quickfix";
-inline constexpr std::string_view k_refactor_rewrite = "refactor.rewrite";
-inline constexpr std::string_view k_refactor_extract_variable = "refactor.extract.variable";
-inline constexpr std::string_view k_refactor_extract_function = "refactor.extract.function";
 
 } // namespace code_action_kind
 

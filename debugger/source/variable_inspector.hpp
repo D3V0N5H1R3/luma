@@ -28,8 +28,6 @@ struct UpvalueVariable;
 
 namespace luma::dap {
 
-class CustomVisualizer;
-
 // ═══════════════════════════════════════════════════════════
 // Null-safety contract:
 // - Public methods: validate inputs and return std::nullopt / empty for null/invalid args
@@ -46,7 +44,6 @@ class CustomVisualizer;
 //      get_variables, make_variable).
 //   4. Variable mutation (set_variable).
 //   5. Expression completions (get_completions).
-//   6. Optional custom visualizer integration.
 //
 // Registry storage is delegated to VariableReferenceRegistry<T>.
 // This class owns the mutex, the two registry instances, and
@@ -154,12 +151,6 @@ public:
     using ThreadResolver = std::function<std::shared_ptr<ThreadState>(int thread_id)>;
 
     explicit VariableInspector(EventCallback event_cb = {});
-
-    // Set an optional custom visualizer for value formatting.
-    // The pointed-to object must outlive this inspector.
-    void set_custom_visualizer(const CustomVisualizer* viz) {
-        custom_visualizer_ = viz;
-    }
 
     // Configure the maximum number of registry entries before stale entries are purged.
     void set_purge_entry_threshold(int threshold);
@@ -360,9 +351,6 @@ private:
     static constexpr int k_max_variable_references = config::variable::k_max_variable_references;
 
     EventCallback event_callback_;
-
-    // Optional custom visualizer — non-owning, may be nullptr.
-    const CustomVisualizer* custom_visualizer_{nullptr};
 
     // Variable reference and frame mapping registries.
     //

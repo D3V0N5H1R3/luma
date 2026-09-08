@@ -225,18 +225,6 @@ struct VMStack {
         ResetGuard(const ResetGuard&) = delete;
         ResetGuard& operator=(const ResetGuard&) = delete;
     };
-
-    // Replace the entire stack contents (time-travel debugger); throws if too large.
-    void restore(std::vector<Value> s) {
-        const auto n = s.size();
-        if (n > k_max) [[unlikely]] {
-            throw StackError{vm_errors::stack_restore_too_large(n, k_max)};
-        }
-        for (std::size_t i = 0; i < n; ++i) {
-            base[i] = std::move(s[i]);
-        }
-        top = base + n;
-    }
 };
 
 } // namespace luma

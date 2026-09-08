@@ -110,10 +110,8 @@ struct LocalVariableInfo {
     StringMap<StringMap<std::string>> function_locals;
 };
 
-// Function body ranges, call graph, and enclosing-function lookup data.
+// Function body ranges and enclosing-function lookup data.
 struct FunctionStructure {
-    // Call graph: caller function name → set of callee function names.
-    StringMap<StringSet> call_graph;
     // Function body ranges (function name → token line range [start, end] inclusive, 1-based).
     StringMap<std::pair<int, int>> function_body_ranges;
 
