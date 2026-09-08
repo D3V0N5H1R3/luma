@@ -78,12 +78,24 @@ The runner maps each pipeline concept to that CLI's own flags:
 
 | Pipeline concept       | Copilot (`copilot`)             | Claude Code (`claude`)                                          |
 | ---------------------- | ------------------------------- | -------------------------------------------------------------- |
-| Headless prompt        | `-p "<instruction>"`            | `-p "<instruction>" --output-format text`                      |
+| Headless prompt        | piped on **stdin** (no `-p`)    | `-p "<instruction>" --output-format text`                      |
 | Read-only audit (plan) | `--output-format json --available-tools=view,grep,glob` | `--permission-mode plan`                    |
 | Mutating fix (agent)   | `--allow-all-tools`             | `--permission-mode acceptEdits --allowedTools Bash Edit Write` |
 | Deny `git push`        | `--deny-tool="shell(git push)"` | `--disallowedTools "Bash(git push *)"`                         |
 | Model override         | `--model=<name>`                | `--model <name>`                                               |
-| Reasoning effort       | `--effort=<level>`              | `--effort <level>`                                             |
+| Reasoning effort       | `--effort=<level>` (omitted for `auto`) | `--effort <level>`                                     |
+
+The Copilot prompt is delivered on **stdin**, not as a `-p "<instruction>"`
+argument. A multi-line prompt passed on the command line is mangled whenever the
+CLI is launched across a boundary that cannot carry newlines in an argv element —
+an npm `copilot.cmd` shim (cmd.exe re-splits `%*`) or the WSL↔Windows interop
+layer — which splits the prompt's paragraphs into stray positional arguments and
+makes Copilot abort with *"Invalid command format … the extra words were treated
+as separate arguments"*. Piping the prompt on stdin (with `-p` omitted entirely)
+carries it verbatim through every such boundary while still running
+non-interactively, because stdin is not a TTY. `--effort` is omitted whenever the
+effective model is `auto` (including after the fallback below), since Copilot
+rejects reasoning-effort configuration for `auto`.
 
 Both backends are held **read-only** during audits and are **denied `git push`**
 during fixes, so the safety model is identical either way. During audits, Claude's
@@ -91,7 +103,7 @@ plan mode grants no edit tools, and Copilot is restricted to the read/search too
 with `--available-tools=view,grep,glob`, so it cannot modify, create, or run
 anything. (Copilot's interactive `--plan` mode is *not* used non-interactively: it
 delivers its result through the `exit_plan_mode` tool / a `plan.md` file rather
-than stdout, so under `-p --output-format json` it would produce an empty report.)
+than stdout, so under `--output-format json` it would produce an empty report.)
 Override the
 executable name or full path with the `LUMA_COPILOT` / `LUMA_CLAUDE` environment
 variables. Model names and `--effort` values differ between the two CLIs — check
