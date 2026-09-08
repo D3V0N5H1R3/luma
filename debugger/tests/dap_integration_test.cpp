@@ -1371,6 +1371,7 @@ void test_evaluate_no_mapping_does_not_crash() {
     auto config_result = send_configuration_done(proc);
 
     bool terminated = has_event(config_result.events, "terminated");
+    bool rejected_while_running = false;
 
     for (int round = 0; round < 200 && !terminated; ++round) {
         JsonValue::ObjectType eval_args;
@@ -1383,6 +1384,17 @@ void test_evaluate_no_mapping_does_not_crash() {
             terminated = true;
             break;
         }
+
+        if (eval_result.got_response && eval_result.response.has("body") &&
+            eval_result.response["body"].has("result") &&
+            eval_result.response["body"]["result"].as_string() == "<evaluation failed>") {
+            rejected_while_running = true;
+        }
+    }
+
+    if (rejected_while_running) {
+        disconnect(proc);
+        return;
     }
 
     if (!terminated) {

@@ -86,6 +86,8 @@ struct ThreadState {
     std::condition_variable cv;
     bool is_paused{false};               // GUARDED_BY(mutex)
     bool is_exception_terminated{false}; // GUARDED_BY(mutex)
+    std::string exception_message;       // GUARDED_BY(mutex)
+    bool exception_caught{false};        // GUARDED_BY(mutex)
     StepState step;                      // GUARDED_BY(mutex)
     PendingEvents pending;               // GUARDED_BY(mutex)
 };

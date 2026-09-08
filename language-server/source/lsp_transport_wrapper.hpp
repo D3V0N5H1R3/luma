@@ -47,6 +47,7 @@ public:
     // Read the next JSON-RPC message from the transport.
     // Returns std::nullopt on EOF.
     [[nodiscard]] std::optional<JsonValue> read_message();
+    [[nodiscard]] bool had_recoverable_read_error() const noexcept;
 
     // ─── Sending ───
 

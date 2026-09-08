@@ -192,6 +192,14 @@ std::pair<int, int> DebugSession::get_variable_counts(int reference) const {
 
 Variable DebugSession::evaluate(int frame_id, const std::string& expression,
                                 EvaluationContext context) const {
+    const auto evaluation_failed = [&expression] {
+        Variable result;
+        result.name = expression;
+        result.value = "<evaluation failed>";
+        result.type = "unknown";
+        return result;
+    };
+
     auto mapping = variable_inspector_.resolve_frame(frame_id);
 
     VM* target_vm = nullptr;
@@ -204,6 +212,9 @@ Variable DebugSession::evaluate(int frame_id, const std::string& expression,
             // Hold the lock for the entire evaluate() call so that target_vm
             // cannot be destroyed between capture and use (TOCTOU race).
             const auto lock = thread_state_manager_.lock_state(*state);
+            if (!state->is_paused || state->vm == nullptr) {
+                return evaluation_failed();
+            }
             target_vm = state->vm;
             actual_index = mapping->frame_index;
             return expression_evaluator_->evaluate(target_vm, actual_index, expression, context);
@@ -221,6 +232,9 @@ Variable DebugSession::evaluate(int frame_id, const std::string& expression,
 
         if (main_state) {
             const auto lock = thread_state_manager_.lock_state(*main_state);
+            if (!main_state->is_paused || main_state->vm == nullptr) {
+                return evaluation_failed();
+            }
             target_vm = main_state->vm;
             return expression_evaluator_->evaluate(target_vm, actual_index, expression, context);
         }
@@ -267,6 +281,20 @@ std::string DebugSession::last_exception_message() const {
 
 bool DebugSession::last_exception_is_caught() const {
     return execution_engine_->last_exception_is_caught();
+}
+
+std::optional<std::pair<std::string, bool>> DebugSession::exception_info(int thread_id) const {
+    const auto state = thread_state_manager_.get_thread(thread_id);
+    if (!state) {
+        return std::nullopt;
+    }
+
+    const auto lock = thread_state_manager_.lock_state(*state);
+    if (state->exception_message.empty()) {
+        return std::nullopt;
+    }
+
+    return std::pair{state->exception_message, state->exception_caught};
 }
 
 // --- Source helpers ---

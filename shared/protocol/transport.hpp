@@ -40,10 +40,18 @@ public:
     // (stderr) handler.
     void set_error_callback(ErrorCallback callback);
 
-    // Read one JSON message.  Returns nullopt on EOF.
+    // Read one JSON message.  Returns nullopt on EOF or after a recoverable
+    // parse error; use had_recoverable_read_error() to distinguish them.
     // The default implementation uses read_line() / read_exact()
     // to handle Content-Length framing.  Mock transports may override.
     [[nodiscard]] virtual std::optional<JsonValue> read_message();
+
+    // Returns true when the previous read skipped a malformed message but
+    // successfully resynchronised to a later frame.  The flag is cleared by
+    // the next read attempt.
+    [[nodiscard]] bool had_recoverable_read_error() const noexcept {
+        return recoverable_read_error_;
+    }
 
     // Write a JSON message with Content-Length framing.
     virtual void write_message(const JsonValue& message) = 0;
@@ -86,6 +94,8 @@ private:
     // Stores a header line found during resync so it is re-fed on the next
     // read_message() call.
     std::optional<std::string> buffered_header_line_;
+
+    bool recoverable_read_error_{false};
 
     // Error reporting callback.  When null, the default stderr handler is used.
     ErrorCallback error_callback_;

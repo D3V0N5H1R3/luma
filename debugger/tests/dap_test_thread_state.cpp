@@ -176,6 +176,20 @@ void test_thread_state_exception_is_caught() {
     ASSERT_EQ(state.pending.exception_message, "test error");
 }
 
+void test_thread_state_exception_metadata_is_independent() {
+    ThreadState first;
+    ThreadState second;
+    first.exception_message = "first error";
+    first.exception_caught = true;
+    second.exception_message = "second error";
+    second.exception_caught = false;
+
+    ASSERT_EQ(first.exception_message, "first error");
+    ASSERT_TRUE(first.exception_caught);
+    ASSERT_EQ(second.exception_message, "second error");
+    ASSERT_FALSE(second.exception_caught);
+}
+
 // ─── Concurrent thread state management ────────────────────────────
 
 void test_thread_state_task_thread() {
@@ -501,6 +515,7 @@ int main() {
     // Exception info caught vs uncaught.
     RUN(test_exception_info_caught_break_mode);
     RUN(test_thread_state_exception_is_caught);
+    RUN(test_thread_state_exception_metadata_is_independent);
 
     // Concurrent thread state.
     RUN(test_thread_state_task_thread);

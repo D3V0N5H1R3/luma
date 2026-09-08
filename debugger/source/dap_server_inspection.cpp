@@ -309,22 +309,23 @@ HandlerResult DapInspectionHandler::handle_source(const JsonValue& args) {
 
 // ─── Exception info ───
 
-HandlerResult DapInspectionHandler::handle_exception_info(const JsonValue& /*args*/) {
+HandlerResult DapInspectionHandler::handle_exception_info(const JsonValue& args) {
     if (!ctx_.has_session()) {
         return HandlerResult::ok(make_empty_exception_info_body());
     }
 
-    auto message = ctx_.session->last_exception_message();
+    const int thread_id = args.get_or<int>("threadId", k_main_thread_id);
+    const auto exception = ctx_.session->exception_info(thread_id);
 
-    if (message.empty()) {
+    if (!exception) {
         return HandlerResult::ok(make_empty_exception_info_body());
     }
 
+    const auto& [message, is_caught] = *exception;
     JsonValue::ObjectType body;
     body["exceptionId"] = JsonValue(std::string("RuntimeError"));
     body["description"] = JsonValue(message);
-    body["breakMode"] =
-        JsonValue(std::string(ctx_.session->last_exception_is_caught() ? "always" : "unhandled"));
+    body["breakMode"] = JsonValue(std::string(is_caught ? "always" : "unhandled"));
 
     JsonValue::ObjectType details;
     details["message"] = JsonValue(message);

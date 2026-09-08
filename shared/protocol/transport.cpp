@@ -17,7 +17,8 @@
 //     • Transient parse errors in read_message() — a single message
 //       had bad framing or invalid JSON.  The error is reported via
 //       the configured ErrorCallback (defaults to stderr), then the
-//       transport resyncs silently and returns std::nullopt so the
+//       transport resyncs silently and returns std::nullopt.  The
+//       had_recoverable_read_error() flag distinguishes this from EOF so the
 //       caller can continue to the next message.
 //
 //   Silent resync (resync_to_next_message):
@@ -116,6 +117,8 @@ std::optional<std::size_t> Transport::parse_headers() {
 }
 
 std::optional<JsonValue> Transport::read_message() {
+    recoverable_read_error_ = false;
+
     try {
         auto content_length = parse_headers();
 
@@ -137,6 +140,7 @@ std::optional<JsonValue> Transport::read_message() {
         // unrecoverably corrupt.
         report_error(std::format("luma: transport parse error: {}\n", e.what()));
         resync_to_next_message();
+        recoverable_read_error_ = true;
         return std::nullopt;
     }
 }

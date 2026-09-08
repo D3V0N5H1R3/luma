@@ -128,6 +128,13 @@ public:
             }
 
             if (!message.has_value()) {
+                if (transport_.had_recoverable_read_error()) {
+                    auto action = recovery.on_error(protocol::ErrorSeverity::transient);
+                    if (action == protocol::RecoveryAction::shutdown) {
+                        break;
+                    }
+                    continue;
+                }
                 break; // EOF — editor closed the pipe.
             }
 

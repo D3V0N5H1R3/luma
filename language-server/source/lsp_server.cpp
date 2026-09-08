@@ -186,6 +186,13 @@ int LspServer::run() {
         }
 
         if (!message.has_value()) {
+            if (transport_wrapper_.had_recoverable_read_error()) {
+                auto action = recovery.on_error(protocol::ErrorSeverity::transient);
+                if (action == protocol::RecoveryAction::shutdown) {
+                    break;
+                }
+                continue;
+            }
             transport_wrapper_.log_message("EOF on stdin, exiting");
             break;
         }
