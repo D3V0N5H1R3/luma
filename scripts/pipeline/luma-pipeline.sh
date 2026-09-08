@@ -485,18 +485,34 @@ luma_invoke_agent_phase() {
     else
         # Mutating 'agent' mode. Copilot takes its prompt on stdin (its args
         # carry no `-p`); claude keeps its prompt in argv, so only copilot is fed.
+        # `tee` is the LAST pipeline stage (not a `> >(tee ...)` process
+        # substitution) so $sink is fully flushed when the pipeline returns - the
+        # quota check below reads it - and the agent's own status is taken from
+        # PIPESTATUS rather than tee's exit. The `if` wrapper keeps `set -e` /
+        # pipefail from aborting on a non-zero agent exit before we capture it.
+        local -a phase_status=()
         if [[ "$agent" == copilot ]]; then
-            if printf '%s' "$instruction" | ( cd -- "$repo_root" && "$exe" "${args[@]}" ) > >(tee "$sink") 2>&1; then
-                exit_code=0
+            if printf '%s' "$instruction" | ( cd -- "$repo_root" && "$exe" "${args[@]}" ) 2>&1 | tee "$sink"; then
+                phase_status=("${PIPESTATUS[@]}")
             else
-                exit_code=$?
+                phase_status=("${PIPESTATUS[@]}")
             fi
+            exit_code="${phase_status[1]}"
         else
-            if ( cd -- "$repo_root" && "$exe" "${args[@]}" ) > >(tee "$sink") 2>&1; then
-                exit_code=0
+            if ( cd -- "$repo_root" && "$exe" "${args[@]}" ) 2>&1 | tee "$sink"; then
+                phase_status=("${PIPESTATUS[@]}")
             else
-                exit_code=$?
+                phase_status=("${PIPESTATUS[@]}")
             fi
+            exit_code="${phase_status[0]}"
+        fi
+        # Copilot exits 0 even after printing "You have exceeded your monthly
+        # quota" and doing no work; that must not be recorded as a successful
+        # phase. Surface it as a failure (which aborts the run by default) with a
+        # clear, actionable message.
+        if [[ "$agent" == copilot && "$exit_code" -eq 0 ]] && luma_transcript_quota_exhausted "$sink"; then
+            luma_warn "Copilot monthly quota exceeded; this phase did no work. Wait for the quota to reset (or switch account/model), then re-run."
+            exit_code=1
         fi
     fi
     return "$exit_code"
@@ -930,6 +946,16 @@ luma_should_abort() {
     [[ "$continue_on_failure" != true ]] && return 0
     [[ "$status" == commit-failed && "$revert_on_failure" != true ]] && return 0
     return 1
+}
+
+# Detect Copilot's monthly-quota exhaustion in a phase transcript. The CLI prints
+# "You have exceeded your monthly quota" and then exits 0 without doing the work,
+# so an agent phase relying on the exit code alone would record a hollow success.
+# Returns 0 (found) or 1 (not found / missing file).
+luma_transcript_quota_exhausted() {
+    local file="$1"
+    [[ -f "$file" ]] || return 1
+    grep -qiF 'exceeded your monthly quota' "$file"
 }
 
 # Move the pipeline artifact root aside into .git/ so the release-verification

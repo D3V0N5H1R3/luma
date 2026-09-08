@@ -273,6 +273,31 @@ function Get-AgentReportFromJsonl {
     return $Report
 }
 
+function Test-CopilotQuotaExhausted {
+    <#
+    .SYNOPSIS
+        Detect Copilot's monthly-quota exhaustion in a phase transcript.
+    .DESCRIPTION
+        The Copilot CLI prints "You have exceeded your monthly quota" and then
+        exits 0 without doing the work, so an agent phase that trusts the exit
+        code alone would record a hollow success. Returns $true when the log file
+        contains the quota signature, $false otherwise (including a missing or
+        unreadable file).
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) {
+        return $false
+    }
+    $Text = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+    if ([string]::IsNullOrEmpty($Text)) { return $false }
+    return $Text.IndexOf('exceeded your monthly quota', [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+}
+
 function Build-ClaudeArgumentList {
     <#
     .SYNOPSIS
@@ -582,6 +607,15 @@ function Invoke-AgentPhase {
                 }
             }
             $ExitCode = $LASTEXITCODE
+
+            # Copilot exits 0 even after printing "You have exceeded your monthly
+            # quota" and doing no work; that must not be recorded as a successful
+            # phase. When the transcript shows quota exhaustion, force a failure
+            # (which aborts the run by default) with a clear, actionable message.
+            if ($Agent -eq 'copilot' -and $ExitCode -eq 0 -and (Test-CopilotQuotaExhausted -Path $LogFile)) {
+                Write-Warning 'Copilot monthly quota exceeded; this phase did no work. Wait for the quota to reset (or switch account/model), then re-run.'
+                $ExitCode = 1
+            }
         }
     }
     finally {
