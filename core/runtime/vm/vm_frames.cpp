@@ -53,7 +53,7 @@ void VM::transfer_state(VM&& other) noexcept {
     compiled_functions_ = std::exchange(other.compiled_functions_, nullptr);
     loop_iterations_ = other.loop_iterations_;
     base_depth_ = other.base_depth_;
-    exceptions_ = std::move(other.exceptions_);
+    exception_handler_ = std::move(other.exception_handler_);
     global_cache_ = std::move(other.global_cache_);
     global_index_cache_ = std::move(other.global_index_cache_);
 

@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "runtime/interpreter/value.hpp"
+#include "runtime/vm/vm_exception_handler.hpp"
 #include "runtime/vm/vm.hpp"
 #include "runtime/vm/vm_stack.hpp"
 #include "runtime/vm/vm_stack_api.hpp"
@@ -177,6 +178,26 @@ static void test_runtime_error_throws() {
     ASSERT_THROWS(s.runtime_error("boom"));
 }
 
+static void test_exception_handler_boundary() {
+    VMExceptionHandler handlers;
+    const std::uint8_t catch_code[] = {0};
+
+    handlers.push(ExceptionHandler{
+        .catch_ip = catch_code,
+        .frame_index = 2,
+        .stack_depth = 4,
+        .task_scope_depth = 1,
+    });
+
+    ASSERT_TRUE(handlers.has_handler_for(2));
+    ASSERT_FALSE(handlers.has_handler_for(3));
+    ASSERT_EQ(handlers.current().stack_depth, static_cast<std::size_t>(4));
+
+    const auto handler = handlers.pop();
+    ASSERT_TRUE(handler.catch_ip == catch_code);
+    ASSERT_TRUE(handlers.empty());
+}
+
 static void test_handler_can_signal_error() {
     // A handler that pops an operand and rejects it via the seam's error path.
     const auto guard = [](VMStackAPI& s) {
@@ -196,6 +217,7 @@ int main() {
     RUN(test_operand_readers);
     RUN(test_current_frame_and_scope);
     RUN(test_runtime_error_throws);
+    RUN(test_exception_handler_boundary);
     RUN(test_handler_can_signal_error);
     return SUMMARY();
 }

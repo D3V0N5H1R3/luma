@@ -45,7 +45,7 @@
 //   stack_         (VMStack)              — pre-allocated value stack, stack-pointer
 //                                          triple (base/top/limit), call frames, and
 //                                          stack high-water mark.
-//   exceptions_    (VMExceptionManager)   — LIFO stack of ExceptionHandler records
+//   exception_handler_ (VMExceptionHandler) — LIFO stack of ExceptionHandler records
 //                                          for try/catch block tracking.
 //   global_cache_  (VMGlobalCache)        — name → Binding* cache for GetGlobal /
 //                                          SetGlobal; populated lazily on first access.
@@ -116,7 +116,7 @@
 #include "runtime/vm/vm_debug_types.hpp"
 #include "runtime/vm/vm_dispatch_helpers.hpp"
 #include "runtime/vm/vm_error_messages.hpp"
-#include "runtime/vm/vm_exception_manager.hpp"
+#include "runtime/vm/vm_exception_handler.hpp"
 #include "runtime/vm/vm_global_cache.hpp"
 #include "runtime/vm/vm_stack.hpp"
 #include "runtime/vm/vm_stack_api.hpp"
@@ -171,7 +171,7 @@ class RuntimeError;
 // Current design: VM dispatch handlers (vm_dispatch_*.cpp) are
 // implemented as private VM member functions.  This gives them
 // unrestricted access to all private members (stack_, task_manager_,
-// exceptions_, global_cache_, etc.) through the implicit `this`.
+// exception_handler_, global_cache_, etc.) through the implicit `this`.
 //
 // The coupling this creates:
 //   ● Dispatch handlers cannot be tested in isolation — instantiating
@@ -182,7 +182,7 @@ class RuntimeError;
 // Most-accessed private members across dispatch files (descending frequency):
 //   1. stack_                       — value stack, frame list, stack pointers (~61 accesses)
 //   2. VMTaskManager::current_scope — thread-local active TaskScope pointer   (~8 accesses)
-//   3. exceptions_                  — exception handler LIFO stack            (~3 accesses)
+//   3. exception_handler_           — exception handler LIFO stack            (~3 accesses)
 //   4. global_cache_   — inline cache for GetGlobal/SetGlobal    (~1 access)
 //
 // Future direction — VMStackAPI interface:
@@ -197,10 +197,8 @@ class RuntimeError;
 //   (or be free functions taking VMStackAPI&), enabling lightweight
 //   unit tests with a mock/stub implementation of VMStackAPI.
 //
-// TODO(refactor): Introduce VMStackAPI in core/runtime/vm/vm_stack_api.hpp
-// and migrate dispatch handlers to use it instead of accessing
-// VM private members directly.  The public const accessors below
-// (current_task_scope(), frames(), stack()) are the seed of this API.
+// VMStackAPI is now the narrow boundary for stack/frame primitives.  Further
+// handler migration remains constrained by the member-pointer dispatch table.
 // ═══════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════
@@ -242,8 +240,8 @@ class RuntimeError;
 //
 //   VMExceptionHandler (vm_exception_handler.hpp)
 //     try/catch frame management: handle_try_catch(), handle_exception().
-//     VMExceptionManager is already a composed type — this would elevate it
-//     to a first-class component with its own interface.
+//     VMExceptionHandler owns the VM-facing boundary while the lower-level
+//     manager remains focused on handler-record storage.
 //
 // Progress:
 //   • VMStackAPI (vm_stack_api.hpp) now EXISTS — VM derives from it and the
@@ -878,7 +876,7 @@ private:
     // the call frame stack, restore the value-stack pointer, set the
     // instruction pointer to the catch block, and push the error value.
     // The manager owns only the handler records themselves.
-    VMExceptionManager exceptions_;
+    VMExceptionHandler exception_handler_;
 
     // ─── Debug context ───────────────────────────────────────────────────
     // Owns all debugger-integration state (the DAP callback set, last

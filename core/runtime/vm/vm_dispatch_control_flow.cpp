@@ -505,7 +505,7 @@ void VM::handle_try_catch(const std::uint8_t* code_end) {
     handler.frame_index = stack_.frames.size() - 1;
     handler.stack_depth = stack_size();
     handler.task_scope_depth = task_manager_.task_scopes.size();
-    exceptions_.push_handler(handler);
+    exception_handler_.push(handler);
 }
 
 } // namespace luma
