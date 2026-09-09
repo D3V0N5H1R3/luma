@@ -264,8 +264,13 @@ jobs:
             | xargs -P "$(nproc)" -n 1 clang-tidy -p build \
             2>&1 | tee clang-tidy-report.txt
 
+      # The report is a diagnostic convenience, not the gate — the clang-tidy
+      # step above already decides pass/fail. A transient artifacts-service
+      # error (e.g. a 403 on FinalizeArtifact) must not fail an otherwise-green
+      # shard, so this upload is best-effort.
       - name: Upload clang-tidy report
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: clang-tidy-report-shard-${{ matrix.shard }}
