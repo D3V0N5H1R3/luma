@@ -48,7 +48,12 @@ void ConfigurationManager::detect_client_capabilities(const JsonValue& params,
         const auto& encodings = general.get("positionEncodings");
         position_encoding_ = "utf-16";
         position_encoding_supported_ = true;
-        if (encodings.is_array()) {
+        // Only treat the client as constraining the encoding when it sends a
+        // NON-EMPTY list.  An absent field (handled by is_array()) and an empty
+        // array both mean "accept the server default (utf-16)"; entering the
+        // "unsupported unless proven" branch for an empty array would wrongly
+        // reject initialization.
+        if (encodings.is_array() && !encodings.as_array().empty()) {
             position_encoding_supported_ = false;
             for (const auto& encoding : encodings.as_array()) {
                 if (encoding.is_string() && encoding.as_string() == "utf-16") {

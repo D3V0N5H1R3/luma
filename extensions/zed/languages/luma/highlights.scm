@@ -268,11 +268,6 @@
   "/="
   "%="
   "//="
-  "&="
-  "|="
-  "^="
-  "<<="
-  ">>="
   "++"
   "--"
 ] @operator
@@ -286,14 +281,9 @@
   "%"
 ] @operator
 
-[
-  "&"
-  "|"
-  "^"
-  "~"
-  "<<"
-  ">>"
-] @operator
+; `|` separates alternative patterns in a match arm (e.g. `case A | B`).
+; Luma has no bitwise operators — bitwise work uses the `Bits` module.
+"|" @operator
 
 ; ─── Punctuation ───────────────────────────────────────────────────
 

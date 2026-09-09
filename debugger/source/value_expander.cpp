@@ -91,13 +91,13 @@ std::vector<Variable> ValueExpander::get_value_variables(const Value& val, int v
         case ValueKind::Array:
             return get_array_variables(val, start, count, child_depth);
         case ValueKind::Dictionary:
-            return get_dictionary_variables(val, child_depth);
+            return get_dictionary_variables(val, start, count, child_depth);
         case ValueKind::Tuple:
             return get_tuple_variables(val, start, count, child_depth);
         case ValueKind::Record:
-            return get_record_variables(val, child_depth);
+            return get_record_variables(val, start, count, child_depth);
         case ValueKind::Choice:
-            return get_choice_variables(val, child_depth);
+            return get_choice_variables(val, start, count, child_depth);
         case ValueKind::Result:
             return get_result_variables(val, child_depth);
         case ValueKind::Queue:
@@ -142,40 +142,68 @@ std::vector<Variable> ValueExpander::get_tuple_variables(const Value& val, int s
     return result;
 }
 
-std::vector<Variable> ValueExpander::get_dictionary_variables(const Value& val,
-                                                              int child_depth) const {
+std::vector<Variable> ValueExpander::get_dictionary_variables(const Value& val, int start,
+                                                              int count, int child_depth) const {
     std::vector<Variable> result;
+    const auto& entries = val.as_dictionary()->entries;
+    const auto [begin, end] = compute_window(start, count, clamp_to_int(entries.size()));
 
-    for (const auto& [key, value] : val.as_dictionary()->entries) {
-        auto var = inspector_.make_variable(key, value, false, child_depth);
-        var.evaluate_name = std::format("[\"{}\"]", key);
-        result.push_back(std::move(var));
+    int index = 0;
+    for (const auto& [key, value] : entries) {
+        if (index >= end) {
+            break;
+        }
+        if (index >= begin) {
+            auto var = inspector_.make_variable(key, value, false, child_depth);
+            var.evaluate_name = std::format("[\"{}\"]", key);
+            result.push_back(std::move(var));
+        }
+        ++index;
     }
 
     return result;
 }
 
-std::vector<Variable> ValueExpander::get_record_variables(const Value& val, int child_depth) const {
+std::vector<Variable> ValueExpander::get_record_variables(const Value& val, int start, int count,
+                                                          int child_depth) const {
     std::vector<Variable> result;
+    const auto& fields = val.as_record()->fields;
+    const auto [begin, end] = compute_window(start, count, clamp_to_int(fields.size()));
 
-    for (const auto& [name, value] : val.as_record()->fields) {
-        auto var = inspector_.make_variable(name, value, false, child_depth);
-        var.evaluate_name = name;
-        result.push_back(std::move(var));
+    int index = 0;
+    for (const auto& [name, value] : fields) {
+        if (index >= end) {
+            break;
+        }
+        if (index >= begin) {
+            auto var = inspector_.make_variable(name, value, false, child_depth);
+            var.evaluate_name = name;
+            result.push_back(std::move(var));
+        }
+        ++index;
     }
 
     return result;
 }
 
-std::vector<Variable> ValueExpander::get_choice_variables(const Value& val, int child_depth) const {
+std::vector<Variable> ValueExpander::get_choice_variables(const Value& val, int start, int count,
+                                                          int child_depth) const {
     std::vector<Variable> result;
     const auto& choice = val.as_choice();
 
-    result.push_back(make_leaf_variable("variant", choice->variant, "string"));
+    // Child 0 is the synthetic "variant" leaf; children 1.. are the payload
+    // fields, so the window spans 1 + fields.size() to match count_child_variables().
+    const int total = 1 + clamp_to_int(choice->fields.size());
+    const auto [begin, end] = compute_window(start, count, total);
 
-    for (std::size_t i = 0; i < choice->fields.size(); ++i) {
-        result.push_back(
-            inspector_.make_variable(std::format(".{}", i), choice->fields[i], false, child_depth));
+    if (begin <= 0 && end > 0) {
+        result.push_back(make_leaf_variable("variant", choice->variant, "string"));
+    }
+
+    for (int child = std::max(begin, 1); child < end; ++child) {
+        const auto field = static_cast<std::size_t>(child - 1);
+        result.push_back(inspector_.make_variable(std::format(".{}", field), choice->fields[field],
+                                                  false, child_depth));
     }
 
     return result;

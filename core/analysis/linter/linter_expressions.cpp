@@ -83,7 +83,7 @@ void Linter::visit_lambda(const LambdaExpression& lambda) {
     auto guard = make_scope_guard();
 
     for (const auto& param : lambda.parameters) {
-        tracker_.track_variable(param.name, lambda.location, true);
+        tracker_.track_variable(param.name, lambda.location, true, param.is_mutable);
     }
 
     if (lambda.is_expression_body() && (lambda.expression_body() != nullptr)) {

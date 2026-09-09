@@ -449,9 +449,27 @@ struct ModuleBuilder {
     Capability cap{Capability::None};
 
     // `cap_override` lets an individual function opt out of the module-wide
-    // capability — e.g. a mostly in-memory module (Csv, Xml) where only the
-    // file-I/O members should carry Capability::FileSystem.  Left unset, the
-    // function inherits the module's `cap`.
+    // capability.  It is used for the file-I/O members of the OS-only modules
+    // that are otherwise mostly in-memory (Csv, Xml): tagging Csv.read_file /
+    // Xml.deserialize_file with Capability::FileSystem records their true
+    // effect, and because those modules are blocked wholesale in sandbox mode
+    // the module-prefix message already covers every name under them.
+    //
+    // The file-I/O members of the *sandbox-aware* modules (Hash, Compression,
+    // Log) deliberately do NOT set this override and stay Capability::None.
+    // Those modules remain partially available in sandbox mode — the runtime
+    // withholds only their file functions at registration (register_hash_file,
+    // Compression's gzip_file/gunzip_file, Log.set_output, each behind
+    // `!sandbox`).  The catalog's sandbox "blocked" set is keyed by module
+    // prefix and is consulted only to phrase a clearer error on an *already
+    // failed* lookup (Environment::verify_sandbox_access), never to gate a
+    // defined name — so tagging e.g. Hash.md5_file would add the whole "Hash"
+    // prefix and then mislabel a typo of the still-available Hash.md5 as "the
+    // Hash module is disabled in sandbox mode".  Keeping these None avoids that
+    // false message; the real sandbox enforcement is the registration-time
+    // withholding above, which does not depend on this capability.
+    //
+    // Left unset, the function inherits the module's `cap`.
     [[nodiscard]] FunctionSpec fn(std::string_view name, int arity, std::string params,
                                   ReturnTypeDesc ret, std::vector<ReturnTypeDesc> param_types = {},
                                   std::optional<Capability> cap_override = std::nullopt) const {

@@ -11,7 +11,7 @@ Patterns, pitfalls, and non-obvious knowledge discovered during development sess
 
 ## Project Identity
 
-- Luma is a statically typed, expression-oriented, interpreted programming language for beginners — "as easy as Python, as safe as Rust." Implemented in C++20 with a bytecode compiler and stack-based VM. Status: Alpha (0.11) — language, stdlib, and interpreter feature-complete; tooling under active development.
+- Luma is a statically typed, expression-oriented, interpreted programming language for beginners — "as easy as Python, as safe as Rust." Implemented in C++20 with a bytecode compiler and stack-based VM. Status: Alpha (0.12) — language, stdlib, and interpreter feature-complete; tooling under active development.
 - The project spans ~150K+ lines across interpreter core, 37 stdlib module namespaces (26 always-available + 4 sandbox-aware + 7 OS-only), an LSP language server (`luma_lsp`), a DAP debugger (`luma_dap`), and editor extensions for VS Code and Zed.
 
 ## Architecture & Pipeline
@@ -64,6 +64,7 @@ Patterns, pitfalls, and non-obvious knowledge discovered during development sess
 - No semicolons required (treated as whitespace). Comments start with `#`.
 - Braces always required, even for single-statement bodies.
 - Function declarations put the **return type before the name** (always required): `function <return-type> <name>(<params>) { … }` — e.g. `function void main()`, `function boolean is_ready()`. Writing the return type after the parameters as `function f() -> T` is a parse error (`missing return type for function`). The `->` arrow *is* valid Luma, but only in **lambdas** (`(T x) -> expr`) and **function-type annotations** (`function(T) -> R`) — never a declaration's return type. Variables are declared **type-first**: `<type> name = value` or `mutable <type> name = value` (e.g. `number x = 5`); `let`/`var` are *not* keywords (the lexer warns `'let' is not a Luma keyword`). These bite whenever a tool *synthesizes* Luma source (debugger / LSP / REPL / codegen).
+- Luma has **no bitwise operators** — bitwise work goes through the `Bits` module (`Bits.and`/`or`/`xor`/`not`/`shift_left`/`shift_right`). The lexer actively rejects `&`, `^`, `~`, and `<<` via `emit_removed_bitwise_op` (decision "R06", `core/analysis/lexer/lexer_operators.cpp`), pointing the user at the `Bits` call; `|` is only a match-pattern alternative and `>>` is retained solely for closing nested generics (`array<array<T>>`), never as shift. **Pitfall:** the editor tooling and syntax doc still list these removed operators as live — the tree-sitter `grammar.js` (binary/unary productions), both highlight `.scm` files, `extensions/vscode/syntaxes/luma.tmLanguage.json`, and `documents/Luma_Syntax_Highlighting.md` — so `a & b` / `~a` highlight and parse in Zed/VS Code but are a `SyntaxError` in the interpreter. Keep any synthesized Luma source and grammar edits `Bits`-based.
 - String interpolation: `"value is ${expr}"`. Triple-quoted strings auto-dedent (common leading whitespace stripped).
 - Pipe operator: `value |> Module.function()` — left becomes first argument.
 - All collection operations return new collections (immutable by default). Build in single pass with `Array.map`/`Array.filter`/`Array.reduce` instead of incremental mutation.

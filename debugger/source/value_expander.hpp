@@ -41,11 +41,11 @@ private:
                                                             int child_depth) const;
     [[nodiscard]] std::vector<Variable> get_tuple_variables(const Value& val, int start, int count,
                                                             int child_depth) const;
-    [[nodiscard]] std::vector<Variable> get_dictionary_variables(const Value& val,
-                                                                 int child_depth) const;
-    [[nodiscard]] std::vector<Variable> get_record_variables(const Value& val,
+    [[nodiscard]] std::vector<Variable> get_dictionary_variables(const Value& val, int start,
+                                                                 int count, int child_depth) const;
+    [[nodiscard]] std::vector<Variable> get_record_variables(const Value& val, int start, int count,
                                                              int child_depth) const;
-    [[nodiscard]] std::vector<Variable> get_choice_variables(const Value& val,
+    [[nodiscard]] std::vector<Variable> get_choice_variables(const Value& val, int start, int count,
                                                              int child_depth) const;
     [[nodiscard]] std::vector<Variable> get_result_variables(const Value& val,
                                                              int child_depth) const;

@@ -222,11 +222,6 @@ module.exports = grammar({
                     "/=",
                     "%=",
                     "//=",
-                    "&=",
-                    "|=",
-                    "^=",
-                    "<<=",
-                    ">>=",
                     "++",
                     "--",
                 ),
@@ -344,10 +339,6 @@ module.exports = grammar({
                         $._expression,
                     ),
                 ),
-                prec.left(7, seq($._expression, "|", $._expression)),
-                prec.left(8, seq($._expression, "^", $._expression)),
-                prec.left(9, seq($._expression, "&", $._expression)),
-                prec.left(10, seq($._expression, choice("<<", ">>"), $._expression)),
                 prec.left(
                     11,
                     seq($._expression, choice("+", "-"), $._expression),
@@ -363,7 +354,7 @@ module.exports = grammar({
             ),
 
         unary_expression: ($) =>
-            prec(13, seq(choice("!", "-", "~"), $._expression)),
+            prec(13, seq(choice("!", "-"), $._expression)),
 
         postfix_expression: ($) =>
             prec(14, seq($._expression, "?")),
@@ -426,6 +417,7 @@ module.exports = grammar({
                 seq(
                     "case",
                     choice($.match_pattern, $._expression),
+                    repeat(seq("|", choice($.match_pattern, $._expression))),
                     $.block,
                 ),
                 seq(

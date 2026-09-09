@@ -81,6 +81,24 @@ void test_capabilities() {
     ASSERT_EQ(caps["positionEncoding"].as_string(), "utf-16");
 }
 
+void test_initialize_accepts_empty_position_encodings() {
+    // An explicit empty positionEncodings array must be treated as "accept the
+    // server default (utf-16)", not "unsupported" — the server must not reject
+    // initialize for it (regression for the empty-array negotiation bug).
+    const std::string init = R"({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "capabilities": { "general": { "positionEncodings": [] } } }
+    })";
+    LspTestSession session{init};
+    (void)session.run();
+
+    const auto* init_resp = session.find_response(1);
+    ASSERT_NE(init_resp, nullptr);
+    ASSERT_TRUE(init_resp->has("result"));
+    ASSERT_FALSE(init_resp->has("error"));
+    ASSERT_EQ((*init_resp)["result"]["capabilities"]["positionEncoding"].as_string(), "utf-16");
+}
+
 void test_save_capability_advertised() {
     // The server must advertise textDocumentSync.save so the client sends
     // textDocument/didSave. That notification drives the include-dependency
@@ -500,6 +518,7 @@ void test_notification_with_id() {
 int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_initialize_shutdown);
     RUN(test_capabilities);
+    RUN(test_initialize_accepts_empty_position_encodings);
     RUN(test_save_capability_advertised);
     RUN(test_did_save_included_file_survives);
     RUN(test_exit_without_shutdown);

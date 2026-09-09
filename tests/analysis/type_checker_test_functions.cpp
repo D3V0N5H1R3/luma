@@ -762,15 +762,38 @@ static void test_pipe_user_function_typed_extra_args() {
 }
 
 static void test_pipe_user_function_typed_extra_arg_mismatch() {
-    // The explicit argument must still be checked against parameter 1, so a
-    // wrong-typed explicit argument is reported (as argument 2).
-    ASSERT_TRUE(fails_with("function string tag(integer count, string label) {\n"
-                           "    return label\n"
-                           "}\n"
-                           "function void foo() {\n"
-                           "    5 |> tag(99)\n"
-                           "}\n",
-                           DiagnosticCode::TypeMismatch));
+    // The explicit argument must still be checked against parameter 1 (the piped
+    // value fills parameter 0).  The user-visible argument number, however,
+    // counts only the explicitly written arguments, so the first written
+    // argument is reported as "argument 1" — matching the generic-function path
+    // — not "argument 2".
+    const auto diagnostics = check("function string tag(integer count, string label) {\n"
+                                   "    return label\n"
+                                   "}\n"
+                                   "function void foo() {\n"
+                                   "    5 |> tag(99)\n"
+                                   "}\n");
+
+    ASSERT_TRUE(has_code(diagnostics, DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(std::ranges::any_of(diagnostics, [](const Diagnostic& d) {
+        return d.message.find("argument 1 type mismatch") != std::string::npos;
+    }));
+}
+
+static void test_pipe_stdlib_typed_arg_mismatch_reports_first_argument() {
+    // Regression: a piped stdlib call must also report the first explicitly
+    // written argument as "argument 1", not "argument 2".  String.repeat has
+    // signature (value: string, count: integer); the piped string fills
+    // parameter 0, so the wrong-typed explicit argument is parameter 1 but the
+    // user-visible argument 1.
+    const auto diagnostics = check("function void foo() {\n"
+                                   "    \"hi\" |> String.repeat(\"x\")\n"
+                                   "}\n");
+
+    ASSERT_TRUE(has_code(diagnostics, DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(std::ranges::any_of(diagnostics, [](const Diagnostic& d) {
+        return d.message.find("argument 1 type mismatch") != std::string::npos;
+    }));
 }
 
 int main() {
@@ -912,5 +935,6 @@ int main() {
     RUN(test_pipe_valid);
     RUN(test_pipe_user_function_typed_extra_args);
     RUN(test_pipe_user_function_typed_extra_arg_mismatch);
+    RUN(test_pipe_stdlib_typed_arg_mismatch_reports_first_argument);
     return SUMMARY();
 }

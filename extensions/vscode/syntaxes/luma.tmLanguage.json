@@ -306,7 +306,7 @@
                 },
                 {
                     "name": "keyword.operator.assignment.luma",
-                    "match": "//=|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|<<=|>>=|(?<![=!<>])=(?!=)"
+                    "match": "//=|\\+=|-=|\\*=|/=|%=|(?<![=!<>])=(?!=)"
                 },
                 {
                     "name": "keyword.operator.assignment.luma",
@@ -317,8 +317,9 @@
                     "match": "//|\\+|-(?!>)|\\*|/(?!/)|%"
                 },
                 {
-                    "name": "keyword.operator.bitwise.luma",
-                    "match": "&(?!&)|\\|(?!\\|)|\\^|~|<<|>>"
+                    "name": "keyword.operator.luma",
+                    "comment": "Match-arm pattern alternative (|). Luma has no bitwise operators — bitwise work uses the Bits module.",
+                    "match": "\\|(?![|>])"
                 }
             ]
         },

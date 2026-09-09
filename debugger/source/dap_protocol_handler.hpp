@@ -105,13 +105,16 @@ public:
                 std::cerr << "DAP: connection closed: " << e.what() << '\n';
                 break;
             } catch (const protocol::ParseError& e) {
-                std::cerr << "DAP: skipping malformed message: " << e.what() << '\n';
-                auto action = recovery.on_error(protocol::ErrorSeverity::transient);
+                // Route through classify_read_error so a ResyncError (the resync
+                // scan was exhausted — the stream is unrecoverably corrupt) is
+                // treated as fatal, while an ordinary framing ParseError stays
+                // transient and recoverable.
+                auto action = recovery.on_error(protocol::classify_read_error(e));
                 if (action == protocol::RecoveryAction::shutdown) {
-                    std::cerr << "DAP: shutting down after " << recovery.consecutive_errors()
-                              << " consecutive read errors\n";
+                    std::cerr << "DAP: shutting down after read error: " << e.what() << '\n';
                     break;
                 }
+                std::cerr << "DAP: skipping malformed message: " << e.what() << '\n';
                 continue;
             } catch (const protocol::TransportError& e) {
                 std::cerr << "DAP: transport error: " << e.what() << '\n';

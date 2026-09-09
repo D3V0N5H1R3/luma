@@ -55,24 +55,47 @@ namespace token_class {
 }
 
 [[nodiscard]] inline bool is_operator(TokenType type) {
+    // Every operator TokenType the lexer can produce (token_type.hpp
+    // "Operators" block) maps to the Operator semantic-token category, so
+    // compound assignments, ranges, optional-chaining, and integer division
+    // are classified consistently with their single-character siblings rather
+    // than left unclassified.
     static constexpr auto operator_types = std::array{
         TokenType::AmpersandAmpersand,
         TokenType::Arrow,
         TokenType::Bang,
         TokenType::BangEquals,
+        TokenType::BangGreater,
+        TokenType::DotDot,
+        TokenType::DotDotEquals,
+        TokenType::Equals,
         TokenType::EqualsEquals,
         TokenType::Greater,
         TokenType::GreaterEquals,
+        TokenType::GreaterGreater,
         TokenType::Less,
         TokenType::LessEquals,
         TokenType::Minus,
+        TokenType::MinusEquals,
+        TokenType::MinusMinus,
         TokenType::Percent,
+        TokenType::PercentEquals,
         TokenType::Pipe,
         TokenType::PipeGreater,
         TokenType::PipePipe,
         TokenType::Plus,
+        TokenType::PlusEquals,
+        TokenType::PlusPlus,
+        TokenType::QuestionBracket,
+        TokenType::QuestionDot,
+        TokenType::QuestionMark,
+        TokenType::QuestionQuestion,
         TokenType::Slash,
+        TokenType::SlashEquals,
+        TokenType::SlashSlash,
+        TokenType::SlashSlashEquals,
         TokenType::Star,
+        TokenType::StarEquals,
     };
     return std::ranges::find(operator_types, type) != operator_types.end();
 }

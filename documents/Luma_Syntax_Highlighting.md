@@ -268,8 +268,7 @@ Operators are grouped by semantic role for theme flexibility.
 | Group             | Symbols                                                                  | Scope                                  |
 | ----------------- | ------------------------------------------------------------------------ | -------------------------------------- |
 | Arithmetic        | `+` `-` `*` `/` `//` `%`                                                 | `keyword.operator.arithmetic.luma`     |
-| Assignment        | `=` `+=` `-=` `*=` `/=` `%=` `//=` `&=` `\|=` `^=` `<<=` `>>=` `++` `--` | `keyword.operator.assignment.luma`     |
-| Bitwise           | `&` `\|` `^` `~` `<<` `>>`                                               | `keyword.operator.bitwise.luma`        |
+| Assignment        | `=` `+=` `-=` `*=` `/=` `%=` `//=` `++` `--`                             | `keyword.operator.assignment.luma`     |
 | Comparison        | `==` `!=` `<` `>` `<=` `>=`                                              | `keyword.operator.comparison.luma`     |
 | Lambda arrow      | `->`                                                                     | `keyword.operator.arrow.luma`          |
 | Logical           | `&&` `\|\|` `!`                                                          | `keyword.operator.logical.luma`        |
@@ -277,6 +276,8 @@ Operators are grouped by semantic role for theme flexibility.
 | Optional unwrap   | `??`                                                                     | `keyword.operator.optional.luma`       |
 | Pipe              | `\|>` `!>`                                                               | `keyword.operator.pipe.luma`           |
 | Range             | `..` `..=`                                                               | `keyword.operator.range.luma`          |
+
+Luma has **no bitwise operators** — bitwise operations use the `Bits` module (`Bits.and`, `Bits.or`, `Bits.xor`, `Bits.not`, `Bits.shift_left`, `Bits.shift_right`). The lexer does not tokenise `&`, `^`, `~`, or `<<` as operators; `|` is only a match-pattern alternative and `>>` only closes nested generics, so neither is highlighted as an arithmetic/bitwise operator.
 
 ### Rule Ordering
 

@@ -14,15 +14,23 @@ namespace luma::protocol {
 //
 // Hierarchy:
 //   std::runtime_error
-//   ├── luma::ParseError         (shared base — see parse_error.hpp)
-//   │   ├── luma::JsonParseError (JSON syntax errors)
-//   │   └── protocol::ParseError (framing / header errors)
-//   └── TransportError           (I/O and connection errors)
+//   ├── luma::ParseError          (shared base — see parse_error.hpp)
+//   │   ├── luma::JsonParseError  (JSON syntax errors)
+//   │   └── protocol::ParseError  (framing / header errors)
+//   │       └── protocol::ResyncError (resync scan exhausted — fatal)
+//   └── TransportError            (I/O and connection errors)
 //       └── ConnectionClosed
 //
 // Callers can catch luma::ParseError to handle all parsing
 // failures uniformly, or catch protocol::ParseError /
 // luma::JsonParseError individually for layer-specific handling.
+//
+// ResyncError is a distinct subtype of protocol::ParseError so the error
+// classifier (error_recovery.hpp) can tell an *unrecoverable* resync failure
+// (the stream is corrupt beyond repair — fatal) apart from an ordinary,
+// recoverable framing/header ParseError (transient).  Because it still derives
+// from protocol::ParseError, existing `catch (const ParseError&)` sites keep
+// working unchanged.
 // ═══════════════════════════════════════════════════════════
 
 // Base class for all transport-level I/O errors in the LSP/DAP protocol layer.
@@ -44,6 +52,15 @@ public:
 class ParseError : public luma::ParseError {
 public:
     using luma::ParseError::ParseError;
+};
+
+// The transport scanned max_resync_iterations lines after a parse error without
+// finding a Content-Length header, so the stream is unrecoverably corrupt.
+// Distinct from a plain ParseError so classify_read_error() can treat it as
+// fatal (immediate shutdown) rather than a transient, resync-recoverable error.
+class ResyncError : public ParseError {
+public:
+    using ParseError::ParseError;
 };
 
 } // namespace luma::protocol

@@ -28,7 +28,7 @@ void Linter::visit_function(const FunctionDeclaration& func) {
 
     // Register parameters in scope and track them for unused detection.
     for (const auto& param : func.parameters) {
-        tracker_.track_variable(param.name, func.location, true);
+        tracker_.track_variable(param.name, func.location, true, param.is_mutable);
     }
 
     lint_block(func.body);

@@ -105,6 +105,15 @@ inline const std::string k_init = R"({
     } } }
 })";
 
+// Initialize params for a client that does NOT support snippets, so keyword
+// completions must fall back to plain-text inserts.
+inline const std::string k_init_no_snippets = R"({
+    "jsonrpc": "2.0", "id": 1, "method": "initialize",
+    "params": { "capabilities": { "textDocument": {
+        "completion": { "completionItem": { "snippetSupport": false } }
+    } } }
+})";
+
 inline const std::string k_initialized = R"({"jsonrpc":"2.0","method":"initialized","params":{}})";
 
 inline const std::string k_exit = R"({"jsonrpc":"2.0","method":"exit","params":{}})";
@@ -152,8 +161,11 @@ inline std::string make_range_params(const std::string& uri, int start_line, int
 
 class LspTestSession {
 public:
-    LspTestSession() : mock_(std::make_unique<MockTransport>()), transport_(mock_.get()) {
-        mock_->enqueue(k_init);
+    LspTestSession() : LspTestSession(k_init) {}
+
+    explicit LspTestSession(const std::string& init_message)
+        : mock_(std::make_unique<MockTransport>()), transport_(mock_.get()) {
+        mock_->enqueue(init_message);
         mock_->enqueue(k_initialized);
     }
 

@@ -38,6 +38,9 @@ pub(crate) fn extract_zip(bytes: &[u8], dest_dir: &str) -> Result<(), String> {
         let comment_len = read_u16(bytes, pos + 32) as usize;
         let local_offset = read_u32(bytes, pos + 42) as usize;
 
+        if pos + 46 + name_len > bytes.len() {
+            return Err("Truncated central directory file name".into());
+        }
         let name_bytes = &bytes[pos + 46..pos + 46 + name_len];
         let name = String::from_utf8_lossy(name_bytes);
 
@@ -168,5 +171,26 @@ mod tests {
         assert_eq!(sanitise_path("foo/bar/baz.exe"), "foo/bar/baz.exe");
         assert_eq!(sanitise_path("/absolute/path"), "absolute/path");
         assert_eq!(sanitise_path("./relative"), "relative");
+    }
+
+    #[test]
+    fn truncated_central_directory_name_errors() {
+        // A central-directory entry whose declared file-name length runs past
+        // the buffer must yield an Err, not panic on an out-of-bounds slice.
+        let mut bytes = vec![0u8; 68];
+        // Central directory file header at offset 0.
+        bytes[0..4].copy_from_slice(&0x0201_4b50u32.to_le_bytes()); // CD signature
+        bytes[28..30].copy_from_slice(&1000u16.to_le_bytes()); // name_len (past end)
+        // End of central directory record at offset 46.
+        let eocd = 46;
+        bytes[eocd..eocd + 4].copy_from_slice(&0x0605_4b50u32.to_le_bytes()); // EOCD signature
+        bytes[eocd + 10..eocd + 12].copy_from_slice(&1u16.to_le_bytes()); // total entries
+        bytes[eocd + 16..eocd + 20].copy_from_slice(&0u32.to_le_bytes()); // cd offset = 0
+
+        let result = extract_zip(&bytes, "unused_dest");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Truncated central directory file name"));
     }
 }

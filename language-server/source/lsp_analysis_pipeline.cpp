@@ -279,13 +279,21 @@ bool AnalysisPipeline::publish_committed_diagnostics(const std::string& uri,
         return false;
     }
 
+    // Always drain any force-publish mark for this URI, regardless of the
+    // current diagnostics_on_save value.  A mark left over from an earlier
+    // on-save period (the setting having since flipped to false) would
+    // otherwise linger in the set and could trigger a spurious later publish
+    // once the setting returns to true.
+    bool was_force_marked = false;
+    {
+        const std::lock_guard lock(force_diag_mutex_);
+        was_force_marked = force_diagnostics_uris_.erase(uri) > 0;
+    }
+
     // When diagnostics_on_save is enabled, only publish if this URI was
     // explicitly marked for forced diagnostic publication (didOpen/didSave).
-    if (state_.configuration.config().get()->diagnostics_on_save) {
-        const std::lock_guard lock(force_diag_mutex_);
-        if (force_diagnostics_uris_.erase(uri) == 0) {
-            return false;
-        }
+    if (state_.configuration.config().get()->diagnostics_on_save && !was_force_marked) {
+        return false;
     }
 
     try {

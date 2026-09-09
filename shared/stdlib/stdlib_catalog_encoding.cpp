@@ -31,6 +31,12 @@ void register_encoder_functions(std::vector<FunctionSpec>& specs, const ModuleBu
 
 void register_hash_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                              const ParamShorthands& p) {
+    // The *_file members (digest_file, md5_file, sha1/256/512_file) read files
+    // but deliberately stay Capability::None rather than carrying
+    // Capability::FileSystem: Hash is a sandbox-aware module whose file
+    // functions are withheld at registration in sandbox mode, and prefix-level
+    // capability tagging would mislabel typos of the safe members.  See the
+    // cap_override note in stdlib_catalog_internal.hpp.
     append_specs(specs,
                  {
                      m.fn("algorithms", 0, "()", R::array_string(), {}),
@@ -63,6 +69,10 @@ void register_hash_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
 
 void register_compression_functions(std::vector<FunctionSpec>& specs, const ModuleBuilder& m,
                                     const ParamShorthands& p) {
+    // gzip_file / gunzip_file / gzip_file_with touch the filesystem but stay
+    // Capability::None for the same reason as Hash's *_file members: Compression
+    // is sandbox-aware and withholds these at registration in sandbox mode.  See
+    // the cap_override note in stdlib_catalog_internal.hpp.
     append_specs(specs,
                  {
                      m.fn("compress", 2, "(data: string, format: Compression.Format)",

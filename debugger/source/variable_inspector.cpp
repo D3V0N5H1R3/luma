@@ -1,5 +1,6 @@
 #include "variable_inspector.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <format>
 #include <optional>
@@ -353,6 +354,15 @@ std::vector<Variable> VariableInspector::get_variables(int reference, int start,
         }
 
         result = get_scope_variables(std::get<ScopeRef>(entry_copy), resolver);
+
+        // Honour DAP start/count paging for the scope's (named) variables,
+        // mirroring the indexed paging in ValueExpander.  start <= 0 means "from
+        // the beginning"; count <= 0 means "through the end".
+        const int total = luma::clamp_to_int(result.size());
+        const int begin = (start > 0) ? std::min(start, total) : 0;
+        const int slice_end = (count > 0) ? begin + std::min(count, total - begin) : total;
+        result.erase(result.begin() + slice_end, result.end());
+        result.erase(result.begin(), result.begin() + begin);
     } else if (std::holds_alternative<ValueRef>(entry_copy)) {
         const auto& value_ref = std::get<ValueRef>(entry_copy);
         result = value_expander_.get_value_variables(*value_ref.value, value_ref.depth, start,

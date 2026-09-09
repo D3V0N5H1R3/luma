@@ -473,6 +473,43 @@ void test_get_variables_array_paging() {
     ASSERT_EQ(head[2].name, "[2]");
 }
 
+// Regression: named collections (dictionary/record/choice) previously ignored
+// DAP start/count paging and returned every child regardless of the requested
+// window.  A dictionary must page like the indexed collections do.
+void test_get_variables_dictionary_paging() {
+    VariableInspector inspector;
+
+    // Build a dictionary with 20 insertion-ordered entries key00..key19.
+    auto dict = std::make_shared<luma::DictionaryValue>();
+    for (int i = 0; i < 20; ++i) {
+        dict->entries.emplace_back(std::format("key{:02}", i),
+                                   luma::Value{static_cast<std::int64_t>(i)});
+    }
+    luma::Value dict_value{dict};
+
+    auto var = inspector.make_variable("d", dict_value, false, 0);
+    ASSERT_TRUE(var.variables_reference != 0);
+    ASSERT_EQ(var.named_variables, 20);
+
+    const VariableInspector::ThreadResolver resolver{};
+
+    // A middle page (start=10, count=5) returns exactly entries key10..key14.
+    auto page = inspector.get_variables(var.variables_reference, 10, 5, "", resolver);
+    ASSERT_EQ(page.size(), 5U);
+    ASSERT_EQ(page[0].name, "key10");
+    ASSERT_EQ(page[4].name, "key14");
+
+    // count == 0 means "from start to the end".
+    auto tail = inspector.get_variables(var.variables_reference, 15, 0, "", resolver);
+    ASSERT_EQ(tail.size(), 5U);
+    ASSERT_EQ(tail[0].name, "key15");
+    ASSERT_EQ(tail[4].name, "key19");
+
+    // The full, unpaged request (start=0, count=0) still returns every entry.
+    auto all = inspector.get_variables(var.variables_reference, 0, 0, "", resolver);
+    ASSERT_EQ(all.size(), 20U);
+}
+
 // ─── Collection expansion (queue, set, key_value_store, ─────────
 // ─── range, reference) ───────────────────────────────────────────────────────
 
@@ -657,6 +694,7 @@ int main() {
     // Depth limiting.
     RUN(test_variable_inspector_max_depth_respected);
     RUN(test_get_variables_array_paging);
+    RUN(test_get_variables_dictionary_paging);
 
     // Collection expansion for the remaining structured value kinds.
     RUN(test_get_variables_queue);

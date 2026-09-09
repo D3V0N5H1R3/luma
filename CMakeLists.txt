@@ -61,19 +61,6 @@ option(LUMA_FEATURE_LTO
 set(LUMA_DISABLE_LTO_TARGETS "" CACHE STRING
     "Semicolon-separated list of targets to exclude from LTO")
 
-# ─────────── Backward compatibility for renamed options ───────────
-function(luma_migrate_option old_name new_name)
-    if(DEFINED ${old_name})
-        set(${new_name} ${${old_name}} CACHE BOOL "" FORCE)
-        message(DEPRECATION "Option ${old_name} is deprecated; use ${new_name} instead")
-    endif()
-endfunction()
-
-luma_migrate_option(LUMA_ENABLE_SANITIZERS LUMA_FEATURE_SANITIZERS)
-luma_migrate_option(LUMA_ENABLE_COVERAGE LUMA_FEATURE_COVERAGE)
-luma_migrate_option(LUMA_ENABLE_LTO LUMA_FEATURE_LTO)
-luma_migrate_option(LUMA_ENABLE_TLS LUMA_FEATURE_TLS)
-
 # ─────────── Target naming convention ───────────
 #   Executables:  luma, luma_lsp, luma_dap
 #   Libraries:    luma_<component>        — luma_core, luma_analysis, luma_shared

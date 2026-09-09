@@ -10,6 +10,13 @@ ErrorSeverity classify_read_error(const std::exception& e) {
         return ErrorSeverity::fatal;
     }
 
+    // ResyncError — the transport exhausted its resync scan without finding a
+    // header, so the stream is unrecoverably corrupt.  Checked before the
+    // ParseError branch below because ResyncError derives from ParseError.
+    if (dynamic_cast<const ResyncError*>(&e) != nullptr) {
+        return ErrorSeverity::fatal;
+    }
+
     // ParseError — malformed message, resync possible.
     if (dynamic_cast<const ParseError*>(&e) != nullptr) {
         return ErrorSeverity::transient;
