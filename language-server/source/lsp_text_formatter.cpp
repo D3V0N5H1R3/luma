@@ -328,9 +328,23 @@ void normalize_trailing_newline(std::string& result) {
            result[result.size() - 2] == '\n') {
         result.pop_back();
     }
+
     if (result.empty() || result.back() != '\n') {
         result += '\n';
     }
+}
+
+[[nodiscard]] int triple_quote_count(const std::string& line) {
+    int count{0};
+    for (std::size_t pos{0}; pos + 2 < line.size();) {
+        if (line[pos] == '"' && line[pos + 1] == '"' && line[pos + 2] == '"') {
+            ++count;
+            pos += 3;
+        } else {
+            ++pos;
+        }
+    }
+    return count;
 }
 
 // ───────────────────────────────────────────────────────────
@@ -437,6 +451,7 @@ std::string format_luma_source(const std::string& source, int tab_size) {
 
     int indent_level = 0;
     int consecutive_blank_lines = 0;
+    bool in_triple_quoted_string = false;
 
     std::size_t pos = 0;
 
@@ -449,6 +464,19 @@ std::string format_luma_source(const std::string& source, int tab_size) {
 
         // Extract line content (without newline).
         auto line = source.substr(pos, eol - pos);
+
+        if (in_triple_quoted_string) {
+            result += line;
+            result += '\n';
+            if ((triple_quote_count(line) % 2) != 0) {
+                in_triple_quoted_string = false;
+            }
+            pos = eol + 1;
+            if (eol == source.size()) {
+                break;
+            }
+            continue;
+        }
 
         auto trimmed = strip_line(line);
 
@@ -463,6 +491,9 @@ std::string format_luma_source(const std::string& source, int tab_size) {
 
         consecutive_blank_lines = 0;
         apply_line_formatting(result, trimmed, indent_level, indent_unit);
+        if ((triple_quote_count(trimmed) % 2) != 0) {
+            in_triple_quoted_string = true;
+        }
 
         pos = eol + 1;
         if (eol == source.size()) {

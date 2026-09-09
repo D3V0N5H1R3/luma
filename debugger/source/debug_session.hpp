@@ -4,7 +4,9 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "breakpoint_manager.hpp"
@@ -138,6 +140,7 @@ public:
 
     [[nodiscard]] std::string last_exception_message() const;
     [[nodiscard]] bool last_exception_is_caught() const;
+    [[nodiscard]] std::optional<std::pair<std::string, bool>> exception_info(int thread_id) const;
     [[nodiscard]] std::string get_source_content(const std::string& path) const;
 
     // ─── Hook installation ───

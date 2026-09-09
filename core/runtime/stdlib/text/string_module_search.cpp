@@ -15,6 +15,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "analysis/source/source_location.hpp"
 #include "common/string_utils.hpp"
@@ -159,28 +160,55 @@ void register_string_search(const EnvPtr& env) {
             const auto& elems = *elems_arr->elements;
             const auto& sep = args[1].as_string();
 
-            std::string result{};
-            result.reserve(elems.size() * 8);
+            std::vector<std::string> converted;
+            converted.reserve(elems.size());
 
             bool first{true};
+            std::size_t converted_count{0};
+            std::size_t total_size{0};
+
+            const auto add_size = [&total_size, loc](const std::size_t size) {
+                if (size > ResourceLimits::max_string_size - total_size) {
+                    throw RuntimeError{
+                        error_msg("String", "join", "result exceeds maximum string size"), loc,
+                        "reduce the number of elements or their size"};
+                }
+                total_size += size;
+            };
 
             for (const auto& elem : elems) {
                 if (!first) {
-                    result += sep;
+                    add_size(sep.size());
                 }
 
                 first = false;
 
                 if (elem.is_string()) {
-                    result += elem.as_string();
+                    add_size(elem.as_string().size());
                 } else {
-                    result += elem.to_string();
+                    converted.push_back(elem.to_string());
+                    add_size(converted.back().size());
+                    ++converted_count;
+                }
+            }
+
+            std::string result{};
+            result.reserve(total_size);
+
+            converted_count = 0;
+            first = true;
+            for (const auto& elem : elems) {
+                if (!first) {
+                    result.append(sep);
                 }
 
-                if (result.size() > ResourceLimits::max_string_size) {
-                    throw RuntimeError{
-                        error_msg("String", "join", "result exceeds maximum string size"), loc,
-                        "reduce the number of elements or their size"};
+                first = false;
+
+                if (elem.is_string()) {
+                    result.append(elem.as_string());
+                } else {
+                    result.append(converted[converted_count]);
+                    ++converted_count;
                 }
             }
 

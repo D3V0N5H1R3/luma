@@ -6,12 +6,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <cstdint>
-#include <cstdlib>
 #include <format>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include "common/resource_limits.hpp"
 #include "common/utf8.hpp"
@@ -23,16 +24,23 @@ namespace luma {
 
 namespace {
 
-// Convert an already-validated JSON numeric token to double.  std::stod throws
-// std::out_of_range when the magnitude is outside double's range (e.g. 1e400 or
-// the underflowing 1e-400); a valid JSON document must still parse, so fall back
-// to std::strtod, which saturates to +/-inf or 0 rather than throwing.
-[[nodiscard]] double parse_double_saturating(const std::string& num_str) {
-    try {
-        return std::stod(num_str);
-    } catch (const std::out_of_range&) {
-        return std::strtod(num_str.c_str(), nullptr);
+// Convert an already-validated JSON numeric token to a finite double. JSON
+// numbers outside the runtime's finite double domain must fail rather than
+// becoming infinity or a silently rounded underflow. std::from_chars is
+// locale-independent (unlike std::stod, which honours the global C locale's
+// decimal separator) and reports underflow/overflow precisely via
+// result_out_of_range, so a genuine "0" still parses while "1e-400" is rejected.
+[[nodiscard]] double parse_double_strict(const std::string& num_str) {
+    double value = 0.0;
+    const char* const first = num_str.data();
+    const char* const last = first + num_str.size();
+    const auto [ptr, ec] = std::from_chars(first, last, value);
+
+    if (ec != std::errc{} || ptr != last) {
+        throw std::out_of_range{std::format("JSON number out of range: {}", num_str)};
     }
+
+    return value;
 }
 
 // Error-reporting policy for the JSON cursor: every scanner error surfaces as a
@@ -338,14 +346,14 @@ private:
         auto num_str = std::string{input_.substr(start, pos_ - start)};
 
         if (is_float) {
-            return Value{parse_double_saturating(num_str)};
+            return Value{parse_double_strict(num_str)};
         }
 
         try {
             return Value{static_cast<std::int64_t>(std::stoll(num_str))};
         } catch (const std::out_of_range&) {
             // Integer literal too large for int64 — represent it as a double.
-            return Value{parse_double_saturating(num_str)};
+            return Value{parse_double_strict(num_str)};
         }
     }
 

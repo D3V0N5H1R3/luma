@@ -5,7 +5,7 @@
 // thread-safe access to the DAP callback set.  This is the "VMDebugInterface"
 // seam of TODO(refactor/V1) — extracted from VM's former nested DebugContext
 // so the debug concern is a first-class, independently documented component,
-// mirroring the VMStack / VMExceptionManager / VMGlobalCache composition.
+// mirroring the VMStack / VMExceptionHandler / VMGlobalCache composition.
 //
 // State owned:
 //   callbacks        — hook functions set by the debugger:

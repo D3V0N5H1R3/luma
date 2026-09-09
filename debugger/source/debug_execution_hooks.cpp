@@ -277,6 +277,8 @@ bool DebugExecutionEngine::on_exception(const std::string& message, bool is_caug
             const auto lock = thread_mgr_.lock_state(*state);
             state->pending.exception_message = message;
             state->pending.exception_caught = is_caught;
+            state->exception_message = message;
+            state->exception_caught = is_caught;
         }
 
         return true;

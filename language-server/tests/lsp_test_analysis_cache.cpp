@@ -339,6 +339,25 @@ void test_include_dependents_add_get_remove() {
     ASSERT_TRUE(after->contains("uri://b"));
 }
 
+void test_transaction_replaces_include_dependencies() {
+    LspAnalysisCache cache;
+    {
+        auto txn = cache.begin_update("uri://main");
+        txn.add_include_dependent("uri://b");
+        txn.commit();
+    }
+    {
+        auto txn = cache.begin_update("uri://main");
+        txn.add_include_dependent("uri://c");
+        txn.commit();
+    }
+
+    ASSERT_FALSE(cache.get_dependents("uri://b").has_value());
+    const auto current = cache.get_dependents("uri://c");
+    ASSERT_TRUE(current.has_value());
+    ASSERT_TRUE(current->contains("uri://main"));
+}
+
 } // namespace
 
 int main() { // NOLINT(bugprone-exception-escape)
@@ -365,6 +384,7 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_symbol_index_updated_on_reinsert);
     RUN(test_symbol_index_updated_on_evict);
     RUN(test_include_dependents_add_get_remove);
+    RUN(test_transaction_replaces_include_dependencies);
 
     return SUMMARY();
 }

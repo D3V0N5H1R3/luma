@@ -7,13 +7,22 @@
 #include "runtime/stdlib/text/json_module.hpp"
 #include "stdlib_test_helpers.hpp"
 
-static void test_json_parses_out_of_double_range_numbers() {
-    // Regression: a finite JSON document must still parse when a numeric literal
-    // lies outside double's range.  1e-400 underflows to 0.0 and 1e400 overflows
-    // to +inf via a saturating conversion, instead of std::stod throwing and the
-    // whole document being rejected.
-    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": 1e-400}"))").is_truthy());
-    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": 1e400}"))").is_truthy());
+static void test_json_rejects_out_of_double_range_numbers() {
+    // JSON numbers outside the runtime's finite double domain must not become
+    // zero or infinity through a saturating conversion.
+    ASSERT_FALSE(eval(R"(Json.is_valid("{\"v\": 1e-400}"))").is_truthy());
+    ASSERT_FALSE(eval(R"(Json.is_valid("{\"v\": 1e400}"))").is_truthy());
+    ASSERT_FALSE(eval(R"(Json.is_valid("{\"v\": -1e400}"))").is_truthy());
+    ASSERT_EVAL_FAILURE(R"(Json.deserialize("1e400"))");
+    ASSERT_EVAL_FAILURE(R"(Json.deserialize("-1e400"))");
+
+    // Representable numbers — including an exact zero, which must not be
+    // mistaken for an underflow — still parse.
+    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": 0}"))").is_truthy());
+    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": 0.0}"))").is_truthy());
+    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": 1e-300}"))").is_truthy());
+    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": 1e300}"))").is_truthy());
+    ASSERT_TRUE(eval(R"(Json.is_valid("{\"v\": -2.5e10}"))").is_truthy());
 }
 
 static void test_json_is_valid() {
@@ -670,7 +679,7 @@ int main() {
     RUN(test_json_set_path_out_of_bounds);
     RUN(test_json_deserialize_non_string_throws);
     RUN(test_json_is_valid_non_string_throws);
-    RUN(test_json_parses_out_of_double_range_numbers);
+    RUN(test_json_rejects_out_of_double_range_numbers);
 
     // Json.Value typed ADT — parse, accessors, field/index, round-trip.
     RUN(test_json_value_module_registered);

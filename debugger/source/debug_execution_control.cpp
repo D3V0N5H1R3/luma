@@ -56,6 +56,8 @@ bool DebugExecutionEngine::unpause_thread_locked(ThreadState& state) {
         }
 
         state.is_paused = false;
+        state.exception_message.clear();
+        state.exception_caught = false;
         state.cv.notify_all();
         return true;
     }
@@ -67,6 +69,8 @@ bool DebugExecutionEngine::unpause_thread_locked(ThreadState& state) {
     }
 
     state.is_paused = false;
+    state.exception_message.clear();
+    state.exception_caught = false;
 
     safe_request_pause_check(state);
 

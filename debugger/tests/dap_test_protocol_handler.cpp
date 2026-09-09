@@ -68,6 +68,51 @@ private:
     std::vector<JsonValue> written_;
 };
 
+class RecoveringTransport : public luma::protocol::Transport {
+public:
+    RecoveringTransport() {
+        set_error_callback([](std::string_view) {});
+    }
+
+    void queue_line(std::string line) {
+        lines_.push_back(std::move(line));
+    }
+
+    void queue_body(std::string body) {
+        bodies_.push_back(std::move(body));
+    }
+
+    [[nodiscard]] const std::vector<JsonValue>& written() const {
+        return written_;
+    }
+
+    void write_message(const JsonValue& message) override {
+        written_.push_back(message);
+    }
+
+protected:
+    [[nodiscard]] std::optional<std::string> read_line() override {
+        if (line_index_ >= lines_.size()) {
+            return std::nullopt;
+        }
+        return lines_[line_index_++];
+    }
+
+    [[nodiscard]] std::string read_exact(std::size_t /*count*/) override {
+        if (body_index_ >= bodies_.size()) {
+            return {};
+        }
+        return bodies_[body_index_++];
+    }
+
+private:
+    std::vector<std::string> lines_;
+    std::size_t line_index_{0};
+    std::vector<std::string> bodies_;
+    std::size_t body_index_{0};
+    std::vector<JsonValue> written_;
+};
+
 // ─── B01: send_event broken-pipe path must invoke the disconnect callback ─
 
 // Regression: a broken pipe encountered inside send_event() (called from a
@@ -86,9 +131,8 @@ void test_send_event_broken_pipe_invokes_disconnect_callback() {
     std::atomic<int> disconnect_calls{0};
     handler.set_disconnect_callback([&] { disconnect_calls.fetch_add(1); });
 
-    handler.register_handler("initialize", [](const JsonValue&) {
-        return DapProtocolHandler::HandlerResult::ok();
-    });
+    handler.register_handler(
+        "initialize", [](const JsonValue&) { return DapProtocolHandler::HandlerResult::ok(); });
 
     // Simulate send_event() being called from the execution thread and
     // hitting a broken pipe *before* run() is ever invoked — mirrors the
@@ -119,9 +163,8 @@ void test_send_response_broken_pipe_invokes_disconnect_callback_once() {
     std::atomic<int> disconnect_calls{0};
     handler.set_disconnect_callback([&] { disconnect_calls.fetch_add(1); });
 
-    handler.register_handler("initialize", [](const JsonValue&) {
-        return DapProtocolHandler::HandlerResult::ok();
-    });
+    handler.register_handler(
+        "initialize", [](const JsonValue&) { return DapProtocolHandler::HandlerResult::ok(); });
 
     transport.set_write_fails(true);
 
@@ -151,6 +194,27 @@ void test_clean_eof_invokes_disconnect_callback_once() {
     ASSERT_EQ(disconnect_calls.load(), 1);
 }
 
+void test_recoverable_transport_error_does_not_look_like_eof() {
+    RecoveringTransport transport;
+    transport.queue_line("Content-Length: 3");
+    transport.queue_line("");
+    transport.queue_body("{x}");
+
+    const std::string request =
+        R"({"type":"request","command":"initialize","seq":1,"arguments":{}})";
+    transport.queue_line("Content-Length: " + std::to_string(request.size()));
+    transport.queue_line("");
+    transport.queue_body(request);
+
+    DapProtocolHandler handler{transport};
+    handler.register_handler(
+        "initialize", [](const JsonValue&) { return DapProtocolHandler::HandlerResult::ok(); });
+
+    ASSERT_EQ(handler.run(), 0);
+    ASSERT_EQ(transport.written().size(), 1U);
+    ASSERT_EQ(transport.written()[0]["command"].as_string(), "initialize");
+}
+
 } // namespace
 
 int main() {
@@ -159,6 +223,7 @@ int main() {
     RUN(test_send_event_broken_pipe_invokes_disconnect_callback);
     RUN(test_send_response_broken_pipe_invokes_disconnect_callback_once);
     RUN(test_clean_eof_invokes_disconnect_callback_once);
+    RUN(test_recoverable_transport_error_does_not_look_like_eof);
 
     return SUMMARY();
 }

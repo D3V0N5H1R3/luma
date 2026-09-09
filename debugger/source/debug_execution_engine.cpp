@@ -135,6 +135,8 @@ void DebugExecutionEngine::handle_unhandled_exception(const std::exception& e,
         main_state->is_paused = true;
         thread_mgr_.increment_paused_count();
         main_state->is_exception_terminated = true;
+        main_state->exception_message = e.what();
+        main_state->exception_caught = false;
     }
 
     JsonValue::ObjectType body;

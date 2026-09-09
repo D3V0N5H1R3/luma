@@ -14,7 +14,7 @@ class TaskScope;  // concurrency/task_scope.hpp
 // ─────────────────────────────────────────────────────────────────────────────
 // VMStackAPI — the narrow, mockable contract that bytecode dispatch handlers
 // depend on, instead of reaching into VM's private members (stack_,
-// task_manager_, exceptions_, …) directly through `this`.
+// task_manager_, exception_handler_, …) directly through `this`.
 //
 // Introduced per TODO(refactor) in vm.hpp.  The VM implements this interface,
 // so existing handlers keep working unchanged, while new or extracted handlers

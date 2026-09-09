@@ -4,7 +4,7 @@
 function void main() {
     mutable integer sum = 0
 
-    for i in 1 .. 10001 {
+    for i in 1 .. 10000001 {
         sum += i
     }
 

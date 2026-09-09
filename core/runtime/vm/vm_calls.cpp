@@ -114,7 +114,7 @@ bool VM::execute_tests(const std::vector<CompiledFunction>& functions,
             // Reset VM state so the next test starts cleanly.
             stack_.top = stack_.base;
             stack_.frames.clear();
-            exceptions_.clear();
+            exception_handler_.clear();
         }
     }
 

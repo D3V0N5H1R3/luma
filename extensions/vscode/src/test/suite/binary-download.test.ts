@@ -1,9 +1,19 @@
 import * as assert from "node:assert";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
-import { parseGithubRelease, LSP_CONFIG, DAP_CONFIG } from "../../utils/binary-download";
+import * as vscode from "vscode";
+
+import {
+    parseGithubRelease,
+    LSP_CONFIG,
+    DAP_CONFIG,
+    resolveBinaryCommand,
+} from "../../utils/binary-download";
 import { GITHUB_REPO } from "../../generated/config";
 import { PLATFORM_MAP, OS_MAP, ARCH_MAP, getPlatformSuffix } from "../../generated/platform";
-import { getPlatformAssetName } from "../../utils/binary/platform";
+import { getBinaryFilename, getPlatformAssetName } from "../../utils/binary/platform";
 
 suite("parseGithubRelease", () => {
     test("should parse valid release data", () => {
@@ -172,5 +182,41 @@ suite("getPlatformAssetName", () => {
             /^luma_lsp-(linux|macos|windows)-(x86_64|aarch64)\.(tar\.gz|zip)$/,
             `Unexpected asset name: ${name}`,
         );
+    });
+});
+
+suite("resolveBinaryCommand", () => {
+    test("falls back when the configured path does not name a file", async () => {
+        const original_get_configuration = vscode.workspace.getConfiguration;
+        const messages: string[] = [];
+        const storage_path = fs.mkdtempSync(path.join(os.tmpdir(), "luma-binary-test-"));
+        const bundled_path = path.join(storage_path, "bin", getBinaryFilename(LSP_CONFIG.name));
+        fs.mkdirSync(path.dirname(bundled_path), { recursive: true });
+        fs.writeFileSync(bundled_path, "");
+        const output = {
+            appendLine: (message: string) => messages.push(message),
+        } as unknown as vscode.OutputChannel;
+
+        vscode.workspace.getConfiguration = () =>
+            ({
+                get: () => "C:\\does-not-exist\\luma_lsp",
+            }) as unknown as vscode.WorkspaceConfiguration;
+
+        try {
+            const result = await resolveBinaryCommand(
+                LSP_CONFIG,
+                "lsp.path",
+                {
+                    globalStorageUri: { fsPath: storage_path },
+                } as vscode.ExtensionContext,
+                output,
+            );
+
+            assert.strictEqual(result, bundled_path);
+            assert.ok(messages.some((message) => message.includes("Invalid luma.lsp.path")));
+        } finally {
+            vscode.workspace.getConfiguration = original_get_configuration;
+            fs.rmSync(storage_path, { recursive: true, force: true });
+        }
     });
 });

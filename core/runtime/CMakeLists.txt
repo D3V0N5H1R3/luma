@@ -191,6 +191,7 @@ luma_add_library(luma_core STATIC
     compiler/program_loader.cpp
     vm/vm.cpp
     vm/vm_exception_manager.cpp
+    vm/vm_exception_handler.cpp
     vm/vm_frames.cpp
     vm/vm_calls.cpp
     vm/vm_debug.cpp

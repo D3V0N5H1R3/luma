@@ -165,7 +165,7 @@ bool VM::handle_exception(const std::runtime_error& e) {
 // codegen also mishandles.
 bool VM::handle_exception(const std::string& message, const std::optional<Value>& error_value) {
     // First determine if the exception will be caught.
-    const bool has_handler = exceptions_.has_handler_for(base_depth_);
+    const bool has_handler = exception_handler_.has_handler_for(base_depth_);
 
     // Then call the hook with the is_caught status.
     // THREAD_SAFETY: snapshots captured under shared_lock; safe to use across threads.
@@ -183,7 +183,7 @@ bool VM::handle_exception(const std::string& message, const std::optional<Value>
         return false; // No Luma handler — caller re-raises lexically.
     }
 
-    auto handler = exceptions_.pop_handler();
+    auto handler = exception_handler_.pop();
 
     // Unwind any task_scope blocks entered after this handler was installed.
     // The frame/stack unwind below cannot see them, so without this their

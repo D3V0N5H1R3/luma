@@ -142,6 +142,14 @@ function void show_help() {
     print("  quit              Exit\n")
 }
 
+function string todo_prompt() {
+    return "todo> add|done|list|quit: "
+}
+
+function string unknown_command_hint() {
+    return "Unknown command. Try: add \"Buy milk\", add! \"Fix router\", done 3, clean, list, help, quit."
+}
+
 # ─── Main Loop ───
 
 @main
@@ -163,7 +171,7 @@ function void main() {
     mutable boolean is_running = true
 
     while is_running {
-        string raw_input = Result.unwrap_or(Console.prompt("\n> "), "quit")
+        string raw_input = Result.unwrap_or(Console.prompt(todo_prompt()), "quit")
         string line = String.trim(raw_input)
         string lower = String.lowercase(line)
 
@@ -228,9 +236,15 @@ function void main() {
         } else if lower == "quit" || lower == "q" {
             is_running = false
         } else if String.length(line) > 0 {
-            print("Unknown command. Type 'help' for usage.")
+            print(unknown_command_hint())
         }
     }
 
     print("Goodbye!")
+}
+
+@test
+function void test_todo_prompt_and_recovery_hint_keep_commands_visible() {
+    assert(String.contains(todo_prompt(), "add|done|list|quit"))
+    assert(String.contains(unknown_command_hint(), "add! \"Fix router\""))
 }

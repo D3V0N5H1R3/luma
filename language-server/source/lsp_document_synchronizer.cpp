@@ -91,6 +91,7 @@ void DocumentSynchronizer::handle_did_open(const JsonValue& params) {
         return;
     }
 
+    state_.semantic_token_cache.invalidate(uri);
     callbacks_.schedule_analysis(uri, true);
 }
 
@@ -154,6 +155,7 @@ void DocumentSynchronizer::handle_did_change(const JsonValue& params) {
         state.documents().refresh_stored_hash(state.token(), uri);
     }
 
+    state_.semantic_token_cache.invalidate(uri);
     callbacks_.schedule_analysis(uri, false);
 }
 
@@ -212,6 +214,7 @@ void DocumentSynchronizer::handle_did_close(const JsonValue& params) {
         state.cache().remove_dependent(uri);
     }
 
+    state_.semantic_token_cache.invalidate(uri);
     // Clear diagnostics for closed document.
     callbacks_.publish_diagnostics(uri, {}, 0);
 

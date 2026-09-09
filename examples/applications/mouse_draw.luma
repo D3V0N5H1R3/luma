@@ -82,16 +82,22 @@ string color_label, string status_text) {
 
     string styled_brush = Result.unwrap(Terminal.color(color_label, brush))
     string left_text = " Brush: ${brush}  Color: ${color_label}  ${status_text}"
-    string right = "q:quit c2:clr 1-5:brush scrl:color"
+    string right = " | Quit q | Clear c | Brush 1-5 | Scroll color | Right-click erase"
     # Use plain text lengths for padding (escape codes don't occupy columns).
     integer left_len = String.length(left_text)
     integer right_len = String.length(right)
     integer content_len = left_len + right_len
     string left_styled = " Brush: ${styled_brush}  Color: ${color_label}  ${status_text}"
-    # If the content is too wide for the terminal, show only the left portion;
-    # otherwise pad between left and right so the bar spans exactly cols columns.
+    # If the content is too wide, keep as much of the plain-language help as
+    # fits after the current brush state.
     if content_len >= cols {
-        Terminal.write(Terminal.inverse(left_styled))
+        integer available = cols - left_len
+        string visible_right = if available > 0 {
+            String.substring(right, 0, available)
+        } else {
+            ""
+        }
+        Terminal.write(Terminal.inverse("${left_styled}${visible_right}"))
     } else {
         integer int_padding = cols - content_len
         string bar = "${left_styled}${Result.unwrap(String.repeat(" ", int_padding))}${right}"
@@ -302,7 +308,8 @@ function void test_status_bar_renders_through_capture() {
     assert(String.contains(out, "Brush:"))
     assert(String.contains(out, "Color: red"))
     assert(String.contains(out, "Draw (3, 5)"))
-    assert(String.contains(out, "q:quit"))
+    assert(String.contains(out, "Quit q"))
+    assert(String.contains(out, "Brush"))
 }
 
 @test

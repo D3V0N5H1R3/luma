@@ -55,6 +55,14 @@ void test_leaves_interpolation_operators_untouched() {
     ASSERT_EQ(format_luma_source("x=\"${a+b}\"\n", 4), std::string("x = \"${a+b}\"\n"));
 }
 
+void test_preserves_multiline_string_contents() {
+    const std::string source = "x = \"\"\"\n"
+                               "  a=b # literal\n"
+                               "  {value}\n"
+                               "\"\"\"\n";
+    ASSERT_EQ(format_luma_source(source, 4), source);
+}
+
 // Characterization: operators inside a trailing line comment are NOT re-spaced.
 void test_leaves_comment_contents_untouched() {
     ASSERT_EQ(format_luma_source("x=1 # a=b\n", 4), std::string("x = 1 # a=b\n"));
@@ -111,6 +119,7 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_normalizes_pipe_operator);
     RUN(test_leaves_string_contents_untouched);
     RUN(test_leaves_interpolation_operators_untouched);
+    RUN(test_preserves_multiline_string_contents);
     RUN(test_leaves_comment_contents_untouched);
     RUN(test_indents_braced_block);
     RUN(test_indent_respects_tab_size);

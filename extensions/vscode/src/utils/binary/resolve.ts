@@ -203,7 +203,12 @@ export async function resolveBinaryCommand(
 
     if (configured) {
         try {
-            return resolvePath(configured);
+            const configured_path = resolvePath(configured);
+            if (fs.statSync(configured_path).isFile()) {
+                return configured_path;
+            }
+
+            throw new Error(`Configured path is not a file: ${configured_path}`);
         } catch (err: unknown) {
             const message = extractErrorMessage(err);
             void reportWarning(

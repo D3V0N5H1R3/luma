@@ -202,6 +202,7 @@ load_and_cache_include_file(const IncludeDeclaration& inc, const std::filesystem
     // even when parsing fails (matching the previous behaviour).
     const auto file_id = ctx.result.semantic.includes.next_file_id;
     ctx.result.semantic.includes.file_id_to_path[file_id] = inc_key;
+    ctx.result.semantic.includes.file_id_to_source[file_id] = inc_src;
     ++ctx.result.semantic.includes.next_file_id;
 
     LoadedInclude loaded;
@@ -291,6 +292,7 @@ process_single_nested_include(const IncludeDeclaration& parent_inc,
     // even when parsing fails (matching the previous behaviour).
     const auto file_id = ctx.result.semantic.includes.next_file_id;
     ctx.result.semantic.includes.file_id_to_path[file_id] = nk;
+    ctx.result.semantic.includes.file_id_to_source[file_id] = nsrc;
     ++ctx.result.semantic.includes.next_file_id;
 
     // Consult the token cache by content hash — mirrors the top-level path so

@@ -15,6 +15,10 @@ std::optional<JsonValue> LspTransportWrapper::read_message() {
     return transport_->read_message();
 }
 
+bool LspTransportWrapper::had_recoverable_read_error() const noexcept {
+    return transport_->had_recoverable_read_error();
+}
+
 // ═══════════════════════════════════════════════════════════
 // Sending
 // ═══════════════════════════════════════════════════════════

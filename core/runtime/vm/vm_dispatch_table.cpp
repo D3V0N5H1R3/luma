@@ -621,10 +621,10 @@ void VM::op_try_catch() {
 }
 
 void VM::op_try_end() {
-    if (exceptions_.empty()) [[unlikely]] {
+    if (exception_handler_.empty()) [[unlikely]] {
         runtime_error(vm_errors::try_end_without_try_catch);
     }
-    exceptions_.pop_handler_discard();
+    exception_handler_.discard();
 }
 
 void VM::op_rethrow() {

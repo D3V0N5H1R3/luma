@@ -95,7 +95,12 @@ private:
     // of the user's document, so its locations cannot be rendered against
     // `source`.  Pass 0 when no prelude was injected.
     void type_check_phase(Program& program, AnalysisResult& result, const std::string& source,
-                          const std::string& uri, FileId prelude_file_id);
+                          const std::string& uri, const std::vector<std::size_t>& line_starts,
+                          FileId prelude_file_id);
+
+    void append_diagnostic(AnalysisResult& result, const luma::Diagnostic& diagnostic,
+                           const std::string& root_source, const std::string& root_uri,
+                           const std::vector<std::size_t>& root_line_starts);
 
     void doc_comment_phase(AnalysisResult& result, const std::string& source);
 

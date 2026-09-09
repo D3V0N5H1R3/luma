@@ -575,6 +575,12 @@ static void test_string_join() {
     ASSERT_EQ(eval("String.join([1, 2, 3], \"-\")").as_string(), "1-2-3");
 }
 
+static void test_string_join_caps_output_size() {
+    const LimitGuard guard{ResourceLimits::max_string_size, static_cast<std::size_t>(8)};
+
+    ASSERT_THROWS(eval("String.join([\"abc\", 12345], \"-\")"));
+}
+
 static void test_string_last_index_of() {
     ASSERT_EVAL_INT("String.last_index_of(\"banana\", \"an\")", 3);
 }
@@ -936,6 +942,7 @@ int main() {
     RUN(test_string_is_blank);
     RUN(test_string_is_numeric);
     RUN(test_string_join);
+    RUN(test_string_join_caps_output_size);
     RUN(test_string_last_index_of);
     RUN(test_string_last_index_of_not_found);
     RUN(test_string_remove_prefix);
