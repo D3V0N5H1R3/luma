@@ -107,7 +107,9 @@ template <typename StringLike>
 //
 // Returns the raw byte value for invalid sequences, treating them as
 // single-byte characters.  This matches the "replacement" strategy used
-// by most text editors and avoids throwing on malformed input.
+// by most text editors and avoids throwing on malformed input.  A sequence
+// is invalid when it is truncated (not enough bytes remain) or when any
+// expected continuation byte is not a genuine 10xxxxxx continuation.
 template <typename StringLike>
 [[nodiscard]] inline std::uint32_t utf8_decode_at(const StringLike& s, std::size_t pos) {
     const auto byte = static_cast<std::uint8_t>(s[pos]);
@@ -116,16 +118,22 @@ template <typename StringLike>
         return byte;
     }
 
-    if (is_2byte_utf8(byte) && pos + 1 < s.size()) {
+    // Whether the byte at `s[pos + offset]` is a genuine continuation byte.
+    // Only called after the caller has confirmed that index is in bounds.
+    const auto continues = [&s, pos](std::size_t offset) {
+        return is_utf8_continuation(static_cast<unsigned char>(s[pos + offset]));
+    };
+
+    if (is_2byte_utf8(byte) && pos + 1 < s.size() && continues(1)) {
         return (static_cast<std::uint32_t>(byte & 0x1F) << 6) | utf8_cont(s, pos, 1);
     }
 
-    if (is_3byte_utf8(byte) && pos + 2 < s.size()) {
+    if (is_3byte_utf8(byte) && pos + 2 < s.size() && continues(1) && continues(2)) {
         return (static_cast<std::uint32_t>(byte & 0x0F) << 12) | (utf8_cont(s, pos, 1) << 6) |
                utf8_cont(s, pos, 2);
     }
 
-    if (is_4byte_utf8(byte) && pos + 3 < s.size()) {
+    if (is_4byte_utf8(byte) && pos + 3 < s.size() && continues(1) && continues(2) && continues(3)) {
         return (static_cast<std::uint32_t>(byte & 0x07) << 18) | (utf8_cont(s, pos, 1) << 12) |
                (utf8_cont(s, pos, 2) << 6) | utf8_cont(s, pos, 3);
     }

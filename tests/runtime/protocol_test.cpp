@@ -658,6 +658,14 @@ static void test_classify_parse_error_is_transient() {
     ASSERT_EQ(classify_read_error(e), ErrorSeverity::transient);
 }
 
+static void test_classify_resync_error_is_fatal() {
+    // A ResyncError means the resync scan was exhausted without finding a
+    // header — the stream is unrecoverably corrupt, so it must be fatal even
+    // though it derives from the (transient) protocol::ParseError.
+    ResyncError e{"Resync failed: no Content-Length header found"};
+    ASSERT_EQ(classify_read_error(e), ErrorSeverity::fatal);
+}
+
 static void test_classify_transport_error_is_fatal() {
     TransportError e{"io failure"};
     ASSERT_EQ(classify_read_error(e), ErrorSeverity::fatal);
@@ -847,6 +855,7 @@ int main() {
     // Error recovery — severity classification and consecutive-error tracking.
     RUN(test_classify_connection_closed_is_fatal);
     RUN(test_classify_parse_error_is_transient);
+    RUN(test_classify_resync_error_is_fatal);
     RUN(test_classify_transport_error_is_fatal);
     RUN(test_classify_unknown_exception_is_transient);
     RUN(test_recovery_state_fatal_shuts_down);

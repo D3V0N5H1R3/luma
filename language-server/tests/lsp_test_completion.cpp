@@ -105,6 +105,34 @@ void test_keyword_context_filtering() {
     ASSERT_FALSE(has_completion_label((*resp)["result"], "return"));
 }
 
+// ─── Keyword completion plain-text fallback (snippets disabled) ─────
+
+void test_keyword_completion_plain_insert_without_snippets() {
+    // A client without snippet support must still receive a valid plain-text
+    // insert for multi-variant keyword items whose label carries a "/variant"
+    // suffix (e.g. "for/kv") — inserting the label verbatim would be a syntax
+    // error.
+    LspTestSession session{k_init_no_snippets};
+
+    const std::string uri = "file:///test/kw_plain.luma";
+    const auto* resp = open_request_and_assert(session, "textDocument/completion", uri, "\n",
+                                               make_td_position(uri, 0, 0));
+    const auto& result = (*resp)["result"];
+    ASSERT_TRUE(result.is_array());
+
+    bool found = false;
+    for (const auto& item : result.as_array()) {
+        if (item.has("label") && item["label"].as_string() == "for/kv") {
+            found = true;
+            ASSERT_TRUE(item.has("insertText"));
+            ASSERT_EQ(item["insertText"].as_string(), std::string{"for"});
+            ASSERT_EQ(item["insertTextFormat"].as_integer(),
+                      static_cast<int64_t>(constants::insert_text_format::plaintext));
+        }
+    }
+    ASSERT_TRUE(found);
+}
+
 // ─── Completion item serialisation ─────────────────────────────────
 
 void test_completion_item_omits_empty_detail() {
@@ -367,6 +395,7 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_pipe_completion);
     RUN(test_record_field_completion);
     RUN(test_keyword_context_filtering);
+    RUN(test_keyword_completion_plain_insert_without_snippets);
     RUN(test_completion_item_omits_empty_detail);
     RUN(test_match_pattern_completion);
     RUN(test_type_annotation_completion);

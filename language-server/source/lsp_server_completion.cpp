@@ -75,6 +75,15 @@ keyword_completions(bool snippet_support, const std::vector<std::string>& module
         if (snippet_support && !kw.snippet.empty()) {
             insert_text = std::string(kw.snippet);
             insert_fmt = constants::insert_text_format::snippet;
+        } else {
+            // Plain-text fallback.  Multi-variant keyword labels carry a
+            // "/variant" suffix for display (e.g. "for/kv", "if/else",
+            // "try/catch/finally"); inserting that label verbatim is a syntax
+            // error, so insert the base keyword — the label up to the first '/'.
+            // For a single-word label this is the whole label, matching (and
+            // making explicit) the client's default label-as-insert behaviour.
+            const auto slash = kw.name.find('/');
+            insert_text = std::string(kw.name.substr(0, slash));
         }
 
         items.push_back(CompletionItemBuilder()

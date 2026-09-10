@@ -398,8 +398,12 @@ void ExpressionTypeChecker::check_user_function_args(
         const auto& arg_type = arg_types[i];
         const auto& param_type = callee_type.inner_types[i + param_offset];
         const auto hint = type_mismatch_hint(param_type, arg_type);
-        (void)type_check_helpers::check_argument_type(tc_, i + 1 + param_offset, param_type,
-                                                      arg_type, expr.arguments[i]->location, hint);
+        // `param_offset` indexes the parameter-type array (the piped value fills
+        // parameter 0), but the user-visible argument number must count only the
+        // explicitly written arguments — so report `i + 1`, matching the
+        // generic-function path in generic_resolver.cpp.
+        (void)type_check_helpers::check_argument_type(tc_, i + 1, param_type, arg_type,
+                                                      expr.arguments[i]->location, hint);
     }
 
     // Check named argument types against declared parameter types.
@@ -541,8 +545,12 @@ ExpressionTypeChecker::check_stdlib_function_call(const CallExpression& expr,
                 continue;
             }
 
-            (void)type_check_helpers::check_argument_type(tc_, param_idx + 1, expected,
-                                                          arg_types[i], expr.location);
+            // `param_idx` indexes the parameter-type array (the piped value
+            // fills parameter 0), but the user-visible argument number must
+            // count only the explicitly written arguments — so report `i + 1`,
+            // matching the generic-function path in generic_resolver.cpp.
+            (void)type_check_helpers::check_argument_type(tc_, i + 1, expected, arg_types[i],
+                                                          expr.location);
         }
     }
 

@@ -262,6 +262,28 @@ static void test_decode_truncated_four_byte() {
     ASSERT_EQ(utf8_decode_at(s, 0), 0xF0U);
 }
 
+static void test_decode_invalid_continuation_two_byte() {
+    // Two-byte leader followed by a non-continuation byte ('A', 0x41). The
+    // sequence is malformed, so decoding falls back to the raw lead byte
+    // rather than masking the following byte into a bogus codepoint.
+    std::string s{static_cast<char>(0xC3), 'A'};
+    ASSERT_EQ(utf8_decode_at(s, 0), 0xC3U);
+}
+
+static void test_decode_invalid_continuation_three_byte() {
+    // Three-byte leader with a valid first continuation but an invalid second
+    // (0x41 is not 10xxxxxx) — falls back to the raw lead byte.
+    std::string s{static_cast<char>(0xE2), static_cast<char>(0x82), 'A'};
+    ASSERT_EQ(utf8_decode_at(s, 0), 0xE2U);
+}
+
+static void test_decode_invalid_continuation_four_byte() {
+    // Four-byte leader whose final byte is not a continuation byte — falls back
+    // to the raw lead byte.
+    std::string s{static_cast<char>(0xF0), static_cast<char>(0x9F), static_cast<char>(0x98), 'A'};
+    ASSERT_EQ(utf8_decode_at(s, 0), 0xF0U);
+}
+
 static void test_count_bare_continuation_bytes() {
     // Each bare continuation byte is treated as a single-byte codepoint.
     std::string s{static_cast<char>(0x80), static_cast<char>(0xBF)};
@@ -527,6 +549,9 @@ int main() {
     RUN(test_decode_truncated_two_byte);
     RUN(test_decode_truncated_three_byte);
     RUN(test_decode_truncated_four_byte);
+    RUN(test_decode_invalid_continuation_two_byte);
+    RUN(test_decode_invalid_continuation_three_byte);
+    RUN(test_decode_invalid_continuation_four_byte);
 
     // Encode.
     RUN(test_encode_ascii);

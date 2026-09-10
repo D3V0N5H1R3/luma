@@ -86,65 +86,66 @@ void BreakpointManager::resolve_pending_breakpoints() {
 BreakpointManager::BreakpointCheckResult
 BreakpointManager::check_breakpoint(int file_id, int line,
                                     const ConditionEvaluatorFn& eval_condition) const {
-    // Phase 1: locate the matching breakpoint and read its identity and
-    // condition fields *without* recording a hit yet — a conditional breakpoint
-    // only counts as hit when its condition holds (DAP semantics).
-    std::optional<BreakpointSnapshot> match;
+    // Phase 1: snapshot every breakpoint bound to this line (distinct requested
+    // lines can snap to the same executable line) *without* recording a hit — a
+    // conditional breakpoint only counts as hit when its condition holds.
+    std::vector<BreakpointSnapshot> matches;
 
     {
         const std::scoped_lock lock(ctx_.mutex);
 
-        match = line_mgr_.find_matching_breakpoint(file_id, line, /*record_hit=*/false);
+        matches = line_mgr_.find_matching_breakpoints(file_id, line);
     }
 
-    if (!match) {
-        return {};
-    }
-
-    // Phase 2: evaluate the condition against the live frame, outside the leaf
-    // lock.  A false condition is not a hit and must not advance the counter,
-    // so this runs *before* the hit is recorded and *before* the hit condition.
-    if (!match->condition.empty() && eval_condition) {
-        if (eval_condition(match->condition) != "true") {
-            return {};
+    // Evaluate each breakpoint in turn; the first one that fully qualifies
+    // (condition holds AND hit condition satisfied) determines the stop / log.
+    for (const auto& match : matches) {
+        // Phase 2: evaluate the condition against the live frame, outside the
+        // leaf lock.  A false condition is not a hit and must not advance the
+        // counter, so this runs before the hit is recorded.
+        if (!match.condition.empty() && eval_condition) {
+            if (eval_condition(match.condition) != "true") {
+                continue;
+            }
         }
-    }
 
-    // Phase 3: record the qualifying hit and read back the updated count.  The
-    // hit counter therefore tracks condition-true hits, which is what a
-    // combined condition + hitCondition breakpoint must gate on.
-    std::optional<BreakpointSnapshot> hit;
+        // Phase 3: record the qualifying hit for this specific breakpoint and
+        // read back its updated count.
+        std::optional<int> times_hit;
 
-    {
-        const std::scoped_lock lock(ctx_.mutex);
+        {
+            const std::scoped_lock lock(ctx_.mutex);
 
-        hit = line_mgr_.find_matching_breakpoint(file_id, line, /*record_hit=*/true);
-    }
-
-    // The breakpoint may have been removed by a concurrent setBreakpoints call
-    // between phase 1 and phase 3; if so, do not break.
-    if (!hit) {
-        return {};
-    }
-
-    // Phase 4: gate on the hit condition using the condition-true hit count.
-    if (!hit->hit_condition.empty()) {
-        if (!evaluate_hit_condition(hit->hit_condition, hit->times_hit)) {
-            return {};
+            times_hit = line_mgr_.record_breakpoint_hit(file_id, line, match.id);
         }
-    }
 
-    BreakpointCheckResult result;
+        // The breakpoint may have been removed by a concurrent setBreakpoints
+        // call between phase 1 and phase 3; if so, skip it.
+        if (!times_hit) {
+            continue;
+        }
 
-    if (!hit->log_message.empty()) {
-        result.log_message = hit->log_message;
-        result.hit_breakpoint_id = hit->id;
+        // Phase 4: gate on the hit condition using the condition-true hit count.
+        if (!match.hit_condition.empty()) {
+            if (!evaluate_hit_condition(match.hit_condition, *times_hit)) {
+                continue;
+            }
+        }
+
+        BreakpointCheckResult result;
+
+        if (!match.log_message.empty()) {
+            result.log_message = match.log_message;
+            result.hit_breakpoint_id = match.id;
+            return result;
+        }
+
+        result.should_break = true;
+        result.hit_breakpoint_id = match.id;
         return result;
     }
 
-    result.should_break = true;
-    result.hit_breakpoint_id = hit->id;
-    return result;
+    return {};
 }
 
 // ─── Queries ───

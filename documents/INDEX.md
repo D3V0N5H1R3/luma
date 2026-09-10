@@ -288,10 +288,10 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | Section | Lines |
 | ------- | ----- |
 | Table of Contents | 7–38 |
-| 1 — Token Design | 39–307 |
-| 2 — Visual Studio Code Extension | 308–522 |
-| 3 — Zed Extension | 523–719 |
-| See Also | 720–723 |
+| 1 — Token Design | 39–308 |
+| 2 — Visual Studio Code Extension | 309–508 |
+| 3 — Zed Extension | 509–706 |
+| See Also | 707–710 |
 
 ## Luma_Tutorial.md
 

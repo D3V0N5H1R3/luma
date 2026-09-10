@@ -1,6 +1,7 @@
 #ifndef LUMA_LSP_DEFINITION_RESOLVER_HPP
 #define LUMA_LSP_DEFINITION_RESOLVER_HPP
 
+#include <algorithm>
 #include <functional>
 #include <optional>
 #include <string>
@@ -241,8 +242,19 @@ private:
                 return Location{origin_uri, find_identifier_range(origin_result->semantic.tokens,
                                                                   loc, plain_name)};
             }
-            // Fall back to current file's tokens for range computation.
-            return Location{origin_uri, find_identifier_range(tokens_, loc, plain_name)};
+            // The origin file's analysis is not cached: derive a best-effort
+            // range from the origin SourceLocation itself.  Searching tokens_
+            // here would be wrong — those are the CURRENT file's tokens, so an
+            // unrelated same-named identifier near loc's (origin-file) line
+            // would yield a wrong range in the origin file.  This mirrors the
+            // loc-based fallback inside find_identifier_range.
+            const int line0 = loc.line > 0 ? loc.line - 1 : 0;
+            const int col0 = std::max(0, loc.column - 1);
+            return Location{
+                origin_uri,
+                Range{.start = Position{.line = line0, .character = col0},
+                      .end = Position{.line = line0,
+                                      .character = col0 + lexeme_column_width(plain_name)}}};
         }
 
         // Symbol defined in the current file.

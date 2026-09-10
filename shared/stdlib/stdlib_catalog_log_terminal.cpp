@@ -20,6 +20,11 @@ void register_log_functions(std::vector<FunctionSpec>& specs, const ModuleBuilde
                  {p.string, p.string}),
             m.fn("set_format", 1, "(format: string)", R::void_type(), {p.string}),
             m.fn("set_level", 1, "(level: Level)", R::void_type(), {p.log_level}),
+            // set_output can open a file, but stays Capability::None: Log is a
+            // sandbox-aware module and withholds set_output at registration in
+            // sandbox mode.  Prefix-level capability tagging would mislabel typos
+            // of the safe Log members.  See the cap_override note in
+            // stdlib_catalog_internal.hpp.
             m.fn("set_output", 1, "(target: Log.Output | string)", R::result_void(), {p.any}),
             m.fn("warning", 1, "(message: string)", R::void_type(), {p.string}),
         });

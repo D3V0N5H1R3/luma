@@ -74,8 +74,8 @@ protected:
     // After a parse error, scan forward discarding input until the next
     // Content-Length: header is found and buffer it for the next read_message()
     // call so the stream is left in a recoverable state.
-    // Throws ParseError if the iteration cap is reached without finding a
-    // valid header.
+    // Throws ResyncError if the iteration cap is reached without finding a
+    // valid header (the stream is unrecoverably corrupt — a fatal condition).
     void resync_to_next_message();
 
     // Report a transport error via the configured callback.

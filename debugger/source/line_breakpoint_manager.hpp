@@ -36,11 +36,21 @@ public:
     // Must NOT be called under ctx_->mutex.
     [[nodiscard]] std::vector<std::string> get_unresolved_paths() const;
 
-    // Check whether a line breakpoint exists at the given location.
-    // Increments the hit counter and returns a snapshot if found.
+    // Check whether any line breakpoints exist at the given location and return
+    // a snapshot of each (identity + condition/hit-condition/log fields) WITHOUT
+    // recording a hit.  Multiple breakpoints can share one executable line when
+    // distinct requested lines snap to it, so this returns all of them; the
+    // caller evaluates each condition and records the qualifying hit via
+    // record_breakpoint_hit().
     // Must be called under ctx_->mutex.
-    [[nodiscard]] std::optional<BreakpointSnapshot> find_matching_breakpoint(int file_id, int line,
-                                                                             bool record_hit) const;
+    [[nodiscard]] std::vector<BreakpointSnapshot> find_matching_breakpoints(int file_id,
+                                                                            int line) const;
+
+    // Record a hit for the breakpoint with `bp_id` at (file_id, line) and return
+    // its updated (saturating) hit count, or std::nullopt if no such breakpoint
+    // exists (e.g. removed by a concurrent setBreakpoints).
+    // Must be called under ctx_->mutex.
+    [[nodiscard]] std::optional<int> record_breakpoint_hit(int file_id, int line, int bp_id) const;
 
     // Returns true if any line breakpoints exist for the given file_id.
     // Must be called under ctx_->mutex.
@@ -60,7 +70,7 @@ private:
         std::string condition;
         std::string hit_condition;
         std::string log_message;
-        // Mutable because find_matching_breakpoint() is a const method that
+        // Mutable because record_breakpoint_hit() is a const method that
         // increments the hit counter.  Always accessed under ctx_->mutex.
         mutable int times_hit{0};
         int line{0};
@@ -73,21 +83,19 @@ private:
                                                               const std::string& abs_path,
                                                               const BreakpointRequest& req);
 
-    void preserve_hit_counts(const std::map<int, LineBreakpointInfo>& old_breakpoints,
+    void preserve_hit_counts(std::map<int, std::vector<LineBreakpointInfo>>& old_breakpoints,
                              LineBreakpointInfo& info, const BreakpointRequest& req);
-
-    [[nodiscard]] std::vector<Breakpoint>
-    build_line_breakpoint_responses(const std::string& abs_path,
-                                    const std::vector<BreakpointRequest>& requests, int file_id,
-                                    const std::set<int>& executable) const;
 
     [[nodiscard]] LineBreakpointInfo create_line_breakpoint_info(const BreakpointRequest& req,
                                                                  int snapped_line) const;
 
     BreakpointSharedContext* ctx_;
 
-    // Line breakpoints: file_id → (line → info).
-    std::unordered_map<int, std::map<int, LineBreakpointInfo>>
+    // Line breakpoints: file_id → (line → breakpoints on that line).  A line
+    // holds a vector rather than a single entry because distinct requested
+    // lines can snap to the same executable line; each retains its own
+    // condition, hit condition, log message, and hit counter.
+    std::unordered_map<int, std::map<int, std::vector<LineBreakpointInfo>>>
         line_breakpoints_; // GUARDED_BY(ctx_->mutex)
 
     // Path-based breakpoints (before file_id resolution).

@@ -25,12 +25,14 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | `choice_types`             | Choice types (ADTs), pattern matching on variants                                 | 🟡 Intermediate   |
 | `converter_functions`      | Base conversions (binary, hex), Roman numerals, ordinals, number-to-words         | 🟡 Intermediate   |
 | `datetime`                 | DateTime module — formatting, arithmetic, timezones                               | 🟡 Intermediate   |
+| `decimal_arithmetic`       | Decimal module — arbitrary-precision arithmetic (financial, currency)             | 🟡 Intermediate   |
 | `encoding`                 | Base64, URL-safe Base64, URL percent-encoding (Encoder module)                    | 🟡 Intermediate   |
 | `error_handling`           | `result<T>`, typed errors, `!>` pipe, `?` propagation, `try/catch/finally`        | 🟡 Intermediate   |
 | `hashing`                  | Hash module — SHA-256, MD5, HMAC, CRC32                                           | 🟡 Intermediate   |
 | `math_functions`           | Math module — trig, rounding, roots, statistics, primes, constants                | 🟡 Intermediate   |
 | `multi_file` / `_utils`    | `include` directive for multi-file projects                                       | 🟡 Intermediate   |
 | `optional_values`          | `optional<T>`, `some`/`none`, `?.`, `??`, pattern matching                        | 🟡 Intermediate   |
+| `ordering`                 | Order module — comparisons, multi-key sort orders, `Ordering` choice type         | 🟡 Intermediate   |
 | `pipeline`                 | Pipe operator `\|>`, lambdas, higher-order functions, functional transforms       | 🟡 Intermediate   |
 | `closures`                 | Closures: variable capture, returning closures, stateful counters via `Reference` | 🟡 Intermediate   |
 | `process_and_terminal`     | Process module, Terminal module                                                   | 🟡 Intermediate   |
@@ -114,6 +116,9 @@ Minimal programs that exercise the debugger and stepping workflows described in 
 | `long_loop`           | A long-running loop for async pause / interrupt        |
 | `exception_caught`    | A division-by-zero handled by `try` / `catch`          |
 | `exception_unhandled` | An unhandled division by zero that halts execution     |
+| `global_scope`        | Evaluating compound expressions that resolve top-level functions in a nested frame |
+| `infinite_eval`       | Expression-evaluation timeout — a non-terminating call aborts at the deadline       |
+| `task_stress`         | Rapid task spawn/exit churn for concurrent task-thread inspection                   |
 
 ## Usage
 

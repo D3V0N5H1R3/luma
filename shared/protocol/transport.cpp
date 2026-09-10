@@ -9,9 +9,10 @@
 //   Exceptions (thrown to the caller):
 //     • ConnectionClosed — fatal I/O failure (EOF mid-message, broken
 //       pipe).  Propagated immediately; the server loop must exit.
-//     • ParseError from resync_to_next_message() — the iteration cap
+//     • ResyncError from resync_to_next_message() — the iteration cap
 //       was reached without finding a valid header; the stream is
-//       unrecoverably corrupt.
+//       unrecoverably corrupt.  A distinct ParseError subtype so the
+//       classifier can treat it as fatal (see error_recovery.hpp).
 //
 //   Error callback (report_error):
 //     • Transient parse errors in read_message() — a single message
@@ -165,8 +166,8 @@ void Transport::resync_to_next_message() {
         }
     }
 
-    throw ParseError(std::format("Resync failed: no Content-Length header found after {} lines",
-                                 limits_.max_resync_iterations));
+    throw ResyncError(std::format("Resync failed: no Content-Length header found after {} lines",
+                                  limits_.max_resync_iterations));
 }
 
 } // namespace luma::protocol

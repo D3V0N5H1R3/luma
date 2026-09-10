@@ -22,14 +22,16 @@
 //       occurred mid-message.  No further communication is possible.
 //     • protocol::TransportError (non-parse) — an I/O-level failure
 //       that is not a simple malformed message.
-//     • Resync failure — the transport scanned max_resync_iterations
-//       lines without finding a Content-Length header, meaning the
-//       stream is unrecoverably corrupt.
+//     • protocol::ResyncError — the transport scanned
+//       max_resync_iterations lines without finding a Content-Length
+//       header, meaning the stream is unrecoverably corrupt.  It is a
+//       distinct subtype of protocol::ParseError so classify_read_error()
+//       can single it out as fatal.
 //
 //   TRANSIENT (log and continue to the next message)
-//     • protocol::ParseError — a single message had bad framing or
-//       invalid JSON.  The transport layer resyncs to the next
-//       Content-Length boundary automatically (up to 1 000 lines).
+//     • protocol::ParseError (other than ResyncError) — a single message
+//       had bad framing or invalid JSON.  The transport layer resyncs to
+//       the next Content-Length boundary automatically (up to 1 000 lines).
 //     • Handler/dispatch exceptions — a bug or unexpected input in
 //       request processing.  The server sends an error response
 //       (DAP) or logs (LSP) and continues.
