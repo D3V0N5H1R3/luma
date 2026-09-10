@@ -6,6 +6,15 @@ genuine regressions. A handful exercise the filesystem, an embedded key-value
 store, subprocess startup, or the concurrency runtime; these have far higher
 run-to-run variance, so they use a wider threshold to avoid spurious CI failures.
 
+A relative threshold alone is not enough: many benchmarks run in a few hundred
+nanoseconds, and the harness reports per-iteration times quantised to ~0.0001 ms
+(100 ns). At that scale a single tick of scheduler jitter turns 0.0003 ms into
+0.0005 ms — a spurious "+66%" that trips the relative gate even though the
+absolute change is meaningless. To stay robust, a regression must exceed BOTH
+the relative threshold AND an absolute minimum-delta floor (``--min-delta``),
+so sub-microsecond noise no longer fails CI while genuinely expensive
+regressions still do.
+
 The baseline is managed by the Benchmark CI workflow, which caches each run's
 results as the baseline for the next run; it is not committed to the repository.
 """
@@ -55,6 +64,15 @@ def main() -> int:
         help="Regression threshold percentage for high-variance I/O and "
         "concurrency benchmarks (default: 50)",
     )
+    parser.add_argument(
+        "--min-delta",
+        type=float,
+        default=0.0,
+        help="Absolute minimum per-iteration slowdown, in milliseconds, that a "
+        "benchmark must exceed (in addition to the percentage threshold) to "
+        "count as a regression. Suppresses spurious failures from timer-"
+        "resolution noise on sub-microsecond benchmarks (default: 0, disabled)",
+    )
     args = parser.parse_args()
 
     if not Path(args.baseline).exists():
@@ -79,11 +97,20 @@ def main() -> int:
             if base_time > 0:
                 limit = args.io_threshold if is_high_variance(name) else threshold
                 change_pct = ((curr_time - base_time) / base_time) * 100
-                if change_pct > limit:
+                abs_delta = curr_time - base_time
+                if change_pct > limit and abs_delta >= args.min_delta:
                     regressions.append((name, base_time, curr_time, change_pct))
                     print(
                         f"REGRESSION: {name}: {base_time:.6f}ms -> {curr_time:.6f}ms "
                         f"({change_pct:+.1f}%, limit {limit:.0f}%)"
+                    )
+                elif change_pct > limit:
+                    # Over the percentage gate but under the absolute floor: this
+                    # is timer-resolution noise on a sub-microsecond benchmark,
+                    # not a meaningful slowdown.
+                    print(
+                        f"OK: {name}: {base_time:.6f}ms -> {curr_time:.6f}ms "
+                        f"({change_pct:+.1f}%, +{abs_delta:.6f}ms < {args.min_delta:.6f}ms floor)"
                     )
                 else:
                     print(

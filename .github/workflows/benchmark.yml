@@ -94,7 +94,8 @@ jobs:
             benchmarks/baseline.json \
             benchmark-results.json \
             --threshold 10 \
-            --io-threshold 50
+            --io-threshold 50 \
+            --min-delta 0.005
 
       - name: Skip comparison (no baseline)
         if: steps.baseline.outputs.exists != 'true'
