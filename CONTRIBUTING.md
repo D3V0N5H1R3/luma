@@ -574,7 +574,7 @@ Luma produces builds in two distinct places. Knowing which is which saves a lot 
 | Produced by | [`ci.yml`](.github/workflows/ci.yml) on every build | [`release.yml`](.github/workflows/release.yml) when a version tag is pushed |
 | Lifetime | **Temporary** — auto-deleted after 7 days (`retention-days: 7`; the coverage report keeps 14) | **Permanent** — kept until you delete the release |
 | Where | An Actions run's **Artifacts** section (`https://github.com/D3V0N5H1R3/luma/actions`), or `gh run download <run-id>` | The repository's **Releases** page (`https://github.com/D3V0N5H1R3/luma/releases`), or `gh release download <tag>` |
-| Named | `luma-<os>-<compiler>` (e.g. `luma-ubuntu-latest-gcc`) | `luma-<os>-<arch>.tar.gz` / `.zip` per platform, plus a `SHA256SUMS` manifest |
+| Named | `luma-<os>-<compiler>` (e.g. `luma-ubuntu-latest-gcc`) | Per platform: the full bundle `luma-<os>-<arch>`, plus standalone `luma_lsp-<os>-<arch>` and `luma_dap-<os>-<arch>` archives (`.tar.gz` / `.zip`); also the VS Code `.vsix` and a `SHA256SUMS` manifest |
 | Use it for | Debugging or smoke-testing the build from one specific commit | Distributing a version to users — the canonical download |
 
 Because [`ci.yml`](.github/workflows/ci.yml) is path-filtered, a docs- or workflow-only
@@ -589,6 +589,19 @@ every platform (Linux x86_64, Linux aarch64 / Raspberry Pi, macOS, Windows), val
 on the Linux distros, packages the VS Code `.vsix`, generates a changelog from the commit
 log since the previous tag, and publishes a GitHub Release with all binaries and a
 `SHA256SUMS` manifest attached.
+
+> **Release contract — always ship the per-binary archives.** Every release
+> **must** attach the standalone `luma_lsp-<os>-<arch>` and `luma_dap-<os>-<arch>`
+> archives (and the `SHA256SUMS` covering them) for all supported platforms, not
+> just the full `luma-<os>-<arch>` bundle. The VS Code and Zed extensions
+> auto-download these per-binary archives from the Releases page on demand — the
+> language server on activation, the debug adapter on first debug session — and
+> verify them against `SHA256SUMS` before extracting (see
+> [`extensions/shared/binary-download/SPECIFICATION.md`](extensions/shared/binary-download/SPECIFICATION.md)).
+> A release missing them breaks language features and debugging for extension
+> users on that version. The [`package-binaries`](.github/actions/package-binaries/action.yml)
+> action emits both the bundle and the per-binary archives on every run so this
+> holds automatically; keep it that way.
 
 1. Update the [`VERSION`](VERSION) file — the single source of truth for the project
    version — on `main`, and commit it:
