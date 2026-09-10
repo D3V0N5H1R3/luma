@@ -181,6 +181,7 @@ mod tests {
         // Central directory file header at offset 0.
         bytes[0..4].copy_from_slice(&0x0201_4b50u32.to_le_bytes()); // CD signature
         bytes[28..30].copy_from_slice(&1000u16.to_le_bytes()); // name_len (past end)
+
         // End of central directory record at offset 46.
         let eocd = 46;
         bytes[eocd..eocd + 4].copy_from_slice(&0x0605_4b50u32.to_le_bytes()); // EOCD signature

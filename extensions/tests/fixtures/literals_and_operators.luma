@@ -46,13 +46,13 @@ function void main() {
     boolean or_op = flag || off
     boolean not_op = !flag
 
-    # Bitwise
-    integer bw_and = 0xFF & 0x0F
-    integer bw_or = 0xF0 | 0x0F
-    integer bw_xor = 0xFF ^ 0x0F
-    integer bw_not = ~0
-    integer shift_l = 1 << 4
-    integer shift_r = 16 >> 2
+    # Bitwise (via the Bits module — Luma has no bitwise operators)
+    integer bw_and = Bits.and(0xFF, 0x0F)
+    integer bw_or = Bits.or(0xF0, 0x0F)
+    integer bw_xor = Bits.xor(0xFF, 0x0F)
+    integer bw_not = Bits.not(0)
+    integer shift_l = Bits.shift_left(1, 4)
+    integer shift_r = Bits.shift_right(16, 2)
 
     # Pipe operators
     string result = "hello" |> String.uppercase()
