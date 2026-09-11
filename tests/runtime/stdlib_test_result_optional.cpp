@@ -379,12 +379,11 @@ static void test_result_or_else_keeps_success() {
 
 static void test_result_error_code_from_stdlib() {
     // A stdlib failure carries a machine-readable code and source function.
-    ASSERT_EQ(eval("Result.error_code(Array.get([1, 2, 3], 10))").as_string(),
-              "index_out_of_bounds");
+    ASSERT_EQ(eval("Result.error_code(Array.pop([]))").as_string(), "empty_container");
 }
 
 static void test_result_source_function_from_stdlib() {
-    ASSERT_EQ(eval("Result.source_function(Array.get([1, 2, 3], 10))").as_string(), "Array.get");
+    ASSERT_EQ(eval("Result.source_function(Array.pop([]))").as_string(), "Array.pop");
 }
 
 static void test_result_error_code_empty_for_plain_failure() {

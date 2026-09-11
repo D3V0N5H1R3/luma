@@ -104,28 +104,28 @@ void register_array_ns(const EnvPtr& env) {
         .func("first", 1)
         .extract_body(expect_array,
                       [](const auto& src, const Args&, SourceLocation) -> Value {
-                          if (auto fail = check_not_empty(*src->elements, "Array.first")) {
-                              return *std::move(fail);
+                          if (src->elements->empty()) {
+                              return Value{NullValue{}};
                           }
-                          return make_success_value(src->elements->front());
+                          return src->elements->front();
                       })
         .func("last", 1)
         .extract_body(expect_array,
                       [](const auto& src, const Args&, SourceLocation) -> Value {
-                          if (auto fail = check_not_empty(*src->elements, "Array.last")) {
-                              return *std::move(fail);
+                          if (src->elements->empty()) {
+                              return Value{NullValue{}};
                           }
-                          return make_success_value(src->elements->back());
+                          return src->elements->back();
                       })
         .func("get", 2)
         .extract_body(expect_array,
                       [](const auto& src, const Args& args, SourceLocation loc) -> Value {
                           const auto i = expect_integer_index(args[1], "Array.get", loc);
 
-                          if (auto fail = check_bounds(i, src->elements->size(), "Array.get")) {
-                              return *std::move(fail);
+                          if (i < 0 || static_cast<std::size_t>(i) >= src->elements->size()) {
+                              return Value{NullValue{}};
                           }
-                          return make_success_value((*src->elements)[static_cast<std::size_t>(i)]);
+                          return (*src->elements)[static_cast<std::size_t>(i)];
                       })
         .func("is_empty", 1)
         .extract_body(expect_array,

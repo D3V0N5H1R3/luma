@@ -323,7 +323,7 @@ function void test_try_catches_runtime_error() {
     integer zero = 0
 
     try {
-        integer _ = 1 / zero
+        integer _ = 1 // zero
     } catch(err) {
         caught = err
     }
@@ -355,7 +355,7 @@ function void test_try_catch_finally_with_error() {
     try {
         log += "try"
 
-        integer _ = 1 / zero
+        integer _ = 1 // zero
 
         log += "-unreachable"
     } catch(_err) {
@@ -390,7 +390,7 @@ function void test_try_finally_runs_before_propagation() {
         try {
             log += "try"
 
-            integer _ = 1 / zero
+            integer _ = 1 // zero
 
             log += "-unreachable"
         } finally {
@@ -432,11 +432,11 @@ function void test_finally_runs_when_catch_throws() {
 
     try {
         try {
-            integer _ = 1 / zero
+            integer _ = 1 // zero
         } catch(_err) {
             log += "C"
 
-            integer _again = 1 / zero
+            integer _again = 1 // zero
         } finally {
             log += "F"
         }
@@ -455,7 +455,7 @@ function void test_finally_runs_on_break_from_catch() {
 
     for _i in 0 .. 5 {
         try {
-            integer _ = 1 / zero
+            integer _ = 1 // zero
         } catch(_err) {
             break
         } finally {
@@ -474,7 +474,7 @@ function void test_finally_runs_on_continue_from_catch() {
 
     for _i in 0 .. 3 {
         try {
-            integer _ = 1 / zero
+            integer _ = 1 // zero
         } catch(_err) {
             continue
         } finally {
@@ -489,7 +489,7 @@ function string catch_returns(reference<string> log) {
     integer zero = 0
 
     try {
-        integer _ = 1 / zero
+        integer _ = 1 // zero
     } catch(_err) {
         Reference.set(log, Reference.get(log) + "C")
 

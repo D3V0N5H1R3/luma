@@ -290,7 +290,7 @@ namespace Billing {
     }
 
     internal function integer tax(integer amount) {
-        return amount / 10
+        return amount // 10
     }
 }
 

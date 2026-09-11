@@ -6,6 +6,7 @@
             "type": "luma",
             "request": "launch",
             "program": "${file}",
+            "cwd": "${workspaceFolder}",
             "stopOnEntry": false
         },
         {
@@ -13,6 +14,7 @@
             "type": "luma",
             "request": "launch",
             "program": "${file}",
+            "cwd": "${workspaceFolder}",
             "stopOnEntry": true
         },
         {
@@ -65,6 +67,16 @@
             "preLaunchTask": "CMake: Build (Debug)"
         },
         {
+            "name": "C++: Language Server (LLDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/luma_lsp",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "MIMode": "lldb",
+            "preLaunchTask": "CMake: Build (Debug)"
+        },
+        {
             "name": "C++: DAP Debugger (MSVC)",
             "type": "cppvsdbg",
             "request": "launch",
@@ -85,6 +97,16 @@
             "preLaunchTask": "CMake: Build (Debug)"
         },
         {
+            "name": "C++: DAP Debugger (LLDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/luma_dap",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "MIMode": "lldb",
+            "preLaunchTask": "CMake: Build (Debug)"
+        },
+        {
             "name": "C++: REPL (MSVC)",
             "type": "cppvsdbg",
             "request": "launch",
@@ -102,6 +124,17 @@
             "args": [],
             "cwd": "${workspaceFolder}",
             "MIMode": "gdb",
+            "externalConsole": true,
+            "preLaunchTask": "CMake: Build (Debug)"
+        },
+        {
+            "name": "C++: REPL (LLDB)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build-debug/luma",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "MIMode": "lldb",
             "externalConsole": true,
             "preLaunchTask": "CMake: Build (Debug)"
         }

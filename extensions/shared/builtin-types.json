@@ -19,7 +19,6 @@
         "stack",
         "key_value_store",
         "set",
-        "widget",
         "xml"
     ],
     "implementations": [

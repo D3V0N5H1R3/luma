@@ -325,7 +325,6 @@ TypeInfo TypeChecker::resolve_named_type(const TypeAnnotation& ann, bool cacheab
 
     // Built-in types that map directly to named Record types.
     static constexpr auto named_record_types = std::to_array<std::string_view>({
-        "widget",
         "xml",
         "set",
         "key_value_store",
@@ -383,17 +382,6 @@ bool TypeChecker::is_assignable(const TypeInfo& target, const TypeInfo& source) 
 
     // StdlibAny source is permissive (backwards-compat for unregistered stdlib).
     if (source.kind == TypeInfo::Kind::StdlibAny) {
-        return true;
-    }
-
-    // widget ↔ dictionary: at runtime widgets are dictionaries.
-    if (target.kind == TypeInfo::Kind::Record && target.name == "widget" &&
-        source.kind == TypeInfo::Kind::Dictionary) {
-        return true;
-    }
-
-    if (source.kind == TypeInfo::Kind::Record && source.name == "widget" &&
-        target.kind == TypeInfo::Kind::Dictionary) {
         return true;
     }
 

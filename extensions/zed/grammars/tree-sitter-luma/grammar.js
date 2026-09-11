@@ -566,7 +566,6 @@ module.exports = grammar({
                 "stack",
                 "key_value_store",
                 "set",
-                "widget",
                 "xml",
             ),
 

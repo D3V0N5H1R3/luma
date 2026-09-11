@@ -32,12 +32,12 @@ function void test_empty_array() {
 @test
 function void test_array_safe_access() {
     array<integer> values = [1, 2, 3]
-    result<integer> found_result = Array.get(values, 1)
-    result<integer> not_found_result = Array.get(values, 10)
+    optional<integer> found_result = Array.get(values, 1)
+    optional<integer> not_found_result = Array.get(values, 10)
 
-    assert(Result.is_success(found_result))
-    assert(Result.unwrap(found_result) == 2)
-    assert(!Result.is_success(not_found_result))
+    assert(Optional.is_some(found_result))
+    assert(Optional.unwrap(found_result) == 2)
+    assert(!Optional.is_some(not_found_result))
 }
 
 # ─── Slice Syntax ───

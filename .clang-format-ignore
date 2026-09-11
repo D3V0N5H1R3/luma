@@ -1,2 +1,5 @@
-# Files excluded from clang-format (honoured by clang-format 18+, so both the
-# pre-commit hook and CI skip them). Uses .gitignore pattern syntax.
+# Files excluded from clang-format, honoured by clang-format 18+ (so the local
+# format/lint scripts and CI all skip them). Uses .gitignore pattern syntax.
+#
+# Currently empty — no first-party C++ header needs excluding. List generated or
+# machine-embedded headers here (one path per line) if any are reintroduced.

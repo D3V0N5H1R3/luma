@@ -21,6 +21,5 @@ export const LUMA_BUILTIN_TYPE_SET = new Set([
     "stack",
     "key_value_store",
     "set",
-    "widget",
     "xml",
 ]);

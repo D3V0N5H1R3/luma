@@ -48,7 +48,6 @@ using detail::ParamShorthands;
         .kv_store = named::key_value_store(),
         .queue = named::queue(),
         .stack = named::stack(),
-        .widget = named::widget(),
         .decimal = named::decimal(),
     };
 

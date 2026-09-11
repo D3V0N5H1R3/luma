@@ -81,6 +81,7 @@ static void test_keyvaluestore_module() {
     ASSERT_TRUE(env->has("KeyValueStore.destroy"));
     ASSERT_TRUE(env->has("KeyValueStore.find_by_pattern"));
     ASSERT_TRUE(env->has("KeyValueStore.is_read_only"));
+    ASSERT_TRUE(env->has("KeyValueStore.transaction"));
 }
 
 // ─── Positive: in-memory operations ──────────────────────────────────────────
@@ -622,6 +623,73 @@ static void test_keyvaluestore_set_many_non_dict_throws() {
     )"));
 }
 
+// ─── Positive: transactions ──────────────────────────────────────────────────
+
+static void test_keyvaluestore_transaction_commit() {
+    // A body that returns success(final) commits — the returned store carries
+    // every threaded change.
+    const auto v = eval(R"(
+        KeyValueStore.open("test_kv_cpp_tx_commit.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.transaction((key_value_store s) -> {
+            key_value_store s1 = KeyValueStore.set(s, "a", "1")?
+            key_value_store s2 = KeyValueStore.set(s1, "b", "2")?
+            return success(s2)
+        })
+        |> Result.unwrap()
+        |> KeyValueStore.get_or("b", "MISSING")
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "2");
+
+    (void)eval(R"(KeyValueStore.open("test_kv_cpp_tx_commit.kv")
+        |> Result.unwrap() |> KeyValueStore.destroy())");
+}
+
+static void test_keyvaluestore_transaction_rollback() {
+    // A body that returns a failure rolls back — transaction yields that failure
+    // and nothing is persisted.
+    const auto v = eval(R"(
+        KeyValueStore.open("test_kv_cpp_tx_rollback.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.transaction((key_value_store s) -> {
+            key_value_store _s1 = KeyValueStore.set(s, "x", "1")?
+            return failure("aborted")
+        })
+        |> Result.is_failure()
+    )");
+
+    ASSERT_TRUE(v.is_bool());
+    ASSERT_TRUE(v.as_bool());
+}
+
+static void test_keyvaluestore_transaction_commit_persists() {
+    // Committing a transaction on a file-backed store persists atomically, so a
+    // fresh open sees the committed keys.
+    (void)eval(R"(
+        KeyValueStore.open("test_kv_cpp_tx_persist.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.transaction((key_value_store s) -> {
+            key_value_store s1 = KeyValueStore.set(s, "k", "v")?
+            return success(s1)
+        })
+    )");
+
+    const auto v = eval(R"(
+        KeyValueStore.open("test_kv_cpp_tx_persist.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.get("k")
+        |> Result.unwrap()
+    )");
+
+    ASSERT_TRUE(v.is_string());
+    ASSERT_EQ(v.as_string(), "v");
+
+    (void)eval(R"(KeyValueStore.open("test_kv_cpp_tx_persist.kv")
+        |> Result.unwrap() |> KeyValueStore.destroy())");
+}
+
 int main() {
     // Codec layer.
     RUN(test_keyvaluestore_codec_escape_roundtrip);
@@ -660,6 +728,11 @@ int main() {
     RUN(test_keyvaluestore_reload_from_disk);
     RUN(test_keyvaluestore_special_chars_persist);
     RUN(test_keyvaluestore_destroy_removes_file);
+
+    // Positive: transactions.
+    RUN(test_keyvaluestore_transaction_commit);
+    RUN(test_keyvaluestore_transaction_rollback);
+    RUN(test_keyvaluestore_transaction_commit_persists);
 
     // Negative: failure results.
     RUN(test_keyvaluestore_get_missing_fails);

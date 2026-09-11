@@ -52,7 +52,7 @@ function array<integer> find_primes_in_range(integer start, integer end) {
 # inside a task_scope (which awaits every spawned task), then merges, dedupes,
 # and sorts the results. Shared by both the parallel and scoped demos below.
 function array<integer> compute_primes_in_chunks(integer limit, integer worker_count) {
-    integer chunk_size = limit / worker_count
+    integer chunk_size = limit // worker_count
 
     array<array<integer>> worker_results = task_scope {
         for worker_index in 0 .. worker_count {
