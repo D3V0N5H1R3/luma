@@ -44,7 +44,7 @@ Canonical configuration reference for both Luma editor extensions. Each editor m
 | Setting | Type | Default | Description |
 | --- | --- | --- | --- |
 | `autoDownload.enabled` | `boolean` | `true` | Automatically download pre-built binaries when not found locally. |
-| `autoDownload.version` | `string` | `"latest"` | Version tag to download (`latest` or a specific tag like `v0.12.0`). |
+| `autoDownload.version` | `string` | `"latest"` | Version tag to download (`latest` or a specific tag like `v0.13.0`). |
 
 ## Editor-Specific Mapping
 

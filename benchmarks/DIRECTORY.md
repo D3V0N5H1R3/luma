@@ -76,7 +76,7 @@ benchmark is large enough to measure reliably, while staying well under the VM
 loop-iteration ceiling. As a rule of thumb:
 
 - **Cheap, pure operations** (arithmetic, control-flow branching, function-call
-  overhead, single stdlib calls, and value/record/tuple/widget construction):
+  overhead, single stdlib calls, and value/record/tuple construction):
   high counts — usually `5000`–`10000`, rising to `50000` for the very cheapest
   cases (raw arithmetic, field access) so the per-iteration figure is not
   dominated by timer resolution.

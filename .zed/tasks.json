@@ -85,5 +85,15 @@
         "label": "Luma: Test Current File (Unix)",
         "command": "$ZED_WORKTREE_ROOT/build/luma",
         "args": ["--test", "$ZED_FILE"]
+    },
+    {
+        "label": "Lint: All",
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/lint.py"]
+    },
+    {
+        "label": "Format: All",
+        "command": "python",
+        "args": ["$ZED_WORKTREE_ROOT/scripts/format.py"]
     }
 ]

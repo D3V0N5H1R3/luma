@@ -89,9 +89,9 @@ TypeInfo ExpressionTypeChecker::visit_spawn(const SpawnExpression& node) {
     }
 
     if (tc_.context().task_scope_depth == 0) {
-        tc_.warn("spawn outside task_scope — task runs unstructured (fire-and-forget)",
-                 node.location,
-                 "wrap spawn calls in a task_scope { } block for structured concurrency");
+        tc_.error("spawn outside task_scope — unstructured concurrency is not allowed",
+                  node.location,
+                  "wrap spawn calls in a task_scope { } block for structured concurrency");
     }
 
     const auto inner = infer_expression_type(*node.call);

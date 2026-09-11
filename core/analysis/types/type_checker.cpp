@@ -84,11 +84,9 @@ bool TypeChecker::is_stdlib_namespace(std::string_view name) const {
 std::string TypeChecker::suggest_type_name(std::string_view unknown) const {
     // Collect all known type names.
     static constexpr auto builtins = std::to_array<std::string_view>({
-        "boolean",  "integer", "number",  "decimal",         "string",
-        "none",     "void",    "array",   "dictionary",      "result",
-        "optional", "task",    "channel", "reference",       "socket",
-        "widget",   "xml",     "set",     "key_value_store", "queue",
-        "stack",
+        "boolean", "integer",    "number", "decimal",         "string", "none",    "void",
+        "array",   "dictionary", "result", "optional",        "task",   "channel", "reference",
+        "socket",  "xml",        "set",    "key_value_store", "queue",  "stack",
     });
 
     std::vector<std::string_view> candidates(builtins.begin(), builtins.end());
@@ -159,8 +157,18 @@ void TypeChecker::pop_scope() {
                 continue;
             }
 
-            warn(std::format("unique variable '{}' is never consumed", name), info.location,
-                 "use the variable or prefix with '_' to suppress this warning");
+            // A unique parameter transfers ownership into the callee, which may
+            // legitimately drop it (a "sink"), so keep that advisory. A unique
+            // local that leaks out of scope is a hard error — ownership is
+            // enforced, not merely advised.
+            if (info.is_parameter) {
+                warn(std::format("unique parameter '{}' is never consumed", name), info.location,
+                     "consume the value, or prefix with '_' to discard it explicitly");
+                continue;
+            }
+
+            error(std::format("unique variable '{}' is never consumed", name), info.location,
+                  "consume the value exactly once, or prefix with '_' to discard it explicitly");
         }
 
         ctx_.current_scope = ctx_.current_scope->parent();

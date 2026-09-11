@@ -158,7 +158,8 @@ function result<Bank> transfer(Bank bank, string from_id, string to_id, number a
     # Re-tag the preceding debit entry so the ledger reads as a transfer pair.
     array<Transaction> ledger = with_credit.ledger
     integer debit_index = Array.length(ledger) - 2
-    Transaction debit_entry = Array.get(ledger, debit_index)?
+    Transaction debit_entry =
+        Optional.to_result(Array.get(ledger, debit_index), "ledger is missing the debit entry")?
     Transaction retagged = debit_entry with { kind = TransactionKind.TransferOut(to_id) }
 
     return success(with_credit with {

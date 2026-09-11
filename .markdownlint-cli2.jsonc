@@ -45,6 +45,11 @@
     "**/node_modules/**",
     "build/**",
     "build-*/**",
+    // The Zed grammar build clones a full copy of the repo here (gitignored via
+    // extensions/zed/.gitignore), producing 160+ duplicated .md files that must
+    // not be linted. markdownlint-cli2 does not honour .gitignore, so — like the
+    // build artefacts above — this git-ignored tree is excluded explicitly.
+    "extensions/zed/grammars/luma/**",
     // Generated pipeline reports/logs (gitignored; see .gitignore). These are
     // LLM-authored artefacts, not first-party docs, so the lint gate must not
     // trip over them.

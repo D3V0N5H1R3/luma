@@ -10,16 +10,21 @@ usable two ways:
 
 ## What the container provides
 
-Everything needed to build and test the interpreter, language server, and
-debugger, matching the versions the CI workflows pin:
+Everything needed to build, test, and package the interpreter, language server,
+debugger, and both editor extensions, matching the versions the CI workflows
+pin:
 
 - **GCC 14** (`gcc-14` / `g++-14`), **CMake**, **Ninja**, and **Make**.
+- **Clang 18** (`clang-18` / `clang++-18`) with the **compiler-rt** runtimes —
+  builds the LibFuzzer fuzz targets in [`fuzz/`](../fuzz).
 - **clang-format 18** and **clang-tidy 18** — the C++ formatting and
   static-analysis gates.
 - **GDB** and **lcov** for native debugging and the coverage preset.
+- **Xvfb** — a headless X server for the VS Code extension's Electron
+  integration tests (`npm test`).
 - **Python 3** with the pinned **Ruff** CLI, plus the **Node** and **Rust**
-  (with the `wasm32-wasip1` target) toolchains for the VS Code and Zed
-  extensions.
+  (`default` profile, so `rustfmt` and `clippy` are present, with the
+  `wasm32-wasip1` target) toolchains for the VS Code and Zed extensions.
 
 Every third-party C/C++ library is vendored in [`external/`](../external), so no
 dependencies are fetched at build time.
@@ -27,7 +32,8 @@ dependencies are fetched at build time.
 ## First launch
 
 The container builds the interpreter automatically via the `default` CMake
-preset (Release), placing the binaries in `build/`:
+preset (Release), placing the binaries in `build/`, and sets up both editor
+extensions (npm dependencies, the tree-sitter parser, and the Zed WASM build):
 
 ```bash
 build/luma examples/language-features/hello.luma   # run a program
@@ -41,6 +47,34 @@ Rebuild after changes with:
 ```bash
 cmake --build build --parallel "$(nproc)"
 ```
+
+### Editor extensions
+
+The extension toolchains are all present, so you can build, lint, test, and
+package both extensions here (running them in an editor UI is a host activity —
+see [Limitations](#limitations)):
+
+```bash
+# VS Code extension (extensions/vscode)
+npm run compile        # bundle with esbuild
+npm run lint           # ESLint + tsc --noEmit
+npm run test:unit      # headless unit tests (no Electron)
+npm test               # full Electron tests — run under Xvfb: xvfb-run npm test
+npm run package        # build the .vsix with vsce
+
+# Zed extension (extensions/zed)
+cargo fmt --check
+cargo clippy --target wasm32-wasip1 -- -D warnings
+cargo test
+cargo build --release --target wasm32-wasip1   # produces the extension .wasm
+
+# Tree-sitter grammar (extensions/zed/grammars/tree-sitter-luma)
+./node_modules/.bin/tree-sitter generate
+```
+
+The network-dependent extension setup in `prepare.sh` is best-effort; if it was
+skipped (for example, during an offline prebuild) run the `npm ci` / `cargo`
+steps by hand.
 
 To reproduce the CI lint gates locally (C++, Python, Markdown, and more), run:
 
@@ -62,6 +96,11 @@ so opening a Codespace skips the initial compile.
 - **Linux only.** Codespaces cannot exercise the MSVC (Windows) or Apple-Clang
   (macOS) code paths, so it complements — but does not replace — building on
   those platforms before a release.
+- **Running the editors is a host activity.** The extension *toolchains* are all
+  here, but the editors themselves are not: with the VS Code Dev Containers
+  extension you can still launch the Extension Development Host (the UI runs on
+  your host, the extension host in the container), whereas the Zed extension is
+  built here and loaded as a dev extension into Zed on your host.
 
 ## Customization
 

@@ -52,7 +52,7 @@ rules for keeping the two layers in sync.
 - **Subagents** (`.claude/agents/`): `plan`, `implement`, `review`, `docs`, and
   `test` — a port of the `.github/agents/*.agent.md` roles. Launch them with the
   Task tool or manage them with `/agents`.
-- **Slash commands** (`.claude/commands/`): 28 workflow commands (`/bug-fix`,
+- **Slash commands** (`.claude/commands/`): 27 workflow commands (`/bug-fix`,
   `/build-and-test`, `/code-review`, …) that each run the matching
   `.github/prompts/*.prompt.md` with your argument, so the workflow is defined
   once.

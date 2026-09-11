@@ -7,7 +7,7 @@ function void main() {
     mutable string status = "start"
 
     try {
-        integer quotient = 10 / divisor
+        integer quotient = 10 // divisor
         status = "quotient: ${quotient}"
     } catch(err) {
         status = "caught: ${err}"

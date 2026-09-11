@@ -14,7 +14,7 @@ function void test_arithmetic_operators() {
     assert(2 + 3 == 5)
     assert(10 - 3 == 7)
     assert(4 * 5 == 20)
-    assert(15 / 4 == 3)
+    assert(15 // 4 == 3)
     assert(17 % 5 == 2)
 }
 
@@ -145,7 +145,7 @@ function void test_pipe_multi_step() {
 function void test_negative_integer_operations() {
     assert(-5 + 3 == -2)
     assert(-5 * -3 == 15)
-    assert(-10 / 3 == -3)
+    assert(-10 // 3 == -4)
     assert(-10 % 3 == -1)
 }
 
@@ -406,8 +406,9 @@ function void test_integer_division_basic() {
 
 @test
 function void test_integer_division_negative() {
-    assert(-7 // 2 == -3)
-    assert(7 // -2 == -3)
+    # // is floor division: it rounds toward negative infinity.
+    assert(-7 // 2 == -4)
+    assert(7 // -2 == -4)
     assert(-7 // -2 == 3)
 }
 

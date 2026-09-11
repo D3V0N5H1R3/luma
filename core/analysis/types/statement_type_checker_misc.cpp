@@ -253,6 +253,16 @@ void StatementTypeChecker::check_compound_operand_types(const CompoundAssignment
         return;
     }
 
+    // True division ('/=') always produces a number, so it cannot target an
+    // integer variable — use '//=' for integer (floor) division.
+    if (stmt.op == TokenType::SlashEquals && target_type.kind == TypeInfo::Kind::Integer) {
+        tc_.error("compound assignment '/=' produces a number and cannot be applied to an "
+                  "integer variable",
+                  stmt.location, "use '//=' for integer (floor) division",
+                  DiagnosticCode::InvalidOperand);
+        return;
+    }
+
     // Arithmetic compound assignment requires numeric types.
     (void)type_check_helpers::require_numeric_operand(
         tc_, target_type, std::format("compound assignment '{}'", token_type_to_string(stmt.op)),

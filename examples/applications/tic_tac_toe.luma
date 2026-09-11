@@ -144,7 +144,7 @@ function result<integer> best_move(array<string> board, Player to_move) {
         return failure("no moves available")
     }
 
-    mutable integer chosen = Result.unwrap_or(Array.first(moves), 0)
+    mutable integer chosen = Array.first(moves) ?? 0
     mutable integer best = -1000
 
     for move in moves {

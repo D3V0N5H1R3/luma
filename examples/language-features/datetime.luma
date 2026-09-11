@@ -8,7 +8,7 @@
 # DateTime.day_of_week returns 1 (Monday) through 7 (Sunday); index from 0.
 function string day_name(integer weekday) {
     array<string> names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    return Array.get(names, weekday - 1) |> Result.unwrap_or("Unknown")
+    return Array.get(names, weekday - 1) |> Optional.unwrap_or("Unknown")
 }
 
 # DateTime.month returns 1 (January) through 12 (December); index from 0.
@@ -17,7 +17,7 @@ function string month_name(integer month) {
         "January", "February", "March", "April", "May", "June",
         "July", "August", "September", "October", "November", "December"
     ]
-    return Array.get(names, month - 1) |> Result.unwrap_or("Unknown")
+    return Array.get(names, month - 1) |> Optional.unwrap_or("Unknown")
 }
 
 @main

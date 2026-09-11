@@ -56,7 +56,7 @@ function void test_mutable_variable() {
 
     assert(total == 10)
 
-    total /= 2
+    total //= 2
 
     assert(total == 5)
 }

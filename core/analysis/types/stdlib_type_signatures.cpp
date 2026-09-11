@@ -392,11 +392,10 @@ struct Refiner {
         true,
         [](const RefineContext& c) { return TypeInfo::make_result(TypeInfo::make_array(c.elem)); });
 
-    add({"Array.get", "Array.first", "Array.last", "Array.find", "Array.minimum", "Array.maximum",
-         "Array.sum"},
-        true, [](const RefineContext& c) { return TypeInfo::make_result(c.elem); });
+    add({"Array.find", "Array.minimum", "Array.maximum", "Array.sum"}, true,
+        [](const RefineContext& c) { return TypeInfo::make_result(c.elem); });
 
-    add({"Array.maximum_by", "Array.minimum_by"}, true,
+    add({"Array.get", "Array.first", "Array.last", "Array.maximum_by", "Array.minimum_by"}, true,
         [](const RefineContext& c) { return TypeInfo::make_optional(c.elem); });
 
     add({"Array.reduce"}, true, [](const RefineContext& c) -> TypeInfo {
@@ -478,8 +477,8 @@ struct Refiner {
         return TypeInfo::make(K::String);
     });
 
-    add({"Result.map", "Result.flat_map", "Result.map_failure", "Result.filter", "Result.recover",
-         "Result.tap", "Result.or", "Result.collect"},
+    add({"Result.map_failure", "Result.filter", "Result.recover", "Result.tap", "Result.or",
+         "Result.collect"},
         true, [](const RefineContext& c) -> TypeInfo {
             if (!c.arg_types.empty() && c.arg_types[0].kind == K::Result &&
                 !c.arg_types[0].inner_types.empty()) {
@@ -488,6 +487,42 @@ struct Refiner {
 
             return c.static_type;
         });
+
+    // Result.map infers result<U> from the mapping lambda's return type U
+    // (mirrors Optional.map, which needs no typed map_* variants).  Falls back
+    // to the input's value type when the lambda's return type is unavailable
+    // (e.g. a block-body lambda typed as StdlibAny), so same-type maps and
+    // unannotated lambdas keep working.
+    add({"Result.map"}, true, [](const RefineContext& c) -> TypeInfo {
+        if (c.arg_types.size() >= 2 && c.arg_types[1].kind == K::Func &&
+            c.arg_types[1].return_type && c.arg_types[1].return_type->kind != K::None) {
+            return TypeInfo::make_result(*c.arg_types[1].return_type);
+        }
+
+        if (!c.arg_types.empty() && c.arg_types[0].kind == K::Result &&
+            !c.arg_types[0].inner_types.empty()) {
+            return TypeInfo::make_result(c.arg_types[0].result_value_type());
+        }
+
+        return c.static_type;
+    });
+
+    // Result.flat_map returns the mapping lambda's own result<U> directly
+    // (mirrors Optional.flat_map), falling back to the input's value type when
+    // the lambda's return type is unavailable.
+    add({"Result.flat_map"}, true, [](const RefineContext& c) -> TypeInfo {
+        if (c.arg_types.size() >= 2 && c.arg_types[1].kind == K::Func &&
+            c.arg_types[1].return_type && c.arg_types[1].return_type->kind == K::Result) {
+            return *c.arg_types[1].return_type;
+        }
+
+        if (!c.arg_types.empty() && c.arg_types[0].kind == K::Result &&
+            !c.arg_types[0].inner_types.empty()) {
+            return TypeInfo::make_result(c.arg_types[0].result_value_type());
+        }
+
+        return c.static_type;
+    });
 
     add({"Result.flatten"}, true, [](const RefineContext& c) -> TypeInfo {
         if (!c.arg_types.empty() && c.arg_types[0].kind == K::Result &&

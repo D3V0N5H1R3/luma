@@ -16,7 +16,7 @@ function result<integer> bench_fallible_divide(integer a, integer b) {
     if b == 0 {
         return failure("division by zero")
     }
-    return success(a / b)
+    return success(a // b)
 }
 
 function result<integer> bench_chain_three() {

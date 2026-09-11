@@ -48,30 +48,6 @@ void register_math_transcendental(const EnvPtr& env) {
 
             return Value{std::hypot(x, y)};
         })
-        // Math.log(base, value) -> result<number>
-        .func("log", 2)
-        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            const auto base = expect_numeric(args[0], "Math.log", loc);
-            const auto value = expect_numeric(args[1], "Math.log", loc);
-
-            if (base <= 0.0 || base == 1.0) {
-                return make_failure_value(
-                    error_msg("Math", "log", "base must be positive and not 1"));
-            }
-
-            if (value <= 0.0) {
-                return make_failure_value(error_msg("Math", "log", "value must be positive"));
-            }
-
-            const auto result = std::log(value) / std::log(base);
-
-            if (!stdlib::is_valid_numeric(result)) {
-                return make_failure_value(
-                    error_msg("Math", "log", "result is not a finite number"));
-            }
-
-            return make_success_value(Value{result});
-        })
         // Math.cube_root(value) -> number
         .func("cube_root", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {

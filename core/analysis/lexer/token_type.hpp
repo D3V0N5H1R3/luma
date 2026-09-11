@@ -438,7 +438,6 @@ inline constexpr auto k_builtin_type_identifiers = std::to_array<std::string_vie
     "socket",
     "stack",
     "task",
-    "widget",
     "xml",
 });
 

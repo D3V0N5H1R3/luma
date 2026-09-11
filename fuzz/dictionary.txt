@@ -222,7 +222,7 @@
 "Math.power("
 "Math.square_root("
 "Math.factorial("
-"Math.log("
+"Math.log_base("
 "Math.greatest_common_divisor("
 "Math.sine("
 "Math.clamp("
