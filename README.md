@@ -193,7 +193,8 @@ On Windows, replace `build/luma` with `build\Release\luma.exe` in the commands a
 | [Language Server][lsp]               | Language Server Protocol features and setup.              |
 
 The [documents/](documents/DIRECTORY.md) directory indexes every architecture, reference,
-and guide document. For contribution and security policies, see
+and guide document. For notable and breaking changes, see
+[CHANGELOG.md](CHANGELOG.md). For contribution and security policies, see
 [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 ## Project Structure

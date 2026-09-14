@@ -271,9 +271,10 @@ static void test_match_nested_match_arm_value_type_mismatch_fails() {
 
 // ─── Unused result<T> warning. ───
 
-static void test_unused_result_warns() {
-    ASSERT_TRUE(has_warnings("function result<string> get() { return success(\"hi\") }\n"
-                             "get()\n"));
+static void test_unused_result_errors() {
+    // Silently discarding a result<T> is a hard error by default.
+    ASSERT_TRUE(fails("function result<string> get() { return success(\"hi\") }\n"
+                      "get()\n"));
 }
 
 static void test_unused_result_assigned_no_warn() {
@@ -670,7 +671,7 @@ int main() {
 
     // ─── Unused result<T> warning ───
 
-    RUN(test_unused_result_warns);
+    RUN(test_unused_result_errors);
     RUN(test_unused_result_assigned_no_warn);
     RUN(test_unused_result_suppressed_with_wildcard);
     RUN(test_unused_void_no_warn);

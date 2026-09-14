@@ -2,9 +2,11 @@
 # Luma — Dev Container image
 #
 # Ubuntu 24.04 (Noble) ships the exact toolchain Luma's CI pins, straight from
-# the distribution archives — GCC 14, CMake 3.28 (>= 3.21 required), and
-# clang-format/clang-tidy 18 — so this image needs no external apt repositories
-# or PPAs and builds fully offline against the vendored dependencies in external/.
+# the distribution archives — GCC 14, CMake 3.28 (>= 3.21 required), Clang 18
+# (compiler + clang-format/clang-tidy, for the fuzz targets and the lint gates),
+# and Xvfb for the VS Code extension's headless Electron tests — so this image
+# needs no external apt repositories or PPAs and builds the interpreter fully
+# offline against the vendored dependencies in external/.
 # ─────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
@@ -15,10 +17,13 @@ ARG DEBIAN_FRONTEND=noninteractive
 # One apt layer installs the complete build / test / lint toolchain:
 #   gcc-14 g++-14 ........... primary compiler pair (ci.yml's main Linux job)
 #   cmake ninja-build make .. build system + the default (Make) and ninja presets
+#   clang-18 ................ Clang compiler for the LibFuzzer fuzz targets (fuzz/)
+#   libclang-rt-18-dev ...... compiler-rt runtimes (fuzzer/ASan) the fuzzers link
 #   clang-format-18 ......... C++ formatting gate (Formatting job in ci.yml)
 #   clang-tidy-18 ........... C++ static-analysis gate (Static Analysis job)
 #   gdb ..................... native debugging of the interpreter (CONTRIBUTING.md §Debugging the C++ Interpreter)
 #   lcov ................... the coverage preset (LUMA_FEATURE_COVERAGE)
+#   xvfb ................... headless X server for the VS Code extension's Electron integration tests
 #   python3 python3-pip pipx  helper scripts under scripts/ and the Ruff CLI
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -27,24 +32,29 @@ RUN apt-get update \
         cmake \
         ninja-build \
         make \
+        clang-18 \
+        libclang-rt-18-dev \
         clang-format-18 \
         clang-tidy-18 \
         gdb \
         lcov \
+        xvfb \
         python3 \
         python3-pip \
         pipx \
     && rm -rf /var/lib/apt/lists/*
 
 # Make the unversioned tool names resolve to the CI-pinned versions, so `cc` /
-# `c++` (used by the presets and CMake Tools) and the `clang-format` /
-# `clang-tidy` the lint scripts invoke all match the CI toolchain. Separate
-# --install groups (no slaves) avoid clashing with the alternatives the gcc / g++
-# packages register for cc / c++.
+# `c++` (used by the presets and CMake Tools), the `clang` / `clang++` the fuzz
+# build names, and the `clang-format` / `clang-tidy` the lint scripts invoke all
+# match the CI toolchain. Separate --install groups (no slaves) avoid clashing
+# with the alternatives the gcc / g++ packages register for cc / c++.
 RUN update-alternatives --install /usr/bin/gcc  gcc  /usr/bin/gcc-14 140 \
     && update-alternatives --install /usr/bin/g++  g++  /usr/bin/g++-14 140 \
     && update-alternatives --install /usr/bin/cc   cc   /usr/bin/gcc-14 140 \
     && update-alternatives --install /usr/bin/c++  c++  /usr/bin/g++-14 140 \
+    && update-alternatives --install /usr/bin/clang   clang   /usr/bin/clang-18 100 \
+    && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100 \
     && update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100 \
     && update-alternatives --install /usr/bin/clang-tidy   clang-tidy   /usr/bin/clang-tidy-18 100
 

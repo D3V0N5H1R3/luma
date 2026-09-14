@@ -2915,10 +2915,6 @@
         },
         {
           "type": "STRING",
-          "value": "widget"
-        },
-        {
-          "type": "STRING",
           "value": "xml"
         }
       ]

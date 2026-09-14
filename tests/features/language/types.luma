@@ -78,10 +78,15 @@ function void test_type_of() {
 }
 
 @test
-function void test_integer_division_truncates() {
-    assert(7 / 2 == 3)
-    assert(-7 / 2 == -3)
-    assert(10 / 5 == 2)
+function void test_true_and_floor_division() {
+    # / is true division and always yields a number.
+    assert(Math.approximately_equal(7 / 2, 3.5, 0.0001))
+    assert(Math.approximately_equal(10 / 5, 2.0, 0.0001))
+
+    # // is floor division on integers (rounds toward negative infinity).
+    assert(7 // 2 == 3)
+    assert(-7 // 2 == -4)
+    assert(10 // 5 == 2)
 }
 
 @test
@@ -507,7 +512,6 @@ function void test_integer_overflow_promotes_to_number() {
 function void test_modulo_sign_follows_dividend() {
     assert(-7 % 2 == -1)
     assert(7 % -2 == 1)
-    assert(-7 / 2 == -3)
 }
 
 # ─── Floating-point Modulo ───────────────────────────────

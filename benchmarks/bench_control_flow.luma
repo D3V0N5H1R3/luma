@@ -75,7 +75,7 @@ function BenchResult run_control_flow_benchmarks(BenchResult state) {
         integer zero = 0
         mutable integer handled = 0
         try {
-            integer _quotient = 1 / zero
+            integer _quotient = 1 // zero
         } catch(_err) {
             handled = 1
         } finally {

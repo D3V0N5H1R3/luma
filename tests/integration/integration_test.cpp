@@ -460,7 +460,7 @@ static void test_rethrow_propagates() {
                     "    try {\n"
                     "        try {\n"
                     "            integer n = 0\n"
-                    "            integer x = 1 / n\n"
+                    "            integer x = 1 // n\n"
                     "        } finally {\n"
                     "            log = \"finally ran\"\n"
                     "        }\n"
@@ -526,10 +526,13 @@ static void test_concurrency_task_scope_collects_results() {
 }
 
 static void test_concurrency_task_await() {
-    // spawn schedules a task; await blocks for and returns its result.
+    // spawn schedules a task inside a task_scope; the scope collects each
+    // spawn's result into an array.
     assert_eval_int("function integer f() {\n"
-                    "    task<integer> t = spawn String.length(\"hello\")\n"
-                    "    return await t\n"
+                    "    array<integer> results = task_scope {\n"
+                    "        spawn String.length(\"hello\")\n"
+                    "    }\n"
+                    "    return results[0]\n"
                     "}\n"
                     "f()\n",
                     5);

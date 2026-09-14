@@ -103,7 +103,6 @@ std::vector<std::pair<std::string, std::string>> get_type_keywords() {
         {"queue", "FIFO collection"},
         {"key_value_store", "persistent store"},
         {"socket", "network I/O"},
-        {"widget", "graphical UI"},
         {"xml", "structured data"},
     };
 }

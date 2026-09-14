@@ -29,7 +29,7 @@ function void main() {
     number le = Math.log_e(e) |> Result.unwrap_or(0.0)
     number l2 = Math.log_2(8.0) |> Result.unwrap_or(0.0)
     number l10 = Math.log_10(100.0) |> Result.unwrap_or(0.0)
-    number lb = Math.log(2.0, 8.0) |> Result.unwrap_or(0.0)
+    number lb = Math.log_base(8.0, 2.0) |> Result.unwrap_or(0.0)
 
     # Integer number theory.
     integer fac = Math.factorial(10) |> Result.unwrap_or(0)

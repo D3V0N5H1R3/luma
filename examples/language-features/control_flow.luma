@@ -125,7 +125,7 @@ function void demo_collatz_sequence() {
     mutable integer steps = 0
 
     while c != 1 {
-        c = if c % 2 == 0 { c / 2 } else { 3 * c + 1 }
+        c = if c % 2 == 0 { c // 2 } else { 3 * c + 1 }
         steps++
     }
 

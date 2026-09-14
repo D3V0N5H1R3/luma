@@ -260,28 +260,28 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 15 — Hash | 771–812 |
 | 16 — Http | 813–920 |
 | 17 — Json | 921–1017 |
-| 18 — KeyValueStore | 1018–1045 |
-| 19 — LinearAlgebra | 1046–1104 |
-| 20 — Log | 1105–1130 |
-| 21 — Math | 1131–1266 |
-| 22 — Optional | 1267–1323 |
-| 23 — Order | 1324–1387 |
-| 24 — Process | 1388–1486 |
-| 25 — Queue | 1487–1513 |
-| 26 — Random | 1514–1569 |
-| 27 — Reference | 1570–1626 |
-| 28 — RegularExpression | 1627–1729 |
-| 29 — Resource | 1730–1782 |
-| 30 — Result | 1783–1815 |
-| 31 — Set | 1816–1850 |
-| 32 — Socket | 1851–1918 |
-| 33 — Stack | 1919–1946 |
-| 34 — Statistics | 1947–1962 |
-| 35 — String | 1963–2068 |
-| 36 — Task | 2069–2138 |
-| 37 — Terminal | 2139–2355 |
-| 38 — Xml | 2356–2434 |
-| See Also | 2435–2440 |
+| 18 — KeyValueStore | 1018–1069 |
+| 19 — LinearAlgebra | 1070–1128 |
+| 20 — Log | 1129–1154 |
+| 21 — Math | 1155–1289 |
+| 22 — Optional | 1290–1346 |
+| 23 — Order | 1347–1410 |
+| 24 — Process | 1411–1509 |
+| 25 — Queue | 1510–1536 |
+| 26 — Random | 1537–1592 |
+| 27 — Reference | 1593–1649 |
+| 28 — RegularExpression | 1650–1752 |
+| 29 — Resource | 1753–1805 |
+| 30 — Result | 1806–1838 |
+| 31 — Set | 1839–1873 |
+| 32 — Socket | 1874–1941 |
+| 33 — Stack | 1942–1969 |
+| 34 — Statistics | 1970–1985 |
+| 35 — String | 1986–2091 |
+| 36 — Task | 2092–2161 |
+| 37 — Terminal | 2162–2378 |
+| 38 — Xml | 2379–2457 |
+| See Also | 2458–2463 |
 
 ## Luma_Syntax_Highlighting.md
 
@@ -338,30 +338,30 @@ are 50–100 KB and reading them in full consumes significant context budget.
 | 4 — Operators | 371–583 |
 | 5 — Control Flow | 584–777 |
 | 6 — Functions | 778–888 |
-| 7 — Lambdas | 889–949 |
-| 8 — Records | 950–1112 |
-| 9 — Arrays | 1113–1211 |
-| 10 — Dictionaries | 1212–1275 |
-| 11 — Tuples | 1276–1347 |
-| 12 — Choice Types — Unit Variants | 1348–1401 |
-| 13 — Choice Types (ADTs) | 1402–1516 |
-| 14 — Result and Optional | 1517–1752 |
-| 15 — Match | 1753–2004 |
-| 16 — String Interpolation and Multi-Line Strings | 2005–2063 |
-| 17 — Pipe Operator | 2064–2112 |
-| 18 — Named Arguments | 2113–2139 |
-| 19 — Type Aliases | 2140–2165 |
-| 20 — Interfaces | 2166–2245 |
-| 21 — Generics, `downcast`, and `is` | 2246–2479 |
-| 22 — Namespaces and `use` | 2480–2680 |
-| 23 — Ownership (`unique` and `borrow`) | 2681–2716 |
-| 24 — Testing with `@test` | 2717–2769 |
-| 25 — Including Files | 2770–2825 |
-| 26 — Standard Library Reference | 2826–2833 |
-| 27 — Linter and `--strict` Mode | 2834–2889 |
-| 28 — Reserved Keywords | 2890–2916 |
-| 29 — Error Reference | 2917–3238 |
-| 30 — Complete Programs | 3239–3448 |
-| 31 — Debugging | 3449–3473 |
-| 32 — Formal Grammar (EBNF) | 3474–3828 |
-| See Also | 3829–3842 |
+| 7 — Lambdas | 889–961 |
+| 8 — Records | 962–1124 |
+| 9 — Arrays | 1125–1223 |
+| 10 — Dictionaries | 1224–1287 |
+| 11 — Tuples | 1288–1359 |
+| 12 — Choice Types — Unit Variants | 1360–1413 |
+| 13 — Choice Types (ADTs) | 1414–1528 |
+| 14 — Result and Optional | 1529–1764 |
+| 15 — Match | 1765–2016 |
+| 16 — String Interpolation and Multi-Line Strings | 2017–2075 |
+| 17 — Pipe Operator | 2076–2124 |
+| 18 — Named Arguments | 2125–2151 |
+| 19 — Type Aliases | 2152–2177 |
+| 20 — Interfaces | 2178–2257 |
+| 21 — Generics, `downcast`, and `is` | 2258–2491 |
+| 22 — Namespaces and `use` | 2492–2690 |
+| 23 — Ownership (`unique` and `borrow`) | 2691–2726 |
+| 24 — Testing with `@test` | 2727–2779 |
+| 25 — Including Files | 2780–2835 |
+| 26 — Standard Library Reference | 2836–2843 |
+| 27 — Linter and `--strict` Mode | 2844–2899 |
+| 28 — Reserved Keywords | 2900–2926 |
+| 29 — Error Reference | 2927–3248 |
+| 30 — Complete Programs | 3249–3458 |
+| 31 — Debugging | 3459–3483 |
+| 32 — Formal Grammar (EBNF) | 3484–3838 |
+| See Also | 3839–3849 |

@@ -96,9 +96,9 @@ function void test_integer_equality_is_clean() {
 function void test_consumed_result_is_clean() {
     array<integer> values = [10, 20, 30]
 
-    result<integer> r = Array.get(values, 1)
+    optional<integer> r = Array.get(values, 1)
 
-    assert(Result.unwrap(r) == 20)
+    assert(Optional.unwrap(r) == 20)
 }
 
 # ─── W0011: an if that returns needs no else (no redundant else) ───
