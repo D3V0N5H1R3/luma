@@ -78,7 +78,7 @@
         "snippets": [
             {
                 "language": "luma",
-                "path": "../shared/snippets/luma.json"
+                "path": "./snippets/luma.json"
             }
         ],
         "themes": [

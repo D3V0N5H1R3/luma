@@ -91,3 +91,28 @@ describe("shared snippets (luma.json)", () => {
         );
     });
 });
+
+describe("editor snippet copies stay in sync with the canonical shared set", () => {
+    // Each editor bundles its own copy inside its extension folder and references
+    // "./snippets/luma.json" — never "../shared/…", which resolves outside the
+    // packaged extension and makes it non-portable. The copies must stay identical
+    // to the canonical shared set consumed above.
+    for (const editor of ["vscode", "zed"]) {
+        it(`${editor}/snippets/luma.json matches shared/snippets/luma.json`, () => {
+            const copyPath = path.join(__dirname, "..", editor, "snippets", "luma.json");
+            assert.ok(
+                fs.existsSync(copyPath),
+                `${editor} must bundle its own copy at ${editor}/snippets/luma.json ` +
+                    `(a "../shared/…" reference resolves outside the packaged extension)`,
+            );
+
+            const copy = JSON.parse(fs.readFileSync(copyPath, "utf-8"));
+            assert.deepEqual(
+                copy,
+                snippets,
+                `${editor}/snippets/luma.json has drifted from the canonical ` +
+                    `shared/snippets/luma.json — re-copy the shared file into ${editor}/snippets/`,
+            );
+        });
+    }
+});
