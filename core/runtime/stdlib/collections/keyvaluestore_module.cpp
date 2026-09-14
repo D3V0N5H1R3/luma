@@ -639,6 +639,56 @@ void register_keyvaluestore_ns(const EnvPtr& env) {
 
             return Value{std::move(dict)};
         })
+        // KeyValueStore.transaction(store, apply) -> result<key_value_store>
+        // Runs a transaction body that threads a sequence of operations over the
+        // store and returns success(final_store) to commit or failure(msg) to
+        // roll back.  Because every mutating operation returns a new store
+        // (copy-on-write), the body must thread the store through each step
+        // (typically with the ? operator) and return the final one.  On commit a
+        // file-backed writable store is persisted atomically; on rollback nothing
+        // is written and the original store and its file are left untouched.
+        .func("transaction", 2)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_key_value_store(args[0], "KeyValueStore.transaction", loc);
+            expect_callable(args[1], "KeyValueStore.transaction", loc);
+
+            // Run the transaction body with the current store as its argument.
+            std::vector<Value> call_args(1);
+            call_args[0] = args[0];
+            Value outcome = invoke_callable(args[1], call_args, loc);
+
+            if (!outcome.is_result()) {
+                return make_failure_value(error_msg("KeyValueStore", "transaction",
+                                                    "transaction body must return "
+                                                    "result<key_value_store>"));
+            }
+
+            const auto& result = outcome.as_result();
+
+            // Rollback: the body failed — nothing is persisted and the original
+            // store is untouched (all operations are copy-on-write).
+            if (!result->is_success) {
+                return outcome;
+            }
+
+            // Commit: the body returned success(final_store).
+            const Value& committed_value = *result->owned_inner;
+            const auto& committed =
+                expect_key_value_store(committed_value, "KeyValueStore.transaction", loc);
+
+            // Persist atomically when the committed store is file-backed and writable.
+            if (!committed->read_only && !committed->file_path.empty()) {
+                const std::scoped_lock lock{committed->mutex};
+
+                if (!write_store(committed->file_path, committed->entries)) {
+                    return make_failure_value(
+                        error_msg("KeyValueStore", "transaction",
+                                  std::format("cannot write '{}'", committed->file_path)));
+                }
+            }
+
+            return make_success_value(committed_value);
+        })
         // KeyValueStore.is_read_only(store) -> boolean
         .func("is_read_only", 1)
         .raw_body([](std::span<const Value> args, [[maybe_unused]] SourceLocation loc) -> Value {

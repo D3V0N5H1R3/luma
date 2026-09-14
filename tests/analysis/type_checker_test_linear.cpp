@@ -14,10 +14,11 @@ static void test_unique_variable_consumed() {
 }
 
 static void test_unique_variable_scope_exit_warning() {
-    // A unique variable that is never consumed should warn.
-    ASSERT_TRUE(has_warnings("function void test() {\n"
-                             "  unique string x = \"hello\"\n"
-                             "}\n"));
+    // A unique variable that is never consumed is a hard error (ownership is
+    // enforced, not advisory).
+    ASSERT_TRUE(fails("function void test() {\n"
+                      "  unique string x = \"hello\"\n"
+                      "}\n"));
 }
 
 static void test_unique_variable_single_use_ok() {
@@ -145,11 +146,14 @@ static void test_borrow_piped_to_unique_param_blocked() {
 
 static void test_unique_passed_to_borrow_param_not_consumed() {
     // Passing a unique variable to a borrow parameter should NOT
-    // consume it — the callee only borrows.
+    // consume it — the callee only borrows, so the value can still be
+    // consumed afterwards.
     ASSERT_TRUE(passes("function void peek(borrow string s) { }\n"
+                       "function void consume(string s) { }\n"
                        "unique string x = \"hello\"\n"
                        "peek(x)\n"
-                       "peek(x)\n"));
+                       "peek(x)\n"
+                       "consume(x)\n"));
 }
 
 static void test_unique_consumed_in_while_loop_blocked() {
@@ -250,11 +254,13 @@ static void test_function_returns_unique_consumed_once() {
 
 static void test_unique_piped_to_borrow_param_not_consumed() {
     // Piping a unique variable into a borrow parameter only lends it, so the
-    // same variable can be piped again.
+    // same variable can be piped again and still consumed afterwards.
     ASSERT_TRUE(passes("function void peek(borrow string s) { string r = s }\n"
+                       "function void consume(string s) { }\n"
                        "unique string x = \"hello\"\n"
                        "x |> peek()\n"
-                       "x |> peek()\n"));
+                       "x |> peek()\n"
+                       "consume(x)\n"));
 }
 
 static void test_borrow_field_read_ok() {

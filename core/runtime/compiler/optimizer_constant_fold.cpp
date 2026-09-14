@@ -99,7 +99,13 @@ std::optional<Value> Optimizer::try_fold_operation(const Value& val1, const Valu
                 break;
             case Op::IntDivide:
                 if (b != 0 && !would_overflow_div(a, b)) {
-                    return Value{a / b};
+                    // Floor division rounds toward negative infinity.
+                    std::int64_t quotient = a / b;
+                    const std::int64_t remainder = a % b;
+                    if (remainder != 0 && ((remainder < 0) != (b < 0))) {
+                        --quotient;
+                    }
+                    return Value{quotient};
                 }
                 break;
             case Op::Modulo:

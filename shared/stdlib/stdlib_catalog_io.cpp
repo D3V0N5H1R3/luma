@@ -293,6 +293,10 @@ void register_key_value_store_functions(std::vector<FunctionSpec>& specs, const 
             m.fn("set_many", 2, "(store: key_value_store, entries: dictionary<string>)",
                  R::result(named::key_value_store()), {p.kv_store, p.dict_any}),
             m.fn("to_dictionary", 1, "(store: key_value_store)", R::dict_string(), {p.kv_store}),
+            m.fn("transaction", 2,
+                 "(store: key_value_store, apply: func(key_value_store) -> "
+                 "result<key_value_store>)",
+                 R::result(named::key_value_store()), {p.kv_store, p.func}),
             m.fn("update", 3,
                  "(store: key_value_store, key: string, updater: func(optional<string>) -> string)",
                  R::result(named::key_value_store()), {p.kv_store, p.string, p.func}),

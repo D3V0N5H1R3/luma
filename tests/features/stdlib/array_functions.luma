@@ -56,18 +56,18 @@ function void test_array_set_out_of_bounds() {
 @test
 function void test_array_first_last() {
     array<integer> values = [10, 20, 30]
-    result<integer> first_result = Array.first(values)
-    result<integer> last_result = Array.last(values)
+    optional<integer> first_result = Array.first(values)
+    optional<integer> last_result = Array.last(values)
 
-    assert(Result.is_success(first_result))
-    assert(Result.unwrap(first_result) == 10)
-    assert(Result.is_success(last_result))
-    assert(Result.unwrap(last_result) == 30)
+    assert(Optional.is_some(first_result))
+    assert(Optional.unwrap(first_result) == 10)
+    assert(Optional.is_some(last_result))
+    assert(Optional.unwrap(last_result) == 30)
 
     array<integer> empty = []
 
-    assert(!Result.is_success(Array.first(empty)))
-    assert(!Result.is_success(Array.last(empty)))
+    assert(!Optional.is_some(Array.first(empty)))
+    assert(!Optional.is_some(Array.last(empty)))
 }
 
 @test
@@ -807,8 +807,8 @@ function void test_array_concat_basic() {
     array<integer> result_arr = Array.concat([1, 2], [3, 4])
 
     assert(Array.length(result_arr) == 4)
-    assert(Result.unwrap(Array.get(result_arr, 0)) == 1)
-    assert(Result.unwrap(Array.get(result_arr, 3)) == 4)
+    assert(Optional.unwrap(Array.get(result_arr, 0)) == 1)
+    assert(Optional.unwrap(Array.get(result_arr, 3)) == 4)
 }
 
 @test

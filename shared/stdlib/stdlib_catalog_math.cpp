@@ -128,8 +128,6 @@ void register_math_functions(std::vector<FunctionSpec>& specs, const ModuleBuild
             m.fn("arc_tangent2", 2, "(y: number, x: number)", R::result_number(),
                  {p.number, p.number}),
             m.fn("hypotenuse", 2, "(x: number, y: number)", R::number_type(), {p.number, p.number}),
-            m.fn("log", 2, "(base: number, value: number)", R::result_number(),
-                 {p.number, p.number}),
             m.fn("cube_root", 1, "(value: number)", R::number_type(), {p.number}),
             m.fn("hyperbolic_sine", 1, "(value: number)", R::result_number(), {p.number}),
             m.fn("hyperbolic_cosine", 1, "(value: number)", R::result_number(), {p.number}),
