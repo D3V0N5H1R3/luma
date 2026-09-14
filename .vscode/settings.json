@@ -7,6 +7,16 @@
     },
 
     "C_Cpp.default.cppStandard": "c++20",
+    // Let the CMake Tools extension feed IntelliSense the exact per-file include
+    // paths, preprocessor defines, and compiler flags from the configured CMake
+    // project. This works with every generator — including the Visual Studio
+    // multi-config generator that CMake selects by default on Windows, which
+    // does NOT emit compile_commands.json. Without this, IntelliSense on Windows
+    // has no compilation database and reports hundreds of false-positive errors
+    // (unresolved includes, unknown identifiers).
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    // Fallback for when CMake Tools is unavailable: single-config generators
+    // (Ninja / Makefiles, the default on Linux and macOS) do emit this file.
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
 
     "files.associations": {
