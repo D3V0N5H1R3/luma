@@ -73,7 +73,7 @@ def _clang_format_gate() -> Gate:
     files = [f for f in git_ls(*CLANG_FORMAT_DIRS) if f.endswith((".cpp", ".hpp"))]
     if not files:
         return skip(name, description, "no C++ files tracked")
-    # .clang-format-ignore (honoured by clang-format 18+) excludes generated headers; currently empty.
+    # .clang-format-ignore (honoured by clang-format 18+) excludes generated headers; none yet.
     return Gate(name, description, [exe, "-i"], files=files)
 
 
