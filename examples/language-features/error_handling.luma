@@ -184,7 +184,7 @@ function void demo_try_catch_finally() {
         log += "opening resource"
 
         integer zero = 0
-        integer _ = 10 / zero
+        integer _ = 10 // zero
 
         log += " (unreachable)"
     } catch(err) {

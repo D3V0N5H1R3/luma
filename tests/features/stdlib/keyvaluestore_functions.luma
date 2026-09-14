@@ -501,3 +501,52 @@ function void test_keyvaluestore_is_empty_and_update() {
         KeyValueStore.update(s2, "count", (optional<string> cur) -> Optional.unwrap_or(cur, "0") + "1"))
     assert(KeyValueStore.get_or(s3, "count", "x") == "01")
 }
+
+# ───────────────────────────────────────────────────────────
+# transaction: a body returning success(final) commits every
+# threaded change (and persists a file-backed store); a body
+# returning a failure rolls back, persisting nothing
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_keyvaluestore_transaction_commit() {
+    key_value_store store = Result.unwrap(KeyValueStore.open("test_kv_luma_tx1.kv"))
+
+    result<key_value_store> committed = KeyValueStore.transaction(store, (key_value_store s) -> {
+        key_value_store s1 = KeyValueStore.set(s, "a", "1")?
+        key_value_store s2 = KeyValueStore.set(s1, "b", "2")?
+        return success(s2)
+    })
+
+    key_value_store final = Result.unwrap(committed)
+    assert(KeyValueStore.get_or(final, "a", "x") == "1")
+    assert(KeyValueStore.get_or(final, "b", "x") == "2")
+
+    result<string> _cleanup = KeyValueStore.destroy(store)
+}
+
+@test
+function void test_keyvaluestore_transaction_rollback_returns_failure() {
+    key_value_store store = Result.unwrap(KeyValueStore.open("test_kv_luma_tx2.kv"))
+
+    result<key_value_store> rolled = KeyValueStore.transaction(store, (key_value_store s) -> {
+        key_value_store _s1 = KeyValueStore.set(s, "x", "1")?
+        return failure("aborted")
+    })
+
+    assert(Result.is_failure(rolled))
+}
+
+@test
+function void test_keyvaluestore_transaction_rollback_not_persisted() {
+    key_value_store store = Result.unwrap(KeyValueStore.open("test_kv_luma_tx3.kv"))
+
+    result<key_value_store> _rolled = KeyValueStore.transaction(store, (key_value_store s) -> {
+        key_value_store _s1 = KeyValueStore.set(s, "ghost", "boo")?
+        return failure("aborted")
+    })
+
+    # A rolled-back transaction persists nothing, so a fresh open never sees the key.
+    key_value_store reopened = Result.unwrap(KeyValueStore.open("test_kv_luma_tx3.kv"))
+    assert(!KeyValueStore.has(reopened, "ghost"))
+}

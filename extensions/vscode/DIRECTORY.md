@@ -114,7 +114,7 @@ All commands are available from the Command Palette under the **Luma** category.
 Install from the Visual Studio Marketplace, or install the `.vsix` file directly:
 
 ```bash
-code --install-extension luma-language-0.12.0.vsix
+code --install-extension luma-language-0.13.0.vsix
 ```
 
 ## Building from Source
@@ -127,4 +127,4 @@ npm install
 npm run package
 ```
 
-This produces `luma-language-0.12.0.vsix` in the current directory.
+This produces `luma-language-0.13.0.vsix` in the current directory.

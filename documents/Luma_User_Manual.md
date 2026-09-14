@@ -185,7 +185,7 @@ string u = s[1..=3] # "ell" — bytes at indices [1, 3] (inclusive end)
 
 For Unicode-safe character access by codepoint index, use `String.character_at`. For Unicode-safe slicing, split with `String.characters` first.
 
-`integer` and `number` are **distinct types**. Pure integer arithmetic never promotes to float: `7 / 2` yields `3`, not `3.5`. Mixing `integer` and `number` operands in the same expression produces a `number`.
+`integer` and `number` are **distinct types**. Division with `/` is **true division** and always yields a `number`, so `7 / 2` yields `3.5` — use `//` for integer (floor) division. Mixing `integer` and `number` operands in any other arithmetic produces a `number`.
 
 > **When to use which:** Use `integer` for **indices and range bounds** — array subscripts, string offsets, loop counters that index into collections, and range end-points (`0..n`). Use `number` for **all other numeric values** — counts, sizes, quantities, measurements, scores, IDs, and mathematical computations. This keeps the intent clear: if a variable is typed `integer`, it addresses a position or delimits a range.
 
@@ -376,17 +376,17 @@ for item in [1, 2, 3] {
 | `+`      | Addition or string concatenation | `string + string` concatenates                       |
 | `-`      | Subtraction or unary negation    | `-x` negates `integer` or `number`                   |
 | `*`      | Multiplication or string repeat  | `"ha" * 3` → `"hahaha"`                              |
-| `/`      | Division                         | Truncates toward zero for `integer` operands         |
-| `//`     | Integer division                 | Both operands must be `integer`; result is `integer` |
+| `/`      | True division                    | Always yields a `number` (so `7 / 2 == 3.5`)         |
+| `//`     | Floor division                   | Both operands must be `integer`; result is `integer` |
 | `%`      | Modulo                           |                                                      |
 
-Integer division: `7 / 2 == 3`. Mixed `integer` and `number` expressions produce `number`.
+True division: `7 / 2 == 3.5`. `/` always produces a `number`, even for integer operands. Assigning the result to an `integer` variable (or using `/=` on one) is a type error — use `//` instead.
 
-The `//` operator always returns an `integer` and requires both operands to be `integer`. It truncates toward zero, matching the behaviour of `/` on integers:
+The `//` operator always returns an `integer` and requires both operands to be `integer`. It performs **floor division**, rounding toward negative infinity:
 
 ```luma
 10 // 3 # 3
--7 // 2 # -3
+-7 // 2 # -4
 ```
 
 Use `//` when you explicitly need an integer quotient and want to document that intent.
@@ -904,6 +904,18 @@ Multi-statement bodies use a block:
     number y = x * x
 
     return y + 1
+}
+```
+
+A lambda body may use the error-propagation operator `?` when the lambda returns
+a `result<T>` or `optional<T>`. A failing step short-circuits and becomes the
+lambda's return value:
+
+```luma
+(string raw) -> {
+    number n = String.parse_number(raw)? # propagates the failure out of the lambda
+
+    return success(n * 2)
 }
 ```
 
@@ -1745,7 +1757,7 @@ integer           safe    = Optional.unwrap_or(s, "default")      # "default"
 result<integer>   r       = Optional.to_result(none, "missing")   # failure("missing")
 ```
 
-See the [Standard Library Reference — §23 Optional](Luma_Standard_Library_Reference.md#23--optional) for the full function reference.
+See the [Standard Library Reference — §22 Optional](Luma_Standard_Library_Reference.md#22--optional) for the full function reference.
 
 ---
 
@@ -2048,7 +2060,7 @@ string letter = """
     """
 ```
 
-> **Tip — dictionary-driven substitution:** When you need to fill multiple named placeholders from data stored in a dictionary, use `String.template` instead of interpolation. See the [Standard Library Reference — §36 String](Luma_Standard_Library_Reference.md#36--string) for details.
+> **Tip — dictionary-driven substitution:** When you need to fill multiple named placeholders from data stored in a dictionary, use `String.template` instead of interpolation. See the [Standard Library Reference — §35 String](Luma_Standard_Library_Reference.md#35--string) for details.
 >
 > ```luma
 > dictionary<string> ctx = {"name": "Alice", "day": "Monday"}
@@ -2681,7 +2693,7 @@ Luma provides optional ownership annotations for values that must be consumed ex
 
 ### Unique Values
 
-A `unique` variable represents exclusive ownership of a value. It must be consumed (passed to a function or assigned away) exactly once. Using it a second time is a type error, and leaving scope without consuming it produces a warning.
+A `unique` variable represents exclusive ownership of a value. It must be consumed (passed to a function or assigned away) exactly once. Using it a second time is a type error, and leaving its scope without consuming a `unique` **local** is also a compile-time error (prefix with `_` to discard it deliberately). An unconsumed `unique` **parameter** is only a warning, since the callee legitimately owns the value and may drop it.
 
 ```luma
 unique string handle = acquire_resource()
@@ -2832,12 +2844,13 @@ It documents all built-in functions and every standard library module — includ
 
 The type checker includes a built-in linter that emits warnings for suspicious or error-prone patterns. These warnings do not prevent execution by default.
 
+> **Discarding a `result<T>` is a hard error**, not a warning. A call that returns `result<T>` whose value is silently dropped fails type checking by default — handle it with `match`, `Result.unwrap`, `Result.unwrap_or`, `?`, or suppress it explicitly with `_ = expr`.
+
 ### Warning Categories
 
 | Warning                      | Description                                                                                                |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Always-false condition       | `while false { ... }` — loop body will never execute                                                       |
-| Discarded result             | A function returning `result<T>` is called and the return value is not used                                |
 | Discarded value              | A non-void function call whose return value is not assigned, piped, or consumed — suppress with `_ = expr` |
 | Empty body                   | A function, `if`, `for`, or `while` block has an empty body — likely incomplete code                       |
 | Downcast always fails        | `downcast<T>` on a value whose type is incompatible with `T` — will always fail at runtime                 |
@@ -2853,10 +2866,9 @@ The type checker includes a built-in linter that emits warnings for suspicious o
 | Redundant downcast           | `downcast<T>` on a value already known to be `T` — the cast is unnecessary                                 |
 | Self-assignment              | Assigning a variable to itself has no effect                                                               |
 | Shadow variable              | A local variable shadows a variable from an outer scope — prefix with `_` to suppress                      |
-| Unconsumed unique            | A `unique` variable leaves scope without being consumed                                                    |
+| Unconsumed unique            | A `unique` parameter leaves scope without being consumed (an unconsumed `unique` local is a hard error)    |
 | Unnecessary semicolon        | Luma does not use semicolons — they can be safely removed                                                  |
 | Unreachable code             | Code appears after a `return`, `break`, or `continue`                                                      |
-| Unstructured spawn           | `spawn` used outside a `task_scope` block — task runs fire-and-forget                                      |
 | Unsafe trusted_downcast      | `trusted_downcast` on an unrefined stdlib value has no compile-time safety guarantee                       |
 | Unused function              | A function is declared but never called — prefix with `_` to suppress                                      |
 | Unused parameter             | A function parameter is never used — prefix with `_` to suppress                                           |
@@ -2905,7 +2917,7 @@ All 47 identifiers below are reserved and cannot be used as variable, function, 
 
 The container and handle types — `channel`,
 `key_value_store`, `queue`, `reference`, `set`, `socket`, `stack`,
-`task`, `widget`, and `xml` — are **not** reserved words. They are ordinary
+`task`, and `xml` — are **not** reserved words. They are ordinary
 identifiers that name built-in generic types, so `queue<integer> q = …` still
 declares a typed variable while `integer queue = …` is also allowed.
 
@@ -3546,7 +3558,7 @@ primitive_type  = "boolean" | "integer" | "number" | "decimal" | "string"
                 | "none" | "optional" ;
                 (* container/handle type names — queue, stack, set, task,
                    channel, socket, xml, reference, decimal,
-                   key_value_store, widget — are ordinary
+                   key_value_store — are ordinary
                    IDENTIFIERs resolved as built-in types via generic_type /
                    qualified_type, not reserved primitive keywords. *)
 

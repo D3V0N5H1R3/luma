@@ -411,11 +411,20 @@ LUMA_TEST(vm_shift_out_of_range) {
     ASSERT_TRUE(throws_runtime("integer x = 1\ninteger y = -1\nBits.shift_left(x, y)"));
 }
 
-LUMA_TEST(vm_integer_division_truncates) {
+LUMA_TEST(vm_true_division_promotes) {
+    // '/' is true division and always yields a number, so 7 / 2 == 3.5.
     const auto result = eval("7 / 2");
 
+    ASSERT_TRUE(result.is_number());
+    ASSERT_EQ(result.as_number(), 3.5);
+}
+
+LUMA_TEST(vm_floor_division_rounds_toward_negative_infinity) {
+    // '//' is floor division: -7 // 2 rounds toward negative infinity to -4.
+    const auto result = eval("-7 // 2");
+
     ASSERT_TRUE(result.is_integer());
-    ASSERT_EQ(result.as_integer(), 3);
+    ASSERT_EQ(result.as_integer(), -4);
 }
 
 LUMA_TEST(vm_number_division) {

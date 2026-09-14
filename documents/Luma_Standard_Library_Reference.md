@@ -87,10 +87,10 @@ These require no namespace prefix:
 | `Array.find_index(array, function)`      | `(array<T>, function(T) -> boolean)`   | `result<integer>`              | Index of first matching element; fail if not found                         |
 | `Array.find_last(array, function)`       | `(array<T>, function(T) -> boolean)`   | `result<T>`                    | Last matching element; fail if not found                                   |
 | `Array.find_last_index(array, function)` | `(array<T>, function(T) -> boolean)`   | `result<integer>`              | Index of last matching element; fail if not found                          |
-| `Array.first(array)`               | `(array<T>)`                           | `result<T>`                    | First element; fail if empty                                               |
+| `Array.first(array)`               | `(array<T>)`                           | `optional<T>`                  | First element; `none` if empty                                             |
 | `Array.flat_map(array, function)`        | `(array<T>, function(T) -> array<U>)`  | `result<array<U>>`             | Map then flatten one level; fail if callback throws                        |
 | `Array.flatten(array)`             | `(array<array<T>>)`                    | `array<T>`                     | Flatten one nesting level                                                  |
-| `Array.get(array, i)`              | `(array<T>, integer)`                  | `result<T>`                    | Safe indexed access; fail if out of bounds                                 |
+| `Array.get(array, i)`              | `(array<T>, integer)`                  | `optional<T>`                  | Safe indexed access; `none` if out of bounds                               |
 | `Array.group_by(array, function)`        | `(array<T>, function(T) -> string)`    | `result<dictionary<array<T>>>` | Group elements by key returned by `function`; fail if callback throws            |
 | `Array.index_of(array, v)`         | `(array<T>, T)`                        | `result<integer>`              | First index of `v`; fail if not found                                      |
 | `Array.insert_at(array, i, v)`     | `(array<T>, integer, T)`               | `result<array<T>>`             | Insert `v` at index `i`; fail if index out of bounds                       |
@@ -98,7 +98,7 @@ These require no namespace prefix:
 | `Array.is_sorted(array)`           | `(array<T>)`                           | `boolean`                      | Whether the array is in ascending natural order                            |
 | `Array.is_sorted_by(array, key)`   | `(array<T>, function(T) -> U)`         | `result<boolean>`              | Whether the array is ascending by the projected key; fail if key throws    |
 | `Array.join(array, separator)`           | `(array<T>, string)`                   | `string`                       | Concatenate elements as strings separated by `separator`                         |
-| `Array.last(array)`                | `(array<T>)`                           | `result<T>`                    | Last element; fail if empty                                                |
+| `Array.last(array)`                | `(array<T>)`                           | `optional<T>`                  | Last element; `none` if empty                                              |
 | `Array.length(array)`              | `(array<T>)`                           | `integer`                      | Number of elements                                                         |
 | `Array.map(array, function)`             | `(array<T>, function(T) -> U)`         | `result<array<U>>`             | Transform each element; fail if callback throws                            |
 | `Array.maximum(array)`                 | `(array<T>)`                           | `result<T>`                    | Maximum value; fail if empty                                               |
@@ -1039,8 +1039,32 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 | `KeyValueStore.set(s, key, value)`          | `(key_value_store, string, string)`     | `result<key_value_store>` | Set a key; fail if read-only                      |
 | `KeyValueStore.set_many(s, entries)`        | `(key_value_store, dictionary<string>)` | `result<key_value_store>` | Batch set; fail if read-only                      |
 | `KeyValueStore.to_dictionary(s)`            | `(key_value_store)`                     | `dictionary<string>`      | Convert to dictionary                             |
+| `KeyValueStore.transaction(s, apply)`       | `(key_value_store, function(key_value_store) -> result<key_value_store>)` | `result<key_value_store>` | Run `apply`; commit (and persist a file-backed store) on `success`, roll back on `failure` |
 | `KeyValueStore.update(s, key, function)`          | `(key_value_store, string, function(optional<string>) -> string)` | `result<key_value_store>` | Set key to `fn(current-or-none)`; fail if read-only |
 | `KeyValueStore.values(s)`                   | `(key_value_store)`                     | `array<string>`           | All values                                        |
+
+### Transactions
+
+`KeyValueStore.transaction(store, apply)` groups a sequence of mutations into a single all-or-nothing unit. The `apply` function receives the current store and threads the operations through it — because every mutating operation returns a **new** store (copy-on-write), thread each step with the `?` operator and return the final store.
+
+- **Commit** — when `apply` returns `success(final_store)`, the transaction returns that store. If the store is file-backed and writable, the committed state is **persisted atomically** to disk.
+- **Rollback** — when `apply` returns `failure(message)`, the transaction returns that failure and **nothing is written**: the original store and its backing file are left untouched (the intermediate stores are simply discarded).
+
+```luma
+key_value_store store = Result.unwrap(KeyValueStore.open("settings.kv"))
+
+result<key_value_store> result = KeyValueStore.transaction(store, (key_value_store s) -> {
+    key_value_store s1 = KeyValueStore.set(s, "theme", "dark")?
+    key_value_store s2 = KeyValueStore.set(s1, "font_size", "14")?
+
+    return success(s2)
+})
+
+match result {
+    success(committed) { print("committed ${KeyValueStore.count(committed)} keys") }
+    failure(message)   { print("rolled back: ${message}") }
+}
+```
 
 ## 19 — LinearAlgebra
 
@@ -1160,7 +1184,6 @@ Levels are ordered: `Debug` < `Information` < `Warning` < `Error` < `Off`. The `
 | `Math.is_prime(n)`                    | `(integer)`                      | `boolean`         | Whether `n` is prime                                                             |
 | `Math.least_common_multiple(a, b)`    | `(integer, integer)`             | `result<integer>` | LCM of `a` and `b`; fail on overflow                                             |
 | `Math.linear_interpolation(a, b, t)`                  | `(number, number, number)`       | `result<number>`  | Linear interpolation; fail if `t` outside [0, 1]                                 |
-| `Math.log(base, value)`               | `(number, number)`               | `result<number>`  | Logarithm of `value` with `base`; fail if base ≤ 0, base = 1, or value ≤ 0       |
 | `Math.log_10(x)`                      | `(number)`                       | `result<number>`  | Base-10 logarithm                                                                |
 | `Math.log_2(x)`                       | `(number)`                       | `result<number>`  | Base-2 logarithm                                                                 |
 | `Math.log_e(x)`                       | `(number)`                       | `result<number>`  | Natural logarithm                                                                |

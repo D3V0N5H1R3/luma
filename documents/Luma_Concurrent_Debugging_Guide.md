@@ -330,5 +330,5 @@ function void main() {
 - [Debugger](Luma_Debugger.md) — Debug Adapter Protocol design and architecture
 - [User Manual](Luma_User_Manual.md) — task, channel, and `task_scope` language features
 - [Standard Library Reference — §5 Channel](Luma_Standard_Library_Reference.md#5--channel) — channel operations
-- [Standard Library Reference — §37 Task](Luma_Standard_Library_Reference.md#37--task) — task operations
+- [Standard Library Reference — §36 Task](Luma_Standard_Library_Reference.md#36--task) — task operations
 - [Coding Guidelines — §20 Concurrency](Luma_Coding_Guidelines.md#20--concurrency) — concurrency idioms and best practices

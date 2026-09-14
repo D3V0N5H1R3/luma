@@ -46,7 +46,7 @@ function void test_division_by_zero_error() {
     integer zero = 0
 
     try {
-        integer _ = 42 / zero
+        integer _ = 42 // zero
     } catch(err) {
         caught = err
     }
@@ -118,19 +118,19 @@ function void test_string_interpolation_with_function_call() {
 function void test_safe_array_access_success() {
     array<integer> values = [10, 20, 30]
 
-    result<integer> r = Array.get(values, 1)
+    optional<integer> r = Array.get(values, 1)
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == 20)
+    assert(Optional.is_some(r))
+    assert(Optional.unwrap(r) == 20)
 }
 
 @test
 function void test_safe_array_access_out_of_bounds() {
     array<integer> values = [10, 20, 30]
 
-    result<integer> r = Array.get(values, 10)
+    optional<integer> r = Array.get(values, 10)
 
-    assert(!Result.is_success(r))
+    assert(Optional.is_none(r))
 }
 
 # ─── Range Bounds ────────────────────────────────────────

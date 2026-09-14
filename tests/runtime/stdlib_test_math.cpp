@@ -423,8 +423,8 @@ LUMA_TEST(math_log_10) {
     ASSERT_NEAR(v.as_result()->owned_inner->as_number(), 2.0, 1e-9);
 }
 
-LUMA_TEST(math_log) {
-    const auto v = eval("Math.log(2.0, 8.0)");
+LUMA_TEST(math_log_base) {
+    const auto v = eval("Math.log_base(8.0, 2.0)");
 
     ASSERT_RESULT_SUCCESS(v);
     ASSERT_NEAR(v.as_result()->owned_inner->as_number(), 3.0, 1e-9);
@@ -516,11 +516,11 @@ LUMA_TEST(math_log_10_non_positive) {
     ASSERT_EVAL_FAILURE("Math.log_10(-1.0)");
 }
 
-LUMA_TEST(math_log_invalid) {
+LUMA_TEST(math_log_base_invalid) {
     // Base must be positive and not 1; value must be positive.
-    ASSERT_EVAL_FAILURE("Math.log(1.0, 5.0)");
-    ASSERT_EVAL_FAILURE("Math.log(-2.0, 8.0)");
-    ASSERT_EVAL_FAILURE("Math.log(2.0, -1.0)");
+    ASSERT_EVAL_FAILURE("Math.log_base(5.0, 1.0)");
+    ASSERT_EVAL_FAILURE("Math.log_base(8.0, -2.0)");
+    ASSERT_EVAL_FAILURE("Math.log_base(-1.0, 2.0)");
 }
 
 LUMA_TEST(math_exponential_overflow) {

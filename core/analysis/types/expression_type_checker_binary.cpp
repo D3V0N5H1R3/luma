@@ -90,7 +90,6 @@ void ExpressionTypeChecker::check_binary_constant_folding(const BinaryExpression
                              DiagnosticCode::IntegerOverflow);
                 }
                 break;
-            case TokenType::Slash:
             case TokenType::SlashSlash:
                 if (right_val != 0 && would_overflow_div(left_val, right_val)) {
                     emit_err("integer overflow in division", expr.location,
@@ -190,7 +189,25 @@ TypeInfo ExpressionTypeChecker::check_arithmetic_binary(const BinaryExpression& 
         return TypeInfo::make(TypeInfo::Kind::Unknown);
     }
 
-    // Minus, Slash, Percent: standard numeric arithmetic.
+    // Slash: true division always yields a number. Integer operands promote,
+    // so 7 / 2 == 3.5. Use // for integer (floor) division.
+    if (expr.op == TokenType::Slash) {
+        if (left.is_numeric() && right.is_numeric()) {
+            return TypeInfo::make(TypeInfo::Kind::Number);
+        }
+        if (is_error_or_unknown(left, right)) {
+            return TypeInfo::make(TypeInfo::Kind::StdlibAny);
+        }
+
+        tc_.error(std::format("operator '/' requires numeric operands, got '{}' and '{}'",
+                              left.to_string(), right.to_string()),
+                  expr.location, "convert the operand to a number using Converter.to_number()",
+                  DiagnosticCode::InvalidOperand);
+
+        return TypeInfo::make(TypeInfo::Kind::Unknown);
+    }
+
+    // Minus, Percent: standard numeric arithmetic.
     if (left.is_numeric() && right.is_numeric()) {
         return promote_numeric(left, right);
     }

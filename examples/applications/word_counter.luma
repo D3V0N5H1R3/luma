@@ -84,7 +84,7 @@ function integer count_characters(string text) {
 function void print_bar(string word, integer count, integer max_count) {
     integer bar_width = 30
     integer filled = if max_count > 0 {
-        count * bar_width / max_count
+        count * bar_width // max_count
     } else {
         0
     }

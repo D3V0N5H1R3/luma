@@ -29,7 +29,7 @@ function result<integer> halve(integer n) {
         return failure("cannot halve zero")
     }
 
-    return success(n / 2)
+    return success(n // 2)
 }
 
 # !> propagates a successful success() value through the chain.
