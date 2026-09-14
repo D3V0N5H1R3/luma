@@ -289,16 +289,9 @@ void VM::handle_divide() {
 
     validate_nonzero_divisor(b, "Division");
 
-    if (a_ref.is_integer() && b.is_integer()) [[likely]] {
-        if (would_overflow_div(a_ref.as_integer(), b.as_integer())) {
-            a_ref = Value{static_cast<double>(a_ref.as_integer()) /
-                          static_cast<double>(b.as_integer())};
-        } else {
-            a_ref = Value{a_ref.as_integer() / b.as_integer()};
-        }
-    } else {
-        a_ref = Value{a_ref.to_numeric() / b.to_numeric()};
-    }
+    // True division always produces a number (float), so integer / integer
+    // promotes (7 / 2 == 3.5). Use // for integer (floor) division.
+    a_ref = Value{a_ref.to_numeric() / b.to_numeric()};
 }
 
 void VM::handle_int_divide() {
@@ -312,7 +305,16 @@ void VM::handle_int_divide() {
                           vm_errors::hint_integer_division_overflow);
         }
 
-        a_ref = Value{a_ref.as_integer() / b.as_integer()};
+        // Floor division rounds toward negative infinity, so -7 // 2 == -4.
+        const std::int64_t x = a_ref.as_integer();
+        const std::int64_t y = b.as_integer();
+        std::int64_t quotient = x / y;
+        const std::int64_t remainder = x % y;
+        if (remainder != 0 && ((remainder < 0) != (y < 0))) {
+            --quotient;
+        }
+
+        a_ref = Value{quotient};
     } else {
         runtime_error(vm_errors::integer_division_requires_integers,
                       vm_errors::hint_integer_division_only);

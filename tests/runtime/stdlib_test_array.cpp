@@ -53,9 +53,7 @@ static void test_array_filter_returns_result() {
 }
 
 static void test_array_first() {
-    const auto v = eval("Array.first([10, 20, 30])");
-
-    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(eval("Array.first([10, 20, 30])").as_integer(), 10);
 }
 
 static void test_array_flatten() {
@@ -114,9 +112,7 @@ static void test_array_insert_at_out_of_bounds() {
 }
 
 static void test_array_last() {
-    const auto v = eval("Array.last([10, 20, 30])");
-
-    ASSERT_RESULT_SUCCESS(v);
+    ASSERT_EQ(eval("Array.last([10, 20, 30])").as_integer(), 30);
 }
 
 static void test_array_length() {
@@ -339,19 +335,19 @@ static void test_array_find_last_index() {
 }
 
 static void test_array_get_out_of_bounds() {
-    ASSERT_EVAL_FAILURE("Array.get([1, 2, 3], 10)");
+    ASSERT_TRUE(eval("Array.get([1, 2, 3], 10)").is_null());
 }
 
 static void test_array_get_negative_index() {
-    ASSERT_EVAL_FAILURE("Array.get([1, 2, 3], -1)");
+    ASSERT_TRUE(eval("Array.get([1, 2, 3], -1)").is_null());
 }
 
 static void test_array_first_empty() {
-    ASSERT_EVAL_FAILURE("Array.first([])");
+    ASSERT_TRUE(eval("Array.first([])").is_null());
 }
 
 static void test_array_last_empty() {
-    ASSERT_EVAL_FAILURE("Array.last([])");
+    ASSERT_TRUE(eval("Array.last([])").is_null());
 }
 
 static void test_array_chunk_negative() {

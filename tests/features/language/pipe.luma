@@ -172,7 +172,7 @@ function void test_pipe_chained_numeric() {
     |> Array.sort((integer a, integer b) -> a - b)
     |> Result.unwrap_or([])
     |> Array.first()
-    |> Result.unwrap_or(0)
+    |> Optional.unwrap_or(0)
 
     assert(output == 1)
 }

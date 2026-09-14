@@ -287,7 +287,7 @@ template <typename Provider> [[nodiscard]] std::string generate_math_statement(P
         case 2: // Natural log (result<number>) — non-positive guard.
             return "print(Result.is_success(Math.log_e(" + na + ")))\n";
         case 3: // Arbitrary-base log (result<number>) — base/value guards.
-            return "print(Result.is_success(Math.log(" + na + ", " + nb + ")))\n";
+            return "print(Result.is_success(Math.log_base(" + na + ", " + nb + ")))\n";
         case 4: // Factorial (result<integer>) — negative and overflow guards.
             return "print(Result.is_success(Math.factorial(" + ia + ")))\n";
         case 5: // Greatest common divisor (result<integer>) — INT64_MIN guard.

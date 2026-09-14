@@ -60,8 +60,8 @@ namespace {
     return l % r;
 }
 
-/// Attempts to fold an integer division, returning nullopt on division by zero
-/// or INT64_MIN / -1 (undefined behaviour in C++).
+/// Attempts to fold an integer floor division, returning nullopt on division by
+/// zero or INT64_MIN / -1 (undefined behaviour in C++).
 // Returns std::nullopt when folding is not possible (e.g. division by zero).
 // Division-by-zero errors are intentionally deferred to runtime for proper
 // error reporting with source locations.
@@ -70,7 +70,13 @@ namespace {
     if (r == 0 || would_overflow_div(l, r)) {
         return std::nullopt;
     }
-    return l / r;
+    // Floor division rounds toward negative infinity, so -7 // 2 == -4.
+    std::int64_t quotient = l / r;
+    const std::int64_t remainder = l % r;
+    if (remainder != 0 && ((remainder < 0) != (r < 0))) {
+        --quotient;
+    }
+    return quotient;
 }
 
 } // anonymous namespace

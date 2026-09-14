@@ -293,7 +293,7 @@ function void test_reference_update_runtime_error_preserves_value() {
     try {
         Reference.update(r, (integer v) -> {
             integer zero = v - v
-            integer bad = v / zero
+            integer bad = v // zero
             return bad
         })
     } catch(_err) {

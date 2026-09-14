@@ -569,7 +569,10 @@ static void test_channel_type_valid() {
 
 static void test_task_type_valid() {
     ASSERT_TRUE(passes("function integer compute() { return 42 }\n"
-                       "task<integer> t = spawn compute()\n"));
+                       "task_scope {\n"
+                       "    task<integer> t = spawn compute()\n"
+                       "    integer _v = await t\n"
+                       "}\n"));
 }
 
 static void test_task_scope_valid() {
@@ -580,19 +583,24 @@ static void test_task_scope_valid() {
                        "}\n"));
 }
 
+static void test_question_mark_in_result_lambda_passes() {
+    // '?' is allowed inside a lambda whose (inferred) return type is result/optional,
+    // even when the enclosing named function does not return a result.
+    ASSERT_TRUE(passes("function result<number> parse(string s) { return success(1.0) }\n"
+                       "function void t() {\n"
+                       "    function(string) -> result<number> f = (string s) -> {\n"
+                       "        number n = parse(s)?\n"
+                       "        return success(n)\n"
+                       "    }\n"
+                       "    result<number> _r = f(\"3\")\n"
+                       "}\n"));
+}
+
 static void test_spawn_outside_task_scope_warns() {
-    auto warnings = check_warnings("function integer compute() { return 42 }\n"
-                                   "task<integer> t = spawn compute()\n");
-
-    bool found{false};
-
-    for (const auto& w : warnings) {
-        if (w.message.find("spawn outside task_scope") != std::string::npos) {
-            found = true;
-        }
-    }
-
-    ASSERT_TRUE(found);
+    // spawn outside a task_scope is now a hard error — structured concurrency
+    // is enforced so unstructured (fire-and-forget) tasks cannot be created.
+    ASSERT_TRUE(fails("function integer compute() { return 42 }\n"
+                      "task<integer> t = spawn compute()\n"));
 }
 
 static void test_spawn_inside_task_scope_no_warn() {
@@ -712,12 +720,13 @@ static void test_task_scope_result_type_mismatch() {
                       "}\n"));
 }
 
-static void test_await_outside_task_scope_on_fire_and_forget() {
-    // Awaiting a fire-and-forget task (spawned outside a task_scope) is still
-    // type-correct — the await yields the task's element type.
-    ASSERT_TRUE(passes("function integer compute() { return 42 }\n"
-                       "task<integer> t = spawn compute()\n"
-                       "integer v = await t\n"));
+static void test_spawn_outside_task_scope_rejected_with_await() {
+    // Spawning outside a task_scope is a hard error even when the task is later
+    // awaited — structured concurrency is enforced, so fire-and-forget tasks
+    // cannot be created.
+    ASSERT_TRUE(fails("function integer compute() { return 42 }\n"
+                      "task<integer> t = spawn compute()\n"
+                      "integer v = await t\n"));
 }
 
 // ─── Generic resolution edge cases (CA-26) ───
@@ -995,6 +1004,7 @@ int main() {
 
     RUN(test_channel_type_valid);
     RUN(test_task_type_valid);
+    RUN(test_question_mark_in_result_lambda_passes);
     RUN(test_task_scope_valid);
     RUN(test_spawn_outside_task_scope_warns);
     RUN(test_spawn_inside_task_scope_no_warn);
@@ -1008,7 +1018,7 @@ int main() {
     RUN(test_await_non_task_rejected);
     RUN(test_await_channel_rejected);
     RUN(test_task_scope_result_type_mismatch);
-    RUN(test_await_outside_task_scope_on_fire_and_forget);
+    RUN(test_spawn_outside_task_scope_rejected_with_await);
 
     // ─── Generic resolution edge cases (CA-26) ───
 

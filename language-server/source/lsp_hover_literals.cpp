@@ -52,7 +52,6 @@ const std::unordered_map<std::string_view, std::string_view>& get_builtin_type_n
         {"stack", "```luma\nstack\n```\n\nImmutable LIFO stack."},
         {"task", "```luma\ntask<T>\n```\n\nA concurrently executing computation that produces a "
                  "value of type `T`."},
-        {"widget", "```luma\nwidget\n```\n\nA graphical UI widget for building user interfaces."},
         {"xml", "```luma\nxml\n```\n\nAn XML document node for structured data processing."},
     };
     return map;

@@ -46,11 +46,14 @@ TypeInfo ExpressionTypeChecker::visit_unary(const UnaryExpression& expr) {
     // Postfix ? — error/none propagation on result and optional types.
     if (expr.op == TokenType::QuestionMark) {
         // '?' requires the enclosing function to return result<T> or optional<T>,
-        // or to be inside @main (where a propagated failure prints the error and exits).
+        // or to be inside @main (where a propagated failure prints the error and
+        // exits). A StdlibAny return context is an unconstrained lambda whose
+        // return type is inferred from its body, so '?' is permitted there too.
         const auto& ctx = tc_.context();
         if (!ctx.is_in_main && (!ctx.current_return_type ||
                                 (ctx.current_return_type->kind != TypeInfo::Kind::Result &&
-                                 ctx.current_return_type->kind != TypeInfo::Kind::Optional))) {
+                                 ctx.current_return_type->kind != TypeInfo::Kind::Optional &&
+                                 ctx.current_return_type->kind != TypeInfo::Kind::StdlibAny))) {
             tc_.error("error propagation '?' can only be used inside a function "
                       "that returns 'result<T>' or 'optional<T>', or inside '@main'",
                       expr.location,
@@ -65,6 +68,7 @@ TypeInfo ExpressionTypeChecker::visit_unary(const UnaryExpression& expr) {
         // '@main' is exempt because it consumes the propagated failure locally
         // (printing it and exiting) instead of returning it to a caller.
         if (!ctx.is_in_main && ctx.current_return_type &&
+            ctx.current_return_type->kind != TypeInfo::Kind::StdlibAny &&
             (operand_type.kind == TypeInfo::Kind::Result ||
              operand_type.kind == TypeInfo::Kind::Optional) &&
             operand_type.kind != ctx.current_return_type->kind) {

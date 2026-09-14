@@ -142,6 +142,21 @@ function void test_result_map() {
 }
 
 @test
+function void test_result_map_changes_type() {
+    # Result.map/flat_map infer result<U> from the mapping lambda's return
+    # type, so no typed map_* variant is needed to change the payload type.
+    result<number> source = success(9.0)
+    result<boolean> as_boolean = Result.map(source, (number n) -> n > 5.0)
+    result<string> as_string = Result.map(source, (number _n) -> "mapped")
+    result<string> chained = Result.flat_map(source, (number _n) -> success("chained"))
+
+    assert(Result.is_success(as_boolean))
+    assert(Result.unwrap(as_boolean))
+    assert(Result.unwrap(as_string) == "mapped")
+    assert(Result.unwrap(chained) == "chained")
+}
+
+@test
 function void test_result_map_boolean() {
     result<boolean> ok_result = success(true)
     result<boolean> mapped = Result.map_boolean(ok_result, (boolean is_set) -> !is_set)
@@ -201,7 +216,7 @@ function result<integer> safe_divide_integer(integer numerator, integer denomina
         return failure("division by zero")
     }
 
-    return success(numerator / denominator)
+    return success(numerator // denominator)
 }
 
 function result<integer> compute() {
@@ -384,11 +399,11 @@ function void test_result_error_code_and_source_function() {
 # to their failures so callers can match on error categories.
 @test
 function void test_result_error_code_from_stdlib() {
-    result<integer> r = Array.get([1, 2, 3], 10)
+    result<(array<integer>, integer)> r = Array.pop([])
 
     assert(Result.is_failure(r))
-    assert(Result.error_code(r) == "index_out_of_bounds")
-    assert(Result.source_function(r) == "Array.get")
+    assert(Result.error_code(r) == "empty_container")
+    assert(Result.source_function(r) == "Array.pop")
 }
 
 @test

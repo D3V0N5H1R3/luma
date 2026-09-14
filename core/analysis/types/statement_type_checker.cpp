@@ -67,10 +67,10 @@ void StatementTypeChecker::visit_expression_statement(const ExpressionStatement&
     const auto result_type = tc_.infer_expression_type(*stmt.expression);
 
     if (result_type.kind == TypeInfo::Kind::Result) {
-        tc_.warn("unused result: the result<T> value is silently discarded — "
-                 "handle it with 'match', 'Result.unwrap', 'Result.unwrap_or', "
-                 "or suppress with '_ = ...'",
-                 stmt.expression->location, "", DiagnosticCode::DiscardedResult);
+        tc_.error("unused result: the result<T> value is silently discarded — "
+                  "handle it with 'match', 'Result.unwrap', 'Result.unwrap_or', "
+                  "or suppress with '_ = ...'",
+                  stmt.expression->location, "", DiagnosticCode::DiscardedResult);
     } else if (result_type.kind != TypeInfo::Kind::Void &&
                result_type.kind != TypeInfo::Kind::None &&
                result_type.kind != TypeInfo::Kind::Unknown &&

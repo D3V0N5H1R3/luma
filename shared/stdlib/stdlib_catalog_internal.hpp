@@ -42,7 +42,7 @@ using R = ReturnTypeDesc;
 
 // ─── Named-type descriptors ──────────────────────────────────────────
 // Single source of truth for every named stdlib type (handle types such as
-// `widget`/`socket` and record types such as `Response`/`TimeParts`).  Each
+// `socket` and record types such as `Response`/`TimeParts`).  Each
 // helper wraps ReturnTypeDesc::named("...") so the identifier string appears
 // exactly once.  Registration sites reference these instead of repeating a
 // raw string literal, which turns a mistyped type name into a compile error
@@ -53,10 +53,6 @@ using R = ReturnTypeDesc;
 namespace named {
 
 // Handle types (identified by a lowercase keyword).
-[[nodiscard]] inline ReturnTypeDesc widget() {
-    return ReturnTypeDesc::named("widget");
-}
-
 [[nodiscard]] inline ReturnTypeDesc set() {
     return ReturnTypeDesc::named("set");
 }
@@ -512,8 +508,6 @@ struct ParamShorthands {
     // Named types
     ReturnTypeDesc socket, matrix, log_level;
     ReturnTypeDesc set, xml, kv_store, queue, stack;
-    // UI types
-    ReturnTypeDesc widget;
     // Exact-decimal type
     ReturnTypeDesc decimal;
 };
