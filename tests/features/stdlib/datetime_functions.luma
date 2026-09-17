@@ -940,6 +940,11 @@ function void test_datetime_end_of() {
     assert(Result.unwrap(DateTime.minute(eod)) == 59)
     assert(Result.unwrap(DateTime.second(eod)) == 59)
 
+    number eoh = Result.unwrap(DateTime.end_of_hour(ts))
+    assert(Result.unwrap(DateTime.hour(eoh)) == 14, "hour is preserved")
+    assert(Result.unwrap(DateTime.minute(eoh)) == 59)
+    assert(Result.unwrap(DateTime.second(eoh)) == 59)
+
     number eom = Result.unwrap(DateTime.end_of_month(ts))
     assert(Result.unwrap(DateTime.day_of_month(eom)) == 31, "March has 31 days")
 

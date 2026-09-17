@@ -97,6 +97,17 @@ static void test_arithmetic_requires_numeric() {
     ASSERT_TRUE(fails("integer x = \"hello\" - 1\n"));
 }
 
+static void test_unary_minus_requires_numeric() {
+    // Unary negation requires a numeric operand; negating a string is an error.
+    ASSERT_TRUE(fails("integer x = -\"hello\"\n"));
+}
+
+static void test_modulo_requires_numeric() {
+    // Modulo requires numeric operands; a string operand is a type error.
+    // (Numbers are accepted: `%` performs floating-point modulo at runtime.)
+    ASSERT_TRUE(fails("integer x = \"hello\" % 2\n"));
+}
+
 static void test_logical_requires_boolean() {
     ASSERT_TRUE(fails("boolean x = 1 && 2\n"));
 }
@@ -455,6 +466,8 @@ int main() {
     // ─── Operators ───
 
     RUN(test_arithmetic_requires_numeric);
+    RUN(test_unary_minus_requires_numeric);
+    RUN(test_modulo_requires_numeric);
     RUN(test_logical_requires_boolean);
     RUN(test_logical_not_requires_boolean);
     RUN(test_string_concatenation);

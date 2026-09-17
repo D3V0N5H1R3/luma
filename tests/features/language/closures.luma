@@ -178,3 +178,40 @@ function void test_closure_captures_at_creation_time() {
 
     assert(captured == 10 || captured == 99)
 }
+
+# ───────────────────────────────────────────────────────────
+# Mutable-capture value semantics (negative / guarantee tests)
+# ───────────────────────────────────────────────────────────
+
+@test
+function void test_closure_mutable_capture_does_not_see_later_mutation() {
+    mutable integer value = 10
+
+    function() -> integer snap = () -> value
+
+    value = 99
+
+    # Closures capture by value at creation time, so a later mutation of the
+    # captured variable must NOT be observed by the closure.
+    assert(snap() == 10)
+}
+
+function function() -> integer make_escaping_snapshot() {
+    mutable integer seed = 7
+
+    function() -> integer f = () -> seed
+
+    # Mutate after the closure is created but before it escapes the scope.
+    seed = 1000
+
+    return f
+}
+
+@test
+function void test_closure_escaping_scope_keeps_captured_value() {
+    function() -> integer escaped = make_escaping_snapshot()
+
+    # The escaped closure retains the value captured at creation time (7),
+    # not the value the local held when the function returned (1000).
+    assert(escaped() == 7)
+}

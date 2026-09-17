@@ -714,4 +714,12 @@ function void test_json_value_predicates_and_as_integer() {
 
     Json.Value obj = Result.unwrap(Json.parse("{}"))
     assert(Json.is_object(obj), "{} is an object")
+
+    Json.Value arr = Result.unwrap(Json.parse("[1, 2, 3]"))
+    assert(Json.is_array(arr), "[1, 2, 3] is an array")
+    assert(!Json.is_array(num), "42 is not an array")
+
+    Json.Value flag = Result.unwrap(Json.parse("true"))
+    assert(Json.is_boolean(flag), "true is a boolean")
+    assert(!Json.is_boolean(num), "42 is not a boolean")
 }
