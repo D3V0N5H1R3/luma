@@ -14,6 +14,7 @@ Read these before making significant changes:
 - [Luma_Coding_Guidelines.md](../documents/Luma_Coding_Guidelines.md) — Luma coding style and conventions
 - [Luma_Error_Handling.md](../documents/Luma_Error_Handling.md) — Error categories, result/optional handling, and stdlib conventions
 - [Luma_Performance_Guide.md](../documents/Luma_Performance_Guide.md) — Performance characteristics and optimisation advice
+- [Luma_Sandbox.md](../documents/Luma_Sandbox.md) — Sandbox-mode security model, capability model, guarantees, and limitations
 - [Luma_Debugger.md](../documents/Luma_Debugger.md) — DAP debugger design and architecture
 - [Luma_Language_Server.md](../documents/Luma_Language_Server.md) — LSP language server design and implementation
 - [Luma_Syntax_Highlighting.md](../documents/Luma_Syntax_Highlighting.md) — Syntax highlighting and editor extension design

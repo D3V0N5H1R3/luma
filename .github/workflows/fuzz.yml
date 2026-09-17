@@ -5,13 +5,17 @@
 # parallel. The fuzz binaries link the AddressSanitizer runtime
 # statically, so the fan-out jobs only need to download and run
 # them — no toolchain reinstall required.
+#
+# Each target's corpus is seeded from the checked-in fuzz/corpus/<name>
+# and persisted between scheduled runs via actions/cache, so coverage
+# accumulates continuously instead of starting cold each run.
 # ─────────────────────────────────────────────────────────────
 
 name: "Fuzz"
 
 on:
   schedule:
-    - cron: "0 3 * * 6" # Weekly Saturday 03:00 UTC.
+    - cron: "0 3 * * *" # Nightly at 03:00 UTC.
   workflow_dispatch:
 
 permissions:
@@ -136,6 +140,12 @@ jobs:
             time: 120
 
     steps:
+      - name: Checkout seed corpus
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: fuzz/corpus
+
       - name: Download fuzzers
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -147,11 +157,47 @@ jobs:
           tar -xzf fuzzers.tar.gz -C fuzzers
           chmod +x fuzzers/*
 
+      # Persist the evolving corpus between scheduled runs so coverage
+      # accumulates instead of starting cold. The run-id key always misses
+      # (forcing a fresh save each run), while restore-keys pulls the most
+      # recent previous corpus for this target.
+      - name: Restore corpus
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: |
+            fuzz-corpus-${{ matrix.target }}-
+
       - name: Fuzz ${{ matrix.target }}
         env:
           TARGET: ${{ matrix.target }}
           MAX_TIME: ${{ matrix.time }}
-        run: ./fuzzers/"$TARGET" -max_total_time="$MAX_TIME"
+        run: |
+          # The writable working corpus is seeded from the checked-in seeds at
+          # fuzz/corpus/<name> (the target name minus its fuzz_ prefix) and
+          # grows with any new coverage-increasing inputs libFuzzer discovers.
+          work="corpus/$TARGET"
+          seed="fuzz/corpus/${TARGET#fuzz_}"
+          mkdir -p "$work"
+          seeds=()
+          [ -d "$seed" ] && seeds+=("$seed")
+          ./fuzzers/"$TARGET" "$work" "${seeds[@]}" \
+            -max_total_time="$MAX_TIME" -print_final_stats=1
+
+      # Minimise the corpus so the cached set stays small while preserving
+      # coverage, keeping future runs fast and the cache within size limits.
+      - name: Minimise corpus
+        if: success()
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          work="corpus/$TARGET"
+          min="corpus-min/$TARGET"
+          mkdir -p "$min"
+          ./fuzzers/"$TARGET" -merge=1 "$min" "$work"
+          rm -rf "$work"
+          mv "$min" "$work"
 
       - name: Upload crash artefacts
         if: failure()
