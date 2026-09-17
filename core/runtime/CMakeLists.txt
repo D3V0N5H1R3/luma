@@ -158,6 +158,7 @@ luma_add_library(luma_core STATIC
     interpreter/value_copying.cpp
     interpreter/value_formatting.cpp
     interpreter/value_hash.cpp
+    interpreter/reference_leak_tracker.cpp
     repl/repl.cpp
     repl/line_editor.cpp
     ${_line_editor}

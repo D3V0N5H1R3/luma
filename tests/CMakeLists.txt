@@ -249,6 +249,7 @@ set(LUMA_RUNTIME_TESTS
     resource_limits_test
     value_hash_test
     value_collections_test
+    soak_test
 )
 
 foreach(test IN LISTS LUMA_RUNTIME_TESTS)
