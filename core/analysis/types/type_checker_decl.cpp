@@ -4,8 +4,8 @@
 // This file implements the two-pass declaration processing:
 //
 //   Pass 1 — register_declarations(): Walk top-level declarations and populate
-//            the symbol registries (records_, choices_, interfaces_, functions_,
-//            type_aliases_, namespace_functions_) so that forward references
+//            the symbol registries (symbols_.records, symbols_.choices, symbols_.interfaces, symbols_.functions,
+//            symbols_.type_aliases, symbols_.namespace_functions) so that forward references
 //            and mutual recursion resolve correctly.
 //
 //   Pass 2 — check_declaration(): Type-check each declaration body.  Functions
@@ -42,9 +42,9 @@ void TypeChecker::register_declaration(const Declaration& decl) {
         using T = std::decay_t<decltype(node)>;
 
         if constexpr (std::is_same_v<T, FunctionDeclaration>) {
-            warn_if_duplicate(functions_, node.name, "function", node.location);
+            warn_if_duplicate(symbols_.functions, node.name, "function", node.location);
 
-            functions_[node.name] = &node;
+            symbols_.functions[node.name] = &node;
             registry_.register_symbol(node.name, SuggestionCategory::Function);
 
             // For generic functions, push dummy type param bindings while
@@ -67,31 +67,31 @@ void TypeChecker::register_declaration(const Declaration& decl) {
                       "remove all parameters from the @test function");
             }
         } else if constexpr (std::is_same_v<T, RecordDeclaration>) {
-            warn_if_duplicate(records_, node.name, "record", node.location);
+            warn_if_duplicate(symbols_.records, node.name, "record", node.location);
 
-            records_[node.name] = &node;
+            symbols_.records[node.name] = &node;
             registry_.register_symbol(node.name, SuggestionCategory::Type);
 
             // Define the record name in scope as a type placeholder.
             current_scope()->define(node.name,
                                     TypeInfo::make_named(TypeInfo::Kind::Record, node.name), {});
         } else if constexpr (std::is_same_v<T, ChoiceDeclaration>) {
-            warn_if_duplicate(choices_, node.name, "choice", node.location);
+            warn_if_duplicate(symbols_.choices, node.name, "choice", node.location);
 
-            choices_[node.name] = &node;
+            symbols_.choices[node.name] = &node;
             registry_.register_symbol(node.name, SuggestionCategory::Type);
 
             current_scope()->define(node.name,
                                     TypeInfo::make_named(TypeInfo::Kind::Choice, node.name), {});
         } else if constexpr (std::is_same_v<T, InterfaceDeclaration>) {
-            warn_if_duplicate(interfaces_, node.name, "interface", node.location);
+            warn_if_duplicate(symbols_.interfaces, node.name, "interface", node.location);
 
-            interfaces_[node.name] = &node;
+            symbols_.interfaces[node.name] = &node;
             registry_.register_symbol(node.name, SuggestionCategory::Type);
         } else if constexpr (std::is_same_v<T, NamespaceDeclaration>) {
             register_namespace(node, "");
         } else if constexpr (std::is_same_v<T, TypeAliasDeclaration>) {
-            type_aliases_[node.name] = node.target_type;
+            symbols_.type_aliases[node.name] = node.target_type;
             registry_.register_symbol(node.name, SuggestionCategory::Type);
 
             if (!node.type_params.empty()) {
@@ -172,8 +172,8 @@ void TypeChecker::register_use_declaration(const UseDeclaration& use_decl) {
         // Wildcard: use Namespace — import all members as bare names.
         const auto prefix = path + ".";
 
-        if (const auto ns_it = namespace_functions_.find(path);
-            ns_it != namespace_functions_.end()) {
+        if (const auto ns_it = symbols_.namespace_functions.find(path);
+            ns_it != symbols_.namespace_functions.end()) {
             for (const auto& [name, func] : ns_it->second) {
                 std::string qualified = path;
                 qualified += '.';
@@ -191,8 +191,8 @@ void TypeChecker::register_use_declaration(const UseDeclaration& use_decl) {
             }
         }
 
-        import_all_namespace_types(records_, TypeInfo::Kind::Record, prefix);
-        import_all_namespace_types(choices_, TypeInfo::Kind::Choice, prefix);
+        import_all_namespace_types(symbols_.records, TypeInfo::Kind::Record, prefix);
+        import_all_namespace_types(symbols_.choices, TypeInfo::Kind::Choice, prefix);
 
         return;
     }
@@ -210,18 +210,19 @@ void TypeChecker::register_use_declaration(const UseDeclaration& use_decl) {
     }
 
     // Try to import as a function, then as a record, then as a choice.
-    if (const auto ns_it = namespace_functions_.find(ns); ns_it != namespace_functions_.end()) {
+    if (const auto ns_it = symbols_.namespace_functions.find(ns);
+        ns_it != symbols_.namespace_functions.end()) {
         if (const auto func_it = ns_it->second.find(member); func_it != ns_it->second.end()) {
             define_function_in_scope(*func_it->second, member);
             return;
         }
     }
 
-    if (import_one_namespace_type(records_, TypeInfo::Kind::Record, path, member)) {
+    if (import_one_namespace_type(symbols_.records, TypeInfo::Kind::Record, path, member)) {
         return;
     }
 
-    if (import_one_namespace_type(choices_, TypeInfo::Kind::Choice, path, member)) {
+    if (import_one_namespace_type(symbols_.choices, TypeInfo::Kind::Choice, path, member)) {
         return;
     }
 
@@ -245,7 +246,7 @@ void TypeChecker::register_namespace(const NamespaceDeclaration& ns, std::string
         if (decl->kind == DeclarationKind::Function) {
             const auto& func = static_cast<const FunctionDeclaration&>(*decl);
 
-            namespace_functions_[ns.name][func.name] = &func;
+            symbols_.namespace_functions[ns.name][func.name] = &func;
 
             if (decl->is_internal_to_namespace) {
                 internal_members_.insert(make_qualified(qualified, func.name));
@@ -257,22 +258,22 @@ void TypeChecker::register_namespace(const NamespaceDeclaration& ns, std::string
         } else if (decl->kind == DeclarationKind::Record) {
             const auto& rec = static_cast<const RecordDeclaration&>(*decl);
             const auto qname = make_qualified(qualified, rec.name);
-            records_[qname] = &rec;
+            symbols_.records[qname] = &rec;
             register_type_member(qname, decl->is_internal_to_namespace);
         } else if (decl->kind == DeclarationKind::Choice) {
             const auto& ch = static_cast<const ChoiceDeclaration&>(*decl);
             const auto qname = make_qualified(qualified, ch.name);
-            choices_[qname] = &ch;
+            symbols_.choices[qname] = &ch;
             register_type_member(qname, decl->is_internal_to_namespace);
         } else if (decl->kind == DeclarationKind::Interface) {
             const auto& iface = static_cast<const InterfaceDeclaration&>(*decl);
             const auto qname = make_qualified(qualified, iface.name);
-            interfaces_[qname] = &iface;
+            symbols_.interfaces[qname] = &iface;
             register_type_member(qname, decl->is_internal_to_namespace);
         } else if (decl->kind == DeclarationKind::TypeAlias) {
             const auto& alias = static_cast<const TypeAliasDeclaration&>(*decl);
             const auto qname = make_qualified(qualified, alias.name);
-            type_aliases_[qname] = alias.target_type;
+            symbols_.type_aliases[qname] = alias.target_type;
             register_type_member(qname, decl->is_internal_to_namespace);
         }
         // Deliberately NOT calling register_declaration(*decl) —

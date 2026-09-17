@@ -138,9 +138,9 @@ TypeInfo TypeChecker::resolve_function_type(const TypeAnnotation& ann) {
 
 std::optional<TypeInfo> TypeChecker::resolve_alias_type(const TypeAnnotation& ann) {
     // Check type aliases first — detect recursive aliases.
-    const auto alias_it = type_aliases_.find(ann.name());
+    const auto alias_it = symbols_.type_aliases.find(ann.name());
 
-    if (alias_it == type_aliases_.end()) {
+    if (alias_it == symbols_.type_aliases.end()) {
         return std::nullopt;
     }
 
@@ -337,15 +337,18 @@ TypeInfo TypeChecker::resolve_named_type(const TypeAnnotation& ann, bool cacheab
     }
 
     // Named types.
-    if (auto result = resolve_user_named(records_, TypeInfo::Kind::Record, ann, cacheable)) {
+    if (auto result =
+            resolve_user_named(symbols_.records, TypeInfo::Kind::Record, ann, cacheable)) {
         return *result;
     }
 
-    if (auto result = resolve_user_named(choices_, TypeInfo::Kind::Choice, ann, cacheable)) {
+    if (auto result =
+            resolve_user_named(symbols_.choices, TypeInfo::Kind::Choice, ann, cacheable)) {
         return *result;
     }
 
-    if (auto result = resolve_user_named(interfaces_, TypeInfo::Kind::Interface, ann, cacheable)) {
+    if (auto result =
+            resolve_user_named(symbols_.interfaces, TypeInfo::Kind::Interface, ann, cacheable)) {
         return *result;
     }
 
@@ -462,12 +465,12 @@ std::optional<bool> TypeChecker::is_choice_alias_assignable(const TypeInfo& targ
         return std::nullopt;
     }
 
-    const auto target_it = choices_.find(target.name);
-    const auto source_it = choices_.find(source.name);
+    const auto target_it = symbols_.choices.find(target.name);
+    const auto source_it = symbols_.choices.find(source.name);
     const ChoiceDeclaration* target_decl =
-        target_it != choices_.end() ? target_it->second : nullptr;
+        target_it != symbols_.choices.end() ? target_it->second : nullptr;
     const ChoiceDeclaration* source_decl =
-        source_it != choices_.end() ? source_it->second : nullptr;
+        source_it != symbols_.choices.end() ? source_it->second : nullptr;
 
     // Same declaration pointer, or if one key is missing (no `use`), fall back
     // to comparing the declaration's name against the other.

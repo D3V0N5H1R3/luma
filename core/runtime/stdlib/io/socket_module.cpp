@@ -448,7 +448,8 @@ constexpr std::int64_t k_max_port = 65535;
 
 // ─── Module registration ─────────────────────────────────────────────────────
 
-void register_socket_ns(const EnvPtr& env) {
+// Connection establishment: TCP connect and its timeout / typed-error variants.
+static void register_socket_client(const EnvPtr& env) {
     ModuleBuilder{"Socket", env} // Socket.connect(string host, integer port) -> result<socket>
         // Establish a TCP connection to a remote host.
         // A 30-second connect timeout is applied automatically.
@@ -554,7 +555,130 @@ void register_socket_ns(const EnvPtr& env) {
 
             return make_success_value(Value{std::move(sv)});
         })
-        // Socket.listen(string host, integer port) -> result<socket>
+        // Socket.connect_timeout(string host, integer port, integer timeout_ms)
+        //     -> result<socket>
+        // Establish a TCP connection with an explicit connect timeout (in
+        // milliseconds) via a non-blocking connect and select() on the fd, failing
+        // if the deadline elapses.  Like Socket.connect but with a caller-chosen
+        // timeout instead of the fixed 30-second default.
+        .func("connect_timeout", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Socket.connect_timeout", loc);
+
+            ensure_winsock();
+
+            const auto& host = args[0].as_string();
+            const auto port_val = expect_integer(args[1], "Socket.connect_timeout", loc);
+
+            if (auto err = validate_port(port_val)) {
+                return *err;
+            }
+
+            const auto timeout_val = expect_integer(args[2], "Socket.connect_timeout", loc);
+
+            if (timeout_val < 0 || timeout_val > INT_MAX) {
+                return make_failure_value("timeout value out of range");
+            }
+
+            const auto port = static_cast<int>(port_val);
+
+            auto info = resolve_address(host, port, SOCK_STREAM, false);
+
+            if (!info) {
+                return resolve_host_failure(host);
+            }
+
+            if (auto err = check_socket_limit("Socket.connect_timeout")) {
+                return *err;
+            }
+
+            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+
+            if (sock == invalid_socket_handle) {
+                return socket_failure("create socket");
+            }
+
+            SocketGuard guard{sock};
+
+            if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
+                                          static_cast<int>(timeout_val))) {
+                return socket_failure("connect");
+            }
+
+            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
+
+            guard.release();
+
+            return make_success_value(Value{std::move(sv)});
+        })
+        // Socket.connect_timeout_typed(string host, integer port, integer timeout_ms)
+        //     -> result<socket, Socket.Error>
+        // Opt-in typed-error variant of Socket.connect_timeout: an elapsed deadline
+        // surfaces as Socket.Error.Timeout and other transport failures as their
+        // matching variant, so a program can retry only on Timeout.  String-error
+        // Socket.connect_timeout is left untouched.
+        .func("connect_timeout_typed", 3)
+        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
+            (void)expect_string(args[0], "Socket.connect_timeout_typed", loc);
+
+            ensure_winsock();
+
+            const auto& host = args[0].as_string();
+            const auto port_val = expect_integer(args[1], "Socket.connect_timeout_typed", loc);
+
+            if (port_val < 0 || port_val > k_max_port) {
+                return socket_error_failure(platform_socket::ErrorCategory::Other);
+            }
+
+            const auto timeout_val = expect_integer(args[2], "Socket.connect_timeout_typed", loc);
+
+            if (timeout_val < 0 || timeout_val > INT_MAX) {
+                return socket_error_failure(platform_socket::ErrorCategory::Other);
+            }
+
+            const auto port = static_cast<int>(port_val);
+
+            auto info = resolve_address(host, port, SOCK_STREAM, false);
+
+            if (!info) {
+                return socket_error_failure(platform_socket::ErrorCategory::HostUnreachable);
+            }
+
+            if (SocketValue::open_count() >= ResourceLimits::max_open_sockets) {
+                return socket_error_failure(platform_socket::ErrorCategory::Other);
+            }
+
+            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+
+            if (sock == invalid_socket_handle) {
+                return socket_error_failure_from_last();
+            }
+
+            SocketGuard guard{sock};
+
+            bool timed_out = false;
+            int error_code = 0;
+
+            if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
+                                          static_cast<int>(timeout_val), &timed_out, &error_code)) {
+                if (timed_out) {
+                    return socket_error_failure(platform_socket::ErrorCategory::TimedOut);
+                }
+
+                return socket_error_failure(platform_socket::classify_error(error_code));
+            }
+
+            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
+
+            guard.release();
+
+            return make_success_value(Value{std::move(sv)});
+        });
+}
+
+// Server side: bind/listen and accept.
+static void register_socket_server(const EnvPtr& env) {
+    ModuleBuilder{"Socket", env} // Socket.listen(string host, integer port) -> result<socket>
         // Create a TCP server socket bound to the given address and port.
         .func("listen", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -706,8 +830,12 @@ void register_socket_ns(const EnvPtr& env) {
             guard.release();
 
             return make_success_value(Value{std::move(csv)});
-        })
-        // Socket.send(socket s, string data) -> result<integer>
+        });
+}
+
+// Stream I/O: single-shot and looping send/receive of text and raw bytes.
+static void register_socket_io(const EnvPtr& env) {
+    ModuleBuilder{"Socket", env} // Socket.send(socket s, string data) -> result<integer>
         // Send data through the socket.  Returns the number of bytes sent.
         .func("send", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -950,125 +1078,6 @@ void register_socket_ns(const EnvPtr& env) {
 
             return make_success_value(Value{std::move(result)});
         })
-        // Socket.connect_timeout(string host, integer port, integer timeout_ms)
-        //     -> result<socket>
-        // Establish a TCP connection with an explicit connect timeout (in
-        // milliseconds) via a non-blocking connect and select() on the fd, failing
-        // if the deadline elapses.  Like Socket.connect but with a caller-chosen
-        // timeout instead of the fixed 30-second default.
-        .func("connect_timeout", 3)
-        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Socket.connect_timeout", loc);
-
-            ensure_winsock();
-
-            const auto& host = args[0].as_string();
-            const auto port_val = expect_integer(args[1], "Socket.connect_timeout", loc);
-
-            if (auto err = validate_port(port_val)) {
-                return *err;
-            }
-
-            const auto timeout_val = expect_integer(args[2], "Socket.connect_timeout", loc);
-
-            if (timeout_val < 0 || timeout_val > INT_MAX) {
-                return make_failure_value("timeout value out of range");
-            }
-
-            const auto port = static_cast<int>(port_val);
-
-            auto info = resolve_address(host, port, SOCK_STREAM, false);
-
-            if (!info) {
-                return resolve_host_failure(host);
-            }
-
-            if (auto err = check_socket_limit("Socket.connect_timeout")) {
-                return *err;
-            }
-
-            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
-
-            if (sock == invalid_socket_handle) {
-                return socket_failure("create socket");
-            }
-
-            SocketGuard guard{sock};
-
-            if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
-                                          static_cast<int>(timeout_val))) {
-                return socket_failure("connect");
-            }
-
-            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
-
-            guard.release();
-
-            return make_success_value(Value{std::move(sv)});
-        })
-        // Socket.connect_timeout_typed(string host, integer port, integer timeout_ms)
-        //     -> result<socket, Socket.Error>
-        // Opt-in typed-error variant of Socket.connect_timeout: an elapsed deadline
-        // surfaces as Socket.Error.Timeout and other transport failures as their
-        // matching variant, so a program can retry only on Timeout.  String-error
-        // Socket.connect_timeout is left untouched.
-        .func("connect_timeout_typed", 3)
-        .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
-            (void)expect_string(args[0], "Socket.connect_timeout_typed", loc);
-
-            ensure_winsock();
-
-            const auto& host = args[0].as_string();
-            const auto port_val = expect_integer(args[1], "Socket.connect_timeout_typed", loc);
-
-            if (port_val < 0 || port_val > k_max_port) {
-                return socket_error_failure(platform_socket::ErrorCategory::Other);
-            }
-
-            const auto timeout_val = expect_integer(args[2], "Socket.connect_timeout_typed", loc);
-
-            if (timeout_val < 0 || timeout_val > INT_MAX) {
-                return socket_error_failure(platform_socket::ErrorCategory::Other);
-            }
-
-            const auto port = static_cast<int>(port_val);
-
-            auto info = resolve_address(host, port, SOCK_STREAM, false);
-
-            if (!info) {
-                return socket_error_failure(platform_socket::ErrorCategory::HostUnreachable);
-            }
-
-            if (SocketValue::open_count() >= ResourceLimits::max_open_sockets) {
-                return socket_error_failure(platform_socket::ErrorCategory::Other);
-            }
-
-            const SocketHandle sock = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
-
-            if (sock == invalid_socket_handle) {
-                return socket_error_failure_from_last();
-            }
-
-            SocketGuard guard{sock};
-
-            bool timed_out = false;
-            int error_code = 0;
-
-            if (!tcp_connect_with_timeout(sock, info->ai_addr, static_cast<int>(info->ai_addrlen),
-                                          static_cast<int>(timeout_val), &timed_out, &error_code)) {
-                if (timed_out) {
-                    return socket_error_failure(platform_socket::ErrorCategory::TimedOut);
-                }
-
-                return socket_error_failure(platform_socket::classify_error(error_code));
-            }
-
-            auto sv = std::make_shared<SocketValue>(sock, SocketRole::Client);
-
-            guard.release();
-
-            return make_success_value(Value{std::move(sv)});
-        })
         // Socket.send_bytes(socket s, array<integer> bytes) -> result<integer>
         // Send raw bytes (each element an integer 0-255) over the socket, looping
         // until the whole buffer is written.  Returns the number of bytes sent.
@@ -1147,8 +1156,12 @@ void register_socket_ns(const EnvPtr& env) {
             }
 
             return make_success_value(Value{std::move(arr)});
-        })
-        // Socket.close(socket s) -> null
+        });
+}
+
+// Lifecycle and introspection: close, timeouts, connection state, addresses.
+static void register_socket_introspection(const EnvPtr& env) {
+    ModuleBuilder{"Socket", env} // Socket.close(socket s) -> null
         // Close the socket.
         .func("close", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -1280,8 +1293,12 @@ void register_socket_ns(const EnvPtr& env) {
             }
 
             return make_address_record(addr);
-        })
-        // Socket.udp_create() -> result<socket>
+        });
+}
+
+// Datagram sockets and IP-literal utilities.
+static void register_socket_udp(const EnvPtr& env) {
+    ModuleBuilder{"Socket", env} // Socket.udp_create() -> result<socket>
         // Create an unbound UDP socket.
         .func("udp_create", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
@@ -1419,6 +1436,14 @@ void register_socket_ns(const EnvPtr& env) {
 
             return Value{cv->fields[0].as_string()};
         });
+}
+
+void register_socket_ns(const EnvPtr& env) {
+    register_socket_client(env);
+    register_socket_server(env);
+    register_socket_io(env);
+    register_socket_introspection(env);
+    register_socket_udp(env);
 }
 
 } // namespace luma

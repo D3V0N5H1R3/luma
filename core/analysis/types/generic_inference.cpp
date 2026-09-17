@@ -135,10 +135,10 @@ bool TypeChecker::check_structural_satisfaction(
 bool TypeChecker::satisfies_interface(std::string_view record_name, std::string_view iface_name,
                                       const std::vector<TypeInfo>& source_type_args,
                                       const std::vector<TypeInfo>& target_type_args) {
-    const auto rec_it = records_.find(record_name);
-    const auto iface_it = interfaces_.find(iface_name);
+    const auto rec_it = symbols_.records.find(record_name);
+    const auto iface_it = symbols_.interfaces.find(iface_name);
 
-    if (rec_it == records_.end() || iface_it == interfaces_.end()) {
+    if (rec_it == symbols_.records.end() || iface_it == symbols_.interfaces.end()) {
         return false;
     }
 
@@ -168,10 +168,10 @@ bool TypeChecker::satisfies_interface_interface(std::string_view source_iface_na
                                                 std::string_view target_iface_name,
                                                 const std::vector<TypeInfo>& source_type_args,
                                                 const std::vector<TypeInfo>& target_type_args) {
-    const auto src_it = interfaces_.find(source_iface_name);
-    const auto tgt_it = interfaces_.find(target_iface_name);
+    const auto src_it = symbols_.interfaces.find(source_iface_name);
+    const auto tgt_it = symbols_.interfaces.find(target_iface_name);
 
-    if (src_it == interfaces_.end() || tgt_it == interfaces_.end()) {
+    if (src_it == symbols_.interfaces.end() || tgt_it == symbols_.interfaces.end()) {
         return false;
     }
 

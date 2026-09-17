@@ -17,7 +17,7 @@
 //
 // Include audit (R-A19):
 //   expression.hpp is included directly because TypeAnnotation (stored by
-//   value in type_aliases_) and MatchArm (used by value in method parameters)
+//   value in symbols_.type_aliases) and MatchArm (used by value in method parameters)
 //   are defined there.  Statement is only forward-declared in expression.hpp
 //   (via StatementPtr), so statement.hpp is not needed here.
 //
@@ -71,6 +71,33 @@ struct TypeAliasDeclaration;
 struct UseDeclaration;
 struct TypeParam;
 struct RecordField;
+
+// ─────────────────────── Symbol Tables ───────────────────────
+// Program-level declaration registries populated by register_declarations().
+// Grouped into a single value object so TypeChecker's own state surface stays
+// focused: these six maps form one cohesive "what names are declared" concept,
+// read together by resolve_type(), is_assignable(), and the sub-checkers.
+//
+// LIFETIME INVARIANT: the pointer entries are non-owning views of AST nodes
+// owned by the Program; valid only during a single type-check pass. The
+// Program must outlive the TypeChecker (guaranteed by Pipeline::run()).
+struct SymbolTables {
+    StringMap<const RecordDeclaration*> records;
+    StringMap<const ChoiceDeclaration*> choices;
+    StringMap<const InterfaceDeclaration*> interfaces;
+    StringMap<TypeAnnotation> type_aliases;
+    StringMap<const FunctionDeclaration*> functions;
+    StringMap<StringMap<const FunctionDeclaration*>> namespace_functions;
+
+    void clear() {
+        records.clear();
+        choices.clear();
+        interfaces.clear();
+        type_aliases.clear();
+        functions.clear();
+        namespace_functions.clear();
+    }
+};
 
 // ─────────────────────── Type Checker ───────────────────────
 //
@@ -139,9 +166,9 @@ struct RecordField;
 //                                push_refinement(), pop_*(),
 //                                find_refinement(),
 //                                try_extract_is_refinement()
-//   Symbol registries            records_, choices_,               type_checker.hpp (data)
-//                                interfaces_, functions_,
-//                                type_aliases_, namespace_functions_
+//   Symbol registries            symbols_.records, symbols_.choices,               type_checker.hpp (data)
+//                                symbols_.interfaces, symbols_.functions,
+//                                symbols_.type_aliases, symbols_.namespace_functions
 //
 // ── Why Type Resolution Is Not a Separate Class ──────────────
 //
@@ -236,8 +263,8 @@ private:
     // Registration Pass                    (impl: type_checker_decl.cpp)
     // ====================================================================
     // First pass: walk top-level declarations and populate the symbol
-    // registries (records_, choices_, interfaces_, functions_, type_aliases_,
-    // namespace_functions_) so that forward references resolve correctly.
+    // registries (symbols_.records, symbols_.choices, symbols_.interfaces, symbols_.functions, symbols_.type_aliases,
+    // symbols_.namespace_functions) so that forward references resolve correctly.
 
     void register_declarations(const std::vector<std::unique_ptr<Declaration>>& decls);
     void register_declaration(const Declaration& decl);
@@ -433,12 +460,7 @@ private:
     // The Program must outlive the TypeChecker (guaranteed by Pipeline::run()).
     // These registries are read by resolve_type(), is_assignable(), and
     // the sub-checkers (ExpressionTypeChecker, StatementTypeChecker).
-    StringMap<const RecordDeclaration*> records_;
-    StringMap<const ChoiceDeclaration*> choices_;
-    StringMap<const InterfaceDeclaration*> interfaces_;
-    StringMap<TypeAnnotation> type_aliases_;
-    StringMap<const FunctionDeclaration*> functions_;
-    StringMap<StringMap<const FunctionDeclaration*>> namespace_functions_;
+    SymbolTables symbols_;
 
     // NOTE: see stdlib_type_handler.hpp/cpp for stdlib return types, arities,
     // and parameter type checking.
@@ -522,44 +544,44 @@ private:
     }
 
     [[nodiscard]] const RecordDeclaration* find_record(std::string_view name) const override {
-        const auto it = records_.find(name);
-        return it != records_.end() ? it->second : nullptr;
+        const auto it = symbols_.records.find(name);
+        return it != symbols_.records.end() ? it->second : nullptr;
     }
 
     [[nodiscard]] const ChoiceDeclaration* find_choice(std::string_view name) const override {
-        const auto it = choices_.find(name);
-        return it != choices_.end() ? it->second : nullptr;
+        const auto it = symbols_.choices.find(name);
+        return it != symbols_.choices.end() ? it->second : nullptr;
     }
 
     [[nodiscard]] const InterfaceDeclaration* find_interface(std::string_view name) const override {
-        const auto it = interfaces_.find(name);
-        return it != interfaces_.end() ? it->second : nullptr;
+        const auto it = symbols_.interfaces.find(name);
+        return it != symbols_.interfaces.end() ? it->second : nullptr;
     }
 
     [[nodiscard]] const FunctionDeclaration* find_function(std::string_view name) const override {
-        const auto it = functions_.find(name);
-        return it != functions_.end() ? it->second : nullptr;
+        const auto it = symbols_.functions.find(name);
+        return it != symbols_.functions.end() ? it->second : nullptr;
     }
 
     [[nodiscard]] const StringMap<const RecordDeclaration*>& records() const override {
-        return records_;
+        return symbols_.records;
     }
 
     [[nodiscard]] const StringMap<const ChoiceDeclaration*>& choices() const override {
-        return choices_;
+        return symbols_.choices;
     }
 
     [[nodiscard]] const StringMap<const InterfaceDeclaration*>& interfaces() const override {
-        return interfaces_;
+        return symbols_.interfaces;
     }
 
     [[nodiscard]] const StringMap<const FunctionDeclaration*>& functions() const override {
-        return functions_;
+        return symbols_.functions;
     }
 
     [[nodiscard]] const StringMap<StringMap<const FunctionDeclaration*>>&
     namespace_functions() const override {
-        return namespace_functions_;
+        return symbols_.namespace_functions;
     }
 
     [[nodiscard]] bool is_internal_member(std::string_view name) const override {

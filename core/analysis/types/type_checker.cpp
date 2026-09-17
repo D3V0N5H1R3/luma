@@ -245,12 +245,7 @@ bool TypeChecker::is_match_exhaustive(const MatchStatement& match_stmt) const {
 void TypeChecker::reset_state() {
     clear_diagnostics();
     warnings_.clear();
-    records_.clear();
-    choices_.clear();
-    interfaces_.clear();
-    type_aliases_.clear();
-    functions_.clear();
-    namespace_functions_.clear();
+    symbols_.clear();
     resolving_aliases_.clear();
     internal_members_.clear();
     called_functions_.clear();
@@ -273,12 +268,12 @@ std::vector<Diagnostic> TypeChecker::check(const Program& program, bool require_
     // Register stdlib-provided record and choice types so they are
     // visible to user programs (e.g. Http.Response, Log.Level).
     for (const auto& [qualified, rec] : stdlib_record_types()) {
-        records_[qualified] = rec;
+        symbols_.records[qualified] = rec;
         registry_.register_symbol(qualified, SuggestionCategory::Type);
     }
 
     for (const auto& [qualified, ch] : stdlib_choice_types()) {
-        choices_[qualified] = ch;
+        symbols_.choices[qualified] = ch;
         registry_.register_symbol(qualified, SuggestionCategory::Type);
     }
 
@@ -326,7 +321,7 @@ std::vector<Diagnostic> TypeChecker::check(const Program& program, bool require_
     // functions whose name starts with '_'.
     // Only emit when require_main is set (real programs, not test/library files).
     if (require_main) {
-        for (const auto& [name, func] : functions_) {
+        for (const auto& [name, func] : symbols_.functions) {
             if (func->is_main || func->is_test) {
                 continue;
             }

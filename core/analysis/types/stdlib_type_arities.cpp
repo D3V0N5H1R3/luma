@@ -919,8 +919,8 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // Variant names must match the constructors in
         // core/runtime/stdlib/text/json_value_module.cpp exactly.  Recursive
         // payload type annotations MUST use the qualified name "Json.Value" so the
-        // type resolver finds this choice in choices_ (a bare "Value" would not
-        // resolve).
+        // type resolver finds this choice in symbols_.choices (a bare "Value" would
+        // not resolve).
         {
             auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Value");
 
@@ -958,7 +958,7 @@ void add_record(StdlibTypeStorage& st, const std::string& qualified_name, Fields
         // content string.  Variant names/shapes must match xml_to_node() in
         // core/runtime/stdlib/text/xml_module.cpp exactly.  The recursive children
         // annotation MUST use the qualified name "Xml.Node" so the resolver finds
-        // this choice in choices_ (a bare "Node" would not resolve).
+        // this choice in symbols_.choices (a bare "Node" would not resolve).
         {
             auto ch = std::make_unique<ChoiceDeclaration>(SourceLocation{}, "Node");
 

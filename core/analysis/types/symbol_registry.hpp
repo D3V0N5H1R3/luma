@@ -13,8 +13,9 @@
 //   The registry is reset at the start of each check() call and populated
 //   during the registration pass.  It provides a single all_symbol_names()
 //   view over all registered names, replacing the previous pattern of
-//   iterating records_, choices_, interfaces_, type_aliases_, and functions_
-//   separately in the suggestion helpers.
+//   iterating symbols_.records, symbols_.choices, symbols_.interfaces,
+//   symbols_.type_aliases, and symbols_.functions separately in the suggestion
+//   helpers.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #pragma once
