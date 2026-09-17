@@ -74,6 +74,7 @@ This directory contains runnable Luma programs grouped by purpose so examples ar
 | `text_adventure`       | Text adventure with a choice-type state machine    | 🟡 Intermediate   |
 | `xml_processing`       | Xml module — parsing and generating XML            | 🟡 Intermediate   |
 | `chat_server`          | Socket-based multi-client chat server              | 🔴 Advanced       |
+| `echo_server`          | TCP echo server that upper-cases each line         | 🔴 Advanced       |
 | `data_pipeline`        | Multi-stage data processing pipeline               | 🔴 Advanced       |
 | `matrix_calculator`    | Matrix calculator using LinearAlgebra module       | 🔴 Advanced       |
 | `mouse_draw`           | Terminal mouse drawing application                 | 🔴 Advanced       |
