@@ -337,15 +337,18 @@ TypeInfo TypeChecker::resolve_named_type(const TypeAnnotation& ann, bool cacheab
     }
 
     // Named types.
-    if (auto result = resolve_user_named(symbols_.records, TypeInfo::Kind::Record, ann, cacheable)) {
+    if (auto result =
+            resolve_user_named(symbols_.records, TypeInfo::Kind::Record, ann, cacheable)) {
         return *result;
     }
 
-    if (auto result = resolve_user_named(symbols_.choices, TypeInfo::Kind::Choice, ann, cacheable)) {
+    if (auto result =
+            resolve_user_named(symbols_.choices, TypeInfo::Kind::Choice, ann, cacheable)) {
         return *result;
     }
 
-    if (auto result = resolve_user_named(symbols_.interfaces, TypeInfo::Kind::Interface, ann, cacheable)) {
+    if (auto result =
+            resolve_user_named(symbols_.interfaces, TypeInfo::Kind::Interface, ann, cacheable)) {
         return *result;
     }
 

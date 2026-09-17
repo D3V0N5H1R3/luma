@@ -210,7 +210,8 @@ void TypeChecker::register_use_declaration(const UseDeclaration& use_decl) {
     }
 
     // Try to import as a function, then as a record, then as a choice.
-    if (const auto ns_it = symbols_.namespace_functions.find(ns); ns_it != symbols_.namespace_functions.end()) {
+    if (const auto ns_it = symbols_.namespace_functions.find(ns);
+        ns_it != symbols_.namespace_functions.end()) {
         if (const auto func_it = ns_it->second.find(member); func_it != ns_it->second.end()) {
             define_function_in_scope(*func_it->second, member);
             return;

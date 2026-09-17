@@ -450,8 +450,7 @@ constexpr std::int64_t k_max_port = 65535;
 
 // Connection establishment: TCP connect and its timeout / typed-error variants.
 static void register_socket_client(const EnvPtr& env) {
-    ModuleBuilder{"Socket", env}
-        // Socket.connect(string host, integer port) -> result<socket>
+    ModuleBuilder{"Socket", env} // Socket.connect(string host, integer port) -> result<socket>
         // Establish a TCP connection to a remote host.
         // A 30-second connect timeout is applied automatically.
         .func("connect", 2)
@@ -679,8 +678,7 @@ static void register_socket_client(const EnvPtr& env) {
 
 // Server side: bind/listen and accept.
 static void register_socket_server(const EnvPtr& env) {
-    ModuleBuilder{"Socket", env}
-        // Socket.listen(string host, integer port) -> result<socket>
+    ModuleBuilder{"Socket", env} // Socket.listen(string host, integer port) -> result<socket>
         // Create a TCP server socket bound to the given address and port.
         .func("listen", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -837,8 +835,7 @@ static void register_socket_server(const EnvPtr& env) {
 
 // Stream I/O: single-shot and looping send/receive of text and raw bytes.
 static void register_socket_io(const EnvPtr& env) {
-    ModuleBuilder{"Socket", env}
-        // Socket.send(socket s, string data) -> result<integer>
+    ModuleBuilder{"Socket", env} // Socket.send(socket s, string data) -> result<integer>
         // Send data through the socket.  Returns the number of bytes sent.
         .func("send", 2)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -1164,8 +1161,7 @@ static void register_socket_io(const EnvPtr& env) {
 
 // Lifecycle and introspection: close, timeouts, connection state, addresses.
 static void register_socket_introspection(const EnvPtr& env) {
-    ModuleBuilder{"Socket", env}
-        // Socket.close(socket s) -> null
+    ModuleBuilder{"Socket", env} // Socket.close(socket s) -> null
         // Close the socket.
         .func("close", 1)
         .raw_body([](std::span<const Value> args, SourceLocation loc) -> Value {
@@ -1302,8 +1298,7 @@ static void register_socket_introspection(const EnvPtr& env) {
 
 // Datagram sockets and IP-literal utilities.
 static void register_socket_udp(const EnvPtr& env) {
-    ModuleBuilder{"Socket", env}
-        // Socket.udp_create() -> result<socket>
+    ModuleBuilder{"Socket", env} // Socket.udp_create() -> result<socket>
         // Create an unbound UDP socket.
         .func("udp_create", 0)
         .raw_body([](std::span<const Value> /*args*/, SourceLocation /*loc*/) -> Value {
