@@ -102,12 +102,13 @@ function void test_compression_gzip_with_round_trip() {
     assert(Result.unwrap(Compression.gunzip(gzipped)) == original)
 }
 
-
 @test
 function void test_compression_gzip_file_with() {
-    assert(Result.is_success(FileSystem.write_file("_test_gzip_src.txt", "hello hello hello hello")))
+    assert(Result.is_success(
+        FileSystem.write_file("_test_gzip_src.txt", "hello hello hello hello")))
 
-    assert(Result.is_success(Compression.gzip_file_with("_test_gzip_src.txt", "_test_gzip_out.gz", 6)))
+    assert(Result.is_success(
+        Compression.gzip_file_with("_test_gzip_src.txt", "_test_gzip_out.gz", 6)))
     assert(Result.unwrap(FileSystem.exists("_test_gzip_out.gz")))
 
     mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_gzip_src.txt"), false)
@@ -273,7 +274,8 @@ function void test_compression_gzip_with_invalid_level() {
 function void test_compression_compress_deflate_matches_direct() {
     string original = "hello world"
 
-    assert(Compression.compress(original, Compression.Format.Deflate) == Compression.deflate(original))
+    assert(Compression.compress(original, Compression.Format.Deflate)
+        == Compression.deflate(original))
 }
 
 @test
@@ -287,14 +289,16 @@ function void test_compression_compress_gzip_matches_direct() {
 function void test_compression_compress_rle_matches_direct() {
     string original = "aaabbbcc"
 
-    assert(Compression.compress(original, Compression.Format.Rle) == Compression.encode_rle(original))
+    assert(Compression.compress(original, Compression.Format.Rle)
+        == Compression.encode_rle(original))
 }
 
 @test
 function void test_compression_decompress_deflate_roundtrip() {
     string original = "hello world"
     string compressed = Compression.compress(original, Compression.Format.Deflate)
-    string roundtripped = Result.unwrap(Compression.decompress(compressed, Compression.Format.Deflate))
+    string roundtripped =
+        Result.unwrap(Compression.decompress(compressed, Compression.Format.Deflate))
 
     assert(roundtripped == original)
 }
@@ -319,8 +323,10 @@ function void test_compression_decompress_rle_roundtrip() {
 
 @test
 function void test_compression_decompress_malformed_fails_per_format() {
-    assert(!Result.is_success(Compression.decompress("not valid deflate", Compression.Format.Deflate)))
-    assert(!Result.is_success(Compression.decompress("not a valid gzip stream!!", Compression.Format.Gzip)))
+    assert(!Result.is_success(
+        Compression.decompress("not valid deflate", Compression.Format.Deflate)))
+    assert(!Result.is_success(
+        Compression.decompress("not a valid gzip stream!!", Compression.Format.Gzip)))
     assert(!Result.is_success(Compression.decompress("0a", Compression.Format.Rle)))
 }
 

@@ -55,11 +55,12 @@ Evaluate each item against the linked `ux-design.instructions.md` section.
 - **Consistency & standards (§16).** The same key, command, label, and status vocabulary mean the same thing throughout; common CLI/TUI conventions are honoured.
 - **Responsive & adaptive design (§17).** Output adapts to terminal width and non-interactive environments, and it remains usable with redirected input/output where applicable.
 - **Accessibility & inclusive design (§18).** Full keyboard operation, plain language, readable contrast, non-colour cues, and screen-reader-friendly text are preserved.
-- **Simplicity & progressive disclosure (§19).** Only what is needed is shown by default; help and advanced options are easy to discover without overwhelming beginners. Watch for the anti-patterns in §20.
+- **Simplicity & progressive disclosure (§19).** Only what is needed is shown by default; help and advanced options are easy to discover without overwhelming beginners. Watch for the anti-patterns in §21.
+- **Terminal & Console interfaces (§20).** The text UI honours the terminal-specific rubric: informative prompts, discoverable commands and shortcuts, stable redraws with persistent regions, non-colour cues, input tolerance and recovery, width/stream adaptation, and headless testability.
 
 ### Terminal/Console Lens
 
-When the target is a text UI, check these concrete expressions of the principles above:
+When the target is a text UI, check these concrete expressions of §20 (Terminal and Console Interfaces) and the principles above:
 
 - **Prompt clarity.** Prompts state expected input, default choices, and how to cancel or get help.
 - **Command discoverability.** Available commands and shortcuts are shown where needed, with consistent names and examples.

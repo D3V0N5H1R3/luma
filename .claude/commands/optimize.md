@@ -3,6 +3,8 @@ description: "Optimize Luma code for speed or memory — interpreter, language s
 argument-hint: "Optimization goal, e.g. 'cut the per-opcode Value copy in the VM arithmetic handlers'"
 ---
 
+# Optimize
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

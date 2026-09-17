@@ -22,6 +22,14 @@
 using luma::SourceLocation;
 using luma::Token;
 using luma::TokenType;
+using luma::json::JsonValue;
+using luma::lsp::AnalysisResult;
+using luma::lsp::find_token_at;
+using luma::lsp::LspConfig;
+using luma::lsp::Position;
+using luma::lsp::PositionEncoder;
+using luma::lsp::Range;
+using luma::lsp::token_range;
 
 namespace {
 

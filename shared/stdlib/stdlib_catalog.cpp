@@ -244,7 +244,7 @@ struct DerivedSets { // NOLINT(bugprone-exception-escape)
             }
         }
 
-        if (!spec.is_constant && spec.return_type.kind == ReturnTypeDesc::Result) {
+        if (!spec.is_constant && spec.return_type.kind == ReturnTypeDesc::Kind::Result) {
             sets.result_returning.insert(name);
         }
     }

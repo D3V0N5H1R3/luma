@@ -163,7 +163,8 @@ function void test_sandbox_blocks_filesystem_write() {
         caught = err
     }
 
-    assert(String.contains(caught, "undefined"), "FileSystem.write_file should be blocked in sandbox")
+    assert(String.contains(caught, "undefined"),
+        "FileSystem.write_file should be blocked in sandbox")
 }
 
 # ─── Process must be blocked ───
@@ -234,7 +235,8 @@ function void test_sandbox_blocks_filesystem_read_file() {
         caught = err
     }
 
-    assert(String.contains(caught, "undefined"), "FileSystem.read_file should be blocked in sandbox")
+    assert(String.contains(caught, "undefined"),
+        "FileSystem.read_file should be blocked in sandbox")
 }
 
 # ─── Http must be blocked ───

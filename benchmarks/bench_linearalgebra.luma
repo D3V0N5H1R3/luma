@@ -44,7 +44,8 @@ function BenchResult run_linearalgebra_benchmarks(BenchResult state) {
     })
 
     st = time_it(st, "LinAlg matrix multiply (5x5)", 500, () -> {
-        array<array<number>> _prod = LinearAlgebra.multiply(mat5_identity, mat5_diagonal) |> Result.unwrap()
+        array<array<number>> _prod = LinearAlgebra.multiply(mat5_identity, mat5_diagonal)
+            |> Result.unwrap()
     })
 
     st = time_it(st, "LinAlg matrix-vector mult (5x5)", 2000, () -> {

@@ -3,6 +3,8 @@ description: "Analyse a Luma editor extension (VS Code or Zed) read-only and pro
 argument-hint: "Optional scope, e.g. 'the VS Code extension' or 'the shared grammar'"
 ---
 
+# Bug Search — Editor Extension
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

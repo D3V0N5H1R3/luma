@@ -385,7 +385,7 @@
         "format": "prettier --write \"src/**/*.ts\" \"src/**/*.js\" \"*.mjs\"",
         "format:check": "prettier --check \"src/**/*.ts\" \"src/**/*.js\" \"*.mjs\"",
         "test": "tsc -p tsconfig.json && node ./out/test/run_tests.js",
-        "test:unit": "tsc -p tsconfig.json && node --require ./src/test/vscode_stub.js ./out/test/run_unit_tests.js",
+        "test:unit": "tsc -p tsconfig.json && node --require ./src/test/vscode-stub.js ./out/test/run_unit_tests.js",
         "package": "npm run compile && vsce package"
     },
     "dependencies": {

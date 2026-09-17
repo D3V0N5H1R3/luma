@@ -211,14 +211,16 @@ function void test_calculus_gradient_quadratic() {
 
 @test
 function void test_calculus_partial_derivative() {
-    number slope = Calculus.partial_derivative([3.0, 4.0], 0, (array<number> v) -> v[0] * v[0] + v[1] * v[1])
+    number slope =
+        Calculus.partial_derivative([3.0, 4.0], 0, (array<number> v) -> v[0] * v[0] + v[1] * v[1])
 
     assert(Math.approximately_equal(slope, 6.0, 0.001))
 }
 
 @test
 function void test_calculus_divergence() {
-    number d = Calculus.divergence([1.0, 1.0], [(array<number> v) -> v[0], (array<number> v) -> v[1]])
+    number d =
+        Calculus.divergence([1.0, 1.0], [(array<number> v) -> v[0], (array<number> v) -> v[1]])
 
     assert(Math.approximately_equal(d, 2.0, 0.001))
 }
@@ -408,9 +410,11 @@ function void test_calculus_arc_length() {
 @test
 function void test_calculus_nth_derivative() {
     # 0th derivative is fn itself
-    assert(Math.approximately_equal(Calculus.nth_derivative(2.0, 0, (number x) -> x * x), 4.0, 0.001))
+    assert(Math.approximately_equal(
+        Calculus.nth_derivative(2.0, 0, (number x) -> x * x), 4.0, 0.001))
     # 1st derivative of x^2 at 2 is 4
-    assert(Math.approximately_equal(Calculus.nth_derivative(2.0, 1, (number x) -> x * x), 4.0, 0.01))
+    assert(Math.approximately_equal(
+        Calculus.nth_derivative(2.0, 1, (number x) -> x * x), 4.0, 0.01))
     # 1st derivative of sine at 0 is cos(0) = 1
     assert(Math.approximately_equal(Calculus.nth_derivative(0.0, 1, Math.sine), 1.0, 0.01))
 }

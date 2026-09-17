@@ -6,6 +6,10 @@
 #include "lsp_server.hpp"
 #include "lsp_test_helpers.hpp"
 
+using luma::json::JsonValue;
+using luma::lsp::LspServer;
+using luma::lsp::LspServerConfig;
+
 namespace {
 
 // Capabilities the server must always advertise in the initialize response.

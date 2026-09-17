@@ -2,6 +2,8 @@
 
 #include "lsp_test_helpers.hpp"
 
+using luma::json::JsonValue;
+
 namespace {
 
 // ─── Include phase: missing include ────────────────────────────────

@@ -46,7 +46,7 @@ function BenchResult run_string_benchmarks(BenchResult state) {
         string a = "alpha"
         string b = "bravo"
         string c = "charlie"
-        string _s = "The quick brown fox ${a} jumps over the lazy dog ${b} while the sun sets slowly ${c} beyond the distant hills."
+        string _s = "fox ${a} jumps over dog ${b} while the sun sets ${c} beyond the hills."
     })
 
     st = time_it(st, "String.split", 10000, () -> {

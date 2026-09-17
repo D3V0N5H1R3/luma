@@ -4,7 +4,6 @@ applyTo: "**/*"
 priority: essential
 ---
 
-
 # Learnings
 
 Patterns, pitfalls, and non-obvious knowledge discovered during development sessions.

@@ -660,7 +660,6 @@ function void test_math_sign_of() {
     assert(sign_label(Math.sign_of(3.14)) == "positive")
 }
 
-
 @test
 function void test_math_interval() {
     Math.Interval iv = Result.unwrap(Math.interval(0.0, 10.0))
@@ -684,7 +683,6 @@ function void test_math_intervals_overlap() {
     assert(Math.intervals_overlap(a, Result.unwrap(Math.interval(5.0, 9.0))), "touching counts")
     assert(!Math.intervals_overlap(a, Result.unwrap(Math.interval(6.0, 9.0))), "disjoint")
 }
-
 
 # ═══════════════════════════════════════════════════════════
 # Math.Angle (optional unit-safe angle)
@@ -770,7 +768,8 @@ function void test_math_rect_union_center_area() {
     assert(Math.approximately_equal(c.x, 5.0, 0.001))
     assert(Math.approximately_equal(c.y, 10.0, 0.001))
 
-    assert(Math.approximately_equal(Math.rectangle_area(Math.rectangle(0.0, 0.0, 10.0, 20.0)), 200.0, 0.001))
+    assert(Math.approximately_equal(
+        Math.rectangle_area(Math.rectangle(0.0, 0.0, 10.0, 20.0)), 200.0, 0.001))
 }
 
 # ─── Math.Circle (N05) — 2D circle geometry ───

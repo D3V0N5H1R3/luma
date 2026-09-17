@@ -396,7 +396,6 @@ function void test_log_output_typed_file_writes() {
         FileSystem.delete("_test_log_output_typed.log"), false)
 }
 
-
 # ─── is_enabled / log additions ──────────────────────────
 
 @test

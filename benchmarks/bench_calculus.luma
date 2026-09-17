@@ -88,7 +88,10 @@ function BenchResult run_calculus_benchmarks(BenchResult state) {
     # --- Series and limits ---
 
     st = time_it(st, "Calculus.sum_series (1..100)", 2000, () -> {
-        number _s = Calculus.sum_series(1, 100, (integer x) -> 1.0 / (Result.unwrap(Converter.to_number(x)) * Result.unwrap(Converter.to_number(x))))
+        number _s = Calculus.sum_series(1, 100, (integer x) -> {
+            number term = Result.unwrap(Converter.to_number(x))
+            return 1.0 / (term * term)
+        })
     })
 
     st = time_it(st, "Calculus.limit ((x^2-1)/(x-1))", 2000, () -> {
@@ -112,7 +115,8 @@ function BenchResult run_calculus_benchmarks(BenchResult state) {
     })
 
     st = time_it(st, "Calculus.curl (3D)", 1000, () -> {
-        result<array<number>> _c = Calculus.curl([1.0, 1.0, 1.0], [bench_curl_fx, bench_curl_fy, bench_curl_fz])
+        result<array<number>> _c = Calculus.curl([1.0, 1.0, 1.0],
+            [bench_curl_fx, bench_curl_fy, bench_curl_fz])
     })
 
     # --- Integral transforms ---

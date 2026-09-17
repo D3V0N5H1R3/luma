@@ -96,7 +96,6 @@ for reference:
 - `instructions/typescript.instructions.md` — TypeScript sources: type safety, async patterns, idioms (`**/*.{ts,tsx}`).
 - `instructions/javascript.instructions.md` — JavaScript sources: modules, async patterns, idioms (`**/*.{js,mjs,cjs}`).
 - `instructions/python.instructions.md` — Python sources: type hints, error handling, idioms (`**/*.py`).
-- `instructions/css.instructions.md` — CSS sources: BEM naming, specificity, custom properties, responsive design (`**/*.css`).
 - `instructions/shell.instructions.md` — shell scripts: portability, quoting, safe scripting (`**/*.{sh,bash}`).
 - `instructions/powershell.instructions.md` — PowerShell scripts: naming, pipeline patterns, modules (`**/*.{ps1,psm1,psd1}`).
 

@@ -139,7 +139,8 @@ function BenchResult run_error_handling_benchmarks(BenchResult state) {
     })
 
     # Operand hoisted so this measures Result.collect, not array construction.
-    array<result<integer>> collect_items = [success(1), success(2), success(3), success(4), success(5)]
+    array<result<integer>> collect_items =
+        [success(1), success(2), success(3), success(4), success(5)]
     st = time_it(st, "Result.collect (5 items)", 5000, () -> {
         result<array<integer>> _r = Result.collect(collect_items)
     })

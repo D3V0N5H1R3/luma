@@ -3,6 +3,8 @@ description: "Audit a Luma application or example for user-experience, usability
 argument-hint: "File or directory to review, e.g. 'examples/applications/text_adventure.luma' or 'examples/applications/' (defaults to Terminal and Console examples)"
 ---
 
+# UX Audit
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

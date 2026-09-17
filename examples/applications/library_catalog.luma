@@ -56,7 +56,9 @@ function Library empty_library() {
 }
 
 function Book new_book(string id, string title, string author, integer year) {
-    return Book { id = id, title = title, author = author, year = year, state = LoanState.Available }
+    return Book {
+        id = id, title = title, author = author, year = year, state = LoanState.Available
+    }
 }
 
 function result<Library> add_book(Library lib, Book book) {
@@ -84,7 +86,13 @@ function boolean is_available(Book book) {
     }
 }
 
-function result<Library> check_out(Library lib, string book_id, string member_id, integer today, integer loan_days) {
+function result<Library> check_out(
+    Library lib,
+    string book_id,
+    string member_id,
+    integer today,
+    integer loan_days
+) {
     if !Dictionary.has(lib.books, book_id) {
         return failure("No book found with id ${book_id}. Check the catalog and try again.")
     }
@@ -309,7 +317,8 @@ function void test_duplicate_book_rejected() {
 
 @test
 function void test_borrow_marks_unavailable() {
-    mutable Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+    mutable Library lib =
+        add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
     lib = register_member(lib, Member { id = "M1", name = "Ann" }) |> Result.unwrap()
     lib = check_out(lib, "B1", "M1", 0, 14) |> Result.unwrap()
 
@@ -319,12 +328,14 @@ function void test_borrow_marks_unavailable() {
 
 @test
 function void test_double_borrow_rejected() {
-    mutable Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+    mutable Library lib =
+        add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
     lib = register_member(lib, Member { id = "M1", name = "Ann" }) |> Result.unwrap()
     lib = register_member(lib, Member { id = "M2", name = "Ben" }) |> Result.unwrap()
     lib = check_out(lib, "B1", "M1", 0, 14) |> Result.unwrap()
 
-    assert(!Result.is_success(check_out(lib, "B1", "M2", 0, 14)), "already-borrowed book should fail")
+    assert(!Result.is_success(check_out(lib, "B1", "M2", 0, 14)),
+        "already-borrowed book should fail")
 }
 
 @test
@@ -353,7 +364,8 @@ function void test_borrow_unknown_book_has_plain_message() {
 
 @test
 function void test_return_makes_available_again() {
-    mutable Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+    mutable Library lib =
+        add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
     lib = register_member(lib, Member { id = "M1", name = "Ann" }) |> Result.unwrap()
     lib = check_out(lib, "B1", "M1", 0, 14) |> Result.unwrap()
     lib = return_book(lib, "B1") |> Result.unwrap()
@@ -385,7 +397,8 @@ function void test_return_unknown_book_has_plain_message() {
 
 @test
 function void test_renew_extends_due_day() {
-    mutable Library lib = add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
+    mutable Library lib =
+        add_book(empty_library(), new_book("B1", "T", "A", 2000)) |> Result.unwrap()
     lib = register_member(lib, Member { id = "M1", name = "Ann" }) |> Result.unwrap()
     lib = check_out(lib, "B1", "M1", 0, 7) |> Result.unwrap()
 

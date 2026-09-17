@@ -3,6 +3,8 @@ description: "Add a new language feature to Luma by implementing it across all i
 argument-hint: "Feature description, e.g. 'while loops' or 'optional chaining operator'"
 ---
 
+# New Language Feature
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

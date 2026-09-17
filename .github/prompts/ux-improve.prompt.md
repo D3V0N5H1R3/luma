@@ -11,7 +11,7 @@ lastUpdated: "2026-09-04"
 Apply user-experience, usability, and presentation-design improvements to the Terminal/TUI or Console interface a Luma program presents, especially apps under `examples/applications/`. This is the executor half of the [ux-audit.prompt.md](ux-audit.prompt.md) pairing: it consumes that audit's ranked findings and resolves them. Change only what improves the experience — preserve each program's logic and observable behaviour otherwise.
 
 1. **Read the rubric and take the work list.** The design principles are the standard every change is measured against — read them first:
-    - [ux-design.instructions.md](../../instructions/ux-design.instructions.md) — the full rubric (visual hierarchy, Gestalt grouping, colour and contrast, typography, interaction and feedback, motion, error prevention, information architecture, accessibility, simplicity).
+    - [ux-design.instructions.md](../../instructions/ux-design.instructions.md) — the full rubric (visual hierarchy, Gestalt grouping, colour and contrast, typography, interaction and feedback, motion, error prevention, information architecture, accessibility, simplicity, and the terminal/console-specific principles in §20).
     - [luma.instructions.md](../../instructions/luma.instructions.md) for Luma source conventions.
     - [Luma_Standard_Library_Reference.md](../../documents/Luma_Standard_Library_Reference.md) for the `Console` and `Terminal` modules and related APIs.
 

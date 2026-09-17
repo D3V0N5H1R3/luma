@@ -955,5 +955,3 @@ function void test_string_character_class_constants() {
     assert(String.is_digit(String.digits))
     assert(String.is_ascii(String.punctuation))
 }
-
-

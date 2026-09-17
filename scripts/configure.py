@@ -105,7 +105,7 @@ def main() -> int:
             from install_git_hooks import enable_hooks
 
             enable_hooks()
-        except Exception as exc:  # pragma: no cover - defensive
+        except (ImportError, OSError) as exc:  # pragma: no cover - defensive
             print(f"Note: could not enable Git hooks ({exc}).", file=sys.stderr)
 
     # Optionally build.

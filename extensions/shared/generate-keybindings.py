@@ -70,6 +70,8 @@ def generate_zed(data: dict) -> str:
             "<!--", "keybindings.json", "generate-keybindings.py", "zed", comment_close="-->"
         ),
         "",
+        "# Luma Zed Keybindings",
+        "",
         "## Suggested Keybindings",
         "",
         "Zed extensions cannot register keybindings automatically. Add the bindings",

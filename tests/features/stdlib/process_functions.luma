@@ -130,7 +130,8 @@ function void test_process_get_all_environment_variables() {
 function void test_process_set_variable_appears_in_snapshot() {
     # A variable written through set_environment_variable must be visible both
     # to a direct lookup and in the full environment snapshot.
-    result<void> set_result = Process.set_environment_variable("_LUMA_FEATURE_ENV_VAR", "round-trip")
+    result<void> set_result =
+        Process.set_environment_variable("_LUMA_FEATURE_ENV_VAR", "round-trip")
 
     assert(Result.is_success(set_result))
 

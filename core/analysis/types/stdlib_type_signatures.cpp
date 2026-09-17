@@ -211,7 +211,7 @@ void StdlibTypeHandler::init_signatures() {
     // Populate from catalog descriptors— functions whose FunctionSpec
     // carries a non-Unspecified ReturnTypeDesc are converted automatically.
     for (const auto& [name, spec] : stdlib::catalog()) {
-        if (spec.return_type.kind != stdlib::ReturnTypeDesc::Unspecified) {
+        if (spec.return_type.kind != stdlib::ReturnTypeDesc::Kind::Unspecified) {
             functions_[name].return_type = type_info_from_desc(spec.return_type);
         }
     }

@@ -55,7 +55,7 @@ Hunt for these defect classes. The triage-first structure and layer list mirror 
 
 Use the workspace search and file-reading tools; parallelize independent read-only exploration. Do **not** build, regenerate the parser, or run tests.
 
-- **Check query child order against the grammar.** For a suspect highlight/fold/indent capture, read the matching `seq(...)` rule in `grammar.js` and confirm the capture sits in the right child position. Reason about the pattern statically — do not run `tree-sitter highlight` (it degrades and can false-pass); the reliable check (`tree-sitter query`, via `extensions/tests/validate_queries.js`) is the fix step's job.
+- **Check query child order against the grammar.** For a suspect highlight/fold/indent capture, read the matching `seq(...)` rule in `grammar.js` and confirm the capture sits in the right child position. Reason about the pattern statically — do not run `tree-sitter highlight` (it degrades and can false-pass); the reliable check (`tree-sitter query`, via `extensions/tests/validate-queries.js`) is the fix step's job.
 - **Diff generated against canonical.** For a suspect generated file, read its canonical JSON source and the relevant `generate-*.py` and confirm the output matches — a mismatch is drift that `ci-check-generated.py` would catch.
 - **Trace a structural highlight change across both copies.** If a grammar node was added, removed, or reordered, confirm both `highlights.scm` copies reflect it.
 - **Compare asset-name construction to the contract.** Read each editor's download code and confirm the `{binary}-{os}-{arch}.{ext}` assembly and platform/arch maps match [BINARY_ASSETS.md](../../extensions/BINARY_ASSETS.md).
@@ -80,7 +80,7 @@ Rank by severity weighted by confidence, tie-broken by reach then effort. A shar
 - **Respect deliberate decisions that look like bugs.** Documented in [learnings.instructions.md](../../instructions/learnings.instructions.md) and [FEATURE_PARITY.md](../../extensions/FEATURE_PARITY.md):
     - **Intentional parity gaps** — the test-runner UX differs (VS Code uses run/test tasks, Zed uses tree-sitter runnables); the difference is by design, not a bug.
     - The `highlights.scm` copies intentionally **diverge on capture-group names** (e.g. canonical `@punctuation.special` vs Zed `@string.special`, plus Zed's reordering/reformatting) — only a divergence in the matched grammar **nodes** counts as a defect.
-    - `extensions/shared/sync-queries.py --check` flags that intentional group-name divergence and exits non-zero, and is **not** wired into CI — treat its exit code as a coarse diff aid, not evidence of a bug; likewise `extensions/tests/validate_queries.js` is effectively local-only.
+    - `extensions/shared/sync-queries.py --check` flags that intentional group-name divergence and exits non-zero, and is **not** wired into CI — treat its exit code as a coarse diff aid, not evidence of a bug; likewise `extensions/tests/validate-queries.js` is effectively local-only.
     - The **VS Code TextMate grammar is hand-maintained by design** (VS Code lacks native tree-sitter) — its existence alongside the tree-sitter grammar is intentional, not duplication to "fix".
 - **No hallucinated findings.** Every entry needs a location you have opened and read.
 

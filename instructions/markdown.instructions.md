@@ -105,7 +105,7 @@ Use `---` on its own line, surrounded by blank lines, to separate major sections
 ## 4 — Code Blocks
 
 - Use fenced code blocks (triple backticks) with a language identifier for every snippet.
-- Supported identifiers in this project: `cpp`, `cmake`, `bash`, `luma`, `yaml`, `json`, `text`, `markdown`, plus the per-language identifiers used by the style guides (`rust`, `python`, `typescript`, `javascript`, `css`, `powershell`) and the documentation-specific identifiers (`ebnf`, `scheme`, `toml`, `vim`).
+- Supported identifiers in this project: `cpp`, `cmake`, `bash`, `luma`, `yaml`, `json`, `text`, `markdown`, plus the per-language identifiers used by the style guides (`rust`, `python`, `typescript`, `javascript`, `powershell`) and the documentation-specific identifiers (`ebnf`, `scheme`, `toml`, `vim`).
 - Do not use indented code blocks (four-space indent). Fenced blocks are clearer and support syntax highlighting.
 - Keep code snippets focused — show only the relevant lines. If context is needed, add a brief comment above the block explaining what the snippet demonstrates.
 

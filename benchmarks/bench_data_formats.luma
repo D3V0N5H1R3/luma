@@ -12,7 +12,8 @@ function BenchResult run_data_format_benchmarks(BenchResult state) {
     })
 
     st = time_it(st, "Json.deserialize", 5000, () -> {
-        result<dictionary<string>> _val = Json.deserialize("{\"name\":\"Alice\",\"age\":\"30\",\"active\":\"true\"}")
+        string json_text = "{\"name\":\"Alice\",\"age\":\"30\",\"active\":\"true\"}"
+        result<dictionary<string>> _val = Json.deserialize(json_text)
     })
 
     # Operand hoisted so this measures pretty-printing, not dict construction.
@@ -79,7 +80,8 @@ function BenchResult run_data_format_benchmarks(BenchResult state) {
     })
 
     st = time_it(st, "Csv.deserialize_with", 2000, () -> {
-        result<array<array<string>>> _rows = Csv.deserialize_with("a;b;c\n1;2;3\n4;5;6", {"delimiter": ";"})
+        result<array<array<string>>> _rows =
+            Csv.deserialize_with("a;b;c\n1;2;3\n4;5;6", {"delimiter": ";"})
     })
 
     # Operand hoisted so this measures serialization, not record construction.
@@ -100,11 +102,14 @@ function BenchResult run_data_format_benchmarks(BenchResult state) {
     |> Xml.set_attribute("class", "main")
     |> Xml.add_child(Xml.element("span") |> Xml.set_text("hello"))
     xml find_doc = Result.unwrap(Xml.deserialize("<r><item/><item/><other/><item/></r>"))
-    xml nav_doc = Result.unwrap(Xml.deserialize("<root><child><leaf id=\"x\">v</leaf></child></root>"))
-    xml attr_doc = Result.unwrap(Xml.deserialize("<r><item id=\"1\"/><item id=\"2\"/><item id=\"3\"/></r>"))
+    string nav_xml = "<root><child><leaf id=\"x\">v</leaf></child></root>"
+    xml nav_doc = Result.unwrap(Xml.deserialize(nav_xml))
+    string attr_xml = "<r><item id=\"1\"/><item id=\"2\"/><item id=\"3\"/></r>"
+    xml attr_doc = Result.unwrap(Xml.deserialize(attr_xml))
 
     st = time_it(st, "Xml.deserialize", 2000, () -> {
-        result<xml> _doc = Xml.deserialize("<root><item id=\"1\">hello</item><item id=\"2\">world</item></root>")
+        string doc_xml = "<root><item id=\"1\">hello</item><item id=\"2\">world</item></root>"
+        result<xml> _doc = Xml.deserialize(doc_xml)
     })
 
     st = time_it(st, "Xml.is_valid", 5000, () -> {

@@ -634,4 +634,3 @@ function void test_optional_filter_non_boolean_throws() {
 
     assert(String.contains(caught, "boolean"), "non-boolean filter predicate should throw")
 }
-

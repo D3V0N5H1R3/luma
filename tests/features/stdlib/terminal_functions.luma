@@ -645,10 +645,13 @@ function void test_terminal_parse_mouse_event_none_for_malformed() {
     # A non-mouse string, a wrong field count, an unknown kind, or a non-integer
     # coordinate all decode to none rather than a bogus event.
     assert(Optional.is_none(Terminal.parse_mouse_event("enter")), "non-mouse string is none")
-    assert(Optional.is_none(Terminal.parse_mouse_event("mouse:left_press:10")), "missing column is none")
-    assert(Optional.is_none(Terminal.parse_mouse_event("mouse:left_press:10:5:0")), "extra field is none")
+    assert(Optional.is_none(Terminal.parse_mouse_event("mouse:left_press:10")),
+        "missing column is none")
+    assert(Optional.is_none(Terminal.parse_mouse_event("mouse:left_press:10:5:0")),
+        "extra field is none")
     assert(Optional.is_none(Terminal.parse_mouse_event("mouse:zoom:1:2")), "unknown kind is none")
-    assert(Optional.is_none(Terminal.parse_mouse_event("mouse:left_press:x:5")), "non-integer row is none")
+    assert(Optional.is_none(Terminal.parse_mouse_event("mouse:left_press:x:5")),
+        "non-integer row is none")
     assert(Optional.is_none(Terminal.parse_mouse_event("")), "empty string is none")
 }
 

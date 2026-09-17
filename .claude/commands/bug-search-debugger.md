@@ -3,6 +3,8 @@ description: "Analyse the Luma debugger (DAP) read-only and produce a prioritize
 argument-hint: "Optional scope, e.g. 'breakpoint_manager.cpp' or 'the whole debugger'"
 ---
 
+# Bug Search — Debugger
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

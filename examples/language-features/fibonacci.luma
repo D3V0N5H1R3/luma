@@ -42,7 +42,8 @@ function integer compute_fibonacci_iterative(integer term_number) {
 function array<integer> generate_fibonacci_sequence(integer count) {
     array<integer> indices = Array.range(0, count) |> Result.unwrap()
 
-    return Array.map(indices, (integer term_number) -> compute_fibonacci_iterative(term_number)) ?? []
+    return Array.map(indices, (integer term_number) -> compute_fibonacci_iterative(term_number))
+        ?? []
 }
 
 @main

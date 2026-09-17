@@ -55,7 +55,7 @@ Diagnose and fix a bug in a Luma editor extension. Two extensions live under `ex
 5. **Add a regression test** in the affected editor's suite:
     - VS Code: a `*.test.ts` file under `extensions/vscode/src/test/suite/` (Mocha) — e.g. `grammar.test.ts` for grammar/scope regressions, `binary-download.test.ts` for download logic.
     - Zed: a `#[test]` in `extensions/zed/src/tests.rs` (cargo test).
-    - Shared grammar: add or extend a fixture in `extensions/tests/fixtures/` so `parse_fixtures.js` covers the construct; add a `validate-*.test.mjs` assertion for shared-data regressions.
+    - Shared grammar: add or extend a fixture in `extensions/tests/fixtures/` so `parse-fixtures.js` covers the construct; add a `validate-*.test.mjs` assertion for shared-data regressions.
 
 6. **Verify** the affected extension (and the shared checks if you touched shared data or grammar). Run the same checks CI runs, plus the per-editor unit tests from step 5:
 
@@ -85,7 +85,7 @@ Diagnose and fix a bug in a Luma editor extension. Two extensions live under `ex
     # Regenerate the parser inside the grammar directory:
     (cd extensions/zed/grammars/tree-sitter-luma && npm install && npx tree-sitter generate)
     # Then, from the repository root:
-    node extensions/tests/parse_fixtures.js
+    node extensions/tests/parse-fixtures.js
     node extensions/tests/validate-defaults.test.mjs
     node extensions/tests/validate-download.test.mjs
     node extensions/tests/validate-download-constants.test.mjs

@@ -13,13 +13,15 @@ function BenchResult run_filesystem_benchmarks(BenchResult state) {
     # --- Write ---
 
     st = time_it(st, "FileSystem.write_file", 500, () -> {
-        result<boolean> _w = FileSystem.write_file(test_file, "The quick brown fox jumps over the lazy dog.\n")
+        string line = "The quick brown fox jumps over the lazy dog.\n"
+        result<boolean> _w = FileSystem.write_file(test_file, line)
     })
 
     # --- Read ---
 
     # Ensure file exists for read benchmarks
-    result<boolean> _setup = FileSystem.write_file(test_file, "Line one\nLine two\nLine three\nLine four\nLine five\n")
+    string content = "Line one\nLine two\nLine three\nLine four\nLine five\n"
+    result<boolean> _setup = FileSystem.write_file(test_file, content)
 
     st = time_it(st, "FileSystem.read_file", 1000, () -> {
         result<string> _content = FileSystem.read_file(test_file)

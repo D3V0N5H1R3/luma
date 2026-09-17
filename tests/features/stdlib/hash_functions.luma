@@ -42,7 +42,8 @@ function void test_hash_sha512() {
     assert(String.length(hash) == 128)
 
     # FIPS 180 test vector for the full digest.
-    string abc_hash = "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+    string abc_hash = "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a" +
+        "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
 
     assert(Hash.sha512("abc") == abc_hash)
 }
@@ -100,7 +101,8 @@ function void test_hash_hmac_sha512() {
 @test
 function void test_hash_hmac_sha512_known_vector() {
     # RFC 4231 Test Case 2 for HMAC-SHA512.
-    string jefe = "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737"
+    string jefe = "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea250554" +
+        "9758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737"
 
     assert(Hash.hmac_sha512("Jefe", "what do ya want for nothing?") == jefe)
 }

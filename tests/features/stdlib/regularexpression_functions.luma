@@ -269,14 +269,18 @@ function void test_regularexpression_find_all_named_groups() {
 
     assert(Array.length(matches) == 2)
 
-    RegularExpression.Capture key0 = Dictionary.get(matches[0].named_groups, "key") |> Result.unwrap()
-    RegularExpression.Capture val0 = Dictionary.get(matches[0].named_groups, "val") |> Result.unwrap()
+    RegularExpression.Capture key0 = Dictionary.get(matches[0].named_groups, "key")
+        |> Result.unwrap()
+    RegularExpression.Capture val0 = Dictionary.get(matches[0].named_groups, "val")
+        |> Result.unwrap()
 
     assert(key0.text == "width")
     assert(val0.text == "100")
 
-    RegularExpression.Capture key1 = Dictionary.get(matches[1].named_groups, "key") |> Result.unwrap()
-    RegularExpression.Capture val1 = Dictionary.get(matches[1].named_groups, "val") |> Result.unwrap()
+    RegularExpression.Capture key1 = Dictionary.get(matches[1].named_groups, "key")
+        |> Result.unwrap()
+    RegularExpression.Capture val1 = Dictionary.get(matches[1].named_groups, "val")
+        |> Result.unwrap()
 
     assert(key1.text == "height")
     assert(val1.text == "200")
@@ -319,7 +323,6 @@ function void test_regularexpression_oversized_pattern() {
 
     assert(RegularExpression.is_valid(within_limit))
 }
-
 
 # ═══════════════════════════════════════════════════════════
 # RegularExpression.Error (opt-in typed errors via compile_typed)
@@ -385,7 +388,6 @@ function void test_regex_compile_typed_carries_message() {
 
     assert(String.length(detail) > 0, "InvalidSyntax carries a diagnostic message")
 }
-
 
 # ═══════════════════════════════════════════════════════════
 # Flag-accepting variants (RegularExpression.Flags)
@@ -514,7 +516,6 @@ function void test_regularexpression_with_redos_rejected() {
     assert(!Result.is_success(
     RegularExpression.find_with("aaaa", "(a+)+", [RegularExpression.Flags.CaseInsensitive])))
 }
-
 
 # ═══════════════════════════════════════════════════════════
 # RegularExpression.count

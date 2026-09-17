@@ -6,6 +6,8 @@
 #include "lsp_test_helpers.hpp"
 #include "lsp_token_utils.hpp"
 
+using luma::lsp::token_extents;
+using luma::lsp::token_range;
 using luma::lsp::test_fixtures::simple::k_empty_main;
 using luma::lsp::test_fixtures::simple::k_main;
 using luma::lsp::test_fixtures::simple::k_main_with_usage;

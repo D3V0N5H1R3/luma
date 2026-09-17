@@ -1,13 +1,13 @@
 ---
-description: "Use when designing or reviewing any user interface — Terminal/Console TUIs, CSS, editor extensions, CLI/REPL output, or documentation layout. Covers user experience, usability, and graphic design principles: colour, typography, spacing, hierarchy, layout, Gestalt laws, interaction, feedback, accessibility, and the usability heuristics."
+description: "Use when designing or reviewing any user interface — Terminal/Console TUIs, editor extensions, CLI/REPL output, or documentation layout. Covers user experience, usability, and graphic design principles: colour, typography, spacing, hierarchy, layout, Gestalt laws, interaction, feedback, accessibility, and the usability heuristics."
 priority: reference
 ---
 
 # Working with UX and Visual Design
 
-A reference for the user experience, usability, and graphic design principles every interface in this project should follow. This guide has no `applyTo` file pattern because design principles are conceptual and cross-cutting — consult it whenever you design or review something a human looks at or interacts with: a Terminal or Console application, a CSS stylesheet, an editor-extension panel, REPL or CLI output, an error message, or a documentation page.
+A reference for the user experience, usability, and graphic design principles every interface in this project should follow. This guide has no `applyTo` file pattern because design principles are conceptual and cross-cutting — consult it whenever you design or review something a human looks at or interacts with: a Terminal or Console application, an editor-extension panel, REPL or CLI output, an error message, or a documentation page.
 
-It is the _why_ behind the _how_. For implementation detail, pair it with the relevant guide: [css.instructions.md](css.instructions.md) for stylesheets, [luma.instructions.md](luma.instructions.md) for Luma applications, and [software-architecture.instructions.md](software-architecture.instructions.md) for the same simplicity-first mindset applied to code.
+It is the _why_ behind the _how_. For implementation detail, pair it with the relevant guide: [luma.instructions.md](luma.instructions.md) for Luma applications, and [software-architecture.instructions.md](software-architecture.instructions.md) for the same simplicity-first mindset applied to code.
 
 ---
 
@@ -32,8 +32,9 @@ It is the _why_ behind the _how_. For implementation detail, pair it with the re
 17. [Responsive and Adaptive Design](#17--responsive-and-adaptive-design)
 18. [Accessibility and Inclusive Design](#18--accessibility-and-inclusive-design)
 19. [Simplicity and Progressive Disclosure](#19--simplicity-and-progressive-disclosure)
-20. [Anti-Patterns](#20--anti-patterns)
-21. [Checklist](#21--checklist)
+20. [Terminal and Console Interfaces](#20--terminal-and-console-interfaces)
+21. [Anti-Patterns](#21--anti-patterns)
+22. [Checklist](#22--checklist)
 
 ---
 
@@ -241,7 +242,7 @@ Interaction design governs how users act on the interface and how it responds.
 
 - **Affordances and signifiers.** Make interactive elements look interactive. Buttons look pressable; links look clickable; draggable things look grabbable. The visual must signal the possible action.
 - **Show all relevant states.** Every interactive element needs distinct **default, hover, focus, active, disabled,** and (where applicable) **selected/error** states. State changes confirm the system noticed the user.
-- **Make targets easy to hit (Fitts's Law).** Use comfortable hit areas — at least ~44 × 44 px for touch — and place frequent actions where the pointer already is or where the eye expects them.
+- **Make targets easy to hit (Fitts's Law).** Use comfortable hit areas — at least ~44 × 44 px for touch — and place frequent actions where the pointer already is or where the eye expects them. _(Graphical surfaces; in a terminal the "target" is a keystroke or menu choice — see §20.)_
 - **Prefer direct manipulation.** Let users act on objects directly (drag, resize, edit in place) rather than through indirect dialogs where it makes sense.
 - **Keep visible focus.** Keyboard users must always see what is focused. Never remove focus indicators without a clear replacement.
 - **Make actions reversible.** Favour undo over confirmation dialogs for routine actions; reserve confirmation for the genuinely destructive (see §14).
@@ -279,6 +280,8 @@ Motion should clarify, not decorate. Good animation explains change; bad animati
 - **Animate cheap properties.** Prefer transform and opacity changes, which are smooth; avoid animating layout-affecting properties that cause jank.
 - **Preserve continuity (common fate).** Move related elements together so the user can follow what changed and where things went.
 - **Respect reduced-motion preferences.** Honour the user's "reduce motion" setting by disabling or softening non-essential animation.
+
+> **Terminal note.** In text interfaces, "motion" means screen redraw, and the millisecond timings above apply to graphical surfaces such as editor-extension panels. For redraw discipline in a TUI, see §20.
 
 ---
 
@@ -340,6 +343,8 @@ Interfaces must work across the range of screens, inputs, and contexts your user
 - **Test real breakpoints and real content.** Check the layout at many widths and with long, short, and missing content — not only at idealised sizes.
 - **Adapt, do not just shrink.** Reflow and reprioritise for the device; a cramped desktop layout squeezed onto a phone is not responsive.
 
+> **Terminal note.** For text interfaces, "responsive" means adapting to terminal width and to redirected, non-interactive I/O rather than pixels, touch, and viewports — see §20.
+
 ---
 
 ## 18 — Accessibility and Inclusive Design
@@ -369,7 +374,46 @@ Simplicity is the discipline of showing only what is needed, when it is needed.
 
 ---
 
-## 20 — Anti-Patterns
+## 20 — Terminal and Console Interfaces
+
+Luma's primary surfaces are text interfaces: the interpreter's `Console` output, interactive `Terminal` (TUI) applications, and the REPL. Every principle above still applies, but its _expression_ changes when the canvas is a grid of characters rather than pixels. This section translates those principles and adds the conventions unique to command-line work. Treat it as the terminal-specific companion to §§5–19, and the authoritative rubric the `ux-audit`/`ux-improve` prompts map their "Terminal/Console Lens" onto.
+
+### How the graphical principles translate
+
+- **Hierarchy (§5) without size or weight.** A terminal has no font sizes. Establish hierarchy with spacing, indentation, casing, ordering, separators, and — sparingly — colour and bold. Put the most important line first or set it off with a blank line.
+- **Effort and choice (Fitts's / Hick's Law, §11).** There are no pixels to click; the "target" is a keystroke or a menu choice. Keep key actions to single, memorable keys; number or letter menu items; make the most common choice the default.
+- **Motion (§13) becomes redraw discipline.** "Animation" in a terminal is screen redraw. Favour stable, minimal repaints over frequent full-screen clears; never rely on rapid redraw for meaning; keep persistent regions (status, help, errors) in fixed, predictable positions.
+- **Responsive design (§17) becomes width- and stream-awareness.** Adapt to terminal width, degrade gracefully on narrow terminals, and stay usable when input or output is redirected (non-interactive or piped).
+
+### Prompts and affordances
+
+- **State what you expect.** A prompt should show the expected input, the available choices, the default (in brackets), and how to cancel or get help — for example `Continue? [Y/n]` or `Choose 1–3 (q to quit):`.
+- **Echo and confirm.** Reflect what the user entered where it aids understanding, and confirm the interpretation of ambiguous input before acting on it.
+
+### Discoverability and navigation
+
+- **Show the way in.** Surface available commands, keys, and shortcuts where they are needed — a persistent hint line, a `help`/`?` command, or a startup banner — rather than assuming the user recalls them.
+- **Name consistently (§16).** The same key, command, and label mean the same thing throughout, and common CLI/TUI conventions are honoured (`q` to quit, `Ctrl+C` to cancel, `--help`, `-` for stdin).
+
+### Colour and non-colour cues
+
+- **Readable on light and dark.** Do not assume a background colour; choose colours that read on both, and keep meaning legible in monochrome.
+- **Never colour alone (§8, §18).** Pair every colour-coded status with text, a symbol, or position, and degrade to plain text for non-TTY output or when `NO_COLOR` is set.
+
+### Feedback, input tolerance, and recovery
+
+- **Never block silently (§12).** Long or asynchronous work (HTTP, timers, file I/O) surfaces loading, progress, success, empty, and error states; a slow action visibly shows that it is working.
+- **Tolerate bad input (§14).** Handle invalid input without losing the user's work, and reply with actionable recovery text — what was wrong and what to try — never a raw code or stack trace.
+- **Always offer an exit (§3).** Every prompt and mode states how to cancel, go back, or quit, so the user is never trapped.
+
+### Progressive disclosure and testability
+
+- **Show little, reveal on demand (§19).** Default to the essentials; keep advanced options and long help behind an explicit `help`, `?`, or `--verbose` so beginners are not overwhelmed.
+- **Make the experience testable.** Interactive behaviour should be drivable headlessly — scripted stdin for `Console` apps, the `Terminal.test_*` APIs for TUIs — so UX qualities such as feedback, focus, and recovery can be verified and kept from regressing.
+
+---
+
+## 21 — Anti-Patterns
 
 Avoid these common failures — each one directly violates a principle above.
 
@@ -385,10 +429,12 @@ Avoid these common failures — each one directly violates a principle above.
 - **Reinventing conventions.** Custom controls that ignore platform standards for no benefit (§16).
 - **Decoration over function.** Animation, imagery, or styling that impresses but obstructs (§1, §13).
 - **Making users wait blindly.** Long operations with no progress indication (§12).
+- **Flickering redraws.** Clearing and repainting the whole screen on every keystroke, so a TUI jumps and flickers (§13, §20).
+- **Silent prompts.** A bare cursor with no indication of what input is expected, what the default is, or how to quit (§20).
 
 ---
 
-## 21 — Checklist
+## 22 — Checklist
 
 - [ ] There is **one clear focal point** and a deliberate visual hierarchy on each view.
 - [ ] Related items are **grouped by proximity and common region**; unrelated items are separated by space.
@@ -408,3 +454,11 @@ Avoid these common failures — each one directly violates a principle above.
 - [ ] The interface is **keyboard operable**, with visible focus and text alternatives.
 - [ ] Language is **simple and consistent** throughout.
 - [ ] Anything that does not help the user reach their goal has been **removed**.
+
+For terminal and console interfaces, also confirm (§20):
+
+- [ ] **Prompts** state the expected input, the default, and how to cancel or get help.
+- [ ] Colour is **paired with text or symbols**, reads on light and dark, and degrades for non-TTY output.
+- [ ] Redraws are **stable**; persistent status, help, and error regions stay in predictable places.
+- [ ] Output **adapts to terminal width** and stays usable when input or output is redirected.
+- [ ] Interactive behaviour is **headlessly testable** with scripted stdin or the `Terminal.test_*` APIs.

@@ -270,7 +270,8 @@ function void test_channel_empty_error_on_try_receive() {
         error_msg = err
     }
 
-    assert(String.contains(error_msg, "no value available"), "error message mentions no value available")
+    assert(String.contains(error_msg, "no value available"),
+        "error message mentions no value available")
 }
 
 @test
@@ -294,7 +295,8 @@ function void test_channel_closed_error_on_try_receive() {
 
     result<integer> r = Channel.try_receive(ch)
 
-    assert(Result.is_failure(r), "try_receive on closed channel returns failure (ChannelClosedError)")
+    assert(Result.is_failure(r),
+        "try_receive on closed channel returns failure (ChannelClosedError)")
 
     mutable string error_msg = ""
 
@@ -304,7 +306,8 @@ function void test_channel_closed_error_on_try_receive() {
         error_msg = err
     }
 
-    assert(String.contains(error_msg, "channel closed"), "try_receive closed error message mentions channel closed")
+    assert(String.contains(error_msg, "channel closed"),
+        "try_receive closed error message mentions channel closed")
 }
 
 @test

@@ -59,7 +59,10 @@ record WordCount {
 
 function array<WordCount> find_top_words(dictionary<integer> counts, integer top_n) {
     array<WordCount> pairs = Dictionary.keys(counts)
-    |> Array.map((string word) -> WordCount { word = word, count = Dictionary.get_or(counts, word, 0) })
+    |> Array.map((string word) -> WordCount {
+        word = word,
+        count = Dictionary.get_or(counts, word, 0)
+    })
     |> Result.unwrap_or([])
 
     array<WordCount> sorted = Result.unwrap_or(Array.sort(pairs,
@@ -136,7 +139,8 @@ function void print_report(string filename, string text) {
 function void test_count_words_counts_repeats() {
     dictionary<integer> counts = count_words("Hello hello world")
 
-    assert(Dictionary.get_or(counts, "hello", 0) == 2, "hello should be counted twice (case-insensitive)")
+    assert(Dictionary.get_or(counts, "hello", 0) == 2,
+        "hello should be counted twice (case-insensitive)")
     assert(Dictionary.get_or(counts, "world", 0) == 1, "world should be counted once")
 }
 

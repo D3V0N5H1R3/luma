@@ -3,6 +3,8 @@ description: "Review code for bugs, security issues, performance pitfalls, and s
 argument-hint: "File or directory to review, e.g. 'core/runtime/vm/' or 'core/analysis/types/type_checker.cpp'"
 ---
 
+# Code Review
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

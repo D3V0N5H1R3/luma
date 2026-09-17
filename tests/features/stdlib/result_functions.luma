@@ -338,7 +338,8 @@ function void test_result_zip_second_failure() {
 @test
 function void test_result_bimap_success() {
     result<integer> r = success(5)
-    result<string> mapped = Result.map_both(r, (integer v) -> Converter.to_string(v), (string e) -> "err: ${e}")
+    result<string> mapped =
+        Result.map_both(r, (integer v) -> Converter.to_string(v), (string e) -> "err: ${e}")
 
     assert(mapped == success("5"))
 }
@@ -346,7 +347,8 @@ function void test_result_bimap_success() {
 @test
 function void test_result_bimap_failure() {
     result<integer> r = failure("bad")
-    result<string> mapped = Result.map_both(r, (integer v) -> Converter.to_string(v), (string e) -> "err: ${e}")
+    result<string> mapped =
+        Result.map_both(r, (integer v) -> Converter.to_string(v), (string e) -> "err: ${e}")
 
     assert(mapped == failure("err: bad"))
 }
@@ -356,7 +358,8 @@ function void test_result_bimap_failure() {
 @test
 function void test_result_fold_success() {
     result<integer> r = success(42)
-    string folded = Result.fold(r, (integer v) -> "ok: ${Converter.to_string(v)}", (string e) -> "err: ${e}")
+    string folded =
+        Result.fold(r, (integer v) -> "ok: ${Converter.to_string(v)}", (string e) -> "err: ${e}")
 
     assert(folded == "ok: 42")
 }
@@ -364,7 +367,8 @@ function void test_result_fold_success() {
 @test
 function void test_result_fold_failure() {
     result<integer> r = failure("oops")
-    string folded = Result.fold(r, (integer v) -> "ok: ${Converter.to_string(v)}", (string e) -> "err: ${e}")
+    string folded =
+        Result.fold(r, (integer v) -> "ok: ${Converter.to_string(v)}", (string e) -> "err: ${e}")
 
     assert(folded == "err: oops")
 }
@@ -545,4 +549,3 @@ function void test_result_recover_receives_error_message() {
     assert(Result.is_success(recovered))
     assert(Result.unwrap(recovered) == 4)
 }
-

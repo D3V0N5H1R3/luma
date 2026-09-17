@@ -9,7 +9,12 @@ record BenchResult {
     number total_time
 }
 
-function BenchResult time_it(BenchResult state, string name, integer iterations, function() -> none body) {
+function BenchResult time_it(
+    BenchResult state,
+    string name,
+    integer iterations,
+    function() -> none body
+) {
     # Warmup: run a fraction of iterations to stabilise caches.
     integer warmup_count = Result.unwrap(Converter.to_integer(Math.maximum(1, iterations / 10)))
     for _ in 0 .. warmup_count {

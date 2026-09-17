@@ -4,42 +4,43 @@
 # See extensions/shared/download-spec.md for the download protocol specification.
 set -euo pipefail
 
+readonly REPO="d3v0n5h1r3/luma"
+
 cleanup() {
-    rm -f -- "bin/${ASSET_NAME:-}"
+    rm -f -- "bin/${asset_name:-}"
 }
 trap cleanup EXIT
 
-VERSION="${LUMA_VERSION:-latest}"
-PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m)"
+version="${LUMA_VERSION:-latest}"
+platform="$(uname -s | tr '[:upper:]' '[:lower:]')"
+arch="$(uname -m)"
 
-case "$PLATFORM" in
-  linux)  OS="linux" ;;
-  darwin) OS="macos" ;;
-  *)      printf 'Unsupported platform: %s\n' "$PLATFORM" && exit 1 ;;
+case "$platform" in
+    linux)  os="linux" ;;
+    darwin) os="macos" ;;
+    *)      printf 'Unsupported platform: %s\n' "$platform" >&2; exit 1 ;;
 esac
 
-case "$ARCH" in
-  x86_64)         ARCH="x86_64" ;;
-  aarch64|arm64)  ARCH="aarch64" ;;
-  *)              printf 'Unsupported architecture: %s\n' "$ARCH" && exit 1 ;;
+case "$arch" in
+    x86_64)         arch="x86_64" ;;
+    aarch64|arm64)  arch="aarch64" ;;
+    *)              printf 'Unsupported architecture: %s\n' "$arch" >&2; exit 1 ;;
 esac
 
-SUFFIX="${OS}-${ARCH}.tar.gz"
-ASSET_NAME="luma_lsp-${SUFFIX}"
-REPO="d3v0n5h1r3/luma"
+suffix="${os}-${arch}.tar.gz"
+asset_name="luma_lsp-${suffix}"
 
 mkdir -p bin
 
-if [ "$VERSION" = "latest" ]; then
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${ASSET_NAME}"
+if [[ "$version" == "latest" ]]; then
+    download_url="https://github.com/${REPO}/releases/latest/download/${asset_name}"
 else
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET_NAME}"
+    download_url="https://github.com/${REPO}/releases/download/${version}/${asset_name}"
 fi
 
-printf 'Downloading %s...\n' "${ASSET_NAME}"
-curl -fSL --proto-redir =https "$DOWNLOAD_URL" -o "bin/${ASSET_NAME}"
-tar -xzf "bin/${ASSET_NAME}" -C bin
-rm -f -- "bin/${ASSET_NAME}"
+printf 'Downloading %s...\n' "${asset_name}"
+curl -fSL --proto-redir =https "$download_url" -o "bin/${asset_name}"
+tar -xzf "bin/${asset_name}" -C bin
+rm -f -- "bin/${asset_name}"
 chmod +x -- "bin/luma_lsp"
 printf 'Done. Binary at bin/luma_lsp\n'

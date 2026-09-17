@@ -143,7 +143,8 @@ function void test_closure_in_reduce() {
     integer initial = 100
     array<integer> values = [1, 2, 3]
 
-    integer total = Result.unwrap(Array.reduce(values, 0, (integer acc, integer x) -> acc + x + initial))
+    integer total =
+        Result.unwrap(Array.reduce(values, 0, (integer acc, integer x) -> acc + x + initial))
 
     # (0 + 1 + 100) + (101 + 2 + 100) + (203 + 3 + 100) = 306
     assert(total == 306)
