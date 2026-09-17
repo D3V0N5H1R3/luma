@@ -127,7 +127,7 @@ concept CollectionSubtype =
 // runtime value: primitives (null, bool, integer, number, string), compound
 // types (array, dictionary, tuple, record, choice, result, range, function),
 // concurrency types (task, channel), and collection types (queue, stack, set,
-// hash_set, linked_list, graph, xml, key_value_store).
+// xml, key_value_store).
 //
 // ─── Design ──────────────────────────────────────────────────────────────
 //
