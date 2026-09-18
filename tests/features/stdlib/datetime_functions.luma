@@ -24,7 +24,8 @@ function void test_datetime_difference() {
     number start_ms = DateTime.milliseconds_since_start()
     number end_ms = start_ms + 100.0
 
-    assert(Math.approximately_equal(DateTime.difference_milliseconds(start_ms, end_ms), 100.0, 0.001))
+    assert(Math.approximately_equal(
+        DateTime.difference_milliseconds(start_ms, end_ms), 100.0, 0.001))
 }
 
 @test
@@ -867,7 +868,6 @@ function void test_datetime_combine_and_extract_roundtrip() {
     assert(back_time.hour == 9 && back_time.minute == 30, "time_of recovers the wall-clock time")
 }
 
-
 # ─── DateTime.Period (calendar-aware span) ───
 
 @test
@@ -939,6 +939,11 @@ function void test_datetime_end_of() {
     assert(Result.unwrap(DateTime.hour(eod)) == 23)
     assert(Result.unwrap(DateTime.minute(eod)) == 59)
     assert(Result.unwrap(DateTime.second(eod)) == 59)
+
+    number eoh = Result.unwrap(DateTime.end_of_hour(ts))
+    assert(Result.unwrap(DateTime.hour(eoh)) == 14, "hour is preserved")
+    assert(Result.unwrap(DateTime.minute(eoh)) == 59)
+    assert(Result.unwrap(DateTime.second(eoh)) == 59)
 
     number eom = Result.unwrap(DateTime.end_of_month(ts))
     assert(Result.unwrap(DateTime.day_of_month(eom)) == 31, "March has 31 days")

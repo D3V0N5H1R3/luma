@@ -3,6 +3,8 @@ description: "Analyse the Luma interpreter and standard library read-only and pr
 argument-hint: "Optional scope, e.g. 'core/runtime/vm/' or 'the whole interpreter'"
 ---
 
+# Bug Search
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

@@ -17,33 +17,30 @@
 #include "lsp_transport.hpp"
 #include "test_framework.hpp"
 
-using namespace luma::json;
-using namespace luma::lsp;
-
 // ─── Mock transport ────────────────────────────────────────────────
 
-class MockTransport : public Transport {
+class MockTransport : public luma::lsp::Transport {
 public:
     void enqueue(const std::string& json_str) {
-        inbox_.push_back(JsonValue::parse(json_str));
+        inbox_.push_back(luma::json::JsonValue::parse(json_str));
     }
 
-    [[nodiscard]] std::optional<JsonValue> read_message() override {
+    [[nodiscard]] std::optional<luma::json::JsonValue> read_message() override {
         if (read_idx_ >= inbox_.size()) {
             return std::nullopt;
         }
         return inbox_[read_idx_++];
     }
 
-    void write_message(const JsonValue& message) override {
+    void write_message(const luma::json::JsonValue& message) override {
         outbox_.push_back(message);
     }
 
-    [[nodiscard]] const std::vector<JsonValue>& outbox() const {
+    [[nodiscard]] const std::vector<luma::json::JsonValue>& outbox() const {
         return outbox_;
     }
 
-    [[nodiscard]] const JsonValue* find_response(int64_t id) const {
+    [[nodiscard]] const luma::json::JsonValue* find_response(int64_t id) const {
         for (const auto& msg : outbox_) {
             if (msg.is_object() && msg.has("id") && msg["id"].as_integer() == id) {
                 return &msg;
@@ -62,9 +59,9 @@ protected:
     }
 
 private:
-    std::vector<JsonValue> inbox_;
+    std::vector<luma::json::JsonValue> inbox_;
     std::size_t read_idx_{0};
-    std::vector<JsonValue> outbox_;
+    std::vector<luma::json::JsonValue> outbox_;
 };
 
 // ─── JSON helpers ──────────────────────────────────────────────────
@@ -187,20 +184,21 @@ public:
         mock_->enqueue(make_shutdown(next_id_++));
         mock_->enqueue(k_exit);
         // Store the server to keep the mock transport alive after run() returns.
-        server_ = LspServer::create(LspServerConfig{std::move(mock_)});
+        server_ = luma::lsp::LspServer::create(luma::lsp::LspServerConfig{std::move(mock_)});
         return server_->run();
     }
 
-    [[nodiscard]] const JsonValue* find_response(int64_t id) const {
+    [[nodiscard]] const luma::json::JsonValue* find_response(int64_t id) const {
         return transport_->find_response(id);
     }
 
-    [[nodiscard]] const std::vector<JsonValue>& outbox() const {
+    [[nodiscard]] const std::vector<luma::json::JsonValue>& outbox() const {
         return transport_->outbox();
     }
 
-    const JsonValue* request_and_run(const std::string& method, const std::string& uri,
-                                     const std::string& code, const std::string& params) {
+    const luma::json::JsonValue* request_and_run(const std::string& method, const std::string& uri,
+                                                 const std::string& code,
+                                                 const std::string& params) {
         open_document(uri, code);
         const auto id = request(method, params);
         (void)run();
@@ -210,23 +208,23 @@ public:
 private:
     std::unique_ptr<MockTransport> mock_;
     MockTransport* transport_;
-    std::unique_ptr<LspServer> server_;
+    std::unique_ptr<luma::lsp::LspServer> server_;
     int64_t next_id_{3}; // IDs 1 and 2 reserved for initialize and shutdown
 };
 
 // ─── Response assertion helpers ────────────────────────────────────
 
-inline void assert_has_result(const JsonValue* resp) {
+inline void assert_has_result(const luma::json::JsonValue* resp) {
     ASSERT_NE(resp, nullptr);
     ASSERT_TRUE(resp->has("result"));
 }
 
-inline void assert_result_is_array(const JsonValue* resp) {
+inline void assert_result_is_array(const luma::json::JsonValue* resp) {
     assert_has_result(resp);
     ASSERT_TRUE((*resp)["result"].is_array());
 }
 
-inline void assert_result_is_object(const JsonValue* resp) {
+inline void assert_result_is_object(const luma::json::JsonValue* resp) {
     assert_has_result(resp);
     ASSERT_TRUE((*resp)["result"].is_object());
 }
@@ -236,7 +234,7 @@ inline void assert_result_is_object(const JsonValue* resp) {
 // Assert that every named capability is advertised in the given
 // capabilities object. Reports the specific missing capability on failure.
 
-inline void assert_capabilities_present(const JsonValue& capabilities,
+inline void assert_capabilities_present(const luma::json::JsonValue& capabilities,
                                         std::span<const std::string_view> names) {
     for (const auto name : names) {
         const std::string key{name};
@@ -251,7 +249,7 @@ inline void assert_capabilities_present(const JsonValue& capabilities,
 // Send a request, run the session, and return the response.
 // Asserts that a response with a "result" field was received.
 
-[[nodiscard]] inline const JsonValue*
+[[nodiscard]] inline const luma::json::JsonValue*
 request_and_assert(LspTestSession& session, const std::string& method, const std::string& params) {
     const auto id = session.request(method, params);
     (void)session.run();
@@ -266,7 +264,7 @@ request_and_assert(LspTestSession& session, const std::string& method, const std
 // response. Combines the common open→request→run→find→assert boilerplate
 // for the many single-document request tests. Asserts a "result" was received.
 
-[[nodiscard]] inline const JsonValue*
+[[nodiscard]] inline const luma::json::JsonValue*
 open_request_and_assert(LspTestSession& session, const std::string& method, const std::string& uri,
                         const std::string& code, const std::string& params) {
     session.open_document(uri, code);
@@ -276,7 +274,8 @@ open_request_and_assert(LspTestSession& session, const std::string& method, cons
 // ─── Completion search helpers ─────────────────────────────────────
 
 // Check if completion result contains an item with the given label
-[[nodiscard]] inline bool has_completion_label(const JsonValue& result, const std::string& label) {
+[[nodiscard]] inline bool has_completion_label(const luma::json::JsonValue& result,
+                                               const std::string& label) {
     if (!result.is_array()) {
         return false;
     }
@@ -289,7 +288,8 @@ open_request_and_assert(LspTestSession& session, const std::string& method, cons
 }
 
 // Extract all completion labels from a result
-[[nodiscard]] inline std::vector<std::string> get_completion_labels(const JsonValue& result) {
+[[nodiscard]] inline std::vector<std::string>
+get_completion_labels(const luma::json::JsonValue& result) {
     std::vector<std::string> labels;
     if (!result.is_array()) {
         return labels;
@@ -305,7 +305,7 @@ open_request_and_assert(LspTestSession& session, const std::string& method, cons
 // ─── Hover text helper ────────────────────────────────────────────
 
 // Extract hover markdown text from a response
-[[nodiscard]] inline std::string get_hover_text(const JsonValue* resp) {
+[[nodiscard]] inline std::string get_hover_text(const luma::json::JsonValue* resp) {
     if (!resp || !resp->has("result")) {
         return "";
     }
@@ -324,7 +324,7 @@ open_request_and_assert(LspTestSession& session, const std::string& method, cons
 
 // ─── Symbol-finding helpers ───────────────────────────────────────
 
-[[nodiscard]] inline bool has_symbol(const JsonValue& result, const std::string& name) {
+[[nodiscard]] inline bool has_symbol(const luma::json::JsonValue& result, const std::string& name) {
     if (!result.is_array()) {
         return false;
     }
@@ -346,9 +346,9 @@ open_request_and_assert(LspTestSession& session, const std::string& method, cons
 
 // ─── Diagnostic helpers ───────────────────────────────────────────
 
-[[nodiscard]] inline std::vector<const JsonValue*>
-find_diagnostics(const std::vector<JsonValue>& outbox, const std::string& uri) {
-    std::vector<const JsonValue*> results;
+[[nodiscard]] inline std::vector<const luma::json::JsonValue*>
+find_diagnostics(const std::vector<luma::json::JsonValue>& outbox, const std::string& uri) {
+    std::vector<const luma::json::JsonValue*> results;
     for (const auto& msg : outbox) {
         if (msg.has("method") && msg["method"].as_string() == "textDocument/publishDiagnostics" &&
             msg.has("params") && msg["params"].has("uri") &&
@@ -359,8 +359,9 @@ find_diagnostics(const std::vector<JsonValue>& outbox, const std::string& uri) {
     return results;
 }
 
-[[nodiscard]] inline bool any_diagnostic_contains(const std::vector<const JsonValue*>& publications,
-                                                  const std::string& substring) {
+[[nodiscard]] inline bool
+any_diagnostic_contains(const std::vector<const luma::json::JsonValue*>& publications,
+                        const std::string& substring) {
     for (const auto* pub : publications) {
         if (!pub->has("params") || !(*pub)["params"].has("diagnostics")) {
             continue;

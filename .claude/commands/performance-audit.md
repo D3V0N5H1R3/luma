@@ -3,6 +3,8 @@ description: "Analyse the project read-only and produce a prioritized, actionabl
 argument-hint: "Optional scope, e.g. 'core/runtime/vm/' or 'the whole interpreter'"
 ---
 
+# Performance Audit
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

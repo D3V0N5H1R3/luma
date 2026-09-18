@@ -22,7 +22,8 @@ require_python()
 
 # Matches lines like: "integer arithmetic | 50000 iterations | 123 ms | 0.002 ms/iter"
 _RESULT_RE = re.compile(
-    r"^(?P<name>.+?)\s*\|\s*\d+\s+iterations\s*\|\s*[\d.]+\s+ms\s*\|\s*(?P<per_iter>[\d.]+)\s+ms/iter$"
+    r"^(?P<name>.+?)\s*\|\s*\d+\s+iterations\s*\|\s*"
+    r"[\d.]+\s+ms\s*\|\s*(?P<per_iter>[\d.]+)\s+ms/iter$"
 )
 
 

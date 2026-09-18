@@ -28,8 +28,8 @@ function void main() {
     # ── Parse and inspect ──
     print("=== CSV Parsing ===")
 
-    array<string> headers = Csv.header(csv_data) |> Result.unwrap()
-    number row_count = Csv.count_rows(csv_data) |> Result.unwrap()
+    array<string> headers = Csv.header(csv_data) |> Result.unwrap_or([])
+    number row_count = Csv.count_rows(csv_data) |> Result.unwrap_or(0.0)
 
     string header_line = String.join(headers, ", ")
 
@@ -39,7 +39,7 @@ function void main() {
     # ── Raw row access ──
     print("\n=== Raw Rows ===")
 
-    array<array<string>> rows = Csv.deserialize(csv_data) |> Result.unwrap()
+    array<array<string>> rows = Csv.deserialize(csv_data) |> Result.unwrap_or([])
 
     print_data_rows(rows)
 
@@ -47,11 +47,11 @@ function void main() {
     print("\n=== As Records ===")
 
     array<dictionary<string>> records = Csv.deserialize_records(csv_data)
-    |> Result.unwrap()
+    |> Result.unwrap_or([])
 
     result<none> _ = records |> Array.each((dictionary<string> rec) -> {
-        string name = Dictionary.get(rec, "name") |> Result.unwrap()
-        string dept = Dictionary.get(rec, "department") |> Result.unwrap()
+        string name = Dictionary.get(rec, "name") |> Result.unwrap_or("?")
+        string dept = Dictionary.get(rec, "department") |> Result.unwrap_or("?")
 
         print("  ${name} works in ${dept}")
     })
@@ -64,7 +64,7 @@ function void main() {
         ["Widget", "150"],
         ["Gadget", "89"]
     ]
-    string output = Csv.serialize(report) |> Result.unwrap()
+    string output = Csv.serialize(report) |> Result.unwrap_or("")
 
     print(output)
 }

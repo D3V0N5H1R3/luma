@@ -29,6 +29,7 @@
 #include "runtime/compiler/bytecode_serializer.hpp"
 #include "runtime/compiler/compilation_cache.hpp"
 #include "runtime/compiler/compile_result.hpp"
+#include "runtime/interpreter/reference_leak_tracker.hpp"
 #include "runtime/stdlib/common/stdlib_registry.hpp"
 #include "runtime/stdlib/system/process_module.hpp"
 #include "runtime/vm/vm.hpp"
@@ -77,10 +78,20 @@ void save_to_disk_cache(const std::filesystem::path& cache_file, const CompiledF
                                    const std::vector<CompiledFunction>& functions,
                                    const std::vector<std::string>& args, bool sandbox) {
     set_program_args(args);
-    const auto global_env = Environment::create();
-    register_all(global_env, sandbox);
-    VM vm{global_env};
-    vm.execute(functions, top_level);
+
+    // Scope the VM and its environment so their reference cells are released
+    // before the leak diagnostic runs — anything still alive afterwards is a
+    // genuine reference<T> cycle leak.  The VM destructor also joins the task
+    // thread pool, so worker-thread references are dropped here too.
+    {
+        const auto global_env = Environment::create();
+        register_all(global_env, sandbox);
+        VM vm{global_env};
+        vm.execute(functions, top_level);
+    }
+
+    ReferenceLeakTracker::report_if_enabled();
+
     return exit_code::success;
 }
 

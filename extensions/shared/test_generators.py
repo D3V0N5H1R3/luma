@@ -29,6 +29,7 @@ import contextlib
 import io
 import sys
 import unittest
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -123,7 +124,7 @@ class ConfigCodeGenerator(unittest.TestCase):
     def test_vscode_mutation_splices_properties_and_drops_comment(self) -> None:
         captured: dict = {}
 
-        def fake_update(_root: Path, mutate) -> None:
+        def fake_update(_root: Path, mutate: Callable[[dict], None]) -> None:
             manifest = {"contributes": {"configuration": {"$comment": "TODO", "properties": {}}}}
             mutate(manifest)
             captured["manifest"] = manifest
@@ -223,7 +224,7 @@ class KeybindingsGenerator(unittest.TestCase):
     def test_vscode_mutation_from_canonical(self) -> None:
         captured: dict = {}
 
-        def fake_update(_root: Path, mutate) -> None:
+        def fake_update(_root: Path, mutate: Callable[[dict], None]) -> None:
             manifest = {"contributes": {"keybindings": None}}
             mutate(manifest)
             captured["manifest"] = manifest
@@ -340,7 +341,7 @@ class BatchRunners(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
 
     def test_ci_check_passes_when_no_diff(self) -> None:
-        def run(cmd, **_kwargs):
+        def run(cmd: list[str], **_kwargs: object) -> SimpleNamespace:
             return SimpleNamespace(returncode=0, stdout="", stderr="")
 
         with (
@@ -350,7 +351,7 @@ class BatchRunners(unittest.TestCase):
             ci_check.main()  # no SystemExit on a clean tree
 
     def test_ci_check_fails_on_stale_generated_files(self) -> None:
-        def run(cmd, **_kwargs):
+        def run(cmd: list[str], **_kwargs: object) -> SimpleNamespace:
             if cmd[0] == "git":
                 return SimpleNamespace(
                     returncode=0, stdout="extensions/vscode/package.json\n", stderr=""
@@ -366,7 +367,7 @@ class BatchRunners(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 1)
 
     def test_ci_check_fails_when_a_generator_fails(self) -> None:
-        def run(cmd, **_kwargs):
+        def run(cmd: list[str], **_kwargs: object) -> SimpleNamespace:
             if cmd[0] == "git":
                 return SimpleNamespace(returncode=0, stdout="", stderr="")
             return SimpleNamespace(returncode=1, stdout="", stderr="boom")

@@ -60,11 +60,11 @@ Keeps the prose and prompt files honest.
 
 Heavier quality gates that run on a timer or on request rather than on every change.
 
-| Workflow                         | Trigger                | Purpose                                                        |
-| -------------------------------- | ---------------------- | -------------------------------------------------------------- |
-| [`benchmark.yml`](benchmark.yml) | Push to `main`; manual | Run the benchmark suite and compare against a cached baseline.  |
-| [`ci-tsan.yml`](ci-tsan.yml)     | Weekly; manual         | Best-effort ThreadSanitizer race detection over the test suite. |
-| [`fuzz.yml`](fuzz.yml)           | Weekly; manual         | Build the libFuzzer targets and fuzz each one in parallel.      |
+| Workflow                         | Trigger                | Purpose                                                                                    |
+| -------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------ |
+| [`benchmark.yml`](benchmark.yml) | Push to `main`; manual | Run the benchmark suite and compare against a cached baseline.                             |
+| [`ci-tsan.yml`](ci-tsan.yml)     | Weekly; manual         | Best-effort ThreadSanitizer race detection over the test suite.                            |
+| [`fuzz.yml`](fuzz.yml)           | Nightly; manual        | Build the libFuzzer targets and fuzz each one in parallel with a persisted, seeded corpus. |
 
 ---
 

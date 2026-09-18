@@ -7,8 +7,7 @@ Single-file deflate/inflate (zlib/gzip) compression library.
 - **Vendored:** 2026-05-15
 - **License:** MIT (see [LICENSE](LICENSE))
 
-Used by the `Compression` module for gzip and raw deflate/inflate, and by the
-`GraphicalUi` module to decompress the embedded web assets at runtime.
+Used by the `Compression` module for gzip and raw deflate/inflate.
 
 ## Files
 

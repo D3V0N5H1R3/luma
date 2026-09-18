@@ -1058,7 +1058,8 @@ function Get-PythonExecutable {
             if ($LASTEXITCODE -eq 0) {
                 return $Command.Source
             }
-        } catch {
+        }
+        catch {
             # Not a working interpreter (e.g. the Store stub) - try the next name.
             Write-Verbose "Skipping '$Name': probe failed ($($_.Exception.Message))."
         }

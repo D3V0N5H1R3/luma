@@ -498,7 +498,8 @@ function void test_keyvaluestore_is_empty_and_update() {
     assert(KeyValueStore.get_or(s2, "count", "x") == "0")
 
     key_value_store s3 = Result.unwrap(
-        KeyValueStore.update(s2, "count", (optional<string> cur) -> Optional.unwrap_or(cur, "0") + "1"))
+        KeyValueStore.update(s2, "count",
+            (optional<string> cur) -> Optional.unwrap_or(cur, "0") + "1"))
     assert(KeyValueStore.get_or(s3, "count", "x") == "01")
 }
 

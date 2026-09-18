@@ -195,6 +195,14 @@ static void test_optional_index_coalesce_no_warn() {
                        "}\n"));
 }
 
+// The ?? fallback must be type-compatible with the left operand's inner type:
+// coalescing an optional<string> with an integer fallback is a type error.
+static void test_null_coalescing_fallback_type_mismatch() {
+    ASSERT_TRUE(fails("function void foo(optional<string> maybe) {\n"
+                      "    string v = maybe ?? 5\n"
+                      "}\n"));
+}
+
 // Storing the result of a void function in a variable emits a warning.
 static void test_void_call_site_warn() {
     ASSERT_TRUE(has_warnings("function void do_thing() {}\n"
@@ -672,6 +680,7 @@ int main() {
     RUN(test_optional_chain_coalesce_no_warn);
     RUN(test_optional_index_warn_non_nullable);
     RUN(test_optional_index_coalesce_no_warn);
+    RUN(test_null_coalescing_fallback_type_mismatch);
     RUN(test_void_call_site_warn);
     RUN(test_discarded_value_warn);
     RUN(test_discarded_value_no_warn_when_assigned);

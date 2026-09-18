@@ -150,7 +150,8 @@ function BenchResult run_concurrency_benchmarks(BenchResult state) {
     st = time_it(st, "Task.flat_map (chain)", 100, () -> {
         array<integer> _results = task_scope {
             task<integer> t = spawn bench_compute_square(5)
-            result<integer> _chained = Task.flat_map(t, (integer x) -> spawn bench_task_increment(x))
+            result<integer> _chained =
+                Task.flat_map(t, (integer x) -> spawn bench_task_increment(x))
         }
     })
 

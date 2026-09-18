@@ -347,7 +347,6 @@ function void test_csv_serialize_with_dialect() {
     assert(String.contains(csv, "1;2"))
 }
 
-
 # ─── Located parse errors (Csv.deserialize_detailed / Csv.ParseError) ───
 
 @test
@@ -375,7 +374,6 @@ function void test_csv_deserialize_detailed_failure_location() {
         }
     }
 }
-
 
 # ─── Csv.Table (headers + positional rows) ───
 

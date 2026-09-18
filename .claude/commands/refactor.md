@@ -3,6 +3,8 @@ description: "Refactor Luma code — interpreter, language server, debugger, or 
 argument-hint: "Refactoring goal, e.g. 'extract token validation into a shared helper'"
 ---
 
+# Refactor
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

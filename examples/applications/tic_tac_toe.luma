@@ -204,7 +204,11 @@ function void print_board(array<string> board) {
     for row in 0..3 {
         integer base = row * 3
 
-        print("   ${cell_label(board, base)} | ${cell_label(board, base + 1)} | ${cell_label(board, base + 2)}")
+        string left = cell_label(board, base)
+        string mid = cell_label(board, base + 1)
+        string right = cell_label(board, base + 2)
+
+        print("   ${left} | ${mid} | ${right}")
 
         if row < 2 {
             print("  ---+---+---")
@@ -315,7 +319,8 @@ function void test_ai_takes_immediate_win() {
     # X has two in the top row; the winning move is cell 2.
     array<string> board = ["X", "X", "-", "O", "O", "-", "-", "-", "-"]
 
-    assert(Result.unwrap_or(best_move(board, Player.X), -1) == 2, "X should complete the row at cell 2")
+    assert(Result.unwrap_or(best_move(board, Player.X), -1) == 2,
+        "X should complete the row at cell 2")
 }
 
 @test

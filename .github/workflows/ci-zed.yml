@@ -90,7 +90,7 @@ jobs:
           fi
 
       - name: Parse fixture files
-        run: node extensions/tests/parse_fixtures.js
+        run: node extensions/tests/parse-fixtures.js
 
       - name: Validate snippets are in sync with the shared source
         run: node extensions/tests/validate-snippets.test.mjs

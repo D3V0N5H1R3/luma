@@ -8,7 +8,7 @@
  * Usage:
  *   cd extensions/zed/grammars/tree-sitter-luma
  *   npm install
- *   node ../../tests/validate_queries.js
+ *   node ../../tests/validate-queries.js
  *
  * Requires: tree-sitter and tree-sitter-luma installed in the grammar directory.
  */
@@ -29,7 +29,7 @@ const ZED_QUERIES_DIR = path.resolve(
 // ── Expected highlight captures for known code patterns ────────
 //
 // Each snippet is highlighted against the Zed query with `tree-sitter
-// query` (see validate_highlights) and must yield the listed capture.
+// query` (see validateHighlights) and must yield the listed capture.
 // These expectations track the Zed capture names: Zed labels boolean
 // literals `@constant.builtin` and every control-flow keyword
 // `@keyword.control` (the `none` literal is `@constant.builtin` too).
@@ -132,14 +132,14 @@ const INJECTION_TESTS = [
 
 // ── Query syntax validation ────────────────────────────────────
 
-function validate_query_syntax(query_dir, label) {
-    if (!fs.existsSync(query_dir)) {
+function validateQuerySyntax(queryDir, label) {
+    if (!fs.existsSync(queryDir)) {
         console.log(`  SKIP  ${label} (directory not found)`);
         return 0;
     }
 
     const files = fs
-        .readdirSync(query_dir)
+        .readdirSync(queryDir)
         .filter((f) => f.endsWith(".scm"));
 
     if (files.length === 0) {
@@ -150,52 +150,52 @@ function validate_query_syntax(query_dir, label) {
     let failures = 0;
 
     for (const file of files) {
-        const file_path = path.join(query_dir, file);
-        const content = fs.readFileSync(file_path, "utf-8");
+        const filePath = path.join(queryDir, file);
+        const content = fs.readFileSync(filePath, "utf-8");
 
         // Validate basic syntax: balanced parentheses, no stray characters
-        let paren_depth = 0;
-        let bracket_depth = 0;
-        let in_string = false;
-        let in_comment = false;
+        let parenDepth = 0;
+        let bracketDepth = 0;
+        let inString = false;
+        let inComment = false;
 
         for (let i = 0; i < content.length; i++) {
             const ch = content[i];
 
-            if (in_comment) {
+            if (inComment) {
                 if (ch === "\n") {
-                    in_comment = false;
+                    inComment = false;
                 }
                 continue;
             }
 
             if (ch === ";") {
-                in_comment = true;
+                inComment = true;
                 continue;
             }
 
             if (ch === '"') {
-                in_string = !in_string;
+                inString = !inString;
                 continue;
             }
 
-            if (in_string) {
+            if (inString) {
                 continue;
             }
 
-            if (ch === "(") paren_depth++;
-            if (ch === ")") paren_depth--;
-            if (ch === "[") bracket_depth++;
-            if (ch === "]") bracket_depth--;
+            if (ch === "(") parenDepth++;
+            if (ch === ")") parenDepth--;
+            if (ch === "[") bracketDepth++;
+            if (ch === "]") bracketDepth--;
 
-            if (paren_depth < 0) {
+            if (parenDepth < 0) {
                 console.log(
                     `  FAIL  ${label}/${file}: unmatched ')' at offset ${i}`,
                 );
                 failures++;
                 break;
             }
-            if (bracket_depth < 0) {
+            if (bracketDepth < 0) {
                 console.log(
                     `  FAIL  ${label}/${file}: unmatched ']' at offset ${i}`,
                 );
@@ -204,14 +204,14 @@ function validate_query_syntax(query_dir, label) {
             }
         }
 
-        if (paren_depth !== 0) {
+        if (parenDepth !== 0) {
             console.log(
-                `  FAIL  ${label}/${file}: unbalanced parentheses (depth=${paren_depth})`,
+                `  FAIL  ${label}/${file}: unbalanced parentheses (depth=${parenDepth})`,
             );
             failures++;
-        } else if (bracket_depth !== 0) {
+        } else if (bracketDepth !== 0) {
             console.log(
-                `  FAIL  ${label}/${file}: unbalanced brackets (depth=${bracket_depth})`,
+                `  FAIL  ${label}/${file}: unbalanced brackets (depth=${bracketDepth})`,
             );
             failures++;
         } else {
@@ -253,25 +253,31 @@ function validate_query_syntax(query_dir, label) {
 const QUERY_ERROR_MARKERS = ["Impossible pattern", "Query error"];
 const ERROR_DISPLAY_MARKERS = [...QUERY_ERROR_MARKERS, "Error:"];
 
-function run_query(query_file, source_code) {
-    const tmp_file = path.join(GRAMMAR_DIR, "_validate_queries_probe.luma");
+function runQuery(queryFile, sourceCode) {
+    const tmpFile = path.join(GRAMMAR_DIR, "_validate_queries_probe.luma");
     try {
-        fs.writeFileSync(tmp_file, source_code + "\n");
+        fs.writeFileSync(tmpFile, sourceCode + "\n");
         const output = execSync(
-            `npx tree-sitter query "${query_file}" "${tmp_file}" 2>&1`,
+            `npx tree-sitter query "${queryFile}" "${tmpFile}" 2>&1`,
             { cwd: GRAMMAR_DIR, encoding: "utf-8", timeout: 30000 },
         );
         return { ok: true, output };
     } catch (err) {
         return { ok: false, output: (err.stdout || err.message || "").toString() };
     } finally {
+        // Best-effort cleanup: the probe file lives in a temp location and a
+        // failed unlink (e.g. already removed) must not mask the query result.
         try {
-            fs.unlinkSync(tmp_file);
-        } catch {}
+            fs.unlinkSync(tmpFile);
+        } catch (cleanupError) {
+            console.warn(
+                `  WARN  could not remove probe file ${tmpFile}: ${cleanupError.message}`,
+            );
+        }
     }
 }
 
-function captured_names(output) {
+function capturedNames(output) {
     const names = new Set();
     const re = /capture:\s*\d+\s*-\s*([\w.]+)/g;
     let match;
@@ -281,7 +287,7 @@ function captured_names(output) {
     return names;
 }
 
-function captured_injection_texts(output) {
+function capturedInjectionTexts(output) {
     const texts = [];
     const re = /capture:\s*\d+\s*-\s*injection\.content,[^\n]*?text:\s*`([^`]*)`/g;
     let match;
@@ -291,7 +297,7 @@ function captured_injection_texts(output) {
     return texts;
 }
 
-function first_error_line(output) {
+function firstErrorLine(output) {
     return (
         output
             .split("\n")
@@ -301,39 +307,39 @@ function first_error_line(output) {
     );
 }
 
-function is_query_error(output) {
+function isQueryError(output) {
     return QUERY_ERROR_MARKERS.some((marker) => output.includes(marker));
 }
 
-function validate_highlights() {
+function validateHighlights() {
     let failures = 0;
 
-    const zed_highlights = path.join(ZED_QUERIES_DIR, "highlights.scm");
+    const zedHighlights = path.join(ZED_QUERIES_DIR, "highlights.scm");
 
-    if (!fs.existsSync(zed_highlights)) {
+    if (!fs.existsSync(zedHighlights)) {
         console.log("  SKIP  highlight tests (zed/highlights.scm not found)");
         return 0;
     }
 
     // Probe availability: skip the whole section if tree-sitter cannot run
     // here, but treat a genuine query-compile error as a real failure.
-    const probe = run_query(zed_highlights, "integer x = 0");
-    if (!probe.ok && !is_query_error(probe.output)) {
+    const probe = runQuery(zedHighlights, "integer x = 0");
+    if (!probe.ok && !isQueryError(probe.output)) {
         console.log("  SKIP  highlight tests (tree-sitter query unavailable)");
         return 0;
     }
 
     for (const test of HIGHLIGHT_TESTS) {
-        const result = run_query(zed_highlights, test.code);
+        const result = runQuery(zedHighlights, test.code);
         if (!result.ok) {
             console.log(
-                `  FAIL  highlight: "${test.name}" — query did not compile: ${first_error_line(result.output)}`,
+                `  FAIL  highlight: "${test.name}" — query did not compile: ${firstErrorLine(result.output)}`,
             );
             failures++;
             continue;
         }
 
-        const names = captured_names(result.output);
+        const names = capturedNames(result.output);
         if (names.has(test.expect)) {
             console.log(`  PASS  highlight: "${test.name}"`);
         } else {
@@ -347,35 +353,35 @@ function validate_highlights() {
     return failures;
 }
 
-function validate_injections() {
+function validateInjections() {
     let failures = 0;
 
-    const zed_injections = path.join(ZED_QUERIES_DIR, "injections.scm");
+    const zedInjections = path.join(ZED_QUERIES_DIR, "injections.scm");
 
-    if (!fs.existsSync(zed_injections)) {
+    if (!fs.existsSync(zedInjections)) {
         console.log("  SKIP  injection tests (zed/injections.scm not found)");
         return 0;
     }
 
     // Probe availability with the same policy as highlights: skip when
     // tree-sitter query cannot run, but fail on a genuine query-compile error.
-    const probe = run_query(zed_injections, "integer x = 0");
-    if (!probe.ok && !is_query_error(probe.output)) {
+    const probe = runQuery(zedInjections, "integer x = 0");
+    if (!probe.ok && !isQueryError(probe.output)) {
         console.log("  SKIP  injection tests (tree-sitter query unavailable)");
         return 0;
     }
 
     for (const test of INJECTION_TESTS) {
-        const result = run_query(zed_injections, test.code);
+        const result = runQuery(zedInjections, test.code);
         if (!result.ok) {
             console.log(
-                `  FAIL  injection: "${test.name}" — query did not compile: ${first_error_line(result.output)}`,
+                `  FAIL  injection: "${test.name}" — query did not compile: ${firstErrorLine(result.output)}`,
             );
             failures++;
             continue;
         }
 
-        const texts = captured_injection_texts(result.output);
+        const texts = capturedInjectionTexts(result.output);
         const missing = test.include.filter((s) => !texts.includes(s));
         const leaked = test.exclude.filter((s) => texts.includes(s));
 
@@ -404,26 +410,26 @@ function validate_injections() {
 function main() {
     console.log("=== Tree-sitter Query Validation ===\n");
 
-    let total_failures = 0;
+    let totalFailures = 0;
 
     // 1. Validate query syntax.
     console.log("--- Zed Query Syntax ---");
-    total_failures += validate_query_syntax(ZED_QUERIES_DIR, "zed");
+    totalFailures += validateQuerySyntax(ZED_QUERIES_DIR, "zed");
 
     // 2. Validate highlights produce expected scopes.
     console.log("\n--- Highlight Capture Tests ---");
-    total_failures += validate_highlights();
+    totalFailures += validateHighlights();
 
     // 3. Validate injections target only the regex pattern operand.
     console.log("\n--- Injection Capture Tests ---");
-    total_failures += validate_injections();
+    totalFailures += validateInjections();
 
     // Summary.
     console.log(
-        `\n${total_failures === 0 ? "All checks passed." : `${total_failures} failure(s).`}`,
+        `\n${totalFailures === 0 ? "All checks passed." : `${totalFailures} failure(s).`}`,
     );
 
-    if (total_failures > 0) {
+    if (totalFailures > 0) {
         process.exit(1);
     }
 }

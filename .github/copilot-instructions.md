@@ -14,6 +14,7 @@ Read these before making significant changes:
 - [Luma_Coding_Guidelines.md](../documents/Luma_Coding_Guidelines.md) — Luma coding style and conventions
 - [Luma_Error_Handling.md](../documents/Luma_Error_Handling.md) — Error categories, result/optional handling, and stdlib conventions
 - [Luma_Performance_Guide.md](../documents/Luma_Performance_Guide.md) — Performance characteristics and optimisation advice
+- [Luma_Sandbox.md](../documents/Luma_Sandbox.md) — Sandbox-mode security model, capability model, guarantees, and limitations
 - [Luma_Debugger.md](../documents/Luma_Debugger.md) — DAP debugger design and architecture
 - [Luma_Language_Server.md](../documents/Luma_Language_Server.md) — LSP language server design and implementation
 - [Luma_Syntax_Highlighting.md](../documents/Luma_Syntax_Highlighting.md) — Syntax highlighting and editor extension design
@@ -100,7 +101,6 @@ Follow the detailed instructions in `instructions/`:
 - **Rust style:** `snake_case` for variables, functions, modules. `PascalCase` for types, traits, enum variants. `UPPER_CASE` for constants. See [instructions/rust.instructions.md](../instructions/rust.instructions.md).
 - **TypeScript style:** `camelCase` for variables, functions. `PascalCase` for types, classes, interfaces. `UPPER_CASE` for constants. See [instructions/typescript.instructions.md](../instructions/typescript.instructions.md).
 - **JavaScript style:** `camelCase` for variables, functions. `PascalCase` for classes. `UPPER_CASE` for constants. `kebab-case` for file names. `const` by default, `let` when needed, never `var`. Always use `===`/`!==`. See [instructions/javascript.instructions.md](../instructions/javascript.instructions.md).
-- **CSS style:** BEM naming (`block__element--modifier`). `kebab-case` for custom properties. 4-space indentation. Low specificity — no IDs for styling, no `!important`. Custom properties for all colours and spacing. Mobile-first responsive design. See [instructions/css.instructions.md](../instructions/css.instructions.md).
 - **Python style:** `snake_case` for variables, functions, modules. `PascalCase` for classes. `UPPER_CASE` for constants. Type hints on all functions. `pytest` for testing. See [instructions/python.instructions.md](../instructions/python.instructions.md).
 - **Shell style:** `snake_case` for variables and functions. `UPPER_CASE` for constants. `set -euo pipefail`. Always quote variables. Portable across Linux and macOS. See [instructions/shell.instructions.md](../instructions/shell.instructions.md).
 - **PowerShell style:** `PascalCase` for variables, functions, parameters. Approved Verb-Noun cmdlet names. `[CmdletBinding()]` on functions. Full cmdlet names — no aliases. See [instructions/powershell.instructions.md](../instructions/powershell.instructions.md).

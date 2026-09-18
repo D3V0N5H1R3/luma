@@ -42,5 +42,3 @@ export function folderLspClientId(folder_name: string): string {
 // Built-in type set sourced from the generated builtin-types module
 // (single source of truth: extensions/shared/builtin-types.json).
 export { LUMA_BUILTIN_TYPE_SET } from "../generated/builtin-types";
-
-export const LUMA_TYPE_PATTERN = /^(\s*)(\w+)\b/;

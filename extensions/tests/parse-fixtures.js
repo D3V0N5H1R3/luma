@@ -9,7 +9,7 @@
  * Usage:
  *   cd extensions/zed/grammars/tree-sitter-luma
  *   npm install
- *   node ../../tests/parse_fixtures.js
+ *   node ../../tests/parse-fixtures.js
  *
  * Requires: tree-sitter-cli installed in the grammar directory.
  */
@@ -44,21 +44,21 @@ function main() {
     let failures = 0;
 
     for (const fixture of fixtures) {
-        const file_path = path.join(FIXTURES_DIR, fixture);
+        const filePath = path.join(FIXTURES_DIR, fixture);
         try {
             const output = execSync(
-                `npx tree-sitter parse "${file_path}" 2>&1`,
+                `npx tree-sitter parse "${filePath}" 2>&1`,
                 { cwd: GRAMMAR_DIR, encoding: "utf-8" },
             );
 
             if (output.includes("ERROR") || output.includes("MISSING")) {
                 console.log(`  FAIL  ${fixture}`);
                 // Print first few error lines.
-                const error_lines = output
+                const errorLines = output
                     .split("\n")
                     .filter((l) => l.includes("ERROR") || l.includes("MISSING"))
                     .slice(0, 5);
-                for (const line of error_lines) {
+                for (const line of errorLines) {
                     console.log(`        ${line.trim()}`);
                 }
                 failures++;

@@ -227,16 +227,19 @@ function array<DepartmentSummary> aggregate(array<Employee> employees) {
 # ─── Stage 6: Format Output ─────────────────────────────
 
 function string format_employee(Employee e) {
-    return "  ${e.name} | ${e.department} | ${String.format_number(e.salary, 0)} | ${e.salary_band} | ${e.tenure_years}y"
+    string salary_text = String.format_number(e.salary, 0)
+    return "  ${e.name} | ${e.department} | ${salary_text} | ${e.salary_band} | ${e.tenure_years}y"
 }
 
 function string format_summary(DepartmentSummary s) {
+    string min_text = String.format_number(s.min_salary, 0)
+    string max_text = String.format_number(s.max_salary, 0)
     return String.join([
         "  ${s.department}:",
         "    Headcount: ${s.headcount}",
         "    Total:     ${String.format_number(s.total_salary, 0)}",
         "    Average:   ${String.format_number(s.average_salary, 0)}",
-        "    Range:     ${String.format_number(s.min_salary, 0)} — ${String.format_number(s.max_salary, 0)}"
+        "    Range:     ${min_text} — ${max_text}"
     ], "\n")
 }
 
@@ -461,7 +464,8 @@ function void test_transform_record() {
     Employee e = transform_record(raw)
 
     assert(e.name == "Alice", "name should match")
-    assert(Result.unwrap_or(Math.absolute(e.salary - 95000.0), 1.0) < 0.01, "salary should be 95000")
+    assert(Result.unwrap_or(Math.absolute(e.salary - 95000.0), 1.0) < 0.01,
+        "salary should be 95000")
     assert(e.salary_band == "Mid-Level", "95k should be Mid-Level")
     assert(e.tenure_years == 7, "expected 7 years")
 }
@@ -493,8 +497,10 @@ function void test_aggregate_single_department() {
 
     assert(Array.length(summaries) == 1, "expected 1 department")
     assert(summaries[0].headcount == 2, "expected 2 employees")
-    assert(Result.unwrap_or(Math.absolute(summaries[0].total_salary - 180000.0), 1.0) < 0.01, "expected total 180k")
-    assert(Result.unwrap_or(Math.absolute(summaries[0].average_salary - 90000.0), 1.0) < 0.01, "expected avg 90k")
+    assert(Result.unwrap_or(Math.absolute(summaries[0].total_salary - 180000.0), 1.0) < 0.01,
+        "expected total 180k")
+    assert(Result.unwrap_or(Math.absolute(summaries[0].average_salary - 90000.0), 1.0) < 0.01,
+        "expected avg 90k")
 }
 
 @test
@@ -512,8 +518,10 @@ function void test_full_pipeline_validation() {
     ValidationOutcome outcome = validate_all(raw)
 
     # Dave has empty salary, Jack has invalid salary
-    assert(Array.length(outcome.errors) == 2, "expected 2 validation errors, got ${Array.length(outcome.errors)}")
-    assert(Array.length(outcome.valid) == 8, "expected 8 valid records, got ${Array.length(outcome.valid)}")
+    assert(Array.length(outcome.errors) == 2,
+        "expected 2 validation errors, got ${Array.length(outcome.errors)}")
+    assert(Array.length(outcome.valid) == 8,
+        "expected 8 valid records, got ${Array.length(outcome.valid)}")
 }
 
 # ─── Entry Point ─────────────────────────────────────────

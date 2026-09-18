@@ -131,7 +131,7 @@ node tests/validate-download-constants.test.mjs
 node tests/validate-resolution-order.test.mjs
 ```
 
-The tree-sitter grammar parse fixtures (`extensions/tests/parse_fixtures.js`,
+The tree-sitter grammar parse fixtures (`extensions/tests/parse-fixtures.js`,
 which needs the grammar generated first) are not reproduced here. Also confirm the generated per-editor files are in sync
 (`cd extensions/shared && python ci-check-generated.py`). Every test must pass
 before the release is verified.

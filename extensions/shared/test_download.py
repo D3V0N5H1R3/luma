@@ -32,6 +32,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -45,7 +46,7 @@ _spec.loader.exec_module(download)
 
 
 @contextlib.contextmanager
-def _quiet():
+def _quiet() -> Iterator[None]:
     """Swallow the JSON progress events download.py prints to stdout."""
     with contextlib.redirect_stdout(io.StringIO()):
         yield
@@ -255,7 +256,7 @@ class _FakeResponse:
     and a ``headers`` mapping, which is all download.py touches.
     """
 
-    def __init__(self, body: bytes = b"", *, headers: dict | None = None):
+    def __init__(self, body: bytes = b"", *, headers: dict | None = None) -> None:
         self._body = body
         self.headers = headers or {}
         self._pos = 0

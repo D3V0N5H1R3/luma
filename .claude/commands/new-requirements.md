@@ -3,6 +3,8 @@ description: "Research other languages and libraries read-only and produce a pri
 argument-hint: "Optional focus, e.g. 'string handling', 'concurrency', 'Terminal', or 'the whole language and stdlib'"
 ---
 
+# New Requirements
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

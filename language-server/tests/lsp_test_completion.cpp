@@ -4,7 +4,10 @@
 #include "lsp_test_helpers.hpp"
 #include "lsp_types.hpp"
 
+using luma::lsp::CompletionItem;
 using luma::lsp::test_fixtures::simple::k_main;
+
+namespace constants = luma::lsp::constants;
 
 namespace {
 

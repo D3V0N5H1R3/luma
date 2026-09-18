@@ -336,4 +336,3 @@ function void test_choice_as_dictionary_value() {
     assert(palette["cool"] == Color.Blue)
     assert(palette["warm"] != palette["cool"])
 }
-

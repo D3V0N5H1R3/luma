@@ -50,9 +50,10 @@ Index of the design, reference, and guide documents for the Luma programming lan
 
 ## 4 — Design and Architecture
 
-| Document                                               | Description                                                |
-| ------------------------------------------------------ | ---------------------------------------------------------- |
-| [Software Architecture](Luma_Software_Architecture.md) | Interpreter pipeline, module layout, and design rationale. |
+| Document                                               | Description                                                                 |
+| ------------------------------------------------------ | --------------------------------------------------------------------------- |
+| [Software Architecture](Luma_Software_Architecture.md) | Interpreter pipeline, module layout, and design rationale.                  |
+| [Sandbox and Threat Model](Luma_Sandbox.md)            | Sandbox-mode security model, capability model, guarantees, and limitations. |
 
 ---
 

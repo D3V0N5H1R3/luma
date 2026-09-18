@@ -231,7 +231,8 @@ function void test_task_sequence_empty_returns_empty() {
     result<array<integer>> sequence_result = Task.sequence([])
 
     assert(Result.is_success(sequence_result), "Task.sequence([]) should succeed")
-    assert(Array.length(Result.unwrap(sequence_result)) == 0, "Task.sequence([]) yields an empty array")
+    assert(Array.length(Result.unwrap(sequence_result)) == 0,
+        "Task.sequence([]) yields an empty array")
 }
 
 @test
@@ -279,7 +280,8 @@ function void test_task_flat_map_requires_task() {
             base_task, (integer task_value) -> task_value + 1
         )
 
-        assert(Result.is_failure(flat_result), "Task.flat_map fails when the function returns a non-task")
+        assert(Result.is_failure(flat_result),
+            "Task.flat_map fails when the function returns a non-task")
     }
 }
 

@@ -147,7 +147,7 @@ function string todo_prompt() {
 }
 
 function string unknown_command_hint() {
-    return "Unknown command. Try: add \"Buy milk\", add! \"Fix router\", done 3, clean, list, help, quit."
+    return "Unknown command. Try: add \"Buy milk\", add! \"Fix router\", done 3, list, quit."
 }
 
 # ─── Main Loop ───

@@ -13,7 +13,7 @@ function BenchResult run_memory_benchmarks(BenchResult state) {
     st = time_it(st, "large dictionary (200 keys)", 10, () -> {
         mutable dictionary<string> d = {}
         for i in 0 .. 200 {
-            d = Dictionary.set(d, Converter.to_string(i), "value_" + Converter.to_string(i))
+            d = Dictionary.set(d, Converter.to_string(i), "value_${i}")
         }
     })
 
@@ -28,7 +28,8 @@ function BenchResult run_memory_benchmarks(BenchResult state) {
         array<integer> source = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         mutable array<array<integer>> copies = []
         for _ in 0 .. 50 {
-            copies = Array.push(copies, source |> Array.map((integer x) -> x + 1) |> Result.unwrap_or([]))
+            copies = Array.push(copies,
+                source |> Array.map((integer x) -> x + 1) |> Result.unwrap_or([]))
         }
     })
 

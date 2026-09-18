@@ -190,5 +190,6 @@ function void test_solution_satisfies_system() {
 @test
 function void test_singular_matrix_has_no_inverse() {
     array<array<number>> singular = [[1.0, 2.0], [2.0, 4.0]]
-    assert(Result.is_failure(LinearAlgebra.inverse(singular)), "a singular matrix is not invertible")
+    assert(Result.is_failure(LinearAlgebra.inverse(singular)),
+        "a singular matrix is not invertible")
 }

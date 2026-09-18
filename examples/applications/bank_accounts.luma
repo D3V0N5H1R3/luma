@@ -58,7 +58,9 @@ function string format_transaction(Transaction entry) {
     string account = Result.unwrap_or(String.pad_right(entry.account_id, 10, " "), entry.account_id)
     string action = describe_kind(entry.kind) |> String.pad_right(22, " ") |> Result.unwrap_or("?")
     string amount = format_money(entry.amount) |> String.pad_left(10, " ") |> Result.unwrap_or("?")
-    string balance = format_money(entry.balance_after) |> String.pad_left(10, " ") |> Result.unwrap_or("?")
+    string balance = format_money(entry.balance_after)
+        |> String.pad_left(10, " ")
+        |> Result.unwrap_or("?")
 
     return "  ${account} ${action} ${amount} ${balance}"
 }
@@ -130,7 +132,8 @@ function result<Bank> withdraw(Bank bank, string account_id, number amount) {
     Account account = Dictionary.get(bank.accounts, account_id)?
 
     if amount > account.balance {
-        return failure("insufficient funds in ${account_id}: balance is ${format_money(account.balance)}")
+        string balance_text = format_money(account.balance)
+        return failure("insufficient funds in ${account_id}: balance is ${balance_text}")
     }
 
     Account updated = account with { balance = account.balance - amount }
@@ -263,7 +266,8 @@ function boolean approx(number a, number b) {
 function void test_open_account_sets_balance() {
     Bank bank = open_account(empty_bank(), "A", "Ann", 100.0) |> Result.unwrap()
 
-    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 100.0), "opening balance should be 100")
+    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 100.0),
+        "opening balance should be 100")
 }
 
 @test
@@ -336,7 +340,8 @@ function void test_failed_transfer_leaves_balances_untouched() {
     result<Bank> outcome = transfer(bank, "A", "B", 1000.0)
 
     assert(!Result.is_success(outcome), "over-limit transfer should fail")
-    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 30.0), "A unchanged after failed transfer")
+    assert(approx(Result.unwrap_or(balance_of(bank, "A"), -1.0), 30.0),
+        "A unchanged after failed transfer")
 }
 
 @test
@@ -360,7 +365,8 @@ function void test_unknown_account_deposit_has_plain_message() {
         assert(false, "deposit to an unknown account should fail")
     }
     failure(message) {
-        assert(message == "No account found with id missing.", "unknown account message should be plain")
+        assert(message == "No account found with id missing.",
+            "unknown account message should be plain")
     }
     }
 }

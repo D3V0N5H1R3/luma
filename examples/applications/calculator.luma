@@ -42,7 +42,11 @@ function boolean is_number_char(string character) {
 # Consume the longest run of characters from `start` for which `predicate`
 # holds, returning the consumed text and the index just past it. The number
 # and identifier scans in tokenize() differ only in the predicate they pass.
-function (string, integer) take_while(string input, integer start, function(string) -> boolean predicate) {
+function (string, integer) take_while(
+    string input,
+    integer start,
+    function(string) -> boolean predicate
+) {
     mutable string consumed = ""
     mutable integer position = start
     integer input_length = String.length(input)
@@ -96,7 +100,8 @@ function result<array<Token>> tokenize(string input) {
         }
         else {
             if is_number_char(current_character) {
-                (string number_text, integer after_number) = take_while(input, current_position, is_number_char)
+                (string number_text, integer after_number) =
+                    take_while(input, current_position, is_number_char)
 
                 current_position = after_number
                 tokens = Array.push(tokens, Token.Number(number_text))
@@ -168,7 +173,11 @@ function result<number> apply_binary(number left, Token operator_token, number r
     }
 }
 
-function result<ParsedOperand> parse_function_call(string name, array<Token> tokens, integer argument_index) {
+function result<ParsedOperand> parse_function_call(
+    string name,
+    array<Token> tokens,
+    integer argument_index
+) {
     if argument_index >= Array.length(tokens) {
         return failure("function '${name}' needs an argument")
     }

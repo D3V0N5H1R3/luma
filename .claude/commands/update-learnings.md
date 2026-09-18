@@ -3,6 +3,8 @@ description: "Capture new development learnings and prune redundant or obsolete 
 argument-hint: "Optional focus, e.g. 'this session's changes' or a subsystem like 'VM' or 'LSP'"
 ---
 
+# Update Learnings
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

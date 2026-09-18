@@ -138,6 +138,65 @@ static void test_sandbox_blocked_modules_are_correct() {
     ASSERT_FALSE(blocked.contains("Result"));
 }
 
+// Cross-check the two independent capability tables that must agree for the
+// sandbox to be sound: the registry's `os_only` flags (which decide whether a
+// module is registered at all when sandbox mode is on) and the catalog-derived
+// blocked set (which produces the "not available in sandbox mode" error). They
+// must name exactly the same modules — a divergence means a new OS-capable
+// module was added to one table but not the other, which would silently expose
+// it (or wrongly hide a safe one) in sandbox mode.
+static void test_registry_os_only_matches_catalog_blocked() {
+    const auto& blocked = stdlib::sandbox_blocked_modules();
+
+    std::set<std::string> os_only_modules;
+    for (const auto& mod : luma::detail::kModules) {
+        if (mod.os_only) {
+            os_only_modules.insert(mod.name);
+        }
+    }
+
+    // Every OS-only module (skipped during sandbox registration) must also be
+    // in the blocked set, and every blocked module must be OS-only.
+    for (const auto& name : os_only_modules) {
+        ASSERT_TRUE(blocked.contains(name));
+    }
+    for (const auto& name : blocked) {
+        ASSERT_TRUE(os_only_modules.contains(std::string{name}));
+    }
+    ASSERT_EQ(os_only_modules.size(), blocked.size());
+}
+
+// End-to-end enforcement through the public lookup path: a sandbox-registered
+// environment must reject access to every blocked module with the sandbox
+// error, while safe modules resolve normally.
+static void test_sandbox_environment_enforces_access() {
+    const auto env = luma::test::make_std_env(/*sandbox=*/true);
+    const SourceLocation loc{};
+
+    // Blocked OS modules are both unregistered and reported with the sandbox
+    // error rather than a bare "undefined variable".
+    ASSERT_THROWS_WITH_MESSAGE(env->get("FileSystem.read_file", loc), "sandbox mode");
+    ASSERT_THROWS_WITH_MESSAGE(env->get("Process.run", loc), "sandbox mode");
+    ASSERT_THROWS_WITH_MESSAGE(env->get("Socket.connect", loc), "sandbox mode");
+    ASSERT_THROWS_WITH_MESSAGE(env->get("Http.get", loc), "sandbox mode");
+
+    // Safe modules remain available.
+    (void)env->get("String.length", loc);
+    (void)env->get("Math.absolute", loc);
+    (void)env->get("Array.map", loc);
+}
+
+// The same blocked modules resolve normally when sandbox mode is off, proving
+// the block is sandbox-scoped rather than an unconditional removal.
+static void test_non_sandbox_environment_permits_os_modules() {
+    const auto env = luma::test::make_std_env(/*sandbox=*/false);
+    const SourceLocation loc{};
+
+    (void)env->get("FileSystem.read_file", loc);
+    (void)env->get("Process.run", loc);
+    (void)env->get("Socket.connect", loc);
+}
+
 static void test_capability_flags_are_set() {
     const auto& cat = stdlib::catalog();
 
@@ -224,6 +283,9 @@ int main() {
     RUN(test_catalog_constants_are_not_callable);
     RUN(test_catalog_functions_are_callable);
     RUN(test_sandbox_blocked_modules_are_correct);
+    RUN(test_registry_os_only_matches_catalog_blocked);
+    RUN(test_sandbox_environment_enforces_access);
+    RUN(test_non_sandbox_environment_permits_os_modules);
     RUN(test_capability_flags_are_set);
     RUN(test_result_error_code_accessor);
     RUN(test_catalog_arity_is_enforced);

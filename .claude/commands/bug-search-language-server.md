@@ -3,6 +3,8 @@ description: "Analyse the Luma language server (LSP) read-only and produce a pri
 argument-hint: "Optional scope, e.g. 'lsp_completion_provider.cpp' or 'the whole language server'"
 ---
 
+# Bug Search — Language Server
+
 Follow the workflow defined in the Luma prompt file below, which is the single
 source of truth for this command. Read it in full and carry out its steps in the
 order given.

@@ -126,7 +126,7 @@ def fetch_release(version: str, urls: dict[str, str]) -> dict[str, Any]:
     emit_progress("fetch_release", f"Fetching release info ({version})...")
     try:
         return fetch_json(url)
-    except Exception as e:
+    except (OSError, ValueError) as e:  # network failure or malformed JSON
         emit_progress("error", f"Failed to fetch release: {e}")
         sys.exit(1)
 

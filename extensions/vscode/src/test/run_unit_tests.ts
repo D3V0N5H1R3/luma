@@ -6,7 +6,7 @@ import { glob } from "glob";
  * Standalone unit test runner — runs pure-utility tests without VS Code.
  * Use `npm run test:unit` to invoke.
  *
- * Requires --require ./out/test/vscode_stub.js to provide a vscode mock.
+ * Requires --require ./out/test/vscode-stub.js to provide a vscode mock.
  */
 async function main(): Promise<void> {
     const mocha = new Mocha({ ui: "tdd", color: true, timeout: 10000 });

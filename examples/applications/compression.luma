@@ -23,7 +23,7 @@ function void main() {
 
     string restored = compressed
     |> Compression.inflate()
-    |> Result.unwrap()
+    |> Result.unwrap_or("<inflate failed>")
 
     print("Restored text: ${restored}")
     print("Round-trip restored the original: ${if restored == original { "yes" } else { "no" }}")
@@ -38,7 +38,7 @@ function void main() {
 
     string ungzipped = gzipped
     |> Compression.gunzip()
-    |> Result.unwrap()
+    |> Result.unwrap_or("<gunzip failed>")
 
     print("Original:  ${data}")
     print("Restored:  ${ungzipped}")
@@ -55,8 +55,9 @@ function void main() {
 
     string decoded = encoded
     |> Compression.decode_rle()
-    |> Result.unwrap()
+    |> Result.unwrap_or("<decode failed>")
 
     print("Decoded: ${decoded}")
-    print("Run-length round-trip restored the input: ${if decoded == rle_input { "yes" } else { "no" }}")
+    string matches_original = if decoded == rle_input { "yes" } else { "no" }
+    print("Run-length round-trip restored the input: ${matches_original}")
 }

@@ -786,8 +786,25 @@ struct KeyValueStoreValue : CollectionObject {
 
 // ─── Node types ─────────────────────────────────────────────────────────────
 
+// Reference-cell leak accounting hooks (defined in reference_leak_tracker.cpp).
+// Declared here so this widely-included header need not depend on the tracker
+// header; see reference_leak_tracker.hpp for the rationale.
+void note_reference_constructed() noexcept;
+void note_reference_destroyed() noexcept;
+
 struct ReferenceValue {
-    explicit ReferenceValue(Value v) : value{std::make_shared<Value>(std::move(v))} {}
+    explicit ReferenceValue(Value v) : value{std::make_shared<Value>(std::move(v))} {
+        note_reference_constructed();
+    }
+
+    ReferenceValue(const ReferenceValue&) = delete;
+    ReferenceValue(ReferenceValue&&) = delete;
+    ReferenceValue& operator=(const ReferenceValue&) = delete;
+    ReferenceValue& operator=(ReferenceValue&&) = delete;
+
+    ~ReferenceValue() {
+        note_reference_destroyed();
+    }
 
     std::shared_ptr<Value> value;
     // Protects get()/set() for cross-task access. deep_copy() intentionally

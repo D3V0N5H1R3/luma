@@ -13,7 +13,6 @@ For repository-wide context — the architecture overview, module layout, and co
 | [build.instructions.md](build.instructions.md)                                   | Build commands, presets, sanitizers, coverage, and fuzz testing        | `**/{CMakeLists.txt,CMakePresets.json}`     |
 | [cmake.instructions.md](cmake.instructions.md)                                   | Target-based CMake configuration, dependency management                | `**/{CMakeLists.txt,*.cmake}`               |
 | [cpp.instructions.md](cpp.instructions.md)                                       | C++ naming, style, const-correctness, RAII, error handling             | `**/*.{cpp,hpp,h}`                          |
-| [css.instructions.md](css.instructions.md)                                       | CSS naming, specificity, layout, responsive design, theming            | `**/*.css`                                  |
 | [git.instructions.md](git.instructions.md)                                       | Commit messages, branch naming, merge strategy                         | Manually referenced                         |
 | [github-actions.instructions.md](github-actions.instructions.md)                 | CI/CD workflow conventions                                             | `.github/workflows/**`                      |
 | [github-actions-recipes.instructions.md](github-actions-recipes.instructions.md) | Copy-paste workflow recipes and debugging guidance                     | Manually referenced                         |

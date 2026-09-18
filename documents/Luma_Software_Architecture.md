@@ -1808,7 +1808,7 @@ No registration, no `implements` keyword, no runtime cost. The check is performe
 
 ## 9 — Memory Management Strategy
 
-The interpreter uses C++ RAII and smart pointers for fully automatic memory management. There is no manual allocation, no garbage collector, and no reference-counting cycle risk at the language level.
+The interpreter uses C++ RAII and smart pointers for fully automatic memory management. There is no manual allocation and no garbage collector. Reference counting reclaims values deterministically; the only construct that can form a cycle — and therefore leak — is `reference<T>`, which is diagnosable via the `LUMA_DIAGNOSE_REFERENCE_CYCLES` shutdown detector (see §19.4).
 
 ### 9.1 Ownership Model
 
@@ -2358,8 +2358,33 @@ This section records the key design decisions and the reasoning behind each one,
 
 - `std::shared_ptr` provides automatic, deterministic memory management via reference counting.
 - It integrates naturally with C++ RAII and requires no runtime infrastructure.
-- The risk of reference cycles is minimal because Luma's value model is acyclic — closures deep-copy their environment at capture time, not by mutable reference.
+- The value model is acyclic for every type **except `reference<T>`**: primitives and
+  compound values have value semantics (operations return new copies) and closures
+  deep-copy their captures, so ordinary values can never form cycles.
 - A garbage collector would add significant complexity without proportional benefit for version 1.0.
+
+**Reference cycles — the one leak vector.** `reference<T>` is the only mutable,
+shared, aliasing cell, so it is the only way a program can build a cycle in the
+value graph: reassigning a cell (via `Reference.set` / `update` / `swap`) to a
+structure that transitively contains the reference itself forms a `shared_ptr`
+cycle that reference counting cannot reclaim. For short-lived scripts this is
+harmless — the OS reclaims everything at exit — but a long-running process that
+repeatedly builds and drops such cycles leaks steadily.
+
+Rather than pay for a cycle collector (whose correctness is delicate in the
+presence of cross-task references), Luma provides a lightweight **detector**:
+`ReferenceLeakTracker` (`core/runtime/interpreter/reference_leak_tracker.hpp`)
+counts live reference cells with two relaxed atomic operations per
+`Reference.new` and per cell destruction. Setting the
+`LUMA_DIAGNOSE_REFERENCE_CYCLES` environment variable makes the interpreter
+print a one-line leak summary at shutdown when reference cells remain alive
+after the program's environment has been torn down — those cells are, by
+construction, leaked cycles. The detector never frees anything, so it cannot
+cause a use-after-free. Programs break a cycle the same way they build one, by
+reassigning the cell (for example `Reference.set(r, none)`) before dropping the
+last handle to it. The `soak_test` suite (`tests/runtime/soak_test.cpp`) pins
+this behaviour: it proves acyclic reference workloads reach a steady state and
+that breaking a cycle reclaims the cells.
 
 ### 19.5 Copy-on-Send for Channels (Not Shared Memory)
 

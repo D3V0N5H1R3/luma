@@ -34,7 +34,7 @@ namespace luma::stdlib {
 //   R::named("TimeParts")            // a record/choice type by name
 
 struct ReturnTypeDesc {
-    enum Kind : uint8_t {
+    enum class Kind : uint8_t {
         Integer,
         Number,
         String,
@@ -55,7 +55,7 @@ struct ReturnTypeDesc {
         Func,        // Callable / function value
     };
 
-    Kind kind{Unspecified};
+    Kind kind{Kind::Unspecified};
     std::string named_type;
     std::vector<ReturnTypeDesc> inner;
 
@@ -68,53 +68,53 @@ struct ReturnTypeDesc {
     // value.
 
     [[nodiscard]] static ReturnTypeDesc integer_type() {
-        return {Integer, {}, {}};
+        return {Kind::Integer, {}, {}};
     }
 
     [[nodiscard]] static ReturnTypeDesc number_type() {
-        return {Number, {}, {}};
+        return {Kind::Number, {}, {}};
     }
 
     [[nodiscard]] static ReturnTypeDesc string_type() {
-        return {String, {}, {}};
+        return {Kind::String, {}, {}};
     }
 
     [[nodiscard]] static ReturnTypeDesc boolean_type() {
-        return {Boolean, {}, {}};
+        return {Kind::Boolean, {}, {}};
     }
 
     [[nodiscard]] static ReturnTypeDesc void_type() {
-        return {Void, {}, {}};
+        return {Kind::Void, {}, {}};
     }
 
     [[nodiscard]] static ReturnTypeDesc none_type() {
-        return {None, {}, {}};
+        return {Kind::None, {}, {}};
     }
 
     [[nodiscard]] static ReturnTypeDesc any_type() {
-        return {Any, {}, {}};
+        return {Kind::Any, {}, {}};
     }
 
     [[nodiscard]] static ReturnTypeDesc unspecified_type() {
-        return {Unspecified, {}, {}};
+        return {Kind::Unspecified, {}, {}};
     }
 
     [[nodiscard]] static ReturnTypeDesc func_type() {
-        return {Func, {}, {}};
+        return {Kind::Func, {}, {}};
     }
 
     // ── Generic type factories ──────────────────────────────
 
     [[nodiscard]] static ReturnTypeDesc array(ReturnTypeDesc elem) {
-        return {Array, "", {std::move(elem)}};
+        return {Kind::Array, "", {std::move(elem)}};
     }
 
     [[nodiscard]] static ReturnTypeDesc dict(ReturnTypeDesc value) {
-        return {Dictionary, "", {std::move(value)}};
+        return {Kind::Dictionary, "", {std::move(value)}};
     }
 
     [[nodiscard]] static ReturnTypeDesc result(ReturnTypeDesc value) {
-        return {Result, "", {std::move(value)}};
+        return {Kind::Result, "", {std::move(value)}};
     }
 
     // Two-parameter result<value, error> — used where a stdlib function surfaces
@@ -123,31 +123,31 @@ struct ReturnTypeDesc {
     // signatures resolver keys off inner.size() == 2 to pick TypeInfo::make_result
     // with an explicit error type.
     [[nodiscard]] static ReturnTypeDesc result(ReturnTypeDesc value, ReturnTypeDesc error) {
-        return {Result, "", {std::move(value), std::move(error)}};
+        return {Kind::Result, "", {std::move(value), std::move(error)}};
     }
 
     [[nodiscard]] static ReturnTypeDesc optional(ReturnTypeDesc value) {
-        return {Optional, "", {std::move(value)}};
+        return {Kind::Optional, "", {std::move(value)}};
     }
 
     [[nodiscard]] static ReturnTypeDesc channel(ReturnTypeDesc value) {
-        return {Channel, "", {std::move(value)}};
+        return {Kind::Channel, "", {std::move(value)}};
     }
 
     [[nodiscard]] static ReturnTypeDesc task(ReturnTypeDesc value) {
-        return {Task, "", {std::move(value)}};
+        return {Kind::Task, "", {std::move(value)}};
     }
 
     [[nodiscard]] static ReturnTypeDesc reference(ReturnTypeDesc value) {
-        return {Reference, "", {std::move(value)}};
+        return {Kind::Reference, "", {std::move(value)}};
     }
 
     [[nodiscard]] static ReturnTypeDesc tuple(std::vector<ReturnTypeDesc> elements) {
-        return {Tuple, "", std::move(elements)};
+        return {Kind::Tuple, "", std::move(elements)};
     }
 
     [[nodiscard]] static ReturnTypeDesc named(std::string name) {
-        return {Named, std::move(name), {}};
+        return {Kind::Named, std::move(name), {}};
     }
 
     // ── Convenience shortcuts ───────────────────────────────

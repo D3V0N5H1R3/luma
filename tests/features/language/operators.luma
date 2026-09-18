@@ -209,6 +209,16 @@ function void test_string_repeat_operator_empty() {
     assert(repeated == "")
 }
 
+@test
+function void test_string_repeat_operator_negative_count() {
+    # A negative repeat count clamps to zero rather than erroring, yielding
+    # an empty string (mirrors the forgiving clamping used elsewhere).
+    string repeated = "ab" * -3
+
+    assert(repeated == "")
+    assert(String.length(repeated) == 0)
+}
+
 # ─── In Operator ───
 
 @test

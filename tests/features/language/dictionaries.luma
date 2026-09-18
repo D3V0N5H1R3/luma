@@ -258,7 +258,8 @@ function void test_for_key_value_empty_dict() {
 function void test_dictionary_reduce() {
     dictionary<integer> d = { "a": 1, "b": 2, "c": 3 }
 
-    result<integer> r = Dictionary.reduce(d, 0, (integer acc, string _key, integer val) -> acc + val)
+    result<integer> r =
+        Dictionary.reduce(d, 0, (integer acc, string _key, integer val) -> acc + val)
 
     assert(Result.is_success(r))
     assert(Result.unwrap(r) == 6)
@@ -281,7 +282,8 @@ function void test_dictionary_reduce_to_string() {
 function void test_dictionary_reduce_empty() {
     dictionary<integer> d = {}
 
-    result<integer> r = Dictionary.reduce(d, 42, (integer acc, string _key, integer val) -> acc + val)
+    result<integer> r =
+        Dictionary.reduce(d, 42, (integer acc, string _key, integer val) -> acc + val)
 
     assert(Result.is_success(r))
     assert(Result.unwrap(r) == 42)
@@ -431,7 +433,8 @@ function void test_dictionary_partition_basic() {
                 @test
                 function void test_dictionary_filter_callback_error() {
                     dictionary<integer> d = {"a": 1, "b": 2}
-                    result<dictionary<integer>> r = Dictionary.filter(d, (string _k, integer _v) -> {
+                    result<dictionary<integer>> r =
+                        Dictionary.filter(d, (string _k, integer _v) -> {
                         assert(false, "boom")
                         return true
                     })
@@ -528,7 +531,8 @@ function void test_dictionary_partition_basic() {
                 @test
                 function void test_dictionary_find_success() {
                     dictionary<integer> d = {"a": 1, "b": 2, "c": 3}
-                    result<(string, integer)> r = Dictionary.find(d, (string _key, integer val) -> val == 2)
+                    result<(string, integer)> r =
+                        Dictionary.find(d, (string _key, integer val) -> val == 2)
 
                     assert(Result.is_success(r))
 
@@ -541,7 +545,8 @@ function void test_dictionary_partition_basic() {
                 @test
                 function void test_dictionary_find_not_found() {
                     dictionary<integer> d = {"a": 1, "b": 2}
-                    result<(string, integer)> r = Dictionary.find(d, (string _key, integer val) -> val > 10)
+                    result<(string, integer)> r =
+                        Dictionary.find(d, (string _key, integer val) -> val > 10)
 
                     assert(Result.is_failure(r))
                 }
@@ -551,7 +556,8 @@ function void test_dictionary_partition_basic() {
                 @test
                 function void test_dictionary_count_basic() {
                     dictionary<integer> d = {"a": 1, "b": 2, "c": 3, "d": 4}
-                    integer c = Result.unwrap(Dictionary.count(d, (string _key, integer val) -> val > 2))
+                    integer c =
+                        Result.unwrap(Dictionary.count(d, (string _key, integer val) -> val > 2))
 
                     assert(c == 2)
                 }
@@ -559,7 +565,8 @@ function void test_dictionary_partition_basic() {
                 @test
                 function void test_dictionary_count_none_match() {
                     dictionary<integer> d = {"a": 1, "b": 2}
-                    integer c = Result.unwrap(Dictionary.count(d, (string _key, integer val) -> val > 10))
+                    integer c =
+                        Result.unwrap(Dictionary.count(d, (string _key, integer val) -> val > 10))
 
                     assert(c == 0)
                 }

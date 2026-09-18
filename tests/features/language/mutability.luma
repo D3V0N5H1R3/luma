@@ -315,5 +315,6 @@ function void test_mutable_dictionary_value_compound_assignment() {
     mutable dictionary<integer> scores = { "alice": 10 }
     scores["alice"] += 5
 
-    assert(scores["alice"] == 15, "compound assignment to a mutable dictionary entry should succeed")
+    assert(scores["alice"] == 15,
+        "compound assignment to a mutable dictionary entry should succeed")
 }

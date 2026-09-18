@@ -1,6 +1,8 @@
 <!-- AUTO-GENERATED from extensions/shared/keybindings.json -->
 <!-- Do not edit manually. Run: python generate-keybindings.py --zed -->
 
+# Luma Zed Keybindings
+
 ## Suggested Keybindings
 
 Zed extensions cannot register keybindings automatically. Add the bindings

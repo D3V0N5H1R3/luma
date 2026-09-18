@@ -16,9 +16,9 @@ set -eu
 : "${CXX:?CXX must be set (C++ compiler)}"
 
 cmake -B build \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_C_COMPILER="${CC}" \
-  -DCMAKE_CXX_COMPILER="${CXX}"
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_COMPILER="${CC}" \
+    -DCMAKE_CXX_COMPILER="${CXX}"
 
 # An explicit job count is required: `--parallel` with no number becomes
 # `make -j` (unlimited) under the Makefiles generator, which spawns hundreds of

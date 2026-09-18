@@ -263,6 +263,25 @@ static void test_unique_piped_to_borrow_param_not_consumed() {
                        "consume(x)\n"));
 }
 
+static void test_unique_captured_in_lambda_then_reused_blocked() {
+    // Capturing a unique variable inside a closure consumes it (the closure
+    // takes ownership of the captured value). Using the variable again after
+    // the capture is a use-after-move error.
+    ASSERT_TRUE(fails("function void consume(string s) { }\n"
+                      "unique string x = \"hello\"\n"
+                      "function() -> string grab = () -> x\n"
+                      "consume(x)\n"));
+}
+
+static void test_unique_captured_in_lambda_single_use_ok() {
+    // Capturing a unique variable exactly once (in a closure that is then
+    // invoked) satisfies the consume-once rule.
+    ASSERT_TRUE(passes("function void consume(string s) { }\n"
+                       "unique string x = \"hello\"\n"
+                       "function() -> void grab = () -> consume(x)\n"
+                       "grab()\n"));
+}
+
 static void test_borrow_field_read_ok() {
     // Reading a field of a borrowed record is allowed (borrow is read-only,
     // not unreadable).
@@ -316,6 +335,8 @@ int main() {
     RUN(test_unique_piped_to_unique_param_consumes);
     RUN(test_function_returns_unique_consumed_once);
     RUN(test_unique_piped_to_borrow_param_not_consumed);
+    RUN(test_unique_captured_in_lambda_then_reused_blocked);
+    RUN(test_unique_captured_in_lambda_single_use_ok);
     RUN(test_borrow_field_read_ok);
 
     // ─── Typed error values: result<T, E> ───

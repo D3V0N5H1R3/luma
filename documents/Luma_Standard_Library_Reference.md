@@ -1646,6 +1646,24 @@ integer value = Reference.new(42) |> Reference.get()       # 42
 string  text  = Reference.new(7)  |> Reference.inspect()  # "ref(7)"
 ```
 
+### Reference Cycles and Long-Running Programs
+
+A reference cell is the only value that can form a cycle: assigning a cell a
+value that transitively contains the cell itself (for example a recursive
+choice type whose payload is `reference<Node>`) creates a self-sustaining loop.
+Because Luma reclaims memory by reference counting rather than a garbage
+collector, such a cycle is **not** freed when the last handle to it goes away —
+it leaks. This is harmless for short scripts (the OS reclaims everything at
+exit) but accumulates in a long-running process that repeatedly builds and
+drops cycles.
+
+To break a cycle, reassign the cell before dropping it, for example
+`Reference.set(node, EmptyVariant)` (or store an empty/`none`-like value). To
+diagnose leaks, run the program with the `LUMA_DIAGNOSE_REFERENCE_CYCLES=1`
+environment variable set: the interpreter prints a one-line summary at exit if
+any reference cells are still alive after the program finishes, which indicates
+a leaked cycle.
+
 ## 28 — RegularExpression
 
 | Function                                          | Parameter Types            | Return Type                              | Description                                                   |
