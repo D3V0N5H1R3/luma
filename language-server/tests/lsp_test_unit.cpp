@@ -25,11 +25,18 @@ using luma::TokenType;
 using luma::json::JsonValue;
 using luma::lsp::AnalysisResult;
 using luma::lsp::find_token_at;
+using luma::lsp::is_reserved_keyword_name;
+using luma::lsp::is_safe_include_path;
+using luma::lsp::is_safe_resolved_path;
 using luma::lsp::LspConfig;
 using luma::lsp::Position;
 using luma::lsp::PositionEncoder;
 using luma::lsp::Range;
+using luma::lsp::reserved_keyword_names;
+using luma::lsp::SymbolDefinition;
 using luma::lsp::token_range;
+using luma::lsp::TokenIndexEntry;
+using luma::lsp::WorkspaceManager;
 
 namespace {
 

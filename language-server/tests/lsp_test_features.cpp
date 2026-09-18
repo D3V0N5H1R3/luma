@@ -6,6 +6,9 @@
 #include "lsp_test_helpers.hpp"
 #include "lsp_token_utils.hpp"
 
+using luma::lsp::find_identifier_range;
+using luma::lsp::lexeme_column_width;
+using luma::lsp::name_range;
 using luma::lsp::token_extents;
 using luma::lsp::token_range;
 using luma::lsp::test_fixtures::simple::k_empty_main;
