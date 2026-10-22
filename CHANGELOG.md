@@ -11,7 +11,11 @@ the end of every release.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- The VS Code extension now requires **VS Code 1.140 or newer** (previously
+  1.137), matching its `@types/vscode` API typings. Packaging the extension with
+  `@vscode/vsce` 4 requires Node.js 22 or newer.
 
 ## [0.13.0] - 2026-09-11
 
