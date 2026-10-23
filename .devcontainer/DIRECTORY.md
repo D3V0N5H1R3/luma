@@ -28,8 +28,8 @@ pin:
   CLIs, plus the **Node** and **Rust** (`default` profile, so `rustfmt` and
   `clippy` are present, with the `wasm32-wasip1` target) toolchains for the VS
   Code and Zed extensions.
-- **PowerShell 7** with the pinned **PSScriptAnalyzer** — the PowerShell lint
-  gate (`ci-powershell.yml`).
+- **PowerShell 7** with the pinned **PSScriptAnalyzer** and **Pester** — the
+  PowerShell lint and test gates (`ci-powershell.yml`).
 
 Every third-party C/C++ library is vendored in [`external/`](../external), so no
 dependencies are fetched at build time.

@@ -90,8 +90,8 @@ contributing to it.
 These apply regardless of which area you work on:
 
 - **Git** — branching (`feature/`, `fix/`, `docs/`), conventional commits
-  (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`), rebasing, and
-  squash-merging.
+  (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `style:`, `ci:`),
+  rebasing, and squash-merging.
 - **The Luma language** — you should be able to read and write basic Luma
   programs (see the [User Manual](documents/Luma_User_Manual.md)) since feature
   tests, examples, and stdlib API design all require it.
@@ -302,15 +302,18 @@ npx markdownlint-cli2
 
 The repository ships two hooks (in `scripts/git-hooks/`):
 
-- **`pre-commit`** runs `clang-format` — and `clang-tidy` when
-  `build/compile_commands.json` exists — on staged C++ files, blocking the
-  commit if they are not clean.
+- **`pre-commit`** runs `clang-format` — and `clang-tidy` when a
+  `compile_commands.json` exists in `build/` or a `build-*` preset tree — on
+  staged C++ files, blocking the commit if they are not clean. It checks the
+  staged content (so partially staged files are judged on what is being
+  committed) and covers the same directories as the CI *Formatting* and
+  *Static Analysis* jobs.
 - **`commit-msg`** checks that the commit subject follows the
-  [Conventional Commits](#commit-messages) format (one of `chore`, `docs`,
-  `feat`, `fix`, `refactor`, `test`, with an optional scope and `!`), blocking
-  the commit if it does not. It also warns — without blocking — when the
-  subject exceeds 72 characters. Merge, revert, and autosquash
-  (`fixup!`/`squash!`) messages are exempt.
+  [Conventional Commits](#commit-messages) format (one of `chore`, `ci`,
+  `docs`, `feat`, `fix`, `refactor`, `style`, `test`, with an optional scope
+  and `!`), blocking the commit if it does not. It also warns — without
+  blocking — when the subject exceeds 72 characters. Git-generated merge,
+  revert, and autosquash (`fixup!`/`squash!`/`amend!`) messages are exempt.
 
 Enable them once per clone by pointing Git at the tracked hooks directory:
 
@@ -539,10 +542,12 @@ Follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
 | Type        | Purpose                                 |
 | ----------- | --------------------------------------- |
 | `chore:`    | Tooling, config, dependencies           |
+| `ci:`       | CI workflows and pipeline configuration |
 | `docs:`     | Documentation only                      |
 | `feat:`     | New feature                             |
 | `fix:`      | Bug fix                                 |
 | `refactor:` | Code restructuring, no behaviour change |
+| `style:`    | Formatting only, no code change         |
 | `test:`     | Adding or updating tests                |
 
 **Rules:**

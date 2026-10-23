@@ -146,13 +146,24 @@ def file_has_tests(path: Path) -> bool:
     return any(line.lstrip().startswith("@test") for line in text.splitlines())
 
 
+def _as_text(stream: str | bytes | None) -> str:
+    """Return a captured stream as text, decoding bytes and mapping ``None`` to ``""``."""
+    if stream is None:
+        return ""
+    if isinstance(stream, bytes):
+        return stream.decode("utf-8", errors="replace")
+    return stream
+
+
 def _combined_output(completed: subprocess.CompletedProcess | subprocess.TimeoutExpired) -> str:
     """Join captured stdout and stderr, tolerating either stream being ``None``.
 
     Works for both a finished ``CompletedProcess`` and a ``TimeoutExpired``,
-    which expose the same ``stdout``/``stderr`` attributes.
+    which expose the same ``stdout``/``stderr`` attributes. On POSIX a
+    ``TimeoutExpired`` carries the partial output as ``bytes`` even when the run
+    used ``text=True``, so each stream is normalised to ``str`` before joining.
     """
-    return (completed.stdout or "") + (completed.stderr or "")
+    return _as_text(completed.stdout) + _as_text(completed.stderr)
 
 
 def run_test_blocks(

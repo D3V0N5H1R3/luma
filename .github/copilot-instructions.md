@@ -106,7 +106,7 @@ Follow the detailed instructions in `instructions/`:
 - **PowerShell style:** `PascalCase` for variables, functions, parameters. Approved Verb-Noun cmdlet names. `[CmdletBinding()]` on functions. Full cmdlet names — no aliases. See [instructions/powershell.instructions.md](../instructions/powershell.instructions.md).
 - **Luma language:** Types, naming, mutability, error handling, pipes, and testing. See [instructions/luma.instructions.md](../instructions/luma.instructions.md).
 - **CMake style:** Targets over variables. No `file(GLOB)`. Pin dependency versions. See [instructions/cmake.instructions.md](../instructions/cmake.instructions.md).
-- **Git conventions:** Conventional commit prefixes (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`). Branch naming: `feature/`, `fix/`, `docs/`. See [instructions/git.instructions.md](../instructions/git.instructions.md).
+- **Git conventions:** Conventional commit prefixes (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `style:`, `ci:`). Branch naming: `feature/`, `fix/`, `docs/`. See [instructions/git.instructions.md](../instructions/git.instructions.md).
 - **GitHub Actions:** Workflow triggers, permissions, job structure, caching, and CI/CD security. See [instructions/github-actions.instructions.md](../instructions/github-actions.instructions.md).
 - **GitHub Actions recipes:** Copy-paste workflow recipes (C++/CMake CI, Docker, release, deployment, CodeQL) and debugging guidance. See [instructions/github-actions-recipes.instructions.md](../instructions/github-actions-recipes.instructions.md).
 - **Testing:** Custom C++ test framework, Luma `@test` feature tests, assertion macros, and test structure. See [instructions/testing.instructions.md](../instructions/testing.instructions.md).

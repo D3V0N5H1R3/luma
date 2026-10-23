@@ -1,9 +1,10 @@
 # ─────────────────────────────────────────────────────────────
-# Luma — PowerShell Lint Workflow
+# Luma — PowerShell Lint and Test Workflow
 #
-# Runs PSScriptAnalyzer on all first-party PowerShell scripts
-# (*.ps1, *.psm1) on every push and PR targeting main that touches
-# them. Rule configuration lives in PSScriptAnalyzerSettings.psd1.
+# Lints all first-party PowerShell scripts (*.ps1, *.psm1) with
+# PSScriptAnalyzer and runs their Pester tests (*.Tests.ps1) on every
+# push and PR targeting main that touches them. Rule configuration
+# lives in PSScriptAnalyzerSettings.psd1.
 # ─────────────────────────────────────────────────────────────
 
 name: CI — PowerShell
@@ -42,3 +43,18 @@ jobs:
       - name: Run PSScriptAnalyzer
         shell: pwsh
         run: ./scripts/run_psscriptanalyzer.ps1
+
+  pester:
+    name: Pester
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Pester tests
+        shell: pwsh
+        run: ./scripts/run_pester.ps1

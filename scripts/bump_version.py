@@ -74,44 +74,21 @@ def bump(version: str, part: str) -> str:
     return f"{major}.{minor}.{patch + 1}"
 
 
-def update_version_file(new_version: str) -> None:
-    """Write the new version to the VERSION file."""
-    VERSION_FILE.write_text(f"{new_version}\n", encoding="utf-8")
-
-
-def update_vscode_package_json(new_version: str) -> None:
-    """Update the 'version' field in the VS Code extension package.json."""
-    content = VSCODE_PACKAGE_JSON.read_text(encoding="utf-8")
-    data = json.loads(content)
+def render_vscode_package_json(new_version: str) -> str:
+    """Return package.json with its 'version' field set to *new_version*."""
+    data = json.loads(VSCODE_PACKAGE_JSON.read_text(encoding="utf-8"))
     data["version"] = new_version
-    VSCODE_PACKAGE_JSON.write_text(
-        json.dumps(data, indent=4, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    return json.dumps(data, indent=4, ensure_ascii=False) + "\n"
 
 
-def update_zed_extension_toml(new_version: str) -> None:
-    """Update the 'version' field in the Zed extension.toml."""
-    content = ZED_EXTENSION_TOML.read_text(encoding="utf-8")
-    updated = re.sub(
-        r'^(version\s*=\s*")([^"]+)(")',
-        rf"\g<1>{new_version}\3",
-        content,
-        count=1,
-        flags=re.MULTILINE,
-    )
-    if updated == content:
-        sys.exit("Error: Could not find 'version = \"...\"' in extension.toml.")
-    ZED_EXTENSION_TOML.write_text(updated, encoding="utf-8")
+def render_first_version_field(path: Path, new_version: str) -> str:
+    """Return *path* with its first top-level ``version = "..."`` set to *new_version*.
 
-
-def update_zed_cargo_toml(new_version: str) -> None:
-    """Update the 'version' field in the Zed extension Cargo.toml.
-
-    Only replaces the first ``version = "..."`` (the [package] version),
-    leaving dependency version fields untouched.
+    Only the first match (the ``[package]`` version in a ``Cargo.toml``) is
+    replaced, leaving dependency version fields untouched. Exits with an error
+    when no such field exists.
     """
-    content = ZED_CARGO_TOML.read_text(encoding="utf-8")
+    content = path.read_text(encoding="utf-8")
     updated = re.sub(
         r'^(version\s*=\s*")([^"]+)(")',
         rf"\g<1>{new_version}\3",
@@ -120,12 +97,12 @@ def update_zed_cargo_toml(new_version: str) -> None:
         flags=re.MULTILINE,
     )
     if updated == content:
-        sys.exit("Error: Could not find 'version = \"...\"' in Cargo.toml.")
-    ZED_CARGO_TOML.write_text(updated, encoding="utf-8")
+        sys.exit(f"Error: Could not find 'version = \"...\"' in {path.name}.")
+    return updated
 
 
-def update_zed_cargo_lock(new_version: str) -> bool:
-    """Update the ``luma-zed`` package version in the Zed extension Cargo.lock.
+def render_zed_cargo_lock(new_version: str) -> str | None:
+    """Return Cargo.lock with the ``luma-zed`` package version set to *new_version*.
 
     The lock file records the workspace package's own version, so a version
     bump must update it too — otherwise the committed lock drifts out of sync
@@ -134,21 +111,17 @@ def update_zed_cargo_lock(new_version: str) -> bool:
     diff. Only the ``[[package]] name = "luma-zed"`` entry's version is
     touched; dependency versions are left untouched.
 
-    Returns True if the file was written, False if it is absent or already at
-    *new_version*.
+    Returns ``None`` when the file is absent or already at *new_version*.
     """
     if not ZED_CARGO_LOCK.exists():
-        return False
+        return None
     content = ZED_CARGO_LOCK.read_text(encoding="utf-8")
     # Anchor on the luma-zed name line so only its own version line changes.
     pattern = re.compile(r'(name = "luma-zed"\r?\nversion = ")([^"]+)(")')
     if pattern.search(content) is None:
         sys.exit("Error: Could not find the luma-zed package entry in Cargo.lock.")
     updated = pattern.sub(rf"\g<1>{new_version}\3", content, count=1)
-    if updated == content:
-        return False
-    ZED_CARGO_LOCK.write_text(updated, encoding="utf-8")
-    return True
+    return None if updated == content else updated
 
 
 DOC_VERSION_FILES: list[Path] = [
@@ -166,14 +139,24 @@ DOC_VERSION_FILES: list[Path] = [
 ]
 
 
-def update_doc_version_references(old_version: str, new_version: str) -> list[str]:
-    """Replace version references in documentation files.
+def replace_version_token(text: str, old: str, new: str) -> str:
+    """Replace every standalone occurrence of the version *old* with *new*.
 
-    Performs plain-text replacement of *old_version* with *new_version* in
-    three forms: bare (``0.5.0``), v-prefixed (``v0.5.0``), and short
-    major.minor (``0.5`` / ``v0.5``).
+    A match must not be glued to a preceding digit or dot, nor to a following
+    digit, so ``0.5`` never rewrites ``10.5``, ``1.0.5``, or ``0.50``. A ``v``
+    prefix (``v0.5.0``) is not a digit, so tagged forms are covered too.
+    """
+    pattern = re.compile(rf"(?<![\d.]){re.escape(old)}(?!\d)")
+    return pattern.sub(new, text)
 
-    Returns a list of repo-relative paths that were modified.
+
+def render_doc_version_references(old_version: str, new_version: str) -> list[tuple[Path, str]]:
+    """Return the documentation files whose version references change.
+
+    Rewrites *old_version* to *new_version* in two forms: the full version
+    (``0.5.0`` / ``v0.5.0``) and, when it changes, the short major.minor form
+    (``0.5`` / ``v0.5``). Returns ``(path, new_content)`` pairs for every file
+    that differs.
     """
     old_major, old_minor, _ = parse_semver(old_version)
     new_major, new_minor, _ = parse_semver(new_version)
@@ -181,28 +164,43 @@ def update_doc_version_references(old_version: str, new_version: str) -> list[st
     old_short = f"{old_major}.{old_minor}"
     new_short = f"{new_major}.{new_minor}"
 
-    updated_files: list[str] = []
+    rendered: list[tuple[Path, str]] = []
 
     for filepath in DOC_VERSION_FILES:
         if not filepath.exists():
             continue
         content = filepath.read_text(encoding="utf-8")
-        new_content = content
 
-        # Replace v-prefixed full version first (to avoid partial matches).
-        new_content = new_content.replace(f"v{old_version}", f"v{new_version}")
-        # Replace bare full version.
-        new_content = new_content.replace(old_version, new_version)
-        # Replace short major.minor forms.
+        new_content = replace_version_token(content, old_version, new_version)
         if old_short != new_short:
-            new_content = new_content.replace(f"v{old_short}", f"v{new_short}")
-            new_content = new_content.replace(old_short, new_short)
+            new_content = replace_version_token(new_content, old_short, new_short)
 
         if new_content != content:
-            filepath.write_text(new_content, encoding="utf-8")
-            updated_files.append(str(filepath.relative_to(REPO_ROOT)))
+            rendered.append((filepath, new_content))
 
-    return updated_files
+    return rendered
+
+
+def plan_updates(current: str, new_version: str) -> list[tuple[Path, str]]:
+    """Compute every file rewrite needed to move from *current* to *new_version*.
+
+    Nothing is written here: each source is read and validated first, so a
+    missing version field exits before any file changes and the bump stays
+    all-or-nothing.
+    """
+    updates: list[tuple[Path, str]] = [
+        (VERSION_FILE, f"{new_version}\n"),
+        (VSCODE_PACKAGE_JSON, render_vscode_package_json(new_version)),
+        (ZED_EXTENSION_TOML, render_first_version_field(ZED_EXTENSION_TOML, new_version)),
+        (ZED_CARGO_TOML, render_first_version_field(ZED_CARGO_TOML, new_version)),
+    ]
+
+    cargo_lock = render_zed_cargo_lock(new_version)
+    if cargo_lock is not None:
+        updates.append((ZED_CARGO_LOCK, cargo_lock))
+
+    updates.extend(render_doc_version_references(current, new_version))
+    return updates
 
 
 def main() -> None:
@@ -230,22 +228,16 @@ def main() -> None:
         print(f"Version is already {current} — nothing to do.")
         return
 
-    update_version_file(new_version)
-    update_vscode_package_json(new_version)
-    update_zed_extension_toml(new_version)
-    update_zed_cargo_toml(new_version)
-    lock_updated = update_zed_cargo_lock(new_version)
-    doc_updates = update_doc_version_references(current, new_version)
+    updates = plan_updates(current, new_version)
+
+    # The repository normalises text to LF (.gitattributes), so write LF on every
+    # platform rather than letting Windows translate newlines to CRLF.
+    for path, content in updates:
+        path.write_text(content, encoding="utf-8", newline="\n")
 
     print(f"Version bumped: {current} -> {new_version}")
-    print("  Updated: VERSION")
-    print("  Updated: extensions/vscode/package.json")
-    print("  Updated: extensions/zed/extension.toml")
-    print("  Updated: extensions/zed/Cargo.toml")
-    if lock_updated:
-        print("  Updated: extensions/zed/Cargo.lock")
-    for doc_path in doc_updates:
-        print(f"  Updated: {doc_path}")
+    for path, _ in updates:
+        print(f"  Updated: {path.relative_to(REPO_ROOT).as_posix()}")
 
 
 if __name__ == "__main__":

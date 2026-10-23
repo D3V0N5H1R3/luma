@@ -37,6 +37,33 @@ the end of every release.
   `NOTFOUND`) and derives `LUMA_EXAMPLES_DIR` from the actual install layout.
 - **Build — the clang-cl fuzz build links the libFuzzer runtime for the target
   architecture** instead of a hard-coded x86_64 library.
+- **Agent hooks — non-ASCII paths are read correctly on Windows.** The hook
+  payload was decoded with the ANSI code page, so the C++ formatter silently
+  skipped files such as `café.cpp`. The vendored-code guard no longer denies a
+  read-only `view` of `external/`, and the formatter now touches only
+  first-party files (inside the repository, outside `external/`), never a file
+  that was merely viewed.
+- **Prompt pipeline — the PowerShell fix runner's gates work again.** Build,
+  test, and lint output leaked into the gate helpers' boolean results, so a
+  failing `cmake`/`ctest`/`lint.py` run read as green, and the agent transcript
+  leaked into each phase's outcome, so every fix phase was recorded as `error`.
+  Tool and agent output now streams to the console instead, Pester regression
+  tests cover the helpers in CI, and the PowerShell runners require
+  PowerShell 7.2 or newer. Both fix runners also resolve a relative report
+  directory against the caller's location and stop with a clear error when
+  `git status` fails, instead of treating the tree as clean.
+- **Prompt pipeline — the PowerShell model probe is bounded to 90 seconds**,
+  matching the bash runner, so a slow or hung Copilot CLI can no longer stall
+  `Invoke-LumaAudit.ps1` / `Invoke-LumaFix.ps1` before the first phase.
+- **Scripts — `run_luma_examples.py` no longer crashes on Linux/macOS when an
+  example times out after printing output.** The partial output arrives as bytes
+  there even in text mode; it is now decoded and shown in the failure report.
+- **Scripts — `bump_version.py` is all-or-nothing.** Every file is validated
+  before any is written, so a missing version field no longer leaves a partial
+  bump, and documentation references only match whole version numbers (bumping
+  `0.15` no longer rewrites `10.15` or `0.150`).
+- **Scripts — `generate_coverage.py` bounds its build to the CPU count** instead
+  of an unlimited `make -j`, which could exhaust memory.
 
 ### Security
 

@@ -128,10 +128,12 @@ git commit -m "fix: resolve null pointer in user lookup"
 | Prefix      | Purpose                                 |
 | ----------- | --------------------------------------- |
 | `chore:`    | Tooling, config, dependencies           |
+| `ci:`       | CI workflows and pipeline configuration |
 | `docs:`     | Documentation only                      |
 | `feat:`     | New feature                             |
 | `fix:`      | Bug fix                                 |
 | `refactor:` | Code restructuring, no behaviour change |
+| `style:`    | Formatting only, no code change         |
 | `test:`     | Adding or updating tests                |
 
 ### 4.2 Amending the Last Commit

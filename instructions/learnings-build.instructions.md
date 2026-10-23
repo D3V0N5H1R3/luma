@@ -54,7 +54,8 @@ priority: essential
 
 *Canonical guide: [git.instructions.md](git.instructions.md). The notes below are a quick-reference summary.*
 
-- Conventional commit prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
+- Conventional commit prefixes: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `style:`, `ci:` — enforced by `scripts/git-hooks/commit-msg`; keep its `TYPES` list, CONTRIBUTING.md, and git.instructions.md in sync.
+- **Git hooks must be tracked as mode `100755`.** A clone on Windows has `core.fileMode=false`, so a hook *created* there is committed as `100644` and Git silently skips it on Linux/macOS. `install_git_hooks.py` then refuses to enable any hook, and `configure.py` only prints a warning, so the hooks silently never ran. After adding a hook, run `git update-index --chmod=+x scripts/git-hooks/<hook>`; `scripts/test_git_hooks.py` asserts the mode. A hook must also check the *staged* blob (`git show ":$file"`), not the working-tree file, or partial staging defeats it.
 - Branch naming: `category/short-description` with categories: `chore/`, `docs/`, `feature/`, `fix/`, `refactor/`, `test/`.
 - Use `git switch` (not `checkout`). Merge with `--no-ff`. Force-push only on personal branches with `--force-with-lease`.
 

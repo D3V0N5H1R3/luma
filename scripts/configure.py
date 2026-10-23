@@ -257,7 +257,11 @@ def main() -> int:
             try:
                 from install_git_hooks import enable_hooks
 
-                enable_hooks()
+                if enable_hooks() != 0:
+                    print(
+                        "Warning: Git hooks were not enabled (see the error above).",
+                        file=sys.stderr,
+                    )
             except (ImportError, OSError) as exc:  # pragma: no cover - defensive
                 print(f"Note: could not enable Git hooks ({exc}).", file=sys.stderr)
 

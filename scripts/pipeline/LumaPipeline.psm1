@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 7.2
 
 # LumaPipeline.psm1 - shared helpers for the Luma prompt-pipeline runners.
 #
@@ -104,7 +104,11 @@ function Resolve-CopilotModel {
 
         [switch]$DryRun,
 
-        [string]$RepoRoot
+        [string]$RepoRoot,
+
+        # Upper bound on the probe, matching `timeout 90` in luma-pipeline.sh.
+        [ValidateRange(1, 3600)]
+        [int]$TimeoutSeconds = 90
     )
 
     if ($Agent -ne 'copilot' -or $DryRun -or [string]::IsNullOrWhiteSpace($Model) -or $Model -eq 'auto') {
@@ -128,22 +132,67 @@ function Resolve-CopilotModel {
         '--no-color'
     )
 
-    $Pushed = $false
-    if ($RepoRoot -and (Test-Path -LiteralPath $RepoRoot)) {
-        Push-Location -LiteralPath $RepoRoot
-        $Pushed = $true
+    # A Process (rather than the & operator) can be waited on with a deadline and
+    # killed, so a slow or hung model turn on the success path cannot stall the
+    # run - the counterpart of the bash runner's `timeout 90`.
+    $StartInfo = [System.Diagnostics.ProcessStartInfo]::new($Executable)
+    foreach ($Argument in $ProbeArgs) {
+        $StartInfo.ArgumentList.Add($Argument)
     }
-    try {
-        $Output = $ProbePrompt | & $Executable @ProbeArgs 2>&1
-    }
-    catch {
-        $Output = $_.Exception.Message
-    }
-    finally {
-        if ($Pushed) { Pop-Location }
+    $StartInfo.UseShellExecute = $false
+    $StartInfo.RedirectStandardInput = $true
+    $StartInfo.RedirectStandardOutput = $true
+    $StartInfo.RedirectStandardError = $true
+    if ($RepoRoot -and (Test-Path -LiteralPath $RepoRoot -PathType Container)) {
+        $StartInfo.WorkingDirectory = $RepoRoot
     }
 
-    if (($Output | Out-String) -match '(?i)model .*is not available') {
+    try {
+        $Process = [System.Diagnostics.Process]::Start($StartInfo)
+    }
+    catch [System.ComponentModel.Win32Exception], [System.InvalidOperationException] {
+        Write-Verbose "Could not start the model probe: $($_.Exception.Message)"
+        return $Model
+    }
+
+    try {
+        # Drain both pipes concurrently so a chatty child cannot block on a full buffer.
+        $StdOutTask = $Process.StandardOutput.ReadToEndAsync()
+        $StdErrTask = $Process.StandardError.ReadToEndAsync()
+        try {
+            $Process.StandardInput.Write($ProbePrompt)
+            $Process.StandardInput.Close()
+        }
+        catch [System.IO.IOException] {
+            # The CLI exited before reading its prompt (e.g. it rejected --model at
+            # start-up); its output is still collected below.
+            Write-Verbose "Model probe closed its input early: $($_.Exception.Message)"
+        }
+
+        if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+            # Still running after the deadline: the CLI accepted the model and is
+            # mid-turn, so fail open and keep the requested model.
+            try {
+                $Process.Kill($true)
+            }
+            catch [System.InvalidOperationException] {
+                # It exited between the timed-out wait and the kill - nothing to stop.
+                Write-Verbose 'Model probe exited just after its deadline.'
+            }
+            Write-Verbose "Model probe timed out after $TimeoutSeconds s; keeping '$Model'."
+            return $Model
+        }
+
+        # Bound the final drain too: a grandchild that inherited the pipes could
+        # otherwise hold them open after the CLI itself has exited.
+        $Drained = [System.Threading.Tasks.Task]::WaitAll(@($StdOutTask, $StdErrTask), 10000)
+        $Output = if ($Drained) { $StdOutTask.Result + $StdErrTask.Result } else { '' }
+    }
+    finally {
+        $Process.Dispose()
+    }
+
+    if ($Output -match '(?i)model .*is not available') {
         Write-Warning "Copilot CLI cannot select model '$Model' for this account; model access is governed by your org/enterprise Copilot policy. Falling back to 'auto'."
         return 'auto'
     }
@@ -223,8 +272,6 @@ function Get-FixPhase {
     $Phases.Add([pscustomobject]@{ Id = 'update-learnings';        Name = 'Update learnings';               Prompt = 'update-learnings.prompt.md';         InputReport = '';                                  Gate = $false; Commit = $true;  SelfVerifies = $false })
     return $Phases
 }
-
-
 
 function Get-AgentReportFromJsonl {
     <#
@@ -344,12 +391,20 @@ function Build-ClaudeArgumentList {
         $Arguments.Add('--permission-mode')
         $Arguments.Add('acceptEdits')
         $Arguments.Add('--allowedTools')
-        $Arguments.Add('Bash'); $Arguments.Add('Edit'); $Arguments.Add('Write')
+        $Arguments.Add('Bash')
+        $Arguments.Add('Edit')
+        $Arguments.Add('Write')
         $Arguments.Add('--disallowedTools')
         $Arguments.Add('Bash(git push *)')
     }
-    if ($Model) { $Arguments.Add('--model'); $Arguments.Add($Model) }
-    if ($Effort) { $Arguments.Add('--effort'); $Arguments.Add($Effort) }
+    if ($Model) {
+        $Arguments.Add('--model')
+        $Arguments.Add($Model)
+    }
+    if ($Effort) {
+        $Arguments.Add('--effort')
+        $Arguments.Add($Effort)
+    }
 
     # -NoEnumerate returns the List intact (an unwrapped `, $Arguments` reads to
     # the analyzer as object[], desyncing it from the declared OutputType).
@@ -589,21 +644,24 @@ function Invoke-AgentPhase {
         else {
             # Mutating 'agent' mode. Copilot takes its prompt on stdin (its args
             # carry no `-p`); claude keeps its prompt in argv, so only copilot is
-            # fed here.
+            # fed here. The transcript is sent to Out-Host so it streams to the
+            # console without joining this function's output: otherwise the
+            # caller receives [string[]..., pscustomobject] and `$Outcome.Success`
+            # throws under StrictMode, recording every phase as 'error'.
             if ($Agent -eq 'copilot') {
                 if ($LogFile) {
-                    $Instruction | & $Executable @Arguments 2>&1 | Tee-Object -FilePath $LogFile
+                    $Instruction | & $Executable @Arguments 2>&1 | Tee-Object -FilePath $LogFile | Out-Host
                 }
                 else {
-                    $Instruction | & $Executable @Arguments
+                    $Instruction | & $Executable @Arguments | Out-Host
                 }
             }
             else {
                 if ($LogFile) {
-                    & $Executable @Arguments 2>&1 | Tee-Object -FilePath $LogFile
+                    & $Executable @Arguments 2>&1 | Tee-Object -FilePath $LogFile | Out-Host
                 }
                 else {
-                    & $Executable @Arguments
+                    & $Executable @Arguments | Out-Host
                 }
             }
             $ExitCode = $LASTEXITCODE
@@ -648,25 +706,29 @@ function Find-CMake {
         return
     }
 
-    $Candidates = @()
+    if (-not $env:ProgramFiles) {
+        return
+    }
+
+    $Candidates = [System.Collections.Generic.List[string]]::new()
 
     # Visual Studio bundled CMake (any edition/year).
-    $VsBase = "${env:ProgramFiles}\Microsoft Visual Studio"
+    $VsBase = Join-Path -Path $env:ProgramFiles -ChildPath 'Microsoft Visual Studio'
     if (Test-Path -LiteralPath $VsBase) {
-        $Candidates += Get-ChildItem -Path $VsBase -Filter 'cmake.exe' -Recurse -ErrorAction SilentlyContinue |
+        Get-ChildItem -LiteralPath $VsBase -Filter 'cmake.exe' -Recurse -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -like '*\CMake\CMake\bin\cmake.exe' } |
-            Select-Object -ExpandProperty FullName
+            ForEach-Object { $Candidates.Add($_.FullName) }
     }
 
     # Standalone CMake install.
-    $Standalone = "${env:ProgramFiles}\CMake\bin\cmake.exe"
+    $Standalone = Join-Path -Path $env:ProgramFiles -ChildPath 'CMake\bin\cmake.exe'
     if (Test-Path -LiteralPath $Standalone) {
-        $Candidates += $Standalone
+        $Candidates.Add($Standalone)
     }
 
     foreach ($Exe in $Candidates) {
         $Dir = Split-Path -Parent $Exe
-        $env:PATH = "$Dir;$env:PATH"
+        $env:PATH = $Dir + [System.IO.Path]::PathSeparator + $env:PATH
         if (Get-Command -Name 'cmake' -CommandType Application -ErrorAction SilentlyContinue) {
             return
         }
@@ -727,10 +789,14 @@ function Test-BuildAndTest {
             return $false
         }
 
+        # Every native call below pipes to Out-Host: uncaptured stdout would
+        # otherwise join this function's [bool] result, and a caller testing
+        # `-not $Result` would then see a non-empty (truthy) array and read a
+        # failed gate as green.
         $BuildDir = Join-Path -Path $RepoRoot -ChildPath 'build'
         if (-not (Test-Path -LiteralPath $BuildDir)) {
             Write-Host "    Configuring (build dir missing): cmake --preset $Preset"
-            cmake --preset $Preset
+            cmake --preset $Preset | Out-Host
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning 'CMake configure failed.'
                 return $false
@@ -739,7 +805,7 @@ function Test-BuildAndTest {
 
         if (-not $SkipBuild) {
             Write-Host "    Building: cmake --build --preset $Preset"
-            cmake --build --preset $Preset
+            cmake --build --preset $Preset | Out-Host
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning 'Build failed.'
                 return $false
@@ -748,7 +814,7 @@ function Test-BuildAndTest {
 
         if (-not $SkipTest) {
             Write-Host "    Testing: ctest --preset $Preset"
-            ctest --preset $Preset
+            ctest --preset $Preset | Out-Host
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning 'Tests failed.'
                 return $false
@@ -785,6 +851,9 @@ function Test-CleanWorkingTree {
     Push-Location -LiteralPath $RepoRoot
     try {
         $Status = git status --porcelain
+        if ($LASTEXITCODE -ne 0) {
+            throw "git status failed in '$RepoRoot' (exit $LASTEXITCODE); is it a git working tree?"
+        }
         return [string]::IsNullOrWhiteSpace(($Status | Out-String))
     }
     finally {
@@ -1224,7 +1293,7 @@ function Initialize-CompileDatabase {
     & cmake -S $RepoRoot -B $DbDir -G $Generator `
         -DCMAKE_BUILD_TYPE=Release `
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON `
-        -DLUMA_BUILD_TESTS=OFF
+        -DLUMA_BUILD_TESTS=OFF | Out-Host
     if ($LASTEXITCODE -ne 0) {
         Write-Warning 'Could not configure a compile database; clang-tidy will be skipped this run.'
         return $true
@@ -1316,8 +1385,10 @@ function Test-LintAndFormat {
     Push-Location -LiteralPath $RepoRoot
     try {
         if (-not $CheckOnly) {
+            # Out-Host keeps the tool's stdout out of this function's [bool]
+            # result (see Test-BuildAndTest).
             Write-Host '    Formatting: python scripts/format.py'
-            & $Python 'scripts/format.py'
+            & $Python 'scripts/format.py' | Out-Host
             # A non-zero format.py means a formatter hit a problem it could not
             # auto-fix; lint.py is the authority for the gate and surfaces the
             # same issue, so warn here but let lint.py decide pass/fail.
@@ -1327,7 +1398,7 @@ function Test-LintAndFormat {
         }
 
         Write-Host '    Linting: python scripts/lint.py'
-        & $Python 'scripts/lint.py'
+        & $Python 'scripts/lint.py' | Out-Host
         if ($LASTEXITCODE -ne 0) {
             Write-Warning 'Lint checks failed.'
             return $false

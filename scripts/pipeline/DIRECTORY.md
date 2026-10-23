@@ -30,6 +30,11 @@ agent, building, testing, committing) flows through one place and has a uniform
 dry-run path (`-DryRun` / `--dry-run`). The two implementations are kept
 behaviourally in lock-step.
 
+[`LumaPipeline.Tests.ps1`](LumaPipeline.Tests.ps1) pins the PowerShell module's
+gate and agent result contracts with fake `cmake` / `ctest` / `python` / agent
+tools. Run it with `pwsh -File scripts/run_pester.ps1`; CI runs it in
+[`ci-powershell.yml`](../../.github/workflows/ci-powershell.yml).
+
 > **Why two scripts?** Audits are safe to run unattended and produce artifacts a
 > human triages. Fixes change source and must be gated, checkpointed, and
 > reversible. Keeping them separate keeps a human decision point between
@@ -55,7 +60,9 @@ Common to both variants:
 
 Then, for your platform:
 
-- **PowerShell 7+** (`pwsh`) for the `*.ps1` runners, or
+- **PowerShell 7.2+** (`pwsh`) for the `*.ps1` runners (earlier hosts turn a
+  native command's redirected stderr into a terminating error under
+  `$ErrorActionPreference = 'Stop'`, which would abort agent phases), or
 - **bash 3.2+** for the `*.sh` runners (the stock macOS `/bin/bash` works; no extra packages needed). Invoke them as `bash scripts/pipeline/luma-*.sh …`, or `chmod +x` them once to run directly.
 
 Run everything from the repository root.
@@ -207,10 +214,11 @@ to whatever default the CLI is allowed, e.g. a Haiku model).
 Because a rejected `--model` makes the agent abort at model resolution — which
 would otherwise fail every phase — each runner **probes the requested model once
 and falls back to `auto` with a warning** when the CLI cannot select it
-(`luma_resolve_copilot_model` / `Resolve-CopilotModel`). To actually use Opus in
-the CLI, an org/enterprise Copilot admin must enable model access (the model
-picker / "Copilot in the CLI") for those models; individual users cannot override
-the server-side entitlement. Verify with:
+(`luma_resolve_copilot_model` / `Resolve-CopilotModel`). Both runners bound the
+probe to 90 seconds, so a slow model turn cannot stall the run. To actually use
+Opus in the CLI, an org/enterprise Copilot admin must enable model access (the
+model picker / "Copilot in the CLI") for those models; individual users cannot
+override the server-side entitlement. Verify with:
 
 ```bash
 copilot -p "reply ok" --model claude-opus-4.6 --allow-all-tools --no-ask-user

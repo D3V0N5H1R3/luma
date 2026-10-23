@@ -16,10 +16,11 @@
     // round out the toolchain so the whole repo — not just the C++ core — is
     // buildable and lintable here. The Rust "default" profile is used (not
     // "minimal") so `rustfmt` and `clippy` — the Zed extension's formatting and
-    // lint gates — are present. PowerShell 7 with the PSScriptAnalyzer version
-    // scripts/run_psscriptanalyzer.ps1 pins runs the PowerShell lint gate
-    // (ci-powershell.yml). Prebuilds absorb the one-time install cost; drop any
-    // of these features if you only work on the interpreter.
+    // lint gates — are present. PowerShell 7 runs the PowerShell lint and test
+    // gates (ci-powershell.yml) with the PSScriptAnalyzer and Pester versions
+    // pinned by scripts/run_psscriptanalyzer.ps1 and scripts/run_pester.ps1.
+    // Prebuilds absorb the one-time install cost; drop any of these features
+    // if you only work on the interpreter.
     "features": {
         "ghcr.io/devcontainers/features/node:1": {
             "version": "lts"
@@ -30,7 +31,7 @@
         },
         "ghcr.io/devcontainers/features/powershell:2": {
             "version": "lts",
-            "modules": "PSScriptAnalyzer==1.25.0"
+            "modules": "PSScriptAnalyzer==1.25.0,Pester==6.2.0"
         }
     },
 

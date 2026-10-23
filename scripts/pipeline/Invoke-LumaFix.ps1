@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 7.2
 
 <#
 .SYNOPSIS
@@ -230,6 +230,9 @@ if (-not $ReportDir) {
 }
 
 if ($ReportDir) {
+    # The agent runs from the repo root, so a CWD-relative path would point it
+    # at the wrong (or a missing) report; resolve against the caller's location.
+    $ReportDir = [System.IO.Path]::GetFullPath($ReportDir, (Get-Location).ProviderPath)
     Write-Host "Audit reports: $ReportDir"
 }
 else {
@@ -262,10 +265,10 @@ $BranchName = "pipeline/fix-$Timestamp"
 if (-not $NoBranch) {
     Write-Host "Creating branch: $BranchName"
     if ($DryRun) {
-        Write-Host "  DRY RUN > git -C `"$RepoRoot`" checkout -b $BranchName" -ForegroundColor DarkGray
+        Write-Host "  DRY RUN > git -C `"$RepoRoot`" switch -c $BranchName" -ForegroundColor DarkGray
     }
     else {
-        & git -C $RepoRoot checkout -b $BranchName
+        & git -C $RepoRoot switch -c $BranchName | Out-Host
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to create branch '$BranchName'."
         }
@@ -452,7 +455,7 @@ foreach ($Current in $Selected) {
                 # Best-effort: warn on a failed reset rather than aborting, so
                 # the summary and any remaining phases still run. Mirrors the
                 # `|| luma_warn` on the shell revert.
-                & git -C $RepoRoot reset --hard HEAD
+                & git -C $RepoRoot reset --hard HEAD | Out-Host
                 if ($LASTEXITCODE -ne 0) { Write-Warning 'Revert failed.' }
             }
         }

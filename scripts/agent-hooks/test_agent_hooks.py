@@ -86,10 +86,25 @@ class HookCommonTest(unittest.TestCase):
         copilot_env = {"COPILOT_PROJECT_DIR": "/repo"}
         flag = [hook_common.CLAUDE_SETTINGS_FLAG]
         shadowed = hook_common.is_shadowed_registration
-        self.assertTrue(shadowed({}, flag, copilot_env))
-        self.assertFalse(shadowed({}, [], copilot_env))
-        self.assertFalse(shadowed({}, flag, {}))
-        self.assertFalse(shadowed({"transcript_path": "/t.jsonl"}, flag, copilot_env))
+        self.assertTrue(shadowed({}, flag, environ=copilot_env))
+        self.assertFalse(shadowed({}, [], environ=copilot_env))
+        self.assertFalse(shadowed({}, flag, environ={}))
+        self.assertFalse(shadowed({"transcript_path": "/t.jsonl"}, flag, environ=copilot_env))
+
+    def test_read_payload_decodes_utf8_whatever_the_stdin_codec(self) -> None:
+        # Windows decodes piped stdin with the ANSI code page; the runtime sends UTF-8.
+        payload = {"path": "external/café.c"}
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        stdin = io.TextIOWrapper(io.BytesIO(raw), encoding="cp1252", errors="surrogateescape")
+        with mock.patch.object(sys, "stdin", stdin):
+            self.assertEqual(hook_common.read_payload(), payload)
+
+    def test_read_only_call_is_only_the_view_command(self) -> None:
+        self.assertTrue(hook_common.is_read_only_call({"command": "view", "path": "a.cpp"}))
+        self.assertFalse(hook_common.is_read_only_call({"command": "create", "path": "a.cpp"}))
+        self.assertFalse(hook_common.is_read_only_call({"path": "a.cpp"}))
+        self.assertFalse(hook_common.is_read_only_call({"command": ["git", "status"]}))
+        self.assertFalse(hook_common.is_read_only_call(ADD_PATCH))
 
 
 class ProtectVendoredPathsTest(unittest.TestCase):
@@ -102,25 +117,28 @@ class ProtectVendoredPathsTest(unittest.TestCase):
         (self.repo / "core").mkdir()
 
     def run_guard(
-        self, payload: object, args: list[str] | None = None, env: dict[str, str] | None = None
+        self,
+        payload: object,
+        *,
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
     ) -> str:
-        """Run the guard like the runtime does and return its stdout."""
-        stdin = payload if isinstance(payload, str) else json.dumps(payload)
+        """Run the guard like the runtime does — UTF-8 JSON on stdin — and return its stdout."""
+        stdin = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
         child_env = {k: v for k, v in os.environ.items() if k != "COPILOT_PROJECT_DIR"}
         child_env.update(env or {})
         result = subprocess.run(
             [sys.executable, str(GUARD_SCRIPT), *(args or [])],
-            input=stdin,
+            input=stdin.encode("utf-8"),
             capture_output=True,
-            text=True,
             env=child_env,
             timeout=30,
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        return result.stdout.strip()
+        return result.stdout.decode("utf-8").strip()
 
-    def payload(self, tool_name: str, tool_input: object) -> dict:
+    def payload(self, tool_name: str, tool_input: object) -> dict[str, object]:
         return {"cwd": str(self.repo), "tool_name": tool_name, "tool_input": tool_input}
 
     def assert_denied(self, stdout: str) -> None:
@@ -132,6 +150,11 @@ class ProtectVendoredPathsTest(unittest.TestCase):
     def test_denies_write_into_external(self) -> None:
         self.assert_denied(self.run_guard(self.payload("Write", {"path": "external/x.c"})))
 
+    def test_denial_names_non_ascii_target_intact(self) -> None:
+        stdout = self.run_guard(self.payload("Write", {"path": "external/café.c"}))
+        self.assert_denied(stdout)
+        self.assertIn("external/café.c", json.loads(stdout)["permissionDecisionReason"])
+
     def test_denies_traversal_and_case_variants(self) -> None:
         stdout = self.run_guard(self.payload("Edit", {"path": "core/../External/x.c"}))
         self.assert_denied(stdout)
@@ -141,6 +164,15 @@ class ProtectVendoredPathsTest(unittest.TestCase):
 
     def test_allows_reads_of_external(self) -> None:
         self.assertEqual(self.run_guard(self.payload("Read", {"path": "external/x.c"})), "")
+
+    def test_allows_editor_view_command_on_external(self) -> None:
+        tool_input = {"command": "view", "path": "external/x.c"}
+        self.assertEqual(self.run_guard(self.payload("str_replace_editor", tool_input)), "")
+        self.assertEqual(self.run_guard(self.payload("Edit", tool_input)), "")
+
+    def test_denies_editor_create_command_into_external(self) -> None:
+        tool_input = {"command": "create", "path": "external/x.c", "file_text": "int x;\n"}
+        self.assert_denied(self.run_guard(self.payload("str_replace_editor", tool_input)))
 
     def test_denies_patch_string_into_external(self) -> None:
         self.assert_denied(self.run_guard(self.payload("Edit", ADD_PATCH)))
@@ -160,12 +192,12 @@ class ProtectVendoredPathsTest(unittest.TestCase):
         payload = self.payload("Write", {"path": "external/x.c"})
         args = [hook_common.CLAUDE_SETTINGS_FLAG]
         env = {"COPILOT_PROJECT_DIR": str(self.repo)}
-        self.assertEqual(self.run_guard(payload, args, env), "")
+        self.assertEqual(self.run_guard(payload, args=args, env=env), "")
 
     def test_claude_copy_still_guards_under_claude_code(self) -> None:
         payload = self.payload("Write", {"path": "external/x.c"})
         payload["transcript_path"] = str(self.repo / "t.jsonl")
-        self.assert_denied(self.run_guard(payload, [hook_common.CLAUDE_SETTINGS_FLAG]))
+        self.assert_denied(self.run_guard(payload, args=[hook_common.CLAUDE_SETTINGS_FLAG]))
 
     def test_malformed_payload_is_a_no_op(self) -> None:
         self.assertEqual(self.run_guard("not json"), "")
@@ -177,19 +209,29 @@ class FormatCppOnEditTest(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name).resolve()
+        (self.root / ".git").mkdir()
         self.source = self.root / "a.cpp"
         self.source.write_text("int  x;\n", encoding="utf-8")
 
     def run_formatter(
-        self, payload: dict, formatted_text: str | None, args: list[str] | None = None
+        self,
+        payload: dict[str, object],
+        formatted_text: str | None,
+        *,
+        args: list[str] | None = None,
     ) -> tuple[str, mock.Mock]:
-        """Run ``main`` with a fake clang-format that writes ``formatted_text``."""
+        """Run ``main`` with a fake clang-format that writes ``formatted_text``.
 
-        def fake_run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess:
+        The payload arrives as UTF-8 bytes behind a cp1252 text layer, as on Windows.
+        """
+
+        def fake_run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
             if formatted_text is not None:
                 Path(command[-1]).write_text(formatted_text, encoding="utf-8")
             return subprocess.CompletedProcess(command, 0, "", "")
 
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        stdin = io.TextIOWrapper(io.BytesIO(raw), encoding="cp1252", errors="surrogateescape")
         stdout = io.StringIO()
         with (
             mock.patch.object(format_cpp_on_edit.shutil, "which", return_value="clang-format"),
@@ -197,14 +239,14 @@ class FormatCppOnEditTest(unittest.TestCase):
             mock.patch.object(
                 format_cpp_on_edit.subprocess, "run", side_effect=fake_run
             ) as run_mock,
-            mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))),
+            mock.patch.object(sys, "stdin", stdin),
             mock.patch.dict(os.environ, {"COPILOT_PROJECT_DIR": str(self.root)}),
             contextlib.redirect_stdout(stdout),
         ):
             self.assertEqual(format_cpp_on_edit.main(args or []), 0)
         return stdout.getvalue().strip(), run_mock
 
-    def payload(self, tool_input: object) -> dict:
+    def payload(self, tool_input: object) -> dict[str, object]:
         return {"cwd": str(self.root), "tool_name": "Edit", "tool_input": tool_input}
 
     def test_reports_reformatted_file_to_the_model(self) -> None:
@@ -232,9 +274,37 @@ class FormatCppOnEditTest(unittest.TestCase):
         self.assertEqual(stdout, "")
         run_mock.assert_not_called()
 
+    def test_formats_non_ascii_file_name(self) -> None:
+        source = self.root / "café.cpp"
+        source.write_text("int  x;\n", encoding="utf-8")
+        stdout, _ = self.run_formatter(self.payload({"path": "café.cpp"}), "int x;\n")
+        self.assertIn(str(source), json.loads(stdout)["additionalContext"])
+
+    def test_ignores_editor_view_command(self) -> None:
+        tool_input = {"command": "view", "path": "a.cpp"}
+        stdout, run_mock = self.run_formatter(self.payload(tool_input), "int x;\n")
+        self.assertEqual(stdout, "")
+        run_mock.assert_not_called()
+
+    def test_ignores_files_outside_the_repository(self) -> None:
+        other = tempfile.TemporaryDirectory()
+        self.addCleanup(other.cleanup)
+        outside = Path(other.name).resolve() / "b.cpp"
+        outside.write_text("int  y;\n", encoding="utf-8")
+        stdout, run_mock = self.run_formatter(self.payload({"path": str(outside)}), "int y;\n")
+        self.assertEqual(stdout, "")
+        run_mock.assert_not_called()
+
+    def test_ignores_vendored_files(self) -> None:
+        (self.root / "external").mkdir()
+        (self.root / "external" / "v.cpp").write_text("int  v;\n", encoding="utf-8")
+        stdout, run_mock = self.run_formatter(self.payload({"path": "external/v.cpp"}), "int v;\n")
+        self.assertEqual(stdout, "")
+        run_mock.assert_not_called()
+
     def test_claude_copy_stands_down_under_copilot(self) -> None:
         stdout, run_mock = self.run_formatter(
-            self.payload({"path": "a.cpp"}), "int x;\n", [hook_common.CLAUDE_SETTINGS_FLAG]
+            self.payload({"path": "a.cpp"}), "int x;\n", args=[hook_common.CLAUDE_SETTINGS_FLAG]
         )
         self.assertEqual(stdout, "")
         run_mock.assert_not_called()

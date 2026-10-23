@@ -12,7 +12,9 @@ varies by runtime and by how the hook is registered:
   paths inside the patch text instead of a ``path`` field.
 
 This module normalises all of these so neither script silently skips a payload
-shape it did not anticipate. It imports only the standard library: the hooks
+shape it did not anticipate, and holds the repository-layout helpers both
+scripts share (repo-root discovery, the vendored ``external/`` directory, and
+read-only editor calls). It imports only the standard library: the hooks
 must stay dependency-free so they run before any project tooling is set up.
 """
 
@@ -23,6 +25,15 @@ import os
 import re
 import sys
 from collections.abc import Mapping, Sequence
+from pathlib import Path
+
+# Top-level directory holding vendored third-party code: never edited by the
+# agent and never reformatted.
+VENDORED_DIR = "external"
+
+# ``command`` values of multi-command editor tools (``str_replace_editor``,
+# reported as ``Edit``) that only read a file.
+READ_ONLY_COMMANDS = frozenset({"view"})
 
 # tool_input keys that may hold a target file path, across differing tool
 # schemas (Claude-canonical ``file_path``, the Copilot runtime's ``path``,
@@ -44,18 +55,28 @@ _PATCH_PATH_LINE = re.compile(
 )
 
 
-def read_payload() -> dict:
+def read_payload() -> dict[str, object]:
     """Parse the hook JSON payload from stdin; return an empty dict on any problem."""
+    if sys.stdin is None:
+        return {}
+
+    # Read raw bytes and let ``json`` detect the UTF encoding: on Windows,
+    # text-mode stdin decodes a pipe with the ANSI code page, which garbles
+    # every non-ASCII path in the runtime's UTF-8 payload.
+    stream = getattr(sys.stdin, "buffer", sys.stdin)
     try:
-        raw = sys.stdin.read()
+        raw = stream.read()
     except (OSError, ValueError):
         return {}
+
     if not raw.strip():
         return {}
+
     try:
         data = json.loads(raw)
     except (ValueError, TypeError):
         return {}
+
     return data if isinstance(data, dict) else {}
 
 
@@ -77,6 +98,7 @@ def get_tool_input(payload: Mapping[str, object]) -> object:
     value = payload.get("tool_input")
     if value is None:
         value = payload.get("toolArgs")
+
     if isinstance(value, str):
         try:
             decoded = json.loads(value)
@@ -92,6 +114,25 @@ def patch_paths(text: str) -> list[str]:
     if not text.lstrip().startswith(PATCH_BEGIN):
         return []
     return [match.group(1) for match in _PATCH_PATH_LINE.finditer(text)]
+
+
+def is_read_only_call(tool_input: object) -> bool:
+    """Return True when an editor-tool call only reads (``command: "view"``)."""
+    if not isinstance(tool_input, Mapping):
+        return False
+
+    # Shell-style tools send ``command`` as a list, which a set lookup cannot hash.
+    command = tool_input.get("command")
+    return isinstance(command, str) and command in READ_ONLY_COMMANDS
+
+
+def find_repo_root(start: Path) -> Path:
+    """Walk up from ``start`` to the nearest ancestor containing a ``.git`` entry."""
+    for directory in (start, *start.parents):
+        if (directory / ".git").exists():
+            return directory
+
+    return start
 
 
 def candidate_paths(tool_input: object) -> list[str]:
@@ -117,22 +158,26 @@ def candidate_paths(tool_input: object) -> list[str]:
                 paths.append(value)
 
     collect(tool_input)
+
     edits = tool_input.get("edits")
     if isinstance(edits, list):
         for edit in edits:
             collect(edit)
+
     for value in tool_input.values():
         if isinstance(value, str):
             paths.extend(patch_paths(value))
+
     return paths
 
 
 def is_shadowed_registration(
     payload: Mapping[str, object],
     argv: Sequence[str],
+    *,
     environ: Mapping[str, str] | None = None,
 ) -> bool:
-    """True when this run is a duplicate that another registration already covers.
+    """Return True when another registration already handles this run.
 
     The Copilot runtime reads ``.claude/settings.json`` in addition to
     ``.github/hooks/*.json``, so without this check every edit would run each

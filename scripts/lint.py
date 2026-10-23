@@ -148,14 +148,15 @@ def _cmakelint_gate() -> Gate:
 
 
 def _shellcheck_gate() -> Gate:
-    """ShellCheck over shell scripts and the pre-commit hook, mirroring ci-shell.yml."""
+    """ShellCheck over shell scripts and the Git hooks, mirroring ci-shell.yml."""
     name, description = "shellcheck", "Shell lint (ShellCheck)"
     exe = which("shellcheck")
     if exe is None:
         return skip(name, description, "shellcheck not found (apt-get install shellcheck)")
     files = git_ls("*.sh", "*.bash", ":!:external/**")
-    if (REPO_ROOT / "scripts" / "git-hooks" / "pre-commit").is_file():
-        files.append("scripts/git-hooks/pre-commit")
+    for hook in ("pre-commit", "commit-msg"):
+        if (REPO_ROOT / "scripts" / "git-hooks" / hook).is_file():
+            files.append(f"scripts/git-hooks/{hook}")
     if not files:
         return skip(name, description, "no shell scripts tracked")
     return Gate(name, description, [exe], files=files)

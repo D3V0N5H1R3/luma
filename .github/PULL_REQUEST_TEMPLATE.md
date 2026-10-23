@@ -34,7 +34,7 @@ any new tests added, and examples exercised (`python scripts/run_luma_examples.p
 
 ## Checklist
 
-- [ ] My commits follow the [Conventional Commits](https://www.conventionalcommits.org/) style (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`), use the imperative mood, and keep the first line under 72 characters.
+- [ ] My commits follow the [Conventional Commits](https://www.conventionalcommits.org/) style (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `style:`, `ci:`), use the imperative mood, and keep the first line under 72 characters.
 - [ ] I built the project and the C++ test suite passes locally (`ctest --preset default`).
 - [ ] The Luma feature tests pass locally (`python scripts/run_luma_tests.py`).
 - [ ] I formatted my C++ changes with clang-format 18 and clang-tidy reports no new findings.
