@@ -1,15 +1,15 @@
 {
-  "version": 1,
-  "hooks": {
-    "PostToolUse": [
-      {
-        "type": "command",
-        "matcher": "Edit|Write|edit|create|apply_patch|str_replace_editor",
-        "bash": "python3 scripts/agent-hooks/format_cpp_on_edit.py; exit 0",
-        "powershell": "python scripts/agent-hooks/format_cpp_on_edit.py; exit 0",
-        "cwd": ".",
-        "timeoutSec": 30
-      }
-    ]
-  }
+    "version": 1,
+    "hooks": {
+        "PostToolUse": [
+            {
+                "type": "command",
+                "matcher": "Edit|Write|edit|create|apply_patch|str_replace_editor",
+                "bash": "python3 scripts/agent-hooks/format_cpp_on_edit.py; exit 0",
+                "powershell": "python scripts/agent-hooks/format_cpp_on_edit.py; exit 0",
+                "cwd": ".",
+                "timeoutSec": 30
+            }
+        ]
+    }
 }
