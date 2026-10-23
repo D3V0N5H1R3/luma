@@ -128,7 +128,7 @@ Follow the detailed instructions in `instructions/`:
 ### Luma Language
 
 - Entry point: `@main` annotated function.
-- Types: `boolean`, `integer`, `number`, `decimal`, `string`, `array<T>`, `dictionary<V>`, `queue<T>`, `stack<T>`, `channel<T>`, `task<T>`, `optional<T>`, `result<T>`, `socket`, tuples, choice types (ADTs), records, interfaces.
+- Types: `boolean`, `integer`, `number`, `decimal`, `string`, `array<T>`, `dictionary<V>`, `set<T>`, `queue<T>`, `stack<T>`, `channel<T>`, `task<T>`, `optional<T>`, `result<T>`, `reference<T>`, `socket`, tuples, choice types (ADTs), records, interfaces.
 - Variables are immutable by default; use `mutable` keyword for mutability.
 - No semicolons required. Comments start with `#`.
 - String interpolation: `"value is ${expr}"`.

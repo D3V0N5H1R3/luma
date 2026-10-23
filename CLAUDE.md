@@ -32,45 +32,21 @@ sync rules live in .claude/DIRECTORY.md.
 
 <!-- Always-on: the learnings guide's applyTo is **/* (every file), so importing
 it here matches how VS Code auto-loads it. Path-scoped guides load via the nested
-CLAUDE.md files in the source subtrees; see "Working with this repo" below. -->
+CLAUDE.md files in the source subtrees; see "Working with This Repo" below. -->
 
 @instructions/learnings.instructions.md
 
-## Claude-native tooling in this repo
+## Claude-Native Tooling in This Repo
 
-Claude Code loads none of the `.github/` agent, prompt, or hook files (those are
-Copilot/VS Code formats). The `.claude/` directory provides the Claude-native
-equivalents, each mirroring a `.github/` counterpart from a single source of
-truth. See [`.claude/DIRECTORY.md`](.claude/DIRECTORY.md) for the full map and the
-rules for keeping the two layers in sync.
+Claude Code loads none of the `.github/` agent, prompt, or hook files (those are Copilot/VS Code formats). The `.claude/` directory provides the Claude-native equivalents, each mirroring a `.github/` counterpart from a single source of truth. See [`.claude/DIRECTORY.md`](.claude/DIRECTORY.md) for the full map and the rules for keeping the two layers in sync.
 
-- **Hooks** (`.claude/settings.json`): a **PreToolUse** guard blocks edits to
-  vendored code under `external/` — treat a denied edit as an intentional
-  safety stop, not a glitch — and a **PostToolUse** hook auto-formats C++ files
-  after you edit them. Both delegate to the shared, runtime-agnostic scripts in
-  `scripts/agent-hooks/`.
-- **Subagents** (`.claude/agents/`): `plan`, `implement`, `review`, `docs`, and
-  `test` — a port of the `.github/agents/*.agent.md` roles. Launch them with the
-  Agent tool (named Task before Claude Code v2.1.63) or manage them with
-  `/agents`.
-- **Slash commands** (`.claude/commands/`): 27 workflow commands (`/bug-fix`,
-  `/build-and-test`, `/code-review`, …) that each run the matching
-  `.github/prompts/*.prompt.md` with your argument, so the workflow is defined
-  once.
+- **Hooks** (`.claude/settings.json`): a **PreToolUse** guard blocks edits to vendored code under `external/` — treat a denied edit as an intentional safety stop, not a glitch — and a **PostToolUse** hook auto-formats C++ files after you edit them. Both delegate to the shared, runtime-agnostic scripts in `scripts/agent-hooks/`.
+- **Subagents** (`.claude/agents/`): `plan`, `implement`, `review`, `docs`, and `test` — a port of the `.github/agents/*.agent.md` roles. Launch them with the Agent tool (named Task before Claude Code v2.1.63) or manage them with `/agents`.
+- **Slash commands** (`.claude/commands/`): 27 workflow commands (`/bug-fix`, `/build-and-test`, `/code-review`, …) that each run the matching `.github/prompts/*.prompt.md` with your argument, so the workflow is defined once.
 
-## Working with this repo in Claude Code
+## Working with This Repo in Claude Code
 
-Most of these guides now load automatically. The always-applicable
-[`learnings.instructions.md`](instructions/learnings.instructions.md) is imported
-at the top of this file, and each primary source subtree — `core/`, `shared/`,
-`language-server/`, `debugger/`, `tests/`, `examples/`, `extensions/`, `scripts/`,
-and `documents/` — carries a nested `CLAUDE.md` that imports the guides whose
-`applyTo` globs match its files, which Claude Code pulls in automatically when you
-work in that directory. The list below is the full mapping (the source of truth
-for what each nested file imports) and still covers the subtrees without a nested
-file plus the three no-`applyTo` guides (`git`, `github-actions-recipes`,
-`ux-design`), which you should open on demand. The glob each one targets is shown
-for reference:
+The always-applicable [`learnings.instructions.md`](instructions/learnings.instructions.md) is imported at the top of this file. Each primary source subtree — `core/`, `shared/`, `language-server/`, `debugger/`, `tests/`, `examples/`, `extensions/`, `scripts/`, and `documents/` — carries a nested `CLAUDE.md` that Claude Code loads automatically when you work in that directory; it names, by repo-root-relative path, the guides whose `applyTo` globs match its files so you can read them on demand. The list below is the full mapping (the source of truth for what each nested file names) and also covers the subtrees without a nested file plus the three no-`applyTo` guides (`git`, `github-actions-recipes`, `ux-design`), which you should open on demand. The glob each one targets is shown for reference:
 
 **Cross-cutting:**
 
@@ -113,8 +89,4 @@ for reference:
 - `instructions/markdown.instructions.md` — Markdown structure, formatting, linking, content (`**/*.md`).
 - `instructions/readme.instructions.md` — README structure, section ordering, update safety (`{**/DIRECTORY.md,README.md}`).
 
-The "Coding Conventions" section of the imported guidance covers most of these
-with additional style detail. The canonical inventory — kept in sync with the
-directory — is the table in [`instructions/DIRECTORY.md`](instructions/DIRECTORY.md);
-treat that as the source of truth and re-list the folder if this summary ever
-drifts.
+The "Coding Conventions" section of the imported guidance covers most of these with additional style detail. The canonical inventory — kept in sync with the directory — is the table in [`instructions/DIRECTORY.md`](instructions/DIRECTORY.md); treat that as the source of truth and re-list the folder if this summary ever drifts.

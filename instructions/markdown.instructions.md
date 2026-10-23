@@ -189,7 +189,7 @@ Use tables for structured reference data such as configuration options, CLI flag
 | Value 1  | Value 2  | Value 3  |
 ```
 
-- **Pad every cell so that all rows share the same column widths.** Pad with spaces so that each pipe character (`|`) aligns vertically across all rows — header, separator, and data rows alike. This makes tables readable as plain text, not only when rendered.
+- **Pad every cell so that all rows share the same column widths.** Pad with spaces so that each pipe character (`|`) aligns vertically across all rows — header, separator, and data rows alike. This makes tables readable as plain text, not only when rendered. markdownlint's table-alignment rule (MD060) is disabled in [.markdownlint-cli2.jsonc](../.markdownlint-cli2.jsonc), so padding is checked by review, not by the lint gate.
 - Match the dash count in the separator row to the column width established by the header.
 - Keep cell content short. If a cell needs a paragraph, the data probably belongs in a subsection instead.
 - Always include the header separator row.
@@ -340,6 +340,14 @@ Agent files in `.github/agents/` open with YAML front matter, then a `# <Role> A
 
 Role-specific sections, such as a review checklist, take the place of `Commands` and `Workflow`. Each agent has a Claude Code port in `.claude/agents/`; edit both together, as described in [Keeping the Layers in Sync](../.claude/DIRECTORY.md#keeping-the-layers-in-sync).
 
+### Prompt and Command Documents
+
+Prompt files in `.github/prompts/` open with YAML front matter (`description`, `agent`, and as needed `tools`, `argument-hint`, `version`, `lastUpdated`), then a single `# <Workflow Name>` heading. Each prompt has a thin Claude Code wrapper in `.claude/commands/` that `@`-imports it, so the workflow is defined once — never copy prompt content into the wrapper. Register every prompt in [the prompt index](../.github/prompts/DIRECTORY.md).
+
+### Claude Code Bridge Documents
+
+The root `CLAUDE.md` and the nested `CLAUDE.md` files in each source subtree are bridges, not guides: they import or name the canonical guidance in `.github/copilot-instructions.md` and `instructions/` rather than restating it. Notes that Claude must act on go in visible Markdown; block-level HTML comments are stripped from Claude's context and are only for maintainers.
+
 ### Reference Documents
 
 Use a table of contents, descriptive headings, and cross-references between sections. Place the most frequently needed information first.
@@ -364,6 +372,7 @@ Lead with the problem statement and motivation, then describe the solution. End 
 
 ## 16 — Checklist Before Committing
 
+- [ ] markdownlint passes — run the command in [Lint and Format](../.github/prompts/lint-and-format.prompt.md#markdown--markdownlint-cli2); CI enforces it in [ci-markdown.yml](../.github/workflows/ci-markdown.yml).
 - [ ] Document starts with a level-one heading matching its subject.
 - [ ] No heading levels are skipped.
 - [ ] Paragraphs are short (two to four sentences).
@@ -373,4 +382,5 @@ Lead with the problem statement and motivation, then describe the solution. End 
 - [ ] File ends with a single trailing newline.
 - [ ] No stale or placeholder content remains.
 - [ ] Table of contents (if present) matches the actual headings.
+- [ ] Prose is not hard-wrapped and tables are padded to aligned columns.
 - [ ] Formatting is consistent with other Markdown files in the project.

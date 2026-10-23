@@ -38,7 +38,8 @@ Run these prompts in sequence on the full project:
     - `shared/` (JSON, protocol transport, stdlib metadata, symbols)
     - `language-server/source/`
     - `debugger/source/`
-      Fix all Bug and Security findings. Fix Performance and Style findings where the fix is safe.
+
+    Fix all Bug and Security findings. Fix Performance and Style findings where the fix is safe.
 
 2. **Refactor** — Run the [refactor](refactor.prompt.md) prompt for any structural issues found during review.
 

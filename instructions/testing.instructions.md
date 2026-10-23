@@ -126,10 +126,10 @@ Follow this layout for every C++ test file:
 
 1. **File comment** — single line describing the scope (e.g., `// Lexer unit tests.`).
 2. **Includes** — standard library first, then project headers, then `test_framework.hpp`.
-3. **`using namespace luma;`** — permitted in test files only.
+3. `using namespace luma;` — permitted in test files only.
 4. **Helper functions** — pipeline shortcuts like `lex()`, `parse()`, `eval()`, `run()`.
 5. **Test functions** — one `static void` function per test, named `test_<feature>`.
-6. **`main()`** — registers tests with `RUN(test_name)`, returns `SUMMARY()`. Alternatively, use `LUMA_TEST(name)` for auto-registration and `LUMA_RUN_ALL()` in `main()`.
+6. `main()` — registers tests with `RUN(test_name)`, returns `SUMMARY()`. Alternatively, use `LUMA_TEST(name)` for auto-registration and `LUMA_RUN_ALL()` in `main()`.
 
 ### Auto-Registration (Alternative)
 
