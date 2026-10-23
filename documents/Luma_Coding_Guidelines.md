@@ -689,13 +689,13 @@ match code {
 
 Luma offers several collection types. Choose based on the access pattern:
 
-| Collection      | Use When                                                              |
-| --------------- | --------------------------------------------------------------------- |
-| `array<T>`      | Default choice. Ordered data with index-based access.                 |
-| `dictionary<V>` | Key-value lookups with string keys.                                   |
-| `set<T>`        | Unordered unique elements. Membership testing.                        |
-| `queue<T>`      | FIFO semantics — producer-consumer patterns.                          |
-| `stack<T>`      | LIFO semantics — depth-first traversal, undo buffers.                 |
+| Collection      | Use When                                              |
+| --------------- | ----------------------------------------------------- |
+| `array<T>`      | Default choice. Ordered data with index-based access. |
+| `dictionary<V>` | Key-value lookups with string keys.                   |
+| `set<T>`        | Unordered unique elements. Membership testing.        |
+| `queue<T>`      | FIFO semantics — producer-consumer patterns.          |
+| `stack<T>`      | LIFO semantics — depth-first traversal, undo buffers. |
 
 Prefer `array<T>` for ordered, index-accessed data and `set<T>` when membership testing is the primary operation. All collections have value semantics — operations return new copies rather than mutating in place.
 

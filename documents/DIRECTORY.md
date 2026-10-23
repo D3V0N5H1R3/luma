@@ -27,13 +27,13 @@ Index of the design, reference, and guide documents for the Luma programming lan
 
 ## 2 — Guides
 
-| Document                                                         | Description                                                        |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [Installation Guide](Luma_Installation_Guide.md)                 | Install pre-built binaries and set up editor integration.          |
-| [Tutorial](Luma_Tutorial.md)                                     | A step-by-step introduction to Luma for absolute beginners.        |
-| [REPL Guide](Luma_REPL_Guide.md)                                 | Interactive exploration of the language and standard library.      |
-| [Performance Guide](Luma_Performance_Guide.md)                   | Runtime performance characteristics and optimisation advice.       |
-| [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) | Debugging tasks, channels, and concurrent execution.               |
+| Document                                                         | Description                                                   |
+| ---------------------------------------------------------------- | ------------------------------------------------------------- |
+| [Installation Guide](Luma_Installation_Guide.md)                 | Install pre-built binaries and set up editor integration.     |
+| [Tutorial](Luma_Tutorial.md)                                     | A step-by-step introduction to Luma for absolute beginners.   |
+| [REPL Guide](Luma_REPL_Guide.md)                                 | Interactive exploration of the language and standard library. |
+| [Performance Guide](Luma_Performance_Guide.md)                   | Runtime performance characteristics and optimisation advice.  |
+| [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) | Debugging tasks, channels, and concurrent execution.          |
 
 ---
 
@@ -88,7 +88,7 @@ Luma documentation follows a consistent naming and titling scheme:
 
 ### Cross-References
 
-Every document except this index ends with a **See Also** section linking to related documents. These sections follow a shared convention:
+Every `Luma_<Topic>.md` document ends with a **See Also** section linking to related documents. These sections follow a shared convention:
 
 - **Reciprocal.** When one document points to another as important related reading, the target points back, so key relationships are navigable from both directions.
 - **Whole-document by default.** Link to the whole document (`Luma_<Topic>.md`); use a section anchor (`Luma_<Topic>.md#n--section-title`) only when one specific section is materially more useful than the whole document.

@@ -152,9 +152,9 @@ The protocol thread remains responsive to DAP requests while the program runs.
 
 ### Modification
 
-| Request       | Direction       | Purpose                                       |
-| ------------- | --------------- | --------------------------------------------- |
-| `setVariable` | Client → Server | Modify a variable's value while paused        |
+| Request       | Direction       | Purpose                                |
+| ------------- | --------------- | -------------------------------------- |
+| `setVariable` | Client → Server | Modify a variable's value while paused |
 
 ### Events (Server → Client)
 
@@ -979,3 +979,4 @@ Once the current implementation is stable, the following features could be added
 - [Contributing](../CONTRIBUTING.md) — configuring editors to launch the debugger
 - [Language Server](Luma_Language_Server.md) — the companion LSP language server
 - [Software Architecture](Luma_Software_Architecture.md) — how the debug adapter fits into the interpreter
+- [Manual Tests](Luma_Manual_Tests.md) — manual test plan covering the debugger in VS Code and Zed

@@ -34,6 +34,8 @@
 26. [Where to Go Next](#26--where-to-go-next)
 27. [Glossary](#27--glossary)
 
+- [See Also](#see-also)
+
 ---
 
 ## 1 — What Programming Is, and What Luma Is
@@ -126,10 +128,10 @@ Congratulations — you are a programmer. Now let's understand every piece of th
 
 ### Anatomy of the Program
 
-- **`@main`** is an **annotation** — a note attached to what follows. `@main` marks the function that Luma should run first. Think of it as the front door: execution starts here. Every complete Luma program has exactly one `@main`.
-- **`function void main()`** declares a **function** named `main`. A function is a named block of instructions. We will cover functions properly in [chapter 13](#13--functions); for now, just know this is the standard starting shape. The word `void` means "this function produces no value" — it just *does* things.
-- **`{ ... }`** — the curly braces hold the function's **body**: the instructions to carry out. Everything the program does goes between them.
-- **`print("Hello, Luma!")`** is the one instruction here. `print` is a built-in tool that displays text on the screen. The text to display, `"Hello, Luma!"`, sits inside the parentheses.
+- `@main` is an **annotation** — a note attached to what follows. `@main` marks the function that Luma should run first. Think of it as the front door: execution starts here. Every complete Luma program has exactly one `@main`.
+- `function void main()` declares a **function** named `main`. A function is a named block of instructions. We will cover functions properly in [chapter 13](#13--functions); for now, just know this is the standard starting shape. The word `void` means "this function produces no value" — it just *does* things.
+- `{ ... }` — the curly braces hold the function's **body**: the instructions to carry out. Everything the program does goes between them.
+- `print("Hello, Luma!")` is the one instruction here. `print` is a built-in tool that displays text on the screen. The text to display, `"Hello, Luma!"`, sits inside the parentheses.
 
 ### Two Rules You'll Notice
 
@@ -317,14 +319,14 @@ For powers, roots, and other maths, use the `Math` module (see [chapter 20](#20-
 
 Comparison operators ask a yes/no question and produce a **boolean**:
 
-| Operator | Meaning                    | Example    | Result  |
-| -------- | -------------------------- | ---------- | ------- |
-| `==`     | equal to                   | `3 == 3`   | `true`  |
-| `!=`     | not equal to               | `3 != 4`   | `true`  |
-| `<`      | less than                  | `2 < 5`    | `true`  |
-| `>`      | greater than               | `2 > 5`    | `false` |
-| `<=`     | less than or equal to      | `5 <= 5`   | `true`  |
-| `>=`     | greater than or equal to   | `4 >= 9`   | `false` |
+| Operator | Meaning                  | Example  | Result  |
+| -------- | ------------------------ | -------- | ------- |
+| `==`     | equal to                 | `3 == 3` | `true`  |
+| `!=`     | not equal to             | `3 != 4` | `true`  |
+| `<`      | less than                | `2 < 5`  | `true`  |
+| `>`      | greater than             | `2 > 5`  | `false` |
+| `<=`     | less than or equal to    | `5 <= 5` | `true`  |
+| `>=`     | greater than or equal to | `4 >= 9` | `false` |
 
 ### Logical
 
@@ -574,8 +576,8 @@ Because `countdown` changes each time, it must be `mutable`. **Make sure the con
 
 Two keywords give you finer control inside any loop:
 
-- **`break`** stops the loop immediately.
-- **`continue`** skips the rest of the current turn and moves to the next.
+- `break` stops the loop immediately.
+- `continue` skips the rest of the current turn and moves to the next.
 
 ```luma
 for n in 0..10 {
@@ -664,15 +666,15 @@ string tenth = Array.get(pets, 10) ?? "unknown"    # "unknown" — no crash
 
 ### A Few Handy Array Tools
 
-| Operation                       | What it does                          | Returns          |
-| ------------------------------- | ------------------------------------- | ---------------- |
-| `Array.length(a)`               | number of elements                    | `integer`        |
-| `Array.push(a, v)`              | new array with `v` added at the end   | `array<T>`       |
-| `Array.contains(a, v)`          | is `v` in the array?                  | `boolean`        |
-| `Array.reverse(a)`              | new array, reversed                   | `array<T>`       |
-| `Array.get(a, i)`               | safe element access                   | `result<T>`      |
-| `Array.sum(a)`                  | total of a numeric array              | `result<number>` |
-| `Array.join(a, sep)`            | join elements into a string           | `string`         |
+| Operation              | What it does                        | Returns          |
+| ---------------------- | ----------------------------------- | ---------------- |
+| `Array.length(a)`      | number of elements                  | `integer`        |
+| `Array.push(a, v)`     | new array with `v` added at the end | `array<T>`       |
+| `Array.contains(a, v)` | is `v` in the array?                | `boolean`        |
+| `Array.reverse(a)`     | new array, reversed                 | `array<T>`       |
+| `Array.get(a, i)`      | safe element access                 | `result<T>`      |
+| `Array.sum(a)`         | total of a numeric array            | `result<number>` |
+| `Array.join(a, sep)`   | join elements into a string         | `string`         |
 
 We'll meet the transforming tools — `Array.map`, `Array.filter`, `Array.reduce` — in [chapter 19](#19--lambdas-pipes-and-higher-order-functions), once we have functions under our belt.
 
@@ -732,14 +734,14 @@ array<number> all_ages = Dictionary.values(ages)
 
 ### Handy Dictionary Tools
 
-| Operation                    | What it does                            | Returns         |
-| ---------------------------- | --------------------------------------- | --------------- |
-| `Dictionary.get_or(d, k, x)` | value for key `k`, or `x` if absent     | `V`             |
-| `Dictionary.set(d, k, v)`    | new dictionary with `k` set to `v`      | `dictionary<V>` |
-| `Dictionary.keys(d)`         | all keys                                | `array<string>` |
-| `Dictionary.values(d)`       | all values                              | `array<V>`      |
-| `Dictionary.length(d)`       | number of entries                       | `integer`       |
-| `Dictionary.remove(d, k)`    | new dictionary without key `k`          | `dictionary<V>` |
+| Operation                    | What it does                        | Returns         |
+| ---------------------------- | ----------------------------------- | --------------- |
+| `Dictionary.get_or(d, k, x)` | value for key `k`, or `x` if absent | `V`             |
+| `Dictionary.set(d, k, v)`    | new dictionary with `k` set to `v`  | `dictionary<V>` |
+| `Dictionary.keys(d)`         | all keys                            | `array<string>` |
+| `Dictionary.values(d)`       | all values                          | `array<V>`      |
+| `Dictionary.length(d)`       | number of entries                   | `integer`       |
+| `Dictionary.remove(d, k)`    | new dictionary without key `k`      | `dictionary<V>` |
 
 > **Try it:** Make a `dictionary<number>` mapping three fruits to their prices. Print each fruit and price on its own line, then print the total of all prices (hint: `Dictionary.values` gives you an array you can total).
 
@@ -1174,7 +1176,7 @@ print(double(10))      # 20
 
 Lambdas shine when passed to **higher-order functions** — functions that take other functions as arguments. The big three transform whole arrays at once. Each returns a `result` (a lambda *could* misbehave), so unwrap with `?? []`:
 
-**`Array.map`** applies a function to every element, producing a new array:
+`Array.map` applies a function to every element, producing a new array:
 
 ```luma
 array<integer> nums = [1, 2, 3, 4]
@@ -1182,14 +1184,14 @@ array<integer> doubled = Array.map(nums, (integer n) -> n * 2) ?? []
 print(doubled)     # [2, 4, 6, 8]
 ```
 
-**`Array.filter`** keeps only the elements for which the function returns `true`:
+`Array.filter` keeps only the elements for which the function returns `true`:
 
 ```luma
 array<integer> evens = Array.filter(nums, (integer n) -> n % 2 == 0) ?? []
 print(evens)       # [2, 4]
 ```
 
-**`Array.reduce`** combines all elements into a single value, starting from an initial accumulator:
+`Array.reduce` combines all elements into a single value, starting from an initial accumulator:
 
 ```luma
 integer total = Array.reduce(nums, 0, (integer acc, integer n) -> acc + n) ?? 0
@@ -1314,16 +1316,16 @@ You met these in chapters [11](#11--arrays), [12](#12--dictionaries), and [19](#
 
 These are just the beginner essentials. Luma has dozens of modules; here are some you'll enjoy exploring as you grow:
 
-| Module      | For working with…                                    |
-| ----------- | ---------------------------------------------------- |
-| `DateTime`  | dates, times, and durations                          |
-| `FileSystem`| reading and writing files                            |
-| `Json`      | JSON data (reading and producing it)                 |
-| `Set`       | collections of unique values                         |
-| `Queue`     | first-in-first-out sequences                         |
-| `Stack`     | last-in-first-out sequences                          |
-| `Log`       | structured logging                                   |
-| `Terminal`  | rich, colourful terminal interfaces                  |
+| Module       | For working with…                    |
+| ------------ | ------------------------------------ |
+| `DateTime`   | dates, times, and durations          |
+| `FileSystem` | reading and writing files            |
+| `Json`       | JSON data (reading and producing it) |
+| `Set`        | collections of unique values         |
+| `Queue`      | first-in-first-out sequences         |
+| `Stack`      | last-in-first-out sequences          |
+| `Log`        | structured logging                   |
+| `Terminal`   | rich, colourful terminal interfaces  |
 
 The [Standard Library Reference](Luma_Standard_Library_Reference.md) documents every module and every function, with the exact types. Get comfortable skimming it — knowing *where to look* is a real programming skill.
 
@@ -1554,7 +1556,7 @@ This is the same instinct as any well-made tool: present a small, deliberate set
 
 ## 24 — Splitting a Program Across Files
 
-So far every program has lived in a single `.luma` file. That's fine for something small, but real projects spread their code across many files — one per feature, or a shared file of helpers reused by several programs. Luma joins files together with the **`include`** directive.
+So far every program has lived in a single `.luma` file. That's fine for something small, but real projects spread their code across many files — one per feature, or a shared file of helpers reused by several programs. Luma joins files together with the `include` directive.
 
 ### The `include` Directive
 
@@ -1742,42 +1744,42 @@ Welcome to programming. Have fun.
 
 A quick reference for the terms introduced in this tutorial.
 
-| Term                  | Meaning                                                                                     |
-| --------------------- | ------------------------------------------------------------------------------------------- |
-| **annotation**        | A marker attached to code, like `@main` or `@test`, that gives it special meaning.          |
-| **argument**          | A value you pass into a function when calling it.                                            |
-| **array**             | An ordered list of values of the same type.                                                 |
-| **assertion**         | A statement in a test (`assert(...)`) that must be true, or the test fails.                  |
-| **boolean**           | A value that is either `true` or `false`.                                                    |
-| **choice type**       | A type whose value is exactly one of several named variants.                                |
-| **comment**           | A note in the code (after `#`) that the computer ignores.                                    |
-| **condition**         | A boolean expression that decides which branch of code runs.                                |
-| **dictionary**        | A collection that maps string keys to values.                                               |
-| **expression**        | A piece of code that produces a value (e.g. `2 + 3` or an `if`-expression).                  |
-| **function**          | A named, reusable block of instructions that may take inputs and return a value.            |
-| **immutable**         | Unable to be changed after it's set (the default for Luma variables).                        |
-| **include**           | Pulls another file's declarations into this one via `include "file.luma"`.                  |
-| **index**             | The position of an element in an array, counting from `0`.                                   |
-| **integer**           | A whole number, used for positions, counts of steps, and range bounds.                      |
-| **interpolation**     | Inserting a value into a string with `${...}`.                                               |
-| **lambda**            | A small, unnamed function written inline, using `->`.                                        |
-| **loop**              | Code that repeats (`for`, `while`).                                                          |
-| **mutable**           | Able to be changed after it's set; opted into with the `mutable` keyword.                    |
-| **namespace**         | A named group of related functions and types, used as `Namespace.member`.                   |
-| **number**            | A value that may have a fractional part, used for quantities and measurements.              |
-| **optional**          | A type (`optional<T>`) holding either a value (`some`) or nothing (`none`).                  |
-| **parameter**         | A named input listed in a function's declaration.                                           |
-| **pattern matching**  | Choosing a branch by comparing a value against patterns with `match`.                       |
-| **pipe**              | The `\|>` operator, which feeds a value as the first argument of the next function.          |
-| **record**            | A type that groups several named fields into one value.                                     |
-| **result**            | A type (`result<T>`) representing success (`success`) or failure (`failure`).               |
-| **return**            | Handing a value back from a function to its caller.                                          |
-| **statement**         | An instruction that performs an action.                                                     |
-| **string**            | A piece of text, written in double quotes.                                                  |
-| **tuple**             | A fixed-size group of values that may have different types.                                  |
-| **type**              | The kind of a value, which determines what you can do with it.                               |
-| **use**               | Imports a namespace's names so you can call them without the prefix.                        |
-| **variable**          | A named reference to a value.                                                                |
+| Term                 | Meaning                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| **annotation**       | A marker attached to code, like `@main` or `@test`, that gives it special meaning.  |
+| **argument**         | A value you pass into a function when calling it.                                   |
+| **array**            | An ordered list of values of the same type.                                         |
+| **assertion**        | A statement in a test (`assert(...)`) that must be true, or the test fails.         |
+| **boolean**          | A value that is either `true` or `false`.                                           |
+| **choice type**      | A type whose value is exactly one of several named variants.                        |
+| **comment**          | A note in the code (after `#`) that the computer ignores.                           |
+| **condition**        | A boolean expression that decides which branch of code runs.                        |
+| **dictionary**       | A collection that maps string keys to values.                                       |
+| **expression**       | A piece of code that produces a value (e.g. `2 + 3` or an `if`-expression).         |
+| **function**         | A named, reusable block of instructions that may take inputs and return a value.    |
+| **immutable**        | Unable to be changed after it's set (the default for Luma variables).               |
+| **include**          | Pulls another file's declarations into this one via `include "file.luma"`.          |
+| **index**            | The position of an element in an array, counting from `0`.                          |
+| **integer**          | A whole number, used for positions, counts of steps, and range bounds.              |
+| **interpolation**    | Inserting a value into a string with `${...}`.                                      |
+| **lambda**           | A small, unnamed function written inline, using `->`.                               |
+| **loop**             | Code that repeats (`for`, `while`).                                                 |
+| **mutable**          | Able to be changed after it's set; opted into with the `mutable` keyword.           |
+| **namespace**        | A named group of related functions and types, used as `Namespace.member`.           |
+| **number**           | A value that may have a fractional part, used for quantities and measurements.      |
+| **optional**         | A type (`optional<T>`) holding either a value (`some`) or nothing (`none`).         |
+| **parameter**        | A named input listed in a function's declaration.                                   |
+| **pattern matching** | Choosing a branch by comparing a value against patterns with `match`.               |
+| **pipe**             | The `\|>` operator, which feeds a value as the first argument of the next function. |
+| **record**           | A type that groups several named fields into one value.                             |
+| **result**           | A type (`result<T>`) representing success (`success`) or failure (`failure`).       |
+| **return**           | Handing a value back from a function to its caller.                                 |
+| **statement**        | An instruction that performs an action.                                             |
+| **string**           | A piece of text, written in double quotes.                                          |
+| **tuple**            | A fixed-size group of values that may have different types.                         |
+| **type**             | The kind of a value, which determines what you can do with it.                      |
+| **use**              | Imports a namespace's names so you can call them without the prefix.                |
+| **variable**         | A named reference to a value.                                                       |
 
 ---
 

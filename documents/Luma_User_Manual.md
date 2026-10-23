@@ -159,8 +159,7 @@ luma>
 
 ### String Escape Sequences
 
-The following escape sequences are recognised inside string literals and
-interpolated strings:
+The following escape sequences are recognised inside string literals and interpolated strings:
 
 | Sequence | Meaning                              |
 | -------- | ------------------------------------ |
@@ -311,8 +310,7 @@ mutable (string first, string last) = split_name(full_name)
 
 ### Record Destructuring
 
-A record can be destructured by field name, binding each listed field to a
-same-named local. Field types are inferred from the record definition:
+A record can be destructured by field name, binding each listed field to a same-named local. Field types are inferred from the record definition:
 
 ```luma
 record Point { number x, number y, number z }
@@ -324,19 +322,14 @@ print(x)                    # 1.0
 print(y)                    # 2.0
 ```
 
-A **subset** of fields may be listed — unlisted fields are simply not bound.
-Duplicate field names, unknown fields, and a right-hand value that is not an
-instance of the record type are compile-time errors. As with tuples, `mutable`
-applies to **all** bindings:
+A **subset** of fields may be listed — unlisted fields are simply not bound. Duplicate field names, unknown fields, and a right-hand value that is not an instance of the record type are compile-time errors. As with tuples, `mutable` applies to **all** bindings:
 
 ```luma
 mutable Point { x, y, z } = p
 x = x + 10.0
 ```
 
-Record destructuring reads plain data — it is distinct from record _creation_,
-which assigns each field (`Point { x = 1.0, ... }`). Records may also be
-destructured as a `match` case pattern (see [§8 — Records](#8--records)).
+Record destructuring reads plain data — it is distinct from record _creation_, which assigns each field (`Point { x = 1.0, ... }`). Records may also be destructured as a `match` case pattern (see [§8 — Records](#8--records)).
 
 ### Scope and Shadowing
 
@@ -393,21 +386,18 @@ Use `//` when you explicitly need an integer quotient and want to document that 
 
 ### Bit Manipulation
 
-Luma has no bitwise operators. Bit manipulation lives in the **`Bits`** standard-library
-module — pipe-first free functions over `integer` values:
+Luma has no bitwise operators. Bit manipulation lives in the `Bits` standard-library module — pipe-first free functions over `integer` values:
 
-| Function                     | Description              | Example                      |
-| ---------------------------- | ------------------------ | ---------------------------- |
-| `Bits.and(a, b)`             | Bitwise AND              | `Bits.and(12, 10)` → `8`     |
-| `Bits.or(a, b)`              | Bitwise OR               | `Bits.or(8, 4)` → `12`       |
-| `Bits.xor(a, b)`             | Bitwise XOR              | `Bits.xor(15, 9)` → `6`      |
-| `Bits.not(a)`                | Bitwise NOT              | `Bits.not(0)` → `-1`         |
-| `Bits.shift_left(v, n)`      | Left shift               | `Bits.shift_left(1, 3)` → `8`  |
-| `Bits.shift_right(v, n)`     | Right shift (arithmetic) | `Bits.shift_right(16, 2)` → `4` |
+| Function                 | Description              | Example                         |
+| ------------------------ | ------------------------ | ------------------------------- |
+| `Bits.and(a, b)`         | Bitwise AND              | `Bits.and(12, 10)` → `8`        |
+| `Bits.or(a, b)`          | Bitwise OR               | `Bits.or(8, 4)` → `12`          |
+| `Bits.xor(a, b)`         | Bitwise XOR              | `Bits.xor(15, 9)` → `6`         |
+| `Bits.not(a)`            | Bitwise NOT              | `Bits.not(0)` → `-1`            |
+| `Bits.shift_left(v, n)`  | Left shift               | `Bits.shift_left(1, 3)` → `8`   |
+| `Bits.shift_right(v, n)` | Right shift (arithmetic) | `Bits.shift_right(16, 2)` → `4` |
 
-Shift amounts must be in the range `0..63`; a shift amount outside this range throws a
-`RuntimeError`. `Bits.not(x)` is the two's-complement 64-bit complement, so
-`Bits.not(0) == -1` and `Bits.not(-1) == 0`.
+Shift amounts must be in the range `0..63`; a shift amount outside this range throws a `RuntimeError`. `Bits.not(x)` is the two's-complement 64-bit complement, so `Bits.not(0) == -1` and `Bits.not(-1) == 0`.
 
 ### Comparison
 
@@ -426,25 +416,21 @@ Shift amounts must be in the range `0..63`; a shift amount outside this range th
 | `in`     | Substring in string: `"ell" in "hello"` → `true` |
 | `in`     | Integer in range: `42 in 1..=100` → `true`       |
 
-Range membership tests whether an `integer` falls within a range's bounds. It
-honours the range form: the lower bound is always inclusive, while the upper
-bound is inclusive for `a..=b` and exclusive for `a..b`. It reads more naturally
-than the two-comparison idiom it replaces:
+Range membership tests whether an `integer` falls within a range's bounds. It honours the range form: the lower bound is always inclusive, while the upper bound is inclusive for `a..=b` and exclusive for `a..b`. It reads more naturally than the two-comparison idiom it replaces:
 
 ```luma
 # Instead of: score >= 1 && score <= 100
 boolean valid = score in 1..=100
 ```
 
-The left operand must be an `integer` (ranges have integer bounds); any other
-type is a compile-time `TypeError`.
+The left operand must be an `integer` (ranges have integer bounds); any other type is a compile-time `TypeError`.
 
 ### Logical
 
 | Operator | Description                  |
 | -------- | ---------------------------- |
 | `&&`     | Short-circuit AND            |
-| `\       | \                            |
+| `\|\|`   | Short-circuit OR             |
 | `!`      | Logical NOT (prefix)         |
 | `??`     | Optional / Result unwrapping |
 
@@ -475,9 +461,9 @@ integer num = parsed ?? 0            # 42
 | 5           | `<` `>` `<=` `>=` `in`                 | Comparison                                 |
 | 6           | `==` `!=`                              | Equality                                   |
 | 7           | `&&`                                   | Logical AND                                |
-| 8           | `\                                     | \                                          |
+| 8           | `\|\|`                                 | Logical OR                                 |
 | 9           | `??`                                   | Optional / Result unwrapping               |
-| 10 (lowest) | `\                                     | >` `!>`                                    |
+| 10 (lowest) | `\|>` `!>`                             | Pipe, error pipe                           |
 
 ### Optional Chaining `?.` and `?[`
 
@@ -907,9 +893,7 @@ Multi-statement bodies use a block:
 }
 ```
 
-A lambda body may use the error-propagation operator `?` when the lambda returns
-a `result<T>` or `optional<T>`. A failing step short-circuits and becomes the
-lambda's return value:
+A lambda body may use the error-propagation operator `?` when the lambda returns a `result<T>` or `optional<T>`. A failing step short-circuits and becomes the lambda's return value:
 
 ```luma
 (string raw) -> {
@@ -962,8 +946,7 @@ Inline lambdas (`(x) -> expr`) do not support default parameter values or named 
 
 ### Declaration
 
-Fields are separated by commas. A trailing comma before the closing `}` is
-allowed but not required.
+Fields are separated by commas. A trailing comma before the closing `}` is allowed but not required.
 
 ```luma
 record Point {
@@ -1008,18 +991,14 @@ print(p)   # Point { x = 3.5, y = -1.2 }
 
 ### Destructuring Fields
 
-Instead of repeating `p.x`, `p.y`, `p.z`, a record can be destructured to bind
-several fields to same-named locals at once. Field types are inferred from the
-record definition, and a subset of fields may be listed:
+Instead of repeating `p.x`, `p.y`, `p.z`, a record can be destructured to bind several fields to same-named locals at once. Field types are inferred from the record definition, and a subset of fields may be listed:
 
 ```luma
 Point { x, y } = p       # binds x and y
 mutable Point { x, y } = p # all bindings are mutable
 ```
 
-Records can also be destructured as a `match` case pattern, binding the named
-fields inside the arm. Because a record has a single shape, an unguarded record
-pattern (or an `else` arm) makes the match exhaustive:
+Records can also be destructured as a `match` case pattern, binding the named fields inside the arm. Because a record has a single shape, an unguarded record pattern (or an `else` arm) makes the match exhaustive:
 
 ```luma
 record Shape { number width, number height }
@@ -1181,8 +1160,8 @@ list[1] = 99 # [1, 99, 3]
 | `Array.last(arr)`             | `result<T>` — last element                                                                                                  |
 | `Array.length(arr)`           | `integer` — number of elements                                                                                              |
 | `Array.map(arr, fn)`          | `result<array<T>>` — transform each element; `failure` if callback throws                                                   |
-| `Array.maximum(arr)`              | `result<T>` — maximum value; `failure` if array is empty                                                                    |
-| `Array.minimum(arr)`              | `result<T>` — minimum value; `failure` if array is empty                                                                    |
+| `Array.maximum(arr)`          | `result<T>` — maximum value; `failure` if array is empty                                                                    |
+| `Array.minimum(arr)`          | `result<T>` — minimum value; `failure` if array is empty                                                                    |
 | `Array.pop(arr)`              | `result<(array, T)>` — `success((array, last))` or `failure` if empty                                                       |
 | `Array.push(arr, v)`          | `array<T>` — new array with `v` appended                                                                                    |
 | `Array.range(start, end)`     | `result<array<integer>>` — generate `[start, start+1, ..., end-1]`; `failure` if range exceeds size limit                   |
@@ -1666,34 +1645,34 @@ boolean ok = Channel.send(ch, 42) # OK — assigned
 
 ### Result Functions
 
-| Function                         | Description                                                                                  |
-| -------------------------------- | -------------------------------------------------------------------------------------------- |
-| `Result.collect(arr)`            | `array<result<T>>` → `result<array<T>>`                                                      |
-| `Result.error(r)`                | Inner error value — runtime error if called on `success`                                     |
-| `Result.error_code(r)`           | Error code string if `failure`; empty string if `success`                                    |
-| `Result.expect(r, msg)`          | Value — runtime error combining `msg` with the underlying error if `failure`                 |
-| `Result.filter(r, fn, msg)`      | Failure with `msg` if predicate is false                                                     |
-| `Result.flat_map(r, fn)`         | Chain a function that returns `result<T>`; throws if the callback does not return a `result` |
-| `Result.flatten(r)`              | `result<result<T>>` → `result<T>`                                                            |
-| `Result.is_failure(r)`           | `true` if `failure`                                                                          |
-| `Result.is_success(r)`           | `true` if `success`                                                                          |
-| `Result.map(r, fn)`              | Transform value if `success` (any inner type)                                                |
-| `Result.map_boolean(r, fn)`      | Transform if `success` and inner value is `boolean`; passes through otherwise                |
-| `Result.map_failure(r, fn)`      | Transform error value if `failure`; passes through `success` unchanged                       |
-| `Result.map_integer(r, fn)`      | Transform if `success` and inner value is `integer`; passes through otherwise                |
-| `Result.map_number(r, fn)`       | Transform if `success` and inner value is `number` or `integer`; passes through otherwise    |
-| `Result.map_string(r, fn)`       | Transform if `success` and inner value is `string`; passes through otherwise                 |
-| `Result.or(r, fallback)`         | Use fallback `result` if `failure`                                                           |
-| `Result.or_else(r, fn)`          | Like `or`, but lazily compute the fallback by applying `fn` to the error message             |
-| `Result.recover(r, fn)`          | If `failure`, apply `fn` to the inner value and wrap the return in `success`                 |
-| `Result.source_function(r)`      | Name of the function that produced the error; empty string if `success`                      |
-| `Result.tap(r, fn)`              | Side-effect on `success` value; passes through unchanged                                     |
-| `Result.to_optional(r)`          | `success(v)` → `some(v)`, `failure(...)` → `none`                                            |
-| `Result.unwrap(r)`               | Value — runtime error if `failure`                                                           |
-| `Result.unwrap_or(r, default)`   | Value or default                                                                             |
-| `Result.zip(a, b)`               | `success((a_val, b_val))` if both succeed; returns first `failure` otherwise                 |
+| Function                            | Description                                                                                  |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| `Result.collect(arr)`               | `array<result<T>>` → `result<array<T>>`                                                      |
+| `Result.error(r)`                   | Inner error value — runtime error if called on `success`                                     |
+| `Result.error_code(r)`              | Error code string if `failure`; empty string if `success`                                    |
+| `Result.expect(r, msg)`             | Value — runtime error combining `msg` with the underlying error if `failure`                 |
+| `Result.filter(r, fn, msg)`         | Failure with `msg` if predicate is false                                                     |
+| `Result.flat_map(r, fn)`            | Chain a function that returns `result<T>`; throws if the callback does not return a `result` |
+| `Result.flatten(r)`                 | `result<result<T>>` → `result<T>`                                                            |
+| `Result.is_failure(r)`              | `true` if `failure`                                                                          |
+| `Result.is_success(r)`              | `true` if `success`                                                                          |
+| `Result.map(r, fn)`                 | Transform value if `success` (any inner type)                                                |
+| `Result.map_boolean(r, fn)`         | Transform if `success` and inner value is `boolean`; passes through otherwise                |
+| `Result.map_failure(r, fn)`         | Transform error value if `failure`; passes through `success` unchanged                       |
+| `Result.map_integer(r, fn)`         | Transform if `success` and inner value is `integer`; passes through otherwise                |
+| `Result.map_number(r, fn)`          | Transform if `success` and inner value is `number` or `integer`; passes through otherwise    |
+| `Result.map_string(r, fn)`          | Transform if `success` and inner value is `string`; passes through otherwise                 |
+| `Result.or(r, fallback)`            | Use fallback `result` if `failure`                                                           |
+| `Result.or_else(r, fn)`             | Like `or`, but lazily compute the fallback by applying `fn` to the error message             |
+| `Result.recover(r, fn)`             | If `failure`, apply `fn` to the inner value and wrap the return in `success`                 |
+| `Result.source_function(r)`         | Name of the function that produced the error; empty string if `success`                      |
+| `Result.tap(r, fn)`                 | Side-effect on `success` value; passes through unchanged                                     |
+| `Result.to_optional(r)`             | `success(v)` → `some(v)`, `failure(...)` → `none`                                            |
+| `Result.unwrap(r)`                  | Value — runtime error if `failure`                                                           |
+| `Result.unwrap_or(r, default)`      | Value or default                                                                             |
+| `Result.zip(a, b)`                  | `success((a_val, b_val))` if both succeed; returns first `failure` otherwise                 |
 | `Result.map_both(r, ok_fn, err_fn)` | Map both branches: apply `ok_fn` to success value, `err_fn` to failure error                 |
-| `Result.fold(r, ok_fn, err_fn)`  | Extract a value from either branch; both functions must return the same type                 |
+| `Result.fold(r, ok_fn, err_fn)`     | Extract a value from either branch; both functions must return the same type                 |
 
 ### Optional
 
@@ -1937,7 +1916,7 @@ match score {
 
 > **Note:** Binding patterns (`success`, `failure`, `some`, and choice destructuring) cannot be combined with `|` because each alternative would need its own binding name.
 
-### Guards (`when` clauses)
+### Guards (`when` Clauses)
 
 Any pattern arm can be refined with a `when` clause — a boolean condition that must also hold for the arm to fire. If the pattern matches but the guard is `false`, matching **falls through** to the next arm:
 
@@ -2433,19 +2412,19 @@ result<result<integer>> rr = downcast<result<integer>>(r) # **recursively** succ
 
 `downcast<T>` recognises the following target types:
 
-| Category     | Target types                                               |
-| ------------ | ---------------------------------------------------------- |
-| Arrays       | `array<T>` — element type verified at every nesting level  |
-| Channel/Task | `channel<T>`, `task<T>` — base type only (see note below)  |
-| Choice types | Choice types (matched by type name)                        |
-| Collections  | `queue<T>`, `stack<T>`, `set<T>` — element type verified   |
+| Category     | Target types                                                 |
+| ------------ | ------------------------------------------------------------ |
+| Arrays       | `array<T>` — element type verified at every nesting level    |
+| Channel/Task | `channel<T>`, `task<T>` — base type only (see note below)    |
+| Choice types | Choice types (matched by type name)                          |
+| Collections  | `queue<T>`, `stack<T>`, `set<T>` — element type verified     |
 | Dictionaries | `dictionary<V>` — value type verified at every nesting level |
-| Optionals    | `optional<T>` — `none`, or inner value verified against `T` |
-| Primitives   | `boolean`, `integer`, `none`, `number`, `string`           |
-| Records      | Record types (matched by type name)                        |
-| References   | `reference<T>` — referenced value verified against `T`     |
-| Results      | `result<T>` — inner type verified for `success` variants   |
-| Tuples       | `(T, U, …)` — element count and each element type verified |
+| Optionals    | `optional<T>` — `none`, or inner value verified against `T`  |
+| Primitives   | `boolean`, `integer`, `none`, `number`, `string`             |
+| Records      | Record types (matched by type name)                          |
+| References   | `reference<T>` — referenced value verified against `T`       |
+| Results      | `result<T>` — inner type verified for `success` variants     |
+| Tuples       | `(T, U, …)` — element count and each element type verified   |
 
 Two important notes for numeric types:
 
@@ -2821,8 +2800,7 @@ include rejected: 'utils.luma' is a symbolic link
 
 An included file may contain top-level statements in addition to declarations. Those statements are executed as part of the including program, before `@main` runs. For predictable behaviour, limit included files to declarations only (functions, records, choice types, type aliases, interfaces).
 
-> **Warning — top-level statements in included files.**
-> When the compiler detects that an included file contains top-level statements, it emits a warning to stderr:
+> **Warning — top-level statements in included files.** When the compiler detects that an included file contains top-level statements, it emits a warning to stderr:
 >
 > ```text
 > warning: included file 'utils.luma' contains top-level statements that will execute before @main
@@ -2900,26 +2878,22 @@ When a type mismatch occurs, the type checker provides a hint suggesting how to 
 
 All 47 identifiers below are reserved and cannot be used as variable, function, record, choice type, or namespace names:
 
-| Keyword      | Keyword        | Keyword       | Keyword            |
-| ------------ | -------------- | ------------- | ------------------ |
-| `array`      | `await`        | `boolean`     | `borrow`           |
-| `break`      | `case`         | `catch`       | `choice`           |
-| `continue`   | `decimal`      | `dictionary`  | `downcast`         |
-| `else`       | `failure`      | `false`       | `finally`          |
-| `for`        | `function`     | `if`          | `in`               |
-| `include`    | `integer`      | `interface`   | `internal`         |
-| `is`         | `match`        | `mutable`     | `namespace`        |
-| `none`       | `number`       | `optional`    | `record`           |
-| `result`     | `return`       | `some`        | `spawn`            |
-| `string`     | `success`      | `task_scope`  | `true`             |
-| `trusted_downcast` | `try`    | `type`        | `unique`           |
-| `use`        | `while`        | `with`        |                    |
+| Keyword            | Keyword    | Keyword      | Keyword     |
+| ------------------ | ---------- | ------------ | ----------- |
+| `array`            | `await`    | `boolean`    | `borrow`    |
+| `break`            | `case`     | `catch`      | `choice`    |
+| `continue`         | `decimal`  | `dictionary` | `downcast`  |
+| `else`             | `failure`  | `false`      | `finally`   |
+| `for`              | `function` | `if`         | `in`        |
+| `include`          | `integer`  | `interface`  | `internal`  |
+| `is`               | `match`    | `mutable`    | `namespace` |
+| `none`             | `number`   | `optional`   | `record`    |
+| `result`           | `return`   | `some`       | `spawn`     |
+| `string`           | `success`  | `task_scope` | `true`      |
+| `trusted_downcast` | `try`      | `type`       | `unique`    |
+| `use`              | `while`    | `with`       |             |
 
-The container and handle types — `channel`,
-`key_value_store`, `queue`, `reference`, `set`, `socket`, `stack`,
-`task`, and `xml` — are **not** reserved words. They are ordinary
-identifiers that name built-in generic types, so `queue<integer> q = …` still
-declares a typed variable while `integer queue = …` is also allowed.
+The container and handle types — `channel`, `key_value_store`, `queue`, `reference`, `set`, `socket`, `stack`, `task`, and `xml` — are **not** reserved words. They are ordinary identifiers that name built-in generic types, so `queue<integer> q = …` still declares a typed variable while `integer queue = …` is also allowed.
 
 ---
 
@@ -2936,41 +2910,41 @@ Diagnostic output is colourised when writing to an interactive terminal (ANSI co
 
 ### Syntax Errors
 
-| Error                                                                                   | Cause                                                            |
-| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `'internal' keyword is only allowed inside a namespace`                                 | `internal` used at the top level                                 |
-| `'internal' must be followed by 'function', 'record', 'choice', 'interface', or 'type'` | `internal` precedes an unsupported declaration                   |
-| `'\                                                                                     | ' alternatives cannot be used with patterns that bind variables` |
-| `binary literal has no digits`                                                          | No digits after `0b` prefix                                      |
-| `cannot open file 'path'`                                                               | Source file could not be opened                                  |
-| `choice destructuring is not allowed in '\                                              | ' alternatives`                                                  |
-| `expected annotation name after '@'`                                                    | `@` not followed by an identifier                                |
-| `expected declaration`                                                                  | File must contain a function, record, or other declaration       |
-| `expected field name after '.'`                                                         | Field access operator not followed by a valid field name         |
-| `expected field name after '?.'`                                                        | Optional field access not followed by a valid field name         |
-| `expected string continuation`                                                          | Mismatched interpolation bracket inside a string                 |
-| `expected type annotation, got 'x'`                                                     | Type annotation expected but not found                           |
-| `expected X, got Y 'z'`                                                                 | Required syntax element missing                                  |
-| `expected '>', got Y 'z'`                                                               | Generic type argument list not closed                            |
-| `hex literal has no digits`                                                             | No digits after `0x` prefix                                      |
-| `integer literal out of range: lexeme`                                                  | Integer constant does not fit in `int64_t`                       |
-| `invalid alternative pattern after '\                                                   | '`                                                               |
-| `invalid integer literal: lexeme`                                                       | Integer literal format is invalid                                |
-| `invalid match arm`                                                                     | Expected a literal, variable binding, choice variant, or `_`     |
-| `invalid number literal: lexeme`                                                        | Number literal format is invalid                                 |
-| `maximum nesting depth exceeded`                                                        | Expression or structure nested too deeply (limit 128)            |
-| `maximum string interpolation nesting depth exceeded`                                   | String interpolation nesting too deep                            |
-| `missing return type for function 'name'`                                               | Function declaration must have a return type                     |
-| `number literal out of range: lexeme`                                                   | Number constant is not a valid `double`                          |
-| `positional argument after named argument`                                              | Positional arguments must precede named arguments                |
-| `try must have at least a 'catch' or 'finally' block`                                   | `try` missing both `catch` and `finally`                         |
-| `unexpected character '...'`                                                            | Invalid character in source text                                 |
-| `unexpected token 'x'`                                                                  | Expected an expression but found an unexpected token             |
-| `unexpected '{' — block expressions are not supported outside of control flow`          | Block expression outside `if`, `match`, `for`, or `while`        |
-| `unknown annotation @x`                                                                 | Annotation is not `@main` or `@test`                             |
-| `unknown escape sequence '\c'`                                                          | Invalid escape; valid are `\n \t \r \0 \\ \" \$`                 |
-| `unterminated string`                                                                   | String literal has no closing quote                              |
-| `'kw' is a reserved keyword and cannot be used as an identifier`                        | Reserved keyword used as a variable or function name             |
+| Error                                                                                   | Cause                                                                                                         |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `'internal' keyword is only allowed inside a namespace`                                 | `internal` used at the top level                                                                              |
+| `'internal' must be followed by 'function', 'record', 'choice', 'interface', or 'type'` | `internal` precedes an unsupported declaration                                                                |
+| `'\|' alternatives cannot be used with patterns that bind variables`                    | A `success`/`failure`/`some` binding, choice destructuring, or record pattern combined with `\|` alternatives |
+| `binary literal has no digits`                                                          | No digits after `0b` prefix                                                                                   |
+| `cannot open file 'path'`                                                               | Source file could not be opened                                                                               |
+| `choice destructuring is not allowed in '\|' alternatives`                              | A variant with a payload pattern, such as `Shape.Circle(r)`, used as a `\|` alternative                       |
+| `expected annotation name after '@'`                                                    | `@` not followed by an identifier                                                                             |
+| `expected declaration`                                                                  | File must contain a function, record, or other declaration                                                    |
+| `expected field name after '.'`                                                         | Field access operator not followed by a valid field name                                                      |
+| `expected field name after '?.'`                                                        | Optional field access not followed by a valid field name                                                      |
+| `expected string continuation`                                                          | Mismatched interpolation bracket inside a string                                                              |
+| `expected type annotation, got 'x'`                                                     | Type annotation expected but not found                                                                        |
+| `expected X, got Y 'z'`                                                                 | Required syntax element missing                                                                               |
+| `expected '>', got Y 'z'`                                                               | Generic type argument list not closed                                                                         |
+| `hex literal has no digits`                                                             | No digits after `0x` prefix                                                                                   |
+| `integer literal out of range: lexeme`                                                  | Integer constant does not fit in `int64_t`                                                                    |
+| `invalid alternative pattern after '\|'`                                                | A `\|` alternative is not a literal, choice variant, or comparison                                            |
+| `invalid integer literal: lexeme`                                                       | Integer literal format is invalid                                                                             |
+| `invalid match arm`                                                                     | Expected a literal, variable binding, choice variant, or `_`                                                  |
+| `invalid number literal: lexeme`                                                        | Number literal format is invalid                                                                              |
+| `maximum nesting depth exceeded`                                                        | Expression or structure nested too deeply (limit 128)                                                         |
+| `maximum string interpolation nesting depth exceeded`                                   | String interpolation nesting too deep                                                                         |
+| `missing return type for function 'name'`                                               | Function declaration must have a return type                                                                  |
+| `number literal out of range: lexeme`                                                   | Number constant is not a valid `double`                                                                       |
+| `positional argument after named argument`                                              | Positional arguments must precede named arguments                                                             |
+| `try must have at least a 'catch' or 'finally' block`                                   | `try` missing both `catch` and `finally`                                                                      |
+| `unexpected character '...'`                                                            | Invalid character in source text                                                                              |
+| `unexpected token 'x'`                                                                  | Expected an expression but found an unexpected token                                                          |
+| `unexpected '{' — block expressions are not supported outside of control flow`          | Block expression outside `if`, `match`, `for`, or `while`                                                     |
+| `unknown annotation @x`                                                                 | Annotation is not `@main` or `@test`                                                                          |
+| `unknown escape sequence '\c'`                                                          | Invalid escape; valid are `\n \t \r \0 \\ \" \$`                                                              |
+| `unterminated string`                                                                   | String literal has no closing quote                                                                           |
+| `'kw' is a reserved keyword and cannot be used as an identifier`                        | Reserved keyword used as a variable or function name                                                          |
 
 ### Type Errors
 
@@ -3034,30 +3008,30 @@ Detected before execution. If any type errors are found, execution does not star
 
 #### Operators
 
-| Error                                                                         | Cause                                            |
-| ----------------------------------------------------------------------------- | ------------------------------------------------ |
-| `operator '+' requires numeric or string operands, got 'T' and 'U'`           | Invalid operand types for addition               |
-| `operator '*' requires numeric operands or string * integer, got 'T' and 'U'` | Invalid operand types for multiplication         |
-| `arithmetic operator requires numeric operands, got 'T' and 'U'`              | Invalid operand types for arithmetic             |
-| `operator '//' requires integer operands, got 'T' and 'U'`                    | Invalid operand types for integer division       |
-| `operator 'op' requires integer operands, got 'T' and 'U'`                    | Invalid operand types for bitwise operator       |
-| `comparison operator requires numeric or string operands, got 'T' and 'U'`    | Invalid operand types for comparison             |
-| `logical operator requires boolean operands, got 'T'`                         | Invalid operand for logical `and` / `or`         |
-| `logical NOT requires boolean operand, got 'T'`                               | Invalid operand for `not`                        |
-| `unary minus requires numeric operand, got 'T'`                               | Invalid operand for unary `-`                    |
-| `bitwise NOT '~' requires an integer operand, got 'T'`                        | Invalid operand for `~`                          |
-| `'in' on dictionary requires a string key, got 'T'`                           | Non-string key in `x in dict`                    |
-| `'in' on string requires a string operand, got 'T'`                           | Non-string value in `x in str`                   |
-| `'in' on a range requires an integer, got 'T'`                                | Non-integer value in `x in a..=b`                |
-| `'in' operator requires array, dictionary, string, or range on the right, got 'T'` | Invalid right operand for `in`              |
-| `compound assignment 'op' requires integer type, got 'T'`                     | Bitwise compound assignment on non-integer       |
-| `compound assignment 'op' requires integer value, got 'T'`                    | Bitwise compound assignment value is non-integer |
-| `compound assignment requires numeric type, got 'T'`                          | Numeric compound assignment on non-numeric       |
-| `compound assignment requires numeric value, got 'T'`                         | Numeric compound assignment value is non-numeric |
-| `increment requires a variable`                                               | `++` on a non-variable expression                |
-| `increment requires numeric type, got 'T'`                                    | `++` on a non-numeric variable                   |
-| `decrement requires a variable`                                               | `--` on a non-variable expression                |
-| `decrement requires numeric type, got 'T'`                                    | `--` on a non-numeric variable                   |
+| Error                                                                              | Cause                                            |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `operator '+' requires numeric or string operands, got 'T' and 'U'`                | Invalid operand types for addition               |
+| `operator '*' requires numeric operands or string * integer, got 'T' and 'U'`      | Invalid operand types for multiplication         |
+| `arithmetic operator requires numeric operands, got 'T' and 'U'`                   | Invalid operand types for arithmetic             |
+| `operator '//' requires integer operands, got 'T' and 'U'`                         | Invalid operand types for integer division       |
+| `operator 'op' requires integer operands, got 'T' and 'U'`                         | Invalid operand types for bitwise operator       |
+| `comparison operator requires numeric or string operands, got 'T' and 'U'`         | Invalid operand types for comparison             |
+| `logical operator requires boolean operands, got 'T'`                              | Invalid operand for logical `and` / `or`         |
+| `logical NOT requires boolean operand, got 'T'`                                    | Invalid operand for `not`                        |
+| `unary minus requires numeric operand, got 'T'`                                    | Invalid operand for unary `-`                    |
+| `bitwise NOT '~' requires an integer operand, got 'T'`                             | Invalid operand for `~`                          |
+| `'in' on dictionary requires a string key, got 'T'`                                | Non-string key in `x in dict`                    |
+| `'in' on string requires a string operand, got 'T'`                                | Non-string value in `x in str`                   |
+| `'in' on a range requires an integer, got 'T'`                                     | Non-integer value in `x in a..=b`                |
+| `'in' operator requires array, dictionary, string, or range on the right, got 'T'` | Invalid right operand for `in`                   |
+| `compound assignment 'op' requires integer type, got 'T'`                          | Bitwise compound assignment on non-integer       |
+| `compound assignment 'op' requires integer value, got 'T'`                         | Bitwise compound assignment value is non-integer |
+| `compound assignment requires numeric type, got 'T'`                               | Numeric compound assignment on non-numeric       |
+| `compound assignment requires numeric value, got 'T'`                              | Numeric compound assignment value is non-numeric |
+| `increment requires a variable`                                                    | `++` on a non-variable expression                |
+| `increment requires numeric type, got 'T'`                                         | `++` on a non-numeric variable                   |
+| `decrement requires a variable`                                                    | `--` on a non-variable expression                |
+| `decrement requires numeric type, got 'T'`                                         | `--` on a non-numeric variable                   |
 
 #### Compile-Time Arithmetic
 
@@ -3145,14 +3119,14 @@ Detected before execution. If any type errors are found, execution does not star
 
 #### Generics, Pipes, and Error Handling
 
-| Error                                                                                                                   | Cause                                                |
-| ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Error                                                                                                                   | Cause                                                                        |
+| ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `argument 1 type mismatch: expected 'U', got 'T'`                                                                       | Value piped (`\|>`) into a function is incompatible with its first parameter |
-| `pipe operator requires a function call on the right side`                                                              | Right side of `\                                     |
-| `error pipe '!>' requires a function call on the right side`                                                            | Right side of `!>` is not a function call            |
-| `error propagation '?' can only be used inside a function that returns 'result<T>' or 'optional<T>', or inside '@main'` | `?` used in a function not returning result/optional |
-| `propagation '?' requires result or optional type, got 'T'`                                                             | `?` applied to a non-result, non-optional value      |
-| `import conflict: 'x' is already defined; use 'Ns.x' to access it`                                                      | `use Namespace` conflicts with a user-defined name   |
+| `pipe operator requires a function call on the right side`                                                              | Right side of `\|>` is not a function call                                   |
+| `error pipe '!>' requires a function call on the right side`                                                            | Right side of `!>` is not a function call                                    |
+| `error propagation '?' can only be used inside a function that returns 'result<T>' or 'optional<T>', or inside '@main'` | `?` used in a function not returning result/optional                         |
+| `propagation '?' requires result or optional type, got 'T'`                                                             | `?` applied to a non-result, non-optional value                              |
+| `import conflict: 'x' is already defined; use 'Ns.x' to access it`                                                      | `use Namespace` conflicts with a user-defined name                           |
 
 #### Concurrency and Miscellaneous
 
@@ -3202,11 +3176,11 @@ Warnings do not prevent execution but indicate likely programmer mistakes.
 
 Include resolution errors. Execution does not start.
 
-| Error                                                   | Cause                                                        |
-| ------------------------------------------------------- | ------------------------------------------------------------ |
+| Error                                                     | Cause                                                        |
+| --------------------------------------------------------- | ------------------------------------------------------------ |
 | `include depth limit exceeded (N) while including 'path'` | Includes are nested more than 64 levels deep                 |
-| `include rejected: 'path' contains directory traversal` | Include path uses `..` to escape the source directory        |
-| `include rejected: 'path' is a symbolic link`           | Symbolic links are not allowed in include paths for security |
+| `include rejected: 'path' contains directory traversal`   | Include path uses `..` to escape the source directory        |
+| `include rejected: 'path' is a symbolic link`             | Symbolic links are not allowed in include paths for security |
 
 ### Runtime Errors
 
@@ -3221,7 +3195,7 @@ Include resolution errors. Execution does not start.
 | `integer overflow in addition` / `subtraction` / `multiplication`             | Arithmetic result does not fit in `int64_t`                                                         |
 | `integer overflow in decrement`                                               | `i--` when `i` equals `-9223372036854775808` (minimum `integer`)                                    |
 | `integer overflow in increment`                                               | `i++` when `i` equals `9223372036854775807` (maximum `integer`)                                     |
-| `maximum recursion depth (256) exceeded`                                      | Call stack exceeds the maximum recursion depth                                                     |
+| `maximum recursion depth (256) exceeded`                                      | Call stack exceeds the maximum recursion depth                                                      |
 | `non-exhaustive match: no arm matched value V`                                | No `match` arm matched the subject value                                                            |
 | `number overflow in addition` / `subtraction` / `multiplication` / `division` | `number` arithmetic with finite inputs produced `±Infinity`                                         |
 | `range bounds must be integers`                                               | `start..end` expression uses non-integer bounds                                                     |
@@ -3488,7 +3462,7 @@ This appendix gives the complete formal grammar of Luma in Extended Backus–Nau
 | ------------ | ----------------------------------------------------- |
 | `=`          | Defines a production rule                             |
 | `;`          | Ends a production rule                                |
-| `\           | `                                                     |
+| `\|`         | Alternation (one of several options)                  |
 | `{ ... }`    | Zero or more repetitions                              |
 | `[ ... ]`    | Optional (zero or one)                                |
 | `( ... )`    | Grouping                                              |
@@ -3819,19 +3793,19 @@ field_init           = IDENTIFIER "=" expression ;
 
 From lowest to highest:
 
-| Level | Operators                                 | Associativity  |
-| ----- | ----------------------------------------- | -------------- |
-| 1     | `with { ... }` (record update)            | Postfix        |
-| 2     | `\                                        | >` `!>` (pipe) |
-| 3     | `??` (null coalescing)                    | Left           |
-| 4     | `\                                        | \              |
-| 5     | `&&` (logical and)                        | Left           |
-| 6     | `==` `!=`                                 | Left           |
-| 7     | `<` `>` `<=` `>=` `in`                    | Left           |
-| 8     | `+` `-`                                   | Left           |
-| 9     | `*` `/` `//` `%`                          | Left           |
-| 10    | `!` `-` (unary prefix)                    | Right          |
-| 11    | `.` `?.` `[…]` `?[…]` `()` `..` `..=` `?` | Left           |
+| Level | Operators                                 | Associativity |
+| ----- | ----------------------------------------- | ------------- |
+| 1     | `with { ... }` (record update)            | Postfix       |
+| 2     | `\|>` `!>` (pipe)                         | Left          |
+| 3     | `??` (null coalescing)                    | Left          |
+| 4     | `\|\|` (logical or)                       | Left          |
+| 5     | `&&` (logical and)                        | Left          |
+| 6     | `==` `!=`                                 | Left          |
+| 7     | `<` `>` `<=` `>=` `in`                    | Left          |
+| 8     | `+` `-`                                   | Left          |
+| 9     | `*` `/` `//` `%`                          | Left          |
+| 10    | `!` `-` (unary prefix)                    | Right         |
+| 11    | `.` `?.` `[…]` `?[…]` `()` `..` `..=` `?` | Left          |
 
 ---
 
@@ -3845,5 +3819,6 @@ From lowest to highest:
 - [REPL Guide](Luma_REPL_Guide.md) — interactive exploration of the language
 - [Concurrent Debugging Guide](Luma_Concurrent_Debugging_Guide.md) — debugging tasks and channels
 - [Software Architecture](Luma_Software_Architecture.md) — how the interpreter executes the language
+- [Sandbox and Threat Model](Luma_Sandbox.md) — what `--box` protects against and its limitations
 - [Initial Concept](Luma_Initial_Concept.md) — the original design goals and motivation
 - [Documentation Index](DIRECTORY.md) — index of all Luma documentation
