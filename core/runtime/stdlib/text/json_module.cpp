@@ -143,7 +143,7 @@ void register_json_parser(const EnvPtr& env) {
                 }
 
                 auto nav = json_path::navigate_path(root, segments, segments.size(),
-                                                    json_path::ArrayKeyError::invalid_array_index);
+                                                    json_path::ArrayKeyError::InvalidArrayIndex);
 
                 if (!nav.value) {
                     return make_failure_value(nav.error);
@@ -174,8 +174,8 @@ void register_json_parser(const EnvPtr& env) {
                 // dictionary-only walk (indexing arrays mid-path is Json.set_path's
                 // job); set_path shares this same walker with arrays allowed.
                 auto nav = json_path::navigate_path(root, segments, segments.size() - 1,
-                                                    json_path::ArrayKeyError::cannot_use_key,
-                                                    json_path::NavigateArrays::reject);
+                                                    json_path::ArrayKeyError::CannotUseKey,
+                                                    json_path::NavigateArrays::Reject);
 
                 if (!nav.value) {
                     return make_failure_value(nav.error);
@@ -290,7 +290,7 @@ void register_json_parser(const EnvPtr& env) {
                 } else if (parent->is_array()) {
                     auto& elems = *parent->as_array()->elements;
                     auto resolved = json_path::resolve_array_index(
-                        last.key, elems, json_path::ArrayKeyError::cannot_use_key);
+                        last.key, elems, json_path::ArrayKeyError::CannotUseKey);
 
                     if (!resolved.ok) {
                         return make_failure_value(error_msg("Json", "set_path", resolved.error));

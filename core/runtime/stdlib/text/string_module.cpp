@@ -217,7 +217,7 @@ std::string apply_padding(const std::string& input, const std::string& fill,
     // the concatenation is already the requested width — no trimming needed.
     auto fill_str = build_cycled_fill(fill, target_width - cp_len);
 
-    if (direction == PaddingDirection::start) {
+    if (direction == PaddingDirection::Start) {
         fill_str += input;
         return fill_str;
     }
@@ -536,7 +536,7 @@ void register_string_ns(const EnvPtr& env) {
                           }
 
                           return make_success_value(
-                              Value{apply_padding(self, fill, width, PaddingDirection::start)});
+                              Value{apply_padding(self, fill, width, PaddingDirection::Start)});
                       })
 
         .func("pad_right", 3)
@@ -558,7 +558,7 @@ void register_string_ns(const EnvPtr& env) {
                           }
 
                           return make_success_value(
-                              Value{apply_padding(self, fill, width, PaddingDirection::end)});
+                              Value{apply_padding(self, fill, width, PaddingDirection::End)});
                       })
 
         .func("split_whitespace", 1)

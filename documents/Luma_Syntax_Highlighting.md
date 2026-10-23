@@ -146,7 +146,7 @@ The `function` keyword appears both as a declaration keyword and as a type keywo
 
 #### 6. String Literals
 
-##### 6a. Double-quoted Strings
+##### 6a. Double-Quoted Strings
 
 ```luma
 string s = "hello, world"
@@ -154,7 +154,7 @@ string s = "hello, world"
 
 **Scope:** `string.quoted.double.luma`
 
-##### 6b. Multi-line Triple-quoted Strings
+##### 6b. Multi-Line Triple-Quoted Strings
 
 ```luma
 string s = """
@@ -202,7 +202,7 @@ This allows full syntax highlighting inside string interpolations — a key diff
 
 **Scope:** `constant.numeric.binary.luma`
 
-##### 7c. Floating-point
+##### 7c. Floating-Point
 
 `3.14`, `1e6`, `2.5e-3`
 
@@ -265,17 +265,17 @@ Standard library modules (`Array`, `Math`, `String`, etc.) are all PascalCase an
 
 Operators are grouped by semantic role for theme flexibility.
 
-| Group             | Symbols                                                                  | Scope                                  |
-| ----------------- | ------------------------------------------------------------------------ | -------------------------------------- |
-| Arithmetic        | `+` `-` `*` `/` `//` `%`                                                 | `keyword.operator.arithmetic.luma`     |
-| Assignment        | `=` `+=` `-=` `*=` `/=` `%=` `//=` `++` `--`                             | `keyword.operator.assignment.luma`     |
-| Comparison        | `==` `!=` `<` `>` `<=` `>=`                                              | `keyword.operator.comparison.luma`     |
-| Lambda arrow      | `->`                                                                     | `keyword.operator.arrow.luma`          |
-| Logical           | `&&` `\|\|` `!`                                                          | `keyword.operator.logical.luma`        |
-| Optional chaining | `?.` `?[`                                                                | `keyword.operator.optional-chain.luma` |
-| Optional unwrap   | `??`                                                                     | `keyword.operator.optional.luma`       |
-| Pipe              | `\|>` `!>`                                                               | `keyword.operator.pipe.luma`           |
-| Range             | `..` `..=`                                                               | `keyword.operator.range.luma`          |
+| Group             | Symbols                                      | Scope                                  |
+| ----------------- | -------------------------------------------- | -------------------------------------- |
+| Arithmetic        | `+` `-` `*` `/` `//` `%`                     | `keyword.operator.arithmetic.luma`     |
+| Assignment        | `=` `+=` `-=` `*=` `/=` `%=` `//=` `++` `--` | `keyword.operator.assignment.luma`     |
+| Comparison        | `==` `!=` `<` `>` `<=` `>=`                  | `keyword.operator.comparison.luma`     |
+| Lambda arrow      | `->`                                         | `keyword.operator.arrow.luma`          |
+| Logical           | `&&` `\|\|` `!`                              | `keyword.operator.logical.luma`        |
+| Optional chaining | `?.` `?[`                                    | `keyword.operator.optional-chain.luma` |
+| Optional unwrap   | `??`                                         | `keyword.operator.optional.luma`       |
+| Pipe              | `\|>` `!>`                                   | `keyword.operator.pipe.luma`           |
+| Range             | `..` `..=`                                   | `keyword.operator.range.luma`          |
 
 Luma has **no bitwise operators** — bitwise operations use the `Bits` module (`Bits.and`, `Bits.or`, `Bits.xor`, `Bits.not`, `Bits.shift_left`, `Bits.shift_right`). The lexer does not tokenise `&`, `^`, `~`, or `<<` as operators; `|` is only a match-pattern alternative and `>>` only closes nested generics, so neither is highlighted as an arithmetic/bitwise operator.
 
@@ -398,7 +398,7 @@ No activation events are needed — grammar-only extensions activate lazily on f
 | Folding              | Marker-based: `{` open, `}` close                                 |
 | Indentation decrease | Lines starting with `}`                                           |
 | Indentation increase | Lines ending with `{`                                             |
-| Line comment toggle  | `#` prefix (VS Code comment toggle command)                      |
+| Line comment toggle  | `#` prefix (VS Code comment toggle command)                       |
 | Surrounding pairs    | Same as auto-closing                                              |
 | Word pattern         | `[a-zA-Z_][a-zA-Z0-9_]*` (standard identifier pattern)            |
 
@@ -406,7 +406,7 @@ No activation events are needed — grammar-only extensions activate lazily on f
 
 The grammar uses the `oniguruma` regex engine (standard for TextMate grammars and VSCode).
 
-#### Top-level Pattern Inclusion Order
+#### Top-Level Pattern Inclusion Order
 
 Patterns are included in this order inside the `patterns` array (see [Token Design](#1--token-design) for full rationale):
 
@@ -435,17 +435,17 @@ Patterns are included in this order inside the `patterns` array (see [Token Desi
 
 #### Key Repository Rules
 
-**`#string_triple`** — Uses `begin`/`end` delimiters `"""`. Embeds `#interpolation` and `#string_escape`.
+`#string_triple` — Uses `begin`/`end` delimiters `"""`. Embeds `#interpolation` and `#string_escape`.
 
-**`#string`** — Uses `begin`/`end` delimiters `"`. Embeds `#interpolation` and `#string_escape`. Must come after `#string_triple`.
+`#string` — Uses `begin`/`end` delimiters `"`. Embeds `#interpolation` and `#string_escape`. Must come after `#string_triple`.
 
-**`#interpolation`** — Uses `begin`/`end` `${`/`}`. Recursively includes `$self` so the full grammar applies inside interpolations.
+`#interpolation` — Uses `begin`/`end` `${`/`}`. Recursively includes `$self` so the full grammar applies inside interpolations.
 
-**`#for_variable`** — Matches the loop-variable binding in `for x in …` and `for k, v in …`. Both variable names receive `variable.other.luma`. Must come before `#type` and `#keyword_control` so the identifiers are captured before `for` and `in` are consumed individually.
+`#for_variable` — Matches the loop-variable binding in `for x in …` and `for k, v in …`. Both variable names receive `variable.other.luma`. Must come before `#type` and `#keyword_control` so the identifiers are captured before `for` and `in` are consumed individually.
 
-**`#typed_binding`** — Matches a built-in type followed immediately by an identifier (e.g. `integer count`). Captures the type as `storage.type.luma` and the name as `variable.other.luma`. Must come before `#type` so the combined pattern wins over a bare type match.
+`#typed_binding` — Matches a built-in type followed immediately by an identifier (e.g. `integer count`). Captures the type as `storage.type.luma` and the name as `variable.other.luma`. Must come before `#type` so the combined pattern wins over a bare type match.
 
-**`#function_declaration`** — Matches the pattern:
+`#function_declaration` — Matches the pattern:
 
 ```text
 \bfunction\b\s*(?:<[^>]*>\s*)?(?:\w[\w<>, \[\]().\s]*?\s+)(\w+)\s*(?=\()
@@ -453,7 +453,7 @@ Patterns are included in this order inside the `patterns` array (see [Token Desi
 
 Capture group 1 → `entity.name.function.luma`. The pattern is non-greedy to correctly isolate the function name before `(`.
 
-**`#type_declaration`** — Single match covers `record`, `choice`, `interface`, `namespace`, and `type` followed by an uppercase identifier:
+`#type_declaration` — Single match covers `record`, `choice`, `interface`, `namespace`, and `type` followed by an uppercase identifier:
 
 ```text
 \b(record|choice|interface|namespace|type)\s+([A-Z][a-zA-Z0-9_]*(?:<[^>]*>)?)
@@ -462,17 +462,17 @@ Capture group 1 → `entity.name.function.luma`. The pattern is non-greedy to co
 - Group 1 → `keyword.declaration.luma`
 - Group 2 → `entity.name.type.luma`
 
-**`#with_field`** — Begin/end rule that opens on `with {` and highlights field names before `=` inside the record-update block.
+`#with_field` — Begin/end rule that opens on `with {` and highlights field names before `=` inside the record-update block.
 
-**`#record_literal_field`** — Begin/end rule that opens on `TypeName[<…>] {` and highlights field names before `=` inside a record literal.
+`#record_literal_field` — Begin/end rule that opens on `TypeName[<…>] {` and highlights field names before `=` inside a record literal.
 
-**`#named_argument`** — Matches `identifier:` call-argument labels (lookahead excludes `::`) and applies `variable.parameter.luma`.
+`#named_argument` — Matches `identifier:` call-argument labels (lookahead excludes `::`) and applies `variable.parameter.luma`.
 
-**`#function_call`** — Matches lowercase `identifier(` or `identifier::<` call sites as `variable.function.luma`.
+`#function_call` — Matches lowercase `identifier(` or `identifier::<` call sites as `variable.function.luma`.
 
-**`#constructor_call`** — Matches `PascalCaseIdentifier(` as `variable.function.luma` (choice variant constructors and similar).
+`#constructor_call` — Matches `PascalCaseIdentifier(` as `variable.function.luma` (choice variant constructors and similar).
 
-**`#module_access`** — Matches `UpperCaseIdentifier.identifier`:
+`#module_access` — Matches `UpperCaseIdentifier.identifier`:
 
 ```text
 \b([A-Z][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)
@@ -708,3 +708,4 @@ Zed's built-in themes (One Dark, Solarized Light, Gruvbox, etc.) use the standar
 
 - [Contributing](../CONTRIBUTING.md) — installing the editor extensions
 - [Language Server](Luma_Language_Server.md) — semantic editor features (diagnostics, hover, completion)
+- [Manual Tests](Luma_Manual_Tests.md) — manual test plan covering the VS Code and Zed extensions

@@ -67,12 +67,12 @@ Every architectural decision follows the principles defined in the Software Arch
 
 ### Constraints
 
-| Constraint          | Description                                                                                                                                  |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Language            | The interpreter is written in modern C++ (C++20 or later).                                                                                   |
+| Constraint          | Description                                                                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Language            | The interpreter is written in modern C++ (C++20 or later).                                                                          |
 | Minimal third-party | Third-party libraries only as exceptions for functionality beyond the C++ standard library and OS APIs (e.g., compression and TLS). |
-| Single entry point  | Every Luma program has exactly one `@main`-annotated function.                                                                               |
-| Bytecode execution  | The interpreter uses a bytecode compiler and stack-based VM execution backend.                                                               |
+| Single entry point  | Every Luma program has exactly one `@main`-annotated function.                                                                      |
+| Bytecode execution  | The interpreter uses a bytecode compiler and stack-based VM execution backend.                                                      |
 
 ---
 
@@ -639,8 +639,8 @@ See Section 12 for detailed design.
 - Uses precedence-aware expression compilation with stack-effect tracking.
 - Emits forward jumps for control flow (`if`, `match`, `for`, `while`) and patches them after the branch body is compiled.
 - Resolves upvalues using a CLox-style capture chain: each `CompilerScope` (one per function or lambda) tracks which enclosing locals are captured.
-- Supports 105 opcodes across 25 categories (see Section 5.5).
-- Operands use big-endian `u16` encoding for jump offsets and constant-pool indices.
+- Supports 99 opcodes across 24 categories (see Section 5.5).
+- Operands are big-endian: `u16` for constant-pool, name-table, and local-slot indices; `u32` for jump offsets and `ConstantLong` indices.
 
 **Dependencies:** AST, Source Location, Interpreter Value, Diagnostics.
 
@@ -875,17 +875,17 @@ Token {
 
 **Token types** (grouped by category):
 
-| Category      | Token Types                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Annotations   | `Annotation` (carries the annotation name, e.g., `main`, `test`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Identifiers   | `Identifier`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Interpolation | `InterpolationStart` (`${`), `InterpolationEnd` (`}` closing an interpolation)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Keywords      | `Await`, `Borrow`, `Break`, `Case`, `Catch`, `Choice`, `Continue`, `Downcast`, `Else`, `Failure`, `Finally`, `For`, `Function`, `If`, `In`, `Include`, `Interface`, `Internal`, `Is`, `Match`, `Mutable`, `Namespace`, `Record`, `Return`, `Some`, `Spawn`, `Success`, `TaskScope`, `TrustedDowncast`, `Try`, `Type`, `Unique`, `Use`, `While`, `With`                                                                                                                                                                                                                                                                       |
-| Literals      | `BooleanLiteral`, `IntegerLiteral`, `NoneLiteral`, `NumberLiteral`, `StringEnd`, `StringLiteral`, `StringMiddle`, `StringStart`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Category      | Token Types                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Annotations   | `Annotation` (carries the annotation name, e.g., `main`, `test`)                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Identifiers   | `Identifier`                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Interpolation | `InterpolationStart` (`${`), `InterpolationEnd` (`}` closing an interpolation)                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Keywords      | `Await`, `Borrow`, `Break`, `Case`, `Catch`, `Choice`, `Continue`, `Downcast`, `Else`, `Failure`, `Finally`, `For`, `Function`, `If`, `In`, `Include`, `Interface`, `Internal`, `Is`, `Match`, `Mutable`, `Namespace`, `Record`, `Return`, `Some`, `Spawn`, `Success`, `TaskScope`, `TrustedDowncast`, `Try`, `Type`, `Unique`, `Use`, `While`, `With`                                                                                                                                  |
+| Literals      | `BooleanLiteral`, `IntegerLiteral`, `NoneLiteral`, `NumberLiteral`, `StringEnd`, `StringLiteral`, `StringMiddle`, `StringStart`                                                                                                                                                                                                                                                                                                                                                         |
 | Operators     | `AmpersandAmpersand`, `Arrow`, `Bang`, `BangEquals`, `BangGreater`, `DotDot`, `DotDotEquals`, `Equals`, `EqualsEquals`, `Greater`, `GreaterEquals`, `GreaterGreater`, `Less`, `LessEquals`, `Minus`, `MinusEquals`, `MinusMinus`, `Percent`, `PercentEquals`, `Pipe`, `PipeGreater`, `PipePipe`, `Plus`, `PlusEquals`, `PlusPlus`, `QuestionBracket`, `QuestionDot`, `QuestionMark`, `QuestionQuestion`, `Slash`, `SlashEquals`, `SlashSlash`, `SlashSlashEquals`, `Star`, `StarEquals` |
-| Punctuation   | `Colon`, `ColonColon`, `Comma`, `Dot`, `LeftBrace`, `LeftBracket`, `LeftParen`, `RightBrace`, `RightBracket`, `RightParen`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Special       | `EndOfFile`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Type keywords | `ArrayType`, `BooleanType`, `DecimalType`, `DictionaryType`, `IntegerType`, `NumberType`, `OptionalType`, `ResultType`, `StringType` (container/handle types such as `queue`, `set`, `task`, `xml` are ordinary identifiers, not keyword tokens)                                                                                                                                                                                                                                                        |
+| Punctuation   | `Colon`, `ColonColon`, `Comma`, `Dot`, `LeftBrace`, `LeftBracket`, `LeftParen`, `RightBrace`, `RightBracket`, `RightParen`                                                                                                                                                                                                                                                                                                                                                              |
+| Special       | `EndOfFile`                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Type keywords | `ArrayType`, `BooleanType`, `DecimalType`, `DictionaryType`, `IntegerType`, `NumberType`, `OptionalType`, `ResultType`, `StringType` (container/handle types such as `queue`, `set`, `task`, `xml` are ordinary identifiers, not keyword tokens)                                                                                                                                                                                                                                        |
 
 ### 5.3 AST Nodes
 
@@ -964,7 +964,7 @@ CallFrame {
 }
 ```
 
-**Opcode categories (105 opcodes):**
+**Opcode categories (99 opcodes):**
 
 | Category        | Count | Opcodes                                                                                                   |
 | --------------- | ----- | --------------------------------------------------------------------------------------------------------- |
@@ -1054,20 +1054,18 @@ The Parser transforms the token stream into an AST:
 
 | Level        | Operators                                      | Associativity  |
 | ------------ | ---------------------------------------------- | -------------- |
-| 1 (lowest)   | `\                                             | >` `!>`        |
+| 1 (lowest)   | `\|>` `!>`                                     | Left           |
 | 2            | `??`                                           | Left           |
-| 3            | `\                                             | \              |
+| 3            | `\|\|`                                         | Left           |
 | 4            | `&&`                                           | Left           |
 | 5            | `==` `!=`                                      | Left           |
 | 6            | `<` `>` `<=` `>=` `in`                         | Left           |
-| 7            | `\                                             | `              |
-| 8            | `^`                                            | Left           |
-| 9            | `&`                                            | Left           |
-| 10           | `<<` `>>`                                      | Left           |
-| 11           | `+` `-`                                        | Left           |
-| 12           | `*` `/` `//` `%`                               | Left           |
-| 13           | `-` `!` `~` (unary prefix)                     | Right (prefix) |
-| 14 (highest) | `()` `[]` `.` `?.` `?[` `..` `..=` postfix `?` | Left           |
+| 7            | `+` `-`                                        | Left           |
+| 8            | `*` `/` `//` `%`                               | Left           |
+| 9            | `-` `!` (unary prefix)                         | Right (prefix) |
+| 10 (highest) | `()` `[]` `.` `?.` `?[` `..` `..=` postfix `?` | Left           |
+
+Luma has no bitwise operators: the lexer rejects `&`, `^`, `~`, and `<<` with a diagnostic pointing at the equivalent `Bits` module function, and `>>` is lexed only to close nested generic type arguments.
 
 1. The pipe operator (`|>`) is parsed as a left-associative binary operator that rewrites into a function call (the left-hand value becomes the first argument).
 2. Named arguments (`name: expr`) are parsed as part of call expressions and stored alongside positional arguments.
@@ -1080,13 +1078,7 @@ The Parser transforms the token stream into an AST:
 After parsing the main file, includes are resolved before type checking. This keeps include handling separate from type analysis (Separation of Concerns):
 
 1. Walk the AST and collect all `IncludeDeclaration` nodes.
-2. For each included path:
-   a. Resolve the path relative to the directory of the including file.
-   b. Check the Source Manager's registry — if already loaded, skip (each file is included at most once).
-   c. Check the inclusion stack for cycles. If the file is already on the stack, report a circular inclusion error and stop.
-   d. Load, lex, and parse the included file (phases 1–3).
-   e. Recursively resolve any includes within the included file.
-   f. Merge the included file's declarations into the main program's declaration list.
+2. For each included path: a. Resolve the path relative to the directory of the including file. b. Check the Source Manager's registry — if already loaded, skip (each file is included at most once). c. Check the inclusion stack for cycles. If the file is already on the stack, report a circular inclusion error and stop. d. Load, lex, and parse the included file (phases 1–3). e. Recursively resolve any includes within the included file. f. Merge the included file's declarations into the main program's declaration list.
 3. The result is a single merged AST containing declarations from all files.
 
 ### 6.5 Phase 5 — Type Checking
@@ -1304,18 +1296,18 @@ end_label:
 
 **Pattern test opcodes by arm kind:**
 
-| Arm Kind       | Test Opcodes                    |
-| -------------- | ------------------------------- |
-| Integer/String | `Constant(val)` + `Equal`       |
+| Arm Kind       | Test Opcodes                                                              |
+| -------------- | ------------------------------------------------------------------------- |
+| Integer/String | `Constant(val)` + `Equal`                                                 |
 | Integer range  | `Constant(lo)` + `Constant(hi)` + `MakeRange`/`MakeRangeInc` + `Contains` |
-| Boolean        | `True`/`False` + `Equal`        |
-| None           | `None` + `Equal`                |
-| Comparison     | `[expr]` + comparison op        |
-| success(v)     | `IsSuccess`                     |
-| failure(m)     | `IsSuccess` + `Not`             |
-| some(v)        | `IsSome`                        |
-| Choice variant | `IsType(name_idx)`              |
-| else           | No test; falls through directly |
+| Boolean        | `True`/`False` + `Equal`                                                  |
+| None           | `None` + `Equal`                                                          |
+| Comparison     | `[expr]` + comparison op                                                  |
+| success(v)     | `IsSuccess`                                                               |
+| failure(m)     | `IsSuccess` + `Not`                                                       |
+| some(v)        | `IsSome`                                                                  |
+| Choice variant | `IsType(name_idx)`                                                        |
+| else           | No test; falls through directly                                           |
 
 Bindings are extracted using `ResultInner` (for success/failure/some) or `IndexGet` with positional indices (for choice variant fields).
 
@@ -1426,16 +1418,16 @@ execute(functions, top_level)
     └── pop CallFrame
 ```
 
-**`run(func)`** sets up a `CallFrame`, pushes placeholder slots for locals, sets `base_depth_` to the current frame depth, and calls `run_dispatch()`. When `Return` pops the frame back to `base_depth_`, the dispatch loop exits and returns the result value.
+`run(func)` sets up a `CallFrame`, pushes placeholder slots for locals, sets `base_depth_` to the current frame depth, and calls `run_dispatch()`. When `Return` pops the frame back to `base_depth_`, the dispatch loop exits and returns the result value.
 
-**`run_dispatch()`** is the core infinite loop. Each iteration:
+`run_dispatch()` is the core infinite loop. Each iteration:
 
 1. Reads the current call frame (`frames_.back()`).
 2. Fetches and decodes the next opcode (`*cf.ip++`).
 3. Executes the opcode via a `switch` statement.
 4. On `RuntimeError`, checks the exception handler stack. If a handler exists at or above `base_depth_`, unwinds to it. Otherwise, re-throws.
 
-**`run_to_return()`** is used when native stdlib functions need to call back into compiled user functions (e.g., `Array.map` calling a user lambda). It saves the current `base_depth_`, sets a new one, calls `run_dispatch()`, and restores the previous base depth. This allows nested dispatch loops.
+`run_to_return()` is used when native stdlib functions need to call back into compiled user functions (e.g., `Array.map` calling a user lambda). It saves the current `base_depth_`, sets a new one, calls `run_dispatch()`, and restores the previous base depth. This allows nested dispatch loops.
 
 ### 7.11 Function Calling Convention
 
@@ -1542,7 +1534,7 @@ Each line shows the byte offset, the opcode name, operand values, and (where app
 
 ### 7.17 Opcode Reference
 
-The complete opcode set (105 opcodes) with stack effects. Stack notation: `(before → after)`, where the top of stack is rightmost.
+The complete opcode set (99 opcodes) with stack effects. Stack notation: `(before → after)`, where the top of stack is rightmost.
 
 #### Stack Manipulation
 
@@ -1618,26 +1610,26 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 
 #### Collections
 
-| Opcode         | Operands  | Stack Effect                          | Description                                                               |
-| -------------- | --------- | ------------------------------------- | ------------------------------------------------------------------------- |
-| `MakeArray`    | u16 count | `(elem₁ ... elemₙ → array)`           | Create array from `count` stack values.                                   |
-| `MakeDict`     | u16 count | `(key₁ val₁ ... keyₙ valₙ → dict)`    | Create dictionary from `count` key-value pairs.                           |
-| `MakeTuple`    | u8 count  | `(elem₁ ... elemₙ → tuple)`           | Create tuple from `count` stack values.                                   |
-| `MakeRange`    | —         | `(start end → range)`                 | Create exclusive range `[start, end)`.                                    |
-| `MakeRangeInc` | —         | `(start end → range)`                 | Create inclusive range `[start, end]`.                                    |
-| `IndexGet`     | —         | `(container index → value)`           | Index into array, dict, string, tuple, or choice. Supports range slicing. |
-| `IndexSet`     | —         | `(container index value → container)` | Set element in array or dictionary. Returns the modified container.       |
-| `IndexGetOpt`  | —         | `(container index → value\            | none)`                                                                    |
+| Opcode         | Operands  | Stack Effect                          | Description                                                                                                             |
+| -------------- | --------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `MakeArray`    | u16 count | `(elem₁ ... elemₙ → array)`           | Create array from `count` stack values.                                                                                 |
+| `MakeDict`     | u16 count | `(key₁ val₁ ... keyₙ valₙ → dict)`    | Create dictionary from `count` key-value pairs.                                                                         |
+| `MakeTuple`    | u8 count  | `(elem₁ ... elemₙ → tuple)`           | Create tuple from `count` stack values.                                                                                 |
+| `MakeRange`    | —         | `(start end → range)`                 | Create exclusive range `[start, end)`.                                                                                  |
+| `MakeRangeInc` | —         | `(start end → range)`                 | Create inclusive range `[start, end]`.                                                                                  |
+| `IndexGet`     | —         | `(container index → value)`           | Index into array, dict, string, tuple, or choice. Supports range slicing.                                               |
+| `IndexSet`     | —         | `(container index value → container)` | Set element in array or dictionary. Returns the modified container.                                                     |
+| `IndexGetOpt`  | —         | `(container index → value\|none)`     | Optional index (`a?[b]`). Pushes `none` when the container is `none`, the index is out of range, or the key is missing. |
 
 #### Records
 
-| Opcode        | Operands                                                | Stack Effect                    | Description                                                        |
-| ------------- | ------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------ |
-| `MakeRecord`  | u16 type_name, u8 field_count, inline u16×N field_names | `(val₁ ... valₙ → record)`      | Create record with named fields. Field name indices follow inline. |
-| `GetField`    | u16 name_idx                                            | `(obj → value)`                 | Access field on record, tuple (numeric index), or choice.          |
-| `SetField`    | u16 name_idx                                            | `(obj value → obj)`             | Set field on record. Returns the modified record.                  |
-| `GetFieldOpt` | u16 name_idx                                            | `(obj → value\                  | none)`                                                             |
-| `RecordWith`  | u8 count, inline u16×N field_names                      | `(base val₁ ... valₙ → record)` | Clone record with field overrides (`record with { ... }`).         |
+| Opcode        | Operands                                                | Stack Effect                    | Description                                                                  |
+| ------------- | ------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------- |
+| `MakeRecord`  | u16 type_name, u8 field_count, inline u16×N field_names | `(val₁ ... valₙ → record)`      | Create record with named fields. Field name indices follow inline.           |
+| `GetField`    | u16 name_idx                                            | `(obj → value)`                 | Access field on record, tuple (numeric index), or choice.                    |
+| `SetField`    | u16 name_idx                                            | `(obj value → obj)`             | Set field on record. Returns the modified record.                            |
+| `GetFieldOpt` | u16 name_idx                                            | `(obj → value\|none)`           | Optional field access (`a?.field`). Pushes `none` when the object is `none`. |
+| `RecordWith`  | u8 count, inline u16×N field_names                      | `(base val₁ ... valₙ → record)` | Clone record with field overrides (`record with { ... }`).                   |
 
 #### Choice Types
 
@@ -1669,13 +1661,13 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 
 #### Control Flow
 
-| Opcode         | Operands   | Stack Effect      | Description                                 |
-| -------------- | ---------- | ----------------- | ------------------------------------------- |
-| `Jump`         | u16 offset | `(→)`             | Unconditional forward jump: `ip += offset`. |
-| `JumpIfFalse`  | u16 offset | `(value → value)` | Jump if top is falsy. Does **not** pop.     |
-| `JumpIfTrue`   | u16 offset | `(value → value)` | Jump if top is truthy. Does **not** pop.    |
-| `Loop`         | u16 offset | `(→)`             | Backward jump: `ip -= offset`.              |
-| `NullCoalesce` | u16 offset | `(value → value\  | inner)`                                     |
+| Opcode         | Operands   | Stack Effect             | Description                                                                                                                                                                  |
+| -------------- | ---------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Jump`         | u32 offset | `(→)`                    | Unconditional forward jump: `ip += offset`.                                                                                                                                  |
+| `JumpIfFalse`  | u32 offset | `(value → value)`        | Jump if top is falsy. Does **not** pop.                                                                                                                                      |
+| `JumpIfTrue`   | u32 offset | `(value → value)`        | Jump if top is truthy. Does **not** pop.                                                                                                                                     |
+| `Loop`         | u32 offset | `(→)`                    | Backward jump: `ip -= offset`.                                                                                                                                               |
+| `NullCoalesce` | u32 offset | `(value → value\|inner)` | `a ?? b`. If TOS is `success(v)`, replace it with `v` and jump; if it is `failure(...)` or `none`, fall through to pop it and evaluate `b`; any other value jumps unchanged. |
 
 #### Functions
 
@@ -1689,16 +1681,16 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 
 #### Pipe Operators
 
-| Opcode      | Operands | Stack Effect              | Description                                     |
-| ----------- | -------- | ------------------------- | ----------------------------------------------- |
-| `Pipe`      | —        | `(value callee → [call])` | Call `callee(value)`. Reorders stack and calls. |
-| `ErrorPipe` | —        | `(value callee → [call]\  | failure)`                                       |
+| Opcode      | Operands | Stack Effect                       | Description                                                                                                                                      |
+| ----------- | -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Pipe`      | —        | `(value callee → [call])`          | Call `callee(value)`. Reorders stack and calls.                                                                                                  |
+| `ErrorPipe` | —        | `(value callee → [call]\|failure)` | `a !> f`. Call `callee` with the unwrapped value of a `success`, or with a non-result value; a `failure` short-circuits and is pushed unchanged. |
 
 #### Exception Handling
 
 | Opcode     | Operands         | Stack Effect | Description                                           |
 | ---------- | ---------------- | ------------ | ----------------------------------------------------- |
-| `TryCatch` | u16 catch_offset | `(→)`        | Push an `ExceptionHandler`.                           |
+| `TryCatch` | u32 catch_offset | `(→)`        | Push an `ExceptionHandler`.                           |
 | `TryEnd`   | —                | `(→)`        | Pop the `ExceptionHandler` (normal completion).       |
 | `Rethrow`  | —                | `(value →)`  | Re-throw TOS as `RuntimeError` (used by try/finally). |
 
@@ -1825,7 +1817,7 @@ The interpreter uses C++ RAII and smart pointers for fully automatic memory mana
 | Lambdas/closures | `std::shared_ptr` | Closures own a deep-copied environment snapshot that must outlive them.                                                          |
 | Records          | `std::shared_ptr` | Records can be passed by reference to functions.                                                                                 |
 | Results          | `std::shared_ptr` | Results flow through pipelines and match arms.                                                                                   |
-| Stdlib values    | `std::shared_ptr` | Queue, Stack, Set, KeyValueStore, Xml, Reference — all use shared pointers.              |
+| Stdlib values    | `std::shared_ptr` | Queue, Stack, Set, KeyValueStore, Xml, Reference — all use shared pointers.                                                      |
 | Tasks            | `std::shared_ptr` | Tasks are shared between the spawning scope and the thread pool.                                                                 |
 | Tuples           | `std::shared_ptr` | Same as arrays.                                                                                                                  |
 
@@ -1964,17 +1956,17 @@ main()
 
 Several standard library modules interact with the operating system. These modules validate all inputs at their boundary:
 
-| Module              | Security Measures                                                                                                                                                                                                                                                     |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Csv`               | Validate file paths for `read_file` / `write_file`. Return `result<T>` on failure.                                                                                                                                                                                    |
-| `FileSystem`        | Validate file paths. Reject path traversal sequences. Reject absolute paths outside the working directory where appropriate. Return `result<T>` on failure.                                                                                                           |
-| `Http`              | Validate header names and values — reject CRLF characters to prevent header injection. Return `result<T>` on failure.                                                                                                                                                 |
-| `Console`           | Return `result<T>` on failure.                                                                                                                                                                                                                                        |
-| `Log`               | Validate file paths for `set_output`. Return `result<T>` on failure.                                                                                                                                                                                                  |
-| `Process`           | Validate command strings. Do not pass raw user input to the shell without sanitisation.                                                                                                                                                                               |
+| Module              | Security Measures                                                                                                                                                                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Csv`               | Validate file paths for `read_file` / `write_file`. Return `result<T>` on failure.                                                                                                                                                                         |
+| `FileSystem`        | Validate file paths. Reject path traversal sequences. Reject absolute paths outside the working directory where appropriate. Return `result<T>` on failure.                                                                                                |
+| `Http`              | Validate header names and values — reject CRLF characters to prevent header injection. Return `result<T>` on failure.                                                                                                                                      |
+| `Console`           | Return `result<T>` on failure.                                                                                                                                                                                                                             |
+| `Log`               | Validate file paths for `set_output`. Return `result<T>` on failure.                                                                                                                                                                                       |
+| `Process`           | Validate command strings. Do not pass raw user input to the shell without sanitisation.                                                                                                                                                                    |
 | `RegularExpression` | Limit pattern size (`max_regex_pattern_size`). Uses C++ `std::regex` (ECMAScript dialect). No backtracking protection — nested quantifiers can cause exponential time on pathological input. `find_all` and `split` iteration bounded by `max_array_size`. |
-| `Socket`            | Validate host and port inputs. Return `result<T>` on connection failure. Enforce timeouts. Limit total open sockets (`max_open_sockets`).                                                                                                                              |
-| `Xml`               | Validate file paths for `parse_file` / `write_file`. Return `result<T>` on failure.                                                                                                                                                                                   |
+| `Socket`            | Validate host and port inputs. Return `result<T>` on connection failure. Enforce timeouts. Limit total open sockets (`max_open_sockets`).                                                                                                                  |
+| `Xml`               | Validate file paths for `parse_file` / `write_file`. Return `result<T>` on failure.                                                                                                                                                                        |
 
 The numeric values behind these limits (`max_regex_pattern_size`, `max_array_size`, `max_open_sockets`, and the rest) and their `LUMA_LIMIT_*` overrides are listed in the canonical [resource-limit table](Luma_Performance_Guide.md#6--resource-limits) in the Performance Guide.
 
@@ -2358,33 +2350,12 @@ This section records the key design decisions and the reasoning behind each one,
 
 - `std::shared_ptr` provides automatic, deterministic memory management via reference counting.
 - It integrates naturally with C++ RAII and requires no runtime infrastructure.
-- The value model is acyclic for every type **except `reference<T>`**: primitives and
-  compound values have value semantics (operations return new copies) and closures
-  deep-copy their captures, so ordinary values can never form cycles.
+- The value model is acyclic for every type **except `reference<T>`**: primitives and compound values have value semantics (operations return new copies) and closures deep-copy their captures, so ordinary values can never form cycles.
 - A garbage collector would add significant complexity without proportional benefit for version 1.0.
 
-**Reference cycles — the one leak vector.** `reference<T>` is the only mutable,
-shared, aliasing cell, so it is the only way a program can build a cycle in the
-value graph: reassigning a cell (via `Reference.set` / `update` / `swap`) to a
-structure that transitively contains the reference itself forms a `shared_ptr`
-cycle that reference counting cannot reclaim. For short-lived scripts this is
-harmless — the OS reclaims everything at exit — but a long-running process that
-repeatedly builds and drops such cycles leaks steadily.
+**Reference cycles — the one leak vector.** `reference<T>` is the only mutable, shared, aliasing cell, so it is the only way a program can build a cycle in the value graph: reassigning a cell (via `Reference.set` / `update` / `swap`) to a structure that transitively contains the reference itself forms a `shared_ptr` cycle that reference counting cannot reclaim. For short-lived scripts this is harmless — the OS reclaims everything at exit — but a long-running process that repeatedly builds and drops such cycles leaks steadily.
 
-Rather than pay for a cycle collector (whose correctness is delicate in the
-presence of cross-task references), Luma provides a lightweight **detector**:
-`ReferenceLeakTracker` (`core/runtime/interpreter/reference_leak_tracker.hpp`)
-counts live reference cells with two relaxed atomic operations per
-`Reference.new` and per cell destruction. Setting the
-`LUMA_DIAGNOSE_REFERENCE_CYCLES` environment variable makes the interpreter
-print a one-line leak summary at shutdown when reference cells remain alive
-after the program's environment has been torn down — those cells are, by
-construction, leaked cycles. The detector never frees anything, so it cannot
-cause a use-after-free. Programs break a cycle the same way they build one, by
-reassigning the cell (for example `Reference.set(r, none)`) before dropping the
-last handle to it. The `soak_test` suite (`tests/runtime/soak_test.cpp`) pins
-this behaviour: it proves acyclic reference workloads reach a steady state and
-that breaking a cycle reclaims the cells.
+Rather than pay for a cycle collector (whose correctness is delicate in the presence of cross-task references), Luma provides a lightweight **detector**: `ReferenceLeakTracker` (`core/runtime/interpreter/reference_leak_tracker.hpp`) counts live reference cells with two relaxed atomic operations per `Reference.new` and per cell destruction. Setting the `LUMA_DIAGNOSE_REFERENCE_CYCLES` environment variable makes the interpreter print a one-line leak summary at shutdown when reference cells remain alive after the program's environment has been torn down — those cells are, by construction, leaked cycles. The detector never frees anything, so it cannot cause a use-after-free. Programs break a cycle the same way they build one, by reassigning the cell (for example `Reference.set(r, none)`) before dropping the last handle to it. The `soak_test` suite (`tests/runtime/soak_test.cpp`) pins this behaviour: it proves acyclic reference workloads reach a steady state and that breaking a cycle reclaims the cells.
 
 ### 19.5 Copy-on-Send for Channels (Not Shared Memory)
 
@@ -2437,5 +2408,6 @@ that breaking a cycle reclaims the cells.
 - [Performance Guide](Luma_Performance_Guide.md) — runtime performance characteristics and optimisation advice
 - [Debugger](Luma_Debugger.md) — Debug Adapter Protocol design and architecture
 - [Language Server](Luma_Language_Server.md) — Language Server Protocol design and architecture
+- [Sandbox and Threat Model](Luma_Sandbox.md) — the sandbox-mode security model and how the interpreter enforces it
 - [Coding Guidelines](Luma_Coding_Guidelines.md) — Luma coding style and conventions
 - [Initial Concept](Luma_Initial_Concept.md) — original language design goals and motivation

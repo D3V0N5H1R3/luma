@@ -31,7 +31,7 @@ on:
       update_baseline:
         description: "Update baseline without comparison (skip regression check)"
         required: false
-        default: "false"
+        default: false
         type: boolean
 
 permissions:
@@ -86,8 +86,11 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # `inputs.update_baseline` is a real boolean (null on push), so test it
+      # directly: comparing it with the string 'true' coerces both sides to
+      # numbers (1 vs NaN) and is never equal.
       - name: Compare with baseline
-        if: steps.baseline.outputs.exists == 'true' && inputs.update_baseline != 'true'
+        if: steps.baseline.outputs.exists == 'true' && !inputs.update_baseline
         run: |
           echo "Comparing against cached baseline..."
           python3 scripts/compare_benchmark_results.py \
@@ -104,7 +107,7 @@ jobs:
           echo "Current results will be saved as the initial baseline."
 
       - name: Skip comparison (baseline refresh)
-        if: steps.baseline.outputs.exists == 'true' && inputs.update_baseline == 'true'
+        if: steps.baseline.outputs.exists == 'true' && inputs.update_baseline
         run: |
           echo "Baseline refresh requested — skipping regression comparison."
 

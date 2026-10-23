@@ -224,20 +224,15 @@ target_link_libraries(my_app
 
 Always use the namespaced imported target (`Library::Component`) — never raw variable names like `${OPENSSL_LIBRARIES}`.
 
-> Luma's own third-party dependencies are vendored, not found on the system (see §7.2). The
-> example above illustrates the generic `find_package` pattern; in this project reserve it for
-> packages genuinely provided by the system or toolchain, such as `Threads`.
+**Exception — OS system libraries.** Windows import libraries such as `ws2_32`, `crypt32`, `bcrypt`, and `shell32` ship with the SDK and have no imported targets, so link them by name inside an `if(WIN32)` guard. Apple frameworks are located with `find_library(LUMA_<NAME>_FRAMEWORK <Name> REQUIRED)` and linked through that variable.
+
+> Luma's own third-party dependencies are vendored, not found on the system (see §7.2). The example above illustrates the generic `find_package` pattern; in this project reserve it for packages genuinely provided by the system or toolchain, such as `Threads`.
 
 ### 7.2 Vendored Dependencies (No Configure-Time Downloads)
 
-Luma keeps every third-party dependency **vendored** under `external/` and builds it
-from source as part of the normal CMake configure. Dependencies are never downloaded
-at configure or build time, so the project always builds offline and reproducibly. See
-`cpp.instructions.md` §7.1 for the policy and the current list of vendored libraries
-(miniz, Mbed TLS).
+Luma keeps every third-party dependency **vendored** under `external/` and builds it from source as part of the normal CMake configure. Dependencies are never downloaded at configure or build time, so the project always builds offline and reproducibly. See `cpp.instructions.md` §7.1 for the policy and the current list of vendored libraries (miniz, Mbed TLS).
 
-Wrap each vendored library in a static target that points at the sources under
-`external/`, then link it with a namespaced alias:
+Wrap each vendored library in a static target that points at the sources under `external/`, then link it with a namespaced alias:
 
 ```cmake
 # cmake/LumaMbedTLS.cmake — vendored Mbed TLS, built as a static target.
@@ -259,12 +254,9 @@ target_link_libraries(luma_core PUBLIC mbedtls_lib)
 Guidelines for vendored dependencies:
 
 - **List sources explicitly** — never `file(GLOB)` a vendored tree.
-- **Record provenance** — note the upstream release tag and vendoring date in the
-  module that builds the library (see `cmake/LumaMbedTLS.cmake`).
-- **Guard optional dependencies behind an option** (for example `LUMA_FEATURE_TLS`) so
-  builds that do not need them stay lean.
-- Do **not** use `FetchContent` or `ExternalProject_Add`; configure-time downloads break
-  hermetic, offline builds and are intentionally avoided here.
+- **Record provenance** — note the upstream release tag and vendoring date in the module that builds the library (see `cmake/LumaMbedTLS.cmake`).
+- **Guard optional dependencies behind an option** (for example `LUMA_FEATURE_TLS`) so builds that do not need them stay lean.
+- Do **not** use `FetchContent` or `ExternalProject_Add`; configure-time downloads break hermetic, offline builds and are intentionally avoided here.
 
 ---
 
@@ -483,16 +475,16 @@ endif()
 
 ## 15 — Anti-Patterns
 
-| Anti-Pattern                                           | Correct Alternative                             |
-| ------------------------------------------------------ | ----------------------------------------------- |
-| `add_definitions(-DFOO)`                               | `target_compile_definitions(t PRIVATE FOO)`     |
-| `file(GLOB SOURCES "src/*.cpp")`                       | List source files explicitly                    |
-| `include_directories(...)`                             | `target_include_directories(t ...)`             |
-| `link_libraries(...)`                                  | `target_link_libraries(t ...)`                  |
-| `set(CMAKE_CXX_STANDARD 20)` at global scope           | `target_compile_features(t PUBLIC cxx_std_20)`  |
-| Bare library names in `target_link_libraries`          | Namespaced imported targets (`Lib::Lib`)        |
-| Building inside the source tree                        | Use a `build/` directory or presets             |
-| Checking `CMAKE_BUILD_TYPE` in multi-config generators | Use generator expressions (`$<CONFIG:Release>`) |
+| Anti-Pattern                                           | Correct Alternative                                                           |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `add_definitions(-DFOO)`                               | `target_compile_definitions(t PRIVATE FOO)`                                   |
+| `file(GLOB SOURCES "src/*.cpp")`                       | List source files explicitly                                                  |
+| `include_directories(...)`                             | `target_include_directories(t ...)`                                           |
+| `link_libraries(...)`                                  | `target_link_libraries(t ...)`                                                |
+| `set(CMAKE_CXX_STANDARD 20)` at global scope           | `target_compile_features(t PUBLIC cxx_std_20)`                                |
+| Bare library names in `target_link_libraries`          | Namespaced imported targets (`Lib::Lib`); OS system libraries excepted (§7.1) |
+| Building inside the source tree                        | Use a `build/` directory or presets                                           |
+| Checking `CMAKE_BUILD_TYPE` in multi-config generators | Use generator expressions (`$<CONFIG:Release>`)                               |
 
 ---
 

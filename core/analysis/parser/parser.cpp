@@ -331,15 +331,15 @@ bool Parser::recover_expect(TokenType type) {
         error_recovery::choose_strategy(type, current().type, peek_at(1).type, is_at_end());
 
     switch (strategy) {
-        case error_recovery::Strategy::skip_and_retry:
+        case error_recovery::Strategy::SkipAndRetry:
             advance(); // skip the extraneous token
             advance(); // consume the expected token
             return true;
 
-        case error_recovery::Strategy::insert_expected:
+        case error_recovery::Strategy::InsertExpected:
             return true; // act as if the token was inserted
 
-        case error_recovery::Strategy::synchronize:
+        case error_recovery::Strategy::Synchronize:
             return false;
     }
 

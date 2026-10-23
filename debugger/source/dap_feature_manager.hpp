@@ -50,10 +50,10 @@ enum class Feature : int {
     InvalidatedEvent,
     ValueFormattingOptions,
     StepInTargets,
-    Count_, // sentinel — must be last
+    Count, // sentinel — must be last
 };
 
-inline constexpr int kFeatureCount = static_cast<int>(Feature::Count_);
+inline constexpr int kFeatureCount = static_cast<int>(Feature::Count);
 
 // ─── Client capabilities ───
 // Subset of the initialize-request arguments that describe what the

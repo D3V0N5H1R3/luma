@@ -31,7 +31,7 @@ The directory uses **one module per concern** rather than a few large files. Eac
 
 ## How the Build Uses These Modules
 
-The root [`CMakeLists.txt`](../CMakeLists.txt) includes `LumaCompilerFlags.cmake` and `LumaTargetHelpers.cmake` early, so every target created afterwards through the `luma_add_*` wrappers inherits the shared warning, security, and language-standard settings without re-applying them by hand. `LumaTargetHelpers.cmake` also provides `luma_configure_vendored_c_target()`, which applies the shared vendored-C policy (build to C99, suppress the project's strict warnings) so `LumaMiniz.cmake` and `LumaMbedTLS.cmake` do not repeat it.
+The root [`CMakeLists.txt`](../CMakeLists.txt) includes `LumaCompilerFlags.cmake` and `LumaTargetHelpers.cmake` early, so every target created afterwards through the `luma_add_*` wrappers inherits the shared warning, security, and language-standard settings without re-applying them by hand. `LumaTargetHelpers.cmake` also provides `luma_configure_vendored_c_target()`, which applies the shared vendored-C policy (build to C99, suppress the project's strict warnings, keep stack-protector and Control Flow Guard hardening) so `LumaMiniz.cmake` and `LumaMbedTLS.cmake` do not repeat it.
 
 The leaf concerns that trail the build wiring — `LumaPlatformCodegen.cmake` (the `generate_platform_code` target), `LumaCodeQuality.cmake` (the `format` and `tidy` targets), and `LumaPackaging.cmake` (CPack) — are each extracted into their own module and pulled in with a one-line `include()` at the point they previously occupied. `include()` runs in the including file's directory scope, so every `CMAKE_*`, `PROJECT_*`, and `CPACK_*` variable resolves exactly as it did inline; the split keeps the root file focused on build wiring.
 

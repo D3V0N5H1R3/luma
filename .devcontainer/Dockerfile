@@ -3,10 +3,11 @@
 #
 # Ubuntu 24.04 (Noble) ships the exact toolchain Luma's CI pins, straight from
 # the distribution archives — GCC 14, CMake 3.28 (>= 3.21 required), Clang 18
-# (compiler + clang-format/clang-tidy, for the fuzz targets and the lint gates),
-# and Xvfb for the VS Code extension's headless Electron tests — so this image
-# needs no external apt repositories or PPAs and builds the interpreter fully
-# offline against the vendored dependencies in external/.
+# (compiler + clang-tidy, for the fuzz targets and the static-analysis gate),
+# clang-format 20 (noble-updates; the formatting gate), and Xvfb for the VS Code
+# extension's headless Electron tests — so this image needs no external apt
+# repositories or PPAs and builds the interpreter fully offline against the
+# vendored dependencies in external/.
 # ─────────────────────────────────────────────────────────────
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 
@@ -19,12 +20,14 @@ ARG DEBIAN_FRONTEND=noninteractive
 #   cmake ninja-build make .. build system + the default (Make) and ninja presets
 #   clang-18 ................ Clang compiler for the LibFuzzer fuzz targets (fuzz/)
 #   libclang-rt-18-dev ...... compiler-rt runtimes (fuzzer/ASan) the fuzzers link
-#   clang-format-18 ......... C++ formatting gate (Formatting job in ci.yml)
+#   clang-format-20 ......... C++ formatting gate (Formatting job in ci.yml)
 #   clang-tidy-18 ........... C++ static-analysis gate (Static Analysis job)
 #   gdb ..................... native debugging of the interpreter (CONTRIBUTING.md §Debugging the C++ Interpreter)
 #   lcov ................... the coverage preset (LUMA_FEATURE_COVERAGE)
 #   xvfb ................... headless X server for the VS Code extension's Electron integration tests
-#   python3 python3-pip pipx  helper scripts under scripts/ and the Ruff CLI
+#   shellcheck ............. shell lint gate (ci-shell.yml; instructions/shell.instructions.md §18)
+#   python3 python3-pip pipx  helper scripts under scripts/ and the Ruff / cmakelint CLIs
+#   python-is-python3 ...... `python` alias — the docs invoke helpers as `python scripts/…`
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         gcc-14 \
@@ -34,14 +37,16 @@ RUN apt-get update \
         make \
         clang-18 \
         libclang-rt-18-dev \
-        clang-format-18 \
+        clang-format-20 \
         clang-tidy-18 \
         gdb \
         lcov \
         xvfb \
+        shellcheck \
         python3 \
         python3-pip \
         pipx \
+        python-is-python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Make the unversioned tool names resolve to the CI-pinned versions, so `cc` /
@@ -55,11 +60,13 @@ RUN update-alternatives --install /usr/bin/gcc  gcc  /usr/bin/gcc-14 140 \
     && update-alternatives --install /usr/bin/c++  c++  /usr/bin/g++-14 140 \
     && update-alternatives --install /usr/bin/clang   clang   /usr/bin/clang-18 100 \
     && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100 \
-    && update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100 \
+    && update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-20 100 \
     && update-alternatives --install /usr/bin/clang-tidy   clang-tidy   /usr/bin/clang-tidy-18 100
 
 # Default the interpreter build to the CI compiler pair. scripts/container-build.sh
 # requires CC / CXX to be set, and CMake honours them when a preset names no
-# compiler, so `cmake --preset default` picks GCC 14 without a custom kit.
+# compiler, so `cmake --preset default` picks GCC 14 without a custom kit. This is
+# the single source of CC / CXX: image ENV reaches every process in the container,
+# including the VS Code server, terminals, and the lifecycle scripts.
 ENV CC=gcc-14 \
     CXX=g++-14

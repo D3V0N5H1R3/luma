@@ -101,14 +101,7 @@ type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 - Avoid abbreviations unless universally understood (`id`, `url`, `http`).
 - Private class fields use a `camelCase` name; mark privacy with the `#` prefix (true private fields) or the `private` keyword.
 
-> **House deviation — Luma editor extensions.** The VS Code extension under `extensions/vscode/`
-> deliberately uses `snake_case` for local variables, function parameters, and class fields
-> (e.g. `lsp_path`, `file_path`, `luma_config`) to stay consistent with the Rust
-> (Zed) and C++ sources it sits beside, and with the shared `defaults.json` keys the code
-> generators emit. Types, classes, interfaces, and enums still use `PascalCase`, and exported
-> constants still use `UPPER_CASE`. New code in `extensions/vscode/` should follow this
-> established `snake_case` convention rather than the `camelCase` default above; everywhere
-> else in the repository, use `camelCase` as specified.
+> **House deviation — Luma editor extensions.** The VS Code extension under `extensions/vscode/` deliberately uses `snake_case` for local variables, function parameters, and class fields (e.g. `lsp_path`, `file_path`, `luma_config`) to stay consistent with the Rust (Zed) and C++ sources it sits beside, and with the shared `defaults.json` keys the code generators emit. Types, classes, interfaces, and enums still use `PascalCase`, and exported constants still use `UPPER_CASE`. New code in `extensions/vscode/` should follow this established `snake_case` convention rather than the `camelCase` default above; everywhere else in the repository, use `camelCase` as specified.
 
 ---
 

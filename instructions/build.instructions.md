@@ -114,9 +114,9 @@ ctest --preset <configure-preset>
 
 ## 4 — Build Types
 
-- **`Release`** — default. Optimised for performance, minimal debug information.
-- **`Debug`** — full debug symbols, no optimisation. Use with a debugger.
-- **`RelWithDebInfo`** — optimised build that retains debug symbols for profiling.
+- `Release` — default. Optimised for performance, minimal debug information.
+- `Debug` — full debug symbols, no optimisation. Use with a debugger.
+- `RelWithDebInfo` — optimised build that retains debug symbols for profiling.
 
 ---
 

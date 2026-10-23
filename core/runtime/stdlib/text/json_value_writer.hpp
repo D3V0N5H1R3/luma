@@ -53,8 +53,8 @@ namespace luma::json_writer {
 
 // How a Policy encodes choice (ADT) values.
 enum class JsonChoiceMode {
-    rich,           // {"variant":"X","fields":[...]} for every arity.
-    nullary_string, // nullary variant → "X"; any fields → null.
+    Rich,          // {"variant":"X","fields":[...]} for every arity.
+    NullaryString, // nullary variant → "X"; any fields → null.
 };
 
 // Growth hints only — never affect the emitted bytes.
@@ -219,7 +219,7 @@ void write_value(const Value& val, std::string& out, int indent, int depth, bool
     if (val.is_choice()) {
         const auto& choice = *val.as_choice();
 
-        if constexpr (Policy::choice_mode == JsonChoiceMode::rich) {
+        if constexpr (Policy::choice_mode == JsonChoiceMode::Rich) {
             out += R"({"variant":")";
             Policy::escape(choice.variant, out);
             out += R"(","fields":[)";

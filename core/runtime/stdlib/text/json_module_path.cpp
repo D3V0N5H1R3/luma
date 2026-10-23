@@ -55,7 +55,7 @@ namespace {
 }
 
 [[nodiscard]] std::string array_key_error(ArrayKeyError style, const std::string& key) {
-    return style == ArrayKeyError::invalid_array_index
+    return style == ArrayKeyError::InvalidArrayIndex
                ? std::format("invalid array index '{}'", key)
                : std::format("cannot use key '{}' on an array", key);
 }
@@ -149,7 +149,7 @@ NavigateResult navigate_path(Value& root, const std::vector<PathSegment>& segmen
                 }
 
                 current = found;
-            } else if (arrays == NavigateArrays::allow && current->is_array()) {
+            } else if (arrays == NavigateArrays::Allow && current->is_array()) {
                 auto& elems = *current->as_array()->elements;
                 auto resolved = resolve_array_index(seg.key, elems, key_error);
 

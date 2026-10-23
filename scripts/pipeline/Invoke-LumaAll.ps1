@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 7.2
 
 <#
 .SYNOPSIS
@@ -121,6 +121,13 @@ if ($Effort) { $CommonArgs += @('-Effort', $Effort) }
 if ($DryRun) { $CommonArgs += '-DryRun' }
 
 function Invoke-Runner {
+    <#
+    .SYNOPSIS
+        Run one pipeline runner in a child pwsh and return its exit code.
+    .DESCRIPTION
+        Forwards the common agent flags plus the runner's own extra arguments,
+        streams the child's output to the host, and returns only its exit code.
+    #>
     [CmdletBinding()]
     [OutputType([int])]
     param(

@@ -38,11 +38,11 @@ This prompt covers creating the module skeleton and wiring it into the runtime, 
 
 A new module involves many files. Verify incrementally rather than waiting until step 10.
 
-| After… | Run | Why |
-|---------|-----|-----|
-| Creating the module source + registry entry (step 5) | `cmake --build --preset default` (compile only) | Catches includes, linker errors, registration typos early |
-| Compiling cleanly | `ctest -R stdlib_test_<module>` (targeted test) | Confirms the module registers and its functions work |
-| Adding catalog metadata | `ctest -R stdlib_catalog_conformance` | Catches arity/name mismatches between runtime and catalog |
-| All C++ tests pass | `build/Release/luma --strict --test tests/features/stdlib/<module>_functions.luma` | Validates Luma-level behaviour and catches lint warnings |
+| After…                                               | Run                                                                                | Why                                                       |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Creating the module source + registry entry (step 5) | `cmake --build --preset default` (compile only)                                    | Catches includes, linker errors, registration typos early |
+| Compiling cleanly                                    | `ctest -R stdlib_test_<module>` (targeted test)                                    | Confirms the module registers and its functions work      |
+| Adding catalog metadata                              | `ctest -R stdlib_catalog_conformance`                                              | Catches arity/name mismatches between runtime and catalog |
+| All C++ tests pass                                   | `build/Release/luma --strict --test tests/features/stdlib/<module>_functions.luma` | Validates Luma-level behaviour and catches lint warnings  |
 
 If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.

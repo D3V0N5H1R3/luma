@@ -16,22 +16,22 @@
         "stopOnEntry": true
     },
     {
-        "label": "C++: Interpreter - Release (Windows)",
+        "label": "C++: Interpreter - RelWithDebInfo (Windows)",
         "adapter": "CodeLLDB",
         "request": "launch",
-        "program": "$ZED_WORKTREE_ROOT/build/Release/luma.exe",
+        "program": "$ZED_WORKTREE_ROOT/build-relwithdebinfo/RelWithDebInfo/luma.exe",
         "args": ["$ZED_WORKTREE_ROOT/examples/language-features/hello.luma"],
         "cwd": "$ZED_WORKTREE_ROOT",
-        "build": "CMake: Build"
+        "build": "CMake: Build (RelWithDebInfo)"
     },
     {
-        "label": "C++: Interpreter - Release (Unix)",
+        "label": "C++: Interpreter - RelWithDebInfo (Unix)",
         "adapter": "CodeLLDB",
         "request": "launch",
-        "program": "$ZED_WORKTREE_ROOT/build/luma",
+        "program": "$ZED_WORKTREE_ROOT/build-relwithdebinfo/luma",
         "args": ["$ZED_WORKTREE_ROOT/examples/language-features/hello.luma"],
         "cwd": "$ZED_WORKTREE_ROOT",
-        "build": "CMake: Build"
+        "build": "CMake: Build (RelWithDebInfo)"
     },
     {
         "label": "C++: Interpreter - Debug (Windows)",

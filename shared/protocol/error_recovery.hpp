@@ -98,21 +98,21 @@ inline constexpr std::size_t k_default_max_consecutive_errors = 50;
 enum class ErrorSeverity {
     // The error is scoped to a single message.  Log it, skip the
     // message, and continue.  The transport layer may resync.
-    transient,
+    Transient,
 
     // The transport is broken beyond repair.  Exit the message loop
     // and begin orderly shutdown.
-    fatal,
+    Fatal,
 };
 
 // ─── Recovery action ─────────────────────────────────────────────────
 
 enum class RecoveryAction {
     // Skip the current message and read the next one.
-    skip_and_continue,
+    SkipAndContinue,
 
     // Shut down the server cleanly.
-    shutdown,
+    Shutdown,
 };
 
 // ─── Exception classification ────────────────────────────────────────
@@ -147,7 +147,7 @@ enum class RecoveryAction {
 //           dispatch(message);
 //       } catch (const std::exception& e) {
 //           auto action = recovery.on_error(classify_read_error(e));
-//           if (action == RecoveryAction::shutdown) break;
+//           if (action == RecoveryAction::Shutdown) break;
 //           // else: continue
 //       }
 //   }
@@ -169,17 +169,17 @@ public:
     // shutdown.  Transient errors produce skip_and_continue until
     // the consecutive-error threshold is reached.
     [[nodiscard]] RecoveryAction on_error(ErrorSeverity severity) noexcept {
-        if (severity == ErrorSeverity::fatal) {
-            return RecoveryAction::shutdown;
+        if (severity == ErrorSeverity::Fatal) {
+            return RecoveryAction::Shutdown;
         }
 
         ++consecutive_errors_;
 
         if (consecutive_errors_ >= max_consecutive_errors_) {
-            return RecoveryAction::shutdown;
+            return RecoveryAction::Shutdown;
         }
 
-        return RecoveryAction::skip_and_continue;
+        return RecoveryAction::SkipAndContinue;
     }
 
     // Current consecutive transient error count.

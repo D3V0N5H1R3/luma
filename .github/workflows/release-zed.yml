@@ -3,7 +3,8 @@
 #
 # Triggered on version tags (zed-v*.*.*). Builds and validates
 # the Zed extension, then creates a GitHub Release with the
-# compiled WASM binary attached.
+# packaged extension (WASM binary, extension.toml, languages/,
+# grammars/) attached as a single tar.gz archive.
 #
 # Note: Zed extensions are published via their extension
 # registry by merging into zed-industries/extensions. This
@@ -44,21 +45,30 @@ jobs:
       - name: Build extension
         uses: ./.github/actions/build-zed-extension
 
-      - name: Prepare artifact
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#zed-v}" >> "$GITHUB_OUTPUT"
+
+      # Ship the extension as one archive: attaching dist/** directly flattens
+      # its languages/ and grammars/ trees into ~30 loose release assets.
+      - name: Package extension
+        id: package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p dist
           cp target/wasm32-wasip1/release/*.wasm dist/
           cp extension.toml dist/
           cp -r languages dist/
           cp -r grammars dist/
-
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#zed-v}" >> "$GITHUB_OUTPUT"
+          archive="luma-zed-extension-v${VERSION}.tar.gz"
+          tar -czf "$archive" -C dist .
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           name: Zed Extension v${{ steps.version.outputs.version }}
           generate_release_notes: true
-          files: extensions/zed/dist/**
+          fail_on_unmatched_files: true
+          files: extensions/zed/${{ steps.package.outputs.archive }}

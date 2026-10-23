@@ -26,9 +26,9 @@ namespace luma::dap {
 
 // Classifies a breakpoint expression for dispatch to the correct validator.
 enum class BreakpointExpressionType {
-    condition,
-    hit_condition,
-    log_message
+    Condition,
+    HitCondition,
+    LogMessage
 };
 
 // A breakpoint expression paired with its type, used to drive unified

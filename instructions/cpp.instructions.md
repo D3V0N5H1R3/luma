@@ -151,10 +151,10 @@ A third-party library may be added when **all** of the following criteria are me
 
 **Current exceptions:**
 
-| Library  | Purpose                                    | Justification                                |
-| -------- | ------------------------------------------ | -------------------------------------------- |
-| miniz    | Deflate/inflate/gzip compression           | Compression algorithms beyond stdlib scope   |
-| Mbed TLS | TLS/HTTPS and cryptographic hashing        | Cryptographic primitives beyond stdlib scope |
+| Library  | Purpose                             | Justification                                |
+| -------- | ----------------------------------- | -------------------------------------------- |
+| miniz    | Deflate/inflate/gzip compression    | Compression algorithms beyond stdlib scope   |
+| Mbed TLS | TLS/HTTPS and cryptographic hashing | Cryptographic primitives beyond stdlib scope |
 
 ### 7.2 Standard Library Usage
 
@@ -443,18 +443,18 @@ private:
 
 Use the facilities of modern C++ (C++20) to write safer, clearer code.
 
-- **`std::optional`** for values that may or may not be present.
-- **`std::variant`** for type-safe unions. _(Ref: P.4 — use `variant` instead of `union`.)_
-- **`std::string_view`** for non-owning read access to strings.
-- **`std::span`** for non-owning access to contiguous ranges. _(Ref: P.4, P.7 — use `span` instead of `(pointer, count)` interfaces.)_
+- `std::optional` for values that may or may not be present.
+- `std::variant` for type-safe unions. _(Ref: P.4 — use `variant` instead of `union`.)_
+- `std::string_view` for non-owning read access to strings.
+- `std::span` for non-owning access to contiguous ranges. _(Ref: P.4, P.7 — use `span` instead of `(pointer, count)` interfaces.)_
 - **Structured bindings** for unpacking pairs, tuples, and simple structs.
 - **`constexpr` and `consteval`** to push computation to compile time.
 - **Range-based `for` loops** over iterator-pair loops.
-- **`enum class`** over unscoped `enum`. _(Ref: Enum.1 — Prefer enumerations over macros. Enum.3 — Prefer enum class over "plain" enum.)_
-- **`nullptr`** — never `NULL` or `0` for pointers. _(Ref: ES.47.)_
+- `enum class` over unscoped `enum`. _(Ref: Enum.1 — Prefer enumerations over macros. Enum.3 — Prefer enum class over "plain" enum.)_
+- `nullptr` — never `NULL` or `0` for pointers. _(Ref: ES.47.)_
 - **`using` aliases** over `typedef`.
 - **Concepts** (C++20) to constrain templates and produce clear error messages. _(Ref: T.10 — Specify concepts for all template arguments.)_
-- **`noexcept`** on destructors, move operations, and swap. _(Ref: C.37, C.66, C.85.)_
+- `noexcept` on destructors, move operations, and swap. _(Ref: C.37, C.66, C.85.)_
 
 ---
 

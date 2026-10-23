@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 
 from _common import REPO_ROOT
-from _gates import Gate, git_ls, npm_script_gate, run_cli, skip, which
+from _gates import Gate, find_clang_format, git_ls, npm_script_gate, run_cli, skip, which
 
 VSCODE_DIR = REPO_ROOT / "extensions" / "vscode"
 ZED_DIR = REPO_ROOT / "extensions" / "zed"
@@ -75,9 +75,9 @@ def _ruff_gates() -> list[Gate]:
 def _clang_format_gate() -> Gate:
     """clang-format dry-run over tracked C++, mirroring the ci.yml formatting job."""
     name, description = "clang-format", "C++ formatting (clang-format)"
-    exe = which("clang-format")
+    exe, reason = find_clang_format()
     if exe is None:
-        return skip(name, description, "clang-format not found (install LLVM/clang tools)")
+        return skip(name, description, reason)
     files = [f for f in git_ls(*CLANG_FORMAT_DIRS) if f.endswith((".cpp", ".hpp"))]
     if not files:
         return skip(name, description, "no C++ files tracked")
@@ -148,14 +148,15 @@ def _cmakelint_gate() -> Gate:
 
 
 def _shellcheck_gate() -> Gate:
-    """ShellCheck over shell scripts and the pre-commit hook, mirroring ci-shell.yml."""
+    """ShellCheck over shell scripts and the Git hooks, mirroring ci-shell.yml."""
     name, description = "shellcheck", "Shell lint (ShellCheck)"
     exe = which("shellcheck")
     if exe is None:
         return skip(name, description, "shellcheck not found (apt-get install shellcheck)")
     files = git_ls("*.sh", "*.bash", ":!:external/**")
-    if (REPO_ROOT / "scripts" / "git-hooks" / "pre-commit").is_file():
-        files.append("scripts/git-hooks/pre-commit")
+    for hook in ("pre-commit", "commit-msg"):
+        if (REPO_ROOT / "scripts" / "git-hooks" / hook).is_file():
+            files.append(f"scripts/git-hooks/{hook}")
     if not files:
         return skip(name, description, "no shell scripts tracked")
     return Gate(name, description, [exe], files=files)

@@ -37,7 +37,7 @@
 //                                 to provide element-wise comparison.  If
 //                                 equality is not meaningful for the type,
 //                                 override equals_kind() to return
-//                                 EqualsKind::by_reference (see XmlValue,
+//                                 EqualsKind::ByReference (see XmlValue,
 //                                 XmlValue) and leave equals_to() to the base
 //                                 default (which returns false).
 //   3. value_type.hpp           — Add is_*() and as_*() convenience methods
@@ -155,8 +155,8 @@ namespace luma {
 struct CollectionObject {
     /// Documents the equality semantics of a collection type.
     enum class EqualsKind {
-        by_value,     ///< Element-wise deep comparison (arrays, queues, stacks, etc.)
-        by_reference, ///< Equality is not meaningful; always returns false.
+        ByValue,     ///< Element-wise deep comparison (arrays, queues, stacks, etc.)
+        ByReference, ///< Equality is not meaningful; always returns false.
     };
 
     explicit CollectionObject(CollectionKind k) : kind_{k} {}
@@ -170,7 +170,7 @@ struct CollectionObject {
     /// Returns the equality semantics for this collection type.
     /// Types returning `by_reference` always compare as not-equal.
     [[nodiscard]] virtual EqualsKind equals_kind() const noexcept {
-        return EqualsKind::by_value;
+        return EqualsKind::ByValue;
     }
 
     [[nodiscard]] virtual std::string to_display_string() const = 0;
@@ -748,7 +748,7 @@ struct XmlValue : CollectionObject {
     }
 
     [[nodiscard]] EqualsKind equals_kind() const noexcept override {
-        return EqualsKind::by_reference;
+        return EqualsKind::ByReference;
     }
 
     [[nodiscard]] Value deep_copy_value() const override;
@@ -773,7 +773,7 @@ struct KeyValueStoreValue : CollectionObject {
     }
 
     [[nodiscard]] EqualsKind equals_kind() const noexcept override {
-        return EqualsKind::by_reference;
+        return EqualsKind::ByReference;
     }
 
     [[nodiscard]] Value deep_copy_value() const override;

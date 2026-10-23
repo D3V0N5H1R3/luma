@@ -139,7 +139,7 @@ namespace {
 
     const auto& collection = a.as_collection();
 
-    if (collection->equals_kind() == luma::CollectionObject::EqualsKind::by_reference) {
+    if (collection->equals_kind() == luma::CollectionObject::EqualsKind::ByReference) {
         return false;
     }
 
@@ -164,7 +164,7 @@ bool ChoiceValue::operator==(const ChoiceValue& other) const {
 // ─────────── Value::equals ───────────
 
 bool Value::equals(const Value& other) const {
-    const runtime::RecursionGuard guard{runtime::RecursionKind::equals};
+    const runtime::RecursionGuard guard{runtime::RecursionKind::Equals};
     if (!guard.entered()) {
         throw RuntimeError{"equals: maximum nesting depth exceeded", {}};
     }
@@ -268,13 +268,13 @@ bool SetValue::equals_to(const CollectionObject& other) const {
     return std::ranges::all_of(elements, [&](const Value& elem) { return b.contains(elem); });
 }
 
-// XmlValue reports EqualsKind::by_reference, so equals_collection()
+// XmlValue reports EqualsKind::ByReference, so equals_collection()
 // short-circuits to false before equals_to() is ever called.  It inherits the
 // base CollectionObject::equals_to() (which returns false) — no override needed.
 
 // KeyValueStoreValue
 
-// KeyValueStoreValue reports EqualsKind::by_reference — identity semantics,
+// KeyValueStoreValue reports EqualsKind::ByReference — identity semantics,
 // never structurally equal.  It inherits the base equals_to() default.
 
 } // namespace luma

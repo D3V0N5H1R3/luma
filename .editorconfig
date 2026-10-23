@@ -28,6 +28,14 @@ indent_size = 2
 [*.scm]
 indent_size = 2
 
+# Clang tool configs are YAML without a .yml extension.
+[{.clang-format,.clang-tidy}]
+indent_size = 2
+
+# ── Windows batch files must stay CRLF (mirrors .gitattributes) ──
+[*.{bat,cmd}]
+end_of_line = crlf
+
 # ── Markdown: trailing whitespace is significant (hard line breaks); do not wrap ──
 [*.md]
 trim_trailing_whitespace = false
@@ -36,5 +44,19 @@ max_line_length = off
 # ── Compiled Luma bytecode is binary — never reformat or re-encode ──
 [*.lumc]
 charset = unset
+end_of_line = unset
+indent_style = unset
+indent_size = unset
 trim_trailing_whitespace = false
 insert_final_newline = false
+max_line_length = off
+
+# ── Fuzz corpus seeds are byte-exact inputs (CRLF, no final newline, raw bytes) ──
+[fuzz/corpus/**]
+charset = unset
+end_of_line = unset
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = false
+insert_final_newline = false
+max_line_length = off

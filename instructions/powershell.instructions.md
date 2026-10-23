@@ -50,17 +50,17 @@ Write the simplest script that solves the problem correctly.
 
 ## 2 — Naming Conventions
 
-| Entity             | Convention           | Examples                                               |
-| ------------------ | -------------------- | ------------------------------------------------------ |
-| Functions/cmdlets  | `PascalCase`         | `Get-BuildOutput`, `Invoke-LumaTest`                   |
-| Verb-Noun pairing  | Approved verbs       | `Get-`, `Set-`, `New-`, `Remove-`, `Invoke-`, `Test-`  |
-| Variables          | `PascalCase`         | `$TotalCount`, `$OutputDir`, `$IsVerbose`              |
-| Parameters         | `PascalCase`         | `-FilePath`, `-OutputDirectory`, `-Force`              |
-| Constants          | `PascalCase`         | `$MaxRetries`, `$DefaultTimeout`                       |
-| Private functions  | `PascalCase`         | Not exported from module — visibility controls access  |
-| File names         | `PascalCase`         | `Build-Project.ps1`, `LumaHelpers.psm1`               |
-| Boolean variables  | question             | `$IsReady`, `$HasErrors`, `$ShouldClean`               |
-| Script parameters  | `PascalCase`         | `param($BuildDir, $Configuration)`                     |
+| Entity            | Convention     | Examples                                              |
+| ----------------- | -------------- | ----------------------------------------------------- |
+| Functions/cmdlets | `PascalCase`   | `Get-BuildOutput`, `Invoke-LumaTest`                  |
+| Verb-Noun pairing | Approved verbs | `Get-`, `Set-`, `New-`, `Remove-`, `Invoke-`, `Test-` |
+| Variables         | `PascalCase`   | `$TotalCount`, `$OutputDir`, `$IsVerbose`             |
+| Parameters        | `PascalCase`   | `-FilePath`, `-OutputDirectory`, `-Force`             |
+| Constants         | `PascalCase`   | `$MaxRetries`, `$DefaultTimeout`                      |
+| Private functions | `PascalCase`   | Not exported from module — visibility controls access |
+| File names        | `PascalCase`   | `Build-Project.ps1`, `LumaHelpers.psm1`               |
+| Boolean variables | question       | `$IsReady`, `$HasErrors`, `$ShouldClean`              |
+| Script parameters | `PascalCase`   | `param($BuildDir, $Configuration)`                    |
 
 - Use [approved verbs](https://learn.microsoft.com/en-us/powershell/scripting/developer/cmdlet/approved-verbs-for-windows-powershell-commands) for function names. Run `Get-Verb` to list them.
 - Name what the value represents, not its type. `$OutputDirectory` — good. `$d` — bad.

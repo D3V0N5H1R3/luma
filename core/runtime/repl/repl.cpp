@@ -22,6 +22,7 @@
 #include "analysis/types/type_checker.hpp"
 #include "common/path_utils.hpp"
 #include "common/resource_limits.hpp"
+#include "common/version.hpp"
 #include "runtime/cli/terminal.hpp"
 #include "runtime/compiler/compiler.hpp"
 #include "runtime/compiler/compiler_config.hpp"
@@ -511,7 +512,8 @@ bool validate_file_path(const std::string& file_path) {
 } // namespace repl_detail
 
 void run_repl(bool sandbox) {
-    std::cout << "Luma 1.0 REPL \u2014 type ':quit' to exit, ':help' for commands\n\n";
+    std::cout << "Luma " << luma_version
+              << " REPL \u2014 type ':quit' to exit, ':help' for commands\n\n";
 
     SourceManager source_manager;
     const DiagnosticRenderer renderer{source_manager};

@@ -368,6 +368,10 @@ luma_add_test(NAME dap_integration_test
     INCLUDES ${PROJECT_SOURCE_DIR}/debugger/source
     TIMEOUT  360
     LABELS   dap integration)
+# The suite locates luma_dap next to itself at run time rather than linking it,
+# so declare the dependency explicitly or building only this target leaves the
+# spawned adapter missing or stale.
+add_dependencies(dap_integration_test luma_dap)
 
 # ── Luma feature test suites ──
 # Each .luma file under tests/features/ is registered as a CTest test case.
@@ -382,8 +386,7 @@ luma_add_test(NAME dap_integration_test
 # race and fail. Explicit lists also follow the project guideline (no file(GLOB))
 # and make CMake re-run when the list changes. Add a new .luma suite here.
 
-set(LUMA_FEATURE_TEST_TIMEOUT 30 CACHE STRING
-    "Timeout in seconds for each Luma feature test")
+# Per-test timeout: LUMA_FEATURE_TEST_TIMEOUT (cache option in the root CMakeLists.txt).
 message(STATUS "Feature test timeout: ${LUMA_FEATURE_TEST_TIMEOUT}s")
 
 set(LUMA_FEATURE_TESTS_LANGUAGE

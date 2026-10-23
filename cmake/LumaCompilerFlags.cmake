@@ -47,8 +47,14 @@ set(LUMA_GCC_SECURITY_FLAGS
 set(LUMA_MSVC_LINKER_SECURITY_FLAGS
     /DYNAMICBASE # Address Space Layout Randomization (ASLR).
     /NXCOMPAT    # Data Execution Prevention (DEP).
-    /CETCOMPAT   # Intel CET shadow stack compatibility.
+    /GUARD:CF    # Control Flow Guard; compiling with /guard:cf alone emits no CFG table.
 )
+
+# Intel CET shadow-stack compatibility is an x64-only image flag: link.exe rejects
+# /CETCOMPAT for any other machine with LNK1246 (e.g. the windows-arm64 preset).
+if(CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "^(x64|AMD64)$")
+    list(APPEND LUMA_MSVC_LINKER_SECURITY_FLAGS /CETCOMPAT)
+endif()
 
 set(LUMA_LINUX_LINKER_SECURITY_FLAGS
     -Wl,-z,relro,-z,now    # Full RELRO (GOT hardening).
@@ -168,7 +174,8 @@ function(luma_set_compile_options target_name)
             target_link_options(${target_name} PRIVATE
                 ${LUMA_MSVC_LINKER_SECURITY_FLAGS})
         else()
-            target_compile_options(${target_name} PRIVATE -fPIE)
+            # Compile-side -fPIE comes from CMAKE_POSITION_INDEPENDENT_CODE (set in
+            # the root CMakeLists.txt); only the link-side flag is added here.
             target_link_options(${target_name} PRIVATE -pie)
             if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
                 target_link_options(${target_name} PRIVATE
@@ -177,11 +184,11 @@ function(luma_set_compile_options target_name)
         endif()
     endif()
 
-    # Preprocessor hardening — enable checked iterators and fortified
-    # libc wrappers in Release builds.
+    # Preprocessor hardening — enable fortified libc wrappers in optimised builds
+    # (_FORTIFY_SOURCE requires optimisation, so Debug is excluded).
     if(NOT MSVC)
         target_compile_definitions(${target_name} PRIVATE
-            $<$<CONFIG:Release>:_FORTIFY_SOURCE=2>
+            $<$<CONFIG:Release,RelWithDebInfo,MinSizeRel>:_FORTIFY_SOURCE=2>
         )
     endif()
 

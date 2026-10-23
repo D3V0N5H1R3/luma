@@ -46,7 +46,7 @@ The `msvc` and `xcode` generators are multi-config: their build type is chosen a
 
 ## Build Presets
 
-Each build preset references a configure preset and selects the configuration to build. Every build preset sets `jobs: 0`, which uses all available cores for parallel compilation.
+Each build preset references a configure preset and selects the configuration to build. Every build preset sets `jobs: 0`, which is equivalent to a bare `cmake --build --parallel`: the native tool's default parallelism. That means `/m` (one project per core) for Visual Studio and Ninja's own default (about cores + 2), but an **unbounded** `make -j` for the Makefiles generator, which is the default on Linux and macOS. That can exhaust memory on large or instrumented builds. Cap it there by passing an explicit count, e.g. `cmake --build --preset default --parallel "$(nproc)"`. The preset's `jobs` value overrides `CMAKE_BUILD_PARALLEL_LEVEL`.
 
 | Preset             | Configure Preset   | Configuration  |
 | ------------------ | ------------------ | -------------- |

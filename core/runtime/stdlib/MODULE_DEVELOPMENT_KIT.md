@@ -47,7 +47,10 @@ luma_add_stdlib_library(collections
 ```
 
 The build library is grouped for faster incremental builds; the path prefix is
-the category subdirectory the file physically lives in (Steps 1–2).
+the category subdirectory the file physically lives in (Steps 1–2). If the module
+uses a vendored library, pick a group whose `DEPENDS` already links it (`luma_tls`
+for Mbed TLS and the `LUMA_HAS_TLS` macro, `miniz_lib` for compression) or add the
+target to that group's `DEPENDS` list.
 
 ### Step 4 — Register in `stdlib_registry.hpp`
 

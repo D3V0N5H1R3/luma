@@ -6,21 +6,11 @@ priority: reference
 
 # Working with GitHub Actions
 
-A reference for writing, debugging, and maintaining GitHub Actions workflows.
-Every recommendation here prioritises **simplicity, readability, security, and fail-safety**.
+A reference for writing, debugging, and maintaining GitHub Actions workflows. Every recommendation here prioritises **simplicity, readability, security, and fail-safety**.
 
-> **Note — examples are illustrative.** Some snippets below use common ecosystem tooling
-> (Node, npm, Python) to demonstrate a pattern generically. Luma's own CI builds C++ with
-> CMake and runs CTest across an operating-system matrix — see §7.3 for the matrix pattern
-> and §1.1 of the [recipes companion](github-actions-recipes.instructions.md) for a complete
-> C++/CMake workflow that mirrors this repository. Apply the *pattern*, not the specific
-> tooling, when writing workflows for this project.
+> **Note — examples are illustrative.** Some snippets below use common ecosystem tooling (Node, npm, Python) to demonstrate a pattern generically. Luma's own CI builds C++ with CMake and runs CTest across an operating-system matrix — see §7.3 for the matrix pattern and §1.1 of the [recipes companion](github-actions-recipes.instructions.md) for a complete C++/CMake workflow that mirrors this repository. Apply the *pattern*, not the specific tooling, when writing workflows for this project.
 
-> **Note — recipes live in a companion guide.** Complete, copy-paste workflow files
-> (C++/CMake CI, Docker publish, release, deployment, CodeQL/SAST) and workflow debugging
-> guidance live in [github-actions-recipes.instructions.md](github-actions-recipes.instructions.md),
-> a manually-referenced companion with no `applyTo`. This guide covers the conventions; that
-> one collects the ready-to-adapt examples.
+> **Note — recipes live in a companion guide.** Complete, copy-paste workflow files (C++/CMake CI, Docker publish, release, deployment, CodeQL/SAST) and workflow debugging guidance live in [github-actions-recipes.instructions.md](github-actions-recipes.instructions.md), a manually-referenced companion with no `applyTo`. This guide covers the conventions; that one collects the ready-to-adapt examples.
 
 ---
 
@@ -41,15 +31,13 @@ Every recommendation here prioritises **simplicity, readability, security, and f
 13. [Style and Maintenance Guidelines](#13--style-and-maintenance-guidelines)
 14. [Checklist Before Committing a Workflow](#14--checklist-before-committing-a-workflow)
 
-> Complete workflow recipes and debugging guidance live in the companion
-> [github-actions-recipes.instructions.md](github-actions-recipes.instructions.md).
+> Complete workflow recipes and debugging guidance live in the companion [github-actions-recipes.instructions.md](github-actions-recipes.instructions.md).
 
 ---
 
 ## 1 — Core Concepts
 
-GitHub Actions is a CI/CD platform built into GitHub.
-The hierarchy is: **Workflow → Job → Step**.
+GitHub Actions is a CI/CD platform built into GitHub. The hierarchy is: **Workflow → Job → Step**.
 
 | Concept      | Lives in                     | Purpose                                     |
 | ------------ | ---------------------------- | ------------------------------------------- |
@@ -107,7 +95,7 @@ Start comments with `#` followed by a single space. Use comments to explain **wh
 # Only deploy when a version tag is pushed — not on every push to main.
 on:
     push:
-        tags: ["v*.*.*"]
+        tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 ```
 
 ---
@@ -199,7 +187,7 @@ on:
 # On tag creation
 on:
   push:
-    tags: ["v*.*.*"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 ```
 
 ### 5.2 — Path and Branch Filtering
@@ -285,8 +273,7 @@ jobs:
 
 ### 7.3 — Matrix Strategies
 
-Use matrices to run the same job across multiple configurations. For a C++/CMake project
-like Luma, the most useful axis is the operating system (and, where relevant, the compiler):
+Use matrices to run the same job across multiple configurations. For a C++/CMake project like Luma, the most useful axis is the operating system (and, where relevant, the compiler):
 
 ```yaml
 jobs:
@@ -303,10 +290,7 @@ jobs:
             - run: ctest --preset default --output-on-failure
 ```
 
-**Refining the matrix with `include` and `exclude`.** Use `include` to add or
-extend specific combinations (e.g., attach extra variables to one entry, or add a
-one-off sanitizer build) and `exclude` to drop combinations that are not worth
-running:
+**Refining the matrix with `include` and `exclude`.** Use `include` to add or extend specific combinations (e.g., attach extra variables to one entry, or add a one-off sanitizer build) and `exclude` to drop combinations that are not worth running:
 
 ```yaml
 strategy:
@@ -325,9 +309,7 @@ strategy:
               compiler: clang
 ```
 
-When the axes are irregular, an entirely `include`-based matrix (listing each
-full combination explicitly) is often clearer than a combinatorial one — this is
-the pattern Luma's own `ci.yml` uses for its per-compiler build jobs.
+When the axes are irregular, an entirely `include`-based matrix (listing each full combination explicitly) is often clearer than a combinatorial one — this is the pattern Luma's own `ci.yml` uses for its per-compiler build jobs.
 
 ### 7.4 — Timeouts
 
@@ -348,19 +330,14 @@ Default is 360 minutes (6 hours) — far too generous for most workflows.
 
 ### 8.1 — Using Actions
 
-**Pin every action to a full-length commit SHA** and add the version as a
-trailing comment. A Git tag or branch is a *mutable* reference: anyone who gains
-write access to an action's repository can move a tag like `@v4` onto a malicious
-commit, which then runs with your workflow's permissions — a classic supply-chain
-attack. A commit SHA is immutable and cannot be redirected, so every workflow in
-this repository pins to one.
+**Pin every action to a full-length commit SHA** and add the version as a trailing comment. A Git tag or branch is a *mutable* reference: anyone who gains write access to an action's repository can move a tag like `@v4` onto a malicious commit, which then runs with your workflow's permissions — a classic supply-chain attack. A commit SHA is immutable and cannot be redirected, so every workflow in this repository pins to one.
 
 ```yaml
 # Best — pinned to an immutable SHA, with a human-readable version comment
-- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
 # Tolerable only for trusted first-party actions/* — the tag is still mutable
-- uses: actions/checkout@v6
+- uses: actions/checkout@v7
 
 # Bad — fully mutable, can change under you without notice
 - uses: actions/checkout@main
@@ -368,25 +345,21 @@ this repository pins to one.
 
 **Current project pins** (update these when bumping versions):
 
-| Action | SHA Pin | Version |
-| ------ | ------- | ------- |
-| `actions/checkout` | `de0fac2e4500dabe0009e67214ff5f5447ce83dd` | v6.0.2 |
-| `actions/upload-artifact` | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` | v7.0.1 |
-| `actions/download-artifact` | `3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c` | v8.0.1 |
-| `actions/cache` | `27d5ce7f107fe9357f9df03efb73ab90386fccae` | v5.0.5 |
-| `actions/setup-node` | `48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e` | v6.4.0 |
-| `actions/setup-python` | `a26af69be951a213d495a4c3e4e4022e16d87065` | v5.6.0 |
-| `github/codeql-action` | `9e0d7b8d25671d64c341c19c0152d693099fb5ba` | v4.35.5 |
-| `codecov/codecov-action` | `75cd11691c0faa626561e295848008c8a7dddffe` | v5.5.4 |
-| `softprops/action-gh-release` | `b4309332981a82ec1c5618f44dd2e27cc8bfbfda` | v3.0.0 |
-| `docker/setup-qemu-action` | `ce360397dd3f832beb865e1373c09c0e9f86d70a` | v4.0.0 |
-| `dtolnay/rust-toolchain` | `3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9` | stable (1.94.1) |
+| Action                        | SHA Pin                                    | Version         |
+| ----------------------------- | ------------------------------------------ | --------------- |
+| `actions/checkout`            | `3d3c42e5aac5ba805825da76410c181273ba90b1` | v7.0.1          |
+| `actions/upload-artifact`     | `cf430e030ddbb5b0abf93d22962f4752f3646cd9` | v7.0.2          |
+| `actions/download-artifact`   | `9000827ccba6bdab643e8b6fd33ac0654aef8333` | v8.0.2          |
+| `actions/cache`               | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` | v6.1.0          |
+| `actions/setup-node`          | `949feb2413d6458794dcd2491c4babbbce0c15c1` | v7.1.0          |
+| `actions/setup-python`        | `5fda3b95a4ea91299a34e894583c3862153e4b97` | v7.0.0          |
+| `github/codeql-action`        | `9b3254085494b55a0f7c4c2b3d2d52cc712ce370` | v4.39.1         |
+| `codecov/codecov-action`      | `303a32d7a59b442fa8d48b6a1cc6825c09c847a5` | v7.1.1          |
+| `softprops/action-gh-release` | `efb35369e0ad2afab669f228072c1b0d510eae64` | v3.0.3          |
+| `docker/setup-qemu-action`    | `99012661954931238ded8c8b007157a8430204e1` | v4.4.0          |
+| `dtolnay/rust-toolchain`      | `3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9` | stable (1.94.1) |
 
-SHA pins are kept current automatically: `.github/dependabot.yml` enables the
-`github-actions` ecosystem, so Dependabot opens weekly PRs that bump each pin
-(the SHA **and** its version comment) when a new release ships. Pinning to a SHA
-and letting Dependabot update it gives you both immutability and freshness —
-review each action's changelog before merging a major bump.
+SHA pins are kept current automatically: `.github/dependabot.yml` enables the `github-actions` ecosystem, so Dependabot opens weekly PRs that bump each pin (the SHA **and** its version comment) when a new release ships. Pinning to a SHA and letting Dependabot update it gives you both immutability and freshness — review each action's changelog before merging a major bump.
 
 ### 8.2 — Running Commands
 
@@ -433,25 +406,18 @@ Common conditions: `success()`, `failure()`, `always()`, `cancelled()`.
 
 ### 8.5 — Checkout Optimisation and Hardening
 
-`actions/checkout` defaults are not always the safest or fastest. Two settings
-are worth making explicit on every checkout:
+`actions/checkout` defaults are not always the safest or fastest. Two settings are worth making explicit on every checkout:
 
 ```yaml
-- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
   with:
       persist-credentials: false # Don't leave the token in .git/config
       fetch-depth: 1             # Shallow clone — only the commit being built
 ```
 
-- **`persist-credentials: false`** stops checkout from writing the `GITHUB_TOKEN`
-  into `.git/config`, where a later step (or a compromised dependency) could read
-  it. Every checkout in this repository sets this.
-- **`fetch-depth: 1`** (the default) fetches only the latest commit. Keep it
-  shallow for build and test jobs. Use `fetch-depth: 0` **only** when you genuinely
-  need full history — e.g., generating a changelog from tags (see §1.3 of the
-  [recipes companion](github-actions-recipes.instructions.md)).
-- **`submodules`** defaults to off; enable it only when a job actually needs
-  submodules, since fetching them adds checkout time.
+- `persist-credentials: false` stops checkout from writing the `GITHUB_TOKEN` into `.git/config`, where a later step (or a compromised dependency) could read it. Every checkout in this repository sets this.
+- `fetch-depth: 1` (the default) fetches only the latest commit. Keep it shallow for build and test jobs. Use `fetch-depth: 0` **only** when you genuinely need full history — e.g., generating a changelog from tags (see §1.3 of the [recipes companion](github-actions-recipes.instructions.md)).
+- `submodules` defaults to off; enable it only when a job actually needs submodules, since fetching them adds checkout time.
 
 ---
 
@@ -682,18 +648,10 @@ User-controlled inputs (issue titles, PR bodies, branch names) can inject arbitr
 
 Catch vulnerabilities before they ship by layering automated scanning into CI:
 
-- **SAST (static analysis):** run CodeQL (see §1.5 of the
-  [recipes companion](github-actions-recipes.instructions.md)) on pushes, pull requests, and
-  a weekly schedule. Treat new high-severity alerts as blocking. This repository's
-  `codeql.yml` analyses the C/C++ sources.
-- **SCA (dependency review):** add `actions/dependency-review-action` on pull
-  requests to flag dependencies with known CVEs or disallowed licences before they
-  are merged.
-- **Secret scanning:** enable GitHub's built-in secret scanning and push
-  protection for the repository, and consider a pre-commit secret scanner so
-  credentials are caught locally before they reach the remote.
-- **Action updates:** let Dependabot (`.github/dependabot.yml`) keep pinned action
-  SHAs current (see §8.1).
+- **SAST (static analysis):** run CodeQL (see §1.5 of the [recipes companion](github-actions-recipes.instructions.md)) on pushes, pull requests, and a weekly schedule. Treat new high-severity alerts as blocking. This repository's `codeql.yml` analyses the C/C++, Rust, Python, JavaScript/TypeScript, and GitHub Actions sources with the `security-extended` query suite.
+- **SCA (dependency review):** add `actions/dependency-review-action` on pull requests to flag dependencies with known CVEs or disallowed licences before they are merged.
+- **Secret scanning:** enable GitHub's built-in secret scanning and push protection for the repository, and consider a pre-commit secret scanner so credentials are caught locally before they reach the remote.
+- **Action updates:** let Dependabot (`.github/dependabot.yml`) keep pinned action SHAs current (see §8.1).
 
 ---
 

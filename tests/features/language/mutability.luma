@@ -318,3 +318,58 @@ function void test_mutable_dictionary_value_compound_assignment() {
     assert(scores["alice"] == 15,
         "compound assignment to a mutable dictionary entry should succeed")
 }
+
+# ───────────────────────────────────────────────────────────
+# Discard assignment
+# ───────────────────────────────────────────────────────────
+
+function result<integer> next_ticket(reference<integer> counter) {
+    Reference.set(counter, Reference.get(counter) + 1)
+    return success(Reference.get(counter))
+}
+
+@test
+function void test_discard_assignment_evaluates_and_drops_result() {
+    reference<integer> counter = Reference.new(0)
+
+    _ = next_ticket(counter)
+    _ = next_ticket(counter)
+
+    assert(Reference.get(counter) == 2, "each discarded call should still run")
+}
+
+@test
+function void test_discard_assignment_accepts_any_value_type() {
+    _ = String.length("abc")
+    _ = [1, 2, 3]
+
+    assert(true)
+}
+
+@test
+function void test_declared_underscore_keeps_assignment_semantics() {
+    mutable integer _ = 1
+    _ = 7
+
+    assert(_ == 7, "a declared '_' variable should be assigned normally")
+}
+
+@test
+function void test_discard_assignment_inside_underscore_bindings() {
+    reference<integer> counter = Reference.new(0)
+
+    for _ in 0..3 {
+        _ = next_ticket(counter)
+    }
+
+    optional<integer> maybe = 5
+    match maybe {
+        case some(_) {
+            _ = next_ticket(counter)
+        }
+        case none {
+        }
+    }
+
+    assert(Reference.get(counter) == 4, "discards inside '_' bindings should still run")
+}

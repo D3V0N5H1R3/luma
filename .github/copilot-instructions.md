@@ -45,7 +45,7 @@ Each phase transforms a well-defined input into a well-defined output. Informati
 | `core/analysis/source/`      | Source file loading and location tracking                 |
 | `core/analysis/types/`       | Static type checking and stdlib type signatures           |
 | `core/runtime/cli/`          | Command-line argument parsing and dispatch                |
-| `core/runtime/compiler/`     | AST-to-bytecode compiler (105 opcodes)                    |
+| `core/runtime/compiler/`     | AST-to-bytecode compiler (99 opcodes)                     |
 | `core/runtime/concurrency/`  | Channels, tasks, and thread pool                          |
 | `core/runtime/include/`      | File inclusion and deduplication                          |
 | `core/runtime/interpreter/`  | Runtime value types, environment, and control flow        |
@@ -106,7 +106,7 @@ Follow the detailed instructions in `instructions/`:
 - **PowerShell style:** `PascalCase` for variables, functions, parameters. Approved Verb-Noun cmdlet names. `[CmdletBinding()]` on functions. Full cmdlet names — no aliases. See [instructions/powershell.instructions.md](../instructions/powershell.instructions.md).
 - **Luma language:** Types, naming, mutability, error handling, pipes, and testing. See [instructions/luma.instructions.md](../instructions/luma.instructions.md).
 - **CMake style:** Targets over variables. No `file(GLOB)`. Pin dependency versions. See [instructions/cmake.instructions.md](../instructions/cmake.instructions.md).
-- **Git conventions:** Conventional commit prefixes (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`). Branch naming: `feature/`, `fix/`, `docs/`. See [instructions/git.instructions.md](../instructions/git.instructions.md).
+- **Git conventions:** Conventional commit prefixes (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `style:`, `ci:`). Branch naming: `feature/`, `fix/`, `docs/`. See [instructions/git.instructions.md](../instructions/git.instructions.md).
 - **GitHub Actions:** Workflow triggers, permissions, job structure, caching, and CI/CD security. See [instructions/github-actions.instructions.md](../instructions/github-actions.instructions.md).
 - **GitHub Actions recipes:** Copy-paste workflow recipes (C++/CMake CI, Docker, release, deployment, CodeQL) and debugging guidance. See [instructions/github-actions-recipes.instructions.md](../instructions/github-actions-recipes.instructions.md).
 - **Testing:** Custom C++ test framework, Luma `@test` feature tests, assertion macros, and test structure. See [instructions/testing.instructions.md](../instructions/testing.instructions.md).
@@ -128,12 +128,12 @@ Follow the detailed instructions in `instructions/`:
 ### Luma Language
 
 - Entry point: `@main` annotated function.
-- Types: `boolean`, `integer`, `number`, `decimal`, `string`, `array<T>`, `dictionary<V>`, `queue<T>`, `stack<T>`, `channel<T>`, `task<T>`, `optional<T>`, `result<T>`, `socket`, tuples, choice types (ADTs), records, interfaces.
+- Types: `boolean`, `integer`, `number`, `decimal`, `string`, `array<T>`, `dictionary<V>`, `set<T>`, `queue<T>`, `stack<T>`, `channel<T>`, `task<T>`, `optional<T>`, `result<T>`, `reference<T>`, `socket`, tuples, choice types (ADTs), records, interfaces.
 - Variables are immutable by default; use `mutable` keyword for mutability.
 - No semicolons required. Comments start with `#`.
 - String interpolation: `"value is ${expr}"`.
 - Pipe operator: `value |> Module.function()`.
 - Structured concurrency: `task_scope { }` blocks with cooperative cancellation; `Task.cancel(t)`, `Task.is_cancelled(t)`.
-- Standard library modules: `String`, `Array`, `Bits`, `Calculus`, `Channel`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, `Xml`.
+- Standard library modules: `Array`, `Bits`, `Calculus`, `Channel`, `Compression`, `Console`, `Converter`, `Csv`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `FileSystem`, `Hash`, `Http`, `Json`, `KeyValueStore`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Process`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Socket`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, `Xml`.
 
 > **Note for AI assistants:** This file serves as the single source of truth for project context. See [instructions/learnings.instructions.md](../instructions/learnings.instructions.md) for accumulated development learnings and pitfalls (auto-loaded for all files), with domain-specific pitfalls split into path-scoped siblings: [learnings-build.instructions.md](../instructions/learnings-build.instructions.md), [learnings-compiler.instructions.md](../instructions/learnings-compiler.instructions.md), [learnings-vm.instructions.md](../instructions/learnings-vm.instructions.md), [learnings-stdlib.instructions.md](../instructions/learnings-stdlib.instructions.md), [learnings-lsp.instructions.md](../instructions/learnings-lsp.instructions.md), [learnings-dap.instructions.md](../instructions/learnings-dap.instructions.md), and [learnings-extensions.instructions.md](../instructions/learnings-extensions.instructions.md).

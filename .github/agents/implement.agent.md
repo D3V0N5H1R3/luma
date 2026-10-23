@@ -44,8 +44,7 @@ You are the implementation engineer for the Luma programming language interprete
 
 ### Key Directories
 
-For the full per-module map, see the **Module Layout** table in
-[copilot-instructions.md](../copilot-instructions.md). You most often work across the pipeline split:
+For the full per-module map, see the [Module Layout](../copilot-instructions.md#module-layout) table in `copilot-instructions.md`. You most often work across the pipeline split:
 
 | Directory        | Purpose                                                  |
 | ---------------- | -------------------------------------------------------- |
@@ -55,8 +54,7 @@ For the full per-module map, see the **Module Layout** table in
 
 ## Commands
 
-Build and test with the CMake presets in the **Build and Test** section of
-[copilot-instructions.md](../copilot-instructions.md). Beyond those:
+Build and test with the CMake presets in the [Build and Test](../copilot-instructions.md#build-and-test) section of `copilot-instructions.md`. Beyond those:
 
 ```bash
 # Run the Luma feature tests

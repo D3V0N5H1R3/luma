@@ -60,7 +60,8 @@ luma_discover_cmake() {
         candidates+=("$pf/CMake/bin/cmake.exe")
     fi
 
-    for exe in "${candidates[@]}"; do
+    local exe
+    for exe in ${candidates[@]+"${candidates[@]}"}; do
         local dir
         dir="$(dirname "$exe")"
         export PATH="$dir:$PATH"
@@ -834,7 +835,8 @@ luma_lint_and_format() {
 }
 
 # Report whether the working tree is clean (no staged or unstaged changes).
-# In dry-run mode it assumes clean and says so. Returns 0 when clean.
+# In dry-run mode it assumes clean and says so. Returns 0 when clean, 1 when
+# dirty, and 2 when git status itself failed (e.g. not a git working tree).
 luma_clean_working_tree() {
     local repo_root="$1"
     local is_dry_run="$2"
@@ -846,7 +848,9 @@ luma_clean_working_tree() {
     fi
 
     local status
-    status="$(git -C "$repo_root" status --porcelain)"
+    if ! status="$(git -C "$repo_root" status --porcelain)"; then
+        return 2
+    fi
     if [[ -n "$status" ]]; then
         return 1
     fi
@@ -889,7 +893,12 @@ luma_git_checkpoint() {
         return 0
     fi
 
-    git -C "$repo_root" add -A >&2
+    # Callers run this in an `if` (set -e is suspended there), so check git add
+    # explicitly - matching the PowerShell checkpoint, which throws on failure.
+    if ! git -C "$repo_root" add -A >&2; then
+        luma_warn 'git add failed.'
+        return 1
+    fi
     # Keep run artifacts out of the commit even when the artifact root lives
     # inside the tree and is not covered by .gitignore. When the root is outside
     # the repo, git errors that the path is outside the repository; ignore it.

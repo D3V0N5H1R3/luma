@@ -21,6 +21,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
 # shellcheck source=scripts/pipeline/luma-pipeline.sh
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/luma-pipeline.sh"
@@ -285,6 +286,12 @@ case "$artifact_root" in
     /*) ;;
     *) artifact_root="$PWD/$artifact_root" ;;
 esac
+# The agent runs from the repo root, so a CWD-relative report dir would point it
+# at the wrong (or a missing) report; resolve it against the caller's directory.
+case "$report_dir" in
+    ''|/*) ;;
+    *) report_dir="$PWD/$report_dir" ;;
+esac
 
 # Auto-detect the newest audit reports directory when one was not given.
 if [[ -z "$report_dir" && -d "$artifact_root" ]]; then
@@ -327,7 +334,13 @@ fi
 # --- Safety: clean tree, dedicated branch, green baseline ---------------------
 
 if [[ "$allow_dirty" != true ]]; then
-    if ! luma_clean_working_tree "$repo_root" "$is_dry_run"; then
+    clean_rc=0
+    luma_clean_working_tree "$repo_root" "$is_dry_run" || clean_rc=$?
+    if (( clean_rc == 2 )); then
+        printf 'Error: git status failed in %s; is it a git working tree?\n' "$repo_root" >&2
+        exit 1
+    fi
+    if (( clean_rc != 0 )); then
         printf 'Error: working tree is not clean. Commit or stash your changes, or pass --allow-dirty.\n' >&2
         exit 1
     fi
@@ -337,10 +350,10 @@ branch_name="pipeline/fix-$timestamp"
 if [[ "$no_branch" != true ]]; then
     printf 'Creating branch: %s\n' "$branch_name"
     if [[ "$is_dry_run" == true ]]; then
-        printf '%s  [dry-run] git -C %s checkout -b %s%s\n' \
+        printf '%s  [dry-run] git -C %s switch -c %s%s\n' \
             "$LUMA_CLR_DIM" "$repo_root" "$branch_name" "$LUMA_CLR_OFF"
     else
-        if ! git -C "$repo_root" checkout -b "$branch_name"; then
+        if ! git -C "$repo_root" switch -c "$branch_name"; then
             printf 'Error: failed to create branch %s.\n' "$branch_name" >&2
             exit 1
         fi

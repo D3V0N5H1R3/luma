@@ -40,12 +40,12 @@ A named constant (e.g. `Math.pi`, `Math.tau`) is a nullary, bodyless variation o
 
 Verify incrementally as you work — don't wait until step 10 to discover a cascade of failures.
 
-| After… | Run | Why |
-|---------|-----|-----|
-| Implementing the runtime body (step 5) | `cmake --build --preset default` (compile only) | Catches typos, missing includes, signature mismatches |
-| Compiling cleanly | `ctest -R stdlib_test_<module>` (targeted test) | Confirms the function works in isolation |
-| Adding catalog metadata | `ctest -R stdlib_catalog_conformance` | Catches arity/name mismatches between runtime and catalog |
-| All C++ tests pass | `build/Release/luma --strict --test <feature-test>.luma` | Validates Luma-level behaviour and catches lint warnings |
+| After…                                 | Run                                                      | Why                                                       |
+| -------------------------------------- | -------------------------------------------------------- | --------------------------------------------------------- |
+| Implementing the runtime body (step 5) | `cmake --build --preset default` (compile only)          | Catches typos, missing includes, signature mismatches     |
+| Compiling cleanly                      | `ctest -R stdlib_test_<module>` (targeted test)          | Confirms the function works in isolation                  |
+| Adding catalog metadata                | `ctest -R stdlib_catalog_conformance`                    | Catches arity/name mismatches between runtime and catalog |
+| All C++ tests pass                     | `build/Release/luma --strict --test <feature-test>.luma` | Validates Luma-level behaviour and catches lint warnings  |
 
 If a tier fails, fix the failure before advancing to the next tier. If a fix introduces a *new* failure you can't resolve in two attempts, revert to your last green state (`git stash` or `git checkout -- <files>`) and try a different approach.
 

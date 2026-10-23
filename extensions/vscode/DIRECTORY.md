@@ -119,7 +119,7 @@ code --install-extension luma-language-0.15.0.vsix
 
 ## Building from Source
 
-Requires **Node.js 20 or later** (CI builds with Node 22).
+Requires **Node.js 22 or later**: `npm run package` uses `@vscode/vsce` 4, which needs Node.js 22. Compiling, linting, and testing the extension also work on Node.js 20.
 
 ```bash
 cd extensions/vscode

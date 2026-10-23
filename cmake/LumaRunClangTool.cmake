@@ -34,6 +34,23 @@ else()
         "LumaRunClangTool: unknown TOOL '${TOOL}' (expected 'format' or 'tidy')")
 endif()
 
+# .clang-format uses clang-format 20 option spellings that older versions reject
+# outright, so fail with an actionable message instead of one config-parse error
+# per file. A banner without a recognisable version is let through.
+if(TOOL STREQUAL "format")
+    execute_process(
+        COMMAND ${TOOL_EXE} --version
+        OUTPUT_VARIABLE _version_banner
+        ERROR_QUIET
+    )
+    if(_version_banner MATCHES "version ([0-9]+)" AND CMAKE_MATCH_1 LESS 20)
+        message(FATAL_ERROR
+            "LumaRunClangTool: ${TOOL_EXE} is clang-format ${CMAKE_MATCH_1}; "
+            "version 20 or later is required to parse .clang-format. Install "
+            "clang-format 20+ and reconfigure (or set LUMA_CLANG_FORMAT_EXE).")
+    endif()
+endif()
+
 # clang-tidy needs -p <build dir> to locate compile_commands.json; without a
 # non-empty BINARY_DIR it would be invoked with an empty path and fail with
 # misleading errors instead of a clear "missing required parameter" message.
@@ -41,6 +58,15 @@ if(TOOL STREQUAL "tidy" AND NOT BINARY_DIR)
     message(FATAL_ERROR
         "LumaRunClangTool: BINARY_DIR is required when TOOL is 'tidy' "
         "(path to the build directory containing compile_commands.json)")
+endif()
+
+# Multi-config Visual Studio / Xcode generators ignore CMAKE_EXPORT_COMPILE_COMMANDS,
+# so fail with an actionable message instead of a wall of clang-tidy errors.
+if(TOOL STREQUAL "tidy" AND NOT EXISTS "${BINARY_DIR}/compile_commands.json")
+    message(FATAL_ERROR
+        "LumaRunClangTool: ${BINARY_DIR}/compile_commands.json not found. "
+        "Configure with a Ninja or Makefile generator (e.g. `cmake --preset ninja`) "
+        "and CMAKE_EXPORT_COMPILE_COMMANDS=ON.")
 endif()
 
 set(_all_sources "")
@@ -51,6 +77,21 @@ foreach(_dir IN LISTS _tool_dirs)
     endforeach()
 endforeach()
 
+# Platform-split sources (<base>_win32.cpp / <base>_posix.cpp, see
+# luma_platform_source_pair) are compiled only on their own platform, so the other
+# half is absent from compile_commands.json; clang-tidy would parse it with guessed
+# flags and fail on missing OS headers. Keep only the half this build tree compiles
+# — the same exclusion ci.yml, scripts/lint.py, and the pre-commit hook apply.
+if(TOOL STREQUAL "tidy")
+    file(READ "${BINARY_DIR}/compile_commands.json" _compile_db)
+    string(FIND "${_compile_db}" "_win32.cpp" _win32_pos)
+    if(_win32_pos EQUAL -1)
+        list(FILTER _all_sources EXCLUDE REGEX "_win32\\.cpp$")
+    else()
+        list(FILTER _all_sources EXCLUDE REGEX "_posix\\.cpp$")
+    endif()
+endif()
+
 list(LENGTH _all_sources _count)
 if(_count EQUAL 0)
     message(STATUS "No source files found — nothing to do")
@@ -59,18 +100,31 @@ endif()
 
 if(TOOL STREQUAL "format")
     message(STATUS "Formatting ${_count} files...")
-    execute_process(
-        COMMAND ${TOOL_EXE} -i ${_all_sources}
-        RESULT_VARIABLE _result
-    )
 else()
     message(STATUS "Running clang-tidy on ${_count} files...")
-    execute_process(
-        COMMAND ${TOOL_EXE} -p ${BINARY_DIR} ${_all_sources}
-        RESULT_VARIABLE _result
-    )
 endif()
 
-if(NOT _result EQUAL 0)
-    message(FATAL_ERROR "${TOOL_EXE} failed with exit code ${_result}")
+# Windows caps a process command line at 32,767 characters and the full source
+# list is well beyond that, so run the tool in batches. Every batch runs even
+# after a failure so a single invocation still reports all findings.
+set(_batch_size 100)
+set(_failures "")
+math(EXPR _last_index "${_count} - 1")
+foreach(_start RANGE 0 ${_last_index} ${_batch_size})
+    list(SUBLIST _all_sources ${_start} ${_batch_size} _batch)
+    if(TOOL STREQUAL "format")
+        execute_process(COMMAND ${TOOL_EXE} -i ${_batch} RESULT_VARIABLE _result)
+    else()
+        execute_process(
+            COMMAND ${TOOL_EXE} -p ${BINARY_DIR} ${_batch}
+            RESULT_VARIABLE _result
+        )
+    endif()
+    if(NOT _result EQUAL 0)
+        list(APPEND _failures "${_result}")
+    endif()
+endforeach()
+
+if(_failures)
+    message(FATAL_ERROR "${TOOL_EXE} failed (exit codes: ${_failures})")
 endif()
