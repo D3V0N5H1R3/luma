@@ -104,7 +104,7 @@ namespace luma {
 // ─────────── Value::to_string ───────────
 
 std::string Value::to_string() const {
-    const runtime::RecursionGuard guard{runtime::RecursionKind::to_string};
+    const runtime::RecursionGuard guard{runtime::RecursionKind::ToString};
     if (!guard.entered()) {
         return "...";
     }

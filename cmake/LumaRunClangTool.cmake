@@ -34,6 +34,23 @@ else()
         "LumaRunClangTool: unknown TOOL '${TOOL}' (expected 'format' or 'tidy')")
 endif()
 
+# .clang-format uses clang-format 20 option spellings that older versions reject
+# outright, so fail with an actionable message instead of one config-parse error
+# per file. A banner without a recognisable version is let through.
+if(TOOL STREQUAL "format")
+    execute_process(
+        COMMAND ${TOOL_EXE} --version
+        OUTPUT_VARIABLE _version_banner
+        ERROR_QUIET
+    )
+    if(_version_banner MATCHES "version ([0-9]+)" AND CMAKE_MATCH_1 LESS 20)
+        message(FATAL_ERROR
+            "LumaRunClangTool: ${TOOL_EXE} is clang-format ${CMAKE_MATCH_1}; "
+            "version 20 or later is required to parse .clang-format. Install "
+            "clang-format 20+ and reconfigure (or set LUMA_CLANG_FORMAT_EXE).")
+    endif()
+endif()
+
 # clang-tidy needs -p <build dir> to locate compile_commands.json; without a
 # non-empty BINARY_DIR it would be invoked with an empty path and fail with
 # misleading errors instead of a clear "missing required parameter" message.

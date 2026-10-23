@@ -17,7 +17,7 @@ pin:
 - **GCC 14** (`gcc-14` / `g++-14`), **CMake**, **Ninja**, and **Make**.
 - **Clang 18** (`clang-18` / `clang++-18`) with the **compiler-rt** runtimes —
   builds the LibFuzzer fuzz targets in [`fuzz/`](../fuzz).
-- **clang-format 18** and **clang-tidy 18** — the C++ formatting and
+- **clang-format 20** and **clang-tidy 18** — the C++ formatting and
   static-analysis gates.
 - **GDB** and **lcov** for native debugging and the coverage preset.
 - **Xvfb** — a headless X server for the VS Code extension's Electron

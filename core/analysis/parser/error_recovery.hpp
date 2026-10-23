@@ -24,9 +24,9 @@ namespace luma {
 namespace error_recovery {
 
 enum class Strategy {
-    skip_and_retry,  // Skip current token and try again
-    insert_expected, // Pretend the expected token was there
-    synchronize      // Skip to next statement boundary
+    SkipAndRetry,   // Skip current token and try again
+    InsertExpected, // Pretend the expected token was there
+    Synchronize     // Skip to next statement boundary
 };
 
 /// Check if a token is one of the top-level declaration keywords
@@ -97,24 +97,24 @@ enum class Strategy {
     // Strategy 1: The next token matches — assume the current token is
     // extraneous.  Skip it and consume the expected one.
     if (!at_end && next == expected) {
-        return Strategy::skip_and_retry;
+        return Strategy::SkipAndRetry;
     }
 
     // Strategy 2: For closing delimiters, assume the token was simply
     // omitted and continue without consuming anything.
     if (is_closing_delimiter(expected)) {
-        return Strategy::insert_expected;
+        return Strategy::InsertExpected;
     }
 
     // Strategy 3: The current token looks like it could start the next
     // construct — let the caller continue (the missing token is
     // implicitly inserted).
     if (is_statement_start(found)) {
-        return Strategy::insert_expected;
+        return Strategy::InsertExpected;
     }
 
     // Cannot recover locally — synchronize to a statement boundary.
-    return Strategy::synchronize;
+    return Strategy::Synchronize;
 }
 
 } // namespace error_recovery

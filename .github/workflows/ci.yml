@@ -240,7 +240,11 @@ jobs:
 
   static-analysis:
     name: Static Analysis (clang-tidy)
-    runs-on: ubuntu-latest
+    # Pinned: installs the versioned clang-tidy-18 package (the version
+    # .clang-tidy targets). An unpinned runner image would silently pull a newer
+    # clang-tidy whose new bugprone-* checks — escalated to errors in
+    # .clang-tidy — fail the job on unchanged code.
+    runs-on: ubuntu-24.04
     # The sweep is split into shards that run as concurrent jobs, so together
     # they still cover every source file but each finishes in roughly a quarter
     # of the wall-clock. A single job — even parallelised across the runner's
@@ -261,10 +265,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install clang-tidy
+      - name: Install clang-tidy-18
         uses: ./.github/actions/apt-install
         with:
-          packages: clang-tidy clang
+          packages: clang-tidy-18 clang-18
 
       # Only configure (to generate compile_commands.json and configured
       # headers); clang-tidy parses the sources itself, so a full build is
@@ -274,8 +278,8 @@ jobs:
           cmake -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_COMPILER=clang++-18
 
       # The real-bug categories escalated to errors are defined once in
       # .clang-tidy (WarningsAsErrors); CI relies on that single source of truth
@@ -296,7 +300,7 @@ jobs:
             ! -name '*_win32.cpp' \
             | sort \
             | awk 'NR % 4 == ${{ matrix.shard }}' \
-            | xargs -P "$(nproc)" -n 1 clang-tidy -p build \
+            | xargs -P "$(nproc)" -n 1 clang-tidy-18 -p build \
             2>&1 | tee clang-tidy-report.txt
 
       # The report is a diagnostic convenience, not the gate — the clang-tidy
@@ -313,7 +317,10 @@ jobs:
 
   formatting:
     name: Formatting (clang-format)
-    # Pinned: installs the versioned clang-format-18 package.
+    # Pinned: installs the versioned clang-format-20 package — the minimum that
+    # parses .clang-format (its KeepEmptyLines / BinPackParameters /
+    # ReflowComments spellings are 20+). Unlike clang-tidy, the formatter can
+    # move ahead of the Clang 18 toolchain: it only reads source text.
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -323,10 +330,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install clang-format-18
+      - name: Install clang-format-20
         uses: ./.github/actions/apt-install
         with:
-          packages: clang-format-18
+          packages: clang-format-20
 
       # Mirrors the `format` target in cmake/LumaRunClangTool.cmake: clang-format
       # covers core, shared, language-server/source, debugger/source, tests, and
@@ -337,7 +344,7 @@ jobs:
           set -o pipefail
           find core shared language-server/source debugger/source tests fuzz \
             \( -name '*.cpp' -o -name '*.hpp' \) \
-            -exec clang-format-18 --dry-run --Werror {} + \
+            -exec clang-format-20 --dry-run --Werror {} + \
             2>&1 | tee clang-format-report.txt
 
       - name: Upload clang-format report

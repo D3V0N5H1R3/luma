@@ -110,7 +110,7 @@ public:
                 // treated as fatal, while an ordinary framing ParseError stays
                 // transient and recoverable.
                 auto action = recovery.on_error(protocol::classify_read_error(e));
-                if (action == protocol::RecoveryAction::shutdown) {
+                if (action == protocol::RecoveryAction::Shutdown) {
                     std::cerr << "DAP: shutting down after read error: " << e.what() << '\n';
                     break;
                 }
@@ -122,7 +122,7 @@ public:
             } catch (const std::exception& e) {
                 std::cerr << "DAP: unexpected error reading message: " << e.what() << '\n';
                 auto action = recovery.on_error(protocol::classify_read_error(e));
-                if (action == protocol::RecoveryAction::shutdown) {
+                if (action == protocol::RecoveryAction::Shutdown) {
                     std::cerr << "DAP: shutting down after " << recovery.consecutive_errors()
                               << " consecutive read errors\n";
                     break;
@@ -132,8 +132,8 @@ public:
 
             if (!message.has_value()) {
                 if (transport_.had_recoverable_read_error()) {
-                    auto action = recovery.on_error(protocol::ErrorSeverity::transient);
-                    if (action == protocol::RecoveryAction::shutdown) {
+                    auto action = recovery.on_error(protocol::ErrorSeverity::Transient);
+                    if (action == protocol::RecoveryAction::Shutdown) {
                         break;
                     }
                     continue;

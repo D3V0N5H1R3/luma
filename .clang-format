@@ -8,7 +8,9 @@
 # Visual Studio, Xcode, and Zed for automatic
 # code formatting.
 #
-# Requires clang-format 18 or later.
+# Requires clang-format 20 or later (the
+# KeepEmptyLines, BinPackParameters, and
+# ReflowComments spellings below are 20+).
 # ─────────────────────────────────────────────
 
 Language: Cpp
@@ -76,7 +78,7 @@ AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 AllowShortLambdasOnASingleLine: Inline
 BinPackArguments: true
-BinPackParameters: true
+BinPackParameters: BinPack
 BreakBeforeBinaryOperators: None
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializers: BeforeColon
@@ -92,7 +94,10 @@ BreakAfterAttributes: Leave
 
 # ── Empty lines ──
 EmptyLineBeforeAccessModifier: Always
-KeepEmptyLinesAtTheStartOfBlocks: false
+KeepEmptyLines:
+  AtEndOfFile: false
+  AtStartOfBlock: false
+  AtStartOfFile: true
 MaxEmptyLinesToKeep: 1
 SeparateDefinitionBlocks: Always
 
@@ -107,4 +112,4 @@ LineEnding: LF
 # ── Miscellaneous ──
 FixNamespaceComments: true
 CompactNamespaces: false
-ReflowComments: false
+ReflowComments: Never

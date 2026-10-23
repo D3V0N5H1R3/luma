@@ -90,9 +90,9 @@
             ],
             "settings": {
                 "cmake.configureOnOpen": true,
-                // The image installs clang-format 18 (the CI formatting gate), so
+                // The image installs clang-format 20 (the CI formatting gate), so
                 // format-on-save never falls back to the extension's bundled build.
-                "C_Cpp.clang_format_path": "/usr/bin/clang-format-18"
+                "C_Cpp.clang_format_path": "/usr/bin/clang-format-20"
             }
         }
     }

@@ -5,7 +5,7 @@ The hook reads the lifecycle payload as JSON on stdin, pulls the edited file
 path(s) out of the tool arguments — including the headers of a patch-format
 (``apply_patch``) edit — and, when a target is a first-party C++ translation
 unit or header (inside the repository, outside ``external/``) that exists on
-disk, reformats it in place with ``clang-format`` (18+). This mirrors the
+disk, reformats it in place with ``clang-format`` (20+). This mirrors the
 project's ``scripts/git-hooks/pre-commit`` gate and the CI *Formatting* job, so
 edits made by the agent land already matching ``.clang-format`` instead of
 failing the check later. An editor tool's read-only ``view`` command is ignored.
@@ -43,8 +43,9 @@ from hook_common import (
     read_payload,
 )
 
-# The project requires clang-format 18+ to match CI and the pre-commit hook.
-MIN_CLANG_FORMAT_MAJOR = 18
+# The project requires clang-format 20+ (the minimum that parses .clang-format)
+# to match CI and the pre-commit hook.
+MIN_CLANG_FORMAT_MAJOR = 20
 
 # Only these suffixes are formatted — the exact set the pre-commit hook and the
 # CI Formatting job cover (the first-party C++ tree uses .cpp/.hpp throughout).
@@ -57,7 +58,7 @@ FORMAT_TIMEOUT = 20
 
 
 def clang_format_is_usable(executable: str) -> bool:
-    """Return True when ``clang-format`` runs and reports version 18 or newer."""
+    """Return True when ``clang-format`` runs and reports version 20 or newer."""
     try:
         result = subprocess.run(
             [executable, "--version"],
@@ -70,7 +71,9 @@ def clang_format_is_usable(executable: str) -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
 
-    match = re.search(r"(\d+)", result.stdout)
+    # Take the number after "version" (as the pre-commit hook does) so a vendor
+    # prefix with digits in the banner cannot be mistaken for the major version.
+    match = re.search(r"version (\d+)", result.stdout)
     return match is not None and int(match.group(1)) >= MIN_CLANG_FORMAT_MAJOR
 
 

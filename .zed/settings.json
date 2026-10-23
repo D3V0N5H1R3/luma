@@ -33,9 +33,9 @@
             "tab_size": 4,
             // Format with clang-format from PATH rather than clangd's built-in
             // formatter: Zed auto-downloads the latest clangd, whose formatter can
-            // differ from the clang-format 18 that CI enforces and reformat code
+            // differ from the clang-format 20 that CI enforces and reformat code
             // you did not touch. Workspace settings override user settings, so
-            // `clang-format` on PATH must be version 18; see CONTRIBUTING.md →
+            // `clang-format` on PATH must be version 20; see CONTRIBUTING.md →
             // Editor Integration → Zed → Formatting.
             "formatter": {
                 "external": {

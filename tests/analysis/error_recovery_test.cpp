@@ -11,7 +11,7 @@ using namespace luma;
 static void test_skip_and_retry_when_next_matches() {
     auto strategy = error_recovery::choose_strategy(TokenType::RightParen, TokenType::Comma,
                                                     TokenType::RightParen, false);
-    ASSERT_EQ(strategy, error_recovery::Strategy::skip_and_retry);
+    ASSERT_EQ(strategy, error_recovery::Strategy::SkipAndRetry);
 }
 
 static void test_skip_and_retry_not_at_end() {
@@ -19,46 +19,45 @@ static void test_skip_and_retry_not_at_end() {
     auto strategy = error_recovery::choose_strategy(TokenType::RightParen, TokenType::Comma,
                                                     TokenType::RightParen, true);
     // at_end == true, so skip_and_retry is not selected even if next matches.
-    ASSERT_NE(static_cast<int>(strategy),
-              static_cast<int>(error_recovery::Strategy::skip_and_retry));
+    ASSERT_NE(static_cast<int>(strategy), static_cast<int>(error_recovery::Strategy::SkipAndRetry));
 }
 
 static void test_insert_expected_for_closing_delimiter_rparen() {
     auto strategy = error_recovery::choose_strategy(
         TokenType::RightParen, TokenType::IntegerLiteral, TokenType::Comma, false);
-    ASSERT_EQ(strategy, error_recovery::Strategy::insert_expected);
+    ASSERT_EQ(strategy, error_recovery::Strategy::InsertExpected);
 }
 
 static void test_insert_expected_for_closing_delimiter_rbrace() {
     auto strategy = error_recovery::choose_strategy(TokenType::RightBrace, TokenType::Identifier,
                                                     TokenType::EndOfFile, false);
-    ASSERT_EQ(strategy, error_recovery::Strategy::insert_expected);
+    ASSERT_EQ(strategy, error_recovery::Strategy::InsertExpected);
 }
 
 static void test_insert_expected_for_closing_delimiter_rbracket() {
     auto strategy = error_recovery::choose_strategy(TokenType::RightBracket, TokenType::Identifier,
                                                     TokenType::Plus, false);
-    ASSERT_EQ(strategy, error_recovery::Strategy::insert_expected);
+    ASSERT_EQ(strategy, error_recovery::Strategy::InsertExpected);
 }
 
 static void test_insert_expected_when_found_is_statement_start() {
     // Expected something else, but found a statement-starting token.
     auto strategy = error_recovery::choose_strategy(TokenType::Equals, TokenType::If,
                                                     TokenType::LeftBrace, false);
-    ASSERT_EQ(strategy, error_recovery::Strategy::insert_expected);
+    ASSERT_EQ(strategy, error_recovery::Strategy::InsertExpected);
 }
 
 static void test_synchronize_as_fallback() {
     // None of the special conditions match — fall back to synchronize.
     auto strategy =
         error_recovery::choose_strategy(TokenType::Colon, TokenType::Plus, TokenType::Star, false);
-    ASSERT_EQ(strategy, error_recovery::Strategy::synchronize);
+    ASSERT_EQ(strategy, error_recovery::Strategy::Synchronize);
 }
 
 static void test_synchronize_at_eof() {
     auto strategy = error_recovery::choose_strategy(TokenType::Colon, TokenType::Plus,
                                                     TokenType::EndOfFile, true);
-    ASSERT_EQ(strategy, error_recovery::Strategy::synchronize);
+    ASSERT_EQ(strategy, error_recovery::Strategy::Synchronize);
 }
 
 // ─── is_statement_start tests ───

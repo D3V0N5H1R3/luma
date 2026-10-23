@@ -264,15 +264,15 @@ bool BytecodeSerializer::deserialize_chunk(Reader& r, Chunk& chunk) {
 
 // Bit flags for the per-function flags byte in the serialized format.
 enum class SerializedFunctionFlags : std::uint8_t {
-    is_main = 0x01,
-    is_test = 0x02,
-    is_verified = 0x04,
+    IsMain = 0x01,
+    IsTest = 0x02,
+    IsVerified = 0x04,
 };
 
 // Bit flags for the per-upvalue flags byte in the serialized format.
 enum class SerializedUpvalueFlags : std::uint8_t {
-    is_local = 0x01,
-    is_mutable = 0x02,
+    IsLocal = 0x01,
+    IsMutable = 0x02,
 };
 
 void BytecodeSerializer::serialize_function(Writer& w, const CompiledFunction& func) {
@@ -284,13 +284,13 @@ void BytecodeSerializer::serialize_function(Writer& w, const CompiledFunction& f
     // Flags byte: bit 0 = is_main, bit 1 = is_test, bit 2 = is_verified.
     std::uint8_t flags = 0;
     if (func.is_main) {
-        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::is_main);
+        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::IsMain);
     }
     if (func.is_test) {
-        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::is_test);
+        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::IsTest);
     }
     if (func.is_verified()) {
-        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::is_verified);
+        flags |= static_cast<std::uint8_t>(SerializedFunctionFlags::IsVerified);
     }
     w.write_u8(flags);
 
@@ -317,8 +317,8 @@ void BytecodeSerializer::serialize_function(Writer& w, const CompiledFunction& f
     for (const auto& uv : func.upvalues) {
         w.write_u16(uv.index);
         std::uint8_t uv_flags =
-            (uv.is_local ? static_cast<std::uint8_t>(SerializedUpvalueFlags::is_local) : 0) |
-            (uv.is_mutable ? static_cast<std::uint8_t>(SerializedUpvalueFlags::is_mutable) : 0);
+            (uv.is_local ? static_cast<std::uint8_t>(SerializedUpvalueFlags::IsLocal) : 0) |
+            (uv.is_mutable ? static_cast<std::uint8_t>(SerializedUpvalueFlags::IsMutable) : 0);
         w.write_u8(uv_flags);
     }
 
@@ -337,10 +337,10 @@ std::optional<CompiledFunction> BytecodeSerializer::deserialize_function(Reader&
     func.upvalue_count = static_cast<int>(r.read_u16());
 
     auto flags = r.read_u8();
-    func.is_main = (flags & static_cast<std::uint8_t>(SerializedFunctionFlags::is_main)) != 0;
-    func.is_test = (flags & static_cast<std::uint8_t>(SerializedFunctionFlags::is_test)) != 0;
-    func.set_is_verified(
-        (flags & static_cast<std::uint8_t>(SerializedFunctionFlags::is_verified)) != 0);
+    func.is_main = (flags & static_cast<std::uint8_t>(SerializedFunctionFlags::IsMain)) != 0;
+    func.is_test = (flags & static_cast<std::uint8_t>(SerializedFunctionFlags::IsTest)) != 0;
+    func.set_is_verified((flags & static_cast<std::uint8_t>(SerializedFunctionFlags::IsVerified)) !=
+                         0);
 
     if (r.error()) {
         return std::nullopt;
@@ -418,9 +418,9 @@ std::optional<CompiledFunction> BytecodeSerializer::deserialize_function(Reader&
         CompiledFunction::Upvalue uv;
         uv.index = r.read_u16();
         auto uv_flags = r.read_u8();
-        uv.is_local = (uv_flags & static_cast<std::uint8_t>(SerializedUpvalueFlags::is_local)) != 0;
+        uv.is_local = (uv_flags & static_cast<std::uint8_t>(SerializedUpvalueFlags::IsLocal)) != 0;
         uv.is_mutable =
-            (uv_flags & static_cast<std::uint8_t>(SerializedUpvalueFlags::is_mutable)) != 0;
+            (uv_flags & static_cast<std::uint8_t>(SerializedUpvalueFlags::IsMutable)) != 0;
         func.upvalues.push_back(uv);
     }
 

@@ -266,7 +266,7 @@ workflow; the equivalents below are what `scripts/lint.py` invokes under the
 hood:
 
 ```bash
-# C++ formatting — clang-format >= 18 (apt-get install clang-format)
+# C++ formatting — clang-format >= 20 (apt-get install clang-format-20)
 find core shared language-server/source debugger/source tests fuzz \( -name '*.cpp' -o -name '*.hpp' \) -exec clang-format --dry-run --Werror {} +
 
 # C++ static analysis — clang-tidy >= 18 (apt-get install clang-tidy); needs a configured build/
@@ -470,11 +470,11 @@ The Luma extension resolves `luma_lsp`, `luma`, and `luma_dap` binaries automati
 }
 ```
 
-**Formatting:** The C/C++ extension formats C++ on save using the repository's `.clang-format`, pre-configured in `.vscode/settings.json`. It runs `clang-format` from your `PATH`, falling back to the copy bundled with the extension — whose version usually differs from the **clang-format 18** that CI enforces, so it can reformat code you did not touch. Install clang-format 18 on your `PATH`, or point `C_Cpp.clang_format_path` at it in your **user** settings (it is machine-specific, so the workspace leaves it unset). Check the version with `clang-format --version`. Typical clang-format 18 paths:
+**Formatting:** The C/C++ extension formats C++ on save using the repository's `.clang-format`, pre-configured in `.vscode/settings.json`. It runs `clang-format` from your `PATH`, falling back to the copy bundled with the extension — whose version usually differs from the **clang-format 20** that CI enforces, so it can reformat code you did not touch. Install clang-format 20 on your `PATH`, or point `C_Cpp.clang_format_path` at it in your **user** settings (it is machine-specific, so the workspace leaves it unset). Check the version with `clang-format --version`. Typical clang-format 20 paths:
 
-- **Windows** (LLVM 18 installer): `C:\Program Files\LLVM\bin\clang-format.exe`
-- **macOS** (Homebrew `llvm@18`): the output of `echo "$(brew --prefix llvm@18)/bin/clang-format"`
-- **Linux** (Debian/Ubuntu `clang-format-18` package): `/usr/bin/clang-format-18`
+- **Windows** (LLVM 20 installer): `C:\Program Files\LLVM\bin\clang-format.exe`
+- **macOS** (Homebrew `llvm@20`): the output of `echo "$(brew --prefix llvm@20)/bin/clang-format"`
+- **Linux** (Debian/Ubuntu `clang-format-20` package): `/usr/bin/clang-format-20`
 
 The Dev Container already sets this. Python, Rust, TypeScript/JavaScript, and PowerShell files use Ruff, rust-analyzer (`rustfmt`), Prettier, and the PowerShell extension as their default formatters; format-on-save is enabled only for C++.
 
@@ -494,11 +494,11 @@ cp -r extensions/zed ~/.local/share/zed/extensions/luma
 
 **Debugging Luma programs:** Open a `.luma` file, set breakpoints, then Command Palette → **debugger: start** → select the **Luma** adapter and the **Launch** request. (The extension also registers a locator, so the ▶ run affordance on a `@main` function can start a debug session too.) Ensure `luma_dap` is on your `PATH`, or let the extension download it. See [extensions/zed/DIRECTORY.md](extensions/zed/DIRECTORY.md#debugger-setup) for a `debug.json` example.
 
-**Formatting:** `.zed/settings.json` formats C++ on save with `clang-format` from your `PATH` (as an external formatter), not clangd's built-in formatter. Zed auto-downloads the latest clangd, whose formatter may differ from the **clang-format 18** that CI enforces. Workspace settings take precedence over user settings, so the command must resolve as plain `clang-format` (version 18), or saving a C++ file reports a formatter error. Check with `clang-format --version`:
+**Formatting:** `.zed/settings.json` formats C++ on save with `clang-format` from your `PATH` (as an external formatter), not clangd's built-in formatter. Zed auto-downloads the latest clangd, whose formatter may differ from the **clang-format 20** that CI enforces. Workspace settings take precedence over user settings, so the command must resolve as plain `clang-format` (version 20), or saving a C++ file reports a formatter error. Check with `clang-format --version`:
 
-- **Windows** (LLVM 18 installer): add `C:\Program Files\LLVM\bin` to `PATH`.
-- **macOS** (Homebrew `llvm@18`, which is keg-only): add `$(brew --prefix llvm@18)/bin` to `PATH`.
-- **Linux** (Debian/Ubuntu `clang-format-18` package, installed as `clang-format-18`): `sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100`. The Dev Container already does this.
+- **Windows** (LLVM 20 installer): add `C:\Program Files\LLVM\bin` to `PATH`.
+- **macOS** (Homebrew `llvm@20`, which is keg-only): add `$(brew --prefix llvm@20)/bin` to `PATH`.
+- **Linux** (Debian/Ubuntu `clang-format-20` package, installed as `clang-format-20`): `sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-20 100`. The Dev Container already does this.
 
 **LSP features:** Once the language server is available, completions, hover, diagnostics, and code snippets work automatically.
 

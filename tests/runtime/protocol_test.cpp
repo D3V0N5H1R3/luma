@@ -650,12 +650,12 @@ static void test_utf16_byte_offset_roundtrip_mixed() {
 
 static void test_classify_connection_closed_is_fatal() {
     ConnectionClosed e{"pipe gone"};
-    ASSERT_EQ(classify_read_error(e), ErrorSeverity::fatal);
+    ASSERT_EQ(classify_read_error(e), ErrorSeverity::Fatal);
 }
 
 static void test_classify_parse_error_is_transient() {
     ParseError e{"bad header"};
-    ASSERT_EQ(classify_read_error(e), ErrorSeverity::transient);
+    ASSERT_EQ(classify_read_error(e), ErrorSeverity::Transient);
 }
 
 static void test_classify_resync_error_is_fatal() {
@@ -663,50 +663,50 @@ static void test_classify_resync_error_is_fatal() {
     // header — the stream is unrecoverably corrupt, so it must be fatal even
     // though it derives from the (transient) protocol::ParseError.
     ResyncError e{"Resync failed: no Content-Length header found"};
-    ASSERT_EQ(classify_read_error(e), ErrorSeverity::fatal);
+    ASSERT_EQ(classify_read_error(e), ErrorSeverity::Fatal);
 }
 
 static void test_classify_transport_error_is_fatal() {
     TransportError e{"io failure"};
-    ASSERT_EQ(classify_read_error(e), ErrorSeverity::fatal);
+    ASSERT_EQ(classify_read_error(e), ErrorSeverity::Fatal);
 }
 
 static void test_classify_unknown_exception_is_transient() {
     std::runtime_error e{"something else"};
-    ASSERT_EQ(classify_read_error(e), ErrorSeverity::transient);
+    ASSERT_EQ(classify_read_error(e), ErrorSeverity::Transient);
 }
 
 static void test_recovery_state_fatal_shuts_down() {
     ErrorRecoveryState recovery;
-    ASSERT_EQ(recovery.on_error(ErrorSeverity::fatal), RecoveryAction::shutdown);
+    ASSERT_EQ(recovery.on_error(ErrorSeverity::Fatal), RecoveryAction::Shutdown);
     // A fatal error does not touch the transient counter.
     ASSERT_EQ(recovery.consecutive_errors(), 0u);
 }
 
 static void test_recovery_state_transient_continues() {
     ErrorRecoveryState recovery{3};
-    ASSERT_EQ(recovery.on_error(ErrorSeverity::transient), RecoveryAction::skip_and_continue);
+    ASSERT_EQ(recovery.on_error(ErrorSeverity::Transient), RecoveryAction::SkipAndContinue);
     ASSERT_EQ(recovery.consecutive_errors(), 1u);
 }
 
 static void test_recovery_state_threshold_shuts_down() {
     ErrorRecoveryState recovery{3};
-    ASSERT_EQ(recovery.on_error(ErrorSeverity::transient), RecoveryAction::skip_and_continue);
-    ASSERT_EQ(recovery.on_error(ErrorSeverity::transient), RecoveryAction::skip_and_continue);
+    ASSERT_EQ(recovery.on_error(ErrorSeverity::Transient), RecoveryAction::SkipAndContinue);
+    ASSERT_EQ(recovery.on_error(ErrorSeverity::Transient), RecoveryAction::SkipAndContinue);
     // The third consecutive transient error reaches the threshold.
-    ASSERT_EQ(recovery.on_error(ErrorSeverity::transient), RecoveryAction::shutdown);
+    ASSERT_EQ(recovery.on_error(ErrorSeverity::Transient), RecoveryAction::Shutdown);
     ASSERT_EQ(recovery.consecutive_errors(), 3u);
 }
 
 static void test_recovery_state_success_resets_counter() {
     ErrorRecoveryState recovery{3};
-    ASSERT_EQ(recovery.on_error(ErrorSeverity::transient), RecoveryAction::skip_and_continue);
-    ASSERT_EQ(recovery.on_error(ErrorSeverity::transient), RecoveryAction::skip_and_continue);
+    ASSERT_EQ(recovery.on_error(ErrorSeverity::Transient), RecoveryAction::SkipAndContinue);
+    ASSERT_EQ(recovery.on_error(ErrorSeverity::Transient), RecoveryAction::SkipAndContinue);
     ASSERT_EQ(recovery.consecutive_errors(), 2u);
     recovery.on_success();
     ASSERT_EQ(recovery.consecutive_errors(), 0u);
     // After a reset the counter climbs from zero again.
-    ASSERT_EQ(recovery.on_error(ErrorSeverity::transient), RecoveryAction::skip_and_continue);
+    ASSERT_EQ(recovery.on_error(ErrorSeverity::Transient), RecoveryAction::SkipAndContinue);
 }
 
 static void test_recovery_state_default_threshold() {

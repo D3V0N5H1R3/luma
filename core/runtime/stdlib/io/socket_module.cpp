@@ -97,7 +97,7 @@ using AddrInfoPtr = std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)>;
         return AddrInfoPtr{nullptr, freeaddrinfo};
     }
 
-    struct addrinfo hints {};
+    struct addrinfo hints{};
 
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = socktype;
@@ -806,7 +806,7 @@ static void register_socket_server(const EnvPtr& env) {
                 return make_failure_value("socket is not a server socket");
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1215,7 +1215,7 @@ static void register_socket_introspection(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1238,7 +1238,7 @@ static void register_socket_introspection(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1262,7 +1262,7 @@ static void register_socket_introspection(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 
@@ -1283,7 +1283,7 @@ static void register_socket_introspection(const EnvPtr& env) {
                 return *err;
             }
 
-            struct sockaddr_storage addr {};
+            struct sockaddr_storage addr{};
 
             auto addr_len = static_cast<socklen_t>(sizeof(addr));
 

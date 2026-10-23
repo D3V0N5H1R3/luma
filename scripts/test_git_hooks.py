@@ -33,7 +33,7 @@ COMMIT_MSG = HOOKS_DIR / "commit-msg"
 
 CLANG_FORMAT_STUB = """#!/bin/sh
 if [ "$1" = "--version" ]; then
-    echo "${STUB_CLANG_FORMAT_BANNER:-clang-format version 18.1.8}"
+    echo "${STUB_CLANG_FORMAT_BANNER:-clang-format version 20.1.8}"
     exit 0
 fi
 for arg; do
@@ -247,15 +247,15 @@ class PreCommitTest(GitHookTestCase):
         self.assertEqual(self.run_hook(PRE_COMMIT).returncode, 1)
 
     def test_old_clang_format_is_skipped(self) -> None:
-        self.env["STUB_CLANG_FORMAT_BANNER"] = "Homebrew 2 clang-format version 17.0.1"
+        self.env["STUB_CLANG_FORMAT_BANNER"] = "Homebrew 2 clang-format version 19.1.7"
         self.write("core/a.cpp", "BAD\n")
         self.git("add", "core/a.cpp")
         result = self.run_hook(PRE_COMMIT)
         self.assertEqual(result.returncode, 0)
-        self.assertIn("version 17 found", result.stderr)
+        self.assertIn("version 19 found", result.stderr)
 
     def test_vendor_banner_with_new_version_is_used(self) -> None:
-        self.env["STUB_CLANG_FORMAT_BANNER"] = "Ubuntu 2 clang-format version 18.1.3 (1ubuntu1)"
+        self.env["STUB_CLANG_FORMAT_BANNER"] = "Ubuntu 2 clang-format version 20.1.2 (1ubuntu1)"
         self.write("core/a.cpp", "BAD\n")
         self.git("add", "core/a.cpp")
         self.assertEqual(self.run_hook(PRE_COMMIT).returncode, 1)

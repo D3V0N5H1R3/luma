@@ -116,7 +116,7 @@ namespace luma {
 // ─────────── Value::deep_copy ───────────
 
 Value Value::deep_copy() const {
-    const runtime::RecursionGuard guard{runtime::RecursionKind::deep_copy};
+    const runtime::RecursionGuard guard{runtime::RecursionKind::DeepCopy};
     if (!guard.entered()) {
         throw RuntimeError{"deep_copy: maximum nesting depth exceeded", {}};
     }

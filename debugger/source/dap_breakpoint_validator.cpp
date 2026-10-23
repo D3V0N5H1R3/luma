@@ -78,14 +78,14 @@ ParsedHitCondition parse_hit_condition(std::string_view trimmed) {
 // ─── Consolidated hit condition parsing ───
 
 enum class HitConditionStatus {
-    ok,
-    empty,
-    not_a_number,
-    out_of_range,
+    Ok,
+    Empty,
+    NotANumber,
+    OutOfRange,
 };
 
 struct HitConditionResult {
-    HitConditionStatus status{HitConditionStatus::empty};
+    HitConditionStatus status{HitConditionStatus::Empty};
     ParsedHitCondition parsed;
 };
 
@@ -93,21 +93,21 @@ struct HitConditionResult {
 // Handles empty/whitespace input and catches parse exceptions.
 [[nodiscard]] HitConditionResult try_parse_hit_condition(const std::string& hc) {
     if (hc.empty()) {
-        return {.status = HitConditionStatus::empty, .parsed = {}};
+        return {.status = HitConditionStatus::Empty, .parsed = {}};
     }
 
     const auto trimmed = trim(hc);
 
     if (trimmed.empty()) {
-        return {.status = HitConditionStatus::empty, .parsed = {}};
+        return {.status = HitConditionStatus::Empty, .parsed = {}};
     }
 
     try {
-        return {.status = HitConditionStatus::ok, .parsed = parse_hit_condition(trimmed)};
+        return {.status = HitConditionStatus::Ok, .parsed = parse_hit_condition(trimmed)};
     } catch (const std::out_of_range&) {
-        return {.status = HitConditionStatus::out_of_range, .parsed = {}};
+        return {.status = HitConditionStatus::OutOfRange, .parsed = {}};
     } catch (const std::invalid_argument&) {
-        return {.status = HitConditionStatus::not_a_number, .parsed = {}};
+        return {.status = HitConditionStatus::NotANumber, .parsed = {}};
     }
 }
 
@@ -119,21 +119,21 @@ std::string validate_hit_condition(const std::string& hc) {
     const auto [status, parsed] = try_parse_hit_condition(hc);
 
     switch (status) {
-        case HitConditionStatus::ok:
+        case HitConditionStatus::Ok:
             if (parsed.op != nullptr && parsed.op->prefix == "%" && parsed.value <= 0) {
                 return std::format("Modulo value must be positive: '{}'", hc);
             }
 
             return "";
-        case HitConditionStatus::empty:
+        case HitConditionStatus::Empty:
             if (!hc.empty()) {
                 return std::format("Invalid hit condition: '{}'", hc);
             }
 
             return "";
-        case HitConditionStatus::not_a_number:
+        case HitConditionStatus::NotANumber:
             return std::format("Invalid hit condition (not a number): '{}'", hc);
-        case HitConditionStatus::out_of_range:
+        case HitConditionStatus::OutOfRange:
             return std::format("Hit condition value out of range: '{}'", hc);
     }
 
@@ -143,8 +143,8 @@ std::string validate_hit_condition(const std::string& hc) {
 bool evaluate_hit_condition(const std::string& hc, int times_hit) {
     const auto [status, parsed] = try_parse_hit_condition(hc);
 
-    if (status != HitConditionStatus::ok) {
-        return status == HitConditionStatus::empty;
+    if (status != HitConditionStatus::Ok) {
+        return status == HitConditionStatus::Empty;
     }
 
     if (parsed.op != nullptr) {
@@ -178,13 +178,13 @@ void append_hit_condition_warning(Breakpoint& bp, const std::string& hit_conditi
 std::string validate_breakpoint_expression(const BreakpointExpression& expr, int breakpoint_id,
                                            CompiledBreakpointCache& cache) {
     switch (expr.type) {
-        case BreakpointExpressionType::condition: {
+        case BreakpointExpressionType::Condition: {
             const auto& cond = cache.compile_condition(breakpoint_id, expr.source);
             return cond.compile_error;
         }
-        case BreakpointExpressionType::hit_condition:
+        case BreakpointExpressionType::HitCondition:
             return validate_hit_condition(expr.source);
-        case BreakpointExpressionType::log_message: {
+        case BreakpointExpressionType::LogMessage: {
             const auto& log = cache.compile_log_message(breakpoint_id, expr.source);
             return log.compile_error;
         }
@@ -198,17 +198,17 @@ std::vector<BreakpointExpression> collect_breakpoint_expressions(const Breakpoin
 
     if (!bp.condition.empty()) {
         expressions.push_back(
-            {.source = bp.condition, .type = BreakpointExpressionType::condition});
+            {.source = bp.condition, .type = BreakpointExpressionType::Condition});
     }
 
     if (!bp.hit_condition.empty()) {
         expressions.push_back(
-            {.source = bp.hit_condition, .type = BreakpointExpressionType::hit_condition});
+            {.source = bp.hit_condition, .type = BreakpointExpressionType::HitCondition});
     }
 
     if (!bp.log_message.empty()) {
         expressions.push_back(
-            {.source = bp.log_message, .type = BreakpointExpressionType::log_message});
+            {.source = bp.log_message, .type = BreakpointExpressionType::LogMessage});
     }
 
     return expressions;
@@ -220,11 +220,11 @@ namespace {
 
 [[nodiscard]] std::string expression_type_label(BreakpointExpressionType type) {
     switch (type) {
-        case BreakpointExpressionType::condition:
+        case BreakpointExpressionType::Condition:
             return "Condition";
-        case BreakpointExpressionType::hit_condition:
+        case BreakpointExpressionType::HitCondition:
             return "Hit condition";
-        case BreakpointExpressionType::log_message:
+        case BreakpointExpressionType::LogMessage:
             return "Log message";
     }
 

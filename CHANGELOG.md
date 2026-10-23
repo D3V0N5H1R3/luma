@@ -24,6 +24,12 @@ the end of every release.
   `dpkg-shlibdeps` when available, replacing the stale `libc6 (>= 2.31)` floor.
 - **Build — configuring inside the source directory is now rejected**, and
   editing `VERSION` triggers a reconfigure.
+- **Tooling — C++ formatting now requires clang-format 20 or newer** (previously
+  18). `.clang-format` uses the clang-format 20 option spellings, which older
+  versions reject; the CI gate, Dev Container, Git and agent hooks, `lint.py` /
+  `format.py`, and the `format` target all require 20, and skip or fail with a
+  clear message on older versions. clang-tidy stays pinned to 18, and the CI
+  clang-tidy job no longer floats with the `ubuntu-latest` image.
 
 ### Fixed
 
@@ -33,6 +39,9 @@ the end of every release.
 - **Build — the `format` target works on Windows**; it previously exceeded the
   32,767-character command-line limit. The `tidy` target reports a clear error when
   `compile_commands.json` is missing.
+- **Tooling — clang-tidy reports diagnostics in first-party headers on Windows.**
+  The `HeaderFilterRegex` only matched `/` separators, but clang builds header
+  paths with `\` on Windows, so every header finding was silently dropped.
 - **Build — `find_package(Luma)` sets `LUMA_EXECUTABLE`** (previously always
   `NOTFOUND`) and derives `LUMA_EXAMPLES_DIR` from the actual install layout.
 - **Build — the clang-cl fuzz build links the libFuzzer runtime for the target

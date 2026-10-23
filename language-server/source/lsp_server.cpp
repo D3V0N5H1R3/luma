@@ -177,7 +177,7 @@ int LspServer::run() {
         } catch (const std::exception& e) {
             transport_wrapper_.log_message(std::format("Error reading message: {}", e.what()));
             auto action = recovery.on_error(protocol::classify_read_error(e));
-            if (action == protocol::RecoveryAction::shutdown) {
+            if (action == protocol::RecoveryAction::Shutdown) {
                 transport_wrapper_.log_message(
                     std::format("Shutting down after {} consecutive read errors",
                                 recovery.consecutive_errors()));
@@ -188,8 +188,8 @@ int LspServer::run() {
 
         if (!message.has_value()) {
             if (transport_wrapper_.had_recoverable_read_error()) {
-                auto action = recovery.on_error(protocol::ErrorSeverity::transient);
-                if (action == protocol::RecoveryAction::shutdown) {
+                auto action = recovery.on_error(protocol::ErrorSeverity::Transient);
+                if (action == protocol::RecoveryAction::Shutdown) {
                     break;
                 }
                 continue;
