@@ -28,7 +28,7 @@ You are a quality engineer for the Luma programming language interpreter. You ru
 - **Test framework:** Custom C++ framework in `tests/test_framework.hpp` (namespace `luma::test`). Uses `RUN(test_name)` macro and `return SUMMARY()` from `main()`.
 - **Assertion macros:** `ASSERT_EQ`, `ASSERT_NE`, `ASSERT_TRUE`, `ASSERT_FALSE`, `ASSERT_THROWS`, `ASSERT_LT`, `ASSERT_LE`, `ASSERT_GT`, `ASSERT_GE`, `ASSERT_NEAR(a, b, epsilon)`, `ASSERT_SNAPSHOT(name, actual, __FILE__)`.
 - **Test fixtures:** Derive from `TestFixture`, override `set_up()`/`tear_down()`, use `TEST_F(FixtureClass, test_name)`.
-- **Luma tests:** `@test`-annotated functions with `assert()` calls. Run via `luma --test file.luma`.
+- **Luma tests:** `@test`-annotated functions with `assert()` calls. Run via `luma --strict --test file.luma` — the `--strict` flag matches CTest, which promotes lint warnings to errors; the `sandbox` suite also needs `--box`.
 - **Testing guide:** [testing.instructions.md](../../instructions/testing.instructions.md)
 
 ### Test Layout
@@ -45,16 +45,14 @@ You are a quality engineer for the Luma programming language interpreter. You ru
 
 ## Commands
 
-Build and run the full suite with the CMake presets in the **Build and Test**
-section of [copilot-instructions.md](../copilot-instructions.md). For targeted
-runs:
+Build and run the full suite with the CMake presets in the [Build and Test](../copilot-instructions.md#build-and-test) section of `copilot-instructions.md`. For targeted runs:
 
 ```bash
 # Run the Luma feature tests
 python scripts/run_luma_tests.py
 
-# Run a single Luma test file
-build/Release/luma --test tests/features/language/<file>.luma
+# Run a single Luma test file (as CTest does)
+build/Release/luma --strict --test tests/features/language/<file>.luma
 
 # Run a single C++ test binary
 build/Release/<test_name>

@@ -16,30 +16,13 @@ You are a technical writer for the Luma programming language. You read source co
 
 ## Project Knowledge
 
-- **Documentation directory:** `documents/` — all project docs live here.
+- **Documentation directory:** `documents/` holds the design, reference, and guide documents. The root-level `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, and `CHANGELOG.md`, plus the per-directory `DIRECTORY.md` indexes, are also in scope.
 - **Markdown conventions:** [markdown.instructions.md](../../instructions/markdown.instructions.md)
 - **README conventions:** [readme.instructions.md](../../instructions/readme.instructions.md)
 
 ### Key Documents
 
-| Document                             | Purpose                                                   |
-| ------------------------------------ | --------------------------------------------------------- |
-| `Luma_User_Manual.md`                | Complete language reference                               |
-| `Luma_Standard_Library_Reference.md` | Standard library and built-in function reference          |
-| `Luma_Software_Architecture.md`      | Interpreter architecture and modules                      |
-| `Luma_Coding_Guidelines.md`          | Luma coding style and conventions                         |
-| `Luma_Error_Handling.md`             | Error categories and stdlib conventions                   |
-| `Luma_Performance_Guide.md`          | Performance characteristics and advice                    |
-| `Luma_Debugger.md`                   | DAP debugger design                                       |
-| `Luma_Concurrent_Debugging_Guide.md` | Concurrent debugging support                              |
-| `Luma_Language_Server.md`            | LSP implementation                                        |
-| `Luma_Syntax_Highlighting.md`        | Editor extension design                                   |
-| `Luma_REPL_Guide.md`                 | Interactive REPL usage                                    |
-| `Luma_Initial_Concept.md`            | Original design vision (historical)                       |
-| `CONTRIBUTING.md`                    | Development environment setup (all editors)               |
-| `documents/DIRECTORY.md`                | Documentation index (this folder)                         |
-| `CONTRIBUTING.md`                    | Contribution workflow                                     |
-| `README.md`                          | Project overview                                          |
+The authoritative catalogue of every document and its purpose is [documents/DIRECTORY.md](../../documents/DIRECTORY.md) — consult it rather than relying on a copied list. [documents/INDEX.md](../../documents/INDEX.md) maps each document's sections to line ranges for targeted reads.
 
 ## Workflow
 
@@ -48,6 +31,7 @@ You are a technical writer for the Luma programming language. You read source co
 3. Update documentation to match implementation, or flag unimplemented documented features.
 4. Follow [markdown.instructions.md](../../instructions/markdown.instructions.md) for formatting: heading hierarchy, table alignment, code blocks with language identifiers, no skipped heading levels.
 5. Keep explanations concise — two to four sentences per paragraph.
+6. After editing a document listed in `documents/INDEX.md`, re-verify and update its section line ranges — they drift with every content change.
 
 ## Boundaries
 

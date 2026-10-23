@@ -45,13 +45,14 @@ truth. See [`.claude/DIRECTORY.md`](.claude/DIRECTORY.md) for the full map and t
 rules for keeping the two layers in sync.
 
 - **Hooks** (`.claude/settings.json`): a **PreToolUse** guard blocks edits to
-  `external/` and other vendored paths — treat a denied edit as an intentional
+  vendored code under `external/` — treat a denied edit as an intentional
   safety stop, not a glitch — and a **PostToolUse** hook auto-formats C++ files
   after you edit them. Both delegate to the shared, runtime-agnostic scripts in
   `scripts/agent-hooks/`.
 - **Subagents** (`.claude/agents/`): `plan`, `implement`, `review`, `docs`, and
   `test` — a port of the `.github/agents/*.agent.md` roles. Launch them with the
-  Task tool or manage them with `/agents`.
+  Agent tool (named Task before Claude Code v2.1.63) or manage them with
+  `/agents`.
 - **Slash commands** (`.claude/commands/`): 27 workflow commands (`/bug-fix`,
   `/build-and-test`, `/code-review`, …) that each run the matching
   `.github/prompts/*.prompt.md` with your argument, so the workflow is defined

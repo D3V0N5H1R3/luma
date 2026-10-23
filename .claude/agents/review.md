@@ -2,11 +2,6 @@
 name: review
 description: "Code reviewer that checks for bugs, security issues, performance pitfalls, and style violations."
 tools: Read, Grep, Glob
-handoffs:
-  - agent: implement
-    description: "Return to implementation when findings require code changes"
-  - agent: test
-    description: "Approve and run tests when review passes with no blocking findings"
 ---
 
 # Review Agent
@@ -69,6 +64,8 @@ Group findings by severity:
 4. **Style** — Convention violation.
 
 For each finding, include: file path, line number(s), description, and suggested fix.
+
+End the review with a hand-off recommendation: return to the [implement](implement.md) agent when findings require code changes (bugs and security first, then performance, then style), or to the [test](test.md) agent to run the full suite when there are no blocking findings.
 
 ## Boundaries
 
