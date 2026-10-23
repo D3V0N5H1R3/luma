@@ -43,6 +43,15 @@ if(TOOL STREQUAL "tidy" AND NOT BINARY_DIR)
         "(path to the build directory containing compile_commands.json)")
 endif()
 
+# Multi-config Visual Studio / Xcode generators ignore CMAKE_EXPORT_COMPILE_COMMANDS,
+# so fail with an actionable message instead of a wall of clang-tidy errors.
+if(TOOL STREQUAL "tidy" AND NOT EXISTS "${BINARY_DIR}/compile_commands.json")
+    message(FATAL_ERROR
+        "LumaRunClangTool: ${BINARY_DIR}/compile_commands.json not found. "
+        "Configure with a Ninja or Makefile generator (e.g. `cmake --preset ninja`) "
+        "and CMAKE_EXPORT_COMPILE_COMMANDS=ON.")
+endif()
+
 set(_all_sources "")
 foreach(_dir IN LISTS _tool_dirs)
     foreach(_glob IN LISTS _globs)
@@ -59,18 +68,31 @@ endif()
 
 if(TOOL STREQUAL "format")
     message(STATUS "Formatting ${_count} files...")
-    execute_process(
-        COMMAND ${TOOL_EXE} -i ${_all_sources}
-        RESULT_VARIABLE _result
-    )
 else()
     message(STATUS "Running clang-tidy on ${_count} files...")
-    execute_process(
-        COMMAND ${TOOL_EXE} -p ${BINARY_DIR} ${_all_sources}
-        RESULT_VARIABLE _result
-    )
 endif()
 
-if(NOT _result EQUAL 0)
-    message(FATAL_ERROR "${TOOL_EXE} failed with exit code ${_result}")
+# Windows caps a process command line at 32,767 characters and the full source
+# list is well beyond that, so run the tool in batches. Every batch runs even
+# after a failure so a single invocation still reports all findings.
+set(_batch_size 100)
+set(_failures "")
+math(EXPR _last_index "${_count} - 1")
+foreach(_start RANGE 0 ${_last_index} ${_batch_size})
+    list(SUBLIST _all_sources ${_start} ${_batch_size} _batch)
+    if(TOOL STREQUAL "format")
+        execute_process(COMMAND ${TOOL_EXE} -i ${_batch} RESULT_VARIABLE _result)
+    else()
+        execute_process(
+            COMMAND ${TOOL_EXE} -p ${BINARY_DIR} ${_batch}
+            RESULT_VARIABLE _result
+        )
+    endif()
+    if(NOT _result EQUAL 0)
+        list(APPEND _failures "${_result}")
+    endif()
+endforeach()
+
+if(_failures)
+    message(FATAL_ERROR "${TOOL_EXE} failed (exit codes: ${_failures})")
 endif()

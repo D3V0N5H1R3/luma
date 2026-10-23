@@ -224,6 +224,11 @@ target_link_libraries(my_app
 
 Always use the namespaced imported target (`Library::Component`) — never raw variable names like `${OPENSSL_LIBRARIES}`.
 
+**Exception — OS system libraries.** Windows import libraries such as `ws2_32`, `crypt32`,
+`bcrypt`, and `shell32` ship with the SDK and have no imported targets, so link them by
+name inside an `if(WIN32)` guard. Apple frameworks are located with
+`find_library(LUMA_<NAME>_FRAMEWORK <Name> REQUIRED)` and linked through that variable.
+
 > Luma's own third-party dependencies are vendored, not found on the system (see §7.2). The
 > example above illustrates the generic `find_package` pattern; in this project reserve it for
 > packages genuinely provided by the system or toolchain, such as `Threads`.
@@ -483,16 +488,16 @@ endif()
 
 ## 15 — Anti-Patterns
 
-| Anti-Pattern                                           | Correct Alternative                             |
-| ------------------------------------------------------ | ----------------------------------------------- |
-| `add_definitions(-DFOO)`                               | `target_compile_definitions(t PRIVATE FOO)`     |
-| `file(GLOB SOURCES "src/*.cpp")`                       | List source files explicitly                    |
-| `include_directories(...)`                             | `target_include_directories(t ...)`             |
-| `link_libraries(...)`                                  | `target_link_libraries(t ...)`                  |
-| `set(CMAKE_CXX_STANDARD 20)` at global scope           | `target_compile_features(t PUBLIC cxx_std_20)`  |
-| Bare library names in `target_link_libraries`          | Namespaced imported targets (`Lib::Lib`)        |
-| Building inside the source tree                        | Use a `build/` directory or presets             |
-| Checking `CMAKE_BUILD_TYPE` in multi-config generators | Use generator expressions (`$<CONFIG:Release>`) |
+| Anti-Pattern                                           | Correct Alternative                                                           |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `add_definitions(-DFOO)`                               | `target_compile_definitions(t PRIVATE FOO)`                                   |
+| `file(GLOB SOURCES "src/*.cpp")`                       | List source files explicitly                                                  |
+| `include_directories(...)`                             | `target_include_directories(t ...)`                                           |
+| `link_libraries(...)`                                  | `target_link_libraries(t ...)`                                                |
+| `set(CMAKE_CXX_STANDARD 20)` at global scope           | `target_compile_features(t PUBLIC cxx_std_20)`                                |
+| Bare library names in `target_link_libraries`          | Namespaced imported targets (`Lib::Lib`); OS system libraries excepted (§7.1) |
+| Building inside the source tree                        | Use a `build/` directory or presets                                           |
+| Checking `CMAKE_BUILD_TYPE` in multi-config generators | Use generator expressions (`$<CONFIG:Release>`)                               |
 
 ---
 

@@ -382,8 +382,7 @@ luma_add_test(NAME dap_integration_test
 # race and fail. Explicit lists also follow the project guideline (no file(GLOB))
 # and make CMake re-run when the list changes. Add a new .luma suite here.
 
-set(LUMA_FEATURE_TEST_TIMEOUT 30 CACHE STRING
-    "Timeout in seconds for each Luma feature test")
+# Per-test timeout: LUMA_FEATURE_TEST_TIMEOUT (cache option in the root CMakeLists.txt).
 message(STATUS "Feature test timeout: ${LUMA_FEATURE_TEST_TIMEOUT}s")
 
 set(LUMA_FEATURE_TESTS_LANGUAGE
