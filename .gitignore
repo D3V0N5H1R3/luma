@@ -151,6 +151,7 @@ vcpkg_installed/
 # ── Python artifacts ──
 __pycache__/
 *.pyc
+.ruff_cache/
 
 # ── Extension build artifacts ──
 *.tgz
