@@ -2,34 +2,32 @@
 
 Thank you for your interest in contributing to the Luma programming language.
 
-This project and everyone participating in it is governed by the Luma
-[Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to
-uphold this code.
+This project and everyone participating in it is governed by the Luma [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
 
 ---
 
 ## Table of Contents
 
-- [Prerequisites](#prerequisites)
-- [Required Knowledge](#required-knowledge)
-- [Project Documentation](#project-documentation)
-- [Getting Started](#getting-started)
-    - [Code Quality and Linting](#code-quality-and-linting)
-    - [Linters and Formatters](#linters-and-formatters)
-    - [Git Hooks](#git-hooks)
-    - [Benchmarks](#benchmarks)
-    - [Fuzz Testing](#fuzz-testing)
-    - [Security Considerations](#security-considerations)
-    - [Debugging the C++ Interpreter](#debugging-the-c-interpreter)
-    - [Editor Integration](#editor-integration)
-- [Branch Naming](#branch-naming)
-- [Commit Messages](#commit-messages)
-- [Pull Request Workflow](#pull-request-workflow)
-- [Releasing](#releasing)
-- [Code Style](#code-style)
-- [Error Handling](#error-handling)
-- [Reporting Issues](#reporting-issues)
-- [License](#license)
+1. [Prerequisites](#prerequisites)
+2. [Required Knowledge](#required-knowledge)
+3. [Project Documentation](#project-documentation)
+4. [Getting Started](#getting-started)
+    1. [Code Quality and Linting](#code-quality-and-linting)
+    2. [Linters and Formatters](#linters-and-formatters)
+    3. [Git Hooks](#git-hooks)
+    4. [Benchmarks](#benchmarks)
+    5. [Fuzz Testing](#fuzz-testing)
+    6. [Security Considerations](#security-considerations)
+    7. [Debugging the C++ Interpreter](#debugging-the-c-interpreter)
+    8. [Editor Integration](#editor-integration)
+5. [Branch Naming](#branch-naming)
+6. [Commit Messages](#commit-messages)
+7. [Pull Request Workflow](#pull-request-workflow)
+8. [Releasing](#releasing)
+9. [Code Style](#code-style)
+10. [Error Handling](#error-handling)
+11. [Reporting Issues](#reporting-issues)
+12. [License](#license)
 
 ---
 
@@ -41,71 +39,53 @@ uphold this code.
 | macOS    | Clang 15 or later    | CMake 3.21+  |
 | Windows  | MSVC 2022 or later   | CMake 3.21+  |
 
-All compilers must support C++20. Building the interpreter, language server, and
-debugger needs only a C++20 toolchain and CMake 3.21 or later — every
-third-party library is vendored and built from source. These versions are hard
-minimums: Luma relies on the C++20 library features `std::format` and
-`std::chrono::clock_cast`, which libstdc++ provides only from **GCC 13** onward,
-so GCC 12 and earlier cannot build the project (for example, the default `g++`
-on Raspberry Pi OS and Debian 12 "bookworm" is GCC 12 — install GCC 13 or newer
-and configure with `-DCMAKE_CXX_COMPILER=g++-13`). **Python 3.10 or later** is
-additionally required to run the helper scripts under `scripts/` (test runners,
-the Git hook installer, and coverage).
+All compilers must support C++20. Building the interpreter, language server, and debugger needs only a C++20 toolchain and CMake 3.21 or later — every third-party library is vendored and built from source.
+
+> **Note:** These versions are hard minimums. Luma relies on the C++20 library features `std::format` and `std::chrono::clock_cast`, which libstdc++ provides only from **GCC 13** onward, so GCC 12 and earlier cannot build the project. The default `g++` on Raspberry Pi OS and Debian 12 ("bookworm") is GCC 12 — install GCC 13 or newer and configure with `-DCMAKE_CXX_COMPILER=g++-13`.
+
+**Python 3.10 or later** is additionally required to run the helper scripts under `scripts/` (test runners, the Git hook installer, and coverage).
 
 Some optional components need extra tooling:
 
-- **VS Code extension and the Node-based linters** (markdownlint, ESLint,
-  Prettier) — **Node.js 20 or later** (CI builds with Node 22).
-- **Zed extension** — **Rust** via [rustup](https://rustup.rs/) with the
-  `wasm32-wasip1` target (`rustup target add wasm32-wasip1`).
+- **VS Code extension and the Node-based linters** (markdownlint, ESLint, Prettier) — **Node.js 20 or later**. Packaging the extension with `@vscode/vsce` 4 needs **Node.js 22 or later**, the version CI builds with.
+- **Zed extension** — **Rust** via [rustup](https://rustup.rs/) with the `wasm32-wasip1` target (`rustup target add wasm32-wasip1`).
 
 ---
 
 ## Required Knowledge
 
-The project spans several technologies. You don't need all of them — only the
-ones relevant to the area you're working on. The matrix below maps each area to
-the languages, tools, and concepts you should be comfortable with before
-contributing to it.
+The project spans several technologies. You don't need all of them — only the ones relevant to the area you're working on. The matrix below maps each area to the languages, tools, and concepts you should be comfortable with before contributing to it.
 
 ### By Area
 
-| Area | Languages | Key Technologies & Concepts |
-| ---- | --------- | --------------------------- |
-| **Interpreter core** (`core/`) | C++20 | Lexers and tokenisation, recursive-descent parsing, ASTs, static type checking, bytecode compilation, stack-based virtual machines, RAII and smart pointers (`unique_ptr`, `shared_ptr`), value semantics, closures (upvalue capture) |
-| **Concurrency runtime** (`core/runtime/concurrency/`) | C++20 | Threads (`std::thread`), mutexes, condition variables, atomics, cooperative cancellation, channel/CSP patterns, thread pools |
-| **Standard library** (`core/runtime/stdlib/`) | C++20 | The Luma language itself (to design API surfaces), platform APIs (sockets, file I/O, processes), data format specifications (JSON, CSV, XML), IEEE-754 floating-point, regular expressions, cryptographic hashing |
-| **Language server** (`language-server/`) | C++20 | [Language Server Protocol (LSP)](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/), JSON-RPC, incremental parsing, red-green trees, semantic tokens, UTF-16 position encoding |
-| **Debugger** (`debugger/`) | C++20 | [Debug Adapter Protocol (DAP)](https://microsoft.github.io/debug-adapter-protocol/specification), breakpoint management, call stacks and stack frames, expression evaluation, thread-safe state machines, mutex lock ordering |
-| **VS Code extension** (`extensions/vscode/`) | TypeScript | VS Code Extension API (`vscode` module), extension activation and lifecycle, language client (`vscode-languageclient`), debug adapter integration, webviews, TextMate grammars |
-| **Zed extension** (`extensions/zed/`) | Rust | Zed Extension API (`zed_extension_api` crate), WebAssembly (`wasm32-wasip1` target), Tree-sitter grammars and queries, WASI |
-| **Build system** (`CMakeLists.txt`, `cmake/`) | CMake | CMake presets, target-based configuration, cross-platform builds (Windows/macOS/Linux), compiler feature detection, CTest |
-| **CI / CD** (`.github/workflows/`) | YAML | GitHub Actions, matrix builds, caching, artifact management, release automation |
-| **Test infrastructure** (`tests/`, `fuzz/`) | C++20, Luma, Python | Custom C++ test framework (`test_framework.hpp`), Luma `@test` annotations and `assert()`, snapshot testing, LibFuzzer, `pytest` (for helper scripts) |
-| **Scripts & tooling** (`scripts/`) | Python, PowerShell, Shell | Test runners, Git hooks, coverage reporting, cross-platform scripting |
-| **Documentation** (`documents/`) | Markdown | Technical writing, API reference conventions |
+| Area                                                  | Languages                 | Key Technologies & Concepts                                                                                                                                                                                                           |
+| ----------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Interpreter core** (`core/`)                        | C++20                     | Lexers and tokenisation, recursive-descent parsing, ASTs, static type checking, bytecode compilation, stack-based virtual machines, RAII and smart pointers (`unique_ptr`, `shared_ptr`), value semantics, closures (upvalue capture) |
+| **Concurrency runtime** (`core/runtime/concurrency/`) | C++20                     | Threads (`std::thread`), mutexes, condition variables, atomics, cooperative cancellation, channel/CSP patterns, thread pools                                                                                                          |
+| **Standard library** (`core/runtime/stdlib/`)         | C++20                     | The Luma language itself (to design API surfaces), platform APIs (sockets, file I/O, processes), data format specifications (JSON, CSV, XML), IEEE-754 floating-point, regular expressions, cryptographic hashing                     |
+| **Language server** (`language-server/`)              | C++20                     | [Language Server Protocol (LSP)](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/), JSON-RPC, incremental parsing, red-green trees, semantic tokens, UTF-16 position encoding              |
+| **Debugger** (`debugger/`)                            | C++20                     | [Debug Adapter Protocol (DAP)](https://microsoft.github.io/debug-adapter-protocol/specification), breakpoint management, call stacks and stack frames, expression evaluation, thread-safe state machines, mutex lock ordering         |
+| **VS Code extension** (`extensions/vscode/`)          | TypeScript                | VS Code Extension API (`vscode` module), extension activation and lifecycle, language client (`vscode-languageclient`), debug adapter integration, webviews, TextMate grammars                                                        |
+| **Zed extension** (`extensions/zed/`)                 | Rust                      | Zed Extension API (`zed_extension_api` crate), WebAssembly (`wasm32-wasip1` target), Tree-sitter grammars and queries, WASI                                                                                                           |
+| **Build system** (`CMakeLists.txt`, `cmake/`)         | CMake                     | CMake presets, target-based configuration, cross-platform builds (Windows/macOS/Linux), compiler feature detection, CTest                                                                                                             |
+| **CI / CD** (`.github/workflows/`)                    | YAML                      | GitHub Actions, matrix builds, caching, artifact management, release automation                                                                                                                                                       |
+| **Test infrastructure** (`tests/`, `fuzz/`)           | C++20, Luma, Python       | Custom C++ test framework (`test_framework.hpp`), Luma `@test` annotations and `assert()`, snapshot testing, LibFuzzer, `pytest` (for helper scripts)                                                                                 |
+| **Scripts & tooling** (`scripts/`)                    | Python, PowerShell, Shell | Test runners, Git hooks, coverage reporting, cross-platform scripting                                                                                                                                                                 |
+| **Documentation** (`documents/`)                      | Markdown                  | Technical writing, API reference conventions                                                                                                                                                                                          |
 
 ### Cross-Cutting Concepts
 
 These apply regardless of which area you work on:
 
-- **Git** — branching (`feature/`, `fix/`, `docs/`), conventional commits
-  (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `style:`, `ci:`),
-  rebasing, and squash-merging.
-- **The Luma language** — you should be able to read and write basic Luma
-  programs (see the [User Manual](documents/Luma_User_Manual.md)) since feature
-  tests, examples, and stdlib API design all require it.
-- **The interpreter pipeline** — understanding the flow
-  `Source → Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM`
-  helps even when working on tooling, because the language server and debugger
-  reuse the same front-end and runtime.
+- **Git** — branching (`feature/`, `fix/`, `docs/`), conventional commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `style:`, `ci:`), rebasing, and squash-merging.
+- **The Luma language** — you should be able to read and write basic Luma programs (see the [User Manual](documents/Luma_User_Manual.md)) since feature tests, examples, and stdlib API design all require it.
+- **The interpreter pipeline** — understanding the flow `Source → Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM` helps even when working on tooling, because the language server and debugger reuse the same front-end and runtime.
 
 ---
 
 ## Project Documentation
 
-Before making significant changes, skim the design and reference documents in
-[`documents/`](documents/):
+Before making significant changes, skim the design and reference documents in [`documents/`](documents/):
 
 - [Luma_Software_Architecture.md](documents/Luma_Software_Architecture.md) — interpreter pipeline and module design.
 - [Luma_User_Manual.md](documents/Luma_User_Manual.md) — complete language reference.
@@ -113,8 +93,7 @@ Before making significant changes, skim the design and reference documents in
 - [Luma_Coding_Guidelines.md](documents/Luma_Coding_Guidelines.md) — Luma coding style and conventions.
 - [Luma_Error_Handling.md](documents/Luma_Error_Handling.md) — error categories and `result`/`optional` handling.
 
-Per-language coding standards (C++, Python, Rust, TypeScript, CMake, and more)
-live in [`instructions/`](instructions/) as `*.instructions.md` files.
+Per-language coding standards (C++, Python, Rust, TypeScript, CMake, and more) live in [`instructions/`](instructions/) as `*.instructions.md` files.
 
 ---
 
@@ -205,14 +184,9 @@ On Windows, replace `build/luma` with `build\Release\luma.exe` in the commands a
 
 ### Code Quality and Linting
 
-`clang-tidy` provides static analysis for the C++ sources. The repository ships a
-`.clang-tidy` file that defines the enforced check set, so run clang-tidy with
-that configuration — rather than a custom `--checks` override — so local results
-match what CI enforces. clang-tidy 18 or later is required.
+`clang-tidy` provides static analysis for the C++ sources. The repository ships a `.clang-tidy` file that defines the enforced check set, so run clang-tidy with that configuration — rather than a custom `--checks` override — so local results match what CI enforces. clang-tidy 18 or later is required.
 
-clang-tidy reads a `compile_commands.json` compilation database, which the CMake
-presets generate automatically (`CMAKE_EXPORT_COMPILE_COMMANDS` is on). Configure
-once, then analyse the files you changed:
+clang-tidy reads a `compile_commands.json` compilation database, which the CMake presets generate automatically (`CMAKE_EXPORT_COMPILE_COMMANDS` is on). Configure once, then analyse the files you changed:
 
 ```bash
 cmake --preset default
@@ -226,44 +200,35 @@ cmake -B build-tidy -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_CLANG_TIDY=clang-tidy
 cmake --build build-tidy
 ```
 
-Either way the analysis uses the checks defined in `.clang-tidy`, and findings
-are printed to the console.
+Either way the analysis uses the checks defined in `.clang-tidy`, and findings are printed to the console.
 
 ### Linters and Formatters
 
-Beyond `clang-tidy`, every language in the repository has a dedicated linter or
-formatter enforced by its own CI workflow. Configuration is checked in at the
-repository root so local runs and CI stay in sync.
+Beyond `clang-tidy`, every language in the repository has a dedicated linter or formatter enforced by its own CI workflow. Configuration is checked in at the repository root so local runs and CI stay in sync.
 
-The fastest way to reproduce the CI lint result locally is the aggregate runner,
-which runs every gate below the way its workflow does and prints a single
-pass/fail summary, skipping any tool you do not have installed:
+The fastest way to reproduce the CI lint result locally is the aggregate runner, which runs every gate below the way its workflow does and prints a single pass/fail summary, skipping any tool you do not have installed:
 
 ```bash
 python scripts/lint.py       # run every check gate (add --list to preview, --skip clang-tidy to omit the slow one)
 python scripts/format.py     # apply every auto-formatter and safe auto-fix
 ```
 
-See [scripts/DIRECTORY.md](scripts/DIRECTORY.md#linting-and-formatting) for the full
-options. The individual gates can also be run by hand — install the tool noted
-below, then invoke it as CI does:
+See [scripts/DIRECTORY.md](scripts/DIRECTORY.md#linting-and-formatting) for the full options. The individual gates can also be run by hand — install the tool noted below, then invoke it as CI does:
 
-| Scope                       | Tool                 | Configuration              | Workflow              |
-| --------------------------- | -------------------- | -------------------------- | --------------------- |
-| C++ formatting              | clang-format         | `.clang-format`            | `ci.yml`              |
-| C++ static analysis         | clang-tidy           | `.clang-tidy`              | `ci.yml`              |
-| Compiler-flag / tidy sync   | `check_warning_sync` | `scripts/`                 | `ci.yml`              |
-| Python                      | Ruff                 | `ruff.toml`                | `ci-python.yml`       |
-| Rust (Zed extension)        | rustfmt + Clippy     | `extensions/zed/`          | `ci-zed.yml`          |
-| TypeScript / JavaScript     | ESLint + Prettier    | `extensions/vscode/`       | `ci-vscode.yml`       |
-| Shell                       | ShellCheck           | auto-discovered            | `ci-shell.yml`        |
-| PowerShell                  | PSScriptAnalyzer     | `PSScriptAnalyzerSettings` | `ci-powershell.yml`   |
-| CMake                       | cmakelint            | `.cmakelintrc`             | `ci-cmake.yml`        |
-| Markdown                    | markdownlint-cli2    | `.markdownlint-cli2.jsonc` | `ci-markdown.yml`     |
+| Scope                     | Tool                 | Configuration              | Workflow            |
+| ------------------------- | -------------------- | -------------------------- | ------------------- |
+| C++ formatting            | clang-format         | `.clang-format`            | `ci.yml`            |
+| C++ static analysis       | clang-tidy           | `.clang-tidy`              | `ci.yml`            |
+| Compiler-flag / tidy sync | `check_warning_sync` | `scripts/`                 | `ci.yml`            |
+| Python                    | Ruff                 | `ruff.toml`                | `ci-python.yml`     |
+| Rust (Zed extension)      | rustfmt + Clippy     | `extensions/zed/`          | `ci-zed.yml`        |
+| TypeScript / JavaScript   | ESLint + Prettier    | `extensions/vscode/`       | `ci-vscode.yml`     |
+| Shell                     | ShellCheck           | auto-discovered            | `ci-shell.yml`      |
+| PowerShell                | PSScriptAnalyzer     | `PSScriptAnalyzerSettings` | `ci-powershell.yml` |
+| CMake                     | cmakelint            | `.cmakelintrc`             | `ci-cmake.yml`      |
+| Markdown                  | markdownlint-cli2    | `.markdownlint-cli2.jsonc` | `ci-markdown.yml`   |
 
-The exact commands each gate runs (with the pinned tool versions) live in each
-workflow; the equivalents below are what `scripts/lint.py` invokes under the
-hood:
+The exact commands each gate runs (with the pinned tool versions) live in each workflow; the equivalents below are what `scripts/lint.py` invokes under the hood:
 
 ```bash
 # C++ formatting — clang-format >= 20 (apt-get install clang-format-20)
@@ -302,18 +267,8 @@ npx markdownlint-cli2
 
 The repository ships two hooks (in `scripts/git-hooks/`):
 
-- **`pre-commit`** runs `clang-format` — and `clang-tidy` when a
-  `compile_commands.json` exists in `build/` or a `build-*` preset tree — on
-  staged C++ files, blocking the commit if they are not clean. It checks the
-  staged content (so partially staged files are judged on what is being
-  committed) and covers the same directories as the CI *Formatting* and
-  *Static Analysis* jobs.
-- **`commit-msg`** checks that the commit subject follows the
-  [Conventional Commits](#commit-messages) format (one of `chore`, `ci`,
-  `docs`, `feat`, `fix`, `refactor`, `style`, `test`, with an optional scope
-  and `!`), blocking the commit if it does not. It also warns — without
-  blocking — when the subject exceeds 72 characters. Git-generated merge,
-  revert, and autosquash (`fixup!`/`squash!`/`amend!`) messages are exempt.
+- `pre-commit` runs `clang-format` — and `clang-tidy` when a `compile_commands.json` exists in `build/` or a `build-*` preset tree — on staged C++ files, blocking the commit if they are not clean. It checks the staged content (so partially staged files are judged on what is being committed) and covers the same directories as the CI *Formatting* and *Static Analysis* jobs.
+- `commit-msg` checks that the commit subject follows the [Conventional Commits](#commit-messages) format (one of `chore`, `ci`, `docs`, `feat`, `fix`, `refactor`, `style`, `test`, with an optional scope and `!`), blocking the commit if it does not. It also warns — without blocking — when the subject exceeds 72 characters. Git-generated merge, revert, and autosquash (`fixup!`/`squash!`/`amend!`) messages are exempt.
 
 Enable them once per clone by pointing Git at the tracked hooks directory:
 
@@ -321,10 +276,7 @@ Enable them once per clone by pointing Git at the tracked hooks directory:
 python scripts/install_git_hooks.py
 ```
 
-This sets a repository-local `core.hooksPath`, so the hooks stay
-version-controlled and update automatically on `git pull`. Running
-`python scripts/configure.py <preset>` enables the hooks for you as part of
-configuring a build.
+This sets a repository-local `core.hooksPath`, so the hooks stay version-controlled and update automatically on `git pull`. Running `python scripts/configure.py <preset>` enables the hooks for you as part of configuring a build.
 
 ### Benchmarks
 
@@ -380,7 +332,7 @@ Available fuzz targets:
 | `fuzz_decimal`               | `Decimal` base-10 parser        |
 | `fuzz_protocol`              | `shared/protocol` transport     |
 | `fuzz_compression`           | `Compression` codec             |
-| `fuzz_encoder`              | `Encoder` Base64 / URL codecs   |
+| `fuzz_encoder`               | `Encoder` Base64 / URL codecs   |
 | `fuzz_keyvaluestore`         | `KeyValueStore` `.kv` codec     |
 | `fuzz_hash`                  | `Hash` CRC32 / hex codec        |
 | `fuzz_path`                  | `FileSystem` path validator     |
@@ -580,115 +532,59 @@ Follow the [Conventional Commits](https://www.conventionalcommits.org/) format:
 
 Luma produces builds in two distinct places. Knowing which is which saves a lot of confusion:
 
-| | **Actions build artifacts** | **GitHub Releases** |
-| --- | --- | --- |
-| Produced by | [`ci.yml`](.github/workflows/ci.yml) on every build | [`release.yml`](.github/workflows/release.yml) when a version tag is pushed |
-| Lifetime | **Temporary** — auto-deleted after 7 days (`retention-days: 7`; the coverage report keeps 14) | **Permanent** — kept until you delete the release |
-| Where | An Actions run's **Artifacts** section (`https://github.com/D3V0N5H1R3/luma/actions`), or `gh run download <run-id>` | The repository's **Releases** page (`https://github.com/D3V0N5H1R3/luma/releases`), or `gh release download <tag>` |
-| Named | `luma-<os>-<compiler>` (e.g. `luma-ubuntu-latest-gcc`) | Per platform: the full bundle `luma-<os>-<arch>`, plus standalone `luma_lsp-<os>-<arch>` and `luma_dap-<os>-<arch>` archives (`.tar.gz` / `.zip`); also the VS Code `.vsix` and a `SHA256SUMS` manifest |
-| Use it for | Debugging or smoke-testing the build from one specific commit | Distributing a version to users — the canonical download |
+|             | **Actions build artifacts**                                                                                                             | **GitHub Releases**                                                                                                                                                                                     |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Produced by | [`ci.yml`](.github/workflows/ci.yml) on every build                                                                                     | [`release.yml`](.github/workflows/release.yml) when a version tag is pushed                                                                                                                             |
+| Lifetime    | **Temporary** — auto-deleted after 7 days (`retention-days: 7`; the coverage report keeps 14)                                           | **Permanent** — kept until you delete the release                                                                                                                                                       |
+| Where       | An Actions run's **Artifacts** section on the [Actions page](https://github.com/D3V0N5H1R3/luma/actions), or `gh run download <run-id>` | The repository's [Releases page](https://github.com/D3V0N5H1R3/luma/releases), or `gh release download <tag>`                                                                                           |
+| Named       | `luma-<os>-<compiler>` (e.g. `luma-ubuntu-latest-gcc`)                                                                                  | Per platform: the full bundle `luma-<os>-<arch>`, plus standalone `luma_lsp-<os>-<arch>` and `luma_dap-<os>-<arch>` archives (`.tar.gz` / `.zip`); also the VS Code `.vsix` and a `SHA256SUMS` manifest |
+| Use it for  | Debugging or smoke-testing the build from one specific commit                                                                           | Distributing a version to users — the canonical download                                                                                                                                                |
 
-Because [`ci.yml`](.github/workflows/ci.yml) is path-filtered, a docs- or workflow-only
-commit does not trigger a build, so the newest artifacts may sit on an earlier
-commit than `HEAD`. Release assets never expire, so they are what users should download.
+Because [`ci.yml`](.github/workflows/ci.yml) is path-filtered, a docs- or workflow-only commit does not trigger a build, so the newest artifacts may sit on an earlier commit than `HEAD`. Release assets never expire, so they are what users should download.
 
-### Cutting a release
+### Cutting a Release
 
-Releases are **tag-triggered**: pushing a tag of the form `vMAJOR.MINOR.PATCH` (the
-`release.yml` filter is `v[0-9]+.[0-9]+.[0-9]+`, digits only, so the `vscode-v*` extension
-tags never trigger it) runs [`release.yml`](.github/workflows/release.yml), which checks the
-tag matches [`VERSION`](VERSION), builds
-every platform (Linux x86_64, Linux aarch64 / Raspberry Pi, macOS, Windows), validates
-on the Linux distros, packages the VS Code `.vsix`, generates a changelog from the commit
-log since the previous `v` tag, and publishes a GitHub Release with all binaries and a
-`SHA256SUMS` manifest attached.
+Releases are **tag-triggered**: pushing a tag of the form `vMAJOR.MINOR.PATCH` (the `release.yml` filter is `v[0-9]+.[0-9]+.[0-9]+`, digits only, so the `vscode-v*` extension tags never trigger it) runs [`release.yml`](.github/workflows/release.yml), which checks the tag matches [`VERSION`](VERSION), builds every platform (Linux x86_64, Linux aarch64 / Raspberry Pi, macOS, Windows), validates on the Linux distros, packages the VS Code `.vsix`, generates a changelog from the commit log since the previous `v` tag, and publishes a GitHub Release with all binaries and a `SHA256SUMS` manifest attached.
 
-> **Release contract — always ship the per-binary archives.** Every release
-> **must** attach the standalone `luma_lsp-<os>-<arch>` and `luma_dap-<os>-<arch>`
-> archives (and the `SHA256SUMS` covering them) for all supported platforms, not
-> just the full `luma-<os>-<arch>` bundle. The VS Code and Zed extensions
-> auto-download these per-binary archives from the Releases page on demand — the
-> language server on activation, the debug adapter on first debug session — and
-> verify them against `SHA256SUMS` before extracting (see
-> [`extensions/shared/binary-download/SPECIFICATION.md`](extensions/shared/binary-download/SPECIFICATION.md)).
-> A release missing them breaks language features and debugging for extension
-> users on that version. The [`package-binaries`](.github/actions/package-binaries/action.yml)
-> action emits both the bundle and the per-binary archives on every run so this
-> holds automatically; keep it that way.
+> **Release contract — always ship the per-binary archives.** Every release **must** attach the standalone `luma_lsp-<os>-<arch>` and `luma_dap-<os>-<arch>` archives (and the `SHA256SUMS` covering them) for all supported platforms, not just the full `luma-<os>-<arch>` bundle. The VS Code and Zed extensions auto-download these per-binary archives from the Releases page on demand — the language server on activation, the debug adapter on first debug session — and verify them against `SHA256SUMS` before extracting (see [`extensions/shared/binary-download/SPECIFICATION.md`](extensions/shared/binary-download/SPECIFICATION.md)). A release missing them breaks language features and debugging for extension users on that version. The [`package-binaries`](.github/actions/package-binaries/action.yml) action emits both the bundle and the per-binary archives on every run so this holds automatically; keep it that way.
 
-1. Update the [`VERSION`](VERSION) file — the single source of truth for the project
-   version — on `main`, and commit it:
+1. Bump the version on `main` with [`scripts/bump_version.py`](scripts/bump_version.py). It rewrites [`VERSION`](VERSION) — the single source of truth for the project version — together with the extension manifests and the documentation references that embed the version, so they never drift apart. Then commit the result:
 
     ```bash
-    # e.g. bump 0.15.0 -> 0.15.0
     git switch main && git pull
-    # edit VERSION, then:
-    git commit -am "chore: bump version to 0.15.0"
+    python scripts/bump_version.py --minor   # or --patch, --major, or an explicit MAJOR.MINOR.PATCH
+    git commit -am "chore: bump version to $(python scripts/bump_version.py --current)"
     git push
     ```
 
 2. Create the `v`-prefixed tag that matches `VERSION`. Use **either** option:
 
-    **A. Automated (recommended) — [`tag-release.yml`](.github/workflows/tag-release.yml).**
-    From the repository's **Actions → Tag Release** page, run the workflow (`workflow_dispatch`)
-    **on the `main` branch** (it refuses any other ref)
-    and enter the new version in the `confirm_version` input. It reads [`VERSION`](VERSION),
-    validates it is a strict `MAJOR.MINOR.PATCH` version, confirms your input matches the file,
-    checks the `v<VERSION>` tag does not already exist, then creates and pushes the annotated
-    tag for you — which triggers [`release.yml`](.github/workflows/release.yml). Tick `dry_run`
-    first to validate without pushing. This requires the one-time `RELEASE_PAT` secret setup
-    described below.
+    **A. Automated (recommended) — [`tag-release.yml`](.github/workflows/tag-release.yml).** From the repository's **Actions → Tag Release** page, run the workflow (`workflow_dispatch`) **on the `main` branch** (it refuses any other ref) and enter the new version in the `confirm_version` input. It reads [`VERSION`](VERSION), validates it is a strict `MAJOR.MINOR.PATCH` version, confirms your input matches the file, checks the `v<VERSION>` tag does not already exist, then creates and pushes the annotated tag for you — which triggers [`release.yml`](.github/workflows/release.yml). Tick `dry_run` first to validate without pushing. This requires the one-time `RELEASE_PAT` secret setup described below.
 
-    **B. Manual.** Create an **annotated** tag whose version matches `VERSION`, prefixed with
-    `v`, and push it:
+    **B. Manual.** Create an **annotated** tag whose version matches `VERSION`, prefixed with `v`, and push it:
 
     ```bash
     git tag -a v0.15.0 -m "Release version 0.15.0"
     git push origin v0.15.0
     ```
 
-3. Watch the **Release** workflow run under
-   [Actions](https://github.com/D3V0N5H1R3/luma/actions). When it finishes, the new
-   release (with its binaries) appears on the
-   [Releases](https://github.com/D3V0N5H1R3/luma/releases) page. It publishes
-   immediately — there is no manual draft step.
+3. Watch the **Release** workflow run under [Actions](https://github.com/D3V0N5H1R3/luma/actions). When it finishes, the new release (with its binaries) appears on the [Releases](https://github.com/D3V0N5H1R3/luma/releases) page. It publishes immediately — there is no manual draft step.
 
-The two editor extensions publish from their own tag prefixes —
-`vscode-v*.*.*` ([`release-vscode.yml`](.github/workflows/release-vscode.yml), to the
-Visual Studio Marketplace) and `zed-v*.*.*`
-([`release-zed.yml`](.github/workflows/release-zed.yml)) — so they can be versioned
-independently of the interpreter. See
-[.github/workflows/DIRECTORY.md](.github/workflows/DIRECTORY.md) (§6 Releases) for the
-workflow index and [Git tag conventions](instructions/git.instructions.md) for the tag
-commands.
+The two editor extensions publish from their own tag prefixes — `vscode-v*.*.*` ([`release-vscode.yml`](.github/workflows/release-vscode.yml), to the Visual Studio Marketplace) and `zed-v*.*.*` ([`release-zed.yml`](.github/workflows/release-zed.yml)) — so they can be versioned independently of the interpreter. See [.github/workflows/DIRECTORY.md](.github/workflows/DIRECTORY.md) (§6 Releases) for the workflow index and [Git tag conventions](instructions/git.instructions.md) for the tag commands.
 
-#### One-time setup: the `RELEASE_PAT` secret
+#### One-Time Setup: The `RELEASE_PAT` Secret
 
-The automated [`tag-release.yml`](.github/workflows/tag-release.yml) workflow needs a
-`RELEASE_PAT` repository secret. This is required because a tag pushed with the default
-`GITHUB_TOKEN` does **not** trigger another workflow (GitHub deliberately blocks recursive
-workflow runs), so the tag must be pushed with a separate token for
-[`release.yml`](.github/workflows/release.yml) to fire. The workflow fails fast with an
-explanatory message if the secret is missing, so it never pushes a tag that would silently
-never release.
+The automated [`tag-release.yml`](.github/workflows/tag-release.yml) workflow needs a `RELEASE_PAT` repository secret. This is required because a tag pushed with the default `GITHUB_TOKEN` does **not** trigger another workflow (GitHub deliberately blocks recursive workflow runs), so the tag must be pushed with a separate token for [`release.yml`](.github/workflows/release.yml) to fire. The workflow fails fast with an explanatory message if the secret is missing, so it never pushes a tag that would silently never release.
 
-Configure it once (a repository **admin** with a Personal Access Token, or a GitHub App
-token, is needed):
+Configure it once (a repository **admin** with a Personal Access Token, or a GitHub App token, is needed):
 
-1. Create a **fine-grained Personal Access Token**: GitHub → your **Settings** →
-   **Developer settings** → **Personal access tokens** → **Fine-grained tokens** →
-   **Generate new token**.
-2. Scope it to the `D3V0N5H1R3/luma` repository (**Only select repositories**), set a short
-   expiry, and under **Repository permissions** grant **Contents: Read and write** (this
-   covers pushing tags). Leave everything else at **No access**.
+1. Create a **fine-grained Personal Access Token**: GitHub → your **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens** → **Generate new token**.
+2. Scope it to the `D3V0N5H1R3/luma` repository (**Only select repositories**), set a short expiry, and under **Repository permissions** grant **Contents: Read and write** (this covers pushing tags). Leave everything else at **No access**.
 3. **Generate token** and copy the value — it is shown only once.
-4. In the `D3V0N5H1R3/luma` repository, go to **Settings → Secrets and variables → Actions
-   → New repository secret**, name it exactly `RELEASE_PAT`, paste the token, and save.
-5. Rotate the token before it expires and update the secret; if it lapses, the workflow's
-   first step reports that `RELEASE_PAT` is not set.
+4. In the `D3V0N5H1R3/luma` repository, go to **Settings → Secrets and variables → Actions → New repository secret**, name it exactly `RELEASE_PAT`, paste the token, and save.
+5. Rotate the token before it expires and update the secret; if it lapses, the workflow's first step reports that `RELEASE_PAT` is not set.
 
-> A classic PAT with the `repo` scope works too, but a fine-grained token limited to this
-> repository with only `Contents: write` is the least-privilege choice.
+> **Tip:** A classic PAT with the `repo` scope works too, but a fine-grained token limited to this repository with only `Contents: write` is the least-privilege choice.
 
 ---
 
@@ -716,13 +612,13 @@ The project uses a layered error handling policy. Each layer of the interpreter,
 
 ### Summary by Layer
 
-| Layer                             | Error Model                                                                              |
-| --------------------------------- | ---------------------------------------------------------------------------------------- |
-| **Analysis** (lexer, parser, type checker, linter) | Emit `Diagnostic` objects. Do not throw for user-facing errors.               |
-| **Runtime** (VM, stdlib)          | `RuntimeError` for bugs. `result<T>` for expected failures.                              |
-| **Protocol** (LSP, DAP)          | Typed error responses for protocol errors. `std::runtime_error` for I/O failures.        |
-| **Shared modules** (`shared/`)   | `std::runtime_error` for malformed input. `std::optional` for expected absence.          |
-| **Extensions** (`extensions/`)   | Follow host-language idioms (TypeScript exceptions, Rust `Result<T>`).                   |
+| Layer                                              | Error Model                                                                       |
+| -------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **Analysis** (lexer, parser, type checker, linter) | Emit `Diagnostic` objects. Do not throw for user-facing errors.                   |
+| **Runtime** (VM, stdlib)                           | `RuntimeError` for bugs. `result<T>` for expected failures.                       |
+| **Protocol** (LSP, DAP)                            | Typed error responses for protocol errors. `std::runtime_error` for I/O failures. |
+| **Shared modules** (`shared/`)                     | `std::runtime_error` for malformed input. `std::optional` for expected absence.   |
+| **Extensions** (`extensions/`)                     | Follow host-language idioms (TypeScript exceptions, Rust `Result<T>`).            |
 
 ### Key Rules
 
@@ -737,8 +633,7 @@ For detailed per-module guidelines, see [Luma_Error_Handling.md](documents/Luma_
 
 ## Reporting Issues
 
-> **Security vulnerabilities:** Do **not** open a public issue. Follow the
-> private reporting process in [SECURITY.md](SECURITY.md) instead.
+> **Security vulnerabilities:** Do **not** open a public issue. Follow the private reporting process in [SECURITY.md](SECURITY.md) instead.
 
 When filing a bug report, include:
 
