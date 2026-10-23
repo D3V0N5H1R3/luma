@@ -16,7 +16,8 @@ $BinaryName = 'luma_lsp'
 # Detect architecture.
 $Arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq [System.Runtime.InteropServices.Architecture]::Arm64) {
     'aarch64'
-} else {
+}
+else {
     'x86_64'
 }
 
@@ -71,7 +72,8 @@ finally {
 $BinaryPath = Join-Path -Path $BinDir -ChildPath "${BinaryName}.exe"
 if (Test-Path -Path $BinaryPath) {
     Write-Host "Installed: ${BinaryPath}"
-} else {
+}
+else {
     Write-Error "Binary not found after extraction: ${BinaryPath}"
     exit 1
 }

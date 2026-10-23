@@ -74,6 +74,14 @@
     "[powershell]": {
         "editor.defaultFormatter": "ms-vscode.powershell"
     },
+    // Keep Format Document in step with the PSScriptAnalyzerSettings.psd1 rules
+    // (the extension's formatter does not read that file's rule settings).
+    // whitespaceAfterSeparator is off so formatting does not collapse the
+    // column-aligned phase table in scripts/pipeline/LumaPipeline.psm1.
+    "powershell.codeFormatting.pipelineIndentationStyle": "IncreaseIndentationForFirstPipeline",
+    "powershell.codeFormatting.avoidSemicolonsAsLineTerminators": true,
+    "powershell.codeFormatting.useConstantStrings": true,
+    "powershell.codeFormatting.whitespaceAfterSeparator": false,
     // Only format with Prettier where a config exists (extensions/vscode), so the
     // generated tree-sitter grammar sources are never reformatted.
     "prettier.requireConfig": true,

@@ -316,7 +316,7 @@ foreach ($Current in $Selected) {
     $Lines.Add("You are running the Luma project fix phase: `"$($Current.Name)`".")
     $Lines.Add('')
     if ($ReportClause) {
-        $Lines.Add("A prioritised audit report for this phase is available at:")
+        $Lines.Add('A prioritised audit report for this phase is available at:')
         $Lines.Add("    $ReportClause")
         $Lines.Add('Read it first and work through its findings in priority order (highest severity times confidence first). Skip any finding you cannot confirm against the current source.')
         $Lines.Add('')
