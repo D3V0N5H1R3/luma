@@ -426,6 +426,11 @@ The Luma project ships first-class integration for two editors. Each provides sy
 
 - **C/C++ Extension Pack** (`ms-vscode.cpptools-extension-pack`): IntelliSense, debugging, CMake Tools integration.
 - **Luma** (`D3V0N5H1R3.luma-language`): Syntax highlighting, LSP, and DAP for `.luma` files.
+- **Ruff** (`charliermarsh.ruff`): Python linting and formatting for `scripts/`.
+- **markdownlint** (`DavidAnson.vscode-markdownlint`): Markdown linting against `.markdownlint-cli2.jsonc`.
+- **rust-analyzer** (`rust-lang.rust-analyzer`): Rust support and `rustfmt` formatting for the Zed extension crates.
+- **PowerShell** (`ms-vscode.powershell`): PowerShell editing, formatting, and PSScriptAnalyzer diagnostics using `PSScriptAnalyzerSettings.psd1`.
+- **ESLint** (`dbaeumer.vscode-eslint`) and **Prettier** (`esbenp.prettier-vscode`): Linting and formatting for the VS Code extension in `extensions/vscode/` (run `npm ci` there so both use the pinned versions).
 - **GitHub Actions** (`github.vscode-github-actions`): Workflow authoring and validation.
 - **GitHub Copilot** (`github.copilot`) and **Copilot Chat** (`github.copilot-chat`): AI code completion and chat.
 - **Claude Code** (`anthropic.claude-code`): Anthropic's agentic coding assistant.
@@ -437,15 +442,18 @@ The Luma extension resolves `luma_lsp`, `luma`, and `luma_dap` binaries automati
 
 **Building, running, and testing:**
 
-- **Build:** Press `F7` or run **CMake: Build**.
+- **Build:** Press `F7` or run **CMake: Build**. The **CMake: Build\*** tasks in `.vscode/tasks.json` call `python scripts/configure.py <preset> --if-needed --build`, which configures the preset only on first use or after `CMakePresets.json` changes, then builds. The **CMake: Configure\*** tasks always re-configure.
 - **Run:** Set the launch target via the status bar, then `Ctrl+F5` (run) or `F5` (debug).
 - **Test:** Use **CTest: Run All Tests** or the Test Explorer for C++ tests.
+- **Sanitizers and coverage:** The **(Sanitizers)** and **(Coverage)** tasks are Linux/macOS only — their presets are disabled on Windows, where the tasks stop with an explanation. Use WSL or the Dev Container instead.
 
 **Debugging the C++ interpreter:** The project ships `.vscode/launch.json` with pre-configured targets for the Debug build (`build-debug/`). Open the "Run and Debug" view (`Ctrl+Shift+D`) and select one of:
 
 - **C++: Interpreter (MSVC / GDB / LLDB)** — Launch the interpreter under the debugger.
-- **C++: REPL (MSVC / GDB)** — Launch the REPL under the debugger.
-- **C++: Language Server** / **C++: DAP Debugger** — Debug `luma_lsp` or `luma_dap`.
+- **C++: REPL (MSVC / GDB / LLDB)** — Launch the REPL under the debugger.
+- **C++: Language Server** / **C++: DAP Debugger** — Launch `luma_lsp` or `luma_dap` directly (they wait for protocol messages on stdin).
+- **C++: Attach to Process (MSVC / GDB / LLDB)** — Attach to a running `luma_lsp`, `luma_dap`, or `luma`. To debug the servers as the editor drives them, set `luma.lsp.path` / `luma.dap.path` in your user settings to the `build-debug/` binary, open a `.luma` file, then attach.
+- **Extension: VS Code Luma Extension** — Launch an Extension Development Host for `extensions/vscode` (run `npm ci` there first).
 
 **Debugging Luma programs:** Set a breakpoint in a `.luma` file and use a `"type": "luma"` launch configuration:
 
@@ -459,7 +467,13 @@ The Luma extension resolves `luma_lsp`, `luma`, and `luma_dap` binaries automati
 }
 ```
 
-**Formatting:** The C/C++ extension formats on save using the repository's `.clang-format`, pre-configured in `.vscode/settings.json`.
+**Formatting:** The C/C++ extension formats C++ on save using the repository's `.clang-format`, pre-configured in `.vscode/settings.json`. It runs `clang-format` from your `PATH`, falling back to the copy bundled with the extension — whose version usually differs from the **clang-format 18** that CI enforces, so it can reformat code you did not touch. Install clang-format 18 on your `PATH`, or point `C_Cpp.clang_format_path` at it in your **user** settings (it is machine-specific, so the workspace leaves it unset). Check the version with `clang-format --version`. Typical clang-format 18 paths:
+
+- **Windows** (LLVM 18 installer): `C:\Program Files\LLVM\bin\clang-format.exe`
+- **macOS** (Homebrew `llvm@18`): the output of `echo "$(brew --prefix llvm@18)/bin/clang-format"`
+- **Linux** (Debian/Ubuntu `clang-format-18` package): `/usr/bin/clang-format-18`
+
+The Dev Container already sets this. Python, Rust, TypeScript/JavaScript, and PowerShell files use Ruff, rust-analyzer (`rustfmt`), Prettier, and the PowerShell extension as their default formatters; format-on-save is enabled only for C++.
 
 #### Zed
 

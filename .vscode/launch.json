@@ -24,6 +24,7 @@
             "program": "${workspaceFolder}/build-debug/Debug/luma.exe",
             "args": ["${workspaceFolder}/examples/language-features/hello.luma"],
             "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
             "preLaunchTask": "CMake: Build (Debug)"
         },
         {
@@ -124,7 +125,9 @@
             "args": [],
             "cwd": "${workspaceFolder}",
             "MIMode": "gdb",
-            "externalConsole": true,
+            // Integrated terminal: works headless (Dev Container / Codespaces),
+            // where an external terminal emulator is unavailable.
+            "externalConsole": false,
             "preLaunchTask": "CMake: Build (Debug)"
         },
         {
@@ -135,8 +138,51 @@
             "args": [],
             "cwd": "${workspaceFolder}",
             "MIMode": "lldb",
+            // lldb-mi cannot route stdin through the integrated terminal on macOS.
             "externalConsole": true,
             "preLaunchTask": "CMake: Build (Debug)"
+        },
+        // luma_lsp and luma_dap talk over stdio, so they are most useful when
+        // launched by the Luma extension: point luma.lsp.path / luma.dap.path
+        // (user settings) at the build-debug binary, then attach here.
+        {
+            "name": "C++: Attach to Process (MSVC)",
+            "type": "cppvsdbg",
+            "request": "attach",
+            "processId": "${command:pickProcess}"
+        },
+        {
+            "name": "C++: Attach to Process (GDB)",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "${workspaceFolder}/build-debug/${input:lumaBinary}",
+            "processId": "${command:pickProcess}",
+            "MIMode": "gdb"
+        },
+        {
+            "name": "C++: Attach to Process (LLDB)",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "${workspaceFolder}/build-debug/${input:lumaBinary}",
+            "processId": "${command:pickProcess}",
+            "MIMode": "lldb"
+        },
+        {
+            "name": "Extension: VS Code Luma Extension",
+            "type": "extensionHost",
+            "request": "launch",
+            "args": ["--extensionDevelopmentPath=${workspaceFolder}/extensions/vscode"],
+            "outFiles": ["${workspaceFolder}/extensions/vscode/out/**/*.js"],
+            "preLaunchTask": "Extension: Compile (VS Code)"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "lumaBinary",
+            "type": "pickString",
+            "description": "Which Luma binary is the process you are attaching to?",
+            "options": ["luma_lsp", "luma_dap", "luma"],
+            "default": "luma_lsp"
         }
     ]
 }

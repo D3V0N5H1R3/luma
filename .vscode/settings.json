@@ -1,10 +1,8 @@
 {
-    "cmake.sourceDirectory": "${workspaceFolder}",
-    "cmake.buildDirectory": "${workspaceFolder}/build",
+    // Build directories, generators, and cache variables (including
+    // CMAKE_EXPORT_COMPILE_COMMANDS) come from CMakePresets.json; CMake Tools
+    // ignores cmake.buildDirectory and cmake.configureSettings in presets mode.
     "cmake.configureOnOpen": true,
-    "cmake.configureSettings": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-    },
 
     "C_Cpp.default.cppStandard": "c++20",
     // Let the CMake Tools extension feed IntelliSense the exact per-file include
@@ -25,12 +23,21 @@
 
     "files.trimTrailingWhitespace": true,
     "files.insertFinalNewline": true,
+    // Match .editorconfig / .gitattributes (LF everywhere) so new files created
+    // on Windows are not CRLF until git normalises them.
+    "files.eol": "\n",
 
     "editor.formatOnSave": false,
     "editor.tabSize": 4,
     "editor.insertSpaces": true,
     "editor.rulers": [100],
 
+    // C_Cpp.clang_format_path is machine-specific, so it is deliberately unset
+    // here. The C/C++ extension then uses `clang-format` from PATH, falling back
+    // to its own bundled build — whose version may differ from the clang-format
+    // 18 that CI enforces and reformat untouched code. Install clang-format 18 on
+    // PATH, or point C_Cpp.clang_format_path at it in your user settings (see
+    // CONTRIBUTING.md → Editor Integration → Visual Studio Code).
     "[cpp]": {
         "editor.defaultFormatter": "ms-vscode.cpptools",
         "editor.formatOnSave": true
@@ -47,6 +54,38 @@
     "[yaml]": {
         "editor.tabSize": 2
     },
+
+    // Formatters for the other first-party languages, matching the CI gates:
+    // Ruff (scripts/), rustfmt (extensions/zed), Prettier (extensions/vscode),
+    // and the PowerShell extension (scripts/*.ps1). Format-on-save stays off for
+    // these; run Format Document or `python scripts/format.py`.
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "[rust]": {
+        "editor.defaultFormatter": "rust-lang.rust-analyzer"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[javascript]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[powershell]": {
+        "editor.defaultFormatter": "ms-vscode.powershell"
+    },
+    // Only format with Prettier where a config exists (extensions/vscode), so the
+    // generated tree-sitter grammar sources are never reformatted.
+    "prettier.requireConfig": true,
+    // The ESLint flat config and node_modules live in the extension's folder,
+    // not the workspace root.
+    "eslint.workingDirectories": ["extensions/vscode"],
+    // The Rust crates are nested too deep for rust-analyzer's auto-discovery.
+    "rust-analyzer.linkedProjects": [
+        "extensions/zed/Cargo.toml",
+        "extensions/zed/grammars/tree-sitter-luma/Cargo.toml"
+    ],
+    "powershell.scriptAnalysis.settingsPath": "PSScriptAnalyzerSettings.psd1",
 
     // luma.lsp.path / luma.path / luma.dap.path are intentionally unset so the
     // extension resolves these binaries (bundled download or PATH). This keeps
@@ -90,10 +129,13 @@
             "text": "Start the PR title with a Conventional Commit prefix (chore:, docs:, feat:, fix:, refactor:, test:) matching the dominant change."
         },
         {
-            "text": "Structure the body with a short Summary (what changed and why), a bulleted list of notable changes, and a Testing section noting how it was validated (cmake build, ctest, and the Luma feature suites via scripts/run_luma_tests.py)."
+            "text": "Fill in the repository's pull request template, keeping its headings and order: Summary (what changed and why), Related Issues, Type of Change (tick the box matching the title prefix), How Was This Tested? (commands run — e.g. ctest --preset default, python scripts/run_luma_tests.py, python scripts/run_luma_examples.py — and platforms tried), and Checklist."
         },
         {
-            "text": "Note any cross-platform impact (Linux, macOS, Windows) and link related issues. Keep it factual and concise; omit sections that do not apply."
+            "file": ".github/PULL_REQUEST_TEMPLATE.md"
+        },
+        {
+            "text": "Note any cross-platform impact (Linux, macOS, Windows) in the Summary. Keep it factual and concise; delete Related Issues only when there are none."
         }
     ]
 }

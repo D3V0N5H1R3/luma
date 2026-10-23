@@ -78,13 +78,20 @@
                 "D3V0N5H1R3.luma-language",
                 "charliermarsh.ruff",
                 "DavidAnson.vscode-markdownlint",
+                "rust-lang.rust-analyzer",
+                "ms-vscode.powershell",
+                "dbaeumer.vscode-eslint",
+                "esbenp.prettier-vscode",
                 "github.vscode-github-actions",
                 "github.copilot",
                 "github.copilot-chat",
                 "github.vscode-pull-request-github"
             ],
             "settings": {
-                "cmake.configureOnOpen": true
+                "cmake.configureOnOpen": true,
+                // The image installs clang-format 18 (the CI formatting gate), so
+                // format-on-save never falls back to the extension's bundled build.
+                "C_Cpp.clang_format_path": "/usr/bin/clang-format-18"
             }
         }
     }
