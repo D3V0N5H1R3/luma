@@ -4,15 +4,15 @@ Reusable composite actions shared across the CI and release workflows. Each acti
 
 ## Actions
 
-| Action | Purpose |
-| --- | --- |
-| [apt-install](apt-install/action.yml) | Update the APT index and install packages (Linux jobs). |
-| [build-vscode-extension](build-vscode-extension/action.yml) | Install, type-check, compile, and package the VS Code extension (.vsix). |
-| [build-zed-extension](build-zed-extension/action.yml) | Install the Rust WASM toolchain and check, lint, test, and build the Zed extension. |
-| [cmake-build](cmake-build/action.yml) | Configure and build the Luma project with CMake (cross-platform). |
-| [package-binaries](package-binaries/action.yml) | Archive the Luma binaries into per-binary and full-bundle archives. |
+| Action                                                        | Purpose                                                                             |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [`apt-install`](apt-install/action.yml)                       | Update the APT index and install packages (Linux jobs).                             |
+| [`build-vscode-extension`](build-vscode-extension/action.yml) | Install, type-check, compile, and package the VS Code extension (`.vsix`).          |
+| [`build-zed-extension`](build-zed-extension/action.yml)       | Install the Rust WASM toolchain and check, lint, test, and build the Zed extension. |
+| [`cmake-build`](cmake-build/action.yml)                       | Configure and build the Luma project with CMake (cross-platform).                   |
+| [`package-binaries`](package-binaries/action.yml)             | Archive the Luma binaries into per-binary and full-bundle archives.                 |
 
-## apt-install
+## `apt-install`
 
 Centralises the `apt-get update && apt-get install` pattern repeated across Linux CI jobs into a single step.
 
@@ -20,7 +20,7 @@ Centralises the `apt-get update && apt-get install` pattern repeated across Linu
 
 - `packages` (required) — space-separated list of packages to install.
 
-## build-vscode-extension
+## `build-vscode-extension`
 
 Sets up Node.js, installs dependencies, type-checks, compiles TypeScript, and packages the extension into a `.vsix` artifact. Used by the VS Code CI, release, and bundled-in-core release workflows.
 
@@ -32,17 +32,17 @@ Sets up Node.js, installs dependencies, type-checks, compiles TypeScript, and pa
 
 - `vsix-file` — filename of the packaged `.vsix` (relative to `working-directory`).
 
-## build-zed-extension
+## `build-zed-extension`
 
-Installs the stable Rust toolchain with the `wasm32-wasip1` target, restores the Cargo cache, then runs format check, compilation check, Clippy lint, tests, and a release WASM build. Used by the Zed CI and release workflows.
+Installs the stable Rust toolchain with the `wasm32-wasip1` target, restores the Cargo cache (keyed on the runner OS, the resolved `rustc` version, and `Cargo.lock`), then runs format check, compilation check, Clippy lint, tests, and a release WASM build. Used by the Zed CI and release workflows.
 
 **Inputs:**
 
 - `working-directory` (default: `extensions/zed`) — path to the extension directory.
 
-## cmake-build
+## `cmake-build`
 
-Hides Unix/Windows configure differences behind a single step. On Unix the compilers are selectable via `cc`/`cxx` inputs; on Windows the default MSVC toolchain is used. Defaults to the detected core count for build parallelism (overridable for memory-heavy builds like sanitizers).
+Hides Unix/Windows configure differences behind a single step. On Unix the compilers are selectable via `cc`/`cxx` inputs; on Windows the default MSVC toolchain is used. Builds with an explicit job count equal to the detected core count (a bare `--parallel` would mean unlimited `make -j`). A compiler launcher such as ccache is picked up from the `CMAKE_C_COMPILER_LAUNCHER`/`CMAKE_CXX_COMPILER_LAUNCHER` environment variables when the caller sets them (Unix generators only).
 
 **Inputs:**
 
@@ -51,11 +51,10 @@ Hides Unix/Windows configure differences behind a single step. On Unix the compi
 - `cc` (optional) — C compiler (Unix only).
 - `cxx` (optional) — C++ compiler (Unix only).
 - `extra-args` (optional) — extra arguments appended to the CMake configure command.
-- `parallel` (optional) — explicit job count; defaults to detected core count.
 
-## package-binaries
+## `package-binaries`
 
-Archives the three Luma binaries (`luma`, `luma_lsp`, `luma_dap`) into a full distribution bundle plus one archive per binary, so each editor extension downloads only what it needs. Produces `.tar.gz` on Unix and `.zip` on Windows. Archive names follow `extensions/BINARY_ASSETS.md`.
+Archives the three Luma binaries (`luma`, `luma_lsp`, `luma_dap`) into a full distribution bundle plus one archive per binary, so each editor extension downloads only what it needs. Produces `.tar.gz` on Unix and `.zip` on Windows. Archive names follow [BINARY_ASSETS.md](../../extensions/BINARY_ASSETS.md).
 
 **Inputs:**
 

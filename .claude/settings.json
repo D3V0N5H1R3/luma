@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/protect_vendored_paths.py\" || python \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/protect_vendored_paths.py\"",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/protect_vendored_paths.py\" --claude-settings || python \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/protect_vendored_paths.py\" --claude-settings",
             "timeout": 10
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/format_cpp_on_edit.py\" || python \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/format_cpp_on_edit.py\"",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/format_cpp_on_edit.py\" --claude-settings || python \"$(git rev-parse --show-toplevel)/scripts/agent-hooks/format_cpp_on_edit.py\" --claude-settings",
             "timeout": 30
           }
         ]

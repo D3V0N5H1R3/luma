@@ -18,16 +18,20 @@ The root [`CLAUDE.md`](../CLAUDE.md) bridges the shared instruction set (it impo
 Two hooks wrap the shared, runtime-agnostic Python scripts in `scripts/agent-hooks/` — the same scripts the Copilot hooks under `.github/hooks/` call:
 
 - **PreToolUse** → `protect_vendored_paths.py` (timeout 10 s). A safety guard that **denies** edits to vendored code under `external/`. A blocked edit is an intentional stop, not a failure. The script signals the decision through its JSON stdout and always exits 0.
-- **PostToolUse** → `format_cpp_on_edit.py` (timeout 30 s). Auto-formats `.cpp` and `.hpp` files with `clang-format` after an edit. Fail-open and non-blocking; it never fails a tool call.
+- **PostToolUse** → `format_cpp_on_edit.py` (timeout 30 s). Auto-formats `.cpp` and `.hpp` files with `clang-format` after an edit and, when it changed a file, tells the model to re-read it (through `hookSpecificOutput.additionalContext`). Fail-open and non-blocking; it never fails a tool call.
 
 Both hooks use the matcher `Write|Edit|MultiEdit|NotebookEdit` — the Claude Code tools that create or modify files, which are the only tools these scripts act on. `MultiEdit` is gone from current Claude Code releases; it stays in the matcher only so older versions remain covered.
+
+### Standing Down Under Copilot
+
+The Copilot runtime reads this file *in addition to* `.github/hooks/*.json`, so without a guard every edit made through Copilot would run each hook twice. Each command therefore passes `--claude-settings` to its script. A script launched with that flag exits as a no-op when it is plainly running under Copilot — `COPILOT_PROJECT_DIR` is set and the payload has no `transcript_path`, which Claude Code always sends — leaving the `.github/hooks/` copy to do the work. Under Claude Code, which never reads `.github/hooks/`, the flag changes nothing. The check lives in `scripts/agent-hooks/hook_common.py` and is covered by `scripts/agent-hooks/test_agent_hooks.py`.
 
 ### Cross-Platform Command
 
 Claude Code's hook format allows a single `command` string per hook, whereas the Copilot format supplies separate `bash` and `powershell` commands. The same string must also run in two runtimes. Claude Code passes it to bash (Git Bash on Windows). The Copilot harness also reads `.claude/settings.json` and runs the string in PowerShell 7 on Windows. To stay cross-platform from one string, each command is:
 
 ```text
-python3 "$(git rev-parse --show-toplevel)/scripts/agent-hooks/<script>.py" || python "$(git rev-parse --show-toplevel)/scripts/agent-hooks/<script>.py"
+python3 "$(git rev-parse --show-toplevel)/scripts/agent-hooks/<script>.py" --claude-settings || python "$(git rev-parse --show-toplevel)/scripts/agent-hooks/<script>.py" --claude-settings
 ```
 
 The `||` fallback fires whenever the first command exits non-zero. In practice, that happens when `python3` is missing or is the Windows Store alias stub, which prints a "Python was not found" message and exits non-zero without reading stdin. `python` is then tried with the untouched payload. The scripts themselves always exit 0, so a successful first run never triggers the fallback. If a script crashes, the fallback receives an already-consumed stdin and exits as a harmless no-op, which keeps both hooks fail-open.

@@ -87,6 +87,7 @@ Use `---` on its own line, surrounded by blank lines, to separate major sections
 - Use `PascalCase` with underscores for multi-word document names: `Luma_User_Manual.md`.
 - Use `UPPER_CASE` for conventional root-level files: `DIRECTORY.md`, `CONTRIBUTING.md`, `LICENSE`, `SECURITY.md`.
 - Use `kebab-case` with the `.instructions.md` suffix for instruction files: `cpp.instructions.md`, `cmake.instructions.md`.
+- Use `kebab-case` with the tool-defined suffix for agent and prompt files: `implement.agent.md`, `bug-fix.prompt.md`. Files whose names a tool mandates keep them verbatim: `SKILL.md`, `CLAUDE.md`, `copilot-instructions.md`.
 - Always use the `.md` extension.
 
 ### Heading and Section Names
@@ -216,7 +217,7 @@ Use tables for structured reference data such as configuration options, CLI flag
 ## 8 — Emphasis and Inline Formatting
 
 - Use **bold** (`**text**`) for key terms, UI labels, and important warnings.
-- Use _italics_ (`*text*`) for emphasis, titles of external works, and introducing new terms.
+- Use *italics* (`*text*`) for emphasis, titles of external works, and introducing new terms.
 - Use `backticks` for inline code: file names, function names, command names, variable names, and short code fragments.
 - Do not combine bold and backticks — use one or the other.
 - Do not use emphasis for entire paragraphs. If everything is bold, nothing is.
@@ -326,6 +327,18 @@ Content.
 
 - [ ] Item
 ```
+
+### Agent Definition Documents
+
+Agent files in `.github/agents/` open with YAML front matter, then a `# <Role> Agent` heading and a short role statement. Use the same section order in every agent, omitting sections that do not apply:
+
+1. `## Your Role`
+2. `## Project Knowledge`
+3. `## Commands`
+4. `## Workflow`
+5. `## Boundaries`
+
+Role-specific sections, such as a review checklist, take the place of `Commands` and `Workflow`. Each agent has a Claude Code port in `.claude/agents/`; edit both together, as described in [Keeping the Layers in Sync](../.claude/DIRECTORY.md#keeping-the-layers-in-sync).
 
 ### Reference Documents
 

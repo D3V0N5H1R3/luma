@@ -60,6 +60,8 @@ Available assertion macros:
 - `ASSERT_TRUE(cond)` — fails if `cond` is false.
 - `ASSERT_FALSE(cond)` — fails if `cond` is true.
 - `ASSERT_THROWS(expr)` — fails if `expr` does not throw.
+- `ASSERT_THROWS_AS(expr, ExceptionType)` — fails unless `expr` throws `ExceptionType` (or a type derived from it).
+- `ASSERT_THROWS_WITH_MESSAGE(expr, expected_substr)` — fails unless `expr` throws an exception whose message contains `expected_substr`.
 - `ASSERT_LT(a, b)` — fails if `a >= b`.
 - `ASSERT_LE(a, b)` — fails if `a > b`.
 - `ASSERT_GT(a, b)` — fails if `a <= b`.
@@ -195,19 +197,12 @@ static void test_division_by_zero() {
 }
 ```
 
-For more specific exception type checking:
+For more specific checks, assert the exception type or message:
 
 ```cpp
 static void test_division_by_zero() {
-    bool threw = false;
-
-    try {
-        eval("1 / 0");
-    } catch (const RuntimeError&) {
-        threw = true;
-    }
-
-    ASSERT_TRUE(threw);
+    ASSERT_THROWS_AS(eval("1 / 0"), RuntimeError);
+    ASSERT_THROWS_WITH_MESSAGE(eval("1 / 0"), "division by zero");
 }
 ```
 

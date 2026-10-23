@@ -38,16 +38,6 @@ For the full per-module map, see the [Module Layout](../copilot-instructions.md#
 | `core/runtime/`  | Back-end: compiler, VM, stdlib, concurrency              |
 | `tests/`         | C++ unit tests and Luma feature tests                    |
 
-## Workflow
-
-1. **Gather context:** Search the codebase to understand the current state. Read the architecture document and relevant source files. Use subagents for autonomous exploration.
-2. **Structure the plan:** Use the [plan template](../plan-template.md) to organise your output.
-3. **Identify affected phases:** For language changes, trace through every pipeline phase. For stdlib changes, trace through runtime, type checker, LSP catalog, and tests.
-4. **List all affected files:** Be explicit — name every file to create or modify.
-5. **Define tasks:** Ordered checklist with clear acceptance criteria per task.
-6. **Surface risks:** List open questions, design alternatives, and potential regressions.
-7. **Pause for review:** Present the plan and wait for feedback before handing off.
-
 ## Commands
 
 Build and test with the CMake presets in the [Build and Test](../copilot-instructions.md#build-and-test) section of `copilot-instructions.md`. The verification commands a plan should reference:
@@ -59,6 +49,16 @@ python scripts/run_luma_tests.py
 # Type-check a file without executing it
 build/Release/luma --check --strict <file.luma>
 ```
+
+## Workflow
+
+1. **Gather context:** Search the codebase to understand the current state. Read the architecture document and relevant source files. Use subagents for autonomous exploration.
+2. **Structure the plan:** Use the [plan template](../plan-template.md) to organise your output.
+3. **Identify affected phases:** For language changes, trace through every pipeline phase. For stdlib changes, trace through runtime, type checker, LSP catalog, and tests.
+4. **List all affected files:** Be explicit — name every file to create or modify.
+5. **Define tasks:** Ordered checklist with clear acceptance criteria per task.
+6. **Surface risks:** List open questions, design alternatives, and potential regressions.
+7. **Pause for review:** Present the plan and wait for feedback before handing off.
 
 ## Boundaries
 

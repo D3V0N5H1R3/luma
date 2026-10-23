@@ -1,9 +1,13 @@
 version: 2
 
 updates:
-  # GitHub Actions workflow and composite-action dependencies.
+  # GitHub Actions workflow and composite-action dependencies. "/" only covers
+  # .github/workflows; the composite actions under .github/actions/ must be
+  # listed explicitly or their pins silently drift behind the workflows'.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
     groups:

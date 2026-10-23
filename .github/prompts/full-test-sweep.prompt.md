@@ -9,11 +9,7 @@ lastUpdated: "2026-08-01"
 
 Run every category of test in the project and fix any failures. Start by building the project in Release mode.
 
-> **Scope:** This runs every test category — C++ unit tests, Luma feature tests
-> (strict), fuzz smoke tests, benchmarks, and examples. For a faster inner-loop
-> check, use [build-and-test.prompt.md](build-and-test.prompt.md). For a
-> clean-room release check that also rebuilds the editor extensions, use
-> [release-verification.prompt.md](release-verification.prompt.md).
+> **Scope:** This runs every test category — C++ unit tests, Luma feature tests (strict), fuzz smoke tests, benchmarks, and examples. For a faster inner-loop check, use [build-and-test.prompt.md](build-and-test.prompt.md). For a clean-room release check that also rebuilds the editor extensions, use [release-verification.prompt.md](release-verification.prompt.md).
 
 ## 1. Build
 

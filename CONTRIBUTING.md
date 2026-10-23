@@ -583,11 +583,13 @@ commit than `HEAD`. Release assets never expire, so they are what users should d
 
 ### Cutting a release
 
-Releases are **tag-triggered**: pushing a tag that matches `v*.*.*` (that is,
-`vMAJOR.MINOR.PATCH`) runs [`release.yml`](.github/workflows/release.yml), which builds
+Releases are **tag-triggered**: pushing a tag of the form `vMAJOR.MINOR.PATCH` (the
+`release.yml` filter is `v[0-9]+.[0-9]+.[0-9]+`, digits only, so the `vscode-v*` extension
+tags never trigger it) runs [`release.yml`](.github/workflows/release.yml), which checks the
+tag matches [`VERSION`](VERSION), builds
 every platform (Linux x86_64, Linux aarch64 / Raspberry Pi, macOS, Windows), validates
 on the Linux distros, packages the VS Code `.vsix`, generates a changelog from the commit
-log since the previous tag, and publishes a GitHub Release with all binaries and a
+log since the previous `v` tag, and publishes a GitHub Release with all binaries and a
 `SHA256SUMS` manifest attached.
 
 > **Release contract — always ship the per-binary archives.** Every release
@@ -618,6 +620,7 @@ log since the previous tag, and publishes a GitHub Release with all binaries and
 
     **A. Automated (recommended) — [`tag-release.yml`](.github/workflows/tag-release.yml).**
     From the repository's **Actions → Tag Release** page, run the workflow (`workflow_dispatch`)
+    **on the `main` branch** (it refuses any other ref)
     and enter the new version in the `confirm_version` input. It reads [`VERSION`](VERSION),
     validates it is a strict `MAJOR.MINOR.PATCH` version, confirms your input matches the file,
     checks the `v<VERSION>` tag does not already exist, then creates and pushes the annotated

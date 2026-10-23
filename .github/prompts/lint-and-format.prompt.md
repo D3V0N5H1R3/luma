@@ -9,12 +9,7 @@ lastUpdated: "2026-08-01"
 
 Lint and format every first-party language in the repository. Run the sections for the file types you changed, or run all of them to sweep the whole tree. Each language's tooling, pinned versions, and configuration mirror the matching CI workflow in `.github/workflows/`, so a clean local pass should reproduce the CI gate. For a broader pass that also reshapes code to the project's style conventions — naming, immutability, single responsibility — beyond what the formatters enforce, add the **Deep Clean** addendum at the end of this prompt.
 
-> **Order matters — lint before format.** A linter run with `--fix` (clang-tidy,
-> Ruff, ESLint, …) rewrites code, and its edits are not guaranteed to match the
-> project's formatting style. For example, `clang-tidy --fix` may apply a
-> `modernize-*` or `bugprone-*` rewrite that `clang-format` then has to
-> normalise — running the formatter first would leave any fixed line
-> unformatted. Within each language below, lint first, then format.
+> **Order matters — lint before format.** A linter run with `--fix` (clang-tidy, Ruff, ESLint, …) rewrites code, and its edits are not guaranteed to match the project's formatting style. For example, `clang-tidy --fix` may apply a `modernize-*` or `bugprone-*` rewrite that `clang-format` then has to normalise — running the formatter first would leave any fixed line unformatted. Within each language below, lint first, then format.
 
 ## Tooling Overview
 
@@ -228,31 +223,17 @@ After applying fixes, confirm nothing regressed — most important where you use
 
 ## Deep Clean (Addendum)
 
-When invoked for a deep clean, go beyond the mechanical tool runs above and
-review every touched file against the project's **general style rules** and
-the per-language conventions in [instructions/](../../instructions/). All
-changes must be **behaviour-preserving**: do not alter public APIs or
-observable behaviour, and keep each diff minimal and reviewable.
+When invoked for a deep clean, go beyond the mechanical tool runs above and review every touched file against the project's **general style rules** and the per-language conventions in [instructions/](../../instructions/). All changes must be **behaviour-preserving**: do not alter public APIs or observable behaviour, and keep each diff minimal and reviewable.
 
 ### Scope
 
-- **Include** first-party sources under `core/`, `shared/`, `language-server/`,
-  `debugger/`, `tests/`, `fuzz/`, `scripts/`, `examples/`, `benchmarks/`,
-  `extensions/`, `cmake/`, `documents/`, `instructions/`, and the repository root.
-- **Exclude** vendored, generated, and fixture code: `external/`, `build/`,
-  `build-*/` (e.g. `build-fuzz/`), `node_modules/`, `target/` (Rust build output
-  under `extensions/zed/`), and `fuzz/corpus/` (intentionally malformed fuzzer
-  seeds — never lint or format these), plus any other build, output, or
-  vendored-dependency directory.
-- **Do not modify** tool configuration files (e.g. `.clang-format`, `.clang-tidy`,
-  `.cmakelintrc`, `ruff.toml`, `.markdownlint-cli2.jsonc`,
-  `PSScriptAnalyzerSettings.psd1`, and the
-  `extensions/vscode` / `extensions/zed` configs).
+- **Include** first-party sources under `core/`, `shared/`, `language-server/`, `debugger/`, `tests/`, `fuzz/`, `scripts/`, `examples/`, `benchmarks/`, `extensions/`, `cmake/`, `documents/`, `instructions/`, and the repository root.
+- **Exclude** vendored, generated, and fixture code: `external/`, `build/`, `build-*/` (e.g. `build-fuzz/`), `node_modules/`, `target/` (Rust build output under `extensions/zed/`), and `fuzz/corpus/` (intentionally malformed fuzzer seeds — never lint or format these), plus any other build, output, or vendored-dependency directory.
+- **Do not modify** tool configuration files (e.g. `.clang-format`, `.clang-tidy`, `.cmakelintrc`, `ruff.toml`, `.markdownlint-cli2.jsonc`, `PSScriptAnalyzerSettings.psd1`, and the `extensions/vscode` / `extensions/zed` configs).
 
 ### General Rules
 
-Apply these in addition to the per-language conventions (the linked
-`*.instructions.md` files):
+Apply these in addition to the per-language conventions (the linked `*.instructions.md` files):
 
 **Naming & identifiers:**
 
@@ -269,8 +250,7 @@ Apply these in addition to the per-language conventions (the linked
 **Functions & structure:**
 
 - Keep functions/methods small and focused on one thing.
-- Give each class/struct/record/enumeration/trait/interface/module table/choice
-  type a single, well-defined responsibility.
+- Give each class/struct/record/enumeration/trait/interface/module table/choice type a single, well-defined responsibility.
 - Avoid deep nesting; prefer early returns and guard clauses.
 - Prefer range-based loops over index-based loops.
 - Write the simplest code that solves the problem correctly; do not over-abstract.
@@ -285,9 +265,7 @@ Apply these in addition to the per-language conventions (the linked
 - Default to private visibility; expose only what consumers need.
 - Hide internal state; expose behaviour through a controlled interface.
 - Divide the system into distinct sections, each addressing a separate concern.
-- Maximise cohesion (everything in a module is closely related) and minimise
-  coupling (depend on other modules as little as possible, through the narrowest
-  possible interface).
+- Maximise cohesion (everything in a module is closely related) and minimise coupling (depend on other modules as little as possible, through the narrowest possible interface).
 
 **Comments:**
 
@@ -297,5 +275,4 @@ Apply these in addition to the per-language conventions (the linked
 **Errors & safety:**
 
 - Detect errors as early as possible and surface them immediately.
-- Prevent undefined behaviour and accidental misuse through disciplined
-  initialization.
+- Prevent undefined behaviour and accidental misuse through disciplined initialization.

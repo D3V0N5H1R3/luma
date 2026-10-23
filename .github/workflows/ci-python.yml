@@ -1,10 +1,10 @@
 # ─────────────────────────────────────────────────────────────
 # Luma — Python Lint, Format & Test Workflow
 #
-# Runs Ruff (lint + format check) over the project's Python tooling
-# and the extension tooling unit tests on every push and PR targeting
-# main that touches Python sources or the Ruff configuration. Rule
-# configuration lives in ruff.toml.
+# Runs Ruff (lint + format check) over the project's Python tooling,
+# the extension tooling unit tests, and the agent hook unit tests on
+# every push and PR targeting main that touches Python sources or the
+# Ruff configuration. Rule configuration lives in ruff.toml.
 # ─────────────────────────────────────────────────────────────
 
 name: CI — Python
@@ -56,3 +56,6 @@ jobs:
       - name: Run extension tooling unit tests
         working-directory: extensions/shared
         run: python -m unittest discover -p "test_*.py"
+
+      - name: Run agent hook unit tests
+        run: python -m unittest discover -s scripts/agent-hooks -p "test_*.py"

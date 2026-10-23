@@ -5,14 +5,16 @@ labels: ["bug"]
 body:
   - type: markdown
     attributes:
-      value: |
-        Thanks for taking the time to file a bug report. Please fill out the
-        sections below so we can reproduce and fix the problem quickly.
+      # Folded (>) so source wrapping does not become hard line breaks in the
+      # rendered form; the doubled blank line yields a single paragraph break.
+      value: >
+        Thanks for taking the time to file a bug report. Please fill out the sections
+        below so we can reproduce and fix the problem quickly.
 
-        > **Security vulnerabilities:** do **not** report them here. Follow the
-        > private process in
-        > [SECURITY.md](https://github.com/D3V0N5H1R3/luma/blob/main/SECURITY.md)
-        > instead.
+
+        > **Security vulnerabilities:** do **not** report them here. Follow the private
+        process in [SECURITY.md](https://github.com/D3V0N5H1R3/luma/blob/main/SECURITY.md)
+        instead.
   - type: checkboxes
     id: preflight
     attributes:
@@ -29,6 +31,7 @@ body:
       description: Which part of Luma is affected?
       options:
         - Interpreter (lexer / parser / type checker / compiler / VM)
+        - REPL (interactive mode)
         - Standard library (a Module.function)
         - Language server (luma_lsp)
         - Debugger (luma_dap)
@@ -43,8 +46,10 @@ body:
     id: version
     attributes:
       label: Luma version
-      description: Output of `luma --version`, or the commit SHA you built from.
-      placeholder: "e.g. luma 0.5.0 (abc1234)"
+      description: >-
+        Output of `luma --version`. If you built from source, also add the
+        commit SHA (`git rev-parse --short HEAD`).
+      placeholder: "e.g. Luma 0.15.0 (abc1234)"
     validations:
       required: true
   - type: dropdown

@@ -54,14 +54,18 @@ env:
 jobs:
   build:
     name: ${{ matrix.os }} — ${{ matrix.compiler }}
-    runs-on: ${{ matrix.os }}
-    # Upper bound covers the cached build, the CTest suite, and (on the gcc-14
+    # `os` is the display label (it feeds the job name, which branch-protection
+    # rulesets reference, and the artifact name); `runner` optionally pins the
+    # actual image. The Linux entries pin ubuntu-24.04 because they install
+    # versioned compilers (gcc-13/gcc-14) that a future ubuntu-latest may drop.
+    runs-on: ${{ matrix.runner || matrix.os }}
+    # Upper bound covers the build, the CTest suite, and (on the gcc-14
     # job) the full headless example sweep run by scripts/run_luma_examples.py. The
     # ceiling accommodates the slowest entry: the gcc-13 sanitizer build, whose
     # ASan/UBSan-instrumented, non-PIE binaries compile and test noticeably
     # slower than the plain jobs (~35 min, versus ~12-28 min for
     # gcc-14/clang/MSVC) and were intermittently hitting the previous 35-minute
-    # limit. Warm-cache plain runs finish well under this.
+    # limit. ccache-warm plain runs finish well under this.
     timeout-minutes: 45
 
     strategy:
@@ -82,6 +86,7 @@ jobs:
         # Configuration) and cmake/LumaCompilerFlags.cmake.
         include:
           - os: ubuntu-latest
+            runner: ubuntu-24.04
             compiler: gcc-14
             cc: gcc-14
             cxx: g++-14
@@ -109,6 +114,7 @@ jobs:
           # uploaded binary is instrumented, not for general use. GCC 13 matches
           # the coverage job's pinned toolchain.
           - os: ubuntu-latest
+            runner: ubuntu-24.04
             compiler: gcc-13-sanitizers
             cc: gcc-13
             cxx: g++-13
@@ -123,19 +129,44 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Cache build directory
+      # Compile caching uses ccache rather than caching build/: checkout stamps
+      # every source with the current time, so restored object files always
+      # look stale and a cached build/ is rebuilt from scratch anyway (while a
+      # restore-key fallback can resurrect an outdated CMakeCache.txt). ccache
+      # hashes content, so hits survive fresh checkouts. CMake picks the
+      # launcher up from the CMAKE_<LANG>_COMPILER_LAUNCHER environment
+      # variables. The Visual Studio generator ignores compiler launchers, so
+      # the MSVC job builds uncached.
+      - name: Install ccache (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ccache
+
+      - name: Configure ccache
+        if: runner.os != 'Windows'
+        run: |
+          {
+            echo "CCACHE_DIR=${RUNNER_TEMP}/ccache"
+            echo "CCACHE_MAXSIZE=500M"
+            echo "CMAKE_C_COMPILER_LAUNCHER=ccache"
+            echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          } >> "$GITHUB_ENV"
+
+      # The per-commit key always misses, so every run saves its updated cache
+      # while restore-keys resumes from the most recent one.
+      - name: Cache ccache directory
+        if: runner.os != 'Windows'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: build
-          key: cmake-${{ runner.os }}-${{ matrix.compiler }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'core/**', 'shared/**', 'debugger/**', 'language-server/**') }}
+          path: ${{ runner.temp }}/ccache
+          key: ccache-${{ runner.os }}-${{ matrix.compiler }}-${{ github.sha }}
           restore-keys: |
-            cmake-${{ runner.os }}-${{ matrix.compiler }}-
+            ccache-${{ runner.os }}-${{ matrix.compiler }}-
 
       - name: Install GCC
         if: runner.os == 'Linux'
         uses: ./.github/actions/apt-install
         with:
-          packages: ${{ matrix.cc }} ${{ matrix.cxx }}
+          packages: ${{ matrix.cc }} ${{ matrix.cxx }} ccache
 
       # AddressSanitizer reserves a large shadow-memory region at a fixed
       # address. CI runners with high ASLR entropy (vm.mmap_rnd_bits up to 32)
@@ -153,6 +184,10 @@ jobs:
           cc: ${{ matrix.cc }}
           cxx: ${{ matrix.cxx }}
           extra-args: ${{ matrix.sanitizers && '-DLUMA_FEATURE_SANITIZERS=ON' || '' }}
+
+      - name: Show ccache statistics
+        if: runner.os != 'Windows'
+        run: ccache --show-stats
 
       - name: Verify binaries (Unix)
         if: runner.os != 'Windows'
@@ -278,7 +313,8 @@ jobs:
 
   formatting:
     name: Formatting (clang-format)
-    runs-on: ubuntu-latest
+    # Pinned: installs the versioned clang-format-18 package.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
@@ -335,7 +371,8 @@ jobs:
 
   coverage:
     name: Code Coverage
-    runs-on: ubuntu-latest
+    # Pinned: installs the versioned gcc-${COVERAGE_GCC_VERSION} packages.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
@@ -405,7 +442,8 @@ jobs:
   # "requires TLS", Random.secure_* failures) stay implemented and green.
   feature-flags:
     name: Feature Flag Build (${{ matrix.label }})
-    runs-on: ubuntu-latest
+    # Pinned: installs the versioned gcc-14 packages.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     strategy:

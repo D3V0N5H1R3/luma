@@ -16,7 +16,7 @@
     },
     {
       "distro": "Fedora",
-      "image": "fedora:latest",
+      "image": "fedora:44",
       "cc": "gcc",
       "cxx": "g++",
       "install-cmd": "dnf install -y cmake gcc gcc-c++ make"

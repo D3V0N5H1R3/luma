@@ -7,7 +7,7 @@
 | Last updated       | YYYY-MM-DD     |
 | Related issue / PR | #000 (or link) |
 
-> **Status:** one of `Draft` → `Approved` → `In Progress` → `Done`. Bump _Last updated_ whenever the plan changes.
+> **Status:** one of `Draft` → `Approved` → `In Progress` → `Done`. Bump *Last updated* whenever the plan changes.
 
 ## Summary
 

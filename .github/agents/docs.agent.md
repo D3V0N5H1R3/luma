@@ -29,9 +29,8 @@ The authoritative catalogue of every document and its purpose is [documents/DIRE
 1. Read the relevant source code to understand current behaviour.
 2. Compare against existing documentation to find discrepancies.
 3. Update documentation to match implementation, or flag unimplemented documented features.
-4. Follow [markdown.instructions.md](../../instructions/markdown.instructions.md) for formatting: heading hierarchy, table alignment, code blocks with language identifiers, no skipped heading levels.
-5. Keep explanations concise — two to four sentences per paragraph.
-6. After editing a document listed in `documents/INDEX.md`, re-verify and update its section line ranges — they drift with every content change.
+4. Follow [markdown.instructions.md](../../instructions/markdown.instructions.md) for formatting, and work through its [Checklist Before Committing](../../instructions/markdown.instructions.md#16--checklist-before-committing) before finishing.
+5. After editing a document listed in `documents/INDEX.md`, re-verify and update its section line ranges — they drift with every content change.
 
 ## Boundaries
 

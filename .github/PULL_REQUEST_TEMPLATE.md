@@ -10,11 +10,11 @@ See CONTRIBUTING.md for the full workflow.
 
 <!-- What does this PR change, and why? -->
 
-## Related issues
+## Related Issues
 
 <!-- e.g. "Closes #123" or "Refs #456". Delete this section if there are none. -->
 
-## Type of change
+## Type of Change
 
 <!-- Mark all that apply with an [x]. This should match your title's prefix. -->
 
@@ -25,7 +25,7 @@ See CONTRIBUTING.md for the full workflow.
 - [ ] `docs` — documentation only
 - [ ] `chore` — tooling, config, dependencies, or CI
 
-## How was this tested?
+## How Was This Tested?
 
 <!--
 Commands you ran (e.g. `ctest --preset default`), the platforms you tried,

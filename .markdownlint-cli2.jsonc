@@ -29,9 +29,11 @@
     // padding preference is still documented in markdown.instructions.md §7.
     "MD060": false,
 
-    // Prompt files (.github/prompts) and editor walkthrough fragments
-    // (extensions/**/walkthroughs) intentionally open with front matter or an
-    // H2 rather than a top-level heading; MD025 still guarantees a single H1.
+    // Prompt files (.github/prompts), the PR template (its body is pasted into
+    // the PR description, where an H1 would duplicate the PR title), and editor
+    // walkthrough fragments (extensions/**/walkthroughs) intentionally open with
+    // front matter, a comment, or an H2 rather than a top-level heading; MD025
+    // still guarantees a single H1.
     "MD041": false,
 
     // The documented admonition style (markdown.instructions.md §9) places

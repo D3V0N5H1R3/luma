@@ -107,7 +107,7 @@ Start comments with `#` followed by a single space. Use comments to explain **wh
 # Only deploy when a version tag is pushed — not on every push to main.
 on:
     push:
-        tags: ["v*.*.*"]
+        tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 ```
 
 ---
@@ -199,7 +199,7 @@ on:
 # On tag creation
 on:
   push:
-    tags: ["v*.*.*"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 ```
 
 ### 5.2 — Path and Branch Filtering
@@ -357,10 +357,10 @@ this repository pins to one.
 
 ```yaml
 # Best — pinned to an immutable SHA, with a human-readable version comment
-- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
 # Tolerable only for trusted first-party actions/* — the tag is still mutable
-- uses: actions/checkout@v6
+- uses: actions/checkout@v7
 
 # Bad — fully mutable, can change under you without notice
 - uses: actions/checkout@main
@@ -368,19 +368,19 @@ this repository pins to one.
 
 **Current project pins** (update these when bumping versions):
 
-| Action | SHA Pin | Version |
-| ------ | ------- | ------- |
-| `actions/checkout` | `de0fac2e4500dabe0009e67214ff5f5447ce83dd` | v6.0.2 |
-| `actions/upload-artifact` | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` | v7.0.1 |
-| `actions/download-artifact` | `3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c` | v8.0.1 |
-| `actions/cache` | `27d5ce7f107fe9357f9df03efb73ab90386fccae` | v5.0.5 |
-| `actions/setup-node` | `48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e` | v6.4.0 |
-| `actions/setup-python` | `a26af69be951a213d495a4c3e4e4022e16d87065` | v5.6.0 |
-| `github/codeql-action` | `9e0d7b8d25671d64c341c19c0152d693099fb5ba` | v4.35.5 |
-| `codecov/codecov-action` | `75cd11691c0faa626561e295848008c8a7dddffe` | v5.5.4 |
-| `softprops/action-gh-release` | `b4309332981a82ec1c5618f44dd2e27cc8bfbfda` | v3.0.0 |
-| `docker/setup-qemu-action` | `ce360397dd3f832beb865e1373c09c0e9f86d70a` | v4.0.0 |
-| `dtolnay/rust-toolchain` | `3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9` | stable (1.94.1) |
+| Action                        | SHA Pin                                    | Version         |
+| ----------------------------- | ------------------------------------------ | --------------- |
+| `actions/checkout`            | `3d3c42e5aac5ba805825da76410c181273ba90b1` | v7.0.1          |
+| `actions/upload-artifact`     | `cf430e030ddbb5b0abf93d22962f4752f3646cd9` | v7.0.2          |
+| `actions/download-artifact`   | `9000827ccba6bdab643e8b6fd33ac0654aef8333` | v8.0.2          |
+| `actions/cache`               | `55cc8345863c7cc4c66a329aec7e433d2d1c52a9` | v6.1.0          |
+| `actions/setup-node`          | `949feb2413d6458794dcd2491c4babbbce0c15c1` | v7.1.0          |
+| `actions/setup-python`        | `5fda3b95a4ea91299a34e894583c3862153e4b97` | v7.0.0          |
+| `github/codeql-action`        | `9b3254085494b55a0f7c4c2b3d2d52cc712ce370` | v4.39.1         |
+| `codecov/codecov-action`      | `303a32d7a59b442fa8d48b6a1cc6825c09c847a5` | v7.1.1          |
+| `softprops/action-gh-release` | `efb35369e0ad2afab669f228072c1b0d510eae64` | v3.0.3          |
+| `docker/setup-qemu-action`    | `99012661954931238ded8c8b007157a8430204e1` | v4.4.0          |
+| `dtolnay/rust-toolchain`      | `3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9` | stable (1.94.1) |
 
 SHA pins are kept current automatically: `.github/dependabot.yml` enables the
 `github-actions` ecosystem, so Dependabot opens weekly PRs that bump each pin
@@ -437,7 +437,7 @@ Common conditions: `success()`, `failure()`, `always()`, `cancelled()`.
 are worth making explicit on every checkout:
 
 ```yaml
-- uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
   with:
       persist-credentials: false # Don't leave the token in .git/config
       fetch-depth: 1             # Shallow clone — only the commit being built
@@ -685,7 +685,8 @@ Catch vulnerabilities before they ship by layering automated scanning into CI:
 - **SAST (static analysis):** run CodeQL (see §1.5 of the
   [recipes companion](github-actions-recipes.instructions.md)) on pushes, pull requests, and
   a weekly schedule. Treat new high-severity alerts as blocking. This repository's
-  `codeql.yml` analyses the C/C++ sources.
+  `codeql.yml` analyses the C/C++, Rust, Python, JavaScript/TypeScript, and GitHub
+  Actions sources with the `security-extended` query suite.
 - **SCA (dependency review):** add `actions/dependency-review-action` on pull
   requests to flag dependencies with known CVEs or disallowed licences before they
   are merged.
