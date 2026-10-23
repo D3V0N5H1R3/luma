@@ -357,23 +357,23 @@ Section-level table of contents for the reference documents in this directory. U
 | 11 — Tuples                                      | 1266–1334 |
 | 12 — Choice Types — Unit Variants                | 1338–1388 |
 | 13 — Choice Types (ADTs)                         | 1392–1503 |
-| 14 — Result and Optional                         | 1507–1739 |
-| 15 — Match                                       | 1743–1991 |
-| 16 — String Interpolation and Multi-Line Strings | 1995–2050 |
-| 17 — Pipe Operator                               | 2054–2099 |
-| 18 — Named Arguments                             | 2103–2126 |
-| 19 — Type Aliases                                | 2130–2152 |
-| 20 — Interfaces                                  | 2156–2232 |
-| 21 — Generics, `downcast`, and `is`              | 2236–2466 |
-| 22 — Namespaces and `use`                        | 2470–2665 |
-| 23 — Ownership (`unique` and `borrow`)           | 2669–2701 |
-| 24 — Testing with `@test`                        | 2705–2754 |
-| 25 — Including Files                             | 2758–2809 |
-| 26 — Standard Library Reference                  | 2813–2817 |
-| 27 — Linter and `--strict` Mode                  | 2821–2873 |
-| 28 — Reserved Keywords                           | 2877–2896 |
-| 29 — Error Reference                             | 2900–3218 |
-| 30 — Complete Programs                           | 3222–3428 |
-| 31 — Debugging                                   | 3432–3453 |
-| 32 — Formal Grammar (EBNF)                       | 3457–3808 |
-| See Also                                         | 3812–3824 |
+| 14 — Result and Optional                         | 1507–1741 |
+| 15 — Match                                       | 1745–1993 |
+| 16 — String Interpolation and Multi-Line Strings | 1997–2052 |
+| 17 — Pipe Operator                               | 2056–2101 |
+| 18 — Named Arguments                             | 2105–2128 |
+| 19 — Type Aliases                                | 2132–2154 |
+| 20 — Interfaces                                  | 2158–2234 |
+| 21 — Generics, `downcast`, and `is`              | 2238–2468 |
+| 22 — Namespaces and `use`                        | 2472–2667 |
+| 23 — Ownership (`unique` and `borrow`)           | 2671–2703 |
+| 24 — Testing with `@test`                        | 2707–2756 |
+| 25 — Including Files                             | 2760–2811 |
+| 26 — Standard Library Reference                  | 2815–2819 |
+| 27 — Linter and `--strict` Mode                  | 2823–2875 |
+| 28 — Reserved Keywords                           | 2879–2898 |
+| 29 — Error Reference                             | 2902–3220 |
+| 30 — Complete Programs                           | 3224–3430 |
+| 31 — Debugging                                   | 3434–3455 |
+| 32 — Formal Grammar (EBNF)                       | 3459–3810 |
+| See Also                                         | 3814–3826 |

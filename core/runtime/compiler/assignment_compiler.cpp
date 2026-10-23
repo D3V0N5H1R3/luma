@@ -6,6 +6,7 @@
 // field access, index access).
 // ─────────────────────────────────────────────────────────────────────────────
 
+#include <algorithm>
 #include <cassert>
 
 #include "analysis/source/source_location.hpp"
@@ -90,6 +91,28 @@ void Compiler::release_scratch_slots(std::size_t count) {
 void Compiler::compile_assign_to_variable(const VariableExpression& var, const Expression& value,
                                           SourceLocation loc) {
     compile_expression(value);
+
+    // '_ = expr' is a discard unless a mutable '_' is in scope (mirrors the type
+    // checker): evaluate for side effects and drop the value. The scan is
+    // read-only so that discarding never captures an enclosing '_' as an upvalue.
+    if (var.name == "_") {
+        const auto name = intern_name(var.name);
+        bool is_mutable_binding = false;
+        for (auto scope = ctx_.scope_stack.rbegin(); scope != ctx_.scope_stack.rend(); ++scope) {
+            const auto local = std::find_if(scope->locals.rbegin(), scope->locals.rend(),
+                                            [&](const auto& l) { return l.name == name; });
+            if (local != scope->locals.rend()) {
+                is_mutable_binding = local->is_mutable;
+                break;
+            }
+        }
+
+        if (!is_mutable_binding) {
+            emit(Op::Pop, loc);
+            return;
+        }
+    }
+
     const auto resolved = resolve_variable(var.name, loc);
     emit_variable_store(resolved, /*use_set_local_pop=*/true, loc);
 }

@@ -287,6 +287,43 @@ static void test_unused_result_suppressed_with_wildcard() {
                               "result<string> _ = get()\n"));
 }
 
+static void test_unused_result_suppressed_with_discard_assignment() {
+    // '_ = expr' with no '_' in scope discards the value without declaring it.
+    const std::string source = "function result<string> get() { return success(\"hi\") }\n"
+                               "function void main() {\n"
+                               "    _ = get()\n"
+                               "}\n";
+    ASSERT_FALSE(fails(source));
+    ASSERT_FALSE(has_warnings(source));
+}
+
+static void test_discard_assignment_still_checks_value() {
+    ASSERT_TRUE(fails("function void main() {\n"
+                      "    _ = missing_name\n"
+                      "}\n"));
+}
+
+static void test_declared_underscore_assignment_is_type_checked() {
+    // A declared mutable '_' keeps ordinary assignment semantics, including type checks.
+    ASSERT_TRUE(fails("function void main() {\n"
+                      "    mutable integer _ = 1\n"
+                      "    _ = \"text\"\n"
+                      "}\n"));
+}
+
+static void test_discard_assignment_inside_underscore_loop() {
+    // An immutable '_' (here the loop variable) cannot be assigned, so '_ = expr'
+    // discards instead of reporting an immutable assignment.
+    const std::string source = "function result<string> get() { return success(\"hi\") }\n"
+                               "function void main() {\n"
+                               "    for _ in 0..3 {\n"
+                               "        _ = get()\n"
+                               "    }\n"
+                               "}\n";
+    ASSERT_FALSE(fails(source));
+    ASSERT_FALSE(has_warnings(source));
+}
+
 static void test_unused_void_no_warn() {
     ASSERT_FALSE(has_warnings("function void side_effect() { print(\"hi\") }\n"
                               "side_effect()\n"));
@@ -674,6 +711,10 @@ int main() {
     RUN(test_unused_result_errors);
     RUN(test_unused_result_assigned_no_warn);
     RUN(test_unused_result_suppressed_with_wildcard);
+    RUN(test_unused_result_suppressed_with_discard_assignment);
+    RUN(test_discard_assignment_still_checks_value);
+    RUN(test_declared_underscore_assignment_is_type_checked);
+    RUN(test_discard_assignment_inside_underscore_loop);
     RUN(test_unused_void_no_warn);
 
     // ─── trusted_downcast on StdlibAny emits warning ───

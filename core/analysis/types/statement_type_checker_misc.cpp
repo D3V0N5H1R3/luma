@@ -157,6 +157,19 @@ void StatementTypeChecker::check_target_mutability(const Expression& target,
 }
 
 void StatementTypeChecker::visit_assignment(const AssignmentStatement& stmt) {
+    // '_ = expr' is a discard — the value is evaluated (and checked) but never
+    // stored — unless a mutable '_' variable is in scope, which keeps ordinary
+    // assignment semantics. An immutable '_' (a 'for _' loop variable, a '_'
+    // pattern binding or parameter) could never be assigned, so it is discarded.
+    if (stmt.target->kind == ExpressionKind::Variable &&
+        static_cast<const VariableExpression&>(*stmt.target).name == "_") {
+        const auto* sym = tc_.lookup_variable("_");
+        if (sym == nullptr || !sym->is_mutable) {
+            (void)tc_.infer_expression_type(*stmt.value);
+            return;
+        }
+    }
+
     // Check that target is mutable.
     check_target_mutability(*stmt.target, stmt.location, AssignmentKind::Plain);
 

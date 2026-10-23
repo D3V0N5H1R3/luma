@@ -1623,15 +1623,17 @@ result<integer> bad = success("-1") !> parse_positive() !> double_it()
 
 ### Discarded Results
 
-Calling a function that returns `result<T>` and ignoring the return value produces a **type warning**. Assign to `_` to explicitly suppress it:
+Calling a function that returns `result<T>` and ignoring the return value is a **type error**. Assign to `_` to explicitly discard it:
 
 ```luma
 function result<integer> parse(string s) { ... }
 
-parse("42")                     # warning: result<integer> returned by 'parse' is discarded
-_ = parse("42")                 # OK — suppressed
+parse("42")                     # error: unused result — the result<T> value is silently discarded
+_ = parse("42")                 # OK — discarded
 result<integer> r = parse("42") # OK — assigned
 ```
+
+`_ = expr` evaluates `expr` and drops its value; `_` does not need to be declared, and it works inside `for _ in …` loops and `case some(_)` arms too. Only when a `mutable` variable named `_` is in scope is the statement an ordinary assignment to that variable.
 
 ### Discarded Values
 
