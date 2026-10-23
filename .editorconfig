@@ -38,3 +38,13 @@ max_line_length = off
 charset = unset
 trim_trailing_whitespace = false
 insert_final_newline = false
+
+# ── Fuzz corpus seeds are byte-exact inputs (CRLF, no final newline, raw bytes) ──
+[fuzz/corpus/**]
+charset = unset
+end_of_line = unset
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = false
+insert_final_newline = false
+max_line_length = off
