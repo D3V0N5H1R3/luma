@@ -16,8 +16,10 @@
     // round out the toolchain so the whole repo — not just the C++ core — is
     // buildable and lintable here. The Rust "default" profile is used (not
     // "minimal") so `rustfmt` and `clippy` — the Zed extension's formatting and
-    // lint gates — are present. Prebuilds absorb the one-time install cost; drop
-    // either feature if you only work on the interpreter.
+    // lint gates — are present. PowerShell 7 with the PSScriptAnalyzer version
+    // scripts/run_psscriptanalyzer.ps1 pins runs the PowerShell lint gate
+    // (ci-powershell.yml). Prebuilds absorb the one-time install cost; drop any
+    // of these features if you only work on the interpreter.
     "features": {
         "ghcr.io/devcontainers/features/node:1": {
             "version": "lts"
@@ -25,6 +27,10 @@
         "ghcr.io/devcontainers/features/rust:1": {
             "profile": "default",
             "targets": "wasm32-wasip1"
+        },
+        "ghcr.io/devcontainers/features/powershell:2": {
+            "version": "lts",
+            "modules": "PSScriptAnalyzer==1.25.0"
         }
     },
 
@@ -37,8 +43,8 @@
         "storage": "32gb"
     },
 
-    // onCreate: one-time developer CLI tooling (the Ruff version ci-python.yml
-    // pins). Runs during Codespaces prebuilds.
+    // onCreate: one-time developer CLI tooling (the Ruff and cmakelint versions
+    // ci-python.yml and ci-cmake.yml pin). Runs during Codespaces prebuilds.
     "onCreateCommand": "bash .devcontainer/bootstrap.sh",
 
     // updateContent: build the interpreter, LSP, and DAP, and set up the VS Code
@@ -49,15 +55,16 @@
     // bounds the C++ job count to the core count — an unbounded `make -j`
     // OOM-kills the container (see scripts/container-build.sh) — and treats the
     // network-dependent extension setup as best-effort so an offline prebuild
-    // still yields a working interpreter.
+    // still yields a working interpreter. A build/ cache created on the host (a
+    // bind-mounted local Dev Container) is reported and skipped, never deleted.
     "updateContentCommand": "bash .devcontainer/prepare.sh",
 
     // postAttach: a one-line pointer to the common entry points on every attach.
     "postAttachCommand": "echo 'Luma ready — build: cmake --build build --parallel $(nproc) | test: ctest --test-dir build --output-on-failure | run: build/luma examples/language-features/hello.luma'",
 
+    // CC / CXX come from the Dockerfile's ENV (the single source); only the
+    // pipx bin directory needs adding for the lifecycle commands.
     "remoteEnv": {
-        "CC": "gcc-14",
-        "CXX": "g++-14",
         "PATH": "${containerEnv:PATH}:/home/vscode/.local/bin"
     },
 

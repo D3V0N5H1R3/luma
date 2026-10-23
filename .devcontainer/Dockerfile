@@ -24,7 +24,9 @@ ARG DEBIAN_FRONTEND=noninteractive
 #   gdb ..................... native debugging of the interpreter (CONTRIBUTING.md §Debugging the C++ Interpreter)
 #   lcov ................... the coverage preset (LUMA_FEATURE_COVERAGE)
 #   xvfb ................... headless X server for the VS Code extension's Electron integration tests
-#   python3 python3-pip pipx  helper scripts under scripts/ and the Ruff CLI
+#   shellcheck ............. shell lint gate (ci-shell.yml; instructions/shell.instructions.md §18)
+#   python3 python3-pip pipx  helper scripts under scripts/ and the Ruff / cmakelint CLIs
+#   python-is-python3 ...... `python` alias — the docs invoke helpers as `python scripts/…`
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         gcc-14 \
@@ -39,9 +41,11 @@ RUN apt-get update \
         gdb \
         lcov \
         xvfb \
+        shellcheck \
         python3 \
         python3-pip \
         pipx \
+        python-is-python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Make the unversioned tool names resolve to the CI-pinned versions, so `cc` /
@@ -60,6 +64,8 @@ RUN update-alternatives --install /usr/bin/gcc  gcc  /usr/bin/gcc-14 140 \
 
 # Default the interpreter build to the CI compiler pair. scripts/container-build.sh
 # requires CC / CXX to be set, and CMake honours them when a preset names no
-# compiler, so `cmake --preset default` picks GCC 14 without a custom kit.
+# compiler, so `cmake --preset default` picks GCC 14 without a custom kit. This is
+# the single source of CC / CXX: image ENV reaches every process in the container,
+# including the VS Code server, terminals, and the lifecycle scripts.
 ENV CC=gcc-14 \
     CXX=g++-14

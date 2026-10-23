@@ -15,6 +15,7 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Keep in sync with the PSScriptAnalyzer pin in .devcontainer/devcontainer.json.
 $RequiredVersion = '1.25.0'
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $SettingsPath = Join-Path -Path $RepoRoot -ChildPath 'PSScriptAnalyzerSettings.psd1'
