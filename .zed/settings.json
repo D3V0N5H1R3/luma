@@ -1,10 +1,14 @@
 {
     "lsp": {
-        "clangd": {
-            "binary": {
-                "arguments": ["--compile-commands-dir=build"]
-            }
-        }
+        // clangd has no --compile-commands-dir override: it already searches the
+        // ancestors of each file and their build/ subdirectories, which finds
+        // build/compile_commands.json from single-config generators (the default
+        // on Linux and macOS). The Visual Studio generator that the default preset
+        // uses on Windows emits no compilation database, and project settings take
+        // precedence over user settings, so pinning a directory here would stop
+        // Windows users pointing clangd elsewhere. See CONTRIBUTING.md → Editor
+        // Integration → Zed.
+        //
         // luma_lsp has no binary.path override here: the Zed extension resolves
         // it (PATH or auto-download), keeping it portable across build layouts.
     },
@@ -27,6 +31,18 @@
     "languages": {
         "C++": {
             "tab_size": 4,
+            // Format with clang-format from PATH rather than clangd's built-in
+            // formatter: Zed auto-downloads the latest clangd, whose formatter can
+            // differ from the clang-format 18 that CI enforces and reformat code
+            // you did not touch. Workspace settings override user settings, so
+            // `clang-format` on PATH must be version 18; see CONTRIBUTING.md →
+            // Editor Integration → Zed → Formatting.
+            "formatter": {
+                "external": {
+                    "command": "clang-format",
+                    "arguments": ["--assume-filename={buffer_path}"]
+                }
+            },
             "format_on_save": "on"
         },
         "CMake": {

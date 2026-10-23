@@ -483,27 +483,19 @@ The Dev Container already sets this. Python, Rust, TypeScript/JavaScript, and Po
 cp -r extensions/zed ~/.local/share/zed/extensions/luma
 ```
 
-**Building, running, and testing:** Zed has no built-in CMake integration; use the integrated terminal and the commands in [Build](#3-build) and [Test Your Changes](#4-test-your-changes).
+**Building, running, and testing:** Command Palette → **task: spawn** lists the workspace tasks in `.zed/tasks.json`. They mirror the VS Code tasks: **CMake: Configure\*** / **CMake: Build\*** call `python scripts/configure.py <preset>` (the build tasks add `--if-needed --build`), plus **CTest**, **Luma: Run All Test Suites**, **Lint: All**, and **Format: All**. Zed tasks cannot vary by operating system, so **Luma: Run / Test Current File** come in **(Windows)** and **(Unix)** variants that run the `default` preset's binary (`build/Release/luma.exe` or `build/luma`).
+
+**C++ code intelligence (clangd):** clangd finds `build/compile_commands.json` automatically on Linux and macOS. On Windows the `default` preset uses the Visual Studio generator, which writes no compilation database. Configure and build the `ninja` preset from a **Developer PowerShell for VS** (`cmake --preset ninja`, then `cmake --build --preset ninja` once so generated headers exist). Then copy `build-ninja/compile_commands.json` to the repository root, where clangd finds it (the file is git-ignored). Copy it again after adding or removing source files.
+
+**Debugging the C++ interpreter:** `.zed/debug.json` ships CodeLLDB scenarios (Command Palette → **debugger: start**) for the interpreter, REPL, `luma_lsp`, and `luma_dap`, each in a **(Windows)** and a **(Unix)** variant. Each scenario builds its preset first: `debug` (`build-debug/`), or `relwithdebinfo` (`build-relwithdebinfo/`) for the optimised interpreter (the `default` Release build has no debug symbols). To debug the servers as Zed drives them, put the directory holding the `build-debug/` binaries (`build-debug/Debug/` on Windows) first on your `PATH` (the extension resolves `luma_lsp` and `luma_dap` from `PATH` before downloading), or set `lsp.luma-lsp.binary.path` in your **user** settings. Then use the **Attach** tab of **debugger: start** to pick the running process.
 
 **Debugging Luma programs:** Open a `.luma` file, set breakpoints, then Command Palette → **debugger: start** → select the **Luma** adapter and the **Launch** request. (The extension also registers a locator, so the ▶ run affordance on a `@main` function can start a debug session too.) Ensure `luma_dap` is on your `PATH`, or let the extension download it. See [extensions/zed/DIRECTORY.md](extensions/zed/DIRECTORY.md#debugger-setup) for a `debug.json` example.
 
-**Formatting:** Configure clang-format as an external formatter in your Zed `settings.json`:
+**Formatting:** `.zed/settings.json` formats C++ on save with `clang-format` from your `PATH` (as an external formatter), not clangd's built-in formatter. Zed auto-downloads the latest clangd, whose formatter may differ from the **clang-format 18** that CI enforces. Workspace settings take precedence over user settings, so the command must resolve as plain `clang-format` (version 18), or saving a C++ file reports a formatter error. Check with `clang-format --version`:
 
-```json
-{
-    "languages": {
-        "C++": {
-            "formatter": {
-                "external": {
-                    "command": "clang-format",
-                    "arguments": ["--assume-filename={buffer_path}"]
-                }
-            },
-            "format_on_save": "on"
-        }
-    }
-}
-```
+- **Windows** (LLVM 18 installer): add `C:\Program Files\LLVM\bin` to `PATH`.
+- **macOS** (Homebrew `llvm@18`, which is keg-only): add `$(brew --prefix llvm@18)/bin` to `PATH`.
+- **Linux** (Debian/Ubuntu `clang-format-18` package, installed as `clang-format-18`): `sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100`. The Dev Container already does this.
 
 **LSP features:** Once the language server is available, completions, hover, diagnostics, and code snippets work automatically.
 
