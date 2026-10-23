@@ -77,6 +77,21 @@ foreach(_dir IN LISTS _tool_dirs)
     endforeach()
 endforeach()
 
+# Platform-split sources (<base>_win32.cpp / <base>_posix.cpp, see
+# luma_platform_source_pair) are compiled only on their own platform, so the other
+# half is absent from compile_commands.json; clang-tidy would parse it with guessed
+# flags and fail on missing OS headers. Keep only the half this build tree compiles
+# — the same exclusion ci.yml, scripts/lint.py, and the pre-commit hook apply.
+if(TOOL STREQUAL "tidy")
+    file(READ "${BINARY_DIR}/compile_commands.json" _compile_db)
+    string(FIND "${_compile_db}" "_win32.cpp" _win32_pos)
+    if(_win32_pos EQUAL -1)
+        list(FILTER _all_sources EXCLUDE REGEX "_win32\\.cpp$")
+    else()
+        list(FILTER _all_sources EXCLUDE REGEX "_posix\\.cpp$")
+    endif()
+endif()
+
 list(LENGTH _all_sources _count)
 if(_count EQUAL 0)
     message(STATUS "No source files found — nothing to do")

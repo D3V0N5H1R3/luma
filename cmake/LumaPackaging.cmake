@@ -9,6 +9,12 @@
 
 include_guard(GLOBAL)
 
+# Escape CPACK_* values when writing CPackConfig.cmake / CPackSourceConfig.cmake so
+# cpack receives them exactly as set here. Without it, cpack re-parses the raw
+# values and drops backslashes, turning each regex "\." in
+# CPACK_SOURCE_IGNORE_FILES into ".", which matches any character.
+set(CPACK_VERBATIM_VARIABLES TRUE)
+
 set(CPACK_PACKAGE_NAME "luma")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
@@ -82,5 +88,34 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     list(APPEND CPACK_GENERATOR "NSIS")
 endif()
+
+# Source package (`package_source` target). CPack archives the whole source tree,
+# so exclude the build trees, IDE state, caches, and fetched checkouts that the
+# root and extensions/zed .gitignore files list — otherwise any in-tree build-*/
+# directory, or the full repository clone Zed fetches into
+# extensions/zed/grammars/luma/, is packed. Setting this variable replaces CPack's
+# default list, so its VCS and editor-temporary patterns are restated. CPack
+# matches the patterns against absolute paths, so each is anchored to the source
+# root: an unanchored "/target/" would drop the entire tree whenever the checkout
+# itself lives under such a directory. Build trees match only at the root, because
+# tracked directories such as .github/actions/build-vscode-extension/ share the
+# build-* prefix.
+string(REGEX REPLACE "([][+.*()^$?|\\\\])" "\\\\\\1" _luma_source_regex
+    "${PROJECT_SOURCE_DIR}")
+set(_luma_any_dir "^${_luma_source_regex}/(.*/)?")
+set(CPACK_SOURCE_IGNORE_FILES
+    "^${_luma_source_regex}/(build|build-[^/]*|cmake-build-[^/]*|out|install)/"
+    "^${_luma_source_regex}/extensions/zed/grammars/(luma/|[^/]*\\.wasm$)"
+    "^${_luma_source_regex}/extensions/zed/extension\\.wasm$"
+    # Compiled-bytecode caches; the fuzz/corpus .lumc seeds are tracked and kept.
+    "^${_luma_source_regex}/([^/]*|(benchmarks|examples|tests)/.*)\\.lumc$"
+    "${_luma_any_dir}(CVS|\\.svn|\\.bzr|\\.hg|\\.git)(/|$)"
+    "${_luma_any_dir}(\\.vs|\\.idea|\\.luma|\\.cache|\\.ccache|\\.ruff_cache)/"
+    "${_luma_any_dir}(target|node_modules|__pycache__)/"
+    "${_luma_any_dir}(CMakeUserPresets|compile_commands)\\.json$"
+    "${_luma_any_dir}([^/]*\\.swp|\\.#[^/]*|#[^/]*)$"
+)
+unset(_luma_any_dir)
+unset(_luma_source_regex)
 
 include(CPack)

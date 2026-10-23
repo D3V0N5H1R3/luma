@@ -7,7 +7,7 @@
 #         -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address" \
 #         -DLUMA_BUILD_FUZZ=ON
 #   cmake --build build-fuzz --parallel
-#   ./build-fuzz/fuzz/fuzz_lexer corpus/lexer/ -max_total_time=300
+#   ./build-fuzz/fuzz_lexer fuzz/corpus/lexer/ -max_total_time=300
 
 if(NOT TARGET luma_analysis)
     message(FATAL_ERROR

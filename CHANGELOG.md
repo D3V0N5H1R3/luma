@@ -39,6 +39,19 @@ the end of every release.
 - **Build — the `format` target works on Windows**; it previously exceeded the
   32,767-character command-line limit. The `tidy` target reports a clear error when
   `compile_commands.json` is missing.
+- **Build — the `windows-arm64` preset links again.** `/CETCOMPAT` is an
+  x64-only linker flag, and the ARM64 linker rejected it (`LNK1246`) for every
+  executable; it is now applied to x64 builds only.
+- **Build — the `tidy` target skips the other platform's `*_win32.cpp` /
+  `*_posix.cpp` sources.** They are absent from `compile_commands.json`, so
+  clang-tidy failed to parse them on every platform; CI and the pre-commit hook
+  already excluded them.
+- **Build — `dap_integration_test` depends on `luma_dap`**, so building only the
+  test target no longer runs a missing or stale debug adapter.
+- **Build — `package_source` now contains exactly the tracked sources.** It
+  previously archived in-tree build directories, caches, and the repository
+  clone Zed fetches into `extensions/zed/grammars/luma/`, and CPack's unescaped
+  config turned the ignore patterns' `\.` into a wildcard.
 - **Tooling — clang-tidy reports diagnostics in first-party headers on Windows.**
   The `HeaderFilterRegex` only matched `/` separators, but clang builds header
   paths with `\` on Windows, so every header finding was silently dropped.
