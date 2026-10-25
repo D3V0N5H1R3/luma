@@ -767,15 +767,15 @@ The `compilation_pipeline.hpp` header (with definitions in `compilation_pipeline
 
 **Interface:**
 
-- `BytecodeVerifier::verify(func) → vector<VerifyError>` — Verify a compiled function's chunk. Returns an empty vector on success.
+- `BytecodeVerifier::verify(func) → vector<VerifyError>` — Verify a compiled function's chunk. Returns an empty vector on success. `instruction_stack_effect(code, offset)` exposes the per-opcode pops/pushes model.
 
 **Behaviour:**
 
 - Checks that all opcodes are valid and operands are in-bounds.
 - Validates that jump targets land on valid instruction boundaries.
 - Checks constant-pool and name-table indices.
-- Simulates stack depth to detect underflows and overflows.
-- Integrated into the pipeline via `VerifierPass`.
+- Walks the control flow graph from the entry point (each frame starts with the callee plus its arguments) to detect stack underflows and overflows, following jump, loop, catch-handler, and loop-exhaustion edges and simulating the deepest stack at merge points.
+- Integrated into the pipeline via `VerifierPass`, and run on every deserialized `.lumc` function; a clean result lets the VM skip operand-truncation and constant-index checks.
 
 **Dependencies:** Chunk, CompiledFunction.
 

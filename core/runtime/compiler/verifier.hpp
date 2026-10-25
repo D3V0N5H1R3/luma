@@ -2,6 +2,7 @@
 #define LUMA_COMPILER_VERIFIER_HPP
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -16,20 +17,38 @@ struct VerifyError {
     std::string message;
 };
 
-// ─── Single-pass bytecode verifier ───
-// Iterates bytecode once, performing all verification checks at each
-// instruction:
+// ─── Stack effect ───
+// How many values one instruction pops and then pushes.  For instructions
+// whose effect depends on the path taken, this describes the path that
+// continues into the instruction's successors: ForIterStep / ForIterStepKV
+// describe a step that produced an element (the exhausted step pushes only
+// `false`).
+
+struct StackEffect {
+    int pops{0};
+    int pushes{0};
+};
+
+// Stack effect of the instruction at `offset`, whose operands must lie within
+// `code`.
+[[nodiscard]] StackEffect instruction_stack_effect(const std::vector<std::uint8_t>& code,
+                                                   std::size_t offset);
+
+// ─── Bytecode verifier ───
+// A linear pass over the bytecode checks, at each instruction:
 //   • opcode validity and instruction truncation
 //   • constant pool index bounds
 //   • name table index bounds
 //   • upvalue index bounds
 //   • local slot index bounds
-//   • stack depth tracking (underflow / overflow)
 //
-// Jump target validation is deferred until after the iteration completes,
-// because forward jumps may target offsets not yet visited.  The deferred
-// phase iterates only the (small) set of collected jump records, not the
-// full bytecode.
+// Jump target validation is deferred until after that pass, because forward
+// jumps may target offsets not yet visited.
+//
+// Stack depth (underflow / overflow) is then checked by walking the control
+// flow graph from the entry point: each reachable instruction is simulated
+// with the deepest stack that reaches it along any path, following jump,
+// loop, exception-handler, and loop-exhaustion edges.
 
 class BytecodeVerifier {
 public:
