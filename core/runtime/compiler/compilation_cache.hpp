@@ -7,15 +7,18 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "common/lru_cache.hpp"
 #include "runtime/compiler/compile_result.hpp"
+#include "runtime/compiler/source_dependency.hpp"
 
 namespace luma {
 
 // In-memory compilation cache that avoids re-compiling unchanged files.
 // Keyed by (absolute path, compilation options, content hash). When a file's
-// content changes or options differ, the cached entry is not returned.
+// content changes, options differ, or a recorded dependency (an included file)
+// has changed on disk, the cached entry is not returned.
 // Uses LRU eviction when the cache exceeds max_entries.
 //
 // Thread safety
@@ -43,13 +46,15 @@ public:
         : cache_{max_entries} {}
 
     // Look up a cached compilation result for the given file path and content.
-    // Returns nullopt if the file is not in the cache or the content has changed.
+    // Returns nullopt if the file is not in the cache, the content has changed,
+    // or any dependency recorded by put() is no longer current on disk.
     [[nodiscard]] std::optional<CompileArtifact>
     get(const std::string& path, const std::string& content, const Options& options = Options{});
 
-    // Store a compiled artifact for the given file path and content.
+    // Store a compiled artifact for the given file path and content, together
+    // with the included files it was compiled from.
     void put(const std::string& path, const std::string& content, const CompileArtifact& artifact,
-             const Options& options = Options{});
+             const Options& options = Options{}, std::vector<SourceDependency> dependencies = {});
 
     // Invalidate all cache entries for a specific file (across all option variants).
     void invalidate(const std::string& path);
@@ -98,6 +103,7 @@ private:
     struct CacheEntry {
         std::uint64_t content_hash{0};
         CompileArtifact artifact;
+        std::vector<SourceDependency> dependencies;
     };
 
     mutable std::mutex mutex_;

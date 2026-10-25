@@ -12,6 +12,8 @@
 // Bytecode serialization format:
 //   Header: magic bytes (4), format version (u32), flags (u32),
 //           source hash (u64), timestamp (u64)
+//   Dependency count (u32), then per dependency: path (length-prefixed
+//   string), content hash (u64)
 //   Function count (u32): total number of functions including the top-level
 //   Functions (repeated):
 //     name (length-prefixed string), arity (u16), required_arity (u16),
@@ -452,7 +454,8 @@ std::optional<CompiledFunction> BytecodeSerializer::deserialize_function(Reader&
 std::vector<std::uint8_t>
 BytecodeSerializer::serialize(const CompiledFunction& top_level,
                               const std::vector<CompiledFunction>& functions,
-                              std::uint64_t source_hash, std::uint64_t timestamp) {
+                              std::uint64_t source_hash, std::uint64_t timestamp,
+                              std::span<const SourceDependency> dependencies) {
     Writer w;
 
     // Header.
@@ -461,6 +464,14 @@ BytecodeSerializer::serialize(const CompiledFunction& top_level,
     w.write_u32(0); // flags
     w.write_u64(source_hash);
     w.write_u64(timestamp);
+
+    // Dependency table.
+    w.write_u32(static_cast<std::uint32_t>(dependencies.size()));
+
+    for (const auto& dependency : dependencies) {
+        w.write_string(dependency.path);
+        w.write_u64(dependency.content_hash);
+    }
 
     // Function count (top_level + functions).
     w.write_u32(static_cast<std::uint32_t>(1 + functions.size()));
@@ -513,6 +524,33 @@ DeserializeResult BytecodeSerializer::deserialize(const std::vector<std::uint8_t
                 .detail = "bytecode_serializer: expected version " +
                           std::to_string(k_bytecode_format_version) + ", got " +
                           std::to_string(result.header.version)};
+    }
+
+    // Read the dependency table.  The count comes from untrusted bytes, so it
+    // is bounded both absolutely and by the remaining input before reserving.
+    const auto dependency_count = r.read_u32();
+    if (r.error() || dependency_count > SerializerLimits::k_max_dependency_count ||
+        !r.has_remaining(static_cast<std::size_t>(dependency_count) *
+                         SerializerLimits::k_min_dependency_bytes)) {
+        return {.bytecode = {},
+                .error = DeserializeError::BadDependencyTable,
+                .detail = "bytecode_serializer: invalid dependency count " +
+                          std::to_string(dependency_count)};
+    }
+
+    result.dependencies.reserve(dependency_count);
+    for (std::uint32_t i = 0; i < dependency_count; ++i) {
+        SourceDependency dependency;
+        dependency.path = r.read_string();
+        dependency.content_hash = r.read_u64();
+
+        if (r.error()) {
+            return {.bytecode = {},
+                    .error = DeserializeError::BadDependencyTable,
+                    .detail = "bytecode_serializer: corrupt dependency " + std::to_string(i)};
+        }
+
+        result.dependencies.push_back(std::move(dependency));
     }
 
     // Read functions.
@@ -587,8 +625,9 @@ DeserializeResult BytecodeSerializer::deserialize(const std::vector<std::uint8_t
 bool BytecodeSerializer::write_file(const std::filesystem::path& path,
                                     const CompiledFunction& top_level,
                                     const std::vector<CompiledFunction>& functions,
-                                    std::uint64_t source_hash, std::uint64_t timestamp) {
-    auto data = serialize(top_level, functions, source_hash, timestamp);
+                                    std::uint64_t source_hash, std::uint64_t timestamp,
+                                    std::span<const SourceDependency> dependencies) {
+    auto data = serialize(top_level, functions, source_hash, timestamp, dependencies);
 
     std::ofstream file(path, std::ios::binary);
     if (!file) {

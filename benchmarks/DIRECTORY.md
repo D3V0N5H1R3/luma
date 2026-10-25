@@ -14,8 +14,6 @@ build/luma benchmarks/suite.luma
 
 Individual `bench_*.luma` files are library modules included by `suite.luma` — they cannot be run standalone.
 
-> **Stale bytecode after editing a module:** `luma` caches compiled bytecode in `benchmarks/suite.lumc`, keyed on the text of `suite.luma` alone. Editing only an included `bench_*.luma` file does not invalidate that cache, so the next run silently executes the old benchmarks. Delete `benchmarks/suite.lumc` (or run with `--strict`, which bypasses the cache) after changing any module. CI starts from a clean checkout and is unaffected.
-
 ## Structure
 
 | File                     | Purpose                                        |

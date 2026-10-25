@@ -1,6 +1,8 @@
 // CLI unit tests — exit codes, levenshtein distance, flag suggestions.
 
+#include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <initializer_list>
 #include <iostream>
 #include <stdexcept>
@@ -433,6 +435,79 @@ static void test_run_file_strict_bypasses_warm_cache() {
               exit_code::type_error);
 }
 
+// A program whose @main fails exactly when the included helper returns true.
+// The entry point never changes in these tests; only the include is edited.
+static constexpr std::string_view k_include_entry_point = "include \"helper.luma\"\n"
+                                                          "@main\n"
+                                                          "function void main() {\n"
+                                                          "    assert(!should_fail())\n"
+                                                          "}\n";
+
+static void write_helper(const std::filesystem::path& path, bool should_fail) {
+    std::ofstream out{path, std::ios::binary | std::ios::trunc};
+    out << "function boolean should_fail() { return " << (should_fail ? "true" : "false") << " }\n";
+}
+
+// Run `program` with stdout/stderr captured so the expected assertion failure
+// does not clutter the test log.
+[[nodiscard]] static int run_quietly(const std::filesystem::path& program,
+                                     CompilationCache& cache) {
+    const CapturedStreams quiet{std::cout, std::cerr};
+
+    return run_file(program.string(), RunOptions{}, cache);
+}
+
+static void test_run_file_memory_cache_invalidated_by_include_edit() {
+    // Regression: the caches keyed on the entry point's text alone, so editing
+    // an included file kept running the old bytecode.
+    const TempDir dir;
+    const TempFile program{dir.path() / "main.luma", std::string{k_include_entry_point}};
+    write_helper(dir.path() / "helper.luma", /*should_fail=*/false);
+
+    CompilationCache cache;
+    ASSERT_EQ(run_quietly(program.path(), cache), exit_code::success);
+
+    write_helper(dir.path() / "helper.luma", /*should_fail=*/true);
+
+    ASSERT_EQ(run_quietly(program.path(), cache), exit_code::runtime_error);
+}
+
+static void test_run_file_disk_cache_invalidated_by_include_edit() {
+    const TempDir dir;
+    const TempFile program{dir.path() / "main.luma", std::string{k_include_entry_point}};
+    write_helper(dir.path() / "helper.luma", /*should_fail=*/false);
+
+    CompilationCache first_process;
+    ASSERT_EQ(run_quietly(program.path(), first_process), exit_code::success);
+    ASSERT_TRUE(std::filesystem::exists(dir.path() / "main.lumc"));
+
+    write_helper(dir.path() / "helper.luma", /*should_fail=*/true);
+
+    // A fresh in-memory cache forces the .lumc lookup, as a new process would.
+    CompilationCache second_process;
+    ASSERT_EQ(run_quietly(program.path(), second_process), exit_code::runtime_error);
+}
+
+static void test_run_file_disk_cache_hit_with_unchanged_include() {
+    const TempDir dir;
+    const TempFile program{dir.path() / "main.luma", std::string{k_include_entry_point}};
+    write_helper(dir.path() / "helper.luma", /*should_fail=*/false);
+
+    CompilationCache first_process;
+    ASSERT_EQ(run_quietly(program.path(), first_process), exit_code::success);
+
+    // Backdate the cache file: a recompile would rewrite it with a current
+    // timestamp, which avoids depending on the filesystem's time resolution.
+    const auto cache_file = dir.path() / "main.lumc";
+    const auto backdated = std::filesystem::last_write_time(cache_file) - std::chrono::hours{1};
+    std::filesystem::last_write_time(cache_file, backdated);
+
+    // An unchanged include must still be served from the .lumc file.
+    CompilationCache second_process;
+    ASSERT_EQ(run_quietly(program.path(), second_process), exit_code::success);
+    ASSERT_TRUE(std::filesystem::last_write_time(cache_file) == backdated);
+}
+
 static void test_run_tests_file_strict_fails_on_warning() {
     // A functionally-correct @test file that still trips a lint warning must
     // fail under --strict before any test body executes.
@@ -839,6 +914,9 @@ int main() {
     RUN(test_run_file_strict_fails_on_warning);
     RUN(test_run_file_nonstrict_succeeds_on_warning);
     RUN(test_run_file_strict_bypasses_warm_cache);
+    RUN(test_run_file_memory_cache_invalidated_by_include_edit);
+    RUN(test_run_file_disk_cache_invalidated_by_include_edit);
+    RUN(test_run_file_disk_cache_hit_with_unchanged_include);
     RUN(test_run_tests_file_strict_fails_on_warning);
     RUN(test_run_tests_file_nonstrict_succeeds_on_warning);
 

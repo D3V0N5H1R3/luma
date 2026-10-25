@@ -1,8 +1,13 @@
 // Compilation cache unit tests.
 
+#include <filesystem>
+#include <fstream>
 #include <string>
+#include <vector>
 
+#include "analysis/source/source_manager.hpp"
 #include "runtime/compiler/compilation_cache.hpp"
+#include "runtime/compiler/source_dependency.hpp"
 #include "test_framework.hpp"
 
 using namespace luma;
@@ -15,6 +20,22 @@ static CompileArtifact make_result(const std::string& name) {
     func.name = name;
     artifact.functions.push_back(std::move(func));
     return artifact;
+}
+
+static void overwrite_file(const std::filesystem::path& path, const std::string& content) {
+    std::ofstream out{path, std::ios::binary | std::ios::trunc};
+    out << content;
+}
+
+// Load `root` and `include` through a SourceManager, as a compile would, and
+// return the dependencies recorded for `root`.
+static std::vector<SourceDependency> dependencies_of(const TempFile& root,
+                                                     const TempFile& include) {
+    SourceManager source_manager;
+    const auto& root_file = source_manager.load(root.path_string());
+    (void)source_manager.load(include.path_string());
+
+    return collect_source_dependencies(source_manager, root_file.file_id);
 }
 
 // ─── Basic put/get ───
@@ -214,6 +235,69 @@ static void test_cache_content_hash_invalidation_flow() {
     ASSERT_FALSE(old_lookup.has_value());
 }
 
+// ─── Source dependencies (included files) ───
+
+static void test_dependencies_skip_root_and_virtual_sources() {
+    const TempFile root{"include \"helper.luma\"\n"};
+    const TempFile include{"function integer helper() { return 1 }\n"};
+
+    SourceManager source_manager;
+    const auto& root_file = source_manager.load(root.path_string());
+    (void)source_manager.load(include.path_string());
+    (void)source_manager.load_virtual("<prelude>", "function integer injected() { return 0 }");
+
+    const auto dependencies = collect_source_dependencies(source_manager, root_file.file_id);
+
+    ASSERT_EQ(dependencies.size(), 1U);
+    ASSERT_EQ(dependencies[0].path, source_manager.files()[1].path);
+    ASSERT_TRUE(are_source_dependencies_current(dependencies));
+}
+
+static void test_dependencies_stale_after_edit() {
+    const TempFile root{"include \"helper.luma\"\n"};
+    const TempFile include{"function integer helper() { return 1 }\n"};
+    const auto dependencies = dependencies_of(root, include);
+
+    overwrite_file(include.path(), "function integer helper() { return 2 }\n");
+
+    ASSERT_FALSE(are_source_dependencies_current(dependencies));
+}
+
+static void test_dependencies_stale_after_delete() {
+    const TempFile root{"include \"helper.luma\"\n"};
+    const TempFile include{"function integer helper() { return 1 }\n"};
+    const auto dependencies = dependencies_of(root, include);
+
+    std::filesystem::remove(include.path());
+
+    ASSERT_FALSE(are_source_dependencies_current(dependencies));
+}
+
+// SourceManager strips a UTF-8 BOM before the text is hashed, so the freshness
+// check must strip it too — otherwise every BOM-prefixed include would read as
+// edited and never hit the cache.
+static void test_dependencies_current_with_utf8_bom() {
+    const TempFile root{"include \"helper.luma\"\n"};
+    const TempFile include{"\xEF\xBB\xBF"
+                           "function integer helper() { return 1 }\n"};
+
+    ASSERT_TRUE(are_source_dependencies_current(dependencies_of(root, include)));
+}
+
+static void test_cache_miss_when_dependency_changes() {
+    const TempFile root{"include \"helper.luma\"\n"};
+    const TempFile include{"function integer helper() { return 1 }\n"};
+    CompilationCache cache;
+
+    cache.put("app.luma", "source", make_result("v1"), {}, dependencies_of(root, include));
+    ASSERT_TRUE(cache.get("app.luma", "source").has_value());
+
+    // The entry point is unchanged, but an included file was edited.
+    overwrite_file(include.path(), "function integer helper() { return 2 }\n");
+
+    ASSERT_FALSE(cache.get("app.luma", "source").has_value());
+}
+
 // ─── main ───
 
 int main() {
@@ -228,5 +312,10 @@ int main() {
     RUN(test_cache_lru_update_refreshes);
     RUN(test_cache_max_entries);
     RUN(test_cache_content_hash_invalidation_flow);
+    RUN(test_dependencies_skip_root_and_virtual_sources);
+    RUN(test_dependencies_stale_after_edit);
+    RUN(test_dependencies_stale_after_delete);
+    RUN(test_dependencies_current_with_utf8_bom);
+    RUN(test_cache_miss_when_dependency_changes);
     return SUMMARY();
 }

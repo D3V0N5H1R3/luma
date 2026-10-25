@@ -207,6 +207,7 @@ const SourceFile& SourceManager::load_virtual(std::string_view name, std::string
     path_to_id_[key] = file_id;
 
     files_.emplace_back(file_id, key, std::move(text));
+    files_.back().is_virtual = true;
 
     return files_.back();
 }

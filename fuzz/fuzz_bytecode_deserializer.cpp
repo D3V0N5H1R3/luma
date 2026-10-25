@@ -34,7 +34,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         // Round-trip oracle: a program that came out of the deserialiser must
         // serialise to a buffer that deserialises again to identical bytes.
         const auto encoded = luma::BytecodeSerializer::serialize(
-            first->top_level, first->functions, first->header.source_hash, first->header.timestamp);
+            first->top_level, first->functions, first->header.source_hash, first->header.timestamp,
+            first->dependencies);
 
         auto second = luma::BytecodeSerializer::deserialize(encoded);
         if (!second) {
@@ -43,7 +44,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
         const auto re_encoded = luma::BytecodeSerializer::serialize(
             second->top_level, second->functions, second->header.source_hash,
-            second->header.timestamp);
+            second->header.timestamp, second->dependencies);
 
         if (encoded != re_encoded) {
             luma::fuzz::trap(); // Serialisation is not deterministic/stable.

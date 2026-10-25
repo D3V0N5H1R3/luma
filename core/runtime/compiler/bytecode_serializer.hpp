@@ -10,12 +10,16 @@
 //   - Distribution of pre-compiled Luma modules.
 //
 // File format (.lumc):
-//   Header (24 bytes):
+//   Header (28 bytes):
 //     - Magic:       "LUMC" (4 bytes)
-//     - Version:     u32 (format version, currently 2)
+//     - Version:     u32 (format version, see k_bytecode_format_version)
 //     - Flags:       u32 (reserved)
 //     - Source hash: u64 (FNV-1a hash of the source text for invalidation)
 //     - Timestamp:   u64 (modification time of source file, for quick checks)
+//
+//   Dependency table:
+//     - Dependency count: u32
+//     - For each dependency (an included file): path string, content hash: u64
 //
 //   Function table:
 //     - Function count: u32
@@ -41,11 +45,13 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
 #include "common/byte_utils.hpp"
 #include "runtime/compiler/chunk.hpp"
+#include "runtime/compiler/source_dependency.hpp"
 
 namespace luma {
 
@@ -68,7 +74,10 @@ namespace luma {
 //   2 → 3: removed unemitted bitwise opcodes (BitwiseAnd, BitwiseOr,
 //          BitwiseXor, BitwiseNot, ShiftLeft, ShiftRight), renumbering
 //          subsequent opcodes.
-static constexpr std::uint32_t k_bytecode_format_version = 3;
+//   3 → 4: added the dependency table after the header, so a cache file built
+//          from an included file that has since been edited is rejected
+//          instead of silently running the old code.
+static constexpr std::uint32_t k_bytecode_format_version = 4;
 
 // Magic bytes at the start of a .lumc file.
 static constexpr char k_bytecode_magic[4] = {'L', 'U', 'M', 'C'};
@@ -87,6 +96,7 @@ static_assert(sizeof(BytecodeHeader) <= 32);
 // Result of deserialization.
 struct DeserializedBytecode {
     BytecodeHeader header;
+    std::vector<SourceDependency> dependencies;
     CompiledFunction top_level;
     std::vector<CompiledFunction> functions;
 };
@@ -98,6 +108,7 @@ enum class DeserializeError {
     ReadError,
     BadMagic,
     VersionMismatch,
+    BadDependencyTable,
     BadFunctionCount,
     CorruptFunction,
     FileNotFound,
@@ -146,10 +157,12 @@ struct DeserializeResult {
 
 class BytecodeSerializer {
 public:
-    // Serialize compiled functions to a byte buffer.
+    // Serialize compiled functions to a byte buffer.  `dependencies` lists the
+    // included files the program was compiled from (see SourceDependency).
     [[nodiscard]] static std::vector<std::uint8_t>
     serialize(const CompiledFunction& top_level, const std::vector<CompiledFunction>& functions,
-              std::uint64_t source_hash, std::uint64_t timestamp = 0);
+              std::uint64_t source_hash, std::uint64_t timestamp = 0,
+              std::span<const SourceDependency> dependencies = {});
 
     // Deserialize from a byte buffer.  Returns a DeserializeResult with a
     // specific error code on failure.
@@ -160,9 +173,12 @@ public:
     [[nodiscard]] static bool write_file(const std::filesystem::path& path,
                                          const CompiledFunction& top_level,
                                          const std::vector<CompiledFunction>& functions,
-                                         std::uint64_t source_hash, std::uint64_t timestamp = 0);
+                                         std::uint64_t source_hash, std::uint64_t timestamp = 0,
+                                         std::span<const SourceDependency> dependencies = {});
 
-    // Read and deserialize a .lumc file.
+    // Read and deserialize a .lumc file.  Checks the entry point's source hash
+    // only; the caller must also confirm the recorded dependencies are current
+    // (are_source_dependencies_current) before trusting the bytecode.
     // Returns a DeserializeResult with a specific error code on failure.
     [[nodiscard]] static DeserializeResult read_file(const std::filesystem::path& path,
                                                      std::uint64_t expected_source_hash = 0);

@@ -786,12 +786,12 @@ The `compilation_pipeline.hpp` header (with definitions in `compilation_pipeline
 **Interface:**
 
 - `CompilationCache(max_entries)` — Construct with an LRU capacity (default 128).
-- `get(path, content, options) → optional<CompileArtifact>` — Look up a cached artifact keyed by path, content hash, and options.
-- `put(path, content, options, artifact)` — Store a compiled artifact.
+- `get(path, content, options) → optional<CompileArtifact>` — Look up a cached artifact keyed by path, content hash, and options; misses if a recorded dependency has changed.
+- `put(path, content, artifact, options, dependencies)` — Store a compiled artifact with the included files (`SourceDependency` list) it was compiled from.
 
 **Behaviour:**
 
-- Keyed by (absolute path, compilation options, content hash). When content or options change, the cached entry is invalidated.
+- Keyed by (absolute path, compilation options, content hash). When content or options change, the cached entry is invalidated. Because the key covers only the entry point, each entry also records its included files; `get` re-hashes them (`are_source_dependencies_current`) and misses if any was edited or deleted.
 - Uses LRU eviction when the cache exceeds `max_entries`.
 - Thread-safe (guarded by mutex) for use by the language server's analysis thread.
 - Complements the on-disk `.lumc` cache (§4.26), which persists compiled bytecode across process restarts.
@@ -804,21 +804,21 @@ The `compilation_pipeline.hpp` header (with definitions in `compilation_pipeline
 
 **Interface:** (`BytecodeSerializer`, static methods)
 
-- `serialize(top_level, functions, source_hash, timestamp) → vector<uint8_t>` — Encode compiled functions to a byte buffer.
+- `serialize(top_level, functions, source_hash, timestamp, dependencies) → vector<uint8_t>` — Encode compiled functions and the program's included-file dependencies to a byte buffer.
 - `deserialize(bytes) → DeserializeResult` — Decode a buffer, returning a typed error code on failure.
-- `write_file(path, top_level, functions, source_hash, timestamp) → bool` — Serialize and write a `.lumc` file.
-- `read_file(path, expected_source_hash) → DeserializeResult` — Read, validate, and decode a `.lumc` file.
+- `write_file(path, top_level, functions, source_hash, timestamp, dependencies) → bool` — Serialize and write a `.lumc` file.
+- `read_file(path, expected_source_hash) → DeserializeResult` — Read, validate, and decode a `.lumc` file. The caller still checks the decoded `dependencies`.
 - `hash_source(source) → uint64` — FNV-1a 64-bit content hash used for invalidation.
 - `cache_path_for(source) → path` — The cache path for a source file; replaces the source extension with `.lumc` (e.g. `app.luma` → `app.lumc`).
 
 **Behaviour:**
 
 - After a successful compile, `run_file` (in `cli_runner.cpp`) writes the bytecode to a `<source>.lumc` file **next to the source**. On the next run it first checks the in-memory `CompilationCache` (§4.25), then attempts `read_file`; a valid hit executes the deserialized bytecode without recompiling.
-- **Invalidation:** the disk cache key mixes the FNV-1a source hash with the optimization level, so editing the source or changing `-O` produces a miss. `read_file` rejects a stale or damaged file — recompiling from source — on bad magic, format-version mismatch, source-hash mismatch, or corruption (see `DeserializeError`).
+- **Invalidation:** the disk cache key mixes the FNV-1a source hash with the optimization level, so editing the source or changing `-O` produces a miss. `read_file` rejects a stale or damaged file — recompiling from source — on bad magic, format-version mismatch, source-hash mismatch, or corruption (see `DeserializeError`). `run_file` then re-hashes every recorded dependency (each `include`d file) and recompiles if one was edited or deleted. A newly created file that would shadow a resolved include is not detected until a dependency or the entry point changes.
 - `.lumc` files are a **transparent cache, not a distribution format**: bumping `k_bytecode_format_version` simply rejects old files (`DeserializeError::VersionMismatch`) rather than migrating them. They are safe to delete and are git-ignored.
 - Only normal program runs produce `.lumc` files; `--check` and `--test` compile in memory and write nothing. A failed write (e.g. a read-only directory) emits a warning to stderr and execution continues.
 
-**File format:** A 24-byte header (`"LUMC"` magic, u32 format version, u32 flags, u64 FNV-1a source hash, u64 timestamp) followed by a function table (count + per-function metadata, bytecode chunk, constant pool, source map, and name table).
+**File format:** A 28-byte header (`"LUMC"` magic, u32 format version, u32 flags, u64 FNV-1a source hash, u64 timestamp), a dependency table (count + per-dependency path and u64 content hash), and a function table (count + per-function metadata, bytecode chunk, constant pool, source map, and name table).
 
 **Dependencies:** Chunk, CompiledFunction, `common/hash.hpp` (FNV-1a).
 

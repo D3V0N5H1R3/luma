@@ -175,6 +175,17 @@ struct SerializerLimits {
     // against the remaining bytes — the same out-of-memory protection the
     // source-map and name-table guards apply.
     static constexpr std::size_t k_min_function_bytes = 31;
+
+    // Maximum number of source dependencies (included files) recorded in a
+    // serialized bytecode file.  The count is a u32; 10 000 includes is far
+    // beyond any real program, and capping it bounds the reservation a
+    // malformed .lumc file can request.
+    static constexpr std::uint32_t k_max_dependency_count = 10'000;
+
+    // Minimum number of bytes a serialized dependency occupies: an empty path
+    // (u32 length prefix) plus its content hash (u64) = 12 bytes.  Bounds the
+    // dependency count against the remaining input, like the guards above.
+    static constexpr std::size_t k_min_dependency_bytes = 12;
 };
 
 } // namespace luma
