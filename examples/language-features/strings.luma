@@ -17,8 +17,8 @@ function void main() {
     print("Welcome to ${name} ${version}.0!")
 
     # Any expression works inside ${...}
-    array<integer> prices = [3, 5, 2]
-    print("Total: ${Result.unwrap(Array.sum(prices))}")
+    array<number> prices = [2.50, 4.25, 1.75]
+    print("Total: ${Array.sum(prices) ?? 0.0}")
     print("Doubled: ${version * 2}")
     print("Status: ${if version >= 1 { "stable" } else { "preview" }}")
 

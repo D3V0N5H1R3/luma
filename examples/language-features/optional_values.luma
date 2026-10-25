@@ -2,7 +2,7 @@
 # Optional Values
 #
 # Demonstrates optional<T>, some(), none, the ?? operator,
-# optional chaining (?. and ?[), and the Optional module.
+# optional chaining (?.), and the Optional module.
 # ═══════════════════════════════════════════════════════════
 
 record User {
@@ -30,8 +30,8 @@ function string format_profile(Profile profile) {
     string bio_text = profile.bio ?? "No bio provided"
 
     string tags_label = match profile.tags {
-    case some(t) { Array.join(t, ", ") }
-    case none    { "none" }
+    case some(tags) { Array.join(tags, ", ") }
+    case none       { "none" }
     }
 
     return "${profile.user.name} — ${bio_text} [tags: ${tags_label}]"
@@ -77,16 +77,16 @@ function void main() {
     print("Optional pipeline:")
 
     string label = some(42)
-    |> Optional.filter((integer i) -> i > 0)
-    |> Optional.map((integer i) -> "positive: ${i}")
-    |> Optional.unwrap_or("not positive")
+        |> Optional.filter((integer i) -> i > 0)
+        |> Optional.map((integer i) -> "positive: ${i}")
+        |> Optional.unwrap_or("not positive")
 
     print("  ${label}")
 
     optional<integer> empty = none
     string fallback = empty
-    |> Optional.map((integer i) -> "value: ${i}")
-    |> Optional.unwrap_or("no value")
+        |> Optional.map((integer i) -> "value: ${i}")
+        |> Optional.unwrap_or("no value")
 
     print("  ${fallback}")
 }

@@ -44,7 +44,9 @@ function void main() {
 
     reference<integer> total = Reference.new(0)
 
-    # Multiple closures all capture the same reference.
+    # Closures capture ordinary values by copy, but a captured reference
+    # still points at the same cell — so updates made through the closure
+    # are visible via `total`.
     function(integer) -> void increment = (integer n) ->
     Reference.update(total, (integer v) -> v + n)
 
@@ -74,22 +76,25 @@ function void main() {
 
     # Resource.with(resource, body, cleanup):
     #   1. Calls body(resource) to produce a value.
-    #   2. Calls cleanup(resource) unconditionally after body completes.
+    #   2. Always calls cleanup(resource) afterwards — even if body raises
+    #      a runtime error.
     #   3. Returns the body's value.
 
     string temp_file = "_ref_example_tmp.txt"
-    boolean _ = FileSystem.write_file(temp_file, "temporary data") |> Result.is_success()
+    _ = FileSystem.write_file(temp_file, "temporary data")
 
     string content = Resource.with(
         temp_file,
-        (string path) -> Result.unwrap(FileSystem.read_file(path)),
+        (string path) -> FileSystem.read_file(path) ?? "<could not read file>",
         (string path) -> FileSystem.delete(path)
     )
 
     print("Read: ${content}")
 
-    boolean still_exists = FileSystem.exists(temp_file) |> Result.unwrap()
-    print("File deleted by cleanup: ${!still_exists}")
+    match FileSystem.exists(temp_file) {
+        success(still_exists) { print("File deleted by cleanup: ${!still_exists}") }
+        failure(message) { print("Could not check the file: ${message}") }
+    }
 
     # ── Resource with integer handle ──
     print("\n=== Resource with Computed Value ===")

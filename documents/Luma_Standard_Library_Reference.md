@@ -1145,6 +1145,8 @@ Structured logging with configurable levels. Messages are written to stderr by d
 
 Levels are ordered: `Debug` < `Information` < `Warning` < `Error` < `Off`. The `Log.Level` choice type provides variants: `Log.Level.Debug`, `Log.Level.Information`, `Log.Level.Warning`, `Log.Level.Error`, `Log.Level.Off`. For convenience, `Log.set_level` also accepts lowercase strings (`"debug"`, `"info"`, `"warn"`, `"error"`, `"off"`).
 
+`Log.set_format` replaces the whole log-line template. The template recognises three placeholders — `${timestamp}`, `${level}`, and `${message}` — and the default is `"${timestamp} [${level}] ${message}"`. Because `${...}` inside a Luma string literal is interpolation, escape the dollar sign so the placeholders reach the logger verbatim: `Log.set_format("[MYAPP] \${level}: \${message}")`. A template without `${message}` omits the message text.
+
 `Log.set_output` accepts a file path or one of the special strings `"stderr"` (default) or `"stdout"`. When given a file path it appends to the file, creating it if it does not exist.
 
 `Log.set_output` also accepts a `Log.Output` choice in place of the string, mirroring how `Log.set_level` accepts `Log.Level`. The choice has three variants: `Log.Output.Stderr`, `Log.Output.Stdout`, and `Log.Output.File(path: string)`. The typed form removes the ambiguity of the string overload — where a mistyped stream name such as `"stdrr"` is silently treated as a file path — because a stream and a file path are now distinct variants: `Log.set_output(Log.Output.File("app.log"))` can only mean a file.
@@ -2119,7 +2121,7 @@ array<integer> outer = task_scope {
 }
 ```
 
-Using `spawn` outside a `task_scope` still works (fire-and-forget) but produces a type-checker warning. Wrap spawns in a `task_scope` for structured lifetime management.
+Using `spawn` outside a `task_scope` is a compile-time error. Wrap spawns in a `task_scope` for structured lifetime management.
 
 | Function                                                           | Parameter Types                       | Return Type        | Description                                                                                                |
 | ------------------------------------------------------------------ | ------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------- |
@@ -2189,7 +2191,7 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | `Terminal.move_right(n)`                       | `(integer)`                           | `none`                            | Move cursor right `n` columns                                                                               |
 | `Terminal.move_to_column(column)`              | `(integer)`                           | `result<none>`                    | Move to column; fail if `col < 1`                                                                           |
 | `Terminal.move_to_row(row)`                    | `(integer)`                           | `result<none>`                    | Move to row; fail if `row < 1`                                                                              |
-| `Terminal.move_to(row, column)`                | `(integer, integer)`                  | `none`                            | Move cursor to row and column (1-based)                                                                     |
+| `Terminal.move_to(row, column)`                | `(integer, integer)`                  | `result<none>`                    | Move cursor to row and column (1-based); fail if `row < 1` or `column < 1`                                  |
 | `Terminal.move_up(n)`                          | `(integer)`                           | `none`                            | Move cursor up `n` lines                                                                                    |
 | `Terminal.overwrite_line(text)`                | `(string)`                            | `none`                            | Clear current line and write                                                                                |
 | `Terminal.parse_key(key)`                      | `(string)`                            | `Terminal.Key`                    | Decode a key name into a typed `Terminal.Key` choice                                                        |

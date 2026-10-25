@@ -8,30 +8,40 @@
 # Usage: luma examples/applications/guess_the_number.luma
 # ═══════════════════════════════════════════════════════════
 
-function boolean play_round(number secret, integer max_guesses) {
+function string format_count(number count) {
+    return String.format_number(count, 0)
+}
+
+function string guesses_text(number count) {
+    string noun = if count == 1 { "guess" } else { "guesses" }
+
+    return "${format_count(count)} ${noun}"
+}
+
+function boolean play_round(number secret, number max_guesses) {
     mutable number attempts = 0
 
     print("\nI'm thinking of a number between 1 and 100.")
-    print("You have ${max_guesses} guesses. Good luck!\n")
+    print("You have ${guesses_text(max_guesses)}. Good luck!\n")
 
     while attempts < max_guesses {
         string raw = Result.unwrap_or(Console.prompt("Your guess (1-100, or 'q' to quit): "), "q")
-        string trimmed = String.trim(raw)
+        string answer = raw |> String.trim() |> String.lowercase()
 
-        if String.lowercase(trimmed) == "q" || String.lowercase(trimmed) == "quit" {
-            print("\nNo problem — the number was ${secret}.")
+        if answer == "q" || answer == "quit" {
+            print("\nNo problem — the number was ${format_count(secret)}.")
 
             return false
         }
 
-        match String.parse_integer(trimmed) {
+        match String.parse_integer(answer) {
             success(guess) {
                 # A guess only counts once it is a valid number, so typos are free.
                 attempts++
 
                 match guess {
                 case == secret {
-                    print("Correct! You got it in ${attempts} guesses!")
+                    print("Correct! You got it in ${guesses_text(attempts)}!")
 
                     return true
                 }
@@ -46,7 +56,7 @@ function boolean play_round(number secret, integer max_guesses) {
                 number remaining = max_guesses - attempts
 
                 if remaining > 0 {
-                    print("(${remaining} guesses remaining)")
+                    print("(${guesses_text(remaining)} remaining)")
                 }
             }
             failure(_) {
@@ -55,7 +65,7 @@ function boolean play_round(number secret, integer max_guesses) {
         }
     }
 
-    print("\nOut of guesses! The number was ${secret}.")
+    print("\nOut of guesses! The number was ${format_count(secret)}.")
 
     return false
 }
@@ -102,18 +112,22 @@ function void main() {
             wins++
         }
 
-        print("\nScore: ${wins}/${rounds}")
+        print("\nScore: ${format_count(wins)}/${format_count(rounds)}")
 
-        if !ask_yes_no(replay_prompt()) {
-            is_playing = false
-        }
+        is_playing = ask_yes_no(replay_prompt())
     }
 
-    print("\nThanks for playing! Final score: ${wins}/${rounds}")
+    print("\nThanks for playing! Final score: ${format_count(wins)}/${format_count(rounds)}")
 }
 
 @test
 function void test_replay_prompt_explains_both_choices() {
     assert(String.contains(replay_prompt(), "Enter y to continue"))
     assert(String.contains(replay_prompt(), "n to quit"))
+}
+
+@test
+function void test_guesses_text_uses_whole_numbers_and_plurals() {
+    assert(guesses_text(1) == "1 guess")
+    assert(guesses_text(6) == "6 guesses")
 }

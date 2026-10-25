@@ -236,7 +236,7 @@ If a producer task finishes without calling `Channel.close(ch)`, consumer tasks 
 
 ### Spawn Outside `task_scope`
 
-Using `spawn` outside a `task_scope` runs the task fire-and-forget. The type checker emits a warning. If the spawned task fails, the error is silently lost.
+Using `spawn` outside a `task_scope` is a compile-time `TypeError` ("spawn outside task_scope — unstructured concurrency is not allowed") in programs and test files. Only the REPL, which skips type checking, can still run a fire-and-forget task whose failure is silently lost.
 
 **Fix:** Wrap spawns in a `task_scope` block.
 

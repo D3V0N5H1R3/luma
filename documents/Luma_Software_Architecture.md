@@ -2063,7 +2063,7 @@ task_scope {
 
 - `Interpreter::current_scope_` (thread-local) points to the active `TaskScope` on the current thread.
 - When a task is spawned, it captures the current scope's token and registers itself. Outside a scope, `current_scope_` is `nullptr` and the task runs unstructured (fire-and-forget).
-- The type checker emits a warning for `spawn` outside a `task_scope`.
+- The type checker rejects `spawn` outside a `task_scope` with a compile-time error. Only the REPL, which skips type checking, can still reach the unstructured runtime path.
 
 ### 12.5 Task Environment Isolation
 

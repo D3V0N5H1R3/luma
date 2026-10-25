@@ -8,10 +8,10 @@
 record Product {
     string name,
     number price,
-    integer quantity
+    number quantity
 }
 
-function string _format_product(Product product) {
+function string format_product(Product product) {
     number total = product.price * product.quantity
 
     return "${product.name}: ${String.format_number(total, 2)}"
@@ -29,25 +29,25 @@ function void main() {
     ]
 
     array<string> report = inventory
-    !> Array.filter((Product product) -> product.quantity > 0)
-    !> Array.sort_by((Product product) -> -product.price)
-    !> Array.map(_format_product)
-    |> Result.unwrap_or([])
+        !> Array.filter((Product product) -> product.quantity > 0)
+        !> Array.sort_by((Product product) -> -product.price)
+        !> Array.map(format_product)
+        |> Result.unwrap_or([])
 
     print("In-stock items (by price, descending):")
 
-    result<none> _ = report |> Array.each((string line) -> print("  ${line}"))
+    _ = report |> Array.each((string line) -> print("  ${line}"))
 
     number total_value = inventory
-    !> Array.map((Product product) -> product.price * product.quantity)
-    !> Array.sum()
-    |> Result.unwrap_or(0.0)
+        !> Array.map((Product product) -> product.price * product.quantity)
+        !> Array.sum()
+        |> Result.unwrap_or(0.0)
 
     print("\nTotal inventory value: ${String.format_number(total_value, 2)}")
 
     integer in_stock = inventory
-    |> Array.count((Product product) -> product.quantity > 0)
-    |> Result.unwrap_or(0)
+        |> Array.count((Product product) -> product.quantity > 0)
+        |> Result.unwrap_or(0)
 
     integer out_of_stock = Array.length(inventory) - in_stock
 

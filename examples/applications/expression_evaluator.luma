@@ -23,8 +23,9 @@ choice Type {
     TBool
 }
 
+# The evaluated language's int type (TInt) maps onto Luma's integer.
 choice Expr {
-    Lit(number value)
+    Lit(integer value)
     BoolLit(boolean value)
     Add(Expr left, Expr right)
     Mul(Expr left, Expr right)
@@ -37,7 +38,7 @@ choice Expr {
 }
 
 choice Value {
-    VInt(number value)
+    VInt(integer value)
     VBool(boolean value)
 }
 
@@ -73,11 +74,16 @@ function boolean is_bool(Type type_value) {
     }
 }
 
+# Choice values compare structurally, so == checks that both are the same variant.
 function boolean types_equal(Type left, Type right) {
-    if is_int(left) && is_int(right)   { return true }
-    if is_bool(left) && is_bool(right) { return true }
+    return left == right
+}
 
-    return false
+function Type type_of_value(Value value) {
+    return match value {
+    case Value.VInt(_int_value)   { Type.TInt }
+    case Value.VBool(_bool_value) { Type.TBool }
+    }
 }
 
 # ─── Environment Helpers ────────────────────────────────
@@ -213,7 +219,7 @@ function result<Type> type_check(Expr expr, array<TypeBinding> env) {
 
 function result<Value> _eval_binary(
     Expr left, Expr right, array<ValueBinding> env,
-    function(number, number) -> Value combiner,
+    function(integer, integer) -> Value combiner,
     string operator
 ) {
     Value left_value = evaluate(left, env)?
@@ -236,32 +242,12 @@ function result<Value> _eval_equal(
     Value left_value = evaluate(left, env)?
     Value right_value = evaluate(right, env)?
 
-    match left_value {
-    case Value.VInt(left_int) {
-        match right_value {
-        case Value.VInt(right_int) {
-            result<integer> left_number = Converter.to_integer(left_int)
-            result<integer> right_number = Converter.to_integer(right_int)
-
-            return success(Value.VBool(left_number == right_number))
-        }
-        else { return failure("Equal: type mismatch") }
-        }
-    }
-    case Value.VBool(left_bool) {
-        match right_value {
-        case Value.VBool(right_bool) {
-            string left_text = Converter.to_string(left_bool)
-            string right_text = Converter.to_string(right_bool)
-
-            return success(Value.VBool(left_text == right_text))
-        }
-        else { return failure("Equal: type mismatch") }
-        }
-    }
+    if !types_equal(type_of_value(left_value), type_of_value(right_value)) {
+        return failure("Equal: type mismatch")
     }
 
-    return failure("Equal: unsupported type")
+    # Value is a choice type, so == compares both the variant and its payload.
+    return success(Value.VBool(left_value == right_value))
 }
 
 function result<Value> _eval_if(
@@ -298,11 +284,11 @@ function result<Value> evaluate(Expr expr, array<ValueBinding> env) {
     case Expr.BoolLit(value) { return success(Value.VBool(value)) }
     case Expr.Add(left, right) {
         return _eval_binary(
-            left, right, env, (number a, number b) -> Value.VInt(a + b), "Add")
+            left, right, env, (integer a, integer b) -> Value.VInt(a + b), "Add")
     }
     case Expr.Mul(left, right) {
         return _eval_binary(
-            left, right, env, (number a, number b) -> Value.VInt(a * b), "Mul")
+            left, right, env, (integer a, integer b) -> Value.VInt(a * b), "Mul")
     }
     case Expr.Neg(operand) {
         Value operand_value = evaluate(operand, env)?
@@ -314,7 +300,7 @@ function result<Value> evaluate(Expr expr, array<ValueBinding> env) {
     }
     case Expr.LessThan(left, right) {
         return _eval_binary(
-            left, right, env, (number a, number b) -> Value.VBool(a < b), "LessThan")
+            left, right, env, (integer a, integer b) -> Value.VBool(a < b), "LessThan")
     }
     case Expr.Equal(left, right) { return _eval_equal(left, right, env) }
     case Expr.If(condition, then_branch, else_branch) {
@@ -507,28 +493,23 @@ function void main() {
     print("   Expression Evaluator & Type Checker")
     print("═══════════════════════════════════════")
 
-    # Simple arithmetic: (3 + 4) * 2
     print("")
     print(run_and_show("(3 + 4) * 2",
         Expr.Mul(Expr.Add(Expr.Lit(3), Expr.Lit(4)), Expr.Lit(2))
     ))
 
-    # Negation: -(10)
     print(run_and_show("-(10)",
         Expr.Neg(Expr.Lit(10))
     ))
 
-    # Comparison: 5 < 3
     print(run_and_show("5 < 3",
         Expr.LessThan(Expr.Lit(5), Expr.Lit(3))
     ))
 
-    # Equality: 42 == 42
     print(run_and_show("42 == 42",
         Expr.Equal(Expr.Lit(42), Expr.Lit(42))
     ))
 
-    # Conditional: if 1 < 10 then 42 else 0
     print(run_and_show("if 1 < 10 then 42 else 0",
         Expr.If(
             Expr.LessThan(Expr.Lit(1), Expr.Lit(10)),
@@ -537,14 +518,12 @@ function void main() {
         )
     ))
 
-    # Let binding: let x = 5 in x + x
     print(run_and_show("let x = 5 in x + x",
         Expr.Let("x", Expr.Lit(5),
             Expr.Add(Expr.Var("x"), Expr.Var("x"))
         )
     ))
 
-    # Nested let: let x = 3 in let y = x + 1 in x * y
     print(run_and_show("let x=3 in let y=x+1 in x*y",
         Expr.Let("x", Expr.Lit(3),
             Expr.Let("y", Expr.Add(Expr.Var("x"), Expr.Lit(1)),
@@ -553,7 +532,6 @@ function void main() {
         )
     ))
 
-    # Complex: let a = 10 in let b = 3 in if a < b then 0 else a + b
     print(run_and_show("let a=10, b=3 in if a<b then 0 else a+b",
         Expr.Let("a", Expr.Lit(10),
             Expr.Let("b", Expr.Lit(3),
@@ -566,7 +544,6 @@ function void main() {
         )
     ))
 
-    # Type error demonstration
     print("")
     print("─── Type Errors ───")
 
@@ -578,7 +555,7 @@ function void main() {
         Expr.If(Expr.Lit(42), Expr.Lit(1), Expr.Lit(2))
     ))
 
-    print(run_and_show("unbound_var",
+    print(run_and_show("oops",
         Expr.Var("oops")
     ))
 }

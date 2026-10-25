@@ -3,8 +3,9 @@
 #
 # Demonstrates the Math standard library module:
 # constants, trigonometry, rounding, roots, powers,
-# logarithms, absolute value, min/max, statistics,
-# combinatorics, and primality testing.
+# logarithms, absolute value, min/max, combinatorics,
+# primality testing, and approximate equality — plus
+# summary statistics from the Statistics module.
 # ═══════════════════════════════════════════════════════════
 
 # ── Constants ──
@@ -108,10 +109,10 @@ function void demo_combinatorics_and_primes() {
     print("gcd(48,18) = ${Result.unwrap(Math.greatest_common_divisor(48, 18))}")
     print("lcm(4, 6)  = ${Result.unwrap(Math.least_common_multiple(4, 6))}")
 
-    array<integer> test_primes = [2, 7, 15, 23, 100]
+    array<integer> candidates = [2, 7, 15, 23, 100]
 
-    for n in test_primes {
-        print("  is_prime(${n}) = ${Math.is_prime(n)}")
+    for candidate in candidates {
+        print("  is_prime(${candidate}) = ${Math.is_prime(candidate)}")
     }
 }
 
@@ -120,11 +121,13 @@ function void demo_approximate_equality() {
     print("")
     print("=== Approximate equality ===")
 
-    number a = 0.1 + 0.2
-    number diff = Result.unwrap(Math.absolute(a - 0.3))
-    boolean exact_match = diff < 0.0000001
-    print("0.1 + 0.2 == 0.3 (exact): ${exact_match}")
-    print("approximately_equal: ${Math.approximately_equal(a, 0.3)}")
+    # Binary floating point cannot store 0.1 or 0.2 exactly, so their sum is
+    # a hair above 0.3. Compare such values with a tolerance, never with ==.
+    number sum = 0.1 + 0.2
+    number difference = Result.unwrap(Math.absolute(sum - 0.3))
+    print("0.1 + 0.2 = ${sum}")
+    print("difference from 0.3: ${difference}")
+    print("approximately_equal(0.1 + 0.2, 0.3): ${Math.approximately_equal(sum, 0.3)}")
 }
 
 @main

@@ -1538,12 +1538,12 @@ Each file is included at most once automatically. Circular includes are a compil
 ### Ignoring Result Values
 
 ```luma
-# Wrong — potential failure silently discarded
-Array.get(arr, idx)
+# Wrong — potential failure silently discarded (a compile error)
+FileSystem.write_file(path, report)
 
 # Correct — handle the result
-match Array.get(arr, idx) {
-    success(v) { print(v) }
+match FileSystem.write_file(path, report) {
+    success(_) { print("report saved") }
     failure(m) { print("error: ${m}") }
 }
 ```

@@ -28,16 +28,16 @@ function number full_price(Product product) {
 }
 
 function number ten_percent_off(Product product) {
-    return product.price * product.quantity * 0.90
+    return full_price(product) * 0.90
 }
 
 function PricingStrategy bulk_discount(number threshold, number rate) {
     return (Product product) -> {
         if product.quantity >= threshold {
-            return product.price * product.quantity * (1.0 - rate)
+            return full_price(product) * (1.0 - rate)
         }
 
-        return product.price * product.quantity
+        return full_price(product)
     }
 }
 
@@ -66,8 +66,8 @@ function void process_order(
     print("--- ${label} ---")
 
     array<Product> sorted = items
-    |> Array.sort_by(sort_key)
-    |> Result.unwrap_or(items)
+        |> Array.sort_by(sort_key)
+        |> Result.unwrap_or(items)
 
     mutable number total = 0.0
 
@@ -95,7 +95,7 @@ function void main() {
         Product { name = "Gizmo",   price = 12.50, quantity = 10 }
     ]
 
-    # Full price, sorted by name-order (price)
+    # Full price, cheapest unit price first
     process_order(cart, full_price, by_price, "Full Price (by price)")
 
     # 10% off everything, sorted by quantity

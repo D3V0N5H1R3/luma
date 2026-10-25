@@ -395,7 +395,7 @@ result<array<integer>> positive = Array.filter(nums, (integer x) -> x > 0)
 
 ### Horizontal Spacing
 
-- Place a space after keywords: `if (`, `for (`, `match (`.
+- Place a space after keywords and do not wrap conditions in parentheses: `if x > 0 {`, `for item in items {`, `match value {`.
 - Place a space around binary operators: `a + b`, `x == y`, `i < n`.
 - No space after unary operators: `!flag`, `++i`.
 - No space inside parentheses: `func(a, b)`, not `func( a, b )`.

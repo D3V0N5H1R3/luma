@@ -2708,7 +2708,7 @@ unique string _ignored = acquire()
 
 ### Writing Tests
 
-`@test` functions must take **no parameters** and have a `void` return type. They run in isolation — each test gets its own local scope — but all tests share the same global environment, so mutations to top-level mutable variables in one test are visible to subsequent tests.
+`@test` functions must take **no parameters** and have a `void` return type. They run in isolation — each test gets its own local scope, and functions cannot read or modify top-level variables — so a test cannot leak state into the tests that follow it.
 
 ```luma
 @test
@@ -3350,7 +3350,7 @@ function void main() {
         |> Result.unwrap_or([])
         |> Array.sort((Product a, Product b) -> a.price - b.price)
         |> Result.unwrap_or([])
-        |> Array.map((Product p) -> "${String.pad_right(p.name, 10)} $${String.format_number(p.price, 2)}")
+        |> Array.map((Product p) -> "${String.pad_right(p.name, 10)} \$${String.format_number(p.price, 2)}")
         |> Result.unwrap_or([])
 
     print("Available products under $20:")

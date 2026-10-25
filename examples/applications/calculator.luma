@@ -27,16 +27,12 @@ record ParsedOperand {
     integer next_index
 }
 
-function boolean is_digit(string character) {
-    return String.is_digit(character)
-}
-
 function boolean is_letter(string character) {
     return String.is_alpha(character)
 }
 
 function boolean is_number_char(string character) {
-    return is_digit(character) || character == "."
+    return String.is_digit(character) || character == "."
 }
 
 # Consume the longest run of characters from `start` for which `predicate`
@@ -127,7 +123,7 @@ function result<number> resolve_name(string name) {
     case "pi"  { success(Math.pi) }
     case "e"   { success(Math.e) }
     case "tau" { success(Math.tau) }
-    else           { failure("unknown name: '${name}'") }
+    else       { failure("unknown name: '${name}'") }
     }
 }
 
@@ -141,7 +137,7 @@ function result<number> apply_unary(string name, number operand) {
     case "log"   { Math.log_e(operand) }
     case "ceil"  { Math.ceil(operand) }
     case "floor" { Math.floor(operand) }
-    else             { failure("unknown function: '${name}'") }
+    else         { failure("unknown function: '${name}'") }
     }
 }
 
@@ -155,11 +151,9 @@ function boolean is_multiplicative(Token token) {
 }
 
 function result<number> apply_binary(number left, Token operator_token, number right) {
-    if operator_token == Token.Slash && right == 0 {
-        return failure("division by zero")
-    }
+    boolean is_division = operator_token == Token.Slash || operator_token == Token.Percent
 
-    if operator_token == Token.Percent && right == 0 {
+    if is_division && right == 0 {
         return failure("division by zero")
     }
 
@@ -188,6 +182,24 @@ function result<ParsedOperand> parse_function_call(
     return success(ParsedOperand { value = applied, next_index = argument.next_index })
 }
 
+function result<ParsedOperand> parse_number_literal(string number_text, integer next_index) {
+    match String.parse_number(number_text) {
+    success(value) { return success(ParsedOperand { value = value, next_index = next_index }) }
+    failure(_) { return failure("invalid number: '${number_text}'") }
+    }
+}
+
+# A name is either a constant (pi, e, tau) or a unary function applied to the
+# operand that follows it (sqrt 144).
+function result<ParsedOperand> parse_name(string name, array<Token> tokens, integer next_index) {
+    match resolve_name(name) {
+    success(constant_value) {
+        return success(ParsedOperand { value = constant_value, next_index = next_index })
+    }
+    failure(_) { return parse_function_call(name, tokens, next_index) }
+    }
+}
+
 function result<ParsedOperand> parse_operand(array<Token> tokens, integer start_index) {
     integer token_count = Array.length(tokens)
 
@@ -195,71 +207,33 @@ function result<ParsedOperand> parse_operand(array<Token> tokens, integer start_
         return failure("expected a number or name")
     }
 
-    mutable boolean is_negated = false
-    mutable integer current_index = start_index
+    boolean is_negated = tokens[start_index] == Token.Minus
+    integer current_index = if is_negated { start_index + 1 } else { start_index }
 
-    if (tokens[current_index] == Token.Minus) {
-        is_negated = true
-        current_index++
-
-        if current_index >= token_count {
-            return failure("expected a number after '-'")
-        }
+    if current_index >= token_count {
+        return failure("expected a number after '-'")
     }
 
-    Token token = tokens[current_index]
-    mutable number parsed_value = 0.0
-    mutable integer next_index = current_index + 1
-
-    match token {
-    case Token.Number(number_text) {
-        match String.parse_number(number_text) {
-        success(value) { parsed_value = value }
-        failure(_) { return failure("invalid number: '${number_text}'") }
-        }
-    }
-    case Token.Name(name_value) {
-        match resolve_name(name_value) {
-        success(constant_value) {
-            parsed_value = constant_value
-        }
-        failure(_) {
-            match parse_function_call(name_value, tokens, current_index + 1) {
-            success(call_result) {
-                parsed_value = call_result.value
-                next_index = call_result.next_index
-            }
-            failure(error_message) { return failure(error_message) }
-            }
-        }
-        }
-    }
-    else {
-        return failure("expected a number or name")
-    }
-    }
+    ParsedOperand operand = match tokens[current_index] {
+    case Token.Number(number_text) { parse_number_literal(number_text, current_index + 1) }
+    case Token.Name(name_value)    { parse_name(name_value, tokens, current_index + 1) }
+    else                           { failure("expected a number or name") }
+    }?
 
     if is_negated {
-        parsed_value = -parsed_value
+        return success(operand with { value = -operand.value })
     }
 
-    return success(ParsedOperand { value = parsed_value, next_index = next_index })
+    return success(operand)
 }
 
 function result<number> reduce_additive(array<number> terms, array<Token> operators) {
     mutable number result_value = terms[0]
-    mutable integer operator_index = 0
 
-    while operator_index < Array.length(operators) {
-        Token operator_token = operators[operator_index]
+    for operator_index, operator_token in operators {
         number right = terms[operator_index + 1]
 
-        match apply_binary(result_value, operator_token, right) {
-        success(value) { result_value = value }
-        failure(error_message) { return failure(error_message) }
-        }
-
-        operator_index++
+        result_value = apply_binary(result_value, operator_token, right)?
     }
 
     return success(result_value)
@@ -288,10 +262,7 @@ function result<number> evaluate(array<Token> tokens) {
         index = next_parsed.next_index
 
         if is_multiplicative(operator_token) {
-            match apply_binary(current_term, operator_token, right) {
-            success(value) { current_term = value }
-            failure(error_message) { return failure(error_message) }
-            }
+            current_term = apply_binary(current_term, operator_token, right)?
         } else {
             additive_terms = Array.push(additive_terms, current_term)
             additive_operators = Array.push(additive_operators, operator_token)
@@ -321,6 +292,12 @@ function string format_result(number value) {
     return String.format_number(value, 6)
 }
 
+function result<number> calculate(string line) {
+    array<Token> tokens = tokenize(line)?
+
+    return evaluate(tokens)
+}
+
 @main
 function void main() {
     print("===============================")
@@ -340,17 +317,9 @@ function void main() {
             if command == "quit" || command == "q" {
                 is_running = false
             } else if String.length(line) > 0 {
-                match tokenize(line) {
-                success(tokens) {
-                    match evaluate(tokens) {
-                    success(value) {
-                        print("  = ${format_result(value)}")
-                    }
-                    failure(error_message) {
-                        print("  Error: ${error_message}")
-                        print("  Try: 2 + 3, sqrt 144, or type 'quit'.")
-                    }
-                    }
+                match calculate(line) {
+                success(value) {
+                    print("  = ${format_result(value)}")
                 }
                 failure(error_message) {
                     print("  Error: ${error_message}")
@@ -370,24 +339,25 @@ function void main() {
 
 # ─── Tests ───
 
+function string describe_token(Token token) {
+    return match token {
+    case Token.Number(value) { "num(${value})" }
+    case Token.Name(value)   { "name(${value})" }
+    case Token.Plus          { "+" }
+    case Token.Minus         { "-" }
+    case Token.Star          { "*" }
+    case Token.Slash         { "/" }
+    case Token.Percent       { "%" }
+    }
+}
+
 # Renders a token list to a compact canonical string so the tokenizer's output
 # can be pinned with one equality assertion per case.
 function string describe_tokens(array<Token> tokens) {
-    mutable array<string> parts = []
-
-    for token in tokens {
-        match token {
-        case Token.Number(value) { parts = Array.push(parts, "num(${value})") }
-        case Token.Name(value)   { parts = Array.push(parts, "name(${value})") }
-        case Token.Plus          { parts = Array.push(parts, "+") }
-        case Token.Minus         { parts = Array.push(parts, "-") }
-        case Token.Star          { parts = Array.push(parts, "*") }
-        case Token.Slash         { parts = Array.push(parts, "/") }
-        case Token.Percent       { parts = Array.push(parts, "%") }
-        }
-    }
-
-    return String.join(parts, " ")
+    return tokens
+        |> Array.map(describe_token)
+        |> Result.unwrap_or([])
+        |> String.join(" ")
 }
 
 @test

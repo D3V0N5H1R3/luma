@@ -51,7 +51,7 @@ function number count_files(FileNode node) {
 function void print_tree(FileNode node, string indent) {
     match node {
     case FileNode.File(name, size) {
-        print("${indent}📄 ${name} (${size} bytes)")
+        print("${indent}📄 ${name} (${String.format_number(size, 0)} bytes)")
     }
     case FileNode.Directory(name, children) {
         print("${indent}📁 ${name}/")
@@ -64,22 +64,14 @@ function void print_tree(FileNode node, string indent) {
 }
 
 function array<string> find_large_files(FileNode node, number threshold) {
-    match node {
+    return match node {
     case FileNode.File(name, size) {
-        if size >= threshold {
-            return [name]
-        }
-
-        return []
+        if size >= threshold { [name] } else { [] }
     }
     case FileNode.Directory(_name, children) {
-        mutable array<string> found = []
-
-        for child in children {
-            found = Array.concat(found, find_large_files(child, threshold))
-        }
-
-        return found
+        children
+            |> Array.flat_map((FileNode child) -> find_large_files(child, threshold))
+            |> Result.unwrap_or([])
     }
     }
 }
@@ -112,8 +104,8 @@ function void main() {
     print_tree(tree, "")
     print("")
 
-    print("Total size: ${total_size(tree)} bytes")
-    print("File count: ${count_files(tree)}")
+    print("Total size: ${String.format_number(total_size(tree), 0)} bytes")
+    print("File count: ${String.format_number(count_files(tree), 0)}")
 
     print("")
     print("Files >= 3000 bytes:")

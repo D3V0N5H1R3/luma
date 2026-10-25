@@ -949,15 +949,18 @@ examples/debug/
 ├── breakpoint_basic.luma      # Simple breakpoint on a print statement
 ├── closure_variables.luma     # Captured upvalues for closure-scope inspection
 ├── concurrent_tasks.luma      # task_scope with multiple tasks
-├── conditional_loop.luma      # Loop with conditional logic for stepping
+├── conditional_loop.luma      # Loop with a running total for conditional breakpoints
 ├── exception_caught.luma      # try/catch for the 'caught' exception filter
 ├── exception_unhandled.luma   # Triggers an unhandled exception
+├── global_scope.luma          # Nested frame that evaluates calls to top-level functions
+├── infinite_eval.luma         # Non-terminating function for the evaluation timeout
 ├── long_loop.luma             # Long-running loop for pause testing
 ├── recursive_stack.luma       # Deep recursion for call-stack and step-out testing
-├── set_variable.luma          # Various variable types for setVariable testing
+├── set_variable.luma          # Mutable integer and string for setVariable testing
 ├── step_into_function.luma    # Function call for step-in testing
 ├── step_over_loop.luma        # Loop for step-over testing
 ├── structured_values.luma     # Records and choice types for expandable variables
+├── task_stress.luma           # Rapid task spawn/exit churn for task-thread inspection
 └── variables_basic.luma       # Various variable types for inspection
 ```
 

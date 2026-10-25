@@ -31,26 +31,44 @@ function boolean is_prime(integer candidate) {
 # ─── Worker ───
 
 function array<integer> find_primes_in_range(integer start, integer end) {
-    # An empty or inverted range has no candidates. The original loop over
-    # start .. end simply ran zero times; guarding here keeps that behaviour,
-    # since Array.range only ever counts upward.
+    # Array.range only counts upward, so an empty or inverted range has no
+    # candidates to check.
     if start >= end {
         return []
     }
 
-    # One native range + filter pass. Pushing each prime onto a growing array
-    # would copy it on every hit, making the scan O(primes²).
+    # One range + filter pass. Pushing each prime onto a growing array would
+    # copy the array on every hit, making the scan O(primes²).
     return Array.range(start, end)
-    |> Result.unwrap_or([])
-    |> Array.filter(is_prime)
-    |> Result.unwrap_or([])
+        |> Result.unwrap_or([])
+        |> Array.filter(is_prime)
+        |> Result.unwrap_or([])
 }
 
-# ─── Chunked Parallel Computation ───
+# ─── Parallel Computation ───
+
+# Splits 2..limit into two halves, spawns one task per half, and awaits each
+# task handle explicitly — spawn/await gives a named result per task.
+function array<integer> compute_primes_in_halves(integer limit) {
+    integer middle = limit // 2
+    mutable array<integer> primes = []
+
+    task_scope {
+        task<array<integer>> lower_task = spawn find_primes_in_range(2, middle)
+        task<array<integer>> upper_task = spawn find_primes_in_range(middle, limit)
+
+        array<integer> lower_primes = await lower_task
+        array<integer> upper_primes = await upper_task
+
+        primes = Array.concat(lower_primes, upper_primes)
+    }
+
+    return primes
+}
 
 # Splits 2..limit into worker_count chunks, runs each chunk on its own task
-# inside a task_scope (which awaits every spawned task), then merges, dedupes,
-# and sorts the results. Shared by both the parallel and scoped demos below.
+# inside a task_scope (which awaits every spawned task and collects their
+# results), then merges, dedupes, and sorts the results.
 function array<integer> compute_primes_in_chunks(integer limit, integer worker_count) {
     integer chunk_size = limit // worker_count
 
@@ -68,10 +86,10 @@ function array<integer> compute_primes_in_chunks(integer limit, integer worker_c
     }
 
     return worker_results
-    |> Array.flatten()
-    |> Array.unique()
-    |> Array.sort((integer left, integer right) -> left - right)
-    |> Result.unwrap_or([])
+        |> Array.flatten()
+        |> Array.unique()
+        |> Array.sort((integer left, integer right) -> left - right)
+        |> Result.unwrap_or([])
 }
 
 # ─── Sequential Baseline ───
@@ -174,10 +192,8 @@ function array<integer> compute_primes_channel(integer limit) {
     return results[2]
 }
 
-function integer find_slow(integer multiplier) {
-    array<integer> prime_list = find_primes_in_range(2, multiplier * 100)
-
-    return Array.length(prime_list)
+function integer count_primes_below(integer limit) {
+    return find_primes_in_range(2, limit) |> Array.length()
 }
 
 # ─── Tests ───
@@ -231,10 +247,10 @@ function void main() {
 
     print("  Last  10: ${last_ten}")
 
-    print("\nParallel with ${worker_count} workers:")
+    print("\nParallel with 2 tasks (spawn/await):")
 
     number parallel_start_ms = DateTime.milliseconds_since_start()
-    array<integer> parallel_prime_list = compute_primes_in_chunks(limit, worker_count)
+    array<integer> parallel_prime_list = compute_primes_in_halves(limit)
     number parallel_elapsed_ms = DateTime.milliseconds_since_start() - parallel_start_ms
 
     print("  Found ${Array.length(parallel_prime_list)} primes in ${parallel_elapsed_ms}ms")
@@ -255,33 +271,33 @@ function void main() {
 
     print("  Found ${Array.length(channel_prime_list)} primes in ${channel_elapsed_ms}ms")
 
-    integer parallel_count = Array.length(parallel_prime_list)
-    integer channel_count = Array.length(channel_prime_list)
-    integer scoped_count = Array.length(scoped_prime_list)
-    boolean is_parallel_match = sequential_count == parallel_count
-    boolean is_channel_match = sequential_count == channel_count
-    boolean is_scoped_match = sequential_count == scoped_count
+    boolean is_parallel_match = parallel_prime_list == sequential_prime_list
+    boolean is_channel_match = channel_prime_list == sequential_prime_list
+    boolean is_scoped_match = scoped_prime_list == sequential_prime_list
 
     print("\nResults match: parallel=${is_parallel_match}, " +
         "channel=${is_channel_match}, scoped=${is_scoped_match}")
 
     print("\n--- Task Utilities ---")
 
-    # Run two tasks in a scope; task_scope waits for both, then we keep the
-    # first task's result. This is not a real race — both tasks run to the end.
-    array<integer> race_results = task_scope {
-        spawn find_slow(10)
-        spawn find_slow(100)
+    task_scope {
+        task<integer> quick_task = spawn count_primes_below(1000)
+        task<integer> slow_task = spawn count_primes_below(10000)
+
+        # Task.race yields the result of whichever task finishes first.
+        match Task.race([quick_task, slow_task]) {
+            success(winner_count) { print("Race winner found ${winner_count} primes") }
+            failure(message) { print("Race failed: ${message}") }
+        }
     }
 
-    integer race_winner_count = race_results[0]
-    print("Race winner found ${race_winner_count} primes")
+    task_scope {
+        task<array<integer>> search_task = spawn find_primes_in_range(2, 10000)
 
-    # Run a single task inside a scope and count the primes it returns.
-    array<array<integer>> timed_results = task_scope {
-        spawn find_primes_in_range(2, 10000)
+        # Task.timeout gives up with a failure if the task takes longer than 5 s.
+        match Task.timeout(search_task, 5000) {
+            success(found) { print("Timed task found ${Array.length(found)} primes") }
+            failure(message) { print("Timed task gave up: ${message}") }
+        }
     }
-
-    integer timed_count = Array.length(timed_results[0])
-    print("Timed task found ${timed_count} primes")
 }

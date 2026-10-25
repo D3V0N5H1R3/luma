@@ -83,9 +83,9 @@ Section-level table of contents for the reference documents in this directory. U
 | 19 — Output Capture          | 877–881 |
 | 20 — Error Handling          | 885–894 |
 | 21 — CMake Integration       | 898–916 |
-| 22 — Testing Strategy        | 920–962 |
-| 23 — Future Extensions       | 966–972 |
-| See Also                     | 976–982 |
+| 22 — Testing Strategy        | 920–965 |
+| 23 — Future Extensions       | 969–975 |
+| See Also                     | 979–985 |
 
 ## Luma_Error_Handling.md
 
@@ -274,26 +274,26 @@ Section-level table of contents for the reference documents in this directory. U
 | 17 — Json              | 918–1013  |
 | 18 — KeyValueStore     | 1015–1065 |
 | 19 — LinearAlgebra     | 1067–1124 |
-| 20 — Log               | 1126–1150 |
-| 21 — Math              | 1152–1285 |
-| 22 — Optional          | 1287–1342 |
-| 23 — Order             | 1344–1395 |
-| 24 — Process           | 1397–1494 |
-| 25 — Queue             | 1496–1521 |
-| 26 — Random            | 1523–1577 |
-| 27 — Reference         | 1579–1640 |
-| 28 — RegularExpression | 1642–1743 |
-| 29 — Resource          | 1745–1796 |
-| 30 — Result            | 1798–1829 |
-| 31 — Set               | 1831–1864 |
-| 32 — Socket            | 1866–1930 |
-| 33 — Stack             | 1934–1960 |
-| 34 — Statistics        | 1962–1972 |
-| 35 — String            | 1974–2078 |
-| 36 — Task              | 2080–2148 |
-| 37 — Terminal          | 2150–2365 |
-| 38 — Xml               | 2367–2442 |
-| See Also               | 2446–2453 |
+| 20 — Log               | 1126–1152 |
+| 21 — Math              | 1154–1287 |
+| 22 — Optional          | 1289–1344 |
+| 23 — Order             | 1346–1397 |
+| 24 — Process           | 1399–1496 |
+| 25 — Queue             | 1498–1523 |
+| 26 — Random            | 1525–1579 |
+| 27 — Reference         | 1581–1642 |
+| 28 — RegularExpression | 1644–1745 |
+| 29 — Resource          | 1747–1798 |
+| 30 — Result            | 1800–1831 |
+| 31 — Set               | 1833–1866 |
+| 32 — Socket            | 1868–1932 |
+| 33 — Stack             | 1936–1962 |
+| 34 — Statistics        | 1964–1974 |
+| 35 — String            | 1976–2080 |
+| 36 — Task              | 2082–2150 |
+| 37 — Terminal          | 2152–2367 |
+| 38 — Xml               | 2369–2444 |
+| See Also               | 2448–2455 |
 
 ## Luma_Syntax_Highlighting.md
 

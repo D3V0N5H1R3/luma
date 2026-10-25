@@ -5,13 +5,11 @@
 # record access, and serialisation of tabular data.
 # ═══════════════════════════════════════════════════════════
 
-# Print every data row, skipping the header row.
 function void print_data_rows(array<array<string>> rows) {
-    array<array<string>> data_rows = Array.drop(rows, 1)
-
-    result<none> _ = data_rows |> Array.each((array<string> row) -> {
+    # Csv.deserialize keeps the header as the first row.
+    for row in Array.drop(rows, 1) {
         print("  ${row[0]} | ${row[1]} | ${row[2]}")
-    })
+    }
 }
 
 @main
@@ -29,12 +27,10 @@ function void main() {
     print("=== CSV Parsing ===")
 
     array<string> headers = Csv.header(csv_data) |> Result.unwrap_or([])
-    number row_count = Csv.count_rows(csv_data) |> Result.unwrap_or(0.0)
-
     string header_line = String.join(headers, ", ")
 
     print("Headers: ${header_line}")
-    print("Rows: ${row_count}")
+    print("Rows: ${Csv.count_rows(csv_data) ?? 0}")
 
     # ── Raw row access ──
     print("\n=== Raw Rows ===")
@@ -47,14 +43,14 @@ function void main() {
     print("\n=== As Records ===")
 
     array<dictionary<string>> records = Csv.deserialize_records(csv_data)
-    |> Result.unwrap_or([])
+        |> Result.unwrap_or([])
 
-    result<none> _ = records |> Array.each((dictionary<string> rec) -> {
-        string name = Dictionary.get(rec, "name") |> Result.unwrap_or("?")
-        string dept = Dictionary.get(rec, "department") |> Result.unwrap_or("?")
+    for employee in records {
+        string name = Dictionary.get(employee, "name") |> Result.unwrap_or("?")
+        string department = Dictionary.get(employee, "department") |> Result.unwrap_or("?")
 
-        print("  ${name} works in ${dept}")
-    })
+        print("  ${name} works in ${department}")
+    }
 
     # ── Build and serialise ──
     print("\n=== Serialise ===")
@@ -66,5 +62,7 @@ function void main() {
     ]
     string output = Csv.serialize(report) |> Result.unwrap_or("")
 
-    print(output)
+    # Csv.serialize ends every row with a newline; trim it so print() does not
+    # add a stray blank line.
+    print(String.trim_end(output))
 }

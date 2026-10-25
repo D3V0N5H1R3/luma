@@ -1,8 +1,8 @@
 # ═══════════════════════════════════════════════════════════
 # Hashing
 #
-# Demonstrates the Hash module — MD5, SHA-256, SHA-512,
-# CRC32, HMAC, and digest verification.
+# Demonstrates the Hash module — MD5, SHA-1, SHA-256, CRC32,
+# HMAC (SHA-256 and SHA-512), and digest verification.
 # ═══════════════════════════════════════════════════════════
 
 @main
@@ -44,7 +44,7 @@ function void main() {
     # ── Available algorithms ──
     print("\n=== Algorithms ===")
 
-    array<string> algos = Hash.algorithms()
+    array<string> algorithms = Hash.algorithms()
 
-    print("Supported: ${algos}")
+    print("Supported: ${algorithms}")
 }

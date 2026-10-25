@@ -17,11 +17,11 @@ function integer slow_computation(integer iterations) {
     return total
 }
 
-function integer cancellable_search(integer limit) {
+function number cancellable_search(integer limit) {
     # Tasks check cancellation automatically at function calls,
     # loop iterations, and await points. When a task is cancelled,
     # it throws a cancellation error that propagates up.
-    mutable integer found = 0
+    mutable number found = 0
     for candidate in 2 .. limit {
         if Math.is_prime(candidate) {
             found += 1
@@ -51,27 +51,18 @@ function integer fail_immediately() {
 function void demonstrate_cancel_on_failure() {
     print("--- Cancel-on-first-failure ---")
 
-    mutable result<array<integer>> outcome = success([])
-
+    # A failed assert is a runtime error, so it surfaces from the scope as
+    # an exception rather than a result value.
     try {
         array<integer> results = task_scope {
             spawn slow_computation(1000)
             spawn fail_immediately()
             spawn slow_computation(2000)
         }
-        outcome = success(results)
+        print("  Unexpected success: ${results}")
     } catch (err) {
-        outcome = failure(err)
-    }
-
-    match outcome {
-        success(values) {
-            print("  Unexpected success: ${values}")
-        }
-        failure(msg) {
-            print("  Caught expected failure: ${msg}")
-            print("  Sibling tasks were cancelled automatically.")
-        }
+        print("  Caught expected failure: ${err}")
+        print("  Sibling tasks were cancelled automatically.")
     }
 }
 
@@ -85,10 +76,10 @@ function void demonstrate_explicit_cancel() {
     print("\n--- Explicit cancellation ---")
 
     task_scope {
-        task<integer> long_task = spawn cancellable_search(100000)
+        task<number> long_task = spawn cancellable_search(100000)
 
         # Cancel the task before it finishes
-        boolean _cancelled = Task.cancel(long_task)
+        _ = Task.cancel(long_task)
 
         boolean is_cancelled = Task.is_cancelled(long_task)
         print("  Task cancelled: ${is_cancelled}")
@@ -149,10 +140,13 @@ function void demonstrate_all_cancellation() {
     }
 }
 
-# ─── Nested task_scope cancellation ───
+# ─── Nested task_scope ───
 #
-# Inner and outer scopes have independent cancellation tokens.
-# Cancelling an inner scope does not affect the outer scope.
+# A task may open its own task_scope. Each scope has its own
+# cancellation token, so a failure inside the inner scope first
+# cancels only the inner siblings; its error then propagates out
+# of the inner scope like any other task failure (and fails the
+# outer scope unless it is caught).
 
 function integer run_inner_scope() {
     array<integer> inner = task_scope {
@@ -171,7 +165,7 @@ function void demonstrate_nested_cancellation() {
     }
 
     print("  Outer results: ${outer_results}")
-    print("  Inner scope completed independently.")
+    print("  Inner scope finished before its parent task returned.")
 }
 
 # ─── Entry Point ───
