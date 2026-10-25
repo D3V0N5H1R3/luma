@@ -231,7 +231,7 @@ Closing a channel stops further sends, but receivers still get every value that 
 | Timeout elapsed                        | `send_timeout` and `receive_timeout` fail with `"…: timeout"`                               |
 | Buffered channel full                  | `try_send` returns `false`; `send` waits for room                                           |
 
-The only runtime errors are invalid arguments — a `new_buffered` capacity that is not positive or exceeds the maximum queue size, or a negative timeout — and an unbounded channel reaching the maximum queue size (`LUMA_LIMIT_MAX_CHANNEL_QUEUE_SIZE`, default 1,000,000) during a send.
+The only runtime errors are invalid arguments — a `new_buffered` capacity that is not positive or exceeds the maximum queue size, or a negative timeout — and `send`, `send_all`, or `send_timeout` on an unbounded channel that already holds the maximum queue size (`LUMA_LIMIT_MAX_CHANNEL_QUEUE_SIZE`, default 1,000,000); `try_send` returns `false` instead.
 
 ```luma
 channel<integer> ch = Channel.new_buffered(2)
