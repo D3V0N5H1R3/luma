@@ -96,19 +96,19 @@ void cancel_other_tasks(std::span<const Value> elements, const std::shared_ptr<T
 // completion notifier (one created already resolved) could go unnoticed.
 constexpr auto k_completion_poll_interval = std::chrono::milliseconds{50};
 
-// Subscribe a single signal to every task in `elements` (all validated as
+// Subscribe to the completion of every task in `elements` (all validated as
 // tasks by the caller), so the caller can block until any of them completes.
-[[nodiscard]] std::shared_ptr<CompletionSignal>
-subscribe_to_completions(std::span<const Value> elements) {
-    auto signal = std::make_shared<CompletionSignal>();
+// The subscription ends when the returned object goes out of scope.
+[[nodiscard]] CompletionSubscription subscribe_to_completions(std::span<const Value> elements) {
+    std::vector<std::shared_ptr<TaskCompletion>> completions;
 
     for (const auto& elem : elements) {
         if (const auto& completion = elem.as_task()->completion) {
-            completion->subscribe(signal);
+            completions.push_back(completion);
         }
     }
 
-    return signal;
+    return CompletionSubscription{std::move(completions)};
 }
 
 // Build a task whose shared state is already resolved with `value`.  Mirrors
@@ -181,7 +181,7 @@ void register_task_ns(const EnvPtr& env) {
 
             // Wake as soon as any task completes rather than sleeping a fixed
             // interval between polls.
-            const auto signal = subscribe_to_completions(*arr->elements);
+            const auto subscription = subscribe_to_completions(*arr->elements);
 
             while (true) {
                 for (const auto& elem : *arr->elements) {
@@ -200,7 +200,7 @@ void register_task_ns(const EnvPtr& env) {
                     }
                 }
 
-                signal->wait_for(k_completion_poll_interval);
+                subscription.wait_for(k_completion_poll_interval);
             }
         })
         // Task.timeout(task<T> t, integer milliseconds) -> result<T>
@@ -406,7 +406,7 @@ void register_task_ns(const EnvPtr& env) {
             std::string last_error;
             std::size_t done_count = 0;
 
-            const auto signal = subscribe_to_completions(*arr->elements);
+            const auto subscription = subscribe_to_completions(*arr->elements);
 
             while (done_count < arr->elements->size()) {
                 for (std::size_t i = 0; i < arr->elements->size(); ++i) {
@@ -439,7 +439,7 @@ void register_task_ns(const EnvPtr& env) {
                 }
 
                 if (done_count < arr->elements->size()) {
-                    signal->wait_for(k_completion_poll_interval);
+                    subscription.wait_for(k_completion_poll_interval);
                 }
             }
 

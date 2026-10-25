@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -79,10 +80,56 @@ public:
         signal->notify();
     }
 
+    // Remove every registration of `signal`.  Waiters must unsubscribe when
+    // they stop waiting: a long-running task raced in a loop would otherwise
+    // collect one stale signal per call until it finally completes.
+    void unsubscribe(const std::shared_ptr<CompletionSignal>& signal) {
+        const std::scoped_lock lock{mutex_};
+        std::erase(subscribers_, signal);
+    }
+
+    [[nodiscard]] std::size_t subscriber_count() const {
+        const std::scoped_lock lock{mutex_};
+        return subscribers_.size();
+    }
+
 private:
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     std::vector<std::shared_ptr<CompletionSignal>> subscribers_;
     bool complete_{false};
+};
+
+// Subscribes one signal to several tasks' completions for the lifetime of this
+// object and unsubscribes on destruction, so a waiter that returns early (the
+// usual case for Task.race) leaves nothing registered on the losing tasks.
+class CompletionSubscription {
+public:
+    explicit CompletionSubscription(std::vector<std::shared_ptr<TaskCompletion>> completions)
+        : completions_{std::move(completions)} {
+        for (const auto& completion : completions_) {
+            completion->subscribe(signal_);
+        }
+    }
+
+    ~CompletionSubscription() {
+        for (const auto& completion : completions_) {
+            completion->unsubscribe(signal_);
+        }
+    }
+
+    CompletionSubscription(const CompletionSubscription&) = delete;
+    CompletionSubscription& operator=(const CompletionSubscription&) = delete;
+    CompletionSubscription(CompletionSubscription&&) = delete;
+    CompletionSubscription& operator=(CompletionSubscription&&) = delete;
+
+    // Block until any subscribed task completes or `timeout` elapses.
+    void wait_for(std::chrono::milliseconds timeout) const {
+        signal_->wait_for(timeout);
+    }
+
+private:
+    std::shared_ptr<CompletionSignal> signal_{std::make_shared<CompletionSignal>()};
+    std::vector<std::shared_ptr<TaskCompletion>> completions_;
 };
 
 } // namespace luma

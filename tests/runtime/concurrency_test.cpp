@@ -2,12 +2,15 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <memory>
 #include <stdexcept>
 #include <thread>
 #include <vector>
 
 #include "runtime/concurrency/cancellation_token.hpp"
 #include "runtime/concurrency/channel.hpp"
+#include "runtime/concurrency/task_completion.hpp"
 #include "runtime/concurrency/task_scope.hpp"
 #include "runtime/concurrency/thread_pool.hpp"
 #include "runtime/interpreter/runtime_exceptions.hpp"
@@ -327,6 +330,51 @@ static void test_cancellation_token_throw_if_cancelled() {
     ASSERT_THROWS(token.throw_if_cancelled());
 }
 
+// ─── TaskCompletion tests ───
+
+static void test_task_completion_subscription_released_on_scope_exit() {
+    // Regression: Task.race/Task.any left their signal registered on every
+    // losing task, so racing a long-running task in a loop grew its subscriber
+    // list by one per call until the task finished.
+    const auto completion = std::make_shared<TaskCompletion>();
+
+    for (int i = 0; i < 3; ++i) {
+        const CompletionSubscription subscription{{completion, completion}};
+        ASSERT_EQ(completion->subscriber_count(), static_cast<std::size_t>(2));
+    }
+
+    ASSERT_EQ(completion->subscriber_count(), static_cast<std::size_t>(0));
+}
+
+static void test_task_completion_wakes_waiter() {
+    const auto completion = std::make_shared<TaskCompletion>();
+    const CompletionSubscription subscription{{completion}};
+
+    std::thread producer{[&completion] { completion->mark_complete(); }};
+
+    // A generous timeout: a missed notification would make the wait run to it.
+    const auto start = std::chrono::steady_clock::now();
+    subscription.wait_for(std::chrono::seconds{10});
+    const auto waited = std::chrono::steady_clock::now() - start;
+
+    producer.join();
+
+    ASSERT_TRUE(waited < std::chrono::seconds{5});
+    ASSERT_EQ(completion->subscriber_count(), static_cast<std::size_t>(0));
+}
+
+static void test_task_completion_subscribe_after_completion_notifies() {
+    const auto completion = std::make_shared<TaskCompletion>();
+    completion->mark_complete();
+
+    const CompletionSubscription subscription{{completion}};
+
+    const auto start = std::chrono::steady_clock::now();
+    subscription.wait_for(std::chrono::seconds{10});
+
+    ASSERT_TRUE(std::chrono::steady_clock::now() - start < std::chrono::seconds{5});
+}
+
 // ─── TaskScope tests ───
 
 static void test_task_scope_join_empty() {
@@ -509,9 +557,7 @@ static void test_task_cancellation_during_execution() {
     token->cancel();
 
     std::atomic<bool> observed_cancel{false};
-    std::thread observer{[&] {
-        observed_cancel = token->is_cancelled();
-    }};
+    std::thread observer{[&] { observed_cancel = token->is_cancelled(); }};
     observer.join();
 
     ASSERT_TRUE(observed_cancel.load());
@@ -660,6 +706,11 @@ int main() {
     RUN(test_cancellation_token_initial_state);
     RUN(test_cancellation_token_cancel);
     RUN(test_cancellation_token_throw_if_cancelled);
+
+    // TaskCompletion tests
+    RUN(test_task_completion_subscription_released_on_scope_exit);
+    RUN(test_task_completion_wakes_waiter);
+    RUN(test_task_completion_subscribe_after_completion_notifies);
 
     // TaskScope tests
     RUN(test_task_scope_join_empty);
