@@ -1,10 +1,12 @@
 #include "runtime/compiler/source_dependency.hpp"
 
 #include <algorithm>
+#include <cstddef>
+#include <filesystem>
 #include <fstream>
 #include <ios>
-#include <iterator>
 #include <optional>
+#include <system_error>
 
 #include "analysis/source/source_manager.hpp"
 #include "common/hash.hpp"
@@ -17,7 +19,18 @@ namespace {
 
 // Read `path` the same way SourceManager::try_load does — binary, size-capped,
 // UTF-8 BOM stripped — so the hash matches the one recorded at compile time.
+//
+// The paths may come from an untrusted .lumc file, so only regular files are
+// read (a FIFO would block and a device such as /dev/zero never ends), and
+// exactly the size that passed the limit check is read rather than the whole
+// stream.
 [[nodiscard]] std::optional<std::string> read_source_text(const std::string& path) {
+    std::error_code ec;
+
+    if (!std::filesystem::is_regular_file(path, ec)) {
+        return std::nullopt;
+    }
+
     std::ifstream stream{path, std::ios::binary | std::ios::ate};
 
     if (!stream) {
@@ -32,9 +45,11 @@ namespace {
 
     stream.seekg(0, std::ios::beg);
 
-    std::string text{std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()};
+    const auto byte_count = static_cast<std::streamsize>(size);
+    std::string text(static_cast<std::size_t>(byte_count), '\0');
+    stream.read(text.data(), byte_count);
 
-    if (stream.bad()) {
+    if (stream.gcount() != byte_count) {
         return std::nullopt;
     }
 

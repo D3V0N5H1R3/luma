@@ -284,6 +284,16 @@ static void test_dependencies_current_with_utf8_bom() {
     ASSERT_TRUE(are_source_dependencies_current(dependencies_of(root, include)));
 }
 
+// A dependency path read from an untrusted .lumc file may name something that
+// is not a regular file; it must read as stale rather than be opened.
+static void test_dependencies_stale_for_non_regular_file() {
+    const TempDir dir;
+    const std::vector<SourceDependency> dependencies{
+        {.path = dir.path_string(), .content_hash = 0}};
+
+    ASSERT_FALSE(are_source_dependencies_current(dependencies));
+}
+
 static void test_cache_miss_when_dependency_changes() {
     const TempFile root{"include \"helper.luma\"\n"};
     const TempFile include{"function integer helper() { return 1 }\n"};
@@ -316,6 +326,7 @@ int main() {
     RUN(test_dependencies_stale_after_edit);
     RUN(test_dependencies_stale_after_delete);
     RUN(test_dependencies_current_with_utf8_bom);
+    RUN(test_dependencies_stale_for_non_regular_file);
     RUN(test_cache_miss_when_dependency_changes);
     return SUMMARY();
 }
