@@ -552,8 +552,9 @@ struct NativeFunctionValue {
 };
 
 struct TaskValue {
-    TaskValue(std::shared_future<Value> f, std::shared_ptr<CancellationToken> ct)
-        : future{std::move(f)}, token{std::move(ct)} {}
+    TaskValue(std::shared_future<Value> f, std::shared_ptr<CancellationToken> ct,
+              std::shared_ptr<TaskCompletion> c = nullptr)
+        : future{std::move(f)}, token{std::move(ct)}, completion{std::move(c)} {}
 
     // A shared_future (not a plain future) so that a task handle can be safely
     // copied across threads: each recipient holds its OWN shared_future object
@@ -563,6 +564,9 @@ struct TaskValue {
     // value_copying.cpp).
     std::shared_future<Value> future;
     std::shared_ptr<CancellationToken> token;
+    // Signalled once `future` is ready, so waiters such as Task.race need not
+    // poll.  Null for a task created already resolved.
+    std::shared_ptr<TaskCompletion> completion;
 };
 
 struct ChannelValue {

@@ -592,6 +592,7 @@ private:
                                       std::vector<Value> args, SourceLocation loc,
                                       const std::vector<CompiledFunction>* compiled_fns, EnvPtr env,
                                       std::shared_ptr<CancellationToken> cancel_token,
+                                      std::shared_ptr<TaskCompletion> completion,
                                       ThreadPool& pool_ref, DebugCallbacks debug_cbs, int task_id)
         -> std::function<void()>;
 

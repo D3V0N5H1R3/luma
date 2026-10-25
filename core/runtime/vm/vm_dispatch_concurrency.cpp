@@ -20,8 +20,10 @@
 #include "analysis/errors/error.hpp"
 #include "common/overflow.hpp"
 #include "common/resource_limits.hpp"
+#include "common/scope_guard.hpp"
 #include "common/utf8.hpp"
 #include "common/utf8_iterator.hpp"
+#include "runtime/concurrency/task_completion.hpp"
 #include "runtime/concurrency/task_scope.hpp"
 #include "runtime/concurrency/thread_pool.hpp"
 #include "runtime/interpreter/runtime_exceptions.hpp"
@@ -160,11 +162,16 @@ auto VM::create_spawn_callable(
     // VM (and its compiled_fns vector) is destroyed. The pointer is therefore
     // guaranteed to remain valid for the entire lifetime of this lambda.
     const std::vector<CompiledFunction>* compiled_fns, EnvPtr env,
-    std::shared_ptr<CancellationToken> cancel_token, ThreadPool& pool_ref, DebugCallbacks debug_cbs,
-    int task_id) -> std::function<void()> {
+    std::shared_ptr<CancellationToken> cancel_token, std::shared_ptr<TaskCompletion> completion,
+    ThreadPool& pool_ref, DebugCallbacks debug_cbs, int task_id) -> std::function<void()> {
     return [promise = std::move(promise), callee = std::move(callable), args = std::move(args),
-            compiled_fns, env = std::move(env), cancel_token = std::move(cancel_token), &pool_ref,
-            loc, debug_cbs = std::move(debug_cbs), task_id]() mutable {
+            compiled_fns, env = std::move(env), cancel_token = std::move(cancel_token),
+            completion = std::move(completion), &pool_ref, loc, debug_cbs = std::move(debug_cbs),
+            task_id]() mutable {
+        // Declared first so it runs last: every path below satisfies the
+        // promise before this wakes waiters such as Task.race.
+        const ScopeGuard notify_completion{[&completion] { completion->mark_complete(); }};
+
         try {
             if (cancel_token && cancel_token->is_cancelled()) {
                 // No task VM is constructed on this early-out path, so there is
@@ -234,16 +241,17 @@ void VM::handle_spawn() {
 
     auto cancel_token =
         (VMTaskManager::current_scope != nullptr) ? VMTaskManager::current_scope->token() : nullptr;
+    auto completion = std::make_shared<TaskCompletion>();
     auto task_id = task_manager_.next_task_id.fetch_add(1);
 
     // THREAD_SAFETY: Captures a consistent snapshot of debug callbacks under
     // shared_lock; safe to move into spawned task.
     auto debug_cbs_copy = debug_.copy_all();
     pool().enqueue(create_spawn_callable(promise, std::move(callee), std::move(args), loc,
-                                         compiled_functions_, global_env_, cancel_token, pool(),
-                                         std::move(debug_cbs_copy), task_id));
+                                         compiled_functions_, global_env_, cancel_token, completion,
+                                         pool(), std::move(debug_cbs_copy), task_id));
 
-    auto task = std::make_shared<TaskValue>(std::move(future), cancel_token);
+    auto task = std::make_shared<TaskValue>(std::move(future), cancel_token, std::move(completion));
 
     if (VMTaskManager::current_scope != nullptr) {
         VMTaskManager::current_scope->add_child(task);

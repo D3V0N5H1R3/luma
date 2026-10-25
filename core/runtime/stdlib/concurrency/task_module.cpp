@@ -15,10 +15,10 @@
 
 #include "analysis/source/source_location.hpp"
 #include "runtime/concurrency/cancellation_token.hpp"
+#include "runtime/concurrency/task_completion.hpp"
 #include "runtime/interpreter/value.hpp"
 #include "runtime/stdlib/common/function_builder.hpp"
 #include "runtime/stdlib/common/native_function.hpp"
-#include "runtime/stdlib/concurrency/concurrency_constants.hpp"
 
 namespace luma {
 
@@ -91,6 +91,26 @@ void cancel_other_tasks(std::span<const Value> elements, const std::shared_ptr<T
     }
 }
 
+// Upper bound on one wait in Task.race / Task.any.  Spawned tasks wake the
+// waiter the moment they complete; this only bounds how long a task without a
+// completion notifier (one created already resolved) could go unnoticed.
+constexpr auto k_completion_poll_interval = std::chrono::milliseconds{50};
+
+// Subscribe a single signal to every task in `elements` (all validated as
+// tasks by the caller), so the caller can block until any of them completes.
+[[nodiscard]] std::shared_ptr<CompletionSignal>
+subscribe_to_completions(std::span<const Value> elements) {
+    auto signal = std::make_shared<CompletionSignal>();
+
+    for (const auto& elem : elements) {
+        if (const auto& completion = elem.as_task()->completion) {
+            completion->subscribe(signal);
+        }
+    }
+
+    return signal;
+}
+
 // Build a task whose shared state is already resolved with `value`.  Mirrors
 // the promise/shared_future machinery used by the `spawn` opcode
 // (vm_dispatch_concurrency.cpp) but performs no real async work; the future is
@@ -159,9 +179,9 @@ void register_task_ns(const EnvPtr& env) {
                 return std::move(*failure);
             }
 
-            // Poll tasks until one is ready, with exponential backoff
-            // to avoid burning CPU while waiting.
-            BackoffTimer backoff;
+            // Wake as soon as any task completes rather than sleeping a fixed
+            // interval between polls.
+            const auto signal = subscribe_to_completions(*arr->elements);
 
             while (true) {
                 for (const auto& elem : *arr->elements) {
@@ -180,8 +200,7 @@ void register_task_ns(const EnvPtr& env) {
                     }
                 }
 
-                // Sleep between polling cycles to avoid burning CPU.
-                backoff.sleep();
+                signal->wait_for(k_completion_poll_interval);
             }
         })
         // Task.timeout(task<T> t, integer milliseconds) -> result<T>
@@ -387,7 +406,7 @@ void register_task_ns(const EnvPtr& env) {
             std::string last_error;
             std::size_t done_count = 0;
 
-            BackoffTimer backoff;
+            const auto signal = subscribe_to_completions(*arr->elements);
 
             while (done_count < arr->elements->size()) {
                 for (std::size_t i = 0; i < arr->elements->size(); ++i) {
@@ -420,7 +439,7 @@ void register_task_ns(const EnvPtr& env) {
                 }
 
                 if (done_count < arr->elements->size()) {
-                    backoff.sleep();
+                    signal->wait_for(k_completion_poll_interval);
                 }
             }
 

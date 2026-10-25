@@ -165,7 +165,8 @@ Value Value::deep_copy() const {
         // token is shared so cancellation still propagates to the clone.
         case ValueType::Task: {
             const auto& source = as_task();
-            return Value{std::make_shared<TaskValue>(source->future, source->token)};
+            return Value{
+                std::make_shared<TaskValue>(source->future, source->token, source->completion)};
         }
 
         // Shallow — primitives and opaque handles; a simple copy suffices.
