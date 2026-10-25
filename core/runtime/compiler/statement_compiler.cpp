@@ -177,7 +177,10 @@ void Compiler::compile_return(const ReturnStatement& stmt) {
     // TailCall instead of Call + Return.
     const bool inside_try = current_scope().exception_context.is_active();
 
-    if (stmt.value && stmt.value->kind == ExpressionKind::Call && !inside_try) {
+    // A return value that must be widened to `number` needs code after the
+    // call, so it cannot become a tail call.
+    if (stmt.value && stmt.value->kind == ExpressionKind::Call && !inside_try &&
+        !stmt.value->numeric_widening) {
         const auto& call = static_cast<const CallExpression&>(*stmt.value);
 
         // Only optimize simple calls (no named arguments).

@@ -677,6 +677,26 @@ static void test_match_arm_type_mismatch_fails() {
                       "}\n"));
 }
 
+static void test_match_wider_later_arm_widens_result() {
+    // A later number arm makes the whole match a number, as for if branches,
+    // so it can no longer be assigned to an integer.
+    ASSERT_TRUE(fails_with("function void foo() {\n"
+                           "    integer y = 3\n"
+                           "    integer r = match y {\n"
+                           "        case 1 { 10 }\n"
+                           "        else { 2.5 }\n"
+                           "    }\n"
+                           "}\n",
+                           DiagnosticCode::TypeMismatch));
+    ASSERT_TRUE(passes("function void foo() {\n"
+                       "    integer y = 3\n"
+                       "    number r = match y {\n"
+                       "        case 1 { 10 }\n"
+                       "        else { 2.5 }\n"
+                       "    }\n"
+                       "}\n"));
+}
+
 // ─── Lambda type ───
 
 static void test_lambda_valid() {
@@ -915,6 +935,7 @@ int main() {
     // ─── Match arm result typing ───
 
     RUN(test_match_arm_type_mismatch_fails);
+    RUN(test_match_wider_later_arm_widens_result);
 
     // ─── Lambda ───
 

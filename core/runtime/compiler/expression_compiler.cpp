@@ -53,11 +53,21 @@ void Compiler::compile_expression(const Expression& expr) {
         return;
     }
 
-    const ScopeGuard guard{[this] {
-        --expression_depth_;
-    }};
+    const ScopeGuard guard{[this] { --expression_depth_; }};
 
     dispatch_expr(expr);
+
+    // The type checker marks expressions whose integer values flow into a
+    // `number` context; convert them so the runtime value matches its type.
+    if (expr.numeric_widening) {
+        const auto& pattern = *expr.numeric_widening;
+
+        if (pattern == "number") {
+            emit(Op::IntToNumber, expr.location);
+        } else {
+            emit_u16(Op::WidenNumber, add_name(pattern), expr.location);
+        }
+    }
 }
 
 void Compiler::compile_literal(const LiteralExpression& expr) {

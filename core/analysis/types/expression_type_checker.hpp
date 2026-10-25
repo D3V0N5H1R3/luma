@@ -259,6 +259,16 @@ private:
     [[nodiscard]] std::optional<TypeInfo>
     check_stdlib_function_call(const CallExpression& expr, const std::vector<TypeInfo>& arg_types);
 
+    // Mark integer arguments that a stdlib call stores into a container of
+    // numbers (e.g. Array.push(scores, 90) on an array<number>) for widening.
+    void mark_stdlib_element_widening(std::string_view full_name, const CallExpression& expr,
+                                      const std::vector<TypeInfo>& arg_types);
+
+    // The widest of a literal's element types under assignability, so that
+    // [3, 4.5] is an array<number>.  `types` must not be empty; elements that
+    // the result does not accept are reported by the caller.
+    [[nodiscard]] TypeInfo widest_literal_type(const std::vector<TypeInfo>& types);
+
     // Convenience wrapper: build and emit a Type-category error diagnostic
     // via tc_.error(), which delegates to DiagnosticEmitter::emit_error().
     void emit_err(std::string_view message, const SourceLocation& loc, std::string_view hint = {},

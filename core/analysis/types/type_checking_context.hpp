@@ -59,6 +59,9 @@ struct TypeCheckingContext {
 
     // ─── Expression context ───
     bool is_in_pipe{false};
+    // Type of the value a pipe feeds into the call being checked (parameter 0);
+    // only meaningful while is_in_pipe is true.  For '!>' it is the success type.
+    std::optional<TypeInfo> pipe_left_type;
 
     // ─── Nesting depths ───
     int loop_depth{0};
@@ -130,9 +133,7 @@ public:
     // that pops it on destruction.
     [[nodiscard]] auto make_scope_guard() {
         push_scope();
-        return ScopeGuard{[this] {
-            pop_scope();
-        }};
+        return ScopeGuard{[this] { pop_scope(); }};
     }
 
     // Convenience wrappers over context().current_scope->lookup / lookup_mut.

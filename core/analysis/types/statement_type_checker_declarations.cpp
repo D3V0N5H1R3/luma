@@ -48,8 +48,11 @@ void StatementTypeChecker::visit_variable_declaration(const VariableDeclStatemen
             }
         }
 
-        (void)type_check_helpers::check_type_assignable(tc_, declared_type, init_type,
-                                                        "cannot assign to variable", stmt.location);
+        if (type_check_helpers::check_type_assignable(tc_, declared_type, init_type,
+                                                      "cannot assign to variable", stmt.location)) {
+            type_check_helpers::mark_numeric_widening(tc_, *stmt.initializer, declared_type,
+                                                      init_type);
+        }
     }
 
     if (tc_.context().current_scope->has_local(stmt.name)) {
@@ -88,9 +91,13 @@ void StatementTypeChecker::visit_tuple_destructuring(const TupleDestructuringSta
             }
         }
 
+        std::vector<TypeInfo> declared_types;
+        declared_types.reserve(stmt.bindings.size());
+
         for (std::size_t i{0}; i < stmt.bindings.size(); ++i) {
             const auto& [type_ann, name] = stmt.bindings[i];
             const auto declared = tc_.resolve_type(type_ann);
+            declared_types.push_back(declared);
 
             TypeInfo actual = TypeInfo::make(TypeInfo::Kind::StdlibAny);
 
@@ -103,6 +110,9 @@ void StatementTypeChecker::visit_tuple_destructuring(const TupleDestructuringSta
 
             tc_.context().current_scope->define(name, declared, {.is_mutable = stmt.is_mutable});
         }
+
+        type_check_helpers::mark_numeric_widening(
+            tc_, *stmt.initializer, TypeInfo::make_tuple(std::move(declared_types)), init_type);
     } else {
         for (const auto& [type_ann, name] : stmt.bindings) {
             tc_.context().current_scope->define(name, tc_.resolve_type(type_ann),

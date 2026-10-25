@@ -342,6 +342,8 @@ TypeInfo ExpressionTypeChecker::check_null_coalescing_binary(const BinaryExpress
                           expr.location,
                           "ensure the default value matches the type inside the optional",
                           DiagnosticCode::TypeMismatch);
+            } else {
+                type_check_helpers::mark_numeric_widening(tc_, *expr.right, *inner, right);
             }
 
             return *inner;
@@ -367,6 +369,8 @@ TypeInfo ExpressionTypeChecker::check_null_coalescing_binary(const BinaryExpress
                       expr.location,
                       "ensure the default value matches the success type of the result",
                       DiagnosticCode::TypeMismatch);
+        } else {
+            type_check_helpers::mark_numeric_widening(tc_, *expr.right, inner, right);
         }
 
         return inner;

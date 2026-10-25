@@ -198,13 +198,22 @@ integer b = 0xFF       # hexadecimal — same value
 integer c = 0b11111111 # binary — same value
 ```
 
-Hex and binary literals are especially useful with the bitwise operators:
+Hex and binary literals are especially useful with the `Bits` module functions (`Bits.and`, `Bits.or`, `Bits.shift_left`, …) — Luma has no bitwise operators.
 
 Assigning an `integer` value to a `number` variable widens it automatically:
 
 ```luma
 number x = 5     # ok — integer 5 widened to 5.0
 number y = 3 + 1 # ok — integer expression widened
+```
+
+The same widening applies wherever an `integer` flows into a `number` slot — record fields, choice payloads, function arguments and return values, and the elements of arrays, dictionaries, tuples, optionals, and results — so a `number` always holds (and prints as) a number:
+
+```luma
+record Item { number price }
+
+Item item = Item { price = 5 }  # item.price is 5.0
+array<number> mixed = [3, 4.5]  # an array<number>: [3.0, 4.5]
 ```
 
 For explicit conversion use `Converter.to_number(i)` (returns `result<number>`). It also accepts a `string` — `Converter.to_number("3.14")` parses the string and returns `success(3.14)` or a failure result.

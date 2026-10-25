@@ -25,10 +25,14 @@
 #include <algorithm>
 #include <array>
 #include <format>
+#include <memory>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "analysis/ast/declaration.hpp"
 #include "analysis/ast/expression.hpp"
+#include "analysis/types/type_check_helpers.hpp"
 #include "analysis/types/type_checker.hpp"
 #include "common/resource_limits.hpp"
 #include "common/scope_guard.hpp"
@@ -402,8 +406,10 @@ bool TypeChecker::is_assignable(const TypeInfo& target, const TypeInfo& source) 
         return true;
     }
 
-    // A value of type T is assignable to optional<T>.
-    if (target.kind == TypeInfo::Kind::Optional) {
+    // A value of type T is assignable to optional<T>.  An optional source falls
+    // through to the covariant container check below, so optional<integer> is
+    // assignable to optional<number>.
+    if (target.kind == TypeInfo::Kind::Optional && source.kind != TypeInfo::Kind::Optional) {
         if (!target.inner_types.empty()) {
             return is_assignable(target.element_type(), source);
         }
@@ -603,5 +609,315 @@ bool TypeChecker::is_tuple_assignable(const TypeInfo& target, const TypeInfo& so
 
     return true;
 }
+
+// ═══════════════════════════════════════════════════════════
+// Numeric widening annotations
+// ═══════════════════════════════════════════════════════════
+
+namespace type_check_helpers {
+
+namespace {
+
+// Bounds recursion over pathologically nested types; deeper flows are simply
+// left unwidened.
+constexpr int k_max_widening_depth = 64;
+
+std::optional<std::string> widening_pattern_at(const TypeInfo& target, const TypeInfo& source,
+                                               int depth) {
+    using K = TypeInfo::Kind;
+
+    if (depth > k_max_widening_depth) {
+        return std::nullopt;
+    }
+
+    if (target.kind == K::Number && source.kind == K::Integer) {
+        return "number";
+    }
+
+    // optional<T> has no runtime wrapper, so optional<S> and a bare S widen alike.
+    if (target.kind == K::Optional) {
+        if (target.inner_types.empty()) {
+            return std::nullopt;
+        }
+
+        if (source.kind == K::Optional && source.inner_types.empty()) {
+            return std::nullopt;
+        }
+
+        const auto& inner_source = source.kind == K::Optional ? source.element_type() : source;
+        auto inner = widening_pattern_at(target.element_type(), inner_source, depth + 1);
+
+        if (!inner) {
+            return std::nullopt;
+        }
+
+        return std::format("optional<{}>", *inner);
+    }
+
+    if (target.kind != source.kind) {
+        return std::nullopt;
+    }
+
+    // Tuples, results with a typed error, and similar multi-component types
+    // describe each component; `_` marks a component that needs no widening.
+    const auto components = [&](std::size_t count) -> std::optional<std::vector<std::string>> {
+        if (target.inner_types.size() < count || source.inner_types.size() < count) {
+            return std::nullopt;
+        }
+
+        std::vector<std::string> parts;
+        bool any_widened = false;
+
+        for (std::size_t i = 0; i < count; ++i) {
+            auto part =
+                widening_pattern_at(target.inner_types[i], source.inner_types[i], depth + 1);
+            any_widened = any_widened || part.has_value();
+            parts.push_back(part.value_or("_"));
+        }
+
+        if (!any_widened) {
+            return std::nullopt;
+        }
+
+        return parts;
+    };
+
+    const auto join = [](const std::vector<std::string>& parts) {
+        std::string joined;
+
+        for (const auto& part : parts) {
+            if (!joined.empty()) {
+                joined += ',';
+            }
+            joined += part;
+        }
+
+        return joined;
+    };
+
+    switch (target.kind) {
+        case K::Array:
+        case K::Dictionary: {
+            const auto parts = components(1);
+
+            if (!parts) {
+                return std::nullopt;
+            }
+
+            return std::format("{}<{}>", target.kind == K::Array ? "array" : "dictionary",
+                               (*parts)[0]);
+        }
+
+        case K::Result: {
+            const auto has_error_type =
+                target.inner_types.size() > 1 && source.inner_types.size() > 1;
+            const auto parts = components(has_error_type ? 2 : 1);
+
+            if (!parts) {
+                return std::nullopt;
+            }
+
+            return std::format("result<{}>", join(*parts));
+        }
+
+        case K::Tuple: {
+            if (target.inner_types.size() != source.inner_types.size()) {
+                return std::nullopt;
+            }
+
+            const auto parts = components(target.inner_types.size());
+
+            if (!parts) {
+                return std::nullopt;
+            }
+
+            return std::format("({})", join(*parts));
+        }
+
+        default:
+            return std::nullopt;
+    }
+}
+
+} // namespace
+
+std::optional<std::string> numeric_widening_pattern(const TypeInfo& target,
+                                                    const TypeInfo& source) {
+    return widening_pattern_at(target, source, 0);
+}
+
+namespace {
+
+// `type` with every `number` replaced by `integer`: the worst-case source for a
+// value whose precise static type is not known, so that widening it to `type`
+// converts every integer the value might hold.
+TypeInfo with_integers_for_numbers(const TypeInfo& type) {
+    if (type.kind == TypeInfo::Kind::Number) {
+        return TypeInfo::make(TypeInfo::Kind::Integer);
+    }
+
+    TypeInfo copy = type;
+
+    for (auto& inner : copy.inner_types) {
+        inner = with_integers_for_numbers(inner);
+    }
+
+    return copy;
+}
+
+// True for a flow between two instantiations of the same generic choice or
+// record whose type arguments widen (List<integer> → List<number>).
+bool widens_generic_user_type(const TypeInfo& target, const TypeInfo& source) {
+    using K = TypeInfo::Kind;
+
+    if ((target.kind != K::Choice && target.kind != K::Record) || source.kind != target.kind ||
+        source.name != target.name || target.inner_types.empty()) {
+        return false;
+    }
+
+    for (std::size_t i = 0; i < target.inner_types.size(); ++i) {
+        const auto& target_arg = target.inner_types[i];
+        const bool is_source_known =
+            i < source.inner_types.size() && source.inner_types[i].kind != K::Unknown;
+        const auto source_arg =
+            is_source_known ? source.inner_types[i] : with_integers_for_numbers(target_arg);
+
+        if (numeric_widening_pattern(target_arg, source_arg)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void mark_widening_at(TypeCheckingServices& tc, const Expression& expr, const TypeInfo& target,
+                      const TypeInfo& source, int depth);
+
+// Widen the field values of a generic constructor call or record creation to
+// the field types of the `target` instantiation.  The pattern language cannot
+// describe user-defined (possibly recursive) types, so the widening happens
+// where each field value is produced instead.  Field values built from other
+// expressions (e.g. a variable holding a List<integer>) are not reachable here.
+void mark_generic_fields(TypeCheckingServices& tc, const Expression& expr, const TypeInfo& target,
+                         int depth) {
+    const auto mark_field = [&](const Expression& value, const TypeAnnotation& field_type) {
+        const auto resolved = tc.resolve_type(field_type);
+        mark_widening_at(tc, value, resolved, with_integers_for_numbers(resolved), depth + 1);
+    };
+
+    if (target.kind == TypeInfo::Kind::Choice && expr.kind == ExpressionKind::Call) {
+        const auto& call = static_cast<const CallExpression&>(expr);
+        const auto choice_it = tc.choices().find(target.name);
+
+        if (call.callee->kind != ExpressionKind::FieldAccess || choice_it == tc.choices().end()) {
+            return;
+        }
+
+        const auto& choice = *choice_it->second;
+        const auto& variant_name =
+            static_cast<const FieldAccessExpression&>(*call.callee).field_name;
+        const auto variant = std::ranges::find(choice.variants, variant_name, &ChoiceVariant::name);
+
+        if (variant == choice.variants.end()) {
+            return;
+        }
+
+        const auto bindings = bind_type_params(tc, choice.type_params, target.inner_types);
+
+        for (std::size_t i = 0; i < variant->fields.size() && i < call.arguments.size(); ++i) {
+            mark_field(*call.arguments[i], variant->fields[i].type);
+        }
+
+        return;
+    }
+
+    if (target.kind == TypeInfo::Kind::Record && expr.kind == ExpressionKind::RecordCreation) {
+        const auto& creation = static_cast<const RecordCreationExpression&>(expr);
+        const auto record_it = tc.records().find(creation.type_name);
+
+        if (record_it == tc.records().end()) {
+            return;
+        }
+
+        const auto& record = *record_it->second;
+        const auto bindings = bind_type_params(tc, record.type_params, target.inner_types);
+
+        for (const auto& field : creation.fields) {
+            const auto declared = std::ranges::find(record.fields, field.name, &RecordField::name);
+
+            if (declared != record.fields.end()) {
+                mark_field(*field.value, declared->type);
+            }
+        }
+    }
+}
+
+void mark_widening_at(TypeCheckingServices& tc, const Expression& expr, const TypeInfo& target,
+                      const TypeInfo& source, int depth) {
+    using K = TypeInfo::Kind;
+
+    if (depth > k_max_widening_depth) {
+        return;
+    }
+
+    if (widens_generic_user_type(target, source)) {
+        mark_generic_fields(tc, expr, target, depth);
+        return;
+    }
+
+    auto pattern = numeric_widening_pattern(target, source);
+
+    if (!pattern) {
+        return;
+    }
+
+    // Widen literal elements individually: integer literals then fold into
+    // number constants, and no widened copy of the collection is built.
+    if (expr.kind == ExpressionKind::ArrayLiteral && target.kind == K::Array &&
+        source.kind == K::Array && !target.inner_types.empty() && !source.inner_types.empty()) {
+        for (const auto& element : static_cast<const ArrayLiteralExpression&>(expr).elements) {
+            mark_widening_at(tc, *element, target.element_type(), source.element_type(), depth + 1);
+        }
+
+        return;
+    }
+
+    if (expr.kind == ExpressionKind::DictionaryLiteral && target.kind == K::Dictionary &&
+        source.kind == K::Dictionary && !target.inner_types.empty() &&
+        !source.inner_types.empty()) {
+        for (const auto& entry : static_cast<const DictionaryLiteralExpression&>(expr).entries) {
+            mark_widening_at(tc, *entry.value, target.element_type(), source.element_type(),
+                             depth + 1);
+        }
+
+        return;
+    }
+
+    if (expr.kind == ExpressionKind::TupleLiteral && target.kind == K::Tuple &&
+        source.kind == K::Tuple) {
+        const auto& elements = static_cast<const TupleLiteralExpression&>(expr).elements;
+
+        if (target.inner_types.size() == elements.size() &&
+            source.inner_types.size() == elements.size()) {
+            for (std::size_t i = 0; i < elements.size(); ++i) {
+                mark_widening_at(tc, *elements[i], target.inner_types[i], source.inner_types[i],
+                                 depth + 1);
+            }
+
+            return;
+        }
+    }
+
+    expr.numeric_widening = std::make_unique<const std::string>(*std::move(pattern));
+}
+
+} // namespace
+
+void mark_numeric_widening(TypeCheckingServices& tc, const Expression& expr, const TypeInfo& target,
+                           const TypeInfo& source) {
+    mark_widening_at(tc, expr, target, source, 0);
+}
+
+} // namespace type_check_helpers
 
 } // namespace luma

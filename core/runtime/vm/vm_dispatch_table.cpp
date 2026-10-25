@@ -23,6 +23,7 @@
 #include "runtime/interpreter/value.hpp"
 #include "runtime/vm/vm.hpp"
 #include "runtime/vm/vm_error_messages.hpp"
+#include "runtime/vm/vm_types.hpp"
 
 namespace luma {
 
@@ -134,6 +135,7 @@ namespace luma {
     X(SetLocalPop,     op_set_local_pop)             \
     X(GetLocalReturn,  op_get_local_return)          \
     X(IntToNumber,     op_int_to_number)             \
+    X(WidenNumber,     op_widen_number)              \
     X(Clone,           op_clone)                    \
     X(EndModule,       op_end_module)
 // clang-format on
@@ -739,6 +741,14 @@ void VM::op_int_to_number() {
     if (top.is_integer()) {
         top = Value{static_cast<double>(top.as_integer())};
     }
+}
+
+void VM::op_widen_number() {
+    const auto name_idx = read_u16();
+    const auto& type_pattern = checked_name(name_idx);
+    validate_stack_depth(1, "WidenNumber");
+    auto& top = *(stack_.top - 1);
+    top = NumericWidener::widen(std::move(top), type_pattern);
 }
 
 void VM::op_clone() {

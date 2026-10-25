@@ -77,7 +77,9 @@ namespace luma {
 //   3 → 4: added the dependency table after the header, so a cache file built
 //          from an included file that has since been edited is rejected
 //          instead of silently running the old code.
-static constexpr std::uint32_t k_bytecode_format_version = 4;
+//   4 → 5: added the WidenNumber opcode after IntToNumber, renumbering
+//          subsequent opcodes.
+static constexpr std::uint32_t k_bytecode_format_version = 5;
 
 // Magic bytes at the start of a .lumc file.
 static constexpr char k_bytecode_magic[4] = {'L', 'U', 'M', 'C'};

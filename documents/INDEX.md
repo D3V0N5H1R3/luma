@@ -235,20 +235,20 @@ Section-level table of contents for the reference documents in this directory. U
 | 4 — Module Decomposition                            | 115–843   |
 | 5 — Data Structures                                 | 847–1009  |
 | 6 — Processing Pipeline                             | 1013–1112 |
-| 7 — Bytecode Compiler and Virtual Machine Internals | 1116–1751 |
-| 8 — Type System Design                              | 1755–1797 |
-| 9 — Memory Management Strategy                      | 1801–1829 |
-| 10 — Error Handling Strategy                        | 1833–1873 |
-| 11 — Standard Library Architecture                  | 1877–1990 |
-| 12 — Concurrency Architecture                       | 1994–2090 |
-| 13 — REPL Architecture                              | 2094–2118 |
-| 14 — Testing Architecture                           | 2122–2146 |
-| 15 — File Inclusion and Source Management           | 2150–2177 |
-| 16 — Project File Structure                         | 2181–2251 |
-| 17 — Cross-Platform Considerations                  | 2255–2281 |
-| 18 — Debugger Architecture                          | 2285–2304 |
-| 19 — Design Decisions and Rationale                 | 2308–2400 |
-| See Also                                            | 2404–2413 |
+| 7 — Bytecode Compiler and Virtual Machine Internals | 1116–1752 |
+| 8 — Type System Design                              | 1756–1798 |
+| 9 — Memory Management Strategy                      | 1802–1830 |
+| 10 — Error Handling Strategy                        | 1834–1874 |
+| 11 — Standard Library Architecture                  | 1878–1991 |
+| 12 — Concurrency Architecture                       | 1995–2091 |
+| 13 — REPL Architecture                              | 2095–2119 |
+| 14 — Testing Architecture                           | 2123–2147 |
+| 15 — File Inclusion and Source Management           | 2151–2178 |
+| 16 — Project File Structure                         | 2182–2252 |
+| 17 — Cross-Platform Considerations                  | 2256–2282 |
+| 18 — Debugger Architecture                          | 2286–2305 |
+| 19 — Design Decisions and Rationale                 | 2309–2401 |
+| See Also                                            | 2405–2414 |
 
 ## Luma_Standard_Library_Reference.md
 
@@ -345,35 +345,35 @@ Section-level table of contents for the reference documents in this directory. U
 | ------------------------------------------------ | --------- |
 | Table of Contents                                | 7–42      |
 | 1 — Getting Started                              | 46–144    |
-| 2 — Types                                        | 148–242   |
-| 3 — Variables and Mutability                     | 246–359   |
-| 4 — Operators                                    | 363–565   |
-| 5 — Control Flow                                 | 569–759   |
-| 6 — Functions                                    | 763–870   |
-| 7 — Lambdas                                      | 874–941   |
-| 8 — Records                                      | 945–1099  |
-| 9 — Arrays                                       | 1103–1198 |
-| 10 — Dictionaries                                | 1202–1262 |
-| 11 — Tuples                                      | 1266–1334 |
-| 12 — Choice Types — Unit Variants                | 1338–1388 |
-| 13 — Choice Types (ADTs)                         | 1392–1503 |
-| 14 — Result and Optional                         | 1507–1741 |
-| 15 — Match                                       | 1745–1993 |
-| 16 — String Interpolation and Multi-Line Strings | 1997–2052 |
-| 17 — Pipe Operator                               | 2056–2101 |
-| 18 — Named Arguments                             | 2105–2128 |
-| 19 — Type Aliases                                | 2132–2154 |
-| 20 — Interfaces                                  | 2158–2234 |
-| 21 — Generics, `downcast`, and `is`              | 2238–2468 |
-| 22 — Namespaces and `use`                        | 2472–2667 |
-| 23 — Ownership (`unique` and `borrow`)           | 2671–2703 |
-| 24 — Testing with `@test`                        | 2707–2756 |
-| 25 — Including Files                             | 2760–2811 |
-| 26 — Standard Library Reference                  | 2815–2819 |
-| 27 — Linter and `--strict` Mode                  | 2823–2875 |
-| 28 — Reserved Keywords                           | 2879–2898 |
-| 29 — Error Reference                             | 2902–3220 |
-| 30 — Complete Programs                           | 3224–3430 |
-| 31 — Debugging                                   | 3434–3455 |
-| 32 — Formal Grammar (EBNF)                       | 3459–3810 |
-| See Also                                         | 3814–3826 |
+| 2 — Types                                        | 148–251   |
+| 3 — Variables and Mutability                     | 255–368   |
+| 4 — Operators                                    | 372–574   |
+| 5 — Control Flow                                 | 578–768   |
+| 6 — Functions                                    | 772–879   |
+| 7 — Lambdas                                      | 883–950   |
+| 8 — Records                                      | 954–1108  |
+| 9 — Arrays                                       | 1112–1207 |
+| 10 — Dictionaries                                | 1211–1271 |
+| 11 — Tuples                                      | 1275–1343 |
+| 12 — Choice Types — Unit Variants                | 1347–1397 |
+| 13 — Choice Types (ADTs)                         | 1401–1512 |
+| 14 — Result and Optional                         | 1516–1750 |
+| 15 — Match                                       | 1754–2002 |
+| 16 — String Interpolation and Multi-Line Strings | 2006–2061 |
+| 17 — Pipe Operator                               | 2065–2110 |
+| 18 — Named Arguments                             | 2114–2137 |
+| 19 — Type Aliases                                | 2141–2163 |
+| 20 — Interfaces                                  | 2167–2243 |
+| 21 — Generics, `downcast`, and `is`              | 2247–2477 |
+| 22 — Namespaces and `use`                        | 2481–2676 |
+| 23 — Ownership (`unique` and `borrow`)           | 2680–2712 |
+| 24 — Testing with `@test`                        | 2716–2765 |
+| 25 — Including Files                             | 2769–2820 |
+| 26 — Standard Library Reference                  | 2824–2828 |
+| 27 — Linter and `--strict` Mode                  | 2832–2884 |
+| 28 — Reserved Keywords                           | 2888–2907 |
+| 29 — Error Reference                             | 2911–3229 |
+| 30 — Complete Programs                           | 3233–3439 |
+| 31 — Debugging                                   | 3443–3464 |
+| 32 — Formal Grammar (EBNF)                       | 3468–3819 |
+| See Also                                         | 3823–3835 |

@@ -639,7 +639,7 @@ See Section 12 for detailed design.
 - Uses precedence-aware expression compilation with stack-effect tracking.
 - Emits forward jumps for control flow (`if`, `match`, `for`, `while`) and patches them after the branch body is compiled.
 - Resolves upvalues using a CLox-style capture chain: each `CompilerScope` (one per function or lambda) tracks which enclosing locals are captured.
-- Supports 99 opcodes across 24 categories (see Section 5.5).
+- Supports 100 opcodes across 24 categories (see Section 5.5).
 - Operands are big-endian: `u16` for constant-pool, name-table, and local-slot indices; `u32` for jump offsets and `ConstantLong` indices.
 
 **Dependencies:** AST, Source Location, Interpreter Value, Diagnostics.
@@ -964,7 +964,7 @@ CallFrame {
 }
 ```
 
-**Opcode categories (99 opcodes):**
+**Opcode categories (100 opcodes):**
 
 | Category        | Count | Opcodes                                                                                                   |
 | --------------- | ----- | --------------------------------------------------------------------------------------------------------- |
@@ -990,7 +990,7 @@ CallFrame {
 | Iteration       | 3     | `ForIterInit`, `ForIterStep`, `ForIterStepKV`                                                             |
 | Misc            | 3     | `Print`, `Assert`, `TypeOf`                                                                               |
 | Fused           | 4     | `IncrementLocal`, `DecrementLocal`, `SetLocalPop`, `GetLocalReturn`                                       |
-| Conversions     | 2     | `IntToNumber`, `Clone`                                                                                    |
+| Conversions     | 3     | `IntToNumber`, `WidenNumber`, `Clone`                                                                     |
 | Module          | 1     | `EndModule`                                                                                               |
 
 > **Note:** `Break` and `Continue` are not opcodes. Break compiles to scope-cleanup `Pop`s followed by a forward `Jump` (patched at loop exit). Continue compiles to scope-cleanup `Pop`s followed by a backward `Loop` instruction.
@@ -1534,7 +1534,7 @@ Each line shows the byte offset, the opcode name, operand values, and (where app
 
 ### 7.17 Opcode Reference
 
-The complete opcode set (99 opcodes) with stack effects. Stack notation: `(before → after)`, where the top of stack is rightmost.
+The complete opcode set (100 opcodes) with stack effects. Stack notation: `(before → after)`, where the top of stack is rightmost.
 
 #### Stack Manipulation
 
@@ -1745,10 +1745,11 @@ The complete opcode set (99 opcodes) with stack effects. Stack notation: `(befor
 
 **Conversion opcodes:**
 
-| Opcode        | Operands | Stack Effect     | Description                                                                  |
-| ------------- | -------- | ---------------- | ---------------------------------------------------------------------------- |
-| `IntToNumber` | —        | `(int → number)` | Convert integer on top of stack to number (double). No-op if already number. |
-| `Clone`       | —        | `(a → a')`       | Deep-copy top of stack (value semantics for mutable bindings).               |
+| Opcode        | Operands     | Stack Effect     | Description                                                                                                                                                          |
+| ------------- | ------------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IntToNumber` | —            | `(int → number)` | Convert integer on top of stack to number (double). No-op if already number.                                                                                         |
+| `WidenNumber` | u16 name_idx | `(a → a')`       | Deep integer → number widening by a type pattern (e.g. `array<number>`), emitted where the type checker marked an integer flowing into a nested `number` context. |
+| `Clone`       | —            | `(a → a')`       | Deep-copy top of stack (value semantics for mutable bindings).                                                                                                       |
 
 ---
 

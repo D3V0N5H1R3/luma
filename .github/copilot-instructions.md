@@ -45,7 +45,7 @@ Each phase transforms a well-defined input into a well-defined output. Informati
 | `core/analysis/source/`      | Source file loading and location tracking                 |
 | `core/analysis/types/`       | Static type checking and stdlib type signatures           |
 | `core/runtime/cli/`          | Command-line argument parsing and dispatch                |
-| `core/runtime/compiler/`     | AST-to-bytecode compiler (99 opcodes)                     |
+| `core/runtime/compiler/`     | AST-to-bytecode compiler (100 opcodes)                    |
 | `core/runtime/concurrency/`  | Channels, tasks, and thread pool                          |
 | `core/runtime/include/`      | File inclusion and deduplication                          |
 | `core/runtime/interpreter/`  | Runtime value types, environment, and control flow        |

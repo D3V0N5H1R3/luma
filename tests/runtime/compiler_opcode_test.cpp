@@ -538,6 +538,37 @@ static void test_compile_int_to_number() {
     ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::IntToNumber));
 }
 
+// The type checker marks integer → number flows; compile after checking so the
+// marks are present.
+static CompileResult compile_checked(const std::string& source) {
+    const auto program = luma::test::lex_and_parse(source);
+
+    TypeChecker checker;
+    (void)checker.check(program, /*require_main=*/false);
+
+    Compiler compiler;
+
+    return compiler.compile(program, /*repl_mode=*/true);
+}
+
+static void test_compile_widen_number_for_nested_integers() {
+    const auto result = compile_checked("array<integer> integers = [1, 2]\n"
+                                        "array<number> numbers = integers");
+
+    ASSERT_TRUE(result.success);
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::WidenNumber));
+}
+
+static void test_compile_widening_of_literal_elements_needs_no_copy() {
+    // Integer literal elements are widened one by one (and later folded into
+    // number constants), so no WidenNumber copy of the array is emitted.
+    const auto result = compile_checked("array<number> numbers = [1, 2.5]");
+
+    ASSERT_TRUE(result.success);
+    ASSERT_FALSE(has_opcode(result.top_level.chunk(), Op::WidenNumber));
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::IntToNumber));
+}
+
 // ═══════════════════════════════════════════════════════════
 // Optional chaining (GetFieldOpt, IndexGetOpt)
 // ═══════════════════════════════════════════════════════════
@@ -683,7 +714,7 @@ struct OpcodeExpectation {
 };
 
 // clang-format off
-constexpr std::array<OpcodeExpectation, 99> k_opcode_expectations{{
+constexpr std::array<OpcodeExpectation, 100> k_opcode_expectations{{
     {Op::Constant, OperandCategory::Constant, OperandLayout::U16, false,false,true,false,false,false,false,false, true, 1},
     {Op::ConstantLong, OperandCategory::Constant, OperandLayout::U32Long, false,false,true,false,false,false,false,false, true, 1},
     {Op::Pop, OperandCategory::None, OperandLayout::Simple, false,false,true,false,false,false,false,false, true, -1},
@@ -781,6 +812,7 @@ constexpr std::array<OpcodeExpectation, 99> k_opcode_expectations{{
     {Op::SetLocalPop, OperandCategory::Local, OperandLayout::U16, false,false,false,false,false,false,false,false, true, -1},
     {Op::GetLocalReturn, OperandCategory::Local, OperandLayout::U16, false,false,false,false,false,true,false,false, true, 0},
     {Op::IntToNumber, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, false, 0},
+    {Op::WidenNumber, OperandCategory::Name, OperandLayout::U16, false,false,false,false,false,false,false,false, false, 0},
     {Op::Clone, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, false, 0},
     {Op::EndModule, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, false, 0},
 }};
@@ -949,6 +981,8 @@ int main() {
 
     // IntToNumber.
     RUN(test_compile_int_to_number);
+    RUN(test_compile_widen_number_for_nested_integers);
+    RUN(test_compile_widening_of_literal_elements_needs_no_copy);
 
     // Optional chaining.
     RUN(test_compile_get_field_opt);

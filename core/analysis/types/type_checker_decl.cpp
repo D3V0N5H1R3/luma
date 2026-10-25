@@ -22,6 +22,7 @@
 
 #include "analysis/ast/ast_dispatch.hpp"
 #include "analysis/ast/declaration.hpp"
+#include "analysis/types/type_check_helpers.hpp"
 #include "analysis/types/type_checker.hpp"
 #include "symbols/qualified_name.hpp"
 
@@ -327,6 +328,9 @@ void TypeChecker::check_declaration(const Declaration& decl) {
                           field.default_value->location,
                           "ensure the default value matches the field's declared type",
                           DiagnosticCode::TypeMismatch);
+                } else {
+                    type_check_helpers::mark_numeric_widening(*this, *field.default_value,
+                                                              field_type, default_type);
                 }
             }
         } else if constexpr (std::is_same_v<T, ChoiceDeclaration>) {
@@ -406,6 +410,9 @@ void TypeChecker::check_function(const FunctionDeclaration& func) {
                                   "parameter type '{}'",
                                   default_type.to_string(), param_type.to_string()),
                       param.default_value->location);
+            } else {
+                type_check_helpers::mark_numeric_widening(*this, *param.default_value, param_type,
+                                                          default_type);
             }
         }
     }

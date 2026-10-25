@@ -8,6 +8,7 @@
 #include "analysis/ast/declaration.hpp"
 #include "analysis/ast/expression.hpp"
 #include "analysis/diagnostics/diagnostic_builders.hpp"
+#include "analysis/types/type_check_helpers.hpp"
 #include "analysis/types/type_checking_context.hpp"
 
 namespace luma {
@@ -264,6 +265,8 @@ void GenericResolver::report_argument_mismatches(
             }
 
             services_->error(detail, args[i]->location, hint);
+        } else {
+            type_check_helpers::mark_numeric_widening(*services_, *args[i], param_type, arg_type);
         }
     }
 }

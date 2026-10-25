@@ -44,6 +44,7 @@
 #include <string_view>
 #include <vector>
 
+#include "analysis/ast/ast_fwd.hpp"
 #include "analysis/diagnostics/diagnostic.hpp"
 #include "analysis/diagnostics/diagnostic_builders.hpp"
 #include "analysis/source/source_location.hpp"
@@ -265,5 +266,30 @@ template <typename ParamRange>
 
     return GenericResolver::ParamGuard{tc.generics().bindings(), names, args};
 }
+
+// ── numeric widening ─────────────────────────────────────────────────────────
+// An integer value may flow into a `number` context — directly, or nested in a
+// covariant container (array<integer> → array<number>).  The value must then
+// be converted at runtime so its representation matches the static type.
+//
+// numeric_widening_pattern returns the runtime pattern describing that
+// conversion (e.g. "number", "array<number>", "(number,_)" — `_` leaves a
+// component untouched), or nullopt when the flow involves no integer → number
+// widening.
+//
+// mark_numeric_widening records that pattern on `expr` for the compiler, which
+// then emits IntToNumber / WidenNumber after the expression.  For array,
+// dictionary, and tuple literals it marks the individual elements instead, so
+// widened integer literals fold into number constants at compile time.  For a
+// generic choice constructor call or record creation flowing into an
+// instantiation with `number` type arguments (List<integer> → List<number>) it
+// descends into the arguments / field values, whose runtime values the pattern
+// language cannot describe.  Call it at every assignment-like check site once
+// the flow has been accepted.
+[[nodiscard]] std::optional<std::string> numeric_widening_pattern(const TypeInfo& target,
+                                                                  const TypeInfo& source);
+
+void mark_numeric_widening(TypeCheckingServices& tc, const Expression& expr, const TypeInfo& target,
+                           const TypeInfo& source);
 
 } // namespace luma::type_check_helpers

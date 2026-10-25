@@ -237,7 +237,7 @@ function void test_lambda_exception_in_callback() {
 
     try {
         # Division by zero in lambda callback.
-        result<array<integer>> _ = Array.map(nums, (integer n) -> 10 / n)
+        result<array<number>> _ = Array.map(nums, (integer n) -> 10 / n)
     } catch(err) {
         caught = err
     }
@@ -287,7 +287,7 @@ function void test_lambda_callback_error_propagates_as_failure() {
     # A lambda that divides by zero on the second element. Array.map surfaces the
     # runtime error as a failure result rather than aborting the program.
     array<integer> nums = [1, 0, 3]
-    result<array<integer>> r = Array.map(nums, (integer n) -> 10 / n)
+    result<array<number>> r = Array.map(nums, (integer n) -> 10 / n)
 
     assert(!Result.is_success(r), "division by zero in callback should produce a failure")
 

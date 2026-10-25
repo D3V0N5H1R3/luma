@@ -753,6 +753,7 @@ private:
     void op_set_local_pop();           // Op::SetLocalPop
     void op_get_local_return();        // Op::GetLocalReturn
     void op_int_to_number();           // Op::IntToNumber
+    void op_widen_number();            // Op::WidenNumber
     void op_clone();                   // Op::Clone
     void op_end_module();              // Op::EndModule
 

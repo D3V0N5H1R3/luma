@@ -67,7 +67,7 @@ std::size_t Chunk::disassemble_instruction(std::size_t offset, std::ostringstrea
                 out << " (" << constants[operand].to_string() << ")";
             } else if ((op == Op::GetGlobal || op == Op::SetGlobal || op == Op::GetField ||
                         op == Op::SetField || op == Op::GetFieldOpt || op == Op::IsType ||
-                        op == Op::Downcast || op == Op::TrustedDowncast) &&
+                        op == Op::Downcast || op == Op::TrustedDowncast || op == Op::WidenNumber) &&
                        operand < names.size()) {
                 out << " (" << names[operand] << ")";
             }

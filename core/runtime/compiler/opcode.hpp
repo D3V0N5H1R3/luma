@@ -153,6 +153,7 @@ enum class Op : std::uint8_t {
 
     // ─── Conversions ───
     IntToNumber, // Convert integer on top of stack to number (double). No-op if already number.
+    WidenNumber, // Deep integer → number widening of TOS by type pattern: WidenNumber <u16 name>
     Clone,       // Deep-copy top of stack (value semantics for mutable bindings).
 
     // ─── Module ───
@@ -335,6 +336,7 @@ inline constexpr std::array<OpcodeInfo, opcode_count> opcode_table{{
     {Op::SetLocalPop, "SetLocalPop", 3, OperandCategory::Local, OperandLayout::U16, 0, true, -1},
     {Op::GetLocalReturn, "GetLocalReturn", 3, OperandCategory::Local, OperandLayout::U16, op_flag::k_terminator, true, 0},
     {Op::IntToNumber, "IntToNumber", 1, OperandCategory::None, OperandLayout::Simple, 0, false, 0},
+    {Op::WidenNumber, "WidenNumber", 3, OperandCategory::Name, OperandLayout::U16, 0, false, 0},
     {Op::Clone, "Clone", 1, OperandCategory::None, OperandLayout::Simple, 0, false, 0},
     {Op::EndModule, "EndModule", 1, OperandCategory::None, OperandLayout::Simple, 0, false, 0},
 }};
@@ -376,6 +378,7 @@ static_assert(opcode_table[static_cast<std::size_t>(Op::ForIterInit)].code    ==
 static_assert(opcode_table[static_cast<std::size_t>(Op::Print)].code          == Op::Print,          "opcode_table: Print position mismatch");
 static_assert(opcode_table[static_cast<std::size_t>(Op::IncrementLocal)].code == Op::IncrementLocal, "opcode_table: IncrementLocal position mismatch");
 static_assert(opcode_table[static_cast<std::size_t>(Op::IntToNumber)].code    == Op::IntToNumber,    "opcode_table: IntToNumber position mismatch");
+static_assert(opcode_table[static_cast<std::size_t>(Op::WidenNumber)].code    == Op::WidenNumber,    "opcode_table: WidenNumber position mismatch");
 static_assert(opcode_table[static_cast<std::size_t>(Op::Clone)].code          == Op::Clone,          "opcode_table: Clone position mismatch");
 // clang-format on
 

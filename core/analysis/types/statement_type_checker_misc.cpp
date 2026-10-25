@@ -188,8 +188,10 @@ void StatementTypeChecker::visit_assignment(const AssignmentStatement& stmt) {
         }
     }
 
-    (void)type_check_helpers::check_type_assignable(tc_, target_type, value_type,
-                                                    "type mismatch in assignment", stmt.location);
+    if (type_check_helpers::check_type_assignable(tc_, target_type, value_type,
+                                                  "type mismatch in assignment", stmt.location)) {
+        type_check_helpers::mark_numeric_widening(tc_, *stmt.value, target_type, value_type);
+    }
 }
 
 void StatementTypeChecker::visit_compound_assignment(const CompoundAssignmentStatement& stmt) {
@@ -305,9 +307,11 @@ void StatementTypeChecker::visit_return(const ReturnStatement& stmt) {
     if (stmt.value) {
         const auto value_type = tc_.infer_expression_type(*stmt.value);
 
-        if (ctx.current_return_type->kind != TypeInfo::Kind::Void) {
-            (void)type_check_helpers::check_type_assignable(
-                tc_, *ctx.current_return_type, value_type, "return type mismatch", stmt.location);
+        if (ctx.current_return_type->kind != TypeInfo::Kind::Void &&
+            type_check_helpers::check_type_assignable(tc_, *ctx.current_return_type, value_type,
+                                                      "return type mismatch", stmt.location)) {
+            type_check_helpers::mark_numeric_widening(tc_, *stmt.value, *ctx.current_return_type,
+                                                      value_type);
         }
     } else {
         if (ctx.current_return_type->kind != TypeInfo::Kind::Void &&

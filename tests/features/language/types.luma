@@ -550,3 +550,158 @@ function void test_string_escape_dollar() {
     assert(text == "price $5")
     assert(String.length(text) == 8)
 }
+
+# ─── Integer → number widening ───
+#
+# An integer flowing into a `number` context is converted, so the runtime value
+# is a number wherever its static type says `number` — not only for plain
+# variable declarations.
+
+record WideningBox {
+    number size = 3
+}
+
+record WideningCell<T> {
+    T value
+}
+
+choice WideningShape {
+    Circle(number radius)
+}
+
+choice WideningList<T> {
+    Empty
+    Node(T head, WideningList<T> tail)
+}
+
+function number widening_identity(number value) {
+    return value
+}
+
+function number widening_from_integer(integer value) {
+    return value
+}
+
+function integer widening_increment(integer value) {
+    return value + 1
+}
+
+function number widening_tail_call(integer value) {
+    return widening_increment(value)
+}
+
+function number widening_default(number value = 4) {
+    return value
+}
+
+@test
+function void test_widening_record_fields_and_defaults() {
+    WideningBox explicit_box = WideningBox { size = 5 }
+    WideningBox default_box = WideningBox {}
+    WideningBox changed_box = explicit_box with { size = 7 }
+
+    assert(type_of(explicit_box.size) == "number")
+    assert(type_of(default_box.size) == "number")
+    assert(type_of(changed_box.size) == "number")
+}
+
+@test
+function void test_widening_field_and_index_assignment() {
+    mutable WideningBox box = WideningBox {}
+    mutable array<number> values = [0.5, 1.5]
+
+    box.size = 9
+    values[0] = 2
+
+    assert(type_of(box.size) == "number")
+    assert(type_of(values[0]) == "number")
+}
+
+@test
+function void test_widening_function_arguments_and_returns() {
+    assert(type_of(widening_identity(5)) == "number")
+    assert(type_of(widening_identity(value: 5)) == "number")
+    assert(type_of(5 |> widening_identity()) == "number")
+    assert(type_of(widening_from_integer(5)) == "number")
+    assert(type_of(widening_tail_call(5)) == "number")
+    assert(type_of(widening_default()) == "number")
+}
+
+@test
+function void test_widening_choice_payloads() {
+    match WideningShape.Circle(5) {
+        case WideningShape.Circle(radius) {
+            assert(type_of(radius) == "number")
+        }
+    }
+}
+
+@test
+function void test_widening_collections_and_wrappers() {
+    array<integer> integers = [1, 2]
+    array<number> widened = integers
+    dictionary<number> totals = {"a": 1}
+    (number, string) pair = (1, "one")
+    optional<number> maybe = some(1)
+    result<number> outcome = success(1)
+
+    assert("${widened}" == "[1.0, 2.0]")
+    assert("${totals}" == "{\"a\": 1.0}")
+    assert(type_of(pair.0) == "number")
+    assert("${maybe}" == "1.0")
+    assert("${outcome}" == "success(1.0)")
+}
+
+@test
+function void test_widening_mixed_numeric_literals() {
+    array<number> values = [3, 4.5]
+    dictionary<number> prices = {"tea": 2, "cake": 3.5}
+
+    assert(type_of(values[0]) == "number")
+    assert("${values}" == "[3.0, 4.5]")
+    assert("${prices}" == "{\"tea\": 2.0, \"cake\": 3.5}")
+}
+
+@test
+function void test_widening_stdlib_element_arguments() {
+    array<number> values = [1.5]
+
+    assert("${Array.push(values, 2)}" == "[1.5, 2.0]")
+    assert("${values |> Array.push(2)}" == "[1.5, 2.0]")
+    assert("${Array.concat(values, [2, 3])}" == "[1.5, 2.0, 3.0]")
+}
+
+@test
+function void test_widening_generic_user_types() {
+    WideningCell<number> cell = WideningCell<number> { value = 5 }
+    WideningList<number> list = WideningList.Node(1, WideningList.Node(2, WideningList.Empty))
+
+    assert(type_of(cell.value) == "number")
+
+    match list {
+        case WideningList.Node(head, _tail) { assert(type_of(head) == "number") }
+        case WideningList.Empty { assert(false, "list should not be empty") }
+    }
+}
+
+@test
+function void test_widening_downcast() {
+    match downcast<number>(5) {
+        success(value) { assert(type_of(value) == "number") }
+        failure(_error) { assert(false, "downcast<number>(5) should succeed") }
+    }
+}
+
+@test
+function void test_widening_conditional_branches_and_defaults() {
+    boolean is_set = true
+    integer selector = 1
+    optional<number> missing = none
+    WideningBox from_if = WideningBox { size = if is_set { 1 } else { 2.5 } }
+    WideningBox from_match = WideningBox { size = match selector { case 1 { 4 } else { 2.5 } } }
+    WideningBox from_default = WideningBox { size = missing ?? 5 }
+
+    assert(type_of(from_if.size) == "number")
+    assert(type_of(from_match.size) == "number")
+    assert(type_of(from_default.size) == "number")
+}

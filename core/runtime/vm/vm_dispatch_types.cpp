@@ -4,13 +4,17 @@
 // Extracted from vm_helpers.cpp / vm.cpp as part of the VM dispatch split.
 // Contains:
 //   - handle_interpolate, matches_type
-//   - TypeMatcher implementation
+//   - TypeMatcher and NumericWidener implementations
 //   - handle_make_failure, handle_unwrap, handle_result_inner (new)
 //   - handle_is_success, handle_downcast, handle_trusted_downcast (new)
 
 #include <algorithm>
 #include <format>
+#include <memory>
+#include <optional>
 #include <string>
+#include <type_traits>
+#include <vector>
 
 #include "common/resource_limits.hpp"
 #include "runtime/interpreter/value.hpp"
@@ -330,6 +334,202 @@ bool TypeMatcher::matches_simple_type(const Value& val, const TypePattern& patte
     return pattern.matches(val.display_type_name());
 }
 
+// ─────────── NumericWidener implementation ───────────
+
+Value NumericWidener::widen(Value val, std::string_view type_pattern) {
+    if (auto widened = widen_impl(val, type_pattern, 0)) {
+        return *std::move(widened);
+    }
+
+    return val;
+}
+
+std::optional<Value> NumericWidener::widen_impl(const Value& val, std::string_view type_pattern,
+                                                int depth) {
+    // Same nesting cap as TypeMatcher: a crafted .lumc may carry a pattern far
+    // deeper than any source-level type.
+    if (depth > ResourceLimits::max_call_depth) {
+        return std::nullopt;
+    }
+
+    if (type_pattern == "number") {
+        if (val.is_integer()) {
+            return Value{static_cast<double>(val.as_integer())};
+        }
+
+        return std::nullopt;
+    }
+
+    const auto pattern = TypePattern::parse(type_pattern);
+
+    if (!pattern) {
+        return std::nullopt;
+    }
+
+    switch (pattern->kind) {
+        case TypePattern::Kind::Simple:
+            return std::nullopt;
+
+        case TypePattern::Kind::Tuple: {
+            if (!val.is_tuple()) {
+                return std::nullopt;
+            }
+
+            const auto& tuple = *val.as_tuple();
+
+            if (tuple.elements.size() != pattern->params.size()) {
+                return std::nullopt;
+            }
+
+            std::shared_ptr<TupleValue> copy;
+
+            for (std::size_t i = 0; i < tuple.elements.size(); ++i) {
+                if (auto widened = widen_impl(tuple.elements[i], pattern->params[i], depth + 1)) {
+                    if (!copy) {
+                        copy = std::make_shared<TupleValue>(tuple);
+                    }
+
+                    copy->elements[i] = *std::move(widened);
+                }
+            }
+
+            if (copy) {
+                return Value{std::move(copy)};
+            }
+
+            return std::nullopt;
+        }
+
+        case TypePattern::Kind::Parameterized:
+            return widen_parameterized(val, *pattern, depth);
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::vector<Value>> NumericWidener::widen_elements(const std::vector<Value>& elements,
+                                                                 std::string_view element_pattern,
+                                                                 int depth) {
+    std::optional<std::vector<Value>> copy;
+
+    for (std::size_t i = 0; i < elements.size(); ++i) {
+        if (auto widened = widen_impl(elements[i], element_pattern, depth + 1)) {
+            if (!copy) {
+                copy.emplace(elements);
+            }
+
+            (*copy)[i] = *std::move(widened);
+        }
+    }
+
+    return copy;
+}
+
+std::optional<Value> NumericWidener::widen_parameterized(const Value& val,
+                                                         const TypePattern& pattern, int depth) {
+    if (pattern.params.empty()) {
+        return std::nullopt;
+    }
+
+    const auto element_pattern = pattern.params[0];
+
+    // optional<T> has no runtime wrapper: `some(x)` is x itself, `none` is null.
+    if (pattern.base == "optional") {
+        if (val.is_null()) {
+            return std::nullopt;
+        }
+
+        return widen_impl(val, element_pattern, depth + 1);
+    }
+
+    if (pattern.base == "array" && val.is_array()) {
+        auto elements = widen_elements(*val.as_array()->elements, element_pattern, depth);
+
+        if (!elements) {
+            return std::nullopt;
+        }
+
+        auto array = std::make_shared<ArrayValue>();
+        array->elements = std::make_shared<std::vector<Value>>(*std::move(elements));
+        return Value{std::move(array)};
+    }
+
+    if (pattern.base == "dictionary" && val.is_dictionary()) {
+        const auto& dictionary = *val.as_dictionary();
+        std::shared_ptr<DictionaryValue> copy;
+
+        for (std::size_t i = 0; i < dictionary.entries.size(); ++i) {
+            if (auto widened =
+                    widen_impl(dictionary.entries[i].second, element_pattern, depth + 1)) {
+                if (!copy) {
+                    // Keys and their positions are unchanged, so the copied
+                    // index stays valid.
+                    copy = std::make_shared<DictionaryValue>(dictionary);
+                }
+
+                copy->entries[i].second = *std::move(widened);
+            }
+        }
+
+        if (copy) {
+            return Value{std::move(copy)};
+        }
+
+        return std::nullopt;
+    }
+
+    if (pattern.base == "result" && val.is_result()) {
+        const auto& result = *val.as_result();
+
+        // The success type is params[0]; a typed error (result<T, E>) is params[1].
+        const auto inner_pattern = result.is_success
+                                       ? element_pattern
+                                       : (pattern.params.size() >= 2 ? pattern.params[1] : "_");
+        auto widened = widen_impl(*result.owned_inner, inner_pattern, depth + 1);
+
+        if (!widened) {
+            return std::nullopt;
+        }
+
+        auto copy = std::make_shared<ResultValue>(result);
+        copy->owned_inner = std::make_shared<Value>(*std::move(widened));
+        return Value{std::move(copy)};
+    }
+
+    const auto widen_collection = [&](const auto& collection) -> std::optional<Value> {
+        auto elements = widen_elements(collection->elements, element_pattern, depth);
+
+        if (!elements) {
+            return std::nullopt;
+        }
+
+        auto copy = std::make_shared<std::decay_t<decltype(*collection)>>(*collection);
+        copy->elements = *std::move(elements);
+
+        if constexpr (std::is_same_v<std::decay_t<decltype(*collection)>, SetValue>) {
+            copy->invalidate_index();
+        }
+
+        return Value{std::move(copy)};
+    };
+
+    if (pattern.base == "queue" && val.is_queue()) {
+        return widen_collection(val.as_queue());
+    }
+
+    if (pattern.base == "stack" && val.is_stack()) {
+        return widen_collection(val.as_stack());
+    }
+
+    if (pattern.base == "set" && val.is_set()) {
+        return widen_collection(val.as_set());
+    }
+
+    // channel<T>, reference<T> and task<T> are invariant in the type checker,
+    // and user-defined generic records/choices are not widened.
+    return std::nullopt;
+}
+
 // ─────────── Result / Optional handlers ───────────
 
 void VM::handle_make_failure() {
@@ -389,7 +589,7 @@ void VM::handle_downcast() {
     auto val = pop();
 
     if (matches_type(val, type_name)) {
-        push(Value{ResultValue::success(std::move(val))});
+        push(Value{ResultValue::success(NumericWidener::widen(std::move(val), type_name))});
     } else {
         push(Value{ResultValue::failure(
             Value{vm_errors::cannot_downcast(val.display_type_name(), type_name)})});
@@ -405,12 +605,7 @@ void VM::handle_trusted_downcast() {
         runtime_error(vm_errors::trusted_downcast_failed(type_name, val.display_type_name()));
     }
 
-    // Widen integer to number if the target type is number.
-    if (type_name == "number" && val.is_integer()) {
-        push(Value{static_cast<double>(val.as_integer())});
-    } else {
-        push(std::move(val));
-    }
+    push(NumericWidener::widen(std::move(val), type_name));
 }
 
 } // namespace luma

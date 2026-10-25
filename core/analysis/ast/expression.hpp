@@ -112,6 +112,15 @@ struct Expression {
 
     ExpressionKind kind;
     SourceLocation location;
+
+    /// Runtime widening pattern recorded by the type checker when this
+    /// expression's static type holds `integer` where its context expects
+    /// `number` — e.g. "number", "array<number>", or "(number,_)" (`_` leaves a
+    /// component untouched).  Null when no widening is needed.  The compiler
+    /// emits IntToNumber / WidenNumber after the expression so the runtime
+    /// representation matches the static type.  `mutable` because the type
+    /// checker annotates an otherwise read-only AST.
+    mutable std::unique_ptr<const std::string> numeric_widening;
 };
 
 /// Attempts to narrow a base Expression reference to a concrete node type `T`.

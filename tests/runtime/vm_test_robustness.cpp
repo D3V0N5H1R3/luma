@@ -398,6 +398,43 @@ LUMA_TEST(vm_typematcher_deeply_nested_pattern_is_bounded) {
     ASSERT_FALSE(TypeMatcher::matches(Value{static_cast<std::int64_t>(0)}, pattern));
 }
 
+// NumericWidener converts integers wherever a pattern says `number`, copying
+// only the containers it changes and leaving other components untouched.
+LUMA_TEST(vm_numeric_widener_converts_nested_integers) {
+    auto array = std::make_shared<ArrayValue>();
+    array->elements->push_back(Value{static_cast<std::int64_t>(1)});
+    array->elements->push_back(Value{2.5});
+    const Value original{array};
+
+    const auto widened = NumericWidener::widen(original, "array<number>");
+
+    ASSERT_TRUE(widened.is_array());
+    ASSERT_TRUE((*widened.as_array()->elements)[0].is_number());
+    ASSERT_TRUE((*widened.as_array()->elements)[1].is_number());
+    // The source array is not mutated in place: other holders keep its value.
+    ASSERT_TRUE((*original.as_array()->elements)[0].is_integer());
+
+    auto tuple = std::make_shared<TupleValue>();
+    tuple->elements = {Value{static_cast<std::int64_t>(3)}, Value{static_cast<std::int64_t>(4)}};
+    const auto widened_tuple = NumericWidener::widen(Value{tuple}, "(number,_)");
+
+    ASSERT_TRUE(widened_tuple.as_tuple()->elements[0].is_number());
+    ASSERT_TRUE(widened_tuple.as_tuple()->elements[1].is_integer());
+}
+
+LUMA_TEST(vm_numeric_widener_shares_unchanged_values) {
+    auto array = std::make_shared<ArrayValue>();
+    array->elements->push_back(Value{1.5});
+    const Value original{array};
+
+    const auto widened = NumericWidener::widen(original, "array<number>");
+
+    // Nothing needed converting, so the storage is shared rather than copied.
+    ASSERT_TRUE(widened.as_array().get() == original.as_array().get());
+    ASSERT_TRUE(NumericWidener::widen(Value{NullValue{}}, "optional<number>").is_null());
+    ASSERT_TRUE(NumericWidener::widen(Value{std::string{"7"}}, "number").is_string());
+}
+
 // ─── Main ───
 
 int main() {

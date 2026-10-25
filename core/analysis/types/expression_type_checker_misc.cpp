@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "analysis/ast/declaration.hpp"
@@ -20,6 +21,20 @@
 #include "symbols/qualified_name.hpp"
 
 namespace luma {
+
+namespace {
+
+// The expression a `{ ... }` block yields as its value, if its last statement
+// is an expression statement.
+const Expression* block_value_expression(const std::vector<std::unique_ptr<Statement>>& body) {
+    if (body.empty() || body.back()->kind != StatementKind::Expression) {
+        return nullptr;
+    }
+
+    return static_cast<const ExpressionStatement&>(*body.back()).expression.get();
+}
+
+} // namespace
 
 TypeInfo ExpressionTypeChecker::visit_lambda(const LambdaExpression& expr) {
     auto scope = tc_.make_scope_guard();
@@ -65,6 +80,9 @@ TypeInfo ExpressionTypeChecker::visit_lambda(const LambdaExpression& expr) {
                                       body_type.to_string(), current_return_type->to_string()),
                           expr.expression_body()->location,
                           "change the return type annotation or adjust the lambda body");
+            } else {
+                type_check_helpers::mark_numeric_widening(tc_, *expr.expression_body(),
+                                                          *current_return_type, body_type);
             }
         } else {
             // No explicit return type — infer from the expression body.
@@ -84,17 +102,38 @@ TypeInfo ExpressionTypeChecker::visit_lambda(const LambdaExpression& expr) {
 }
 
 TypeInfo ExpressionTypeChecker::visit_if(const IfExpression& expr) {
-    return infer_conditional_result(
+    TypeInfo then_type = TypeInfo::make(TypeInfo::Kind::Void);
+    TypeInfo else_type = TypeInfo::make(TypeInfo::Kind::Void);
+
+    const auto result = infer_conditional_result(
         *expr.condition,
         [&] {
-            return expr.then_expr() != nullptr ? infer_expression_type(*expr.then_expr())
-                                               : infer_block_result(expr.then_body());
+            then_type = expr.then_expr() != nullptr ? infer_expression_type(*expr.then_expr())
+                                                    : infer_block_result(expr.then_body());
+            return then_type;
         },
         [&] {
-            return expr.else_expr() != nullptr ? infer_expression_type(*expr.else_expr())
-                                               : infer_block_result(expr.else_body());
+            else_type = expr.else_expr() != nullptr ? infer_expression_type(*expr.else_expr())
+                                                    : infer_block_result(expr.else_body());
+            return else_type;
         },
         expr.location);
+
+    // A branch narrower than the merged type (`if c { 1 } else { 2.5 }`) widens.
+    const auto* then_value =
+        expr.then_expr() != nullptr ? expr.then_expr() : block_value_expression(expr.then_body());
+    const auto* else_value =
+        expr.else_expr() != nullptr ? expr.else_expr() : block_value_expression(expr.else_body());
+
+    if (then_value != nullptr) {
+        type_check_helpers::mark_numeric_widening(tc_, *then_value, result, then_type);
+    }
+
+    if (else_value != nullptr) {
+        type_check_helpers::mark_numeric_widening(tc_, *else_value, result, else_type);
+    }
+
+    return result;
 }
 
 TypeInfo ExpressionTypeChecker::infer_if_statement_result(const IfStatement& stmt) {
@@ -221,6 +260,9 @@ TypeInfo ExpressionTypeChecker::infer_match_result(const Expression& subject,
 
     std::vector<TypeScope::OwnershipSnapshot> arm_snapshots;
 
+    // Expression-bodied arms, widened to the match's result type afterwards.
+    std::vector<std::pair<const Expression*, TypeInfo>> arm_values;
+
     TypeInfo result_type = TypeInfo::make(TypeInfo::Kind::Unknown);
     bool first{true};
 
@@ -258,8 +300,13 @@ TypeInfo ExpressionTypeChecker::infer_match_result(const Expression& subject,
 
         if (arm.body_expr) {
             arm_type = infer_expression_type(*arm.body_expr);
+            arm_values.emplace_back(arm.body_expr.get(), arm_type);
         } else {
             arm_type = infer_block_result(arm.body);
+
+            if (const auto* value = block_value_expression(arm.body)) {
+                arm_values.emplace_back(value, arm_type);
+            }
         }
 
         if (first) {
@@ -279,6 +326,10 @@ TypeInfo ExpressionTypeChecker::infer_match_result(const Expression& subject,
                 tc_.error(std::format("match arms have different types: '{}' and '{}'",
                                       result_type.to_string(), arm_type.to_string()),
                           location, "ensure all match arms return the same type");
+            } else if (!tc_.is_assignable(result_type, arm_type)) {
+                // A wider arm widens the whole match, as for if branches:
+                // `case 1 { 2 } else { 2.5 }` is a number.
+                result_type = arm_type;
             }
         }
 
@@ -289,6 +340,10 @@ TypeInfo ExpressionTypeChecker::infer_match_result(const Expression& subject,
     }
 
     match_arm_binding::merge_arm_ownership(tc_, before, arm_snapshots);
+
+    for (const auto& [arm_value, arm_type] : arm_values) {
+        type_check_helpers::mark_numeric_widening(tc_, *arm_value, result_type, arm_type);
+    }
 
     return result_type;
 }
@@ -346,6 +401,9 @@ void ExpressionTypeChecker::check_record_provided_fields(const RecordDeclaration
                     "ensure the field value matches the type declared in the record");
                 tc_.error(diag.message, init_it->value->location, diag.hint,
                           DiagnosticCode::TypeMismatch);
+            } else {
+                type_check_helpers::mark_numeric_widening(tc_, *init_it->value, expected_type,
+                                                          actual_type);
             }
         }
     }
@@ -496,6 +554,9 @@ TypeInfo ExpressionTypeChecker::visit_record_with(const RecordWithExpression& ex
                     "ensure the override value matches the field's declared type");
                 tc_.error(diag.message, override_field.value->location, diag.hint,
                           DiagnosticCode::TypeMismatch);
+            } else {
+                type_check_helpers::mark_numeric_widening(tc_, *override_field.value, expected_type,
+                                                          actual_type);
             }
         }
     }

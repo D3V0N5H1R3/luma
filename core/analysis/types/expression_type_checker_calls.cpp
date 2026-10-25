@@ -1,4 +1,9 @@
+#include <algorithm>
+#include <array>
 #include <format>
+#include <optional>
+#include <string_view>
+#include <vector>
 
 #include "analysis/ast/declaration.hpp"
 #include "analysis/ast/expression.hpp"
@@ -117,8 +122,9 @@ void ExpressionTypeChecker::check_pipe_first_parameter(const Parameter& first_pa
 
     if (left_type.kind != TypeInfo::Kind::StdlibAny &&
         param_type.kind != TypeInfo::Kind::StdlibAny && left_type.kind != TypeInfo::Kind::Unknown &&
-        param_type.kind != TypeInfo::Kind::Unknown) {
-        (void)type_check_helpers::check_argument_type(tc_, 1, param_type, left_type, loc);
+        param_type.kind != TypeInfo::Kind::Unknown &&
+        type_check_helpers::check_argument_type(tc_, 1, param_type, left_type, loc)) {
+        type_check_helpers::mark_numeric_widening(tc_, piped_value, param_type, left_type);
     }
 
     // Ownership: the piped value flows into the first parameter, so a borrowed
@@ -204,12 +210,15 @@ TypeInfo ExpressionTypeChecker::visit_pipe(const PipeExpression& expr) {
     // The right side is a call — infer its type (it already includes
     // the left as implicit first argument at runtime).
     const bool saved_in_pipe = tc_.context().is_in_pipe;
+    auto saved_pipe_left_type = tc_.context().pipe_left_type;
 
     tc_.context().is_in_pipe = true;
+    tc_.context().pipe_left_type = left_type;
 
     const auto result = infer_expression_type(*expr.right);
 
     tc_.context().is_in_pipe = saved_in_pipe;
+    tc_.context().pipe_left_type = std::move(saved_pipe_left_type);
 
     // A bare function reference (`x |> f`, no parentheses) infers to the
     // function's own type, but the pipe evaluates to `f(x)` — the function's
@@ -226,7 +235,7 @@ TypeInfo ExpressionTypeChecker::visit_error_pipe(const ErrorPipeExpression& expr
     // The left side must ultimately be a result<T> at runtime. The type
     // checker infers the left side but does not enforce this statically
     // (it may be StdlibAny or result<T>).
-    (void)infer_expression_type(*expr.left);
+    const auto left_type = infer_expression_type(*expr.left);
 
     // Validate that the right side is a function call or function reference.
     if (expr.right->kind != ExpressionKind::Call && expr.right->kind != ExpressionKind::Variable &&
@@ -240,12 +249,18 @@ TypeInfo ExpressionTypeChecker::visit_error_pipe(const ErrorPipeExpression& expr
     // U is the return type of the right-hand function. We always return
     // a Result kind to the caller.
     const bool saved_in_pipe = tc_.context().is_in_pipe;
+    auto saved_pipe_left_type = tc_.context().pipe_left_type;
 
     tc_.context().is_in_pipe = true;
+    tc_.context().pipe_left_type =
+        left_type.kind == TypeInfo::Kind::Result && !left_type.inner_types.empty()
+            ? left_type.result_value_type()
+            : TypeInfo::make(TypeInfo::Kind::StdlibAny);
 
     auto right_type = infer_expression_type(*expr.right);
 
     tc_.context().is_in_pipe = saved_in_pipe;
+    tc_.context().pipe_left_type = std::move(saved_pipe_left_type);
 
     // A bare function reference (`x !> f`) infers to the function's own type,
     // but the error pipe evaluates to `f(x)` — use the function's RETURN type.
@@ -402,15 +417,20 @@ void ExpressionTypeChecker::check_user_function_args(
         // parameter 0), but the user-visible argument number must count only the
         // explicitly written arguments — so report `i + 1`, matching the
         // generic-function path in generic_resolver.cpp.
-        (void)type_check_helpers::check_argument_type(tc_, i + 1, param_type, arg_type,
-                                                      expr.arguments[i]->location, hint);
+        if (type_check_helpers::check_argument_type(tc_, i + 1, param_type, arg_type,
+                                                    expr.arguments[i]->location, hint)) {
+            type_check_helpers::mark_numeric_widening(tc_, *expr.arguments[i], param_type,
+                                                      arg_type);
+        }
     }
 
     // Check named argument types against declared parameter types.
     const auto fn_it = fn_name.empty() ? tc_.functions().end() : tc_.functions().find(fn_name);
 
     if (fn_it != tc_.functions().end()) {
-        for (const auto& [named_name, named_type] : named_arg_types) {
+        for (std::size_t k{0}; k < named_arg_types.size() && k < expr.named_arguments.size(); ++k) {
+            const auto& [named_name, named_type] = named_arg_types[k];
+
             for (const auto& param : fn_it->second->parameters) {
                 if (param.name == named_name) {
                     const auto param_type = tc_.resolve_type(param.type);
@@ -419,6 +439,9 @@ void ExpressionTypeChecker::check_user_function_args(
                         const auto diag = diag_builders::named_argument_type_mismatch(
                             named_name, param_type, named_type);
                         tc_.error(diag.message, expr.location, "", DiagnosticCode::TypeMismatch);
+                    } else {
+                        type_check_helpers::mark_numeric_widening(
+                            tc_, *expr.named_arguments[k].value, param_type, named_type);
                     }
 
                     break;
@@ -554,6 +577,8 @@ ExpressionTypeChecker::check_stdlib_function_call(const CallExpression& expr,
         }
     }
 
+    mark_stdlib_element_widening(full_name, expr, arg_types);
+
     if (ret_type != nullptr) {
         return tc_.stdlib_handler().refine_return_type(full_name, *ret_type, arg_types);
     }
@@ -564,6 +589,63 @@ ExpressionTypeChecker::check_stdlib_function_call(const CallExpression& expr,
              expr.location);
 
     return TypeInfo::make(TypeInfo::Kind::StdlibAny);
+}
+
+void ExpressionTypeChecker::mark_stdlib_element_widening(std::string_view full_name,
+                                                         const CallExpression& expr,
+                                                         const std::vector<TypeInfo>& arg_types) {
+    // Stdlib functions that store a value (or a whole array) of their first
+    // argument's element type.  The catalog types these parameters loosely, so
+    // the element relationship is spelled out here.
+    struct ElementParameter {
+        std::string_view function;
+        std::size_t parameter;
+        bool is_whole_container;
+    };
+
+    static constexpr std::array<ElementParameter, 5> k_element_parameters{{
+        {"Array.push", 1, false},
+        {"Array.insert_at", 2, false},
+        {"Array.set", 2, false},
+        {"Array.concat", 1, true},
+        {"Dictionary.set", 2, false},
+    }};
+
+    const auto it = std::ranges::find(k_element_parameters, full_name, &ElementParameter::function);
+
+    if (it == k_element_parameters.end()) {
+        return;
+    }
+
+    // When piped, the container is the piped value and explicit arguments
+    // start at parameter 1.
+    const bool is_piped = tc_.context().is_in_pipe;
+    const std::size_t first_explicit_parameter = is_piped ? 1 : 0;
+
+    std::optional<TypeInfo> container_type;
+
+    if (is_piped) {
+        container_type = tc_.context().pipe_left_type;
+    } else if (!arg_types.empty()) {
+        container_type = arg_types[0];
+    }
+
+    if (!container_type ||
+        (container_type->kind != TypeInfo::Kind::Array &&
+         container_type->kind != TypeInfo::Kind::Dictionary) ||
+        container_type->inner_types.empty() || it->parameter < first_explicit_parameter) {
+        return;
+    }
+
+    const auto argument_index = it->parameter - first_explicit_parameter;
+
+    if (argument_index >= expr.arguments.size() || argument_index >= arg_types.size()) {
+        return;
+    }
+
+    const auto& target = it->is_whole_container ? *container_type : container_type->element_type();
+    type_check_helpers::mark_numeric_widening(tc_, *expr.arguments[argument_index], target,
+                                              arg_types[argument_index]);
 }
 
 } // namespace luma
