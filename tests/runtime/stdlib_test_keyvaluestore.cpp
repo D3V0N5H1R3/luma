@@ -1,6 +1,8 @@
 // Standard library tests: KeyValueStore.
 
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
 #include <string>
 
 #include "common/resource_limits.hpp"
@@ -314,7 +316,34 @@ static void test_keyvaluestore_find_by_pattern_wildcard() {
 
 // ─── Positive: read-only mode ────────────────────────────────────────────────
 
+// An empty store file on disk for the duration of a test: open_read_only fails
+// on a missing file, so read-only tests need a real (empty) store to open.
+class ScopedStoreFile {
+public:
+    explicit ScopedStoreFile(std::string path) : path_{std::move(path)} {
+        std::ofstream{path_};
+    }
+
+    ~ScopedStoreFile() {
+        std::error_code ignored;
+        std::filesystem::remove(path_, ignored);
+    }
+
+    ScopedStoreFile(const ScopedStoreFile&) = delete;
+    ScopedStoreFile& operator=(const ScopedStoreFile&) = delete;
+
+private:
+    std::string path_;
+};
+
+static void test_keyvaluestore_open_read_only_missing_file_fails() {
+    const auto v = eval(R"(KeyValueStore.open_read_only("test_kv_cpp_ro_missing.kv"))");
+
+    ASSERT_RESULT_FAILURE(v);
+}
+
 static void test_keyvaluestore_is_read_only_true() {
+    const ScopedStoreFile file{"test_kv_cpp_ro.kv"};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro.kv")
         |> Result.unwrap()
@@ -486,6 +515,7 @@ static void test_keyvaluestore_open_rejects_oversized_file() {
 // ─── Negative: writes on a read-only store fail (no throw, failure result) ────
 
 static void test_keyvaluestore_set_read_only_fails() {
+    const ScopedStoreFile file{"test_kv_cpp_ro_set.kv"};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_set.kv")
         |> Result.unwrap()
@@ -496,6 +526,7 @@ static void test_keyvaluestore_set_read_only_fails() {
 }
 
 static void test_keyvaluestore_remove_read_only_fails() {
+    const ScopedStoreFile file{"test_kv_cpp_ro_remove.kv"};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_remove.kv")
         |> Result.unwrap()
@@ -506,6 +537,7 @@ static void test_keyvaluestore_remove_read_only_fails() {
 }
 
 static void test_keyvaluestore_clear_read_only_fails() {
+    const ScopedStoreFile file{"test_kv_cpp_ro_clear.kv"};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_clear.kv")
         |> Result.unwrap()
@@ -516,6 +548,7 @@ static void test_keyvaluestore_clear_read_only_fails() {
 }
 
 static void test_keyvaluestore_set_many_read_only_fails() {
+    const ScopedStoreFile file{"test_kv_cpp_ro_setmany.kv"};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_setmany.kv")
         |> Result.unwrap()
@@ -526,6 +559,7 @@ static void test_keyvaluestore_set_many_read_only_fails() {
 }
 
 static void test_keyvaluestore_save_read_only_fails() {
+    const ScopedStoreFile file{"test_kv_cpp_ro_save.kv"};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_save.kv")
         |> Result.unwrap()
@@ -536,6 +570,7 @@ static void test_keyvaluestore_save_read_only_fails() {
 }
 
 static void test_keyvaluestore_destroy_read_only_fails() {
+    const ScopedStoreFile file{"test_kv_cpp_ro_destroy.kv"};
     const auto v = eval(R"(
         KeyValueStore.open_read_only("test_kv_cpp_ro_destroy.kv")
         |> Result.unwrap()
@@ -720,6 +755,7 @@ int main() {
     RUN(test_keyvaluestore_find_by_pattern_wildcard);
 
     // Positive: read-only mode.
+    RUN(test_keyvaluestore_open_read_only_missing_file_fails);
     RUN(test_keyvaluestore_is_read_only_true);
     RUN(test_keyvaluestore_is_read_only_false);
 

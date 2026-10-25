@@ -275,6 +275,11 @@ private:
     // Assignment target helpers — one per target kind (Variable, FieldAccess, IndexAccess).
     void compile_assign_to_variable(const VariableExpression& var, const Expression& value,
                                     SourceLocation loc);
+
+    // Compile the container part of an assignment target (`a` in `a.x = v`,
+    // `a[i]` in `a[i].x = v`) for writing: each step makes its storage
+    // exclusive first (copy-on-write), so the write cannot reach an alias.
+    void compile_write_target(const Expression& container);
     void compile_assign_to_field(const FieldAccessExpression& field, const Expression& value,
                                  SourceLocation loc);
     void compile_assign_to_index(const IndexAccessExpression& index, const Expression& value,

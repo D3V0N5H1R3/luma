@@ -1,13 +1,13 @@
 # ═══════════════════════════════════════════════════════════
 # Luma v1.0 — Feature Tests — Optional Module Functions
 #
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_Standard_Library_Reference.md.
+#
 # Covers the Optional stdlib module (map / flat_map / filter /
 # and_then / zip / tap / …). The language-level behaviour of the
 # optional<T> type and match is covered by language/optional.luma;
 # this suite exercises the module functions from user code.
-#
-# Feature Tests are based on Luma_Initial_Concept.md and
-# Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
 # ─── is_some / is_none ───────────────────────────────────
@@ -30,15 +30,15 @@ function void test_optional_unwrap_some() {
 @test
 function void test_optional_unwrap_none_throws() {
     optional<integer> empty = none
-    mutable boolean caught = false
+    mutable boolean has_thrown = false
 
     try {
-        integer _v = Optional.unwrap(empty)
-    } catch(_e) {
-        caught = true
+        integer _value = Optional.unwrap(empty)
+    } catch(_err) {
+        has_thrown = true
     }
 
-    assert(caught)
+    assert(has_thrown)
 }
 
 @test
@@ -69,29 +69,29 @@ function void test_optional_map_none_stays_none() {
 @test
 function void test_optional_map_returning_none_throws() {
     # map must not collapse to none — that is what flat_map is for.
-    mutable boolean caught = false
+    mutable boolean has_thrown = false
 
     try {
-        optional<integer> _r = Optional.map(some(5), (integer _x) -> none)
-    } catch(_e) {
-        caught = true
+        optional<integer> _mapped = Optional.map(some(5), (integer _x) -> none)
+    } catch(_err) {
+        has_thrown = true
     }
 
-    assert(caught)
+    assert(has_thrown)
 }
 
 @test
 function void test_optional_flat_map() {
-    optional<integer> r = Optional.flat_map(some(5), (integer x) -> some(x + 1))
+    optional<integer> incremented = Optional.flat_map(some(5), (integer x) -> some(x + 1))
 
-    assert(Optional.unwrap(r) == 6)
+    assert(Optional.unwrap(incremented) == 6)
 }
 
 @test
 function void test_optional_flat_map_may_return_none() {
-    optional<integer> r = Optional.flat_map(some(5), (integer _x) -> none)
+    optional<integer> flattened = Optional.flat_map(some(5), (integer _x) -> none)
 
-    assert(Optional.is_none(r))
+    assert(Optional.is_none(flattened))
 }
 
 # ─── filter ──────────────────────────────────────────────
@@ -128,7 +128,6 @@ function void test_optional_tap_returns_original() {
 
     optional<integer> passed = Optional.tap(some(42), (integer x) -> {
         Reference.set(seen, x)
-        return x
     })
 
     assert(Optional.unwrap(passed) == 42)
@@ -142,7 +141,6 @@ function void test_optional_tap_none_skips_callback() {
 
     optional<integer> passed = Optional.tap(empty, (integer x) -> {
         Reference.set(seen, x)
-        return x
     })
 
     assert(Optional.is_none(passed))
@@ -154,11 +152,9 @@ function void test_optional_tap_none_skips_callback() {
 @test
 function void test_optional_flatten() {
     optional<optional<integer>> nested = some(some(42))
-
-    assert(Optional.unwrap(Optional.flatten(nested)) == 42)
-
     optional<optional<integer>> nested_none = none
 
+    assert(Optional.unwrap(Optional.flatten(nested)) == 42)
     assert(Optional.is_none(Optional.flatten(nested_none)))
 }
 
@@ -166,19 +162,18 @@ function void test_optional_flatten() {
 
 @test
 function void test_optional_to_result_success() {
-    result<integer> r = Optional.to_result(some(42), "missing")
+    result<integer> converted = Optional.to_result(some(42), "missing")
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == 42)
+    assert(converted == success(42))
 }
 
 @test
 function void test_optional_to_result_failure() {
     optional<integer> empty = none
-    result<integer> r = Optional.to_result(empty, "missing")
+    result<integer> converted = Optional.to_result(empty, "missing")
 
-    assert(Result.is_failure(r))
-    assert(Result.error(r) == "missing")
+    assert(Result.is_failure(converted))
+    assert(Result.error(converted) == "missing")
 }
 
 # ─── zip ─────────────────────────────────────────────────
@@ -223,7 +218,7 @@ function void test_optional_contains() {
     assert(Optional.contains(some("hi"), "hi"))
 }
 
-# ─── expect / and / xor additions ────────────────────────
+# ─── expect / and / xor ──────────────────────────────────
 
 @test
 function void test_optional_expect() {
@@ -231,10 +226,39 @@ function void test_optional_expect() {
 }
 
 @test
+function void test_optional_expect_none_throws_with_message() {
+    optional<integer> empty = none
+    mutable string error_message = ""
+
+    try {
+        integer _value = Optional.expect(empty, "config value required")
+    } catch(err) {
+        error_message = err
+    }
+
+    assert(String.contains(error_message, "config value required"))
+}
+
+@test
 function void test_optional_and_xor() {
-    assert(Optional.is_some(Optional.and(some(1), some(2))))
+    # and yields the second operand when the first is some; xor is some only
+    # when exactly one side is.
+    assert(Optional.unwrap(Optional.and(some(1), some(2))) == 2)
     assert(Optional.is_none(Optional.and(none, some(2))))
-    assert(Optional.is_some(Optional.xor(some(1), none)))
+    assert(Optional.unwrap(Optional.xor(some(1), none)) == 1)
+    assert(Optional.unwrap(Optional.xor(none, some(2))) == 2)
     assert(Optional.is_none(Optional.xor(some(1), some(2))))
     assert(Optional.is_none(Optional.xor(none, none)))
+}
+
+# ─── pipes ───────────────────────────────────────────────
+
+@test
+function void test_optional_pipe_chain() {
+    string label = some(42)
+    |> Optional.filter((integer i) -> i > 0)
+    |> Optional.map((integer i) -> "positive: ${i}")
+    |> Optional.unwrap_or("not positive")
+
+    assert(label == "positive: 42")
 }

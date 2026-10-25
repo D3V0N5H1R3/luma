@@ -5,12 +5,10 @@
 # Luma_User_Manual.md.
 # ═══════════════════════════════════════════════════════════
 
-# ───────────────────────────────────────────────────────────
-# Helper functions
-# ───────────────────────────────────────────────────────────
+# ─── Helper functions ────────────────────────────────────
 
-function string create_user(string name, integer age, boolean active) {
-    if active {
+function string create_user(string name, integer age, boolean is_active) {
+    if is_active {
         return "${name} (${age})"
     }
 
@@ -25,77 +23,67 @@ function string greet(string greeting, string name) {
     return "${greeting}, ${name}!"
 }
 
-# ───────────────────────────────────────────────────────────
-# All named arguments
-# ───────────────────────────────────────────────────────────
+# ─── All named arguments ─────────────────────────────────
 
 @test
 function void test_all_named_any_order() {
-    string u1 = create_user(name: "Alice", age: 30, active: true)
-    string u2 = create_user(active: false, name: "Bob", age: 25)
+    string alice = create_user(name: "Alice", age: 30, is_active: true)
+    string bob = create_user(is_active: false, name: "Bob", age: 25)
 
-    assert(u1 == "Alice (30)")
-    assert(u2 == "Bob (inactive)")
+    assert(alice == "Alice (30)")
+    assert(bob == "Bob (inactive)")
 }
 
-# ───────────────────────────────────────────────────────────
-# Mixed positional and named
-# ───────────────────────────────────────────────────────────
+# ─── Mixed positional and named ──────────────────────────
 
 @test
 function void test_mixed_positional_and_named() {
-    string u = create_user("Charlie", active: true, age: 35)
+    string charlie = create_user("Charlie", is_active: true, age: 35)
 
-    assert(u == "Charlie (35)")
+    assert(charlie == "Charlie (35)")
 }
 
-# ───────────────────────────────────────────────────────────
-# Named arguments preserve semantics
-# ───────────────────────────────────────────────────────────
+# ─── Named arguments bind by name, not position ──────────
 
 @test
-function void test_named_argument_order_matters_for_subtraction() {
-    integer r1 = subtract(a: 10, b: 3)
-    integer r2 = subtract(b: 3, a: 10)
+function void test_named_argument_order_does_not_change_binding() {
+    # Subtraction is not commutative, so swapping the written order of the
+    # named arguments would change the result if they bound by position.
+    integer in_order = subtract(a: 10, b: 3)
+    integer swapped = subtract(b: 3, a: 10)
 
-    assert(r1 == 7)
-    assert(r2 == 7)
+    assert(in_order == 7)
+    assert(swapped == 7)
 }
 
-# ───────────────────────────────────────────────────────────
-# Named with string arguments
-# ───────────────────────────────────────────────────────────
+# ─── Named with string arguments ─────────────────────────
 
 @test
 function void test_named_string_arguments() {
-    string msg = greet(greeting: "Hello", name: "World")
+    string message = greet(greeting: "Hello", name: "World")
 
-    assert(msg == "Hello, World!")
+    assert(message == "Hello, World!")
 }
 
-# ───────────────────────────────────────────────────────────
-# Named arguments with pipe operator
-# ───────────────────────────────────────────────────────────
+# ─── Named arguments with pipe operator ──────────────────
 
 @test
 function void test_named_with_pipe() {
     # Pipe fills the first positional param (greeting); name is supplied as named.
-    string msg = "Hi" |> greet(name: "World")
+    string message = "Hi" |> greet(name: "World")
 
-    assert(msg == "Hi, World!")
+    assert(message == "Hi, World!")
 }
 
 @test
-function void test_named_pipe_reorder() {
-    # Pipe fills first positional param; named fills the second.
-    integer r = 10 |> subtract(b: 3)
+function void test_named_pipe_fills_first_parameter() {
+    # The piped value binds to a; the named argument binds to b.
+    integer difference = 10 |> subtract(b: 3)
 
-    assert(r == 7)
+    assert(difference == 7)
 }
 
-# ───────────────────────────────────────────────────────────
-# Named arguments with default parameters
-# ───────────────────────────────────────────────────────────
+# ─── Named arguments with default parameters ─────────────
 
 function string format_name(string first, string last, string separator = " ") {
     return "${first}${separator}${last}"
@@ -103,7 +91,7 @@ function string format_name(string first, string last, string separator = " ") {
 
 @test
 function void test_named_with_defaults() {
-    # Use default separator.
+    # separator is omitted, so its default applies.
     string full = format_name(first: "Alice", last: "Smith")
 
     assert(full == "Alice Smith")
@@ -123,31 +111,34 @@ function void test_named_override_default_reordered() {
     assert(full == "Alice, Smith")
 }
 
-# ───────────────────────────────────────────────────────────
-# Expression as named argument value
-# ───────────────────────────────────────────────────────────
+# ─── Expression as named argument value ──────────────────
 
 @test
 function void test_named_with_expression_value() {
-    integer r = subtract(a: 5 + 5, b: 2 * 1)
+    integer difference = subtract(a: 5 + 5, b: 2 * 1)
 
-    assert(r == 8)
+    assert(difference == 8)
 }
 
-# ───────────────────────────────────────────────────────────
-# All positional baseline
-# ───────────────────────────────────────────────────────────
+# ─── Named arguments on standard library functions ───────
+
+@test
+function void test_named_arguments_on_stdlib_function() {
+    string padded = Result.unwrap(String.pad_left(s: "007", width: 6, fill: "0"))
+
+    assert(padded == "000007")
+}
+
+# ─── All positional baseline ─────────────────────────────
 
 @test
 function void test_all_positional_still_works() {
-    string u = create_user("Zara", 20, true)
+    string zara = create_user("Zara", 20, true)
 
-    assert(u == "Zara (20)")
+    assert(zara == "Zara (20)")
 }
 
-# ───────────────────────────────────────────────────────────
-# Negative — unknown named argument is a runtime error
-# ───────────────────────────────────────────────────────────
+# ─── Negative — unknown named argument is a runtime error ───
 
 @test
 function void test_unknown_named_argument_throws() {

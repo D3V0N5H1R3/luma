@@ -4,7 +4,7 @@
 # Feature Tests are based on Luma_Initial_Concept.md and
 # Luma_User_Manual.md.
 #
-# Run with: luma --box --test tests/features/language/sandbox.luma
+# Run with: luma --box --strict --test tests/features/language/sandbox.luma
 #
 # These tests verify that safe modules remain fully
 # functional when the interpreter runs in sandbox mode.
@@ -22,22 +22,22 @@ function void test_sandbox_string_operations() {
 
     assert(lower == "world", "String.lowercase should work in sandbox")
 
-    integer len = String.length("test")
+    integer length = String.length("test")
 
-    assert(len == 4, "String.length should work in sandbox")
+    assert(length == 4, "String.length should work in sandbox")
 }
 
 # ─── Safe array operations ───
 
 @test
 function void test_sandbox_array_operations() {
-    array<integer> nums = [3, 1, 2]
+    array<integer> numbers = [3, 1, 2]
 
-    result<array<integer>> sorted = Array.sort(nums, (integer a, integer b) -> a - b)
+    result<array<integer>> sorted = Array.sort(numbers, (integer a, integer b) -> a - b)
 
     assert(sorted == success([1, 2, 3]), "Array.sort should work in sandbox")
 
-    integer length = Array.length(nums)
+    integer length = Array.length(numbers)
 
     assert(length == 3, "Array.length should work in sandbox")
 }
@@ -46,26 +46,25 @@ function void test_sandbox_array_operations() {
 
 @test
 function void test_sandbox_math_operations() {
-    result<integer> abs_val = Math.absolute(-42)
+    result<integer> absolute_value = Math.absolute(-42)
 
-    assert(abs_val == success(42), "Math.absolute should work in sandbox")
+    assert(absolute_value == success(42), "Math.absolute should work in sandbox")
 
-    number pi = Math.pi
-
-    assert(pi > 3.14, "Math.pi should work in sandbox")
+    assert(Math.approximately_equal(Math.pi, 3.141592653589793), "Math.pi should work in sandbox")
 }
 
 # ─── Safe hash operations (in-memory) ───
 
 @test
 function void test_sandbox_hash_in_memory() {
-    string hash = Hash.sha256("hello")
+    string sha256_hash = Hash.sha256("hello")
 
-    assert(String.length(hash) == 64, "Hash.sha256 should return 64-char hex in sandbox")
+    assert(sha256_hash == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        "Hash.sha256 should work in sandbox")
 
     string md5_hash = Hash.md5("test")
 
-    assert(String.length(md5_hash) == 32, "Hash.md5 should return 32-char hex in sandbox")
+    assert(md5_hash == "098f6bcd4621d373cade4e832627b4f6", "Hash.md5 should work in sandbox")
 }
 
 # ─── Safe compression operations (in-memory) ───
@@ -75,21 +74,13 @@ function void test_sandbox_compression_in_memory() {
     string compressed = Compression.deflate("hello world")
     result<string> decompressed = Compression.inflate(compressed)
 
-    match decompressed {
-        success(original) {
-            assert(original == "hello world", "round-trip should preserve data")
-        }
-        failure(msg) {
-            assert(false, "inflate failed: ${msg}")
-        }
-    }
+    assert(decompressed == success("hello world"), "round-trip should preserve data")
 }
 
 # ─── Safe log operations (console) ───
 
 @test
 function void test_sandbox_log_console() {
-    # Logging to console (stderr) should work in sandbox mode.
     Log.set_level(Log.Level.Debug)
     Log.Level level = Log.get_level()
 
@@ -102,154 +93,214 @@ function void test_sandbox_log_console() {
 function void test_sandbox_json_operations() {
     string json = Json.serialize({"key": "value"})
 
-    assert(String.length(json) > 0, "Json.serialize should work in sandbox")
+    assert(json == "{\"key\":\"value\"}", "Json.serialize should work in sandbox")
 }
 
 # ─── Safe converter operations ───
 
 @test
 function void test_sandbox_converter() {
-    string s = Converter.to_string(42)
+    string text = Converter.to_string(42)
 
-    assert(s == "42", "Converter.to_string should work in sandbox")
+    assert(text == "42", "Converter.to_string should work in sandbox")
 
-    result<integer> n = Converter.to_integer(123.9)
+    result<integer> truncated = Converter.to_integer(123.9)
 
-    assert(Result.is_success(n), "Converter.to_integer should work in sandbox")
+    assert(truncated == success(123), "Converter.to_integer should work in sandbox")
 }
 
 # ─── Safe result operations ───
 
 @test
 function void test_sandbox_result_operations() {
-    result<integer> ok = success(42)
-    integer val = ok |> Result.unwrap()
+    result<integer> succeeded = success(42)
+    integer value = succeeded |> Result.unwrap()
 
-    assert(val == 42, "Result.unwrap should work in sandbox")
+    assert(value == 42, "Result.unwrap should work in sandbox")
 
-    result<integer> err = failure("oops")
-    boolean is_err = err |> Result.is_failure()
+    result<integer> failed = failure("oops")
+    boolean is_failed = failed |> Result.is_failure()
 
-    assert(is_err, "Result.is_failure should work in sandbox")
+    assert(is_failed, "Result.is_failure should work in sandbox")
 }
 
 # ═══════════════════════════════════════════════════════════
 # Negative tests — verify that unsafe modules are BLOCKED
 # in sandbox mode.
+#
+# Calling a function of a blocked module raises the runtime error
+# "'Module.function' is not available in sandbox mode (--box)".
 # ═══════════════════════════════════════════════════════════
 
 # ─── FileSystem must be blocked ───
 
 @test
 function void test_sandbox_blocks_filesystem_exists() {
-    mutable string caught = ""
+    mutable string error_message = ""
 
     try {
         result<boolean> _ = FileSystem.exists("some_file.txt")
     } catch(err) {
-        caught = err
+        error_message = err
     }
 
-    assert(String.contains(caught, "undefined"), "FileSystem.exists should be blocked in sandbox")
+    assert(
+        error_message == "'FileSystem.exists' is not available in sandbox mode (--box)",
+        "FileSystem.exists should be blocked in sandbox"
+    )
 }
 
 @test
 function void test_sandbox_blocks_filesystem_write() {
-    mutable string caught = ""
+    mutable string error_message = ""
 
     try {
         result<boolean> _ = FileSystem.write_file("some_file.txt", "data")
     } catch(err) {
-        caught = err
+        error_message = err
     }
 
-    assert(String.contains(caught, "undefined"),
-        "FileSystem.write_file should be blocked in sandbox")
+    assert(
+        error_message == "'FileSystem.write_file' is not available in sandbox mode (--box)",
+        "FileSystem.write_file should be blocked in sandbox"
+    )
 }
 
 # ─── Process must be blocked ───
 
 @test
 function void test_sandbox_blocks_process_execute() {
-    mutable string caught = ""
+    mutable string error_message = ""
 
     try {
         result<ProcessResult> _ = Process.run("echo hello")
     } catch(err) {
-        caught = err
+        error_message = err
     }
 
-    assert(String.contains(caught, "undefined"), "Process.run should be blocked in sandbox")
+    assert(
+        error_message == "'Process.run' is not available in sandbox mode (--box)",
+        "Process.run should be blocked in sandbox"
+    )
 }
 
 @test
 function void test_sandbox_blocks_process_exit() {
-    mutable string caught = ""
+    mutable string error_message = ""
 
     try {
         Process.exit(0)
     } catch(err) {
-        caught = err
+        error_message = err
     }
 
-    assert(String.contains(caught, "undefined"), "Process.exit should be blocked in sandbox")
+    assert(
+        error_message == "'Process.exit' is not available in sandbox mode (--box)",
+        "Process.exit should be blocked in sandbox"
+    )
 }
 
 # ─── Socket must be blocked ───
 
 @test
 function void test_sandbox_blocks_socket_connect() {
-    mutable string caught = ""
+    mutable string error_message = ""
 
     try {
         result<socket> _ = Socket.connect("localhost", 80)
     } catch(err) {
-        caught = err
+        error_message = err
     }
 
-    assert(String.contains(caught, "undefined"), "Socket.connect should be blocked in sandbox")
+    assert(
+        error_message == "'Socket.connect' is not available in sandbox mode (--box)",
+        "Socket.connect should be blocked in sandbox"
+    )
 }
 
 @test
 function void test_sandbox_blocks_socket_listen() {
-    mutable string caught = ""
+    mutable string error_message = ""
 
     try {
         result<socket> _ = Socket.listen("localhost", 9999)
     } catch(err) {
-        caught = err
+        error_message = err
     }
 
-    assert(String.contains(caught, "undefined"), "Socket.listen should be blocked in sandbox")
+    assert(
+        error_message == "'Socket.listen' is not available in sandbox mode (--box)",
+        "Socket.listen should be blocked in sandbox"
+    )
 }
 
 # ─── FileSystem file content operations must be blocked ───
 
 @test
 function void test_sandbox_blocks_filesystem_read_file() {
-    mutable string caught = ""
+    mutable string error_message = ""
 
     try {
         result<string> _ = FileSystem.read_file("some_file.txt")
     } catch(err) {
-        caught = err
+        error_message = err
     }
 
-    assert(String.contains(caught, "undefined"),
-        "FileSystem.read_file should be blocked in sandbox")
+    assert(
+        error_message == "'FileSystem.read_file' is not available in sandbox mode (--box)",
+        "FileSystem.read_file should be blocked in sandbox"
+    )
 }
 
 # ─── Http must be blocked ───
 
 @test
 function void test_sandbox_blocks_http_get() {
-    mutable string caught = ""
+    mutable string error_message = ""
 
     try {
         result<HttpResponse> _ = Http.get("http://example.com")
     } catch(err) {
-        caught = err
+        error_message = err
     }
 
-    assert(String.contains(caught, "undefined"), "Http.get should be blocked in sandbox")
+    assert(
+        error_message == "'Http.get' is not available in sandbox mode (--box)",
+        "Http.get should be blocked in sandbox"
+    )
+}
+
+# ─── File-I/O functions of safe modules must be blocked ───
+
+@test
+function void test_sandbox_blocks_hash_sha256_file() {
+    # Hash stays available, but its file-reading variants are withheld and
+    # report the same sandbox error as a blocked module.
+    mutable string error_message = ""
+
+    try {
+        result<string> _ = Hash.sha256_file("some_file.txt")
+    } catch(err) {
+        error_message = err
+    }
+
+    assert(error_message == "'Hash.sha256_file' is not available in sandbox mode (--box)")
+}
+
+@test
+function void test_sandbox_blocks_compression_gzip_file() {
+    mutable string error_message = ""
+
+    try {
+        result<string> _ = Compression.gzip_file("in.txt", "out.gz")
+    } catch(err) {
+        error_message = err
+    }
+
+    assert(error_message == "'Compression.gzip_file' is not available in sandbox mode (--box)")
+}
+
+@test
+function void test_sandbox_keeps_safe_members_of_partly_blocked_modules() {
+    assert(String.length(Hash.sha256("x")) == 64, "in-memory hashing stays available")
 }

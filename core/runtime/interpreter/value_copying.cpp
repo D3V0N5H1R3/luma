@@ -189,6 +189,33 @@ Value Value::deep_copy() const {
     return *this;
 }
 
+// ─────────── Value::make_exclusive ───────────
+
+void Value::make_exclusive() {
+    if (is_array()) {
+        if (as_array().use_count() > 1) {
+            // Share the element vector; ArrayValue::ensure_unique copies it on
+            // the first write, so a shallow copy here costs one allocation.
+            auto copy = std::make_shared<ArrayValue>();
+            copy->elements = as_array()->elements;
+            *this = Value{std::move(copy)};
+        }
+    } else if (is_dictionary()) {
+        if (as_dictionary().use_count() > 1) {
+            auto copy = std::make_shared<DictionaryValue>();
+            copy->entries = as_dictionary()->entries;
+            *this = Value{std::move(copy)};
+        }
+    } else if (is_record()) {
+        if (as_record().use_count() > 1) {
+            auto copy = std::make_shared<RecordValue>();
+            copy->type_name = as_record()->type_name;
+            copy->fields = as_record()->fields;
+            *this = Value{std::move(copy)};
+        }
+    }
+}
+
 // ─────────── XmlValue::deep_clone ───────────
 
 namespace {

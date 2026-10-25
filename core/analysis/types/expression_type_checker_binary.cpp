@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <format>
+#include <optional>
 
 #include "analysis/ast/declaration.hpp"
 #include "analysis/ast/expression.hpp"
@@ -27,6 +28,24 @@ namespace {
 [[nodiscard]] bool is_error_or_unknown(const TypeInfo& left, const TypeInfo& right) {
     return left.kind == TypeInfo::Kind::StdlibAny || right.kind == TypeInfo::Kind::StdlibAny ||
            left.kind == TypeInfo::Kind::Unknown || right.kind == TypeInfo::Kind::Unknown;
+}
+
+// The value of an integer literal, also seeing through a unary minus: Luma has
+// no negative integer literals, so `-3` parses as negation of `3`.
+[[nodiscard]] std::optional<std::int64_t> get_signed_integer_value(const Expression& expr) {
+    if (expr.kind == ExpressionKind::Unary) {
+        const auto& unary = static_cast<const UnaryExpression&>(expr);
+
+        if (unary.op == TokenType::Minus) {
+            if (const auto magnitude = get_integer_value(*unary.operand)) {
+                return -*magnitude;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    return get_integer_value(expr);
 }
 
 } // namespace
@@ -110,9 +129,10 @@ void ExpressionTypeChecker::check_binary_constant_folding(const BinaryExpression
     }
 
     // String repeat: detect negative or excessive literal repeat count.
-    if (expr.op == TokenType::Star && left_type.kind == TypeInfo::Kind::String && right_int) {
+    const auto repeat_count = get_signed_integer_value(*expr.right);
+    if (expr.op == TokenType::Star && left_type.kind == TypeInfo::Kind::String && repeat_count) {
         const auto msg = compile_time_arithmetic::check_string_repeat(
-            *right_int, static_cast<std::size_t>(ResourceLimits::max_string_repeat));
+            *repeat_count, static_cast<std::size_t>(ResourceLimits::max_string_repeat));
         if (msg) {
             emit_err(*msg, expr.location, "reduce the repeat count to avoid excessive memory usage",
                      DiagnosticCode::InvalidRepeatCount);

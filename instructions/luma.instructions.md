@@ -297,7 +297,7 @@ print("fibonacci(" + Converter.to_string(i) + ") = " + Converter.to_string(fibon
 Use `|>` for chaining operations. It passes the left-hand value as the first argument to the right-hand function.
 
 ```luma
-string result = "  Hello, World!  "
+string greeting = "  Hello, World!  "
     |> String.trim()
     |> String.lowercase()
     |> String.replace("world", "luma")
@@ -315,9 +315,9 @@ All use the pipe-first calling convention: `value |> Module.function()`.
 
 ### Sandbox Mode
 
-When running with `--box`, modules that access OS resources are disabled: `Console`, `Csv`, `FileSystem`, `Http`, `KeyValueStore`, `Process`, `Socket`, `Xml`. Individual file-I/O functions in safe modules are also disabled: `Compression.gunzip_file`, `Compression.gzip_file`, `Hash.sha256_file`, `Hash.sha512_file`, `Log.set_output`.
+When running with `--box`, modules that access OS resources are disabled: `Console`, `Csv`, `FileSystem`, `Http`, `KeyValueStore`, `Process`, `Socket`, `Xml`. Individual file-I/O functions in safe modules are also disabled: `Compression.gunzip_file`, `Compression.gzip_file`, `Compression.gzip_file_with`, `Hash.digest_file`, `Hash.md5_file`, `Hash.sha1_file`, `Hash.sha256_file`, `Hash.sha512_file`, and `Log.set_output`.
 
-Accessing a sandboxed function produces the error: `'Module.function' is not available in sandbox mode (--box)`.
+Calling any of these functions produces the error: `'Module.function' is not available in sandbox mode (--box)`.
 
 ### Resource Limits
 
@@ -422,7 +422,7 @@ function integer sum_positive(array<integer> numbers) {
 
             return total
         }
-        failure(msg) { return 0 }
+        failure(_) { return 0 }
     }
 }
 

@@ -3,60 +3,80 @@
 #
 # Feature Tests are based on Luma_Initial_Concept.md and
 # Luma_Standard_Library_Reference.md.
+#
+# Every suite runs in the repository root and CTest runs suites in
+# parallel, so each temporary path here carries the `_fs_test_` prefix
+# and a per-test name to avoid collisions.
 # ═══════════════════════════════════════════════════════════
+
+# Path functions use the platform separator; normalise it so expectations
+# can be written once.
+function string to_forward_slashes(string path) {
+    return String.replace_all(path, "\\", "/")
+}
+
+# ─── Existence, creation and deletion ───
 
 @test
 function void test_filesystem_exists() {
-    assert(Result.is_success(FileSystem.create_directory("_test_exists_dir")))
-    assert(Result.is_success(FileSystem.write_file("_test_exists_file.txt", "data")))
+    assert(Result.is_success(FileSystem.create_directory("_fs_test_exists_dir")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_exists_file.txt", "data")))
 
-    assert(Result.unwrap(FileSystem.exists("_test_exists_dir")))
-    assert(Result.unwrap(FileSystem.exists("_test_exists_file.txt")))
+    assert(Result.unwrap(FileSystem.exists("_fs_test_exists_dir")))
+    assert(Result.unwrap(FileSystem.exists("_fs_test_exists_file.txt")))
     assert(!Result.unwrap(FileSystem.exists("_nonexistent_dir_xyz")))
 
-    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_exists_dir"), false)
+    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_exists_dir"), false)
 
-    _ = Result.unwrap_or(FileSystem.delete("_test_exists_file.txt"), false)
+    _ = Result.unwrap_or(FileSystem.delete("_fs_test_exists_file.txt"), false)
 }
 
 @test
 function void test_filesystem_create_and_delete_directory() {
-    result<boolean> create_result = FileSystem.create_directory("_test_dir_tmp")
+    result<boolean> create_result = FileSystem.create_directory("_fs_test_dir_tmp")
 
     assert(Result.is_success(create_result))
-    assert(Result.unwrap(FileSystem.exists("_test_dir_tmp")))
+    assert(Result.unwrap(FileSystem.exists("_fs_test_dir_tmp")))
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_dir_tmp"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_dir_tmp"), false)
 
-    assert(!Result.unwrap(FileSystem.exists("_test_dir_tmp")))
+    assert(!Result.unwrap(FileSystem.exists("_fs_test_dir_tmp")))
 }
 
 @test
 function void test_filesystem_list_directories() {
-    result<array<string>> list_result = FileSystem.list_directories(".")
+    assert(Result.is_success(FileSystem.create_directories("_fs_test_list_dirs/sub")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_list_dirs/file.txt", "data")))
 
-    assert(Result.is_success(list_result))
+    result<array<string>> list_result = FileSystem.list_directories("_fs_test_list_dirs")
+
+    # Only the subdirectory is listed, not the sibling file.
+    assert(list_result == success(["sub"]))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete_directory("_fs_test_list_dirs"), false)
 }
 
 @test
 function void test_filesystem_copy_rename() {
-    assert(Result.is_success(FileSystem.write_file("_test_copy_src.txt", "data")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_copy_src.txt", "data")))
 
-    result<boolean> copied = FileSystem.copy("_test_copy_src.txt", "_test_copy_dst.txt")
+    result<boolean> copied = FileSystem.copy("_fs_test_copy_src.txt", "_fs_test_copy_dst.txt")
 
     assert(Result.is_success(copied))
-    assert(Result.unwrap(FileSystem.exists("_test_copy_dst.txt")))
+    assert(Result.unwrap(FileSystem.read_file("_fs_test_copy_dst.txt")) == "data")
 
-    result<boolean> renamed = FileSystem.rename("_test_copy_dst.txt", "_test_copy_moved.txt")
+    result<boolean> renamed = FileSystem.rename("_fs_test_copy_dst.txt", "_fs_test_copy_moved.txt")
 
     assert(Result.is_success(renamed))
-    assert(Result.unwrap(FileSystem.exists("_test_copy_moved.txt")))
-    assert(!Result.unwrap(FileSystem.exists("_test_copy_dst.txt")))
+    assert(Result.unwrap(FileSystem.read_file("_fs_test_copy_moved.txt")) == "data")
+    assert(!Result.unwrap(FileSystem.exists("_fs_test_copy_dst.txt")))
 
-    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_copy_src.txt"), false)
+    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_copy_src.txt"), false)
 
-    _ = Result.unwrap_or(FileSystem.delete("_test_copy_moved.txt"), false)
+    _ = Result.unwrap_or(FileSystem.delete("_fs_test_copy_moved.txt"), false)
 }
+
+# ─── Path decomposition ───
 
 @test
 function void test_filesystem_extension() {
@@ -71,62 +91,66 @@ function void test_filesystem_name_and_parent() {
     assert(FileSystem.parent("src/main.cpp") == "src")
 }
 
+# ─── Inspecting files and directories ───
+
 @test
 function void test_filesystem_is_directory_and_is_file() {
-    assert(Result.is_success(FileSystem.create_directory("_test_isdir_tmp")))
-    assert(Result.is_success(FileSystem.write_file("_test_isfile_tmp.txt", "data")))
+    assert(Result.is_success(FileSystem.create_directory("_fs_test_isdir_tmp")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_isfile_tmp.txt", "data")))
 
-    assert(Result.unwrap(FileSystem.is_directory("_test_isdir_tmp")))
+    assert(Result.unwrap(FileSystem.is_directory("_fs_test_isdir_tmp")))
     assert(!Result.unwrap(FileSystem.is_directory("_nonexistent_xyz")))
-    assert(Result.unwrap(FileSystem.is_file("_test_isfile_tmp.txt")))
-    assert(!Result.unwrap(FileSystem.is_file("_test_isdir_tmp")))
+    assert(Result.unwrap(FileSystem.is_file("_fs_test_isfile_tmp.txt")))
+    assert(!Result.unwrap(FileSystem.is_file("_fs_test_isdir_tmp")))
     assert(!Result.unwrap(FileSystem.is_file("_nonexistent_xyz.txt")))
 
-    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_isdir_tmp"), false)
+    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_isdir_tmp"), false)
 
-    _ = Result.unwrap_or(FileSystem.delete("_test_isfile_tmp.txt"), false)
+    _ = Result.unwrap_or(FileSystem.delete("_fs_test_isfile_tmp.txt"), false)
 }
 
 @test
 function void test_filesystem_list_files() {
-    assert(Result.is_success(FileSystem.create_directory("_test_listfiles_tmp")))
-    assert(Result.is_success(FileSystem.write_file("_test_listfiles_tmp/a.txt", "a")))
-    assert(Result.is_success(FileSystem.write_file("_test_listfiles_tmp/b.txt", "b")))
+    assert(Result.is_success(FileSystem.create_directory("_fs_test_listfiles_tmp")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_listfiles_tmp/a.txt", "a")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_listfiles_tmp/b.txt", "b")))
 
-    result<array<string>> files = FileSystem.list_files("_test_listfiles_tmp")
+    result<array<string>> files = FileSystem.list_files("_fs_test_listfiles_tmp")
 
     assert(Result.is_success(files))
 
     array<string> file_list = Result.unwrap(files)
 
+    # Plain names relative to the listed directory; order is not guaranteed.
     assert(Array.length(file_list) == 2)
+    assert(Array.contains(file_list, "a.txt"))
+    assert(Array.contains(file_list, "b.txt"))
 
-    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_listfiles_tmp/a.txt"), false)
+    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_listfiles_tmp/a.txt"), false)
 
-    _ = Result.unwrap_or(FileSystem.delete("_test_listfiles_tmp/b.txt"), false)
-    _ = Result.unwrap_or(FileSystem.delete("_test_listfiles_tmp"), false)
+    _ = Result.unwrap_or(FileSystem.delete("_fs_test_listfiles_tmp/b.txt"), false)
+    _ = Result.unwrap_or(FileSystem.delete("_fs_test_listfiles_tmp"), false)
 }
 
 @test
 function void test_filesystem_size() {
-    assert(Result.is_success(FileSystem.write_file("_test_size_tmp.txt", "hello")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_size_tmp.txt", "hello")))
 
-    result<integer> file_size = FileSystem.size("_test_size_tmp.txt")
+    result<integer> file_size = FileSystem.size("_fs_test_size_tmp.txt")
 
     assert(Result.is_success(file_size))
     assert(Result.unwrap(file_size) == 5)
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_size_tmp.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_size_tmp.txt"), false)
 }
 
 # ─── Path Functions ───
 
 @test
 function void test_filesystem_join() {
-    string joined_path = FileSystem.join("src", "stdlib")
+    string joined_path = to_forward_slashes(FileSystem.join("src", "stdlib"))
 
-    assert("src" in joined_path)
-    assert("stdlib" in joined_path)
+    assert(String.ends_with(joined_path, "src/stdlib"))
 }
 
 @test
@@ -155,10 +179,9 @@ function void test_filesystem_split_path() {
 
 @test
 function void test_filesystem_normalize() {
-    string normalized_path = FileSystem.normalize("a/b/../c")
+    string normalized_path = to_forward_slashes(FileSystem.normalize("a/b/../c"))
 
-    assert("a" in normalized_path)
-    assert("c" in normalized_path)
+    assert(normalized_path == "a/c")
 }
 
 @test
@@ -169,136 +192,146 @@ function void test_filesystem_is_absolute_and_relative() {
 
 @test
 function void test_filesystem_relative() {
-    string relative_path = FileSystem.relative("a/b/c", "a")
+    string relative_path = to_forward_slashes(FileSystem.relative("a/b/c", "a"))
 
-    assert("b" in relative_path)
-    assert("c" in relative_path)
+    assert(relative_path == "b/c")
 }
 
 # ─── delete_directory / rename_directory ───
 
 @test
 function void test_filesystem_delete_directory() {
-    assert(Result.is_success(FileSystem.create_directory("_test_del_dir_tmp")))
-    assert(Result.unwrap(FileSystem.is_directory("_test_del_dir_tmp")))
+    assert(Result.is_success(FileSystem.create_directory("_fs_test_del_dir_tmp")))
+    assert(Result.unwrap(FileSystem.is_directory("_fs_test_del_dir_tmp")))
 
-    result<boolean> del_result = FileSystem.delete_directory("_test_del_dir_tmp")
+    result<boolean> delete_result = FileSystem.delete_directory("_fs_test_del_dir_tmp")
 
-    assert(Result.is_success(del_result))
-    assert(!Result.unwrap(FileSystem.exists("_test_del_dir_tmp")))
+    assert(Result.is_success(delete_result))
+    assert(!Result.unwrap(FileSystem.exists("_fs_test_del_dir_tmp")))
 }
 
 @test
 function void test_filesystem_delete_directory_not_a_dir() {
-    assert(Result.is_success(FileSystem.write_file("_test_del_dir_file.txt", "data")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_del_dir_file.txt", "data")))
 
-    result<boolean> del_result = FileSystem.delete_directory("_test_del_dir_file.txt")
+    result<boolean> delete_result = FileSystem.delete_directory("_fs_test_del_dir_file.txt")
 
-    assert(Result.is_failure(del_result))
+    assert(Result.is_failure(delete_result))
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_del_dir_file.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_del_dir_file.txt"), false)
 }
 
 @test
 function void test_filesystem_rename_directory() {
-    assert(Result.is_success(FileSystem.create_directory("_test_ren_dir_old")))
+    assert(Result.is_success(FileSystem.create_directory("_fs_test_ren_dir_old")))
 
-    result<boolean> ren_result = FileSystem.rename_directory(
-        "_test_ren_dir_old", "_test_ren_dir_new"
+    result<boolean> rename_result = FileSystem.rename_directory(
+        "_fs_test_ren_dir_old", "_fs_test_ren_dir_new"
     )
 
-    assert(Result.is_success(ren_result))
-    assert(!Result.unwrap(FileSystem.exists("_test_ren_dir_old")))
-    assert(Result.unwrap(FileSystem.is_directory("_test_ren_dir_new")))
+    assert(Result.is_success(rename_result))
+    assert(!Result.unwrap(FileSystem.exists("_fs_test_ren_dir_old")))
+    assert(Result.unwrap(FileSystem.is_directory("_fs_test_ren_dir_new")))
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_ren_dir_new"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_ren_dir_new"), false)
 }
 
 @test
 function void test_filesystem_rename_directory_not_a_dir() {
-    assert(Result.is_success(FileSystem.write_file("_test_ren_dir_file.txt", "data")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_ren_dir_file.txt", "data")))
 
-    result<boolean> ren_result = FileSystem.rename_directory(
-        "_test_ren_dir_file.txt", "_test_ren_dir_new2"
+    result<boolean> rename_result = FileSystem.rename_directory(
+        "_fs_test_ren_dir_file.txt", "_fs_test_ren_dir_new2"
     )
 
-    assert(Result.is_failure(ren_result))
+    assert(Result.is_failure(rename_result))
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_ren_dir_file.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_ren_dir_file.txt"), false)
 }
 
 @test
 function void test_filesystem_absolute_path() {
-    result<string> r = FileSystem.absolute_path("some_file.txt")
+    result<string> resolved = FileSystem.absolute_path("some_file.txt")
 
-    assert(Result.is_success(r))
+    assert(Result.is_success(resolved))
 
-    string abs = Result.unwrap(r)
+    string absolute = Result.unwrap(resolved)
 
-    assert(FileSystem.is_absolute(abs))
-    assert(String.length(abs) > String.length("some_file.txt"))
+    assert(FileSystem.is_absolute(absolute))
+    assert(String.ends_with(absolute, "some_file.txt"))
+
+    # Resolving a path that is already absolute (and inside the sandbox) is a no-op.
+    assert(FileSystem.absolute_path(absolute) == success(absolute))
 }
 
 @test
-function void test_filesystem_absolute_path_already_absolute() {
-    result<string> r = FileSystem.absolute_path("/usr/bin")
+function void test_filesystem_absolute_path_outside_sandbox_fails() {
+    # Unlike most FileSystem functions, absolute_path reports a sandbox escape
+    # as a failure result instead of raising a runtime error.
+    result<string> resolved = FileSystem.absolute_path("/usr/bin")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(resolved))
 }
 
-# ─── Negative tests ──────────────────────────────────────
+# ─── Operations on missing paths ──────────────────────────
 
 @test
 function void test_filesystem_delete_nonexistent_is_idempotent() {
     # Deleting a non-existent file succeeds (idempotent).
-    result<boolean> r = FileSystem.delete("_no_such_file_xyz.txt")
+    result<boolean> delete_result = FileSystem.delete("_no_such_file_xyz.txt")
 
-    assert(Result.is_success(r))
+    assert(Result.is_success(delete_result))
 }
 
 @test
 function void test_filesystem_rename_nonexistent() {
-    result<boolean> r = FileSystem.rename("_no_such_file_xyz.txt", "_dest.txt")
+    result<boolean> rename_result =
+        FileSystem.rename("_no_such_file_xyz.txt", "_fs_test_rename_missing_dst.txt")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(rename_result))
+    assert(!Result.unwrap(FileSystem.exists("_fs_test_rename_missing_dst.txt")))
 }
 
 @test
 function void test_filesystem_copy_nonexistent() {
-    result<boolean> r = FileSystem.copy("_no_such_file_xyz.txt", "_dest.txt")
+    result<boolean> copy_result =
+        FileSystem.copy("_no_such_file_xyz.txt", "_fs_test_copy_missing_dst.txt")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(copy_result))
+    assert(!Result.unwrap(FileSystem.exists("_fs_test_copy_missing_dst.txt")))
 }
 
 @test
 function void test_filesystem_size_nonexistent() {
-    result<integer> r = FileSystem.size("_no_such_file_xyz.txt")
+    result<integer> size_result = FileSystem.size("_no_such_file_xyz.txt")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(size_result))
 }
 
 @test
 function void test_filesystem_list_files_nonexistent() {
-    result<array<string>> r = FileSystem.list_files("_no_such_dir_xyz")
+    result<array<string>> list_result = FileSystem.list_files("_no_such_dir_xyz")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(list_result))
 }
 
 @test
 function void test_filesystem_list_directories_nonexistent() {
-    result<array<string>> r = FileSystem.list_directories("_no_such_dir_xyz")
+    result<array<string>> list_result = FileSystem.list_directories("_no_such_dir_xyz")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(list_result))
 }
 
 # ─── FileSystem.home_directory ───────────────────────────
 
 @test
 function void test_filesystem_home_directory() {
-    result<string> r = FileSystem.home_directory()
+    result<string> home_result = FileSystem.home_directory()
 
-    assert(Result.is_success(r))
-    string home = Result.unwrap(r)
+    assert(Result.is_success(home_result))
+
+    string home = Result.unwrap(home_result)
+
     assert(String.length(home) > 0, "home directory should not be empty")
 }
 
@@ -306,26 +339,26 @@ function void test_filesystem_home_directory() {
 
 @test
 function void test_filesystem_write_and_read_file() {
-    result<boolean> write_result = FileSystem.write_file("_test_io_tmp.txt", "hello luma")
+    result<boolean> write_result = FileSystem.write_file("_fs_test_io_tmp.txt", "hello luma")
 
     assert(Result.is_success(write_result))
-    assert(Result.unwrap(FileSystem.exists("_test_io_tmp.txt")))
+    assert(Result.unwrap(FileSystem.exists("_fs_test_io_tmp.txt")))
 
-    result<string> content = FileSystem.read_file("_test_io_tmp.txt")
+    result<string> content = FileSystem.read_file("_fs_test_io_tmp.txt")
 
     assert(Result.is_success(content))
     assert(Result.unwrap(content) == "hello luma")
 
-    result<boolean> append_result = FileSystem.append_file("_test_io_tmp.txt", " world")
+    result<boolean> append_result = FileSystem.append_file("_fs_test_io_tmp.txt", " world")
 
     assert(Result.is_success(append_result))
 
-    result<string> appended_content = FileSystem.read_file("_test_io_tmp.txt")
+    result<string> appended_content = FileSystem.read_file("_fs_test_io_tmp.txt")
 
     assert(Result.is_success(appended_content))
     assert(Result.unwrap(appended_content) == "hello luma world")
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_io_tmp.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_io_tmp.txt"), false)
 }
 
 # ─── FileSystem.write_bytes / read_bytes (binary I/O) ────
@@ -336,12 +369,12 @@ function void test_filesystem_write_and_read_bytes() {
     # read_file would corrupt, but read_bytes/write_bytes round-trip losslessly.
     array<integer> data = [0, 72, 105, 255, 10]
 
-    result<boolean> write_result = FileSystem.write_bytes("_test_bytes_tmp.bin", data)
+    result<boolean> write_result = FileSystem.write_bytes("_fs_test_bytes_tmp.bin", data)
 
     assert(Result.is_success(write_result))
-    assert(Result.unwrap(FileSystem.exists("_test_bytes_tmp.bin")))
+    assert(Result.unwrap(FileSystem.exists("_fs_test_bytes_tmp.bin")))
 
-    result<array<integer>> read_result = FileSystem.read_bytes("_test_bytes_tmp.bin")
+    result<array<integer>> read_result = FileSystem.read_bytes("_fs_test_bytes_tmp.bin")
 
     assert(Result.is_success(read_result))
 
@@ -354,51 +387,58 @@ function void test_filesystem_write_and_read_bytes() {
     assert(bytes[3] == 255)
     assert(bytes[4] == 10)
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_bytes_tmp.bin"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_bytes_tmp.bin"), false)
 }
 
 @test
 function void test_filesystem_write_bytes_rejects_out_of_range() {
     # A byte value outside 0–255 fails without creating a partial file.
-    result<boolean> r = FileSystem.write_bytes("_test_bytes_oob.bin", [256])
+    result<boolean> write_result = FileSystem.write_bytes("_fs_test_bytes_oob.bin", [256])
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(write_result))
+    assert(!Result.unwrap(FileSystem.exists("_fs_test_bytes_oob.bin")))
 }
 
 @test
 function void test_filesystem_read_bytes_missing() {
-    result<array<integer>> r = FileSystem.read_bytes("_nonexistent_bytes_xyz.bin")
+    result<array<integer>> read_result = FileSystem.read_bytes("_nonexistent_bytes_xyz.bin")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(read_result))
 }
 
 @test
 function void test_filesystem_create_directories_and_copy_directory() {
-    boolean _d1 = Result.unwrap_or(FileSystem.delete_directory("_test_mkdirp_ft"), false)
-    boolean _d2 = Result.unwrap_or(FileSystem.delete_directory("_test_cpdir_ft_dst"), false)
+    # Clear leftovers from an interrupted run: copy_directory refuses an
+    # existing destination.
+    boolean _stale_source =
+        Result.unwrap_or(FileSystem.delete_directory("_fs_test_mkdirp_ft"), false)
+    boolean _stale_copy =
+        Result.unwrap_or(FileSystem.delete_directory("_fs_test_cpdir_ft_dst"), false)
 
     # mkdir -p creates all missing parents in one call.
-    assert(Result.is_success(FileSystem.create_directories("_test_mkdirp_ft/x/y")))
-    assert(Result.unwrap(FileSystem.is_directory("_test_mkdirp_ft/x/y")))
+    assert(Result.is_success(FileSystem.create_directories("_fs_test_mkdirp_ft/x/y")))
+    assert(Result.unwrap(FileSystem.is_directory("_fs_test_mkdirp_ft/x/y")))
 
     # Re-creating an existing path is a no-op success.
-    assert(Result.is_success(FileSystem.create_directories("_test_mkdirp_ft/x/y")))
+    assert(Result.is_success(FileSystem.create_directories("_fs_test_mkdirp_ft/x/y")))
 
-    assert(Result.is_success(FileSystem.write_file("_test_mkdirp_ft/x/note.txt", "hi")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_mkdirp_ft/x/note.txt", "hi")))
 
     # Recursive copy of the whole tree.
     assert(Result.is_success(
-        FileSystem.copy_directory("_test_mkdirp_ft", "_test_cpdir_ft_dst")
+        FileSystem.copy_directory("_fs_test_mkdirp_ft", "_fs_test_cpdir_ft_dst")
     ))
-    assert(Result.unwrap(FileSystem.read_file("_test_cpdir_ft_dst/x/note.txt")) == "hi")
+    assert(Result.unwrap(FileSystem.read_file("_fs_test_cpdir_ft_dst/x/note.txt")) == "hi")
 
     # Copying onto an existing destination fails.
     assert(Result.is_failure(
-        FileSystem.copy_directory("_test_mkdirp_ft", "_test_cpdir_ft_dst")
+        FileSystem.copy_directory("_fs_test_mkdirp_ft", "_fs_test_cpdir_ft_dst")
     ))
 
-    boolean _c1 = Result.unwrap_or(FileSystem.delete_directory("_test_mkdirp_ft"), false)
-    boolean _c2 = Result.unwrap_or(FileSystem.delete_directory("_test_cpdir_ft_dst"), false)
+    boolean _source_removed =
+        Result.unwrap_or(FileSystem.delete_directory("_fs_test_mkdirp_ft"), false)
+    boolean _copy_removed =
+        Result.unwrap_or(FileSystem.delete_directory("_fs_test_cpdir_ft_dst"), false)
 }
 
 @test
@@ -412,22 +452,22 @@ function void test_filesystem_file_not_found() {
 
 @test
 function void test_filesystem_read_file_limited() {
-    result<boolean> write_result = FileSystem.write_file("_test_io_limited.txt", "hello luma")
+    result<boolean> write_result = FileSystem.write_file("_fs_test_io_limited.txt", "hello luma")
 
     assert(Result.is_success(write_result))
 
     # Read within limit succeeds.
-    result<string> ok_result = FileSystem.read_file_limited("_test_io_limited.txt", 1048576)
+    result<string> ok_result = FileSystem.read_file_limited("_fs_test_io_limited.txt", 1048576)
 
     assert(Result.is_success(ok_result))
     assert(Result.unwrap(ok_result) == "hello luma")
 
     # Read with limit smaller than file size fails.
-    result<string> fail_result = FileSystem.read_file_limited("_test_io_limited.txt", 3)
+    result<string> fail_result = FileSystem.read_file_limited("_fs_test_io_limited.txt", 3)
 
     assert(Result.is_failure(fail_result))
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_io_limited.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_io_limited.txt"), false)
 }
 
 # ─── FileSystem.write_lines / read_lines ────────────────
@@ -436,11 +476,11 @@ function void test_filesystem_read_file_limited() {
 function void test_filesystem_read_and_write_lines() {
     array<string> lines = ["line one", "line two", "line three"]
 
-    result<boolean> write_result = FileSystem.write_lines("_test_lines_tmp.txt", lines)
+    result<boolean> write_result = FileSystem.write_lines("_fs_test_lines_tmp.txt", lines)
 
     assert(Result.is_success(write_result))
 
-    result<array<string>> read_result = FileSystem.read_lines("_test_lines_tmp.txt")
+    result<array<string>> read_result = FileSystem.read_lines("_fs_test_lines_tmp.txt")
 
     assert(Result.is_success(read_result))
 
@@ -448,58 +488,62 @@ function void test_filesystem_read_and_write_lines() {
 
     assert(Array.length(read_back) == 3)
     assert(read_back[0] == "line one")
+    assert(read_back[1] == "line two")
     assert(read_back[2] == "line three")
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_lines_tmp.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_lines_tmp.txt"), false)
 }
 
-# ───────────────────────────────────────────────────────────
-# get_modified_time, is_symlink, list_recursively
-# ───────────────────────────────────────────────────────────
+# ─── get_modified_time, is_symbolic_link, list_recursively ───
 
 @test
 function void test_filesystem_get_modified_time() {
-    assert(Result.is_success(FileSystem.write_file("_test_mtime.txt", "data")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_mtime.txt", "data")))
 
-    result<number> mtime = FileSystem.get_modified_time("_test_mtime.txt")
+    result<number> modified_time = FileSystem.get_modified_time("_fs_test_mtime.txt")
 
-    assert(Result.is_success(mtime))
-    assert(Result.unwrap(mtime) > 0.0)
+    assert(Result.is_success(modified_time))
+    assert(Result.unwrap(modified_time) > 1577836800.0, "a fresh file is modified after 2020")
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_mtime.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_mtime.txt"), false)
 }
 
 @test
-function void test_filesystem_is_symlink() {
-    assert(Result.is_success(FileSystem.write_file("_test_symlink.txt", "data")))
+function void test_filesystem_is_symbolic_link_false_for_regular_file() {
+    # The FileSystem API cannot create links, so only the negative case is portable.
+    assert(Result.is_success(FileSystem.write_file("_fs_test_regular_file.txt", "data")))
 
-    assert(!Result.unwrap(FileSystem.is_symbolic_link("_test_symlink.txt")))
+    assert(!Result.unwrap(FileSystem.is_symbolic_link("_fs_test_regular_file.txt")))
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_symlink.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_regular_file.txt"), false)
 }
 
 @test
 function void test_filesystem_list_recursively() {
-    assert(Result.is_success(FileSystem.create_directory("_test_rec_dir")))
-    assert(Result.is_success(FileSystem.write_file("_test_rec_dir/inner.txt", "data")))
+    assert(Result.is_success(FileSystem.create_directories("_fs_test_rec_dir/nested")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_rec_dir/inner.txt", "data")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_rec_dir/nested/deep.txt", "data")))
 
-    result<array<string>> listing = FileSystem.list_recursively("_test_rec_dir")
+    result<array<string>> listing = FileSystem.list_recursively("_fs_test_rec_dir")
 
     assert(Result.is_success(listing))
-    assert(Array.length(Result.unwrap(listing)) >= 1)
 
-    mutable boolean _ = Result.unwrap_or(FileSystem.delete("_test_rec_dir/inner.txt"), false)
+    # Entries are relative to the listed directory and reach nested files;
+    # normalize gives the expected path its platform separator.
+    array<string> entries = Result.unwrap(listing)
 
-    _ = Result.unwrap_or(FileSystem.delete("_test_rec_dir"), false)
+    assert(Array.contains(entries, "inner.txt"))
+    assert(Array.contains(entries, FileSystem.normalize("nested/deep.txt")))
+
+    boolean _ = Result.unwrap_or(FileSystem.delete_directory("_fs_test_rec_dir"), false)
 }
 
-# ═══════════════════════════════════════════════════════════
-# Negative tests — sandbox-escape rejection
+# ─── Sandbox-escape rejection ───
 #
-# Every FileSystem function validates its path against the current
-# working directory. A path that escapes the sandbox raises a
+# The string-error FileSystem functions validate their path against the
+# current working directory. A path that escapes the sandbox raises a
 # catchable runtime error rather than touching the filesystem.
-# ═══════════════════════════════════════════════════════════
+# (absolute_path and read_file_typed report it as a failure result instead.)
 
 @test
 function void test_filesystem_read_file_rejects_traversal() {
@@ -566,8 +610,7 @@ function void test_filesystem_join_rejects_escape() {
 }
 
 @test
-function void test_filesystem_absolute_path_outside_rejected() {
-    # An absolute path outside the working directory is rejected.
+function void test_filesystem_exists_rejects_absolute_path_outside() {
     mutable string caught = ""
 
     try {
@@ -586,50 +629,53 @@ function void test_filesystem_absolute_path_outside_rejected() {
 
 @test
 function void test_filesystem_read_file_limited_negative_max_bytes() {
-    assert(Result.is_success(FileSystem.write_file("_test_rl_neg.txt", "data")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_rl_neg.txt", "data")))
 
     # A negative byte limit is invalid and yields a failure.
-    result<string> r = FileSystem.read_file_limited("_test_rl_neg.txt", -1)
+    result<string> limited_read = FileSystem.read_file_limited("_fs_test_rl_neg.txt", -1)
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(limited_read))
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_rl_neg.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_rl_neg.txt"), false)
 }
 
 @test
 function void test_filesystem_read_file_limited_exact_boundary() {
-    assert(Result.is_success(FileSystem.write_file("_test_rl_exact.txt", "hello")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_rl_exact.txt", "hello")))
 
     # A limit exactly equal to the file size succeeds.
-    result<string> r = FileSystem.read_file_limited("_test_rl_exact.txt", 5)
+    result<string> limited_read = FileSystem.read_file_limited("_fs_test_rl_exact.txt", 5)
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == "hello")
+    assert(Result.is_success(limited_read))
+    assert(Result.unwrap(limited_read) == "hello")
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_rl_exact.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_rl_exact.txt"), false)
 }
+
+# ─── Listing and metadata ───
 
 @test
 function void test_filesystem_list_directories_contains_created() {
-    assert(Result.is_success(FileSystem.create_directory("_test_ld_parent/_child")))
+    # create_directory also creates the missing parent here.
+    assert(Result.is_success(FileSystem.create_directory("_fs_test_ld_parent/_child")))
 
-    result<array<string>> dirs = FileSystem.list_directories("_test_ld_parent")
+    result<array<string>> subdirectories = FileSystem.list_directories("_fs_test_ld_parent")
 
-    assert(Result.is_success(dirs))
-    assert(Array.contains(Result.unwrap(dirs), "_child"))
+    assert(Result.is_success(subdirectories))
+    assert(Array.contains(Result.unwrap(subdirectories), "_child"))
 
-    boolean _ = Result.unwrap_or(FileSystem.delete_directory("_test_ld_parent"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete_directory("_fs_test_ld_parent"), false)
 }
 
 @test
 function void test_filesystem_metadata_file() {
-    assert(Result.is_success(FileSystem.write_file("_test_meta.txt", "hello")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_meta.txt", "hello")))
 
-    result<FileSystem.FileInfo> r = FileSystem.metadata("_test_meta.txt")
+    result<FileSystem.FileInfo> metadata_result = FileSystem.metadata("_fs_test_meta.txt")
 
-    assert(Result.is_success(r), "metadata succeeds")
+    assert(Result.is_success(metadata_result), "metadata succeeds")
 
-    FileSystem.FileInfo info = Result.unwrap(r)
+    FileSystem.FileInfo info = Result.unwrap(metadata_result)
 
     assert(info.size == 5, "size is 5 bytes")
     assert(info.is_file, "is a file")
@@ -637,16 +683,16 @@ function void test_filesystem_metadata_file() {
     assert(!info.is_symbolic_link, "not a symlink")
     assert(info.modified_time > 1577836800.0, "modified after 2020")
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_meta.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_meta.txt"), false)
 }
 
 @test
 function void test_filesystem_metadata_directory() {
-    result<FileSystem.FileInfo> r = FileSystem.metadata(".")
+    result<FileSystem.FileInfo> metadata_result = FileSystem.metadata(".")
 
-    assert(Result.is_success(r), "metadata succeeds for a directory")
+    assert(Result.is_success(metadata_result), "metadata succeeds for a directory")
 
-    FileSystem.FileInfo info = Result.unwrap(r)
+    FileSystem.FileInfo info = Result.unwrap(metadata_result)
 
     assert(info.is_directory, "is a directory")
     assert(!info.is_file, "not a regular file")
@@ -655,9 +701,9 @@ function void test_filesystem_metadata_directory() {
 
 @test
 function void test_filesystem_metadata_nonexistent() {
-    result<FileSystem.FileInfo> r = FileSystem.metadata("_nonexistent_meta_file.txt")
+    result<FileSystem.FileInfo> metadata_result = FileSystem.metadata("_nonexistent_meta_file.txt")
 
-    assert(Result.is_failure(r), "metadata fails on a missing path")
+    assert(Result.is_failure(metadata_result), "metadata fails on a missing path")
 }
 
 # ─── FileSystem.FileKind ───
@@ -665,59 +711,59 @@ function void test_filesystem_metadata_nonexistent() {
 # Exhaustive match over every FileKind variant.  Beyond labelling a kind, this
 # doubles as a check that FileSystem.FileKind is fully registered, exhaustively
 # matchable, and usable as a parameter type annotation.
-function string file_kind_label(FileSystem.FileKind k) {
-    return match k {
-    case FileSystem.FileKind.File      { "file" }
-    case FileSystem.FileKind.Directory { "directory" }
-    case FileSystem.FileKind.SymbolicLink   { "symlink" }
-    case FileSystem.FileKind.Other     { "other" }
+function string file_kind_label(FileSystem.FileKind path_kind) {
+    return match path_kind {
+        case FileSystem.FileKind.File         { "file" }
+        case FileSystem.FileKind.Directory    { "directory" }
+        case FileSystem.FileKind.SymbolicLink { "symlink" }
+        case FileSystem.FileKind.Other        { "other" }
     }
 }
 
 @test
 function void test_filesystem_kind_file() {
-    assert(Result.is_success(FileSystem.write_file("_test_kind.txt", "hello")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_kind.txt", "hello")))
 
-    result<FileSystem.FileKind> r = FileSystem.kind("_test_kind.txt")
+    result<FileSystem.FileKind> kind_result = FileSystem.kind("_fs_test_kind.txt")
 
-    assert(Result.is_success(r), "kind succeeds for a file")
+    assert(Result.is_success(kind_result), "kind succeeds for a file")
 
-    FileSystem.FileKind k = Result.unwrap(r)
+    FileSystem.FileKind path_kind = Result.unwrap(kind_result)
 
-    assert(k == FileSystem.FileKind.File, "a regular file is File")
-    assert(file_kind_label(k) == "file")
+    assert(path_kind == FileSystem.FileKind.File, "a regular file is File")
+    assert(file_kind_label(path_kind) == "file")
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_kind.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_kind.txt"), false)
 }
 
 @test
 function void test_filesystem_kind_directory() {
-    result<FileSystem.FileKind> r = FileSystem.kind(".")
+    result<FileSystem.FileKind> kind_result = FileSystem.kind(".")
 
-    assert(Result.is_success(r), "kind succeeds for a directory")
+    assert(Result.is_success(kind_result), "kind succeeds for a directory")
 
-    FileSystem.FileKind k = Result.unwrap(r)
+    FileSystem.FileKind path_kind = Result.unwrap(kind_result)
 
-    assert(k == FileSystem.FileKind.Directory, "a directory is Directory")
-    assert(file_kind_label(k) == "directory")
+    assert(path_kind == FileSystem.FileKind.Directory, "a directory is Directory")
+    assert(file_kind_label(path_kind) == "directory")
 }
 
 @test
 function void test_filesystem_kind_nonexistent() {
-    result<FileSystem.FileKind> r = FileSystem.kind("_nonexistent_kind_file.txt")
+    result<FileSystem.FileKind> kind_result = FileSystem.kind("_nonexistent_kind_file.txt")
 
-    assert(Result.is_failure(r), "kind fails on a missing path")
+    assert(Result.is_failure(kind_result), "kind fails on a missing path")
 }
 
 @test
 function void test_filesystem_metadata_kind_field() {
-    assert(Result.is_success(FileSystem.write_file("_test_meta_kind.txt", "hi")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_meta_kind.txt", "hi")))
 
-    result<FileSystem.FileInfo> r = FileSystem.metadata("_test_meta_kind.txt")
+    result<FileSystem.FileInfo> metadata_result = FileSystem.metadata("_fs_test_meta_kind.txt")
 
-    assert(Result.is_success(r), "metadata succeeds")
+    assert(Result.is_success(metadata_result), "metadata succeeds")
 
-    FileSystem.FileInfo info = Result.unwrap(r)
+    FileSystem.FileInfo info = Result.unwrap(metadata_result)
 
     # The kind field agrees with the is_file / is_directory / is_symlink booleans,
     # as a single, mutually-exclusive, match-able choice.
@@ -725,47 +771,48 @@ function void test_filesystem_metadata_kind_field() {
     assert(info.is_file, "is_file agrees with kind")
     assert(file_kind_label(info.kind) == "file")
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_meta_kind.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_meta_kind.txt"), false)
 }
 
 # ─── FileSystem.permissions (structured file-access flags) ───
 
 @test
 function void test_filesystem_permissions_file() {
-    assert(Result.is_success(FileSystem.write_file("_test_perms.txt", "hello")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_perms.txt", "hello")))
 
-    result<FileSystem.Permissions> r = FileSystem.permissions("_test_perms.txt")
+    result<FileSystem.Permissions> permissions_result = FileSystem.permissions("_fs_test_perms.txt")
 
-    assert(Result.is_success(r), "permissions succeeds for a present file")
+    assert(Result.is_success(permissions_result), "permissions succeeds for a present file")
 
-    FileSystem.Permissions perms = Result.unwrap(r)
+    FileSystem.Permissions permissions = Result.unwrap(permissions_result)
 
     # A freshly written file is readable and writable on every platform.
-    assert(perms.readable, "a new file is readable")
-    assert(perms.writable, "a new file is writable")
+    assert(permissions.readable, "a new file is readable")
+    assert(permissions.writable, "a new file is writable")
     # mode carries the POSIX mode bits; a regular file always has some read bit.
-    assert(perms.mode != 0, "mode carries permission bits")
+    assert(permissions.mode != 0, "mode carries permission bits")
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_perms.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_perms.txt"), false)
 }
 
 @test
 function void test_filesystem_permissions_directory() {
-    result<FileSystem.Permissions> r = FileSystem.permissions(".")
+    result<FileSystem.Permissions> permissions_result = FileSystem.permissions(".")
 
-    assert(Result.is_success(r), "permissions succeeds for a directory")
+    assert(Result.is_success(permissions_result), "permissions succeeds for a directory")
 
-    FileSystem.Permissions perms = Result.unwrap(r)
+    FileSystem.Permissions permissions = Result.unwrap(permissions_result)
 
-    assert(perms.readable, "the current directory is readable")
-    assert(perms.mode != 0, "directory mode carries bits")
+    assert(permissions.readable, "the current directory is readable")
+    assert(permissions.mode != 0, "directory mode carries bits")
 }
 
 @test
 function void test_filesystem_permissions_nonexistent() {
-    result<FileSystem.Permissions> r = FileSystem.permissions("_nonexistent_perms_file.txt")
+    result<FileSystem.Permissions> permissions_result =
+        FileSystem.permissions("_nonexistent_perms_file.txt")
 
-    assert(Result.is_failure(r), "permissions fails on a missing path")
+    assert(Result.is_failure(permissions_result), "permissions fails on a missing path")
 }
 
 # ─── FileSystem.IoError (opt-in typed I/O errors) ───
@@ -785,24 +832,26 @@ function string io_error_label(FileSystem.IoError e) {
 
 @test
 function void test_filesystem_read_file_typed_success() {
-    assert(Result.is_success(FileSystem.write_file("_test_typed_ok.txt", "typed body")))
+    assert(Result.is_success(FileSystem.write_file("_fs_test_typed_ok.txt", "typed body")))
 
-    result<string, FileSystem.IoError> r = FileSystem.read_file_typed("_test_typed_ok.txt")
+    result<string, FileSystem.IoError> read_result =
+        FileSystem.read_file_typed("_fs_test_typed_ok.txt")
 
-    assert(Result.is_success(r), "reading a present file succeeds")
-    assert(Result.unwrap(r) == "typed body")
+    assert(Result.is_success(read_result), "reading a present file succeeds")
+    assert(Result.unwrap(read_result) == "typed body")
 
-    boolean _ = Result.unwrap_or(FileSystem.delete("_test_typed_ok.txt"), false)
+    boolean _ = Result.unwrap_or(FileSystem.delete("_fs_test_typed_ok.txt"), false)
 }
 
 @test
 function void test_filesystem_read_file_typed_not_found() {
-    result<string, FileSystem.IoError> r = FileSystem.read_file_typed("_nonexistent_typed_xyz.txt")
+    result<string, FileSystem.IoError> read_result =
+        FileSystem.read_file_typed("_nonexistent_typed_xyz.txt")
 
-    assert(Result.is_failure(r), "a missing file fails")
+    assert(Result.is_failure(read_result), "a missing file fails")
 
     # The error is a match-able typed choice, not an opaque string.
-    string label = match r {
+    string label = match read_result {
         success(_c) { "unexpected_success" }
         failure(e) { io_error_label(e) }
     }
@@ -813,9 +862,9 @@ function void test_filesystem_read_file_typed_not_found() {
 @test
 function void test_filesystem_read_file_typed_directory_is_invalid_input() {
     # Reading a directory as a file is a misuse of the API (EISDIR → InvalidInput).
-    result<string, FileSystem.IoError> r = FileSystem.read_file_typed(".")
+    result<string, FileSystem.IoError> read_result = FileSystem.read_file_typed(".")
 
-    string label = match r {
+    string label = match read_result {
         success(_c) { "unexpected_success" }
         failure(e) { io_error_label(e) }
     }
@@ -827,11 +876,11 @@ function void test_filesystem_read_file_typed_directory_is_invalid_input() {
 function void test_filesystem_read_file_typed_traversal_is_invalid_input() {
     # A traversing path is rejected as a typed InvalidInput failure rather than
     # throwing (unlike the string-error FileSystem functions).
-    result<string, FileSystem.IoError> r = FileSystem.read_file_typed("../escape.txt")
+    result<string, FileSystem.IoError> read_result = FileSystem.read_file_typed("../escape.txt")
 
-    assert(Result.is_failure(r), "a traversing path fails")
+    assert(Result.is_failure(read_result), "a traversing path fails")
 
-    string label = match r {
+    string label = match read_result {
         success(_c) { "unexpected_success" }
         failure(e) { io_error_label(e) }
     }

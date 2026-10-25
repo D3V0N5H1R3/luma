@@ -1,34 +1,39 @@
 # ═══════════════════════════════════════════════════════════
-# Luma — Feature Tests — Record field destructuring
+# Luma v1.0 — Feature Tests — Record Destructuring
 #
-# Positional-by-name record destructuring in bindings and as a
-# match case pattern.  See Luma_User_Manual.md §3 and §8.
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
+#
+# Destructuring by field name in bindings (§3) and as a match
+# case pattern (§8).
 # ═══════════════════════════════════════════════════════════
 
 record Point {
-    integer x,
-    integer y,
-    integer z
+    number x,
+    number y,
+    number z
 }
 
-record Named {
+record Person {
     string name,
     integer age
 }
 
 record Inner {
-    integer v
+    number value
 }
 
 record Outer {
     Inner inner,
-    integer k
+    number weight
 }
+
+# ─── Destructuring bindings ───────────────────────────────
 
 @test
 function void test_record_destructuring_binding() {
-    Point p = Point { x = 1, y = 2, z = 3 }
-    Point { x, y, z } = p
+    Point point = Point { x = 1, y = 2, z = 3 }
+    Point { x, y, z } = point
 
     assert(x == 1)
     assert(y == 2)
@@ -37,8 +42,8 @@ function void test_record_destructuring_binding() {
 
 @test
 function void test_record_destructuring_subset() {
-    Point p = Point { x = 7, y = 8, z = 9 }
-    Point { x, z } = p
+    Point point = Point { x = 7, y = 8, z = 9 }
+    Point { x, z } = point
 
     assert(x == 7)
     assert(z == 9)
@@ -46,8 +51,8 @@ function void test_record_destructuring_subset() {
 
 @test
 function void test_record_destructuring_mutable() {
-    Point p = Point { x = 5, y = 6, z = 7 }
-    mutable Point { x, y, z } = p
+    Point point = Point { x = 5, y = 6, z = 7 }
+    mutable Point { x, y, z } = point
 
     x = x + 100
     y = y + 10
@@ -56,12 +61,13 @@ function void test_record_destructuring_mutable() {
     assert(x == 105)
     assert(y == 16)
     assert(z == 8)
+    assert(point.x == 5, "mutating a binding should not change the source record")
 }
 
 @test
 function void test_record_destructuring_field_types() {
-    Named n = Named { name = "Ada", age = 36 }
-    Named { name, age } = n
+    Person person = Person { name = "Ada", age = 36 }
+    Person { name, age } = person
 
     assert(name == "Ada")
     assert(age == 36)
@@ -69,44 +75,45 @@ function void test_record_destructuring_field_types() {
 
 @test
 function void test_record_destructuring_nested() {
-    Outer o = Outer { inner = Inner { v = 40 }, k = 2 }
-    Outer { inner, k } = o
+    Outer outer = Outer { inner = Inner { value = 40 }, weight = 2 }
+    Outer { inner, weight } = outer
 
-    assert(inner.v == 40)
-    assert(k == 2)
+    assert(inner.value == 40)
+    assert(weight == 2)
 }
+
+# ─── Match case patterns ──────────────────────────────────
 
 @test
 function void test_record_match_pattern_statement() {
-    Named n = Named { name = "Grace", age = 45 }
+    Person person = Person { name = "Grace", age = 45 }
+    mutable string message = ""
 
-    mutable string msg = ""
-
-    match n {
-        case Named { name, age } {
-            msg = "${name}:${age}"
+    match person {
+        case Person { name, age } {
+            message = "${name}:${age}"
         }
     }
 
-    assert(msg == "Grace:45")
+    assert(message == "Grace:45")
 }
 
 @test
 function void test_record_match_pattern_expression() {
-    Named n = Named { name = "Alan", age = 41 }
+    Person person = Person { name = "Alan", age = 41 }
 
-    integer got = match n {
-        case Named { age } { age }
+    integer age = match person {
+        case Person { age } { age }
     }
 
-    assert(got == 41)
+    assert(age == 41)
 }
 
 @test
 function void test_record_match_pattern_with_guard() {
-    Point p = Point { x = 10, y = 2, z = 0 }
+    Point point = Point { x = 10, y = 2, z = 0 }
 
-    string label = match p {
+    string label = match point {
         case Point { x, y } when x > y { "x-major" }
         else { "other" }
     }
@@ -115,9 +122,21 @@ function void test_record_match_pattern_with_guard() {
 }
 
 @test
+function void test_record_match_pattern_guard_falls_through_to_else() {
+    Point point = Point { x = 1, y = 2, z = 0 }
+
+    string label = match point {
+        case Point { x, y } when x > y { "x-major" }
+        else { "other" }
+    }
+
+    assert(label == "other")
+}
+
+@test
 function void test_record_creation_still_works() {
     # A record-creation expression (fields carry '=') is not destructuring.
-    Point p = Point { x = 1, y = 1, z = 1 }
+    Point point = Point { x = 1, y = 1, z = 1 }
 
-    assert(p.x == 1)
+    assert(point.x == 1)
 }

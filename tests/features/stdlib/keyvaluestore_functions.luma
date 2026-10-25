@@ -3,170 +3,210 @@
 #
 # Feature Tests are based on Luma_Initial_Concept.md and
 # Luma_Standard_Library_Reference.md.
+#
+# Every suite runs in the repository root and CTest runs suites in
+# parallel, so each store path carries the `_kv_test_` prefix and a
+# per-test name. A store only touches the disk once it is saved (or a
+# transaction commits), so purely in-memory tests leave no file behind.
 # ═══════════════════════════════════════════════════════════
+
+# Persist an empty store at `path` and reopen it read-only (open_read_only
+# fails on a missing file).
+function key_value_store open_read_only_fixture(string path) {
+    result<string> _saved = KeyValueStore.open(path)
+        |> Result.unwrap()
+        |> KeyValueStore.save()
+
+    return Result.unwrap(KeyValueStore.open_read_only(path))
+}
+
+# Delete a store's backing file through a writable handle.
+function void destroy_store(string path) {
+    result<string> _destroyed = KeyValueStore.open(path)
+        |> Result.unwrap()
+        |> KeyValueStore.destroy()
+}
+
+# ─── Basic operations ───
 
 @test
 function void test_keyvaluestore_open_set_get() {
-    string val = KeyValueStore.open("test_kv_luma1.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("greeting", "hello")
-    |> Result.unwrap()
-    |> KeyValueStore.get("greeting")
-    |> Result.unwrap()
+    string greeting = KeyValueStore.open("_kv_test_open_set_get.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("greeting", "hello")
+        |> Result.unwrap()
+        |> KeyValueStore.get("greeting")
+        |> Result.unwrap()
 
-    assert(val == "hello")
+    assert(greeting == "hello")
 }
 
 @test
 function void test_keyvaluestore_has() {
-    boolean found = KeyValueStore.open("test_kv_luma2.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("x", "1")
-    |> Result.unwrap()
-    |> KeyValueStore.has("x")
+    boolean is_found = KeyValueStore.open("_kv_test_has.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("x", "1")
+        |> Result.unwrap()
+        |> KeyValueStore.has("x")
 
-    assert(found)
+    assert(is_found)
 }
 
 @test
 function void test_keyvaluestore_has_missing() {
-    boolean found = KeyValueStore.open("test_kv_luma3.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.has("missing")
+    boolean is_found = KeyValueStore.open("_kv_test_has_missing.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.has("missing")
 
-    assert(!found)
+    assert(!is_found)
 }
 
 @test
 function void test_keyvaluestore_get_or_present() {
-    string val = KeyValueStore.open("test_kv_luma_getor1.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("port", "8080")
-    |> Result.unwrap()
-    |> KeyValueStore.get_or("port", "3000")
+    string port = KeyValueStore.open("_kv_test_get_or_present.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("port", "8080")
+        |> Result.unwrap()
+        |> KeyValueStore.get_or("port", "3000")
 
-    assert(val == "8080")
+    assert(port == "8080")
 }
 
 @test
 function void test_keyvaluestore_get_or_missing() {
-    string val = KeyValueStore.open("test_kv_luma_getor2.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.get_or("port", "3000")
+    string port = KeyValueStore.open("_kv_test_get_or_missing.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.get_or("port", "3000")
 
-    assert(val == "3000")
+    assert(port == "3000")
 }
 
 @test
 function void test_keyvaluestore_remove() {
-    boolean found = KeyValueStore.open("test_kv_luma4.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("k", "v")
-    |> Result.unwrap()
-    |> KeyValueStore.remove("k")
-    |> Result.unwrap()
-    |> KeyValueStore.has("k")
+    boolean is_found = KeyValueStore.open("_kv_test_remove.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("k", "v")
+        |> Result.unwrap()
+        |> KeyValueStore.remove("k")
+        |> Result.unwrap()
+        |> KeyValueStore.has("k")
 
-    assert(!found)
+    assert(!is_found)
 }
 
 @test
 function void test_keyvaluestore_count() {
-    integer n = KeyValueStore.open("test_kv_luma5.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("a", "1")
-    |> Result.unwrap()
-    |> KeyValueStore.set("b", "2")
-    |> Result.unwrap()
-    |> KeyValueStore.count()
+    integer entry_count = KeyValueStore.open("_kv_test_count.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("a", "1")
+        |> Result.unwrap()
+        |> KeyValueStore.set("b", "2")
+        |> Result.unwrap()
+        |> KeyValueStore.count()
 
-    assert(n == 2)
+    assert(entry_count == 2)
 }
 
 @test
 function void test_keyvaluestore_clear() {
-    integer n = KeyValueStore.open("test_kv_luma6.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("a", "1")
-    |> Result.unwrap()
-    |> KeyValueStore.set("b", "2")
-    |> Result.unwrap()
-    |> KeyValueStore.clear()
-    |> Result.unwrap()
-    |> KeyValueStore.count()
+    integer entry_count = KeyValueStore.open("_kv_test_clear.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("a", "1")
+        |> Result.unwrap()
+        |> KeyValueStore.set("b", "2")
+        |> Result.unwrap()
+        |> KeyValueStore.clear()
+        |> Result.unwrap()
+        |> KeyValueStore.count()
 
-    assert(n == 0)
+    assert(entry_count == 0)
 }
 
 @test
 function void test_keyvaluestore_keys() {
-    array<string> k = KeyValueStore.open("test_kv_luma7.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("x", "1")
-    |> Result.unwrap()
-    |> KeyValueStore.set("y", "2")
-    |> Result.unwrap()
-    |> KeyValueStore.keys()
+    array<string> keys = KeyValueStore.open("_kv_test_keys.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("x", "1")
+        |> Result.unwrap()
+        |> KeyValueStore.set("y", "2")
+        |> Result.unwrap()
+        |> KeyValueStore.keys()
 
-    assert(Array.length(k) == 2)
+    assert(Array.length(keys) == 2)
+    assert(Array.contains(keys, "x"))
+    assert(Array.contains(keys, "y"))
 }
 
 @test
 function void test_keyvaluestore_values() {
-    array<string> v = KeyValueStore.open("test_kv_luma8.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("a", "10")
-    |> Result.unwrap()
-    |> KeyValueStore.values()
+    array<string> values = KeyValueStore.open("_kv_test_values.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("a", "10")
+        |> Result.unwrap()
+        |> KeyValueStore.values()
 
-    assert(Array.length(v) == 1)
-    assert(v[0] == "10")
+    assert(values == ["10"])
 }
 
 @test
 function void test_keyvaluestore_to_dictionary() {
-    dictionary<string> d = KeyValueStore.open("test_kv_luma9.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("k", "v")
-    |> Result.unwrap()
-    |> KeyValueStore.to_dictionary()
+    dictionary<string> entries = KeyValueStore.open("_kv_test_to_dictionary.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("k", "v")
+        |> Result.unwrap()
+        |> KeyValueStore.to_dictionary()
 
-    assert(d["k"] == "v")
+    assert(Dictionary.length(entries) == 1)
+    assert(entries["k"] == "v")
 }
 
 @test
 function void test_keyvaluestore_get_missing() {
-    result<string> r = KeyValueStore.open("test_kv_luma10.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.get("missing")
+    result<string> lookup = KeyValueStore.open("_kv_test_get_missing.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.get("missing")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(lookup))
 }
 
 @test
 function void test_keyvaluestore_set_many() {
-    integer n = KeyValueStore.open("test_kv_luma11.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set_many({"a": "1", "b": "2", "c": "3"})
-    |> Result.unwrap()
-    |> KeyValueStore.count()
+    integer entry_count = KeyValueStore.open("_kv_test_set_many.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set_many({"a": "1", "b": "2", "c": "3"})
+        |> Result.unwrap()
+        |> KeyValueStore.count()
 
-    assert(n == 3)
+    assert(entry_count == 3)
+}
+
+@test
+function void test_keyvaluestore_set_overwrites() {
+    string value = KeyValueStore.open("_kv_test_set_overwrites.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("k", "first")
+        |> Result.unwrap()
+        |> KeyValueStore.set("k", "second")
+        |> Result.unwrap()
+        |> KeyValueStore.get("k")
+        |> Result.unwrap()
+
+    assert(value == "second")
 }
 
 # ─── get_many ────────────────────────────────────────────
 
 @test
 function void test_keyvaluestore_get_many() {
-    dictionary<string> results = KeyValueStore.open("test_kv_luma12.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("x", "10")
-    |> Result.unwrap()
-    |> KeyValueStore.set("y", "20")
-    |> Result.unwrap()
-    |> KeyValueStore.set("z", "30")
-    |> Result.unwrap()
-    |> KeyValueStore.get_many(["x", "z"])
+    dictionary<string> results = KeyValueStore.open("_kv_test_get_many.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("x", "10")
+        |> Result.unwrap()
+        |> KeyValueStore.set("y", "20")
+        |> Result.unwrap()
+        |> KeyValueStore.set("z", "30")
+        |> Result.unwrap()
+        |> KeyValueStore.get_many(["x", "z"])
 
     assert(results["x"] == "10")
     assert(results["z"] == "30")
@@ -175,76 +215,137 @@ function void test_keyvaluestore_get_many() {
 
 @test
 function void test_keyvaluestore_get_many_missing_keys_skipped() {
-    dictionary<string> results = KeyValueStore.open("test_kv_luma13.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("a", "1")
-    |> Result.unwrap()
-    |> KeyValueStore.get_many(["a", "missing"])
+    dictionary<string> results = KeyValueStore.open("_kv_test_get_many_missing.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("a", "1")
+        |> Result.unwrap()
+        |> KeyValueStore.get_many(["a", "missing"])
 
     assert(Dictionary.length(results) == 1)
     assert(results["a"] == "1")
 }
 
-# ─── save / reload ───────────────────────────────────────
+@test
+function void test_keyvaluestore_get_many_empty_keys() {
+    array<string> no_keys = []
+
+    dictionary<string> results = KeyValueStore.open("_kv_test_get_many_empty.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("a", "1")
+        |> Result.unwrap()
+        |> KeyValueStore.get_many(no_keys)
+
+    assert(Dictionary.length(results) == 0)
+}
+
+# ─── save / reload / destroy ─────────────────────────────
 
 @test
 function void test_keyvaluestore_save_and_reload() {
-    result<string> save_result = KeyValueStore.open("test_kv_luma14.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("persisted", "yes")
-    |> Result.unwrap()
-    |> KeyValueStore.save()
+    string path = "_kv_test_save_and_reload.kv"
+
+    result<string> save_result = KeyValueStore.open(path)
+        |> Result.unwrap()
+        |> KeyValueStore.set("persisted", "yes")
+        |> Result.unwrap()
+        |> KeyValueStore.save()
 
     assert(Result.is_success(save_result))
 
-    string val = KeyValueStore.open("test_kv_luma14.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.get("persisted")
-    |> Result.unwrap()
+    string value = KeyValueStore.open(path)
+        |> Result.unwrap()
+        |> KeyValueStore.get("persisted")
+        |> Result.unwrap()
 
-    assert(val == "yes")
+    assert(value == "yes")
 
-    # Clean up
-    result<string> _cleanup = KeyValueStore.open("test_kv_luma14.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.destroy()
+    destroy_store(path)
 }
 
-# ─── destroy ─────────────────────────────────────────────
+@test
+function void test_keyvaluestore_reload() {
+    string path = "_kv_test_reload.kv"
+
+    # Persist a value to disk so reload has something to read back.
+    result<string> saved = KeyValueStore.open(path)
+        |> Result.unwrap()
+        |> KeyValueStore.set("k", "v")
+        |> Result.unwrap()
+        |> KeyValueStore.save()
+
+    assert(Result.is_success(saved))
+
+    # reload() returns a store reflecting the on-disk contents.
+    string value = KeyValueStore.open(path)
+        |> Result.unwrap()
+        |> KeyValueStore.reload()
+        |> Result.unwrap()
+        |> KeyValueStore.get("k")
+        |> Result.unwrap()
+
+    assert(value == "v")
+
+    destroy_store(path)
+}
+
+@test
+function void test_keyvaluestore_special_chars_persist() {
+    # Tab, newline and backslash are escaped on write and unescaped on read,
+    # so a value containing all three must come back intact.
+    string path = "_kv_test_special_chars.kv"
+
+    result<string> saved = KeyValueStore.open(path)
+        |> Result.unwrap()
+        |> KeyValueStore.set("k", "a\tb\nc\\d")
+        |> Result.unwrap()
+        |> KeyValueStore.save()
+
+    assert(Result.is_success(saved))
+
+    string value = KeyValueStore.open(path)
+        |> Result.unwrap()
+        |> KeyValueStore.get("k")
+        |> Result.unwrap()
+
+    assert(value == "a\tb\nc\\d")
+
+    destroy_store(path)
+}
 
 @test
 function void test_keyvaluestore_destroy() {
-    result<string> save_result = KeyValueStore.open("test_kv_luma15.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("tmp", "data")
-    |> Result.unwrap()
-    |> KeyValueStore.save()
+    string path = "_kv_test_destroy.kv"
+
+    result<string> save_result = KeyValueStore.open(path)
+        |> Result.unwrap()
+        |> KeyValueStore.set("tmp", "data")
+        |> Result.unwrap()
+        |> KeyValueStore.save()
 
     assert(Result.is_success(save_result))
+    assert(Result.unwrap(FileSystem.exists(path)))
 
-    result<string> destroy_result = KeyValueStore.open("test_kv_luma15.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.destroy()
+    result<string> destroy_result = KeyValueStore.open(path)
+        |> Result.unwrap()
+        |> KeyValueStore.destroy()
 
     assert(Result.is_success(destroy_result))
-
-    # File should no longer exist
-    assert(!Result.unwrap(FileSystem.exists("test_kv_luma15.kv")))
+    assert(!Result.unwrap(FileSystem.exists(path)))
 }
 
 # ─── find_by_pattern ─────────────────────────────────────
 
 @test
 function void test_keyvaluestore_find_by_pattern_wildcard() {
-    dictionary<string> results = KeyValueStore.open("test_kv_luma16.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("user_alice", "admin")
-    |> Result.unwrap()
-    |> KeyValueStore.set("user_bob", "editor")
-    |> Result.unwrap()
-    |> KeyValueStore.set("session_1", "active")
-    |> Result.unwrap()
-    |> KeyValueStore.find_by_pattern("user_*")
+    dictionary<string> results = KeyValueStore.open("_kv_test_pattern_wildcard.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("user_alice", "admin")
+        |> Result.unwrap()
+        |> KeyValueStore.set("user_bob", "editor")
+        |> Result.unwrap()
+        |> KeyValueStore.set("session_1", "active")
+        |> Result.unwrap()
+        |> KeyValueStore.find_by_pattern("user_*")
 
     assert(Dictionary.length(results) == 2)
     assert(results["user_alice"] == "admin")
@@ -253,15 +354,15 @@ function void test_keyvaluestore_find_by_pattern_wildcard() {
 
 @test
 function void test_keyvaluestore_find_by_pattern_question_mark() {
-    dictionary<string> results = KeyValueStore.open("test_kv_luma17.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("a1", "x")
-    |> Result.unwrap()
-    |> KeyValueStore.set("a2", "y")
-    |> Result.unwrap()
-    |> KeyValueStore.set("b1", "z")
-    |> Result.unwrap()
-    |> KeyValueStore.find_by_pattern("a?")
+    dictionary<string> results = KeyValueStore.open("_kv_test_pattern_question.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("a1", "x")
+        |> Result.unwrap()
+        |> KeyValueStore.set("a2", "y")
+        |> Result.unwrap()
+        |> KeyValueStore.set("b1", "z")
+        |> Result.unwrap()
+        |> KeyValueStore.find_by_pattern("a?")
 
     assert(Dictionary.length(results) == 2)
     assert(results["a1"] == "x")
@@ -270,284 +371,241 @@ function void test_keyvaluestore_find_by_pattern_question_mark() {
 
 @test
 function void test_keyvaluestore_find_by_pattern_no_match() {
-    dictionary<string> results = KeyValueStore.open("test_kv_luma18.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("hello", "world")
-    |> Result.unwrap()
-    |> KeyValueStore.find_by_pattern("no_match_*")
+    dictionary<string> results = KeyValueStore.open("_kv_test_pattern_no_match.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("hello", "world")
+        |> Result.unwrap()
+        |> KeyValueStore.find_by_pattern("no_match_*")
 
     assert(Dictionary.length(results) == 0)
+}
+
+@test
+function void test_keyvaluestore_find_by_pattern_exact() {
+    # A wildcard-free pattern matches the key exactly, not its prefixes.
+    dictionary<string> results = KeyValueStore.open("_kv_test_pattern_exact.kv")
+        |> Result.unwrap()
+        |> KeyValueStore.set("exact", "hit")
+        |> Result.unwrap()
+        |> KeyValueStore.set("exact_longer", "miss")
+        |> Result.unwrap()
+        |> KeyValueStore.find_by_pattern("exact")
+
+    assert(Dictionary.length(results) == 1)
+    assert(results["exact"] == "hit")
 }
 
 # ─── open_read_only / is_read_only ───────────────────────
 
 @test
 function void test_keyvaluestore_open_read_only() {
-    # Write data first
-    result<string> _save = KeyValueStore.open("test_kv_luma19.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("key", "value")
-    |> Result.unwrap()
-    |> KeyValueStore.save()
+    string path = "_kv_test_open_read_only.kv"
 
-    # Open read-only and verify reads work
-    key_value_store ro_store = KeyValueStore.open_read_only("test_kv_luma19.kv")
-    |> Result.unwrap()
+    result<string> _save = KeyValueStore.open(path)
+        |> Result.unwrap()
+        |> KeyValueStore.set("key", "value")
+        |> Result.unwrap()
+        |> KeyValueStore.save()
 
-    assert(KeyValueStore.is_read_only(ro_store))
-    assert(KeyValueStore.has(ro_store, "key"))
-    assert(Result.unwrap(KeyValueStore.get(ro_store, "key")) == "value")
+    # Reads work on a read-only store.
+    key_value_store read_only_store = KeyValueStore.open_read_only(path)
+        |> Result.unwrap()
 
-    # Clean up
-    result<string> _cleanup = KeyValueStore.open("test_kv_luma19.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.destroy()
+    assert(KeyValueStore.is_read_only(read_only_store))
+    assert(KeyValueStore.has(read_only_store, "key"))
+    assert(Result.unwrap(KeyValueStore.get(read_only_store, "key")) == "value")
+
+    destroy_store(path)
+}
+
+@test
+function void test_keyvaluestore_open_read_only_missing_file_fails() {
+    # A read-only store can never gain entries, so a missing file (usually a
+    # mistyped path) is reported instead of opening an empty store.
+    result<key_value_store> opened = KeyValueStore.open_read_only("_kv_test_missing_store.kv")
+
+    assert(Result.is_failure(opened))
+    assert(String.contains(Result.error(opened) ?? "", "store file not found"))
 }
 
 @test
 function void test_keyvaluestore_is_read_only_false_for_normal() {
-    key_value_store store = KeyValueStore.open("test_kv_luma20.kv")
-    |> Result.unwrap()
+    key_value_store store = KeyValueStore.open("_kv_test_not_read_only.kv")
+        |> Result.unwrap()
 
     assert(!KeyValueStore.is_read_only(store))
 }
 
-# ───────────────────────────────────────────────────────────
-# reload
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_keyvaluestore_reload() {
-    # Persist a value to disk so reload has something to read back.
-    result<string> saved = KeyValueStore.open("test_kv_reload.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("k", "v")
-    |> Result.unwrap()
-    |> KeyValueStore.save()
-
-    assert(Result.is_success(saved))
-
-    # reload() returns a store reflecting the on-disk contents.
-    string value = KeyValueStore.open("test_kv_reload.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.reload()
-    |> Result.unwrap()
-    |> KeyValueStore.get("k")
-    |> Result.unwrap()
-
-    assert(value == "v")
-
-    # Clean up the persisted file.
-    result<string> _cleanup = KeyValueStore.open("test_kv_reload.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.destroy()
-}
-
-# ───────────────────────────────────────────────────────────
-# set overwrites an existing key
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_keyvaluestore_set_overwrites() {
-    string val = KeyValueStore.open("test_kv_luma21.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("k", "first")
-    |> Result.unwrap()
-    |> KeyValueStore.set("k", "second")
-    |> Result.unwrap()
-    |> KeyValueStore.get("k")
-    |> Result.unwrap()
-
-    assert(val == "second")
-}
-
-# ───────────────────────────────────────────────────────────
-# special characters survive a save/reload round-trip
+# ─── Read-only stores reject every mutation ───
 #
-# Tab, newline and backslash are escaped on write and unescaped
-# on read, so a value containing all three must come back intact.
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_keyvaluestore_special_chars_persist() {
-    result<string> saved = KeyValueStore.open("test_kv_luma22.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("k", "a\tb\nc\\d")
-    |> Result.unwrap()
-    |> KeyValueStore.save()
-
-    assert(Result.is_success(saved))
-
-    string val = KeyValueStore.open("test_kv_luma22.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.get("k")
-    |> Result.unwrap()
-
-    assert(val == "a\tb\nc\\d")
-
-    # Clean up
-    result<string> _cleanup = KeyValueStore.open("test_kv_luma22.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.destroy()
-}
-
-# ───────────────────────────────────────────────────────────
-# find_by_pattern with a literal (wildcard-free) pattern
-# matches a key exactly and not its prefixes
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_keyvaluestore_find_by_pattern_exact() {
-    dictionary<string> results = KeyValueStore.open("test_kv_luma23.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("exact", "hit")
-    |> Result.unwrap()
-    |> KeyValueStore.set("exact_longer", "miss")
-    |> Result.unwrap()
-    |> KeyValueStore.find_by_pattern("exact")
-
-    assert(Dictionary.length(results) == 1)
-    assert(results["exact"] == "hit")
-}
-
-# ───────────────────────────────────────────────────────────
-# get_many with no keys returns an empty dictionary
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_keyvaluestore_get_many_empty_keys() {
-    array<string> no_keys = []
-
-    dictionary<string> results = KeyValueStore.open("test_kv_luma24.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("a", "1")
-    |> Result.unwrap()
-    |> KeyValueStore.get_many(no_keys)
-
-    assert(Dictionary.length(results) == 0)
-}
-
-# ───────────────────────────────────────────────────────────
-# negative: every mutating operation is rejected on a
-# read-only store, returning a failure result rather than
-# mutating state or raising
-# ───────────────────────────────────────────────────────────
+# Each mutating operation returns a failure result on a read-only store
+# rather than mutating state or raising.
 
 @test
 function void test_keyvaluestore_set_read_only_fails() {
-    result<key_value_store> r = KeyValueStore.open_read_only("test_kv_luma_ro1.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set("k", "v")
+    string path = "_kv_test_read_only_set.kv"
 
-    assert(!Result.is_success(r))
+    result<key_value_store> outcome = open_read_only_fixture(path)
+        |> KeyValueStore.set("k", "v")
+
+    assert(!Result.is_success(outcome))
+
+    destroy_store(path)
 }
 
 @test
 function void test_keyvaluestore_remove_read_only_fails() {
-    result<key_value_store> r = KeyValueStore.open_read_only("test_kv_luma_ro2.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.remove("k")
+    string path = "_kv_test_read_only_remove.kv"
 
-    assert(!Result.is_success(r))
+    result<key_value_store> outcome = open_read_only_fixture(path)
+        |> KeyValueStore.remove("k")
+
+    assert(!Result.is_success(outcome))
+
+    destroy_store(path)
 }
 
 @test
 function void test_keyvaluestore_clear_read_only_fails() {
-    result<key_value_store> r = KeyValueStore.open_read_only("test_kv_luma_ro3.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.clear()
+    string path = "_kv_test_read_only_clear.kv"
 
-    assert(!Result.is_success(r))
+    result<key_value_store> outcome = open_read_only_fixture(path)
+        |> KeyValueStore.clear()
+
+    assert(!Result.is_success(outcome))
+
+    destroy_store(path)
 }
 
 @test
 function void test_keyvaluestore_set_many_read_only_fails() {
-    result<key_value_store> r = KeyValueStore.open_read_only("test_kv_luma_ro4.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.set_many({"a": "1"})
+    string path = "_kv_test_read_only_set_many.kv"
 
-    assert(!Result.is_success(r))
+    result<key_value_store> outcome = open_read_only_fixture(path)
+        |> KeyValueStore.set_many({"a": "1"})
+
+    assert(!Result.is_success(outcome))
+
+    destroy_store(path)
+}
+
+@test
+function void test_keyvaluestore_update_read_only_fails() {
+    string path = "_kv_test_read_only_update.kv"
+
+    result<key_value_store> outcome = KeyValueStore.update(
+        open_read_only_fixture(path),
+        "k",
+        (optional<string> current) -> Optional.unwrap_or(current, "0"))
+
+    assert(!Result.is_success(outcome))
+
+    destroy_store(path)
 }
 
 @test
 function void test_keyvaluestore_save_read_only_fails() {
-    result<string> r = KeyValueStore.open_read_only("test_kv_luma_ro5.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.save()
+    string path = "_kv_test_read_only_save.kv"
 
-    assert(!Result.is_success(r))
+    result<string> outcome = open_read_only_fixture(path)
+        |> KeyValueStore.save()
+
+    assert(!Result.is_success(outcome))
+
+    destroy_store(path)
 }
 
 @test
 function void test_keyvaluestore_destroy_read_only_fails() {
-    result<string> r = KeyValueStore.open_read_only("test_kv_luma_ro6.kv")
-    |> Result.unwrap()
-    |> KeyValueStore.destroy()
+    string path = "_kv_test_read_only_destroy.kv"
 
-    assert(!Result.is_success(r))
+    result<string> outcome = open_read_only_fixture(path)
+        |> KeyValueStore.destroy()
+
+    assert(!Result.is_success(outcome))
+    assert(Result.unwrap(FileSystem.exists(path)), "the backing file is left in place")
+
+    destroy_store(path)
 }
+
+# ─── is_empty / update ───
 
 @test
 function void test_keyvaluestore_is_empty_and_update() {
-    key_value_store s = Result.unwrap(KeyValueStore.open("test_kv_luma_update.kv"))
-    assert(KeyValueStore.is_empty(s))
+    key_value_store empty_store = Result.unwrap(KeyValueStore.open("_kv_test_update.kv"))
 
-    key_value_store s2 = Result.unwrap(
-        KeyValueStore.update(s, "count", (optional<string> cur) -> Optional.unwrap_or(cur, "0")))
-    assert(!KeyValueStore.is_empty(s2))
-    assert(KeyValueStore.get_or(s2, "count", "x") == "0")
+    assert(KeyValueStore.is_empty(empty_store))
 
-    key_value_store s3 = Result.unwrap(
-        KeyValueStore.update(s2, "count",
-            (optional<string> cur) -> Optional.unwrap_or(cur, "0") + "1"))
-    assert(KeyValueStore.get_or(s3, "count", "x") == "01")
+    # The callback receives none for an absent key.
+    key_value_store initialised = Result.unwrap(KeyValueStore.update(
+        empty_store, "count", (optional<string> current) -> Optional.unwrap_or(current, "0")))
+
+    assert(!KeyValueStore.is_empty(initialised))
+    assert(KeyValueStore.get_or(initialised, "count", "x") == "0")
+
+    # On an existing key it receives the current value.
+    key_value_store appended = Result.unwrap(KeyValueStore.update(
+        initialised, "count", (optional<string> current) -> "${Optional.unwrap_or(current, "0")}1"))
+
+    assert(KeyValueStore.get_or(appended, "count", "x") == "01")
 }
 
-# ───────────────────────────────────────────────────────────
-# transaction: a body returning success(final) commits every
-# threaded change (and persists a file-backed store); a body
-# returning a failure rolls back, persisting nothing
-# ───────────────────────────────────────────────────────────
+# ─── transaction ───
+#
+# A body returning success(final) commits every threaded change (and
+# persists a file-backed store); a body returning a failure rolls back,
+# persisting nothing.
 
 @test
 function void test_keyvaluestore_transaction_commit() {
-    key_value_store store = Result.unwrap(KeyValueStore.open("test_kv_luma_tx1.kv"))
+    string path = "_kv_test_transaction_commit.kv"
+    key_value_store store = Result.unwrap(KeyValueStore.open(path))
 
     result<key_value_store> committed = KeyValueStore.transaction(store, (key_value_store s) -> {
-        key_value_store s1 = KeyValueStore.set(s, "a", "1")?
-        key_value_store s2 = KeyValueStore.set(s1, "b", "2")?
-        return success(s2)
+        key_value_store with_a = KeyValueStore.set(s, "a", "1")?
+        key_value_store with_b = KeyValueStore.set(with_a, "b", "2")?
+        return success(with_b)
     })
 
     key_value_store final = Result.unwrap(committed)
+
     assert(KeyValueStore.get_or(final, "a", "x") == "1")
     assert(KeyValueStore.get_or(final, "b", "x") == "2")
 
-    result<string> _cleanup = KeyValueStore.destroy(store)
+    # The commit was persisted, so a fresh open sees both keys.
+    key_value_store reopened = Result.unwrap(KeyValueStore.open(path))
+
+    assert(KeyValueStore.get_or(reopened, "a", "x") == "1")
+    assert(KeyValueStore.get_or(reopened, "b", "x") == "2")
+
+    destroy_store(path)
 }
 
 @test
 function void test_keyvaluestore_transaction_rollback_returns_failure() {
-    key_value_store store = Result.unwrap(KeyValueStore.open("test_kv_luma_tx2.kv"))
+    key_value_store store = Result.unwrap(KeyValueStore.open("_kv_test_transaction_rollback.kv"))
 
-    result<key_value_store> rolled = KeyValueStore.transaction(store, (key_value_store s) -> {
-        key_value_store _s1 = KeyValueStore.set(s, "x", "1")?
+    result<key_value_store> rolled_back = KeyValueStore.transaction(store, (key_value_store s) -> {
+        key_value_store _with_x = KeyValueStore.set(s, "x", "1")?
         return failure("aborted")
     })
 
-    assert(Result.is_failure(rolled))
+    assert(rolled_back == failure("aborted"))
 }
 
 @test
 function void test_keyvaluestore_transaction_rollback_not_persisted() {
-    key_value_store store = Result.unwrap(KeyValueStore.open("test_kv_luma_tx3.kv"))
+    string path = "_kv_test_transaction_not_persisted.kv"
+    key_value_store store = Result.unwrap(KeyValueStore.open(path))
 
-    result<key_value_store> _rolled = KeyValueStore.transaction(store, (key_value_store s) -> {
-        key_value_store _s1 = KeyValueStore.set(s, "ghost", "boo")?
+    result<key_value_store> _rolled_back = KeyValueStore.transaction(store, (key_value_store s) -> {
+        key_value_store _with_ghost = KeyValueStore.set(s, "ghost", "boo")?
         return failure("aborted")
     })
 
     # A rolled-back transaction persists nothing, so a fresh open never sees the key.
-    key_value_store reopened = Result.unwrap(KeyValueStore.open("test_kv_luma_tx3.kv"))
+    key_value_store reopened = Result.unwrap(KeyValueStore.open(path))
+
     assert(!KeyValueStore.has(reopened, "ghost"))
+    assert(!Result.unwrap(FileSystem.exists(path)))
 }

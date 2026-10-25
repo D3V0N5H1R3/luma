@@ -209,14 +209,14 @@ for n in nums {
 When mutation is needed, keep the mutable variable as close to its use as possible and limit the scope of mutation.
 
 ```luma
-# Good — mutable variable used briefly, then consumed
-mutable string result = ""
+# Good — mutable accumulator used briefly, then consumed
+mutable number total = 0.0
 
-for i, fruit in fruits {
-    result = result + "${i}: ${fruit}\n"
+for price in prices {
+    total += price
 }
 
-print(result)
+print("total: ${total}")
 ```
 
 ### Compound Assignment Operators
@@ -529,17 +529,17 @@ _ = parse(input) # explicitly discard
 
 ### `optional<T>`
 
-`optional<T>` represents a value that may or may not be present: either `some(value)` or `none`. Use it when absence is a normal outcome rather than an error — for example, looking up a key that might not exist.
+`optional<T>` represents a value that may or may not be present: either `some(value)` or `none`. Use it when absence is a normal outcome rather than an error — for example, taking the first element of a list that may be empty.
 
 ```luma
 # Exhaustive match
-match Dictionary.get(config, "host") {
+match Array.first(hosts) {
     case some(host) { connect(host) }
     case none       { print("no host configured") }
 }
 
 # Default with ??
-string host = Dictionary.get(config, "host") ?? "localhost"
+string host = Array.first(hosts) ?? "localhost"
 ```
 
 Use the postfix `?` operator inside a function that returns `optional<T>` to propagate `none`:
@@ -569,10 +569,13 @@ string city = user?.address?.city ?? "unknown"
 `try`/`catch`/`finally` handles **programmer errors only** — division by zero, out-of-bounds access, `assert` failures, and failed `Result.unwrap` calls. It does not intercept syntax or type errors.
 
 ```luma
+integer divisor = 0
+
 try {
-    integer result = 10 / 0
+    integer quotient = 10 // divisor
+    print(quotient)
 } catch(err) {
-    print("caught: ${err}")  # caught: division by zero
+    print("caught: ${err}")  # caught: Integer division: division by zero
 } finally {
     print("always runs")
 }
@@ -815,14 +818,14 @@ Building strings by repeated concatenation in a loop creates a new string on eac
 
 ```luma
 # Good — single pass
-array<string> parts = Array.map(items, (string item) -> item)
-string result = String.join(parts, ", ")
+array<string> labels = Array.map(items, (string item) -> "[${item}]") |> Result.unwrap_or([])
+string joined = String.join(labels, ", ")
 
 # Bad — O(n²) from repeated concatenation
-mutable string result = ""
+mutable string joined = ""
 
 for item in items {
-    result = result + item + ", "
+    joined = joined + "[${item}], "
 }
 ```
 
@@ -844,12 +847,12 @@ The pipe operator `|>` passes the left-hand value as the first argument to the r
 
 ```luma
 # Good — reads left to right
-string result = "  hello world  "
+string shouted = "  hello world  "
     |> String.trim()
     |> String.uppercase()
 
 # Less readable — reads inside out
-string result = String.uppercase(String.trim("  hello world  "))
+string shouted = String.uppercase(String.trim("  hello world  "))
 ```
 
 ### Multi-Line Pipelines
@@ -878,12 +881,12 @@ function integer double(integer n) {
     return n * 2
 }
 
-result<array<integer>> result = numbers
+result<array<integer>> doubled_positives = numbers
     !> Array.filter(is_positive)
     !> Array.map(double)
 
 # Less readable — inline lambdas obscure intent
-result<array<integer>> result = numbers
+result<array<integer>> doubled_positives = numbers
     !> Array.filter((integer n) -> n > 0)
     !> Array.map((integer n) -> n * 2)
 ```
@@ -1368,9 +1371,9 @@ Use `assert(condition)` to fail a test immediately when the condition is false. 
 ```luma
 @test
 function void test_with_message() {
-    integer result = compute()
+    integer answer = compute()
 
-    assert(result == 42, "expected 42 but got ${result}")
+    assert(answer == 42, "expected 42 but got ${answer}")
 }
 ```
 
@@ -1422,27 +1425,31 @@ The exit code is non-zero if any test fails. This makes `--test` suitable for CI
 
 - Place feature-specific test suites in `tests/features/language/` (core language features) or `tests/features/stdlib/` (standard library modules) with descriptive file names.
 - Each test file is self-contained — no shared state between files.
+- Begin every suite with the standard header (see [Test Files](#test-files)). Suites in `language/` cite `Luma_User_Manual.md`; suites in `stdlib/` cite `Luma_Standard_Library_Reference.md`.
 
 ```text
 tests/
 └── features/
-    ├── array_functions.luma
-    ├── arrays.luma
-    ├── control_flow.luma
-    ├── dictionaries.luma
-    ├── enums.luma
-    ├── functions.luma
-    ├── interfaces.luma
-    ├── lambdas.luma
-    ├── match.luma
-    ├── math_functions.luma
-    ├── mutability.luma
-    ├── operators.luma
-    ├── records.luma
-    ├── result_functions.luma
-    ├── string_functions.luma
-    ├── tuples.luma
-    └── ...
+    ├── language/
+    │   ├── arrays.luma
+    │   ├── control_flow.luma
+    │   ├── dictionaries.luma
+    │   ├── enums.luma
+    │   ├── functions.luma
+    │   ├── interfaces.luma
+    │   ├── lambdas.luma
+    │   ├── match.luma
+    │   ├── mutability.luma
+    │   ├── operators.luma
+    │   ├── records.luma
+    │   ├── tuples.luma
+    │   └── ...
+    └── stdlib/
+        ├── array_functions.luma
+        ├── math_functions.luma
+        ├── result_functions.luma
+        ├── string_functions.luma
+        └── ...
 ```
 
 ---
@@ -1485,6 +1492,9 @@ Test files do not have a `@main` function. Place helper functions and type defin
 ```luma
 # ═══════════════════════════════════════════════════════════
 # Luma v1.0 — Feature Tests — Arrays
+#
+# Feature Tests are based on Luma_Initial_Concept.md and
+# Luma_User_Manual.md.
 # ═══════════════════════════════════════════════════════════
 
 # ─── Creation ───
@@ -1571,10 +1581,10 @@ result<integer> total = nums
 
 ```luma
 # Hard to read — inside-out evaluation
-string result = String.uppercase(String.trim(String.reverse(input)))
+string normalized = String.uppercase(String.trim(String.reverse(input)))
 
 # Clear — left-to-right evaluation
-string result = input
+string normalized = input
     |> String.reverse()
     |> String.trim()
     |> String.uppercase()
@@ -1682,7 +1692,7 @@ result<array<integer>> out = Array.map(data, (integer x) -> x * 2)
 
 ### Sandbox Mode
 
-Use `--box` when running untrusted Luma files. Sandbox mode disables all OS-accessing modules (`Console`, `FileSystem`, `Process`, `Socket`, `Http`, `Csv`, `Xml`, `KeyValueStore`) and individual file-I/O functions in otherwise-safe modules (`Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, `Hash.sha512_file`).
+Use `--box` when running untrusted Luma files. Sandbox mode disables all OS-accessing modules (`Console`, `FileSystem`, `Process`, `Socket`, `Http`, `Csv`, `Xml`, `KeyValueStore`) and individual file-I/O functions in otherwise-safe modules (`Compression.gunzip_file`, `Compression.gzip_file`, `Compression.gzip_file_with`, `Hash.digest_file`, `Hash.md5_file`, `Hash.sha1_file`, `Hash.sha256_file`, `Hash.sha512_file`, and `Log.set_output`).
 
 ```bash
 luma --box untrusted_script.luma

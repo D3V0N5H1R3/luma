@@ -254,7 +254,7 @@ Compress and decompress data using Deflate (RFC 1951), Gzip (RFC 1952), and run-
 | `Compression.decompress(data, format)`        | `(string, Compression.Format)` | `result<string>`                    | Decompress `data` under the given format                                     |
 | `Compression.decompress_typed(data, format)`  | `(string, Compression.Format)` | `result<string, Compression.Error>` | Decompress `data`; on failure the error is a typed `Compression.Error`       |
 | `Compression.deflate(data)`                   | `(string)`                     | `string`                            | Deflate-compress data                                                        |
-| `Compression.deflate_with(data, level)`       | `(string, integer)`            | `result<string>`                    | Deflate-compress with explicit level (0–9)                                   |
+| `Compression.deflate_with(data, level)`       | `(string, integer)`            | `result<string>`                    | Deflate-compress with explicit level (1–9)                                   |
 | `Compression.detect_format(data)`             | `(string)`                     | `optional<Compression.Format>`      | Sniff the container from magic bytes (`Gzip`/`Zlib`); `none` if unrecognised |
 | `Compression.encode_rle(s)`                   | `(string)`                     | `string`                            | Run-length encode (e.g. `"aaabbbcc"` → `"3a3b2c"`)                           |
 | `Compression.gunzip(data)`                    | `(string)`                     | `result<string>`                    | Gunzip-decompress data                                                       |
@@ -262,12 +262,12 @@ Compress and decompress data using Deflate (RFC 1951), Gzip (RFC 1952), and run-
 | `Compression.gunzip_typed(data)`              | `(string)`                     | `result<string, Compression.Error>` | Gunzip-decompress data; on failure the error is a typed `Compression.Error`  |
 | `Compression.gzip(data)`                      | `(string)`                     | `string`                            | Gzip-compress data                                                           |
 | `Compression.gzip_file(in, out)`              | `(string, string)`             | `result<string>`                    | Gzip-compress file to output path                                            |
-| `Compression.gzip_file_with(in, out, level)`  | `(string, string, integer)`    | `result<string>`                    | Gzip-compress a file to `out` with explicit level (0–9)                      |
-| `Compression.gzip_with(data, level)`          | `(string, integer)`            | `result<string>`                    | Gzip-compress with explicit level (0–9)                                      |
+| `Compression.gzip_file_with(in, out, level)`  | `(string, string, integer)`    | `result<string>`                    | Gzip-compress a file to `out` with explicit level (1–9)                      |
+| `Compression.gzip_with(data, level)`          | `(string, integer)`            | `result<string>`                    | Gzip-compress with explicit level (1–9)                                      |
 | `Compression.inflate(data)`                   | `(string)`                     | `result<string>`                    | Inflate-decompress data                                                      |
 | `Compression.inflate_typed(data)`             | `(string)`                     | `result<string, Compression.Error>` | Inflate-decompress data; on failure the error is a typed `Compression.Error` |
 | `Compression.zlib_compress(data)`             | `(string)`                     | `string`                            | Zlib-wrapped deflate (RFC 1950)                                              |
-| `Compression.zlib_compress_with(data, level)` | `(string, integer)`            | `result<string>`                    | Zlib-compress with explicit level (0–9)                                      |
+| `Compression.zlib_compress_with(data, level)` | `(string, integer)`            | `result<string>`                    | Zlib-compress with explicit level (1–9)                                      |
 | `Compression.zlib_decompress(data)`           | `(string)`                     | `result<string>`                    | Zlib-decompress (RFC 1950) data                                              |
 | `Compression.zlib_decompress_typed(data)`     | `(string)`                     | `result<string, Compression.Error>` | Zlib-decompress data; on failure the error is a typed `Compression.Error`    |
 
@@ -321,7 +321,7 @@ Convert values between different types (e.g. string → integer, integer → str
 
 | Function                                    | Parameter Types       | Return Type       | Description                                                                                                                   |
 | ------------------------------------------- | --------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `Converter.character_to_codepoint(channel)` | `(string)`            | `result<integer>` | Unicode codepoint of character; fail on empty string                                                                          |
+| `Converter.character_to_codepoint(text)`    | `(string)`            | `result<integer>` | Unicode codepoint of character; fail on empty string                                                                          |
 | `Converter.codepoint_to_character(cp)`      | `(integer)`           | `result<string>`  | Character from codepoint; fail on invalid codepoint                                                                           |
 | `Converter.from_binary(s)`                  | `(string)`            | `result<integer>` | Parse binary string (e.g. `"1010"` → 10)                                                                                      |
 | `Converter.from_hexadecimal(s)`             | `(string)`            | `result<integer>` | Parse hex string (e.g. `"ff"` → 255)                                                                                          |
@@ -379,7 +379,7 @@ Quoted fields, embedded commas, and escaped quotes are handled. `Csv.deserialize
 | `DateTime.add_days(timestamp, n)`                     | `(number, number)`                                       | `number`                              | Add `n` days to a Unix timestamp                                                                                               |
 | `DateTime.add_hours(timestamp, n)`                    | `(number, number)`                                       | `number`                              | Add `n` hours to a Unix timestamp                                                                                              |
 | `DateTime.add_months(timestamp, n)`                   | `(number, integer)`                                      | `result<number>`                      | Add `n` calendar months (clamps day); fail if out of range                                                                     |
-| `DateTime.add_milliseconds(timestamp, n)`             | `(number, integer)`                                      | `number`                              | Add `n` milliseconds to a Unix timestamp                                                                                       |
+| `DateTime.add_milliseconds(timestamp, n)`             | `(number, integer)`                                      | `number`                              | Add `n` milliseconds to a millisecond reading such as `milliseconds_since_start()` (not a Unix timestamp, which is in seconds) |
 | `DateTime.add_minutes(timestamp, n)`                  | `(number, number)`                                       | `number`                              | Add `n` minutes to a Unix timestamp                                                                                            |
 | `DateTime.add_seconds(timestamp, n)`                  | `(number, number)`                                       | `number`                              | Add `n` seconds to a Unix timestamp                                                                                            |
 | `DateTime.add_weeks(timestamp, n)`                    | `(number, number)`                                       | `number`                              | Add `n` weeks to a Unix timestamp                                                                                              |
@@ -395,7 +395,7 @@ Quoted fields, embedded commas, and escaped quotes are handled. `Csv.deserialize
 | `DateTime.difference_days(t1, t2)`                    | `(number, number)`                                       | `number`                              | Absolute difference in days                                                                                                    |
 | `DateTime.difference_hours(t1, t2)`                   | `(number, number)`                                       | `number`                              | Absolute difference in hours                                                                                                   |
 | `DateTime.difference_months(t1, t2)`                  | `(number, number)`                                       | `result<integer>`                     | Absolute difference in calendar months; fail if out of range                                                                   |
-| `DateTime.difference_milliseconds(t1, t2)`            | `(number, number)`                                       | `number`                              | Difference in milliseconds                                                                                                     |
+| `DateTime.difference_milliseconds(t1, t2)`            | `(number, number)`                                       | `number`                              | Absolute difference between two millisecond readings such as `milliseconds_since_start()`                                      |
 | `DateTime.difference_minutes(t1, t2)`                 | `(number, number)`                                       | `number`                              | Absolute difference in minutes                                                                                                 |
 | `DateTime.difference_seconds(t1, t2)`                 | `(number, number)`                                       | `number`                              | Absolute difference in seconds                                                                                                 |
 | `DateTime.difference_weeks(t1, t2)`                   | `(number, number)`                                       | `number`                              | Absolute difference in weeks                                                                                                   |
@@ -699,11 +699,11 @@ string text = Result.unwrap(Encoder.decode_text(bytes, Encoder.Encoding.Latin1))
 | `FileSystem.is_file(path)`                    | `(string)`                 | `result<boolean>`                    | Whether the path is a file                                                                     |
 | `FileSystem.is_relative(path)`                | `(string)`                 | `boolean`                            | Whether the path is relative                                                                   |
 | `FileSystem.is_symbolic_link(path)`           | `(string)`                 | `result<boolean>`                    | Whether the path is a symbolic link                                                            |
-| `FileSystem.join(a, b)`                       | `(string, string)`         | `string`                             | Join two path components                                                                       |
+| `FileSystem.join(a, b)`                       | `(string, string)`         | `string`                             | Join path components (two or more) into an absolute path resolved against the working directory |
 | `FileSystem.kind(path)`                       | `(string)`                 | `result<FileSystem.FileKind>`        | Classify a path as `File`, `Directory`, `Symlink`, or `Other`; fail if the path does not exist |
 | `FileSystem.list_directories(path)`           | `(string)`                 | `result<array<string>>`              | List subdirectories                                                                            |
 | `FileSystem.list_files(path)`                 | `(string)`                 | `result<array<string>>`              | List files in a directory                                                                      |
-| `FileSystem.list_recursively(path)`           | `(string)`                 | `result<array<string>>`              | Recursively list all files beneath a directory                                                 |
+| `FileSystem.list_recursively(path)`           | `(string)`                 | `result<array<string>>`              | Recursively list all files and subdirectories beneath a directory                              |
 | `FileSystem.metadata(path)`                   | `(string)`                 | `result<FileSystem.FileInfo>`        | Gather size, modified time, and kind in one call; fail if the path does not exist              |
 | `FileSystem.name(path)`                       | `(string)`                 | `string`                             | File name (e.g. `"file.txt"`)                                                                  |
 | `FileSystem.normalize(path)`                  | `(string)`                 | `string`                             | Normalise path (e.g. `"a/b/../c"` → `"a/c"`)                                                   |
@@ -810,7 +810,7 @@ match d.algorithm { case Hash.Algorithm.Sha256 { print("sha-256") } else { print
 
 ## 16 — Http
 
-Plain HTTP/1.1 client built on raw sockets. Only `http://` is supported; `https://` URLs return an error result.
+HTTP/1.1 client built on raw sockets. `https://` URLs use TLS (via Mbed TLS) when the build has TLS support (`LUMA_FEATURE_TLS=ON`, the default); in a build without it they fail with `Http.Error.TlsError`.
 
 | Function                                                              | Parameter Types                                              | Return Type                         | Description                                                                                               |
 | --------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -860,7 +860,7 @@ boolean is_json = mt.type == "application" && mt.subtype == "json"
 string charset = Dictionary.get_or(mt.parameters, "charset", "utf-8")
 ```
 
-`Http.Request` record fields: `method` (`Http.Method`), `url` (`string`), `headers` (`dictionary<string>`), `body` (`string`), `timeout_milliseconds` (`integer`). Unlike the `Http.request` options dictionary — which is homogeneous and so forces the verb to be stringified — an `Http.Request` carries the `Http.Method` choice natively, so the request is type-checked and discoverable and its method can be matched exhaustively. Build one with `Http.request_of` (common case) or `Http.request_with` (full control), then run it with `Http.send`:
+`Http.Request` record fields: `method` (`Http.Method`), `url` (`string`), `headers` (`dictionary<string>`), `body` (`string`), `timeout_ms` (`integer`). Unlike the `Http.request` options dictionary — which is homogeneous and so forces the verb to be stringified — an `Http.Request` carries the `Http.Method` choice natively, so the request is type-checked and discoverable and its method can be matched exhaustively. Build one with `Http.request_of` (common case) or `Http.request_with` (full control), then run it with `Http.send`:
 
 ```luma
 Http.Request req = Http.request_of(Http.Method.Get, "http://example.com/api")
@@ -958,7 +958,7 @@ Supported types: `integer`, `number`, `string`, `boolean`, `none` (→ JSON `nul
 
 `Json.get` navigates a dot-separated path (e.g. `"user.address.city"`) into a parsed JSON string and returns the value wrapped in a `result`. Array elements are accessed by numeric index (e.g. `"items.0"`).
 
-`Json.set` navigates to a key inside a JSON object string and returns a new serialised JSON string with that key replaced by the given value. The path must point to an existing key inside a JSON object.
+`Json.set` navigates to a key inside a JSON object string and returns a new serialised JSON string with that key set to the given value. A missing final key is added; every parent on the path must already exist as a JSON object.
 
 `Json.merge` merges two JSON object strings; keys from the second object overwrite those in the first. Both inputs must be JSON objects.
 
@@ -1051,14 +1051,14 @@ Persistent file-backed key-value store. Keys and values are strings. The store u
 ```luma
 key_value_store store = Result.unwrap(KeyValueStore.open("settings.kv"))
 
-result<key_value_store> result = KeyValueStore.transaction(store, (key_value_store s) -> {
+result<key_value_store> outcome = KeyValueStore.transaction(store, (key_value_store s) -> {
     key_value_store s1 = KeyValueStore.set(s, "theme", "dark")?
     key_value_store s2 = KeyValueStore.set(s1, "font_size", "14")?
 
     return success(s2)
 })
 
-match result {
+match outcome {
     success(committed) { print("committed ${KeyValueStore.count(committed)} keys") }
     failure(message)   { print("rolled back: ${message}") }
 }
@@ -1143,7 +1143,7 @@ Structured logging with configurable levels. Messages are written to stderr by d
 | `Log.set_output(target)`      | `(Log.Output \| string)`        | `result<void>` | Redirect to a file, `Stderr`, or `Stdout`                               |
 | `Log.warning(message)`        | `(string)`                      | `none`         | Log at warn level                                                       |
 
-Levels are ordered: `Debug` < `Information` < `Warning` < `Error` < `Off`. The `Log.Level` choice type provides variants: `Log.Level.Debug`, `Log.Level.Information`, `Log.Level.Warning`, `Log.Level.Error`, `Log.Level.Off`. For convenience, `Log.set_level` also accepts lowercase strings (`"debug"`, `"info"`, `"warn"`, `"error"`, `"off"`).
+Levels are ordered: `Debug` < `Information` < `Warning` < `Error` < `Off`. The `Log.Level` choice type provides variants: `Log.Level.Debug`, `Log.Level.Information`, `Log.Level.Warning`, `Log.Level.Error`, `Log.Level.Off`.
 
 `Log.set_format` replaces the whole log-line template. The template recognises three placeholders — `${timestamp}`, `${level}`, and `${message}` — and the default is `"${timestamp} [${level}] ${message}"`. Because `${...}` inside a Luma string literal is interpolation, escape the dollar sign so the placeholders reach the logger verbatim: `Log.set_format("[MYAPP] \${level}: \${message}")`. A template without `${message}` omits the message text.
 
@@ -1418,7 +1418,7 @@ The existing numeric comparator convention (a `function(T, T) -> number` returni
 | `Process.set_environment_variable(name, value)`          | `(string, string)`           | `result<none>`                                 | Set environment variable; fail if name/value exceeds 32 KB or OS rejects                 |
 | `Process.signal(process_id, signal)`                     | `(integer, Process.Signal)`  | `result<boolean>`                              | Send a `Process.Signal` to another process by pid; fail if the OS rejects the request    |
 
-> **Security warning:** `Process.run` passes its argument to the system shell (`cmd.exe` on Windows, `/bin/sh` on Unix). If any part of the string comes from user input, an attacker can inject shell commands using characters such as `;`, `&&`, `|`, or `$(...)`. **Never pass unsanitised user input to `Process.run`.** Validate and whitelist all inputs before use, or construct the command from a fixed set of known-safe values only. **When any part of a command comes from untrusted input, prefer `Process.run_command` (below), which bypasses the shell entirely.**
+> **Security warning:** `Process.run` does **not** use a system shell: it splits its argument into words (whitespace-separated, with `"…"` / `'…'` quoting and `\` escapes) and launches the first word as the program. Shell builtins such as `echo` therefore fail unless you invoke a shell explicitly — and doing that (`cmd /c …`, `sh -c …`) re-enables shell interpretation, so `;`, `&&`, `|`, or `$(...)` in user input become an injection hole. Even without a shell, a user-supplied string can add extra arguments or change which program runs. **Never build a `Process.run` string from unsanitised user input.** **When any part of a command comes from untrusted input, use `Process.run_command` (below), which takes each argument separately.**
 
 `Process.Command` record fields: `program` (`string`), `arguments` (`array<string>`). Built by `Process.command(program, arguments)` and executed by `Process.run_command`, which launches the program **directly** — `execvp` on POSIX, `CreateProcess` on Windows — with **no shell involved**, so shell metacharacters (`;`, `&&`, `|`, `$(...)`) in any argument are passed through literally rather than interpreted. This is the safe alternative to building a `Process.run` string from untrusted input: `Process.run_command(Process.command("git", ["log", user_branch]))` cannot be turned into a command-injection hole the way `Process.run("git log " + user_branch)` can. It returns the same `result<Process.CommandOutput>` as `Process.execute` (a negative exit code — surfaced as `failure` — signals a launch failure such as an unknown program or an empty `program` name).
 
@@ -1957,7 +1957,7 @@ Immutable LIFO (last-in, first-out) stack. All mutating operations return a new 
 | `Stack.pop(stack)`                    | `(stack)`                         | `result<(T, stack)>`        | Pop from top; fail if empty                                                                                     |
 | `Stack.pop_while(stack, function)`    | `(stack, function(T) -> boolean)` | `result<(array<T>, stack)>` | Pop top elements while `function` holds (returned top-first) plus the remaining stack; fail if predicate throws |
 | `Stack.push(stack, value)`            | `(stack, T)`                      | `stack`                     | Push to top                                                                                                     |
-| `Stack.reduce(stack, init, function)` | `(stack, U, function(U, T) -> U)` | `result<U>`                 | Fold elements; fail if callback throws                                                                          |
+| `Stack.reduce(stack, init, function)` | `(stack, U, function(U, T) -> U)` | `result<U>`                 | Fold elements from bottom to top; fail if callback throws                                                       |
 | `Stack.reverse(stack)`                | `(stack)`                         | `stack`                     | Reverse element order (top becomes bottom)                                                                      |
 | `Stack.to_array(stack)`               | `(stack)`                         | `array<T>`                  | Convert to array                                                                                                |
 
@@ -1971,7 +1971,7 @@ Descriptive statistics over numeric arrays. Split out of `Math` so the four math
 | `Statistics.median(array)`             | `(array<number>)` | `result<number>` | Median value; fail if empty        |
 | `Statistics.mode(array)`               | `(array<number>)` | `result<number>` | Most frequent value; fail if empty |
 | `Statistics.standard_deviation(array)` | `(array<number>)` | `result<number>` | Standard deviation; fail if empty  |
-| `Statistics.variance(array)`           | `(array<number>)` | `result<number>` | Variance; fail if empty            |
+| `Statistics.variance(array)`           | `(array<number>)` | `result<number>` | Population variance; fail if empty |
 
 ## 35 — String
 
@@ -2141,8 +2141,8 @@ Using `spawn` outside a `task_scope` is a compile-time error. Wrap spawns in a `
 | `Task.map(task, function)`                                         | `(task<T>, function(T) -> U)`         | `result<U>`        | Transform completed value                                                                                  |
 | `Task.map_n(tasks, function)`                                      | `(array<task<T>>, function(T) -> U)`  | `result<array<U>>` | Map over all task results                                                                                  |
 | `Task.race(tasks)`                                                 | `(array<task<T>>)`                    | `result<T>`        | Return first completed result                                                                              |
-| `Task.retry(task, function)`                                       | `(integer, function() -> T)`          | `result<T>`        | Retry up to `n` times; `n` must be > 0                                                                     |
-| `Task.retry_with_backoff(task, base_delay_milliseconds, function)` | `(integer, integer, function() -> T)` | `result<T>`        | Retry up to `n` times with exponential backoff (`base_delay_milliseconds`, `2×`, `4×`, …) between attempts |
+| `Task.retry(n, function)`                                          | `(integer, function() -> result<T>)`  | `result<T>`        | Retry up to `n` times; `n` must be > 0                                                                     |
+| `Task.retry_with_backoff(n, base_delay_milliseconds, function)`    | `(integer, integer, function() -> result<T>)` | `result<T>`        | Retry up to `n` times with exponential backoff (`base_delay_milliseconds`, `2×`, `4×`, …) between attempts |
 | `Task.sequence(tasks)`                                             | `(array<task<T>>)`                    | `result<array<T>>` | Await each in order; collect results                                                                       |
 | `Task.timeout(task, milliseconds)`                                 | `(task<T>, integer)`                  | `result<T>`        | Await with timeout; fail on timeout                                                                        |
 | `Task.timeout_or(task, milliseconds, default)`                     | `(task<T>, integer, T)`               | `T`                | Task's value if it completes within `milliseconds`, else `default` (timeout or failure)                    |
@@ -2216,7 +2216,7 @@ Terminal UI control — cursor movement, colors, styling, screen management, and
 | `Terminal.show_cursor()`                       | `()`                                  | `none`                            | Show the cursor                                                                                             |
 | `Terminal.size()`                              | `()`                                  | `Terminal.Size`                   | Record with `columns` and `rows` fields                                                                     |
 | `Terminal.strikethrough(text)`                 | `(string)`                            | `string`                          | Strikethrough styled text                                                                                   |
-| `Terminal.styled(text, style)`                 | `(string, Terminal.Style)`            | `string`                          | Render `text` with a `Terminal.Style` as one combined ANSI sequence with a single reset                     |
+| `Terminal.styled(text, style)`                 | `(string, Terminal.Style)`            | `string`                          | Render `text` with a `Terminal.Style` as its ANSI codes followed by a single reset                           |
 | `Terminal.supports_color()`                    | `()`                                  | `boolean`                         | Whether the terminal supports ANSI colour                                                                   |
 | `Terminal.supports_true_color()`               | `()`                                  | `boolean`                         | Whether the terminal supports 24-bit true colour                                                            |
 | `Terminal.supports_unicode()`                  | `()`                                  | `boolean`                         | Best-effort heuristic (locale / `TERM` / code page) for Unicode rendering                                   |
@@ -2286,7 +2286,7 @@ string b = Result.unwrap(Terminal.color(Terminal.Color.Red, "error"))
 string c = Result.unwrap(Terminal.background_color(Terminal.Color.Yellow, "warning"))
 ```
 
-`Terminal.Style` is a record that declares a reusable text style once instead of nesting per-attribute wrappers. Fields: `foreground` (`Terminal.Color`), `background` (`Terminal.Color`), `bold`, `dim`, `italic`, `underline`, `inverse`, `strikethrough` (all `boolean`). Build a default with `Terminal.plain_style()` (both colours `Terminal.Color.Default` — meaning "leave unchanged" — and every attribute off), then override the fields you want with a record-update (`with`). `Terminal.styled(text, style)` renders the text as one combined ANSI sequence closed by a single reset (`\033[0m`), replacing the order-sensitive, deeply nested `Terminal.bold(Result.unwrap(Terminal.color("red", ...)))`. A fully-default style returns the text unchanged. Like the per-attribute `Terminal.bold` / `italic` / `color` helpers (which stay for one-off styling), `styled` emits ANSI directly; guard on `Terminal.supports_color()` if you want to skip codes when output is not a terminal.
+`Terminal.Style` is a record that declares a reusable text style once instead of nesting per-attribute wrappers. Fields: `foreground` (`Terminal.Color`), `background` (`Terminal.Color`), `bold`, `dim`, `italic`, `underline`, `inverse`, `strikethrough` (all `boolean`). Build a default with `Terminal.plain_style()` (both colours `Terminal.Color.Default` — meaning "leave unchanged" — and every attribute off), then override the fields you want with a record-update (`with`). `Terminal.styled(text, style)` renders the text prefixed by the style's ANSI codes (one per attribute or colour) and closed by a single reset (`\033[0m`), replacing the order-sensitive, deeply nested `Terminal.bold(Result.unwrap(Terminal.color("red", ...)))`. A fully-default style returns the text unchanged. Like the per-attribute `Terminal.bold` / `italic` / `color` helpers (which stay for one-off styling), `styled` emits ANSI directly; guard on `Terminal.supports_color()` if you want to skip codes when output is not a terminal.
 
 ```luma
 # Declare "bold red on white" once, reuse it for any text:

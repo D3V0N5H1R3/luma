@@ -75,9 +75,7 @@ void Linter::lint_expression(const Expression& expr) {
         return;
     }
 
-    const ScopeGuard guard{[this] {
-        --expression_depth_;
-    }};
+    const ScopeGuard guard{[this] { --expression_depth_; }};
 
     run_expression_plugins(expr);
     dispatch_expr(expr);
@@ -156,8 +154,9 @@ void Linter::report_unused_in_current_scope() {
     for (const auto& [name, info] : tracker_.current_variables()) {
         if (info.used) {
             // Check for mutable-never-mutated (only if the variable IS used).
-            if (info.is_mutable && !info.mutated && !info.is_parameter) {
-                warn(std::format("Mutable variable '{}' is never mutated", name), info.location,
+            if (info.is_mutable && !info.mutated) {
+                const auto* const label = info.is_parameter ? "parameter" : "variable";
+                warn(std::format("Mutable {} '{}' is never mutated", label, name), info.location,
                      "remove the 'mutable' keyword if mutation is not needed",
                      DiagnosticCode::MutableNeverMutated);
             }

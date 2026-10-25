@@ -3,13 +3,59 @@
 #
 # Feature Tests are based on Luma_Initial_Concept.md and
 # Luma_Standard_Library_Reference.md.
+#
+# Every test is headless: escape-code emitters run inside a
+# Terminal.test_* session so their output is captured and asserted
+# instead of being written to (and altering) the real console.
 # ═══════════════════════════════════════════════════════════
+
+# ─── Helpers ───────────────────────────────────────────────
+
+# Luma string literals have no escape for ESC (U+001B), so expected ANSI
+# sequences are built from its codepoint.
+function string escape_character() {
+    return Result.unwrap(String.from_codepoints([27]))
+}
+
+# The ANSI Control Sequence Introducer, "ESC [".
+function string csi() {
+    return "${escape_character()}["
+}
+
+# Runs `action` inside a headless session and returns everything it wrote.
+# `finally` ends the session even when `action` fails, so a failing test never
+# leaves output capture (and simulated raw mode) active for later tests.
+function string capture_output(function() -> void action) {
+    array<string> no_keys = []
+    mutable string output = ""
+
+    Terminal.test_start(no_keys)
+
+    try {
+        action()
+    } finally {
+        output = Terminal.test_stop()
+    }
+
+    return output
+}
+
+# ─── Terminal information ──────────────────────────────────
 
 @test
 function void test_terminal_is_terminal() {
-    boolean is_terminal_device = Terminal.is_terminal()
+    # Whether stdout is a TTY depends on how the suite is launched, so compare
+    # with the ambient answer: a session reports a terminal, and ending the
+    # session restores the real value.
+    boolean is_terminal_before = Terminal.is_terminal()
+    array<string> no_keys = []
 
-    assert(type_of(is_terminal_device) == "boolean")
+    Terminal.test_start(no_keys)
+    boolean is_terminal_in_session = Terminal.is_terminal()
+    string _output = Terminal.test_stop()
+
+    assert(is_terminal_in_session, "a headless session reports an attached terminal")
+    assert(Terminal.is_terminal() == is_terminal_before, "test_stop restores the real TTY state")
 }
 
 @test
@@ -32,77 +78,85 @@ function void test_terminal_size() {
 
     assert(size.columns > 0)
     assert(size.rows > 0)
+    assert(size.columns == Terminal.columns(), "size agrees with columns()")
+    assert(size.rows == Terminal.rows(), "size agrees with rows()")
 }
+
+# ─── Text attributes ───────────────────────────────────────
+
+# Each attribute helper opens its SGR code and closes it with the matching
+# "attribute off" code rather than a full reset, so nested styles survive.
 
 @test
 function void test_terminal_bold() {
-    string bold_text = Terminal.bold("hello")
-
-    assert("hello" in bold_text)
+    assert(Terminal.bold("hello") == "${csi()}1mhello${csi()}22m")
 }
 
 @test
 function void test_terminal_dim() {
-    string dimmed_text = Terminal.dim("faint")
-
-    assert("faint" in dimmed_text)
+    assert(Terminal.dim("faint") == "${csi()}2mfaint${csi()}22m")
 }
 
 @test
 function void test_terminal_italic() {
-    string italic_text = Terminal.italic("slanted")
-
-    assert("slanted" in italic_text)
+    assert(Terminal.italic("slanted") == "${csi()}3mslanted${csi()}23m")
 }
 
 @test
 function void test_terminal_underline() {
-    string underlined_text = Terminal.underline("important")
-
-    assert("important" in underlined_text)
+    assert(Terminal.underline("important") == "${csi()}4mimportant${csi()}24m")
 }
 
 @test
 function void test_terminal_strikethrough() {
-    string strikethrough_text = Terminal.strikethrough("deleted")
-
-    assert("deleted" in strikethrough_text)
+    assert(Terminal.strikethrough("deleted") == "${csi()}9mdeleted${csi()}29m")
 }
 
 @test
 function void test_terminal_inverse() {
-    string inverse_text = Terminal.inverse("reversed")
-
-    assert("reversed" in inverse_text)
+    assert(Terminal.inverse("reversed") == "${csi()}7mreversed${csi()}27m")
 }
+
+@test
+function void test_terminal_blink() {
+    assert(Terminal.blink("flash") == "${csi()}5mflash${csi()}0m")
+}
+
+@test
+function void test_terminal_link() {
+    # An OSC 8 hyperlink: ESC ] 8 ; ; URL ST text ESC ] 8 ; ; ST, where the
+    # string terminator ST is ESC followed by a backslash.
+    string esc = escape_character()
+    string link_text = Terminal.link("https://example.com", "Example")
+
+    assert(link_text == "${esc}]8;;https://example.com${esc}\\Example${esc}]8;;${esc}\\")
+}
+
+# ─── Named and RGB colours ─────────────────────────────────
 
 @test
 function void test_terminal_color() {
     string red_styled_text = Result.unwrap(Terminal.color("red", "error"))
-
-    assert("error" in red_styled_text)
-
     string green_styled_text = Result.unwrap(Terminal.color("green", "success"))
-
-    assert("success" in green_styled_text)
-
     string bright_styled_text = Result.unwrap(Terminal.color("bright_cyan", "info"))
 
-    assert("info" in bright_styled_text)
+    assert(red_styled_text == "${csi()}31merror${csi()}39m")
+    assert(green_styled_text == "${csi()}32msuccess${csi()}39m")
+    assert(bright_styled_text == "${csi()}96minfo${csi()}39m")
 }
 
 @test
 function void test_terminal_bg_color() {
     string background_text = Result.unwrap(Terminal.background_color("yellow", "highlight"))
 
-    assert("highlight" in background_text)
+    assert(background_text == "${csi()}43mhighlight${csi()}49m")
 }
 
 @test
 function void test_terminal_rgb_color() {
     string orange_rgb_text = Result.unwrap(Terminal.rgb_color(255, 128, 0, "orange"))
 
-    assert("orange" in orange_rgb_text)
+    assert(orange_rgb_text == "${csi()}38;2;255;128;0morange${csi()}39m")
 }
 
 @test
@@ -111,30 +165,75 @@ function void test_terminal_rgb_bg_color() {
         Terminal.rgb_background_color(0, 0, 128, "navy")
     )
 
-    assert("navy" in navy_rgb_background_text)
-}
-
-@test
-function void test_terminal_link() {
-    string link_text = Terminal.link("https://example.com", "Example")
-
-    assert("Example" in link_text)
-    assert("https://example.com" in link_text)
+    assert(navy_rgb_background_text == "${csi()}48;2;0;0;128mnavy${csi()}49m")
 }
 
 @test
 function void test_terminal_color_composability() {
+    # Wrappers nest: bold opens outside the colour and closes after it.
     string composed_styled_text = Terminal.bold(Result.unwrap(Terminal.color("green", "OK")))
 
-    assert("OK" in composed_styled_text)
+    assert(composed_styled_text == "${csi()}1m${csi()}32mOK${csi()}39m${csi()}22m")
 }
 
-# ─── Terminal.Color choice (type-safe colour) ────────────────
+@test
+function void test_terminal_color_invalid_name() {
+    result<string> color_result = Terminal.color("not_a_color", "text")
+
+    assert(Result.is_failure(color_result))
+}
+
+@test
+function void test_terminal_bg_color_invalid_name() {
+    result<string> color_result = Terminal.background_color("not_a_color", "text")
+
+    assert(Result.is_failure(color_result))
+}
+
+@test
+function void test_terminal_rgb_color_boundary() {
+    # 0 and 255 are the inclusive ends of the valid channel range.
+    result<string> black_result = Terminal.rgb_color(0, 0, 0, "black")
+    result<string> white_result = Terminal.rgb_color(255, 255, 255, "white")
+
+    assert(black_result == success("${csi()}38;2;0;0;0mblack${csi()}39m"))
+    assert(white_result == success("${csi()}38;2;255;255;255mwhite${csi()}39m"))
+}
+
+@test
+function void test_terminal_rgb_color_negative() {
+    assert(Result.is_failure(Terminal.rgb_color(-1, 0, 0, "test")), "negative red fails")
+    assert(Result.is_failure(Terminal.rgb_color(0, -1, 0, "test")), "negative green fails")
+    assert(Result.is_failure(Terminal.rgb_color(0, 0, -1, "test")), "negative blue fails")
+}
+
+@test
+function void test_terminal_rgb_color_overflow() {
+    assert(Result.is_failure(Terminal.rgb_color(256, 0, 0, "test")), "red above 255 fails")
+    assert(Result.is_failure(Terminal.rgb_color(0, 256, 0, "test")), "green above 255 fails")
+    assert(Result.is_failure(Terminal.rgb_color(0, 0, 256, "test")), "blue above 255 fails")
+}
+
+@test
+function void test_terminal_rgb_background_color_overflow() {
+    result<string> color_result = Terminal.rgb_background_color(256, 0, 0, "text")
+
+    assert(Result.is_failure(color_result))
+}
+
+@test
+function void test_terminal_rgb_background_color_negative() {
+    result<string> color_result = Terminal.rgb_background_color(0, -1, 0, "text")
+
+    assert(Result.is_failure(color_result))
+}
+
+# ─── Terminal.Color choice (type-safe colour) ──────────────
 
 # Exhaustive match over Terminal.Color — no `else`, so this only type-checks
 # when every one of the 17 variants is handled (proof the choice is registered).
-function string color_label(Terminal.Color c) {
-    return match c {
+function string color_label(Terminal.Color color) {
+    return match color {
     case Terminal.Color.Black         { "black" }
     case Terminal.Color.Red           { "red" }
     case Terminal.Color.Green         { "green" }
@@ -160,7 +259,7 @@ function void test_terminal_color_choice() {
     # The typed path is total: a Terminal.Color variant always yields a colour.
     string styled = Result.unwrap(Terminal.color(Terminal.Color.Red, "error"))
 
-    assert("error" in styled)
+    assert(styled == "${csi()}31merror${csi()}39m")
     assert(color_label(Terminal.Color.Red) == "red")
 }
 
@@ -177,15 +276,17 @@ function void test_terminal_color_choice_matches_string() {
 function void test_terminal_background_color_choice() {
     string styled = Result.unwrap(Terminal.background_color(Terminal.Color.Yellow, "warn"))
 
-    assert("warn" in styled)
+    assert(styled == "${csi()}43mwarn${csi()}49m")
 }
+
+# ─── Terminal.Style / Terminal.styled ──────────────────────
 
 @test
 function void test_terminal_plain_style_is_identity() {
     # A fully-default style adds no codes, so the text is returned verbatim.
-    string out = Terminal.styled("hi", Terminal.plain_style())
+    string output = Terminal.styled("hi", Terminal.plain_style())
 
-    assert(out == "hi", "a plain style leaves text unchanged")
+    assert(output == "hi", "a plain style leaves text unchanged")
 }
 
 @test
@@ -196,225 +297,452 @@ function void test_terminal_styled_applies_and_reuses_style() {
         bold = true,
         foreground = Terminal.Color.Red
     }
+    string reset = "${csi()}0m"
 
     string first = Terminal.styled("error", bold_red)
     string second = Terminal.styled("again", bold_red)
 
     assert("error" in first, "styled text still contains the original text")
-    assert("again" in second, "the same style renders different text")
     assert(String.length(first) > String.length("error"), "styling adds ANSI codes")
+    assert(String.ends_with(first, reset), "the styled text is closed by a reset")
+    assert(String.count(first, reset) == 1, "there is a single reset, not one per attribute")
+    assert(String.replace(first, "error", "again") == second,
+        "the same style renders different text with identical codes")
 }
+
+# ─── Raw mode and mouse state ──────────────────────────────
 
 @test
 function void test_terminal_is_raw_mode() {
-    # Raw mode should be off by default
-    assert(!Terminal.is_in_raw_mode())
+    assert(!Terminal.is_in_raw_mode(), "raw mode is off by default")
 }
 
 @test
 function void test_terminal_is_mouse() {
-    # Mouse mode should be off by default
-    assert(!Terminal.is_mouse_enabled())
+    assert(!Terminal.is_mouse_enabled(), "mouse reporting is off by default")
 }
 
 @test
-function void test_terminal_set_scroll_region() {
-    # set_scroll_region and reset_scroll_region emit ANSI sequences
-    # and return null — verify they don't throw
-    result<void> _r1 = Terminal.set_scroll_region(1, 10)
-    Terminal.reset_scroll_region()
+function void test_terminal_enable_mouse_in_headless_session() {
+    # A session simulates an attached terminal, so raw mode and mouse
+    # reporting can be switched on and back off without a real TTY.
+    array<string> no_keys = []
+
+    Terminal.test_start(no_keys)
+    result<void> raw_result = Terminal.enable_raw_mode()
+    result<void> mouse_result = Terminal.enable_mouse()
+    boolean is_mouse_on = Terminal.is_mouse_enabled()
+    Terminal.disable_mouse()
+    boolean is_mouse_on_after_disable = Terminal.is_mouse_enabled()
+    Terminal.disable_raw_mode()
+    string _output = Terminal.test_stop()
+
+    assert(Result.is_success(raw_result), "raw mode can be enabled in a session")
+    assert(Result.is_success(mouse_result), "mouse reporting can be enabled once raw mode is on")
+    assert(is_mouse_on, "is_mouse_enabled reports the enabled state")
+    assert(!is_mouse_on_after_disable, "disable_mouse turns reporting off")
+}
+
+@test
+function void test_terminal_disable_mouse() {
+    string _output = capture_output(() -> Terminal.disable_mouse())
+
+    assert(!Terminal.is_mouse_enabled(), "mouse reporting stays off")
+}
+
+# ─── Raw-mode gating ───────────────────────────────────────
+
+# Outside a session with raw mode off, input functions fail fast with a
+# failure result instead of blocking on stdin.
+
+@test
+function void test_terminal_read_key_requires_raw_mode() {
+    result<string> key_result = Terminal.read_key()
+
+    assert(Result.is_failure(key_result))
 }
 
 @test
 function void test_terminal_read_key_timeout_requires_raw_mode() {
-    # read_key_timeout fails fast (without blocking on stdin) when raw mode is
-    # off, returning a failure result rather than reading a key.
-    result<string> r = Terminal.read_key_timeout(100)
+    result<string> key_result = Terminal.read_key_timeout(100)
 
-    assert(!Result.is_success(r))
+    assert(Result.is_failure(key_result))
 }
 
 @test
-function void test_terminal_get_cursor_position_exists() {
-    # get_cursor_position requires raw mode and a real terminal.
-    # In non-TTY test environments it may fail, so we verify the
-    # function exists and returns a result type.
-    if Terminal.is_terminal() {
-        result<void> _r = Terminal.enable_raw_mode()
+function void test_terminal_get_input_requires_raw_mode() {
+    result<Terminal.InputEvent> input_result = Terminal.get_input()
 
-        result<Terminal.CursorPosition> pos_result = Terminal.get_cursor_position()
-
-        if Result.is_success(pos_result) {
-            Terminal.CursorPosition pos = Result.unwrap(pos_result)
-
-            assert(pos.row >= 1)
-            assert(pos.column >= 1)
-        }
-
-        Terminal.disable_raw_mode()
-    } else {
-        # Not a TTY — just verify raw mode gate works
-        result<Terminal.CursorPosition> pos_result = Terminal.get_cursor_position()
-
-        assert(!Result.is_success(pos_result))
-    }
+    assert(Result.is_failure(input_result))
 }
 
 @test
-function void test_terminal_move_to_row() {
-    # move_to_row emits an ANSI sequence — verify it doesn't throw
-    result<void> _r = Terminal.move_to_row(1)
+function void test_terminal_enable_mouse_requires_raw_mode() {
+    result<void> mouse_result = Terminal.enable_mouse()
+
+    assert(Result.is_failure(mouse_result))
+    assert(!Terminal.is_mouse_enabled(), "a rejected enable leaves mouse reporting off")
 }
 
 @test
-function void test_terminal_move_to_row_invalid() {
-    # row < 1 should return failure, but type is void — just verify no crash
-    result<void> _r = Terminal.move_to_row(0)
+function void test_terminal_get_cursor_position_fails_headless() {
+    # Querying the cursor needs raw mode and a live terminal to answer the
+    # request, so it fails both outside a session and inside one.
+    result<Terminal.CursorPosition> outside_result = Terminal.get_cursor_position()
+    array<string> no_keys = []
+
+    Terminal.test_start(no_keys)
+    result<Terminal.CursorPosition> session_result = Terminal.get_cursor_position()
+    string _output = Terminal.test_stop()
+
+    assert(Result.is_failure(outside_result), "fails when raw mode is off")
+    assert(Result.is_failure(session_result), "fails without a live terminal to query")
 }
 
-# ─── Output functions ─────────────────────────────────────
+# ─── Output functions ──────────────────────────────────────
 
 @test
 function void test_terminal_write() {
-    # write emits text without a newline — just verify it doesn't throw
-    Terminal.write("hello")
+    string output = capture_output(() -> Terminal.write("hello"))
+
+    assert(output == "hello", "write emits the text with no trailing newline")
 }
 
 @test
 function void test_terminal_overwrite_line() {
-    # overwrite_line returns to column 0 and writes — verify no crash
-    Terminal.overwrite_line("test line")
+    string output = capture_output(() -> Terminal.overwrite_line("test line"))
+
+    assert(output == "\r${csi()}2Ktest line", "return to column 0, clear the line, then write")
 }
 
 @test
 function void test_terminal_reset_style() {
-    # reset_style emits the ANSI reset sequence — verify no crash
-    Terminal.reset_style()
+    string output = capture_output(() -> Terminal.reset_style())
+
+    assert(output == "${csi()}0m")
 }
 
 @test
 function void test_terminal_bell() {
-    # bell emits the BEL character — verify no crash
-    Terminal.bell()
+    string bell_character = Result.unwrap(String.from_codepoints([7]))
+
+    string output = capture_output(() -> Terminal.bell())
+
+    assert(output == bell_character, "bell emits the BEL control character")
 }
 
-# ─── Screen control ───────────────────────────────────────
+@test
+function void test_terminal_flush() {
+    # Nothing is buffered under capture, so flush succeeds and adds no output.
+    string output = capture_output(() -> {
+        assert(Result.is_success(Terminal.flush()), "flush succeeds")
+    })
+
+    assert(output == "")
+}
+
+# ─── Screen control ────────────────────────────────────────
 
 @test
 function void test_terminal_clear_screen() {
-    Terminal.clear_screen()
+    string output = capture_output(() -> Terminal.clear_screen())
+
+    assert(output == "${csi()}2J${csi()}H", "clear the screen, then home the cursor")
 }
 
 @test
 function void test_terminal_clear_line() {
-    Terminal.clear_line()
+    string output = capture_output(() -> Terminal.clear_line())
+
+    assert(output == "${csi()}2K\r", "clear the whole line, then return to column 0")
 }
 
 @test
 function void test_terminal_clear_to_end_of_line() {
-    Terminal.clear_to_end_of_line()
+    string output = capture_output(() -> Terminal.clear_to_end_of_line())
+
+    assert(output == "${csi()}K")
 }
 
 @test
 function void test_terminal_clear_to_end_of_screen() {
-    Terminal.clear_to_end_of_screen()
-}
+    string output = capture_output(() -> Terminal.clear_to_end_of_screen())
 
-# ─── Cursor movement ─────────────────────────────────────
-
-@test
-function void test_terminal_move_to() {
-    # move_to returns result<void> — verify success for valid coordinates
-    result<void> _r = Terminal.move_to(1, 1)
+    assert(output == "${csi()}J")
 }
 
 @test
-function void test_terminal_move_to_invalid() {
-    # move_to should return failure for row/col < 1
-    result<void> r = Terminal.move_to(0, 1)
+function void test_terminal_clear_to_start_of_line() {
+    string output = capture_output(() -> {
+        assert(Result.is_success(Terminal.clear_to_start_of_line()), "clear succeeds")
+    })
 
-    assert(!Result.is_success(r))
+    assert(output == "${csi()}1K", "erase-in-line mode 1")
 }
-
-@test
-function void test_terminal_move_to_column() {
-    # move_to_column returns result — verify success for valid column
-    result<void> _r = Terminal.move_to_column(1)
-}
-
-@test
-function void test_terminal_move_up() {
-    Terminal.move_up(1)
-}
-
-@test
-function void test_terminal_move_down() {
-    Terminal.move_down(1)
-}
-
-@test
-function void test_terminal_move_left() {
-    Terminal.move_left(1)
-}
-
-@test
-function void test_terminal_move_right() {
-    Terminal.move_right(1)
-}
-
-# ─── Cursor visibility ────────────────────────────────────
-
-@test
-function void test_terminal_hide_show_cursor() {
-    Terminal.hide_cursor()
-    Terminal.show_cursor()
-}
-
-# ─── Alternate screen ────────────────────────────────────
 
 @test
 function void test_terminal_alternate_screen() {
-    Terminal.enter_alternate_screen()
-    Terminal.leave_alternate_screen()
+    string output = capture_output(() -> {
+        Terminal.enter_alternate_screen()
+        Terminal.leave_alternate_screen()
+    })
+
+    assert(output == "${csi()}?1049h${csi()}?1049l")
 }
 
-# ─── Scrolling ────────────────────────────────────────────
+@test
+function void test_terminal_set_scroll_region() {
+    string output = capture_output(() -> {
+        assert(Result.is_success(Terminal.set_scroll_region(1, 10)), "a valid region succeeds")
+        Terminal.reset_scroll_region()
+    })
+
+    assert(output == "${csi()}1;10r${csi()}r", "set rows 1-10, then reset to the full screen")
+}
+
+@test
+function void test_terminal_set_scroll_region_invalid() {
+    string output = capture_output(() -> {
+        assert(Result.is_failure(Terminal.set_scroll_region(10, 1)), "top > bottom fails")
+        assert(Result.is_failure(Terminal.set_scroll_region(3, 3)), "top == bottom fails")
+        assert(Result.is_failure(Terminal.set_scroll_region(0, 5)), "top < 1 fails")
+    })
+
+    assert(output == "", "a rejected region emits nothing")
+}
 
 @test
 function void test_terminal_scroll_up() {
-    Terminal.scroll_up(1)
+    string output = capture_output(() -> Terminal.scroll_up(3))
+
+    assert(output == "${csi()}3S")
 }
 
 @test
 function void test_terminal_scroll_down() {
-    Terminal.scroll_down(1)
+    string output = capture_output(() -> Terminal.scroll_down(3))
+
+    assert(output == "${csi()}3T")
 }
 
-# ─── Window title ─────────────────────────────────────────
+@test
+function void test_terminal_insert_line() {
+    string output = capture_output(() -> {
+        assert(Result.is_success(Terminal.insert_line(1)), "inserting one line succeeds")
+    })
+
+    assert(output == "${csi()}1L")
+}
+
+@test
+function void test_terminal_insert_line_invalid() {
+    string output = capture_output(() -> {
+        assert(Result.is_failure(Terminal.insert_line(0)), "count < 1 fails")
+    })
+
+    assert(output == "", "a rejected insert emits nothing")
+}
+
+@test
+function void test_terminal_delete_line() {
+    string output = capture_output(() -> {
+        assert(Result.is_success(Terminal.delete_line(2)), "deleting two lines succeeds")
+    })
+
+    assert(output == "${csi()}2M")
+}
+
+@test
+function void test_terminal_delete_line_invalid() {
+    string output = capture_output(() -> {
+        assert(Result.is_failure(Terminal.delete_line(0)), "count < 1 fails")
+    })
+
+    assert(output == "", "a rejected delete emits nothing")
+}
+
+# ─── Cursor movement ───────────────────────────────────────
+
+@test
+function void test_terminal_move_to() {
+    string output = capture_output(() -> {
+        assert(Result.is_success(Terminal.move_to(3, 4)), "valid 1-based coordinates succeed")
+    })
+
+    assert(output == "${csi()}3;4H", "row first, then column")
+}
+
+@test
+function void test_terminal_move_to_invalid() {
+    string output = capture_output(() -> {
+        assert(Result.is_failure(Terminal.move_to(0, 1)), "row < 1 fails")
+        assert(Result.is_failure(Terminal.move_to(1, 0)), "column < 1 fails")
+    })
+
+    assert(output == "", "a rejected move emits nothing")
+}
+
+@test
+function void test_terminal_move_to_row() {
+    string output = capture_output(() -> {
+        assert(Result.is_success(Terminal.move_to_row(5)), "a valid row succeeds")
+    })
+
+    assert(output == "${csi()}5d")
+}
+
+@test
+function void test_terminal_move_to_row_invalid() {
+    string output = capture_output(() -> {
+        assert(Result.is_failure(Terminal.move_to_row(0)), "row < 1 fails")
+    })
+
+    assert(output == "", "a rejected move emits nothing")
+}
+
+@test
+function void test_terminal_move_to_column() {
+    string output = capture_output(() -> {
+        assert(Result.is_success(Terminal.move_to_column(6)), "a valid column succeeds")
+    })
+
+    assert(output == "${csi()}6G")
+}
+
+@test
+function void test_terminal_move_to_column_invalid() {
+    string output = capture_output(() -> {
+        assert(Result.is_failure(Terminal.move_to_column(0)), "column < 1 fails")
+    })
+
+    assert(output == "", "a rejected move emits nothing")
+}
+
+@test
+function void test_terminal_move_up() {
+    string output = capture_output(() -> Terminal.move_up(2))
+
+    assert(output == "${csi()}2A")
+}
+
+@test
+function void test_terminal_move_down() {
+    string output = capture_output(() -> Terminal.move_down(2))
+
+    assert(output == "${csi()}2B")
+}
+
+@test
+function void test_terminal_move_left() {
+    string output = capture_output(() -> Terminal.move_left(2))
+
+    assert(output == "${csi()}2D")
+}
+
+@test
+function void test_terminal_move_right() {
+    string output = capture_output(() -> Terminal.move_right(2))
+
+    assert(output == "${csi()}2C")
+}
+
+@test
+function void test_terminal_hide_show_cursor() {
+    string output = capture_output(() -> {
+        Terminal.hide_cursor()
+        Terminal.show_cursor()
+    })
+
+    assert(output == "${csi()}?25l${csi()}?25h")
+}
+
+@test
+function void test_terminal_save_restore_cursor() {
+    string output = capture_output(() -> {
+        Terminal.save_cursor()
+        Terminal.restore_cursor()
+    })
+
+    assert(output == "${csi()}s${csi()}u")
+}
+
+# ─── Terminal.CursorStyle / Terminal.set_cursor_style ──────
+
+# Exhaustive match over every Terminal.CursorStyle variant.  Beyond labelling a
+# style, this doubles as a compile-time check that Terminal.CursorStyle is fully
+# registered, exhaustively matchable, and usable as a parameter type annotation.
+function integer cursor_style_code(Terminal.CursorStyle style) {
+    return match style {
+    case Terminal.CursorStyle.BlinkingBlock     { 1 }
+    case Terminal.CursorStyle.SteadyBlock       { 2 }
+    case Terminal.CursorStyle.BlinkingUnderline { 3 }
+    case Terminal.CursorStyle.SteadyUnderline   { 4 }
+    case Terminal.CursorStyle.BlinkingBar       { 5 }
+    case Terminal.CursorStyle.SteadyBar         { 6 }
+    }
+}
+
+@test
+function void test_terminal_cursor_style_variants() {
+    # Each variant maps to its DECSCUSR parameter, proving the exhaustive match
+    # compiles and every variant is registered.
+    assert(cursor_style_code(Terminal.CursorStyle.BlinkingBlock) == 1)
+    assert(cursor_style_code(Terminal.CursorStyle.SteadyBlock) == 2)
+    assert(cursor_style_code(Terminal.CursorStyle.BlinkingUnderline) == 3)
+    assert(cursor_style_code(Terminal.CursorStyle.SteadyUnderline) == 4)
+    assert(cursor_style_code(Terminal.CursorStyle.BlinkingBar) == 5)
+    assert(cursor_style_code(Terminal.CursorStyle.SteadyBar) == 6)
+}
+
+@test
+function void test_terminal_set_cursor_style() {
+    string output = capture_output(() -> {
+        result<boolean> style_result = Terminal.set_cursor_style(Terminal.CursorStyle.SteadyBar)
+
+        assert(Result.is_success(style_result), "a valid style succeeds")
+    })
+
+    assert(output == "${csi()}6 q", "SteadyBar is DECSCUSR parameter 6")
+}
+
+# ─── Window title ──────────────────────────────────────────
 
 @test
 function void test_terminal_set_title() {
-    # set_title emits an OSC sequence — verify no crash
-    Terminal.set_title("Test Title")
+    # OSC 2 sets the window title; ST (ESC backslash) terminates it.
+    string esc = escape_character()
+
+    string output = capture_output(() -> Terminal.set_title("Test Title"))
+
+    assert(output == "${esc}]2;Test Title${esc}\\")
 }
 
-# ─── Capability detection ────────────────────────────────
+# ─── Capability detection ──────────────────────────────────
+
+# Real capability depends on the console running the suite, so only the
+# environment-independent rule is checked: colour is never reported when
+# stdout is not a terminal.
 
 @test
 function void test_terminal_supports_color() {
-    boolean supports = Terminal.supports_color()
-
-    assert(type_of(supports) == "boolean")
+    assert(Terminal.is_terminal() || !Terminal.supports_color(),
+        "colour support is never reported for non-terminal output")
 }
 
 @test
 function void test_terminal_supports_true_color() {
-    boolean supports = Terminal.supports_true_color()
-
-    assert(type_of(supports) == "boolean")
+    assert(Terminal.is_terminal() || !Terminal.supports_true_color(),
+        "true-colour support is never reported for non-terminal output")
 }
 
-# ─── Escape timeout ──────────────────────────────────────
+@test
+function void test_terminal_supports_unicode() {
+    # A locale / code-page heuristic with no environment-independent answer;
+    # this only checks that detection runs without error.
+    boolean _is_unicode_supported = Terminal.supports_unicode()
+}
+
+# ─── Escape timeout ────────────────────────────────────────
 
 @test
 function void test_terminal_escape_timeout_default() {
@@ -425,154 +753,24 @@ function void test_terminal_escape_timeout_default() {
 
 @test
 function void test_terminal_set_escape_timeout() {
-    Terminal.set_escape_timeout(100)
+    # The timeout is process-wide, so restore the default even if the assertion
+    # fails — otherwise test_terminal_escape_timeout_default could break.
+    try {
+        Terminal.set_escape_timeout(100)
 
-    assert(Terminal.get_escape_timeout() == 100)
-
-    # Restore default
-    Terminal.set_escape_timeout(50)
+        assert(Terminal.get_escape_timeout() == 100)
+    } finally {
+        Terminal.set_escape_timeout(50)
+    }
 }
 
-# ─── Color invalid name ──────────────────────────────────
-
-@test
-function void test_terminal_color_invalid_name() {
-    result<string> r = Terminal.color("not_a_color", "text")
-
-    assert(!Result.is_success(r))
-}
-
-@test
-function void test_terminal_bg_color_invalid_name() {
-    result<string> r = Terminal.background_color("not_a_color", "text")
-
-    assert(!Result.is_success(r))
-}
-
-# ─── RGB boundary ─────────────────────────────────────────
-
-@test
-function void test_terminal_rgb_color_boundary() {
-    result<string> r = Terminal.rgb_color(0, 0, 0, "black")
-
-    assert(Result.is_success(r))
-
-    result<string> r2 = Terminal.rgb_color(255, 255, 255, "white")
-
-    assert(Result.is_success(r2))
-}
-
-@test
-function void test_terminal_rgb_color_negative() {
-    # Negative RGB values should return failure.
-    result<string> r = Terminal.rgb_color(-1, 0, 0, "test")
-
-    assert(!Result.is_success(r))
-
-    result<string> r2 = Terminal.rgb_color(0, -1, 0, "test")
-
-    assert(!Result.is_success(r2))
-
-    result<string> r3 = Terminal.rgb_color(0, 0, -1, "test")
-
-    assert(!Result.is_success(r3))
-}
-
-@test
-function void test_terminal_rgb_color_overflow() {
-    # RGB values > 255 should return failure.
-    result<string> r = Terminal.rgb_color(256, 0, 0, "test")
-
-    assert(!Result.is_success(r))
-}
-
-@test
-function void test_terminal_move_to_column_invalid() {
-    # column < 1 should return failure
-    result<void> r = Terminal.move_to_column(0)
-
-    assert(!Result.is_success(r))
-}
-
-@test
-function void test_terminal_set_scroll_region_invalid() {
-    # top > bottom should return failure
-    result<void> r = Terminal.set_scroll_region(10, 1)
-
-    assert(!Result.is_success(r))
-}
-
-# ───────────────────────────────────────────────────────────
-# Cursor save/restore and mouse disable (escape-code emitters)
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_terminal_save_restore_cursor() {
-    Terminal.save_cursor()
-    Terminal.restore_cursor()
-}
-
-@test
-function void test_terminal_disable_mouse() {
-    Terminal.disable_mouse()
-}
-
-# ───────────────────────────────────────────────────────────
-# Raw-mode gating — input functions fail fast (without blocking
-# on stdin) when raw mode is not enabled.
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_terminal_read_key_requires_raw_mode() {
-    result<string> r = Terminal.read_key()
-
-    assert(!Result.is_success(r))
-}
-
-@test
-function void test_terminal_get_input_requires_raw_mode() {
-    result<Terminal.InputEvent> r = Terminal.get_input()
-
-    assert(!Result.is_success(r))
-}
-
-@test
-function void test_terminal_enable_mouse_requires_raw_mode() {
-    # enable_mouse requires raw mode to be enabled first.
-    result<void> r = Terminal.enable_mouse()
-
-    assert(!Result.is_success(r))
-}
-
-# ───────────────────────────────────────────────────────────
-# RGB background colour validation
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_terminal_rgb_background_color_overflow() {
-    # RGB values > 255 should return failure.
-    result<string> r = Terminal.rgb_background_color(256, 0, 0, "text")
-
-    assert(!Result.is_success(r))
-}
-
-@test
-function void test_terminal_rgb_background_color_negative() {
-    # Negative RGB values should return failure.
-    result<string> r = Terminal.rgb_background_color(0, -1, 0, "text")
-
-    assert(!Result.is_success(r))
-}
-
-# ───────────────────────────────────────────────────────────
-# Terminal.MouseEvent / Terminal.MouseEventKind
-# ───────────────────────────────────────────────────────────
+# ─── Terminal.MouseEvent / Terminal.MouseEventKind ─────────
 
 # Exhaustive match over every MouseEventKind variant.  Beyond labelling a kind,
 # this doubles as a check that Terminal.MouseEventKind is fully registered,
 # exhaustively matchable, and usable as a parameter type annotation.
-function string mouse_event_kind_label(Terminal.MouseEventKind k) {
-    return match k {
+function string mouse_event_kind_label(Terminal.MouseEventKind kind) {
+    return match kind {
     case Terminal.MouseEventKind.LeftPress     { "left_press" }
     case Terminal.MouseEventKind.LeftRelease   { "left_release" }
     case Terminal.MouseEventKind.LeftDrag      { "left_drag" }
@@ -655,16 +853,14 @@ function void test_terminal_parse_mouse_event_none_for_malformed() {
     assert(Optional.is_none(Terminal.parse_mouse_event("")), "empty string is none")
 }
 
-# ───────────────────────────────────────────────────────────
-# Terminal.Key / Terminal.parse_key
-# ───────────────────────────────────────────────────────────
+# ─── Terminal.Key / Terminal.parse_key ─────────────────────
 
 # Exhaustive match over every Terminal.Key variant.  Beyond labelling a key,
 # this doubles as a compile-time check that Terminal.Key is fully registered,
 # exhaustively matchable, and usable as a parameter type annotation — and that
 # the two payload variants (Character, Function) bind their payloads.
-function string key_label(Terminal.Key k) {
-    return match k {
+function string key_label(Terminal.Key key) {
+    return match key {
     case Terminal.Key.Character(c) { "char:${c}" }
     case Terminal.Key.Function(n)  { "f${n}" }
     case Terminal.Key.Enter        { "enter" }
@@ -752,127 +948,46 @@ function void test_terminal_parse_key_character() {
     else { assert(false, "bare f should be Character") }
     }
 
+    match Terminal.parse_key("f0") {
+    case Terminal.Key.Character(c) { assert(c == "f0", "f0 -> Character(f0)") }
+    else { assert(false, "f0 should be Character") }
+    }
+
+    # Modifier prefixes are not stripped; the whole name is the payload.
+    match Terminal.parse_key("ctrl+c") {
+    case Terminal.Key.Character(c) { assert(c == "ctrl+c", "ctrl+c -> Character(ctrl+c)") }
+    else { assert(false, "ctrl+c should be Character") }
+    }
+
     assert(key_label(Terminal.parse_key("a")) == "char:a")
 }
 
-# ───────────────────────────────────────────────────────────
-# Blink styling / buffered output / line editing helpers
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_terminal_blink() {
-    # blink wraps the text in the SGR blink attribute — the text is preserved.
-    string blinking_text = Terminal.blink("flash")
-
-    assert("flash" in blinking_text)
-}
-
-@test
-function void test_terminal_flush() {
-    # flush drains buffered output; nothing is observable headlessly, but it
-    # returns a result rather than throwing.
-    result<boolean> _r = Terminal.flush()
-}
-
-@test
-function void test_terminal_insert_line() {
-    result<boolean> _r = Terminal.insert_line(1)
-}
-
-@test
-function void test_terminal_insert_line_invalid() {
-    # count < 1 should return failure.
-    result<boolean> r = Terminal.insert_line(0)
-
-    assert(!Result.is_success(r))
-}
-
-@test
-function void test_terminal_delete_line() {
-    result<boolean> _r = Terminal.delete_line(2)
-}
-
-@test
-function void test_terminal_delete_line_invalid() {
-    result<boolean> r = Terminal.delete_line(0)
-
-    assert(!Result.is_success(r))
-}
-
-@test
-function void test_terminal_clear_to_start_of_line() {
-    result<boolean> _r = Terminal.clear_to_start_of_line()
-}
-
-@test
-function void test_terminal_supports_unicode() {
-    boolean supports = Terminal.supports_unicode()
-
-    assert(type_of(supports) == "boolean")
-}
-
-# ───────────────────────────────────────────────────────────
-# Terminal.CursorStyle / Terminal.set_cursor_style
-# ───────────────────────────────────────────────────────────
-
-# Exhaustive match over every Terminal.CursorStyle variant.  Beyond labelling a
-# style, this doubles as a compile-time check that Terminal.CursorStyle is fully
-# registered, exhaustively matchable, and usable as a parameter type annotation.
-function integer cursor_style_code(Terminal.CursorStyle style) {
-    return match style {
-    case Terminal.CursorStyle.BlinkingBlock     { 1 }
-    case Terminal.CursorStyle.SteadyBlock       { 2 }
-    case Terminal.CursorStyle.BlinkingUnderline { 3 }
-    case Terminal.CursorStyle.SteadyUnderline   { 4 }
-    case Terminal.CursorStyle.BlinkingBar       { 5 }
-    case Terminal.CursorStyle.SteadyBar         { 6 }
-    }
-}
-
-@test
-function void test_terminal_cursor_style_variants() {
-    # Each variant maps to its DECSCUSR parameter, proving the exhaustive match
-    # compiles and every variant is registered.
-    assert(cursor_style_code(Terminal.CursorStyle.BlinkingBlock) == 1)
-    assert(cursor_style_code(Terminal.CursorStyle.SteadyBlock) == 2)
-    assert(cursor_style_code(Terminal.CursorStyle.BlinkingUnderline) == 3)
-    assert(cursor_style_code(Terminal.CursorStyle.SteadyUnderline) == 4)
-    assert(cursor_style_code(Terminal.CursorStyle.BlinkingBar) == 5)
-    assert(cursor_style_code(Terminal.CursorStyle.SteadyBar) == 6)
-}
-
-@test
-function void test_terminal_set_cursor_style() {
-    # set_cursor_style emits the DECSCUSR escape for the given style and returns
-    # a result — verify it succeeds for a valid variant.
-    result<boolean> r = Terminal.set_cursor_style(Terminal.CursorStyle.SteadyBar)
-
-    assert(Result.is_success(r))
-}
-
-# ───────────────────────────────────────────────────────────
-# Terminal.read_line (driven by the headless input harness)
-# ───────────────────────────────────────────────────────────
+# ─── Terminal.read_line (headless input harness) ───────────
 
 @test
 function void test_terminal_read_line_reads_scripted_input() {
     # Printable keys append and echo, backspace deletes the last char, and Enter
     # submits: h i x <backspace> <enter> -> "hi".
+    string backspace_character = Result.unwrap(String.from_codepoints([8]))
+
     Terminal.test_start(["h", "i", "x", "backspace", "enter"])
     result<string> line_result = Terminal.read_line("> ")
-    string _captured = Terminal.test_stop()
+    string captured = Terminal.test_stop()
 
-    assert(Result.is_success(line_result))
-    assert(Result.unwrap(line_result) == "hi")
+    assert(line_result == success("hi"))
+    assert(String.starts_with(captured, "> hix"), "the prompt is printed, then keys are echoed")
+    assert("${backspace_character} ${backspace_character}" in captured,
+        "backspace echoes an erase sequence")
 }
 
 @test
 function void test_terminal_read_line_drains_to_failure() {
     # An exhausted scripted queue makes read_line fail (end of input).
     array<string> no_keys = []
+
     Terminal.test_start(no_keys)
     result<string> line_result = Terminal.read_line("> ")
     string _captured = Terminal.test_stop()
 
-    assert(!Result.is_success(line_result))
+    assert(Result.is_failure(line_result))
 }

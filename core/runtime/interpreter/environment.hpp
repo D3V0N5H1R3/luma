@@ -5,6 +5,7 @@
 #include <format>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -118,10 +119,20 @@ public:
 
     // Mark a set of module prefixes as blocked by sandbox mode.
     // Only call this on the global (root) environment.
-    void set_sandbox_blocked(StringSet prefixes) {
+    void set_sandbox_blocked(StringSet prefixes, StringSet functions = {}) {
         assert(parent_ == nullptr &&
                "set_sandbox_blocked() must only be called on root environment");
-        sandbox_policy_.set_blocked(std::move(prefixes));
+        sandbox_policy_.set_blocked(std::move(prefixes), std::move(functions));
+    }
+
+    // Why `name` is blocked by sandbox mode anywhere up the scope chain (the
+    // blocked sets live on the root environment), or nullopt if it is not.
+    [[nodiscard]] std::optional<std::string> sandbox_denial_hint(std::string_view name) const {
+        if (auto hint = sandbox_policy_.denial_hint(name)) {
+            return hint;
+        }
+
+        return parent_ ? parent_->sandbox_denial_hint(name) : std::nullopt;
     }
 
     // Install a lazy-loading callback for on-demand module registration.

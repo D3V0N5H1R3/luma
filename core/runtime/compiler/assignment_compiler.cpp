@@ -88,6 +88,69 @@ void Compiler::release_scratch_slots(std::size_t count) {
 
 // ─────────── Simple assignment target helpers ───────────
 
+void Compiler::compile_write_target(const Expression& container) {
+    switch (container.kind) {
+        case ExpressionKind::Variable: {
+            const auto& var = static_cast<const VariableExpression&>(container);
+            const auto resolved = resolve_variable(var.name, container.location);
+
+            switch (resolved.location) {
+                case VarLocation::Local:
+                    emit_u16(Op::UniqueLocal, resolved.slot, container.location);
+                    break;
+                case VarLocation::Upvalue:
+                    emit_u16(Op::UniqueUpvalue, resolved.slot, container.location);
+                    break;
+                case VarLocation::Global:
+                    emit_u16(Op::UniqueGlobal, resolved.slot, container.location);
+                    break;
+            }
+
+            compile_variable(var);
+            return;
+        }
+
+        case ExpressionKind::FieldAccess: {
+            const auto& field = static_cast<const FieldAccessExpression&>(container);
+
+            if (!field.is_optional) {
+                compile_write_target(*field.object);
+                emit_u16(Op::GetFieldUnique, add_name(field.field_name), container.location);
+                return;
+            }
+            break;
+        }
+
+        case ExpressionKind::IndexAccess: {
+            const auto& index = static_cast<const IndexAccessExpression&>(container);
+
+            if (!index.is_optional) {
+                compile_write_target(*index.object);
+                {
+                    // The container sits on the operand stack while the index is
+                    // compiled, exactly as for a plain IndexGet.
+                    const ScratchSlotGuard scratch{access_, 1, container.location};
+                    compile_expression(*index.index);
+                }
+                emit(Op::IndexGetUnique, container.location);
+                return;
+            }
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    // A temporary (call result, optional chain, ...) can still share storage
+    // with a variable — `Reference.get(cell)` or a function returning its
+    // argument — so writing into it must not reach that storage.  The type
+    // checker rejects such targets; this keeps the REPL (which skips type
+    // checking) sound too.
+    compile_expression(container);
+    emit(Op::Clone, container.location);
+}
+
 void Compiler::compile_assign_to_variable(const VariableExpression& var, const Expression& value,
                                           SourceLocation loc) {
     compile_expression(value);
@@ -119,7 +182,7 @@ void Compiler::compile_assign_to_variable(const VariableExpression& var, const E
 
 void Compiler::compile_assign_to_field(const FieldAccessExpression& field, const Expression& value,
                                        SourceLocation loc) {
-    compile_expression(*field.object);
+    compile_write_target(*field.object);
     // The object sits on the operand stack while the value is compiled; reserve
     // a placeholder slot so a value-producing block computes correct local slots.
     {
@@ -134,7 +197,7 @@ void Compiler::compile_assign_to_field(const FieldAccessExpression& field, const
 
 void Compiler::compile_assign_to_index(const IndexAccessExpression& index, const Expression& value,
                                        SourceLocation loc) {
-    compile_expression(*index.object);
+    compile_write_target(*index.object);
     compile_expression(*index.index);
     // The container and index sit on the operand stack while the value is
     // compiled; reserve placeholder slots so a value-producing block (match/if
@@ -163,7 +226,7 @@ void Compiler::compile_compound_assign_to_variable(const VariableExpression& var
 void Compiler::compile_compound_assign_to_field(const FieldAccessExpression& field,
                                                 const Expression& value, TokenType op,
                                                 SourceLocation loc) {
-    compile_expression(*field.object);
+    compile_write_target(*field.object);
     emit(Op::Dup, loc);
     auto name_idx = add_name(field.field_name);
 
@@ -175,7 +238,7 @@ void Compiler::compile_compound_assign_to_field(const FieldAccessExpression& fie
 void Compiler::compile_compound_assign_to_index(const IndexAccessExpression& index,
                                                 const Expression& value, TokenType op,
                                                 SourceLocation loc) {
-    compile_expression(*index.object);
+    compile_write_target(*index.object);
     compile_expression(*index.index);
     emit(Op::Dup2, loc);
 
@@ -247,7 +310,7 @@ void Compiler::compile_unary_mutation(const Expression& target, Op local_op, Op 
             }
         },
         [&](const FieldAccessExpression& field) {
-            compile_expression(*field.object);
+            compile_write_target(*field.object);
             emit(Op::Dup, loc);
             auto name_idx = add_name(field.field_name);
             emit_u16(Op::GetField, name_idx, loc);
@@ -255,7 +318,7 @@ void Compiler::compile_unary_mutation(const Expression& target, Op local_op, Op 
             emit_field_set_pop(name_idx, loc);
         },
         [&](const IndexAccessExpression& index) {
-            compile_expression(*index.object);
+            compile_write_target(*index.object);
             compile_expression(*index.index);
             emit(Op::Dup2, loc);
             emit(Op::IndexGet, loc);

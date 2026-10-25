@@ -5,15 +5,60 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── Constants ────────────────────────────────────────────
+
 @test
 function void test_math_constants() {
     assert(Math.pi > 3.14)
     assert(Math.pi < 3.15)
     assert(Math.e > 2.71)
     assert(Math.e < 2.72)
-    assert(Math.tau > 6.28)
-    assert(Math.tau < 6.29)
+    assert(Math.approximately_equal(Math.tau, 2.0 * Math.pi), "tau is a full turn")
 }
+
+@test
+function void test_math_integer_bounds() {
+    # The 64-bit signed integer bounds (two's complement).
+    assert(Math.max_integer == 9223372036854775807)
+    assert(Math.min_integer == -9223372036854775807 - 1)
+}
+
+@test
+function void test_math_number_bounds() {
+    # Largest finite number and smallest positive normal number.
+    assert(Math.max_number > 0.0)
+    assert(Math.min_number > 0.0)
+    assert(Math.max_number > Math.min_number)
+    assert(Math.is_finite(Math.max_number))
+    assert(Math.max_number > 1.0e300)
+    assert(Math.min_number < 1.0e-300)
+}
+
+@test
+function void test_math_epsilon() {
+    # Machine epsilon is the gap between 1.0 and the next representable number,
+    # so half of it is lost when added to 1.0.
+    assert(Math.epsilon > 0.0)
+    assert(Math.epsilon < 0.001)
+    assert(1.0 + Math.epsilon > 1.0)
+    assert(!(1.0 + Math.epsilon / 2.0 > 1.0))
+}
+
+@test
+function void test_math_nan() {
+    # Math.nan is the quiet not-a-number sentinel; test it with the predicate,
+    # never with '=='.
+    assert(Math.is_not_a_number(Math.nan))
+    assert(!Math.is_infinite(Math.nan))
+}
+
+@test
+function void test_math_infinity() {
+    assert(Math.infinity > 999999999)
+    assert(Math.approximately_equal(1.0 / Math.infinity, 0.0))
+}
+
+# ─── Rounding / absolute / sign ───────────────────────────
 
 @test
 function void test_math_floor_ceil_round() {
@@ -26,11 +71,55 @@ function void test_math_floor_ceil_round() {
 }
 
 @test
+function void test_math_truncate() {
+    assert(Result.unwrap(Math.truncate(3.7)) == 3)
+    assert(Result.unwrap(Math.truncate(-3.7)) == -3)
+}
+
+@test
+function void test_math_round_to() {
+    assert(Math.approximately_equal(Result.unwrap(Math.round_to(3.14159, 2)), 3.14, 0.0001))
+    assert(Math.approximately_equal(Result.unwrap(Math.round_to(2.5, 0)), 3.0, 0.0001))
+    assert(Math.approximately_equal(Result.unwrap(Math.round_to(-1.2345, 2)), -1.23, 0.0001))
+    assert(Result.is_failure(Math.round_to(1.5, -1)))
+    assert(Result.is_failure(Math.round_to(1.5, 16)))
+}
+
+@test
 function void test_math_absolute() {
     assert(Result.unwrap(Math.absolute(-5)) == 5)
     assert(Result.unwrap(Math.absolute(5)) == 5)
     assert(Math.approximately_equal(Result.unwrap(Math.absolute(-3.14)), 3.14))
 }
+
+@test
+function void test_math_sign() {
+    assert(Math.sign(-5) == -1)
+    assert(Math.sign(0) == 0)
+    assert(Math.sign(42) == 1)
+}
+
+@test
+function void test_math_clamp() {
+    assert(Math.approximately_equal(Result.unwrap(Math.clamp(5, 0, 10)), 5.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.clamp(-5, 0, 10)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.clamp(15, 0, 10)), 10.0))
+    assert(Result.is_failure(Math.clamp(5, 10, 0)))
+}
+
+@test
+function void test_math_max() {
+    assert(Math.approximately_equal(Math.maximum(3.0, 7.0), 7.0))
+    assert(Math.approximately_equal(Math.maximum(-1.0, -5.0), -1.0))
+}
+
+@test
+function void test_math_min() {
+    assert(Math.approximately_equal(Math.minimum(3.0, 7.0), 3.0))
+    assert(Math.approximately_equal(Math.minimum(-1.0, -5.0), -5.0))
+}
+
+# ─── Powers, roots, logarithms ────────────────────────────
 
 @test
 function void test_math_power() {
@@ -41,13 +130,25 @@ function void test_math_power() {
 @test
 function void test_math_square_root() {
     result<number> sqrt_result = Math.square_root(16.0)
+    result<number> negative_result = Math.square_root(-1.0)
 
     assert(Result.is_success(sqrt_result))
     assert(Math.approximately_equal(Result.unwrap(sqrt_result), 4.0))
+    assert(Result.is_failure(negative_result))
+}
 
-    result<number> negative_result = Math.square_root(-1.0)
+@test
+function void test_math_cube_root() {
+    assert(Math.approximately_equal(Math.cube_root(27.0), 3.0))
+    assert(Math.approximately_equal(Math.cube_root(-8.0), -2.0))
+    assert(Math.approximately_equal(Math.cube_root(0.0), 0.0))
+}
 
-    assert(!Result.is_success(negative_result))
+@test
+function void test_math_exponential() {
+    number exponential_result = Result.unwrap(Math.exponential(1.0))
+
+    assert(Math.approximately_equal(exponential_result, Math.e))
 }
 
 @test
@@ -55,24 +156,41 @@ function void test_math_log_e() {
     result<number> log_e_result = Math.log_e(Math.e)
 
     assert(Result.is_success(log_e_result))
-
-    number log_e_value = Result.unwrap(log_e_result)
-
-    assert(log_e_value > 0.99)
-    assert(log_e_value < 1.01)
+    assert(Math.approximately_equal(Result.unwrap(log_e_result), 1.0))
 }
 
 @test
 function void test_math_log_10() {
     result<number> log_10_result = Math.log_10(100.0)
+    result<number> invalid_result = Math.log_10(-1.0)
 
     assert(Result.is_success(log_10_result))
     assert(Math.approximately_equal(Result.unwrap(log_10_result), 2.0))
-
-    result<number> invalid_result = Math.log_10(-1.0)
-
-    assert(!Result.is_success(invalid_result))
+    assert(Result.is_failure(invalid_result))
 }
+
+@test
+function void test_math_log_2() {
+    result<number> log_2_result = Math.log_2(8.0)
+
+    assert(Result.is_success(log_2_result))
+    assert(Math.approximately_equal(Result.unwrap(log_2_result), 3.0))
+}
+
+@test
+function void test_math_log_base_and_nth_root() {
+    assert(Math.approximately_equal(Result.unwrap(Math.log_base(8.0, 2.0)), 3.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.log_base(100.0, 10.0)), 2.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.nth_root(27.0, 3.0)), 3.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.nth_root(-8.0, 3.0)), -2.0))
+    assert(Result.is_failure(Math.nth_root(-16.0, 4.0)), "even root of a negative fails")
+    assert(Result.is_failure(Math.nth_root(8.0, 0.0)), "zero root degree fails")
+    assert(Result.is_failure(Math.log_base(8.0, 1.0)))
+    assert(Result.is_failure(Math.log_base(5.0, -2.0)))
+    assert(Result.is_failure(Math.log_base(-1.0, 2.0)))
+}
+
+# ─── Integer arithmetic ───────────────────────────────────
 
 @test
 function void test_math_factorial() {
@@ -114,6 +232,19 @@ function void test_math_lcm() {
 }
 
 @test
+function void test_math_remainder() {
+    assert(Result.unwrap(Math.remainder(7, 3)) == 1)
+    assert(Result.unwrap(Math.remainder(10, 5)) == 0)
+}
+
+@test
+function void test_math_remainder_floating_point() {
+    # Floating-point operands take the fmod path rather than integer modulo.
+    assert(Math.approximately_equal(Result.unwrap(Math.remainder(5.5, 2.0)), 1.5))
+    assert(Math.approximately_equal(Result.unwrap(Math.remainder(-5.5, 2.0)), -1.5))
+}
+
+@test
 function void test_math_is_prime() {
     assert(!Math.is_prime(0))
     assert(!Math.is_prime(1))
@@ -139,168 +270,14 @@ function void test_math_is_even_odd() {
 }
 
 @test
-function void test_math_integer_bounds() {
-    # The 64-bit signed integer bounds.
-    assert(Math.max_integer == 9223372036854775807)
-    assert(Math.min_integer < 0)
-    assert(Math.max_integer > 0)
-    # Their magnitudes bracket every other integer.
-    assert(Math.max_integer > 1000000)
-    assert(Math.min_integer < -1000000)
+function void test_math_digit_helpers() {
+    assert(Math.digit_sum(1234) == 10)
+    assert(Math.digit_sum(-56) == 11)
+    assert(Math.digit_count(1000) == 4)
+    assert(Math.digit_count(0) == 1)
 }
 
-@test
-function void test_math_number_bounds() {
-    # Largest finite number and smallest positive normal number.
-    assert(Math.max_number > 0.0)
-    assert(Math.min_number > 0.0)
-    assert(Math.max_number > Math.min_number)
-    assert(Math.is_finite(Math.max_number))
-    # A very large everyday value is still below the finite maximum.
-    assert(Math.max_number > 1.0e300)
-    assert(Math.min_number < 1.0e-300)
-}
-
-@test
-function void test_math_epsilon() {
-    # Machine epsilon is a tiny positive tolerance.
-    assert(Math.epsilon > 0.0)
-    assert(Math.epsilon < 0.001)
-    # It is the smallest step distinguishable from 1.0.
-    assert(1.0 + Math.epsilon > 1.0)
-}
-
-@test
-function void test_math_nan() {
-    # Math.nan is the quiet not-a-number sentinel; test it with the predicate,
-    # never with '=='.
-    assert(Math.is_not_a_number(Math.nan))
-    assert(!Math.is_infinite(Math.nan))
-}
-
-@test
-function void test_math_clamp() {
-    assert(Math.approximately_equal(Result.unwrap(Math.clamp(5, 0, 10)), 5.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.clamp(-5, 0, 10)), 0.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.clamp(15, 0, 10)), 10.0))
-    assert(Result.is_failure(Math.clamp(5, 10, 0)))
-}
-
-@test
-function void test_math_lerp() {
-    assert(Math.approximately_equal(Result.unwrap(Math.linear_interpolation(0, 10, 0.5)), 5.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.linear_interpolation(0, 10, 0.0)), 0.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.linear_interpolation(0, 10, 1.0)), 10.0))
-    assert(Result.is_failure(Math.linear_interpolation(0, 10, 1.5)))
-}
-
-@test
-function void test_math_sign() {
-    assert(Math.sign(-5) == -1)
-    assert(Math.sign(0) == 0)
-    assert(Math.sign(42) == 1)
-}
-
-@test
-function void test_math_trig() {
-    assert(Math.approximately_equal(Result.unwrap(Math.sine(0.0)), 0.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.cosine(0.0)), 1.0))
-}
-
-@test
-function void test_math_degrees() {
-    number pi_in_degrees = Math.degrees(Math.pi)
-
-    assert(pi_in_degrees > 179.99)
-    assert(pi_in_degrees < 180.01)
-}
-
-@test
-function void test_math_radians() {
-    number pi_in_radians = Math.radians(180.0)
-
-    assert(pi_in_radians > 3.14)
-    assert(pi_in_radians < 3.15)
-}
-
-@test
-function void test_math_arc_cosine() {
-    number arc_cosine_result = Result.unwrap(Math.arc_cosine(0.0))
-
-    assert(arc_cosine_result > 1.57)
-    assert(arc_cosine_result < 1.58)
-}
-
-@test
-function void test_math_arc_cosine_fail() {
-    result<number> r = Math.arc_cosine(2.0)
-
-    assert(Result.is_failure(r))
-}
-
-@test
-function void test_math_arc_sine() {
-    number arc_sine_result = Result.unwrap(Math.arc_sine(1.0))
-
-    assert(arc_sine_result > 1.57)
-    assert(arc_sine_result < 1.58)
-}
-
-@test
-function void test_math_arc_sine_fail() {
-    result<number> r = Math.arc_sine(-2.0)
-
-    assert(Result.is_failure(r))
-}
-
-@test
-function void test_math_arc_tangent() {
-    number arc_tangent_result = Result.unwrap(Math.arc_tangent(1.0))
-
-    assert(arc_tangent_result > 0.78)
-    assert(arc_tangent_result < 0.79)
-}
-
-@test
-function void test_math_exponential() {
-    number exponential_result = Result.unwrap(Math.exponential(1.0))
-
-    assert(exponential_result > 2.71)
-    assert(exponential_result < 2.72)
-}
-
-@test
-function void test_math_max() {
-    assert(Math.approximately_equal(Math.maximum(3.0, 7.0), 7.0))
-    assert(Math.approximately_equal(Math.maximum(-1.0, -5.0), -1.0))
-}
-
-@test
-function void test_math_min() {
-    assert(Math.approximately_equal(Math.minimum(3.0, 7.0), 3.0))
-    assert(Math.approximately_equal(Math.minimum(-1.0, -5.0), -5.0))
-}
-
-@test
-function void test_math_remainder() {
-    assert(Result.unwrap(Math.remainder(7, 3)) == 1)
-    assert(Result.unwrap(Math.remainder(10, 5)) == 0)
-}
-
-@test
-function void test_math_tangent() {
-    number tangent_result = Result.unwrap(Math.tangent(0.0))
-
-    assert(Math.approximately_equal(tangent_result, 0.0))
-}
-
-@test
-function void test_math_truncate() {
-    assert(Result.unwrap(Math.truncate(3.7)) == 3)
-    assert(Result.unwrap(Math.truncate(-3.7)) == -3)
-}
-
-# ─── Statistics Functions ───
+# ─── Sum ──────────────────────────────────────────────────
 
 @test
 function void test_math_sum() {
@@ -311,22 +288,167 @@ function void test_math_sum() {
 }
 
 @test
-function void test_math_log_2() {
-    result<number> log_2_result = Math.log_2(8.0)
+function void test_math_sum_integers() {
+    # An all-integer array sums to an integer, not a number.
+    result<integer> sum_result = Math.sum([1, 2, 3, 4])
 
-    assert(Result.is_success(log_2_result))
+    assert(Result.is_success(sum_result))
+    assert(Result.unwrap(sum_result) == 10)
+    assert(type_of(Result.unwrap(sum_result)) == "integer")
+}
 
-    number log_2_value = Result.unwrap(log_2_result)
+# ─── Interpolation ────────────────────────────────────────
 
-    assert(log_2_value > 2.99)
-    assert(log_2_value < 3.01)
+@test
+function void test_math_linear_interpolation() {
+    assert(Math.approximately_equal(Result.unwrap(Math.linear_interpolation(0, 10, 0.5)), 5.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.linear_interpolation(0, 10, 0.0)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.linear_interpolation(0, 10, 1.0)), 10.0))
+    assert(Result.is_failure(Math.linear_interpolation(0, 10, 1.5)))
 }
 
 @test
-function void test_math_infinity() {
-    assert(Math.infinity > 999999999)
-    assert(Math.approximately_equal(1.0 / Math.infinity, 0.0))
+function void test_math_remap() {
+    assert(Math.approximately_equal(Result.unwrap(Math.remap(5.0, 0.0, 10.0, 0.0, 100.0)), 50.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.remap(0.0, 0.0, 10.0, 0.0, 100.0)), 0.0))
 }
+
+@test
+function void test_math_smooth_step() {
+    assert(Math.approximately_equal(Result.unwrap(Math.smooth_step(0.0, 1.0, 0.5)), 0.5))
+    assert(Math.approximately_equal(Result.unwrap(Math.smooth_step(0.0, 1.0, 0.0)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.smooth_step(0.0, 1.0, 1.0)), 1.0))
+}
+
+# ─── Trigonometry and angles ──────────────────────────────
+
+@test
+function void test_math_trig() {
+    assert(Math.approximately_equal(Result.unwrap(Math.sine(0.0)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.sine(Math.pi / 2.0)), 1.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.cosine(0.0)), 1.0))
+}
+
+@test
+function void test_math_tangent() {
+    number tangent_result = Result.unwrap(Math.tangent(0.0))
+
+    assert(Math.approximately_equal(tangent_result, 0.0))
+}
+
+@test
+function void test_math_degrees() {
+    assert(Math.approximately_equal(Math.degrees(Math.pi), 180.0))
+}
+
+@test
+function void test_math_radians() {
+    assert(Math.approximately_equal(Math.radians(180.0), Math.pi))
+}
+
+@test
+function void test_math_arc_cosine() {
+    number arc_cosine_result = Result.unwrap(Math.arc_cosine(0.0))
+
+    assert(Math.approximately_equal(arc_cosine_result, Math.pi / 2.0))
+}
+
+@test
+function void test_math_arc_cosine_fail() {
+    result<number> arc_cosine_result = Math.arc_cosine(2.0)
+
+    assert(Result.is_failure(arc_cosine_result))
+}
+
+@test
+function void test_math_arc_sine() {
+    number arc_sine_result = Result.unwrap(Math.arc_sine(1.0))
+
+    assert(Math.approximately_equal(arc_sine_result, Math.pi / 2.0))
+}
+
+@test
+function void test_math_arc_sine_fail() {
+    result<number> arc_sine_result = Math.arc_sine(-2.0)
+
+    assert(Result.is_failure(arc_sine_result))
+}
+
+@test
+function void test_math_arc_tangent() {
+    number arc_tangent_result = Result.unwrap(Math.arc_tangent(1.0))
+
+    assert(Math.approximately_equal(arc_tangent_result, Math.pi / 4.0))
+}
+
+@test
+function void test_math_arc_tangent2() {
+    number angle = Result.unwrap(Math.arc_tangent2(1.0, 1.0))
+
+    assert(Math.approximately_equal(angle, Math.pi / 4.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.arc_tangent2(0.0, 1.0)), 0.0))
+    assert(Math.approximately_equal(Result.unwrap(Math.arc_tangent2(1.0, 0.0)), Math.pi / 2.0))
+}
+
+@test
+function void test_math_hypotenuse() {
+    assert(Math.approximately_equal(Math.hypotenuse(3.0, 4.0), 5.0))
+    assert(Math.approximately_equal(Math.hypotenuse(0.0, 0.0), 0.0))
+    assert(Math.approximately_equal(Math.hypotenuse(5.0, 12.0), 13.0))
+}
+
+@test
+function void test_math_wrap_and_angles() {
+    number difference = Math.angle_difference(Math.radians(10.0), Math.radians(350.0))
+
+    assert(Math.approximately_equal(Math.wrap(7.0, 0.0, 5.0), 2.0))
+    assert(Math.approximately_equal(Math.wrap(-1.0, 0.0, 5.0), 4.0))
+    assert(Math.approximately_equal(difference, Math.radians(20.0)))
+    assert(Math.approximately_equal(Math.normalize_angle(0.0), 0.0))
+    assert(Math.approximately_equal(Math.normalize_angle(3.0 * Math.pi / 2.0), -Math.pi / 2.0),
+        "angles beyond pi wrap into [-pi, pi]")
+}
+
+# ─── Hyperbolic functions ─────────────────────────────────
+
+@test
+function void test_math_hyperbolic_sine() {
+    number sinh_of_one = Result.unwrap(Math.hyperbolic_sine(1.0))
+
+    assert(Math.approximately_equal(Result.unwrap(Math.hyperbolic_sine(0.0)), 0.0))
+    assert(sinh_of_one > 1.17)
+    assert(sinh_of_one < 1.18)
+}
+
+@test
+function void test_math_hyperbolic_cosine() {
+    number cosh_of_one = Result.unwrap(Math.hyperbolic_cosine(1.0))
+
+    assert(Math.approximately_equal(Result.unwrap(Math.hyperbolic_cosine(0.0)), 1.0))
+    assert(cosh_of_one > 1.54)
+    assert(cosh_of_one < 1.55)
+}
+
+@test
+function void test_math_hyperbolic_tangent() {
+    number tanh_of_one = Math.hyperbolic_tangent(1.0)
+
+    assert(Math.approximately_equal(Math.hyperbolic_tangent(0.0), 0.0))
+    assert(tanh_of_one > 0.76)
+    assert(tanh_of_one < 0.77)
+}
+
+# ─── Special functions ────────────────────────────────────
+
+@test
+function void test_math_special_functions() {
+    assert(Math.approximately_equal(Math.sigmoid(0.0), 0.5))
+    assert(Math.approximately_equal(Result.unwrap(Math.gamma(5.0)), 24.0))
+    assert(Result.is_failure(Math.gamma(0.0)))
+    assert(Math.approximately_equal(Math.error_function(0.0), 0.0))
+}
+
+# ─── Floating-point predicates ────────────────────────────
 
 @test
 function void test_math_is_infinite() {
@@ -346,18 +468,9 @@ function void test_math_is_finite() {
 }
 
 @test
-function void test_math_round_to() {
-    assert(Math.approximately_equal(Result.unwrap(Math.round_to(3.14159, 2)), 3.14, 0.0001))
-    assert(Math.approximately_equal(Result.unwrap(Math.round_to(2.5, 0)), 3.0, 0.0001))
-    assert(Math.approximately_equal(Result.unwrap(Math.round_to(-1.2345, 2)), -1.23, 0.0001))
-    assert(Result.is_failure(Math.round_to(1.5, -1)))
-    assert(Result.is_failure(Math.round_to(1.5, 16)))
-}
-
-@test
 function void test_math_is_not_a_number() {
-    # Use integer / 0 produces a runtime error, but 0.0 / 0.0 is only
-    # possible through Math.infinity arithmetic.
+    # Division by zero (even 0.0 / 0.0) is a runtime error, so NaN is built
+    # from infinity arithmetic here.
     number nan = Math.infinity - Math.infinity
 
     assert(Math.is_not_a_number(nan))
@@ -383,20 +496,20 @@ function void test_math_approximately_equal() {
     assert(Math.approximately_equal(0.0, 0.0, 0.0))
 }
 
-# ─── Negative / edge-case tests ───
+# ─── Failure cases — invalid arguments ────────────────────
 
 @test
 function void test_math_factorial_negative() {
-    result<integer> r = Math.factorial(-1)
+    result<integer> factorial_result = Math.factorial(-1)
 
-    assert(Result.is_failure(r), "factorial of negative should fail")
+    assert(Result.is_failure(factorial_result), "factorial of negative should fail")
 }
 
 @test
 function void test_math_factorial_too_large() {
-    result<integer> r = Math.factorial(21)
+    result<integer> factorial_result = Math.factorial(21)
 
-    assert(Result.is_failure(r), "factorial above 20 should fail")
+    assert(Result.is_failure(factorial_result), "factorial above 20 should fail")
 }
 
 @test
@@ -417,182 +530,99 @@ function void test_math_permutations_invalid() {
 
 @test
 function void test_math_remainder_zero_divisor() {
-    result<number> r = Math.remainder(7, 0)
+    result<number> remainder_result = Math.remainder(7, 0)
 
-    assert(Result.is_failure(r), "remainder with zero divisor should fail")
+    assert(Result.is_failure(remainder_result), "remainder with zero divisor should fail")
 }
 
 @test
 function void test_math_log_e_negative() {
-    result<number> r = Math.log_e(-1.0)
+    result<number> log_result = Math.log_e(-1.0)
 
-    assert(Result.is_failure(r), "log_e of negative should fail")
+    assert(Result.is_failure(log_result), "log_e of negative should fail")
 }
 
 @test
 function void test_math_log_e_zero() {
-    result<number> r = Math.log_e(0.0)
+    result<number> log_result = Math.log_e(0.0)
 
-    assert(Result.is_failure(r), "log_e of zero should fail")
+    assert(Result.is_failure(log_result), "log_e of zero should fail")
 }
 
 @test
 function void test_math_log_2_negative() {
-    result<number> r = Math.log_2(-5.0)
+    result<number> log_result = Math.log_2(-5.0)
 
-    assert(Result.is_failure(r), "log_2 of negative should fail")
+    assert(Result.is_failure(log_result), "log_2 of negative should fail")
 }
 
 @test
 function void test_math_power_negative_fractional() {
     # Negative base with fractional exponent is undefined in reals.
-    result<number> r = Math.power(-1.0, 0.5)
+    result<number> power_result = Math.power(-1.0, 0.5)
 
-    assert(Result.is_failure(r), "negative base with fractional exponent should fail")
-}
-
-# ─── Math.arc_tangent2 ────────────────────────────────────────
-
-@test
-function void test_math_atan2() {
-    number res = Result.unwrap(Math.arc_tangent2(1.0, 1.0))
-
-    assert(Math.approximately_equal(res, Math.pi / 4.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.arc_tangent2(0.0, 1.0)), 0.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.arc_tangent2(1.0, 0.0)), Math.pi / 2.0))
-}
-
-# ─── Math.hypotenuse ────────────────────────────────────────
-
-@test
-function void test_math_hypot() {
-    assert(Math.approximately_equal(Math.hypotenuse(3.0, 4.0), 5.0))
-    assert(Math.approximately_equal(Math.hypotenuse(0.0, 0.0), 0.0))
-    assert(Math.approximately_equal(Math.hypotenuse(5.0, 12.0), 13.0))
-}
-
-# ─── Math.cube_root ───────────────────────────────────
-
-@test
-function void test_math_cube_root() {
-    assert(Math.approximately_equal(Math.cube_root(27.0), 3.0))
-    assert(Math.approximately_equal(Math.cube_root(-8.0), -2.0))
-    assert(Math.approximately_equal(Math.cube_root(0.0), 0.0))
-}
-
-# ─── Math.hyperbolic functions ─────────────────────────
-
-@test
-function void test_math_hyperbolic_sine() {
-    assert(Math.approximately_equal(Result.unwrap(Math.hyperbolic_sine(0.0)), 0.0))
-
-    number sinh1 = Result.unwrap(Math.hyperbolic_sine(1.0))
-
-    assert(sinh1 > 1.17)
-    assert(sinh1 < 1.18)
+    assert(Result.is_failure(power_result), "negative base with fractional exponent should fail")
 }
 
 @test
-function void test_math_hyperbolic_cosine() {
-    assert(Math.approximately_equal(Result.unwrap(Math.hyperbolic_cosine(0.0)), 1.0))
+function void test_math_remap_zero_input_range() {
+    result<number> remap_result = Math.remap(5.0, 3.0, 3.0, 0.0, 1.0)
 
-    number cosh1 = Result.unwrap(Math.hyperbolic_cosine(1.0))
-
-    assert(cosh1 > 1.54)
-    assert(cosh1 < 1.55)
+    assert(Result.is_failure(remap_result), "remap with a zero input range should fail")
 }
 
 @test
-function void test_math_hyperbolic_tangent() {
-    assert(Math.approximately_equal(Math.hyperbolic_tangent(0.0), 0.0))
+function void test_math_smooth_step_equal_edges() {
+    result<number> smooth_result = Math.smooth_step(5.0, 5.0, 0.5)
 
-    number tanh1 = Math.hyperbolic_tangent(1.0)
-
-    assert(tanh1 > 0.76)
-    assert(tanh1 < 0.77)
+    assert(Result.is_failure(smooth_result), "smooth_step with equal edges should fail")
 }
 
-# ───────────────────────────────────────────────────────────
-# remap, smooth_step
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_math_remap() {
-    assert(Math.approximately_equal(Result.unwrap(Math.remap(5.0, 0.0, 10.0, 0.0, 100.0)), 50.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.remap(0.0, 0.0, 10.0, 0.0, 100.0)), 0.0))
-}
-
-@test
-function void test_math_smooth_step() {
-    assert(Math.approximately_equal(Result.unwrap(Math.smooth_step(0.0, 1.0, 0.5)), 0.5))
-    assert(Math.approximately_equal(Result.unwrap(Math.smooth_step(0.0, 1.0, 0.0)), 0.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.smooth_step(0.0, 1.0, 1.0)), 1.0))
-}
-
-# ───────────────────────────────────────────────────────────
-# Additional positive coverage
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_math_remainder_floating_point() {
-    # Floating-point operands take the fmod path rather than integer modulo.
-    assert(Math.approximately_equal(Result.unwrap(Math.remainder(5.5, 2.0)), 1.5))
-    assert(Math.approximately_equal(Result.unwrap(Math.remainder(-5.5, 2.0)), -1.5))
-}
-
-@test
-function void test_math_sum_integers() {
-    # An all-integer array sums to an integer, not a number.
-    result<number> r = Math.sum([1, 2, 3, 4])
-
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == 10)
-}
-
-# ───────────────────────────────────────────────────────────
-# Additional negative / overflow coverage
-# ───────────────────────────────────────────────────────────
+# ─── Failure cases — overflow / non-finite results ────────
 
 @test
 function void test_math_least_common_multiple_overflow() {
-    result<integer> r = Math.least_common_multiple(9223372036854775807, 2)
+    result<integer> lcm_result = Math.least_common_multiple(9223372036854775807, 2)
 
-    assert(Result.is_failure(r), "lcm that overflows int64 should fail")
+    assert(Result.is_failure(lcm_result), "lcm that overflows int64 should fail")
 }
 
 @test
 function void test_math_greatest_common_divisor_overflow() {
-    result<integer> r = Math.greatest_common_divisor(-9223372036854775807 - 1, 4)
+    result<integer> gcd_result = Math.greatest_common_divisor(-9223372036854775807 - 1, 4)
 
-    assert(Result.is_failure(r), "gcd of INT64_MIN should fail")
+    assert(Result.is_failure(gcd_result), "gcd of INT64_MIN should fail")
 }
 
 @test
 function void test_math_absolute_overflow() {
-    result<integer> r = Math.absolute(-9223372036854775807 - 1)
+    result<integer> absolute_result = Math.absolute(-9223372036854775807 - 1)
 
-    assert(Result.is_failure(r), "absolute of INT64_MIN should fail")
+    assert(Result.is_failure(absolute_result), "absolute of INT64_MIN should fail")
 }
 
 @test
 function void test_math_exponential_overflow() {
-    result<number> r = Math.exponential(1000.0)
+    result<number> exponential_result = Math.exponential(1000.0)
 
-    assert(Result.is_failure(r), "exponential that overflows to infinity should fail")
+    assert(
+        Result.is_failure(exponential_result),
+        "exponential that overflows to infinity should fail"
+    )
 }
 
 @test
 function void test_math_hyperbolic_sine_overflow() {
-    result<number> r = Math.hyperbolic_sine(1000.0)
+    result<number> sinh_result = Math.hyperbolic_sine(1000.0)
 
-    assert(Result.is_failure(r), "hyperbolic_sine that overflows should fail")
+    assert(Result.is_failure(sinh_result), "hyperbolic_sine that overflows should fail")
 }
 
 @test
 function void test_math_hyperbolic_cosine_overflow() {
-    result<number> r = Math.hyperbolic_cosine(1000.0)
+    result<number> cosh_result = Math.hyperbolic_cosine(1000.0)
 
-    assert(Result.is_failure(r), "hyperbolic_cosine that overflows should fail")
+    assert(Result.is_failure(cosh_result), "hyperbolic_cosine that overflows should fail")
 }
 
 @test
@@ -615,35 +645,21 @@ function void test_math_trig_infinite_argument() {
 @test
 function void test_math_arc_tangent_not_a_number() {
     number nan = Math.infinity - Math.infinity
-    result<number> r = Math.arc_tangent(nan)
+    result<number> arc_tangent_result = Math.arc_tangent(nan)
 
-    assert(Result.is_failure(r), "arc_tangent of NaN should fail")
+    assert(Result.is_failure(arc_tangent_result), "arc_tangent of NaN should fail")
 }
 
-@test
-function void test_math_remap_zero_input_range() {
-    result<number> r = Math.remap(5.0, 3.0, 3.0, 0.0, 1.0)
-
-    assert(Result.is_failure(r), "remap with a zero input range should fail")
-}
-
-@test
-function void test_math_smooth_step_equal_edges() {
-    result<number> r = Math.smooth_step(5.0, 5.0, 0.5)
-
-    assert(Result.is_failure(r), "smooth_step with equal edges should fail")
-}
-
-# ─── Sign (Math.sign_of) ───
+# ─── Sign (Math.sign_of) ──────────────────────────────────
 
 # Exhaustive match over every Sign variant.  Beyond labelling a sign, this
 # doubles as a check that the top-level Sign choice is fully registered and
 # exhaustively matchable — the compiler rejects a missing arm.
-function string sign_label(Sign s) {
-    return match s {
-    case Sign.Negative { "negative" }
-    case Sign.Zero     { "zero" }
-    case Sign.Positive { "positive" }
+function string sign_label(Sign sign) {
+    return match sign {
+        case Sign.Negative { "negative" }
+        case Sign.Zero     { "zero" }
+        case Sign.Positive { "positive" }
     }
 }
 
@@ -660,42 +676,48 @@ function void test_math_sign_of() {
     assert(sign_label(Math.sign_of(3.14)) == "positive")
 }
 
+# ─── Math.Interval ────────────────────────────────────────
+
 @test
 function void test_math_interval() {
-    Math.Interval iv = Result.unwrap(Math.interval(0.0, 10.0))
+    Math.Interval interval = Result.unwrap(Math.interval(0.0, 10.0))
 
-    assert(Math.approximately_equal(iv.minimum, 0.0, 0.001), "min stored")
-    assert(Math.approximately_equal(iv.maximum, 10.0, 0.001), "max stored")
-    assert(Math.interval_contains(iv, 5.0), "contains a midpoint")
-    assert(Math.interval_contains(iv, 0.0), "closed: contains the low endpoint")
-    assert(!Math.interval_contains(iv, 11.0), "excludes points outside")
-    assert(Math.approximately_equal(Math.interval_clamp(iv, 15.0), 10.0, 0.001), "clamps above")
-    assert(Math.approximately_equal(Math.interval_clamp(iv, -3.0), 0.0, 0.001), "clamps below")
-    assert(Math.approximately_equal(Math.interval_length(iv), 10.0, 0.001), "length is max - min")
+    assert(Math.approximately_equal(interval.minimum, 0.0, 0.001), "min stored")
+    assert(Math.approximately_equal(interval.maximum, 10.0, 0.001), "max stored")
+    assert(Math.interval_contains(interval, 5.0), "contains a midpoint")
+    assert(Math.interval_contains(interval, 0.0), "closed: contains the low endpoint")
+    assert(!Math.interval_contains(interval, 11.0), "excludes points outside")
+    number clamped_above = Math.interval_clamp(interval, 15.0)
+    number clamped_below = Math.interval_clamp(interval, -3.0)
+
+    assert(Math.approximately_equal(clamped_above, 10.0, 0.001), "clamps above")
+    assert(Math.approximately_equal(clamped_below, 0.0, 0.001), "clamps below")
+    assert(
+        Math.approximately_equal(Math.interval_length(interval), 10.0, 0.001),
+        "length is max - min"
+    )
     assert(Result.is_failure(Math.interval(5.0, 1.0)), "min > max is rejected")
 }
 
 @test
 function void test_math_intervals_overlap() {
-    Math.Interval a = Result.unwrap(Math.interval(0.0, 5.0))
+    Math.Interval base = Result.unwrap(Math.interval(0.0, 5.0))
 
-    assert(Math.intervals_overlap(a, Result.unwrap(Math.interval(4.0, 9.0))), "partial overlap")
-    assert(Math.intervals_overlap(a, Result.unwrap(Math.interval(5.0, 9.0))), "touching counts")
-    assert(!Math.intervals_overlap(a, Result.unwrap(Math.interval(6.0, 9.0))), "disjoint")
+    assert(Math.intervals_overlap(base, Result.unwrap(Math.interval(4.0, 9.0))), "partial overlap")
+    assert(Math.intervals_overlap(base, Result.unwrap(Math.interval(5.0, 9.0))), "touching counts")
+    assert(!Math.intervals_overlap(base, Result.unwrap(Math.interval(6.0, 9.0))), "disjoint")
 }
 
-# ═══════════════════════════════════════════════════════════
-# Math.Angle (optional unit-safe angle)
-# ═══════════════════════════════════════════════════════════
+# ─── Math.Angle (unit-safe angle) ─────────────────────────
 
 @test
 function void test_math_angle() {
     Math.Angle ninety = Math.Angle.Degrees(90.0)
+    Math.Angle half_turn = Math.Angle.Radians(Math.pi)
+
     assert(Math.approximately_equal(Math.to_radians(ninety), Math.pi / 2.0, 0.001),
         "90 degrees is pi/2 radians")
     assert(Math.approximately_equal(Math.sine_of(ninety), 1.0, 0.001), "sin of 90 degrees is 1")
-
-    Math.Angle half_turn = Math.Angle.Radians(Math.pi)
     assert(Math.approximately_equal(Math.to_degrees(half_turn), 180.0, 0.001),
         "pi radians is 180 degrees")
 
@@ -704,157 +726,126 @@ function void test_math_angle() {
         "radians pass through")
 }
 
-# ═══════════════════════════════════════════════════════════
-# Math.Quaternion — removed
-# ═══════════════════════════════════════════════════════════
-
-# ─── Math.Rectangle (N03) — axis-aligned 2D rectangle ───
+# ─── Math.Rectangle — axis-aligned 2D rectangle ───────────
 
 @test
-function void test_math_rect_construct() {
-    Math.Rectangle r = Math.rectangle(1.0, 2.0, 30.0, 40.0)
+function void test_math_rectangle_construct() {
+    Math.Rectangle rectangle = Math.rectangle(1.0, 2.0, 30.0, 40.0)
 
-    assert(Math.approximately_equal(r.x, 1.0, 0.001))
-    assert(Math.approximately_equal(r.y, 2.0, 0.001))
-    assert(Math.approximately_equal(r.width, 30.0, 0.001))
-    assert(Math.approximately_equal(r.height, 40.0, 0.001))
+    assert(Math.approximately_equal(rectangle.x, 1.0, 0.001))
+    assert(Math.approximately_equal(rectangle.y, 2.0, 0.001))
+    assert(Math.approximately_equal(rectangle.width, 30.0, 0.001))
+    assert(Math.approximately_equal(rectangle.height, 40.0, 0.001))
 }
 
 @test
-function void test_math_rect_contains_half_open() {
-    Math.Rectangle r = Math.rectangle(0.0, 0.0, 10.0, 10.0)
+function void test_math_rectangle_negative_extent_clamps_to_zero() {
+    Math.Rectangle degenerate = Math.rectangle(0.0, 0.0, -5.0, 3.0)
 
-    assert(Math.rectangle_contains(r, 5.0, 5.0), "an interior point is contained")
-    assert(Math.rectangle_contains(r, 0.0, 0.0), "the min corner is contained")
-    assert(!Math.rectangle_contains(r, 10.0, 5.0), "the max edge is excluded (half-open)")
+    assert(Math.approximately_equal(degenerate.width, 0.0, 0.001), "negative width clamps to 0")
+    assert(Math.approximately_equal(degenerate.height, 3.0, 0.001), "positive height is kept")
 }
 
 @test
-function void test_math_rect_intersects_and_intersection() {
-    Math.Rectangle a = Math.rectangle(0.0, 0.0, 10.0, 10.0)
-    Math.Rectangle b = Math.rectangle(5.0, 5.0, 10.0, 10.0)
+function void test_math_rectangle_contains_half_open() {
+    Math.Rectangle square = Math.rectangle(0.0, 0.0, 10.0, 10.0)
 
-    assert(Math.rectangle_intersects(a, b), "overlapping rectangles intersect")
+    assert(Math.rectangle_contains(square, 5.0, 5.0), "an interior point is contained")
+    assert(Math.rectangle_contains(square, 0.0, 0.0), "the min corner is contained")
+    assert(!Math.rectangle_contains(square, 10.0, 5.0), "the max edge is excluded (half-open)")
+}
 
-    optional<Math.Rectangle> overlap = Math.rectangle_intersection(a, b)
-    match overlap {
-        case some(o) {
-            assert(Math.approximately_equal(o.width, 5.0, 0.001))
-            assert(Math.approximately_equal(o.height, 5.0, 0.001))
+@test
+function void test_math_rectangle_intersects_and_intersection() {
+    Math.Rectangle first = Math.rectangle(0.0, 0.0, 10.0, 10.0)
+    Math.Rectangle second = Math.rectangle(5.0, 5.0, 10.0, 10.0)
+    Math.Rectangle touching = Math.rectangle(10.0, 0.0, 5.0, 5.0)
+
+    assert(Math.rectangle_intersects(first, second), "overlapping rectangles intersect")
+    assert(!Math.rectangle_intersects(first, touching), "touching edges do not intersect")
+
+    match Math.rectangle_intersection(first, second) {
+        case some(overlap) {
+            assert(Math.approximately_equal(overlap.x, 5.0, 0.001))
+            assert(Math.approximately_equal(overlap.y, 5.0, 0.001))
+            assert(Math.approximately_equal(overlap.width, 5.0, 0.001))
+            assert(Math.approximately_equal(overlap.height, 5.0, 0.001))
         }
         case none { assert(false, "expected an overlap") }
     }
 }
 
 @test
-function void test_math_rect_intersection_disjoint_is_none() {
-    Math.Rectangle a = Math.rectangle(0.0, 0.0, 5.0, 5.0)
-    Math.Rectangle b = Math.rectangle(10.0, 10.0, 5.0, 5.0)
+function void test_math_rectangle_intersection_disjoint_is_none() {
+    Math.Rectangle first = Math.rectangle(0.0, 0.0, 5.0, 5.0)
+    Math.Rectangle second = Math.rectangle(10.0, 10.0, 5.0, 5.0)
 
-    assert(!Math.rectangle_intersects(a, b), "disjoint rectangles do not intersect")
-    assert(Optional.is_none(Math.rectangle_intersection(a, b)), "disjoint intersection is none")
+    assert(!Math.rectangle_intersects(first, second), "disjoint rectangles do not intersect")
+    assert(
+        Optional.is_none(Math.rectangle_intersection(first, second)),
+        "disjoint intersection is none"
+    )
 }
 
 @test
-function void test_math_rect_union_center_area() {
-    Math.Rectangle a = Math.rectangle(0.0, 0.0, 5.0, 5.0)
-    Math.Rectangle b = Math.rectangle(10.0, 10.0, 5.0, 5.0)
+function void test_math_rectangle_union_center_area() {
+    Math.Rectangle first = Math.rectangle(0.0, 0.0, 5.0, 5.0)
+    Math.Rectangle second = Math.rectangle(10.0, 10.0, 5.0, 5.0)
+    Math.Rectangle tall = Math.rectangle(0.0, 0.0, 10.0, 20.0)
 
-    Math.Rectangle u = Math.rectangle_union(a, b)
-    assert(Math.approximately_equal(u.width, 15.0, 0.001))
-    assert(Math.approximately_equal(u.height, 15.0, 0.001))
+    Math.Rectangle bounding = Math.rectangle_union(first, second)
+    Math.Vector2 center = Math.rectangle_center(tall)
 
-    Math.Vector2 c = Math.rectangle_center(Math.rectangle(0.0, 0.0, 10.0, 20.0))
-    assert(Math.approximately_equal(c.x, 5.0, 0.001))
-    assert(Math.approximately_equal(c.y, 10.0, 0.001))
-
-    assert(Math.approximately_equal(
-        Math.rectangle_area(Math.rectangle(0.0, 0.0, 10.0, 20.0)), 200.0, 0.001))
+    assert(Math.approximately_equal(bounding.width, 15.0, 0.001))
+    assert(Math.approximately_equal(bounding.height, 15.0, 0.001))
+    assert(Math.approximately_equal(center.x, 5.0, 0.001))
+    assert(Math.approximately_equal(center.y, 10.0, 0.001))
+    assert(Math.approximately_equal(Math.rectangle_area(tall), 200.0, 0.001))
 }
 
-# ─── Math.Circle (N05) — 2D circle geometry ───
+# ─── Math.Circle — 2D circle geometry ─────────────────────
 
 @test
 function void test_math_circle_construct() {
-    Math.Circle c = Math.circle(Math.vector2(3.0, 4.0), 5.0)
-
-    assert(Math.approximately_equal(c.center.x, 3.0, 0.001))
-    assert(Math.approximately_equal(c.center.y, 4.0, 0.001))
-    assert(Math.approximately_equal(c.radius, 5.0, 0.001))
-
-    # A negative radius clamps to zero (a degenerate circle is a point).
+    Math.Circle circle = Math.circle(Math.vector2(3.0, 4.0), 5.0)
     Math.Circle degenerate = Math.circle(Math.vector2(0.0, 0.0), -3.0)
-    assert(Math.approximately_equal(degenerate.radius, 0.0, 0.001))
+
+    assert(Math.approximately_equal(circle.center.x, 3.0, 0.001))
+    assert(Math.approximately_equal(circle.center.y, 4.0, 0.001))
+    assert(Math.approximately_equal(circle.radius, 5.0, 0.001))
+    assert(Math.approximately_equal(degenerate.radius, 0.0, 0.001),
+        "a negative radius clamps to zero (a degenerate circle is a point)")
 }
 
 @test
 function void test_math_circle_contains_closed_disk() {
-    Math.Circle c = Math.circle(Math.vector2(0.0, 0.0), 5.0)
+    Math.Circle circle = Math.circle(Math.vector2(0.0, 0.0), 5.0)
 
-    assert(Math.circle_contains(c, Math.vector2(0.0, 0.0)), "the centre is contained")
-    assert(Math.circle_contains(c, Math.vector2(3.0, 4.0)), "the boundary is inclusive")
-    assert(!Math.circle_contains(c, Math.vector2(3.0, 4.1)), "just outside is excluded")
+    assert(Math.circle_contains(circle, Math.vector2(0.0, 0.0)), "the centre is contained")
+    assert(Math.circle_contains(circle, Math.vector2(3.0, 4.0)), "the boundary is inclusive")
+    assert(!Math.circle_contains(circle, Math.vector2(3.0, 4.1)), "just outside is excluded")
 }
 
 @test
 function void test_math_circle_intersects() {
-    Math.Circle a = Math.circle(Math.vector2(0.0, 0.0), 5.0)
+    Math.Circle circle = Math.circle(Math.vector2(0.0, 0.0), 5.0)
 
-    assert(Math.circle_intersects(a, Math.circle(Math.vector2(6.0, 0.0), 5.0)),
+    assert(Math.circle_intersects(circle, Math.circle(Math.vector2(6.0, 0.0), 5.0)),
         "overlapping circles intersect")
-    assert(Math.circle_intersects(a, Math.circle(Math.vector2(10.0, 0.0), 5.0)),
+    assert(Math.circle_intersects(circle, Math.circle(Math.vector2(10.0, 0.0), 5.0)),
         "exactly touching circles intersect (inclusive)")
-    assert(!Math.circle_intersects(a, Math.circle(Math.vector2(12.0, 0.0), 5.0)),
+    assert(!Math.circle_intersects(circle, Math.circle(Math.vector2(12.0, 0.0), 5.0)),
         "disjoint circles do not intersect")
 }
 
 @test
 function void test_math_circle_rectangle_intersects() {
-    Math.Rectangle r = Math.rectangle(0.0, 0.0, 10.0, 10.0)
+    Math.Rectangle square = Math.rectangle(0.0, 0.0, 10.0, 10.0)
 
-    assert(Math.circle_rectangle_intersects(Math.circle(Math.vector2(5.0, 5.0), 2.0), r),
+    assert(Math.circle_rectangle_intersects(Math.circle(Math.vector2(5.0, 5.0), 2.0), square),
         "a circle centred inside the rect overlaps")
-    assert(Math.circle_rectangle_intersects(Math.circle(Math.vector2(11.0, 5.0), 2.0), r),
+    assert(Math.circle_rectangle_intersects(Math.circle(Math.vector2(11.0, 5.0), 2.0), square),
         "a circle within radius of an edge overlaps")
-    assert(!Math.circle_rectangle_intersects(Math.circle(Math.vector2(12.0, 12.0), 2.0), r),
+    assert(!Math.circle_rectangle_intersects(Math.circle(Math.vector2(12.0, 12.0), 2.0), square),
         "a circle beyond the far corner does not overlap")
-}
-
-# ─── N01/N02/N05/N07 additions ───────────────────────────
-
-@test
-function void test_math_log_base_and_nth_root() {
-    assert(Math.approximately_equal(Result.unwrap(Math.log_base(8.0, 2.0)), 3.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.log_base(100.0, 10.0)), 2.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.nth_root(27.0, 3.0)), 3.0))
-    assert(Math.approximately_equal(Result.unwrap(Math.nth_root(-8.0, 3.0)), -2.0))
-    assert(Result.is_failure(Math.nth_root(-16.0, 4.0)))
-    assert(Result.is_failure(Math.log_base(8.0, 1.0)))
-    assert(Result.is_failure(Math.log_base(5.0, -2.0)))
-    assert(Result.is_failure(Math.log_base(-1.0, 2.0)))
-}
-
-@test
-function void test_math_wrap_and_angles() {
-    assert(Math.approximately_equal(Math.wrap(7.0, 0.0, 5.0), 2.0))
-    assert(Math.approximately_equal(Math.wrap(-1.0, 0.0, 5.0), 4.0))
-    number diff = Math.angle_difference(Math.radians(10.0), Math.radians(350.0))
-    assert(Math.approximately_equal(diff, Math.radians(20.0)))
-    assert(Math.approximately_equal(Math.normalize_angle(0.0), 0.0))
-}
-
-@test
-function void test_math_special_functions() {
-    assert(Math.approximately_equal(Math.sigmoid(0.0), 0.5))
-    assert(Math.approximately_equal(Result.unwrap(Math.gamma(5.0)), 24.0))
-    assert(Result.is_failure(Math.gamma(0.0)))
-    assert(Math.approximately_equal(Math.error_function(0.0), 0.0))
-}
-
-@test
-function void test_math_digit_helpers() {
-    assert(Math.digit_sum(1234) == 10)
-    assert(Math.digit_sum(-56) == 11)
-    assert(Math.digit_count(1000) == 4)
-    assert(Math.digit_count(0) == 1)
 }

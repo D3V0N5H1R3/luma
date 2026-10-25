@@ -639,7 +639,7 @@ See Section 12 for detailed design.
 - Uses precedence-aware expression compilation with stack-effect tracking.
 - Emits forward jumps for control flow (`if`, `match`, `for`, `while`) and patches them after the branch body is compiled.
 - Resolves upvalues using a CLox-style capture chain: each `CompilerScope` (one per function or lambda) tracks which enclosing locals are captured.
-- Supports 100 opcodes across 24 categories (see Section 5.5).
+- Supports 105 opcodes across 25 categories (see Section 5.5).
 - Operands are big-endian: `u16` for constant-pool, name-table, and local-slot indices; `u32` for jump offsets and `ConstantLong` indices.
 
 **Dependencies:** AST, Source Location, Interpreter Value, Diagnostics.
@@ -964,7 +964,7 @@ CallFrame {
 }
 ```
 
-**Opcode categories (100 opcodes):**
+**Opcode categories (105 opcodes):**
 
 | Category        | Count | Opcodes                                                                                                   |
 | --------------- | ----- | --------------------------------------------------------------------------------------------------------- |
@@ -991,6 +991,7 @@ CallFrame {
 | Misc            | 3     | `Print`, `Assert`, `TypeOf`                                                                               |
 | Fused           | 4     | `IncrementLocal`, `DecrementLocal`, `SetLocalPop`, `GetLocalReturn`                                       |
 | Conversions     | 3     | `IntToNumber`, `WidenNumber`, `Clone`                                                                     |
+| Copy-on-write   | 5     | `UniqueLocal`, `UniqueUpvalue`, `UniqueGlobal`, `GetFieldUnique`, `IndexGetUnique`                        |
 | Module          | 1     | `EndModule`                                                                                               |
 
 > **Note:** `Break` and `Continue` are not opcodes. Break compiles to scope-cleanup `Pop`s followed by a forward `Jump` (patched at loop exit). Continue compiles to scope-cleanup `Pop`s followed by a backward `Loop` instruction.
@@ -1534,7 +1535,7 @@ Each line shows the byte offset, the opcode name, operand values, and (where app
 
 ### 7.17 Opcode Reference
 
-The complete opcode set (100 opcodes) with stack effects. Stack notation: `(before → after)`, where the top of stack is rightmost.
+The complete opcode set (105 opcodes) with stack effects. Stack notation: `(before → after)`, where the top of stack is rightmost.
 
 #### Stack Manipulation
 
@@ -1750,6 +1751,18 @@ The complete opcode set (100 opcodes) with stack effects. Stack notation: `(befo
 | `IntToNumber` | —            | `(int → number)` | Convert integer on top of stack to number (double). No-op if already number.                                                                                         |
 | `WidenNumber` | u16 name_idx | `(a → a')`       | Deep integer → number widening by a type pattern (e.g. `array<number>`), emitted where the type checker marked an integer flowing into a nested `number` context. |
 | `Clone`       | —            | `(a → a')`       | Deep-copy top of stack (value semantics for mutable bindings).                                                                                                       |
+
+**Copy-on-write opcodes:**
+
+Copying a value shares its storage, so a write must first make sure no other value still uses the storage it is about to change. The compiler emits these opcodes only for the container path of an assignment, compound-assignment, or `++`/`--` target: `points[0].x = 5` compiles to `UniqueLocal` on `points`, the usual `GetLocal`, the index, `IndexGetUnique`, the new value, and `SetField x`. Each step replaces a shared array, dictionary, or record with a shallow copy it owns (`Value::make_exclusive`), so reads stay free and a copy is made only on the first write to shared storage. A target rooted in a temporary rather than a variable (`make_point().x = 5`) is a type error; for the REPL, which skips type checking, the compiler copies the temporary first.
+
+| Opcode           | Operands     | Stack Effect                | Description                                                                          |
+| ---------------- | ------------ | --------------------------- | ------------------------------------------------------------------------------------ |
+| `UniqueLocal`    | u16 slot     | `(→)`                       | Make `local[slot]`'s storage exclusive before a write through it.                    |
+| `UniqueUpvalue`  | u16 index    | `(→)`                       | Make the upvalue's storage exclusive before a write through it.                      |
+| `UniqueGlobal`   | u16 name_idx | `(→)`                       | Make the global's storage exclusive before a write through it.                       |
+| `GetFieldUnique` | u16 name_idx | `(record → field)`          | `GetField`, first making the field's storage exclusive within the (exclusive) record. |
+| `IndexGetUnique` | —            | `(container index → elem)`  | `IndexGet`, first making the element's storage exclusive within the container.       |
 
 ---
 
@@ -1984,7 +1997,7 @@ When the interpreter is started with `--box` (or `-b`), the `register_all` funct
 - `Socket` — TCP and UDP networking
 - `Xml` — XML file I/O
 
-All other modules (`Array`, `Bits`, `Calculus`, `Channel`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `Hash`, `Json`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Log.set_output`, `Compression.gzip_file`, `Compression.gunzip_file`, `Hash.sha256_file`, and `Hash.sha512_file`. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
+All other modules (`Array`, `Bits`, `Calculus`, `Channel`, `Compression`, `Converter`, `DateTime`, `Decimal`, `Dictionary`, `Encoder`, `Hash`, `Json`, `LinearAlgebra`, `Log`, `Math`, `Optional`, `Order`, `Queue`, `Random`, `Reference`, `RegularExpression`, `Resource`, `Result`, `Set`, `Stack`, `Statistics`, `String`, `Task`, `Terminal`, etc.) remain available. Within these safe modules, individual functions that perform file I/O are also disabled: `Compression.gunzip_file`, `Compression.gzip_file`, `Compression.gzip_file_with`, `Hash.digest_file`, `Hash.md5_file`, `Hash.sha1_file`, `Hash.sha256_file`, `Hash.sha512_file`, and `Log.set_output`. They are withheld at registration; `register_stdlib_postamble` finds them by registering each sandbox-aware module into a scratch environment and blocks them by name, so calling one reports the same "not available in sandbox mode" error as a blocked module. Programs running in sandbox mode can perform pure computation and produce output via `print`, but cannot access the file system, network, or spawn processes.
 
 Attempting to call a function from a sandbox-blocked module produces a clear error message (`'Module.function' is not available in sandbox mode (--box)`) instead of the generic "undefined variable" error. The `Environment` class maintains a set of blocked module prefixes that is checked during variable lookup.
 

@@ -5,6 +5,8 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── Core operations ──────────────────────────────────────
+
 @test
 function void test_array_length() {
     assert(Array.length([1, 2, 3]) == 3)
@@ -15,22 +17,16 @@ function void test_array_length() {
 function void test_array_push() {
     array<integer> pushed = Array.push([1, 2], 3)
 
-    assert(Array.length(pushed) == 3)
-    assert(pushed[2] == 3)
+    assert(pushed == [1, 2, 3])
 }
 
 @test
 function void test_array_pop() {
-    result<(array<integer>, integer)> pop_result = Array.pop([1, 2, 3])
-
-    assert(Result.is_success(pop_result))
-
-    (array<integer> remaining, integer last) = Result.unwrap(pop_result)
+    (array<integer> remaining, integer last) = Result.unwrap(Array.pop([1, 2, 3]))
 
     assert(last == 3)
-    assert(Array.length(remaining) == 2)
-
-    assert(Result.is_failure(Array.pop([])))
+    assert(remaining == [1, 2])
+    assert(Result.is_failure(Array.pop([])), "popping an empty array should fail")
 }
 
 @test
@@ -38,36 +34,34 @@ function void test_array_set() {
     array<integer> original = [10, 20, 30]
     array<integer> updated = Result.unwrap(Array.set(original, 1, 99))
 
-    assert(updated[0] == 10)
-    assert(updated[1] == 99)
-    assert(updated[2] == 30)
-
-    # Original is not mutated (immutable semantics)
-    assert(original[1] == 20)
+    assert(updated == [10, 99, 30])
+    assert(original == [10, 20, 30], "Array.set should return a copy, not mutate")
 }
 
 @test
 function void test_array_set_out_of_bounds() {
-    result<array<integer>> r = Array.set([1, 2, 3], 5, 99)
+    result<array<integer>> updated = Array.set([1, 2, 3], 5, 99)
 
-    assert(Result.is_failure(r))
+    assert(updated == failure("index 5 out of bounds for array of length 3"))
+}
+
+@test
+function void test_array_get() {
+    array<integer> values = [10, 20, 30]
+
+    assert(Array.get(values, 1) == some(20))
+    assert(Optional.is_none(Array.get(values, 3)), "out-of-bounds access should yield none")
 }
 
 @test
 function void test_array_first_last() {
     array<integer> values = [10, 20, 30]
-    optional<integer> first_result = Array.first(values)
-    optional<integer> last_result = Array.last(values)
-
-    assert(Optional.is_some(first_result))
-    assert(Optional.unwrap(first_result) == 10)
-    assert(Optional.is_some(last_result))
-    assert(Optional.unwrap(last_result) == 30)
-
     array<integer> empty = []
 
-    assert(!Optional.is_some(Array.first(empty)))
-    assert(!Optional.is_some(Array.last(empty)))
+    assert(Array.first(values) == some(10))
+    assert(Array.last(values) == some(30))
+    assert(Optional.is_none(Array.first(empty)))
+    assert(Optional.is_none(Array.last(empty)))
 }
 
 @test
@@ -75,9 +69,7 @@ function void test_array_map() {
     array<integer> values = [1, 2, 3]
     array<integer> doubled = Result.unwrap(Array.map(values, (integer x) -> x * 2))
 
-    assert(doubled[0] == 2)
-    assert(doubled[1] == 4)
-    assert(doubled[2] == 6)
+    assert(doubled == [2, 4, 6])
 }
 
 @test
@@ -85,35 +77,30 @@ function void test_array_filter() {
     array<integer> values = [1, 2, 3, 4, 5, 6]
     array<integer> evens = Result.unwrap(Array.filter(values, (integer x) -> x % 2 == 0))
 
-    assert(Array.length(evens) == 3)
+    assert(evens == [2, 4, 6])
 }
 
 @test
 function void test_array_each() {
-    mutable integer count = 0
-    array<integer> items = [1, 2, 3]
+    # A reference cell lets the callback accumulate a side effect.
+    reference<integer> total = Reference.new(0)
 
-    for _ in items {
-        count++
-    }
+    result<none> outcome = Array.each([1, 2, 3], (integer x) -> {
+        Reference.update(total, (integer sum) -> sum + x)
+    })
 
-    assert(count == 3)
-
-    # Also verify Array.each runs by checking no error is thrown
-    result<none> _each = Array.each(items, (integer x) -> print(x))
+    assert(Result.is_success(outcome))
+    assert(Reference.get(total) == 6, "callback should run once per element")
 }
 
 @test
 function void test_array_find() {
     array<integer> values = [1, 2, 3, 4, 5]
     result<integer> found = Array.find(values, (integer x) -> x > 3)
-
-    assert(Result.is_success(found))
-    assert(Result.unwrap(found) == 4)
-
     result<integer> not_found = Array.find(values, (integer x) -> x > 10)
 
-    assert(!Result.is_success(not_found))
+    assert(found == success(4))
+    assert(not_found == failure("element not found"))
 }
 
 @test
@@ -143,9 +130,9 @@ function void test_array_none() {
 
 @test
 function void test_array_none_callback_exception() {
-    result<boolean> r = Array.none([1, 3, 0], (integer x) -> (10 // x) > 100)
+    result<boolean> outcome = Array.none([1, 3, 0], (integer x) -> (10 // x) > 100)
 
-    assert(Result.is_failure(r), "none callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "none callback exception should propagate as failure")
 }
 
 @test
@@ -159,8 +146,7 @@ function void test_array_count() {
 function void test_array_reverse() {
     array<integer> reversed = Array.reverse([1, 2, 3])
 
-    assert(reversed[0] == 3)
-    assert(reversed[2] == 1)
+    assert(reversed == [3, 2, 1])
 }
 
 @test
@@ -169,15 +155,14 @@ function void test_array_sort() {
         Array.sort([3, 1, 4, 1, 5], (integer a, integer b) -> a - b)
     )
 
-    assert(sorted[0] == 1)
-    assert(sorted[4] == 5)
+    assert(sorted == [1, 1, 3, 4, 5])
 }
 
 @test
 function void test_array_unique() {
     array<integer> unique_items = Array.unique([1, 2, 2, 3, 3, 3])
 
-    assert(Array.length(unique_items) == 3)
+    assert(unique_items == [1, 2, 3])
 }
 
 @test
@@ -185,41 +170,33 @@ function void test_array_flatten() {
     array<array<integer>> nested = [[1, 2], [3, 4]]
     array<integer> flat = Array.flatten(nested)
 
-    assert(Array.length(flat) == 4)
-    assert(Result.unwrap(Array.sum(flat)) == 10)
+    assert(flat == [1, 2, 3, 4])
 }
 
 @test
 function void test_array_zip() {
     array<(integer, string)> zipped = Array.zip([1, 2, 3], ["a", "b", "c"])
+    array<(integer, string)> truncated = Array.zip([1, 2, 3], ["a"])
 
-    assert(Array.length(zipped) == 3)
-    assert(zipped[0].0 == 1)
-    assert(zipped[0].1 == "a")
+    assert(zipped == [(1, "a"), (2, "b"), (3, "c")])
+    assert(truncated == [(1, "a")], "zip should truncate to the shorter array")
 }
 
 @test
 function void test_array_unzip() {
-    (array<integer>, array<string>) split = Array.unzip([(1, "a"), (2, "b"), (3, "c")])
+    (array<integer> numbers, array<string> letters) = Array.unzip([(1, "a"), (2, "b"), (3, "c")])
 
-    array<integer> nums = split.0
-    array<string> letters = split.1
-
-    assert(Array.length(nums) == 3)
-    assert(Array.length(letters) == 3)
-    assert(nums[0] == 1)
-    assert(nums[2] == 3)
-    assert(letters[0] == "a")
-    assert(letters[2] == "c")
+    assert(numbers == [1, 2, 3])
+    assert(letters == ["a", "b", "c"])
 }
 
 @test
 function void test_array_unzip_roundtrip() {
     array<(integer, integer)> pairs = Array.zip([1, 2, 3], [4, 5, 6])
-    (array<integer>, array<integer>) split = Array.unzip(pairs)
+    (array<integer> lefts, array<integer> rights) = Array.unzip(pairs)
 
-    assert(split.0[1] == 2)
-    assert(split.1[2] == 6)
+    assert(lefts == [1, 2, 3])
+    assert(rights == [4, 5, 6])
 }
 
 @test
@@ -259,78 +236,67 @@ function void test_array_min_max() {
 
 @test
 function void test_array_min_max_empty() {
-    array<integer> empty_arr = []
-    result<integer> min_result = Array.minimum(empty_arr)
-    result<integer> max_result = Array.maximum(empty_arr)
+    array<integer> empty = []
 
-    assert(Result.is_failure(min_result))
-    assert(Result.is_failure(max_result))
+    assert(Result.is_failure(Array.minimum(empty)))
+    assert(Result.is_failure(Array.maximum(empty)))
 }
 
 @test
 function void test_array_slice() {
     array<integer> sliced = Result.unwrap(Array.slice([1, 2, 3, 4, 5], 1, 4))
 
-    assert(Array.length(sliced) == 3)
-    assert(sliced[0] == 2)
-    assert(sliced[2] == 4)
+    assert(sliced == [2, 3, 4])
 }
 
 @test
 function void test_array_slice_edge_cases() {
-    # Negative 'to' index is now an error.
-    assert(Result.is_failure(Array.slice([1, 2, 3], 0, -1)))
-
-    # from > to is also an error.
-    assert(Result.is_failure(Array.slice([1, 2, 3], 3, 1)))
-
-    # Indices clamped to array length.
     array<integer> clamped = Result.unwrap(Array.slice([1, 2, 3], 0, 100))
 
-    assert(Array.length(clamped) == 3)
+    assert(Result.is_failure(Array.slice([1, 2, 3], 0, -1)), "a negative 'to' index is an error")
+    assert(Result.is_failure(Array.slice([1, 2, 3], 3, 1)), "from > to is an error")
+    assert(clamped == [1, 2, 3], "'to' beyond the length is clamped")
 }
 
 @test
 function void test_array_index_of() {
     assert(Result.unwrap(Array.index_of([10, 20, 30], 20)) == 1)
-    assert(!Result.is_success(Array.index_of([10, 20, 30], 99)))
+    assert(Result.is_failure(Array.index_of([10, 20, 30], 99)))
 }
 
 @test
 function void test_array_take_while() {
     array<integer> taken = Result.unwrap(Array.take_while([1, 2, 3, 4, 5], (integer x) -> x < 4))
 
-    assert(Array.length(taken) == 3)
-    assert(taken[2] == 3)
+    assert(taken == [1, 2, 3])
 }
 
 @test
 function void test_array_drop_while() {
     array<integer> dropped = Result.unwrap(Array.drop_while([1, 2, 3, 4, 5], (integer x) -> x < 3))
 
-    assert(Array.length(dropped) == 3)
-    assert(dropped[0] == 3)
+    assert(dropped == [3, 4, 5])
 }
 
 @test
 function void test_array_flat_map() {
     array<integer> mapped = Result.unwrap(Array.flat_map([1, 2, 3], (integer x) -> [x, x * 10]))
 
-    assert(Array.length(mapped) == 6)
+    assert(mapped == [1, 10, 2, 20, 3, 30])
 }
 
 @test
 function void test_array_chunk() {
     array<array<integer>> chunks = Array.chunk([1, 2, 3, 4, 5], 2) |> Result.unwrap()
 
-    assert(Array.length(chunks) == 3)
+    assert(chunks == [[1, 2], [3, 4], [5]])
 }
 
 @test
 function void test_array_enumerate() {
     array<(integer, string)> pairs = Array.enumerate(["a", "b", "c"])
 
-    assert(Array.length(pairs) == 3)
+    assert(pairs == [(0, "a"), (1, "b"), (2, "c")])
 }
 
 @test
@@ -343,25 +309,22 @@ function void test_array_is_empty() {
 function void test_array_range() {
     array<integer> range_values = Array.range(0, 5) |> Result.unwrap()
 
-    assert(Array.length(range_values) == 5)
-    assert(range_values[0] == 0)
-    assert(range_values[4] == 4)
+    assert(range_values == [0, 1, 2, 3, 4])
 }
 
 @test
 function void test_array_repeat() {
     array<integer> repeated = Array.repeat(0, 4) |> Result.unwrap()
 
-    assert(Array.length(repeated) == 4)
-    assert(repeated[0] == 0)
-    assert(repeated[3] == 0)
+    assert(repeated == [0, 0, 0, 0])
+    assert(Result.is_failure(Array.repeat(0, -1)), "a negative count is an error")
 }
 
-# ─── Sort By ───
+# ─── Array.sort_by ────────────────────────────────────────
 
 record Person {
     string name,
-    integer age
+    number age
 }
 
 @test
@@ -394,7 +357,7 @@ function void test_sort_by_name() {
     assert(sorted[2].name == "Charlie")
 }
 
-# ─── Array.reduce (generic fold) ────────────────────────────────
+# ─── Array.reduce (generic fold) ──────────────────────────
 
 @test
 function void test_reduce_sum() {
@@ -435,11 +398,11 @@ function void test_array_group_by() {
         (string s) -> Converter.to_string(String.length(s))
     ))
 
-    assert(Array.length(Result.unwrap(Dictionary.get(groups, "1"))) == 2)
-    assert(Array.length(Result.unwrap(Dictionary.get(groups, "2"))) == 2)
+    assert(Result.unwrap(Dictionary.get(groups, "1")) == ["a", "c"])
+    assert(Result.unwrap(Dictionary.get(groups, "2")) == ["bb", "dd"])
 }
 
-# ─── Array.maximum_by / Array.minimum_by ──────────────────────────
+# ─── Array.maximum_by / Array.minimum_by ──────────────────
 
 @test
 function void test_array_max_by() {
@@ -526,163 +489,135 @@ function void test_array_join_single_element() {
     assert(joined == "only")
 }
 
+# ─── Array.insert_at / Array.remove_at ────────────────────
+
 @test
 function void test_array_insert_at() {
-    result<array<integer>> r = Array.insert_at([1, 2, 3], 1, 99)
+    result<array<integer>> inserted = Array.insert_at([1, 2, 3], 1, 99)
 
-    assert(Result.is_success(r))
-
-    array<integer> arr = Result.unwrap(r)
-
-    assert(Array.length(arr) == 4)
-    assert(arr[0] == 1)
-    assert(arr[1] == 99)
-    assert(arr[2] == 2)
-    assert(arr[3] == 3)
+    assert(inserted == success([1, 99, 2, 3]))
 }
 
 @test
 function void test_array_insert_at_beginning() {
-    result<array<integer>> r = Array.insert_at([1, 2], 0, 0)
+    result<array<integer>> inserted = Array.insert_at([1, 2], 0, 0)
 
-    assert(Result.is_success(r))
-
-    array<integer> arr = Result.unwrap(r)
-
-    assert(arr[0] == 0)
-    assert(arr[1] == 1)
+    assert(inserted == success([0, 1, 2]))
 }
 
 @test
 function void test_array_insert_at_end() {
-    result<array<integer>> r = Array.insert_at([1, 2], 2, 3)
+    result<array<integer>> inserted = Array.insert_at([1, 2], 2, 3)
 
-    assert(Result.is_success(r))
-
-    array<integer> arr = Result.unwrap(r)
-
-    assert(arr[2] == 3)
+    assert(inserted == success([1, 2, 3]))
 }
 
 @test
 function void test_array_insert_at_out_of_bounds() {
-    result<array<integer>> r = Array.insert_at([1, 2], 5, 99)
+    result<array<integer>> inserted = Array.insert_at([1, 2], 5, 99)
 
-    assert(Result.is_failure(r))
+    assert(inserted == failure("Array.insert_at: index 5 out of bounds (size 2)"))
 }
 
 @test
 function void test_array_remove_at() {
-    result<(array<integer>, integer)> r = Array.remove_at([10, 20, 30], 1)
-
-    assert(Result.is_success(r))
-
-    (array<integer> arr, integer removed) = Result.unwrap(r)
+    (array<integer> remaining, integer removed) = Result.unwrap(Array.remove_at([10, 20, 30], 1))
 
     assert(removed == 20)
-    assert(Array.length(arr) == 2)
-    assert(arr[0] == 10)
-    assert(arr[1] == 30)
+    assert(remaining == [10, 30])
 }
 
 @test
 function void test_array_remove_at_first() {
-    result<(array<integer>, integer)> r = Array.remove_at([10, 20, 30], 0)
-
-    assert(Result.is_success(r))
-
-    (array<integer> arr, integer removed) = Result.unwrap(r)
+    (array<integer> remaining, integer removed) = Result.unwrap(Array.remove_at([10, 20, 30], 0))
 
     assert(removed == 10)
-    assert(arr[0] == 20)
+    assert(remaining == [20, 30])
 }
 
 @test
 function void test_array_remove_at_last() {
-    result<(array<integer>, integer)> r = Array.remove_at([10, 20, 30], 2)
-
-    assert(Result.is_success(r))
-
-    (array<integer> _arr, integer removed) = Result.unwrap(r)
+    (array<integer> remaining, integer removed) = Result.unwrap(Array.remove_at([10, 20, 30], 2))
 
     assert(removed == 30)
+    assert(remaining == [10, 20])
 }
 
 @test
 function void test_array_remove_at_out_of_bounds() {
-    result<(array<integer>, integer)> r = Array.remove_at([10, 20], 5)
+    result<(array<integer>, integer)> removal = Array.remove_at([10, 20], 5)
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(removal))
 }
 
-# ─── Array.contains ────────────────────────────────────
+# ─── Array.contains ───────────────────────────────────────
 
 @test
 function void test_array_contains_true() {
     assert(Array.contains([1, 2, 3], 2))
 }
 
-# ─── Array.windows ─────────────────────────────────────
+@test
+function void test_array_contains_false() {
+    assert(!Array.contains([1, 2, 3], 5))
+}
+
+@test
+function void test_array_contains_empty() {
+    assert(!Array.contains([], 1))
+}
+
+@test
+function void test_array_contains_string() {
+    assert(Array.contains(["a", "b", "c"], "b"))
+    assert(!Array.contains(["a", "b", "c"], "d"))
+}
+
+# ─── Array.windows ────────────────────────────────────────
 
 @test
 function void test_array_windows_basic() {
-    array<array<integer>> wins = Array.windows([1, 2, 3, 4, 5], 3) |> Result.unwrap()
+    array<array<integer>> windows = Array.windows([1, 2, 3, 4, 5], 3) |> Result.unwrap()
 
-    assert(Array.length(wins) == 3)
-    assert(wins[0][0] == 1)
-    assert(wins[0][2] == 3)
-    assert(wins[1][0] == 2)
-    assert(wins[2][0] == 3)
-    assert(wins[2][2] == 5)
+    assert(windows == [[1, 2, 3], [2, 3, 4], [3, 4, 5]])
 }
 
 @test
 function void test_array_windows_size_equals_length() {
-    array<array<integer>> wins = Array.windows([1, 2, 3], 3) |> Result.unwrap()
+    array<array<integer>> windows = Array.windows([1, 2, 3], 3) |> Result.unwrap()
 
-    assert(Array.length(wins) == 1)
-    assert(wins[0][0] == 1)
-    assert(wins[0][2] == 3)
+    assert(windows == [[1, 2, 3]])
 }
 
 @test
 function void test_array_windows_size_exceeds_length() {
-    array<array<integer>> wins = Array.windows([1, 2], 5) |> Result.unwrap()
+    array<array<integer>> windows = Array.windows([1, 2], 5) |> Result.unwrap()
 
-    assert(Array.length(wins) == 0)
+    assert(Array.length(windows) == 0)
 }
 
 @test
 function void test_array_windows_size_one() {
-    array<array<integer>> wins = Array.windows([10, 20, 30], 1) |> Result.unwrap()
+    array<array<integer>> windows = Array.windows([10, 20, 30], 1) |> Result.unwrap()
 
-    assert(Array.length(wins) == 3)
-    assert(wins[0][0] == 10)
-    assert(wins[1][0] == 20)
-    assert(wins[2][0] == 30)
+    assert(windows == [[10], [20], [30]])
 }
 
-# ─── Array.scan ────────────────────────────────────────
+# ─── Array.scan ───────────────────────────────────────────
 
 @test
 function void test_array_scan_basic() {
-    result<array<integer>> r = Array.scan([1, 2, 3], 0, (integer acc, integer x) -> acc + x)
-    array<integer> scanned = Result.unwrap(r)
+    array<integer> scanned =
+        Result.unwrap(Array.scan([1, 2, 3], 0, (integer acc, integer x) -> acc + x))
 
-    assert(Array.length(scanned) == 4)
-    assert(scanned[0] == 0)
-    assert(scanned[1] == 1)
-    assert(scanned[2] == 3)
-    assert(scanned[3] == 6)
+    assert(scanned == [0, 1, 3, 6])
 }
 
 @test
 function void test_array_scan_empty() {
-    result<array<integer>> r = Array.scan([], 42, (integer acc, integer x) -> acc + x)
-    array<integer> scanned = Result.unwrap(r)
+    array<integer> scanned = Result.unwrap(Array.scan([], 42, (integer acc, integer x) -> acc + x))
 
-    assert(Array.length(scanned) == 1)
-    assert(scanned[0] == 42)
+    assert(scanned == [42])
 }
 
 @test
@@ -695,7 +630,7 @@ function void test_array_scan_infers_accumulator_type() {
     assert(totals == [0, 1, 3, 6])
 }
 
-# ─── Array.map / Array.flat_map result types ──────────
+# ─── Array.map / Array.flat_map result types ──────────────
 
 @test
 function void test_array_map_infers_callback_return_type() {
@@ -716,211 +651,159 @@ function void test_array_flat_map_infers_callback_element_type() {
     assert(stars == ["*", "*", "*"])
 }
 
-# ─── Array.intersperse ─────────────────────────────────
+# ─── Array.intersperse ────────────────────────────────────
 
 @test
 function void test_array_intersperse_basic() {
-    array<integer> res = Array.intersperse([1, 2, 3], 0)
+    array<integer> interspersed = Array.intersperse([1, 2, 3], 0)
 
-    assert(Array.length(res) == 5)
-    assert(res[0] == 1)
-    assert(res[1] == 0)
-    assert(res[2] == 2)
-    assert(res[3] == 0)
-    assert(res[4] == 3)
+    assert(interspersed == [1, 0, 2, 0, 3])
 }
 
 @test
 function void test_array_intersperse_single() {
-    array<integer> res = Array.intersperse([42], 0)
+    array<integer> interspersed = Array.intersperse([42], 0)
 
-    assert(Array.length(res) == 1)
-    assert(res[0] == 42)
+    assert(interspersed == [42])
 }
 
 @test
 function void test_array_intersperse_empty() {
-    array<integer> res = Array.intersperse([], 0)
+    array<integer> interspersed = Array.intersperse([], 0)
 
-    assert(Array.length(res) == 0)
+    assert(Array.length(interspersed) == 0)
 }
 
-# ─── Array.rotate ──────────────────────────────────────
+# ─── Array.rotate ─────────────────────────────────────────
 
 @test
 function void test_array_rotate_left() {
-    array<integer> res = Array.rotate([1, 2, 3, 4, 5], 2)
+    array<integer> rotated = Array.rotate([1, 2, 3, 4, 5], 2)
 
-    assert(res[0] == 3)
-    assert(res[1] == 4)
-    assert(res[2] == 5)
-    assert(res[3] == 1)
-    assert(res[4] == 2)
+    assert(rotated == [3, 4, 5, 1, 2])
 }
 
 @test
 function void test_array_rotate_right() {
-    array<integer> res = Array.rotate([1, 2, 3, 4, 5], -1)
+    array<integer> rotated = Array.rotate([1, 2, 3, 4, 5], -1)
 
-    assert(res[0] == 5)
-    assert(res[1] == 1)
-    assert(res[2] == 2)
-    assert(res[3] == 3)
-    assert(res[4] == 4)
+    assert(rotated == [5, 1, 2, 3, 4])
 }
 
 @test
 function void test_array_rotate_zero() {
-    array<integer> res = Array.rotate([1, 2, 3], 0)
+    array<integer> rotated = Array.rotate([1, 2, 3], 0)
 
-    assert(res[0] == 1)
-    assert(res[1] == 2)
-    assert(res[2] == 3)
+    assert(rotated == [1, 2, 3])
 }
 
 @test
 function void test_array_rotate_empty() {
-    array<integer> res = Array.rotate([], 5)
+    array<integer> rotated = Array.rotate([], 5)
 
-    assert(Array.length(res) == 0)
+    assert(Array.length(rotated) == 0)
 }
 
-# ─── Array.transpose ──────────────────────────────────
+# ─── Array.transpose ──────────────────────────────────────
 
 @test
 function void test_array_transpose_basic() {
     array<array<integer>> matrix = [[1, 2, 3], [4, 5, 6]]
     array<array<integer>> transposed = Result.unwrap(Array.transpose(matrix))
 
-    assert(Array.length(transposed) == 3)
-    assert(transposed[0][0] == 1)
-    assert(transposed[0][1] == 4)
-    assert(transposed[1][0] == 2)
-    assert(transposed[1][1] == 5)
-    assert(transposed[2][0] == 3)
-    assert(transposed[2][1] == 6)
+    assert(transposed == [[1, 4], [2, 5], [3, 6]])
 }
 
 @test
 function void test_array_transpose_empty() {
-    result<array<array<integer>>> r = Array.transpose([])
+    array<array<integer>> transposed = Result.unwrap(Array.transpose([]))
 
-    assert(Result.is_success(r))
+    assert(Array.length(transposed) == 0)
 }
 
 @test
 function void test_array_transpose_unequal_rows() {
-    result<array<array<integer>>> r = Array.transpose([[1, 2], [3]])
+    result<array<array<integer>>> transposed = Array.transpose([[1, 2], [3]])
 
-    assert(Result.is_failure(r))
-}
-
-@test
-function void test_array_contains_false() {
-    assert(!Array.contains([1, 2, 3], 5))
-}
-
-@test
-function void test_array_contains_empty() {
-    assert(!Array.contains([], 1))
-}
-
-@test
-function void test_array_contains_string() {
-    assert(Array.contains(["a", "b", "c"], "b"))
-    assert(!Array.contains(["a", "b", "c"], "d"))
+    assert(Result.is_failure(transposed))
 }
 
 # ─── Array.concat ─────────────────────────────────────────
 
 @test
 function void test_array_concat_basic() {
-    array<integer> result_arr = Array.concat([1, 2], [3, 4])
+    array<integer> combined = Array.concat([1, 2], [3, 4])
 
-    assert(Array.length(result_arr) == 4)
-    assert(Optional.unwrap(Array.get(result_arr, 0)) == 1)
-    assert(Optional.unwrap(Array.get(result_arr, 3)) == 4)
+    assert(combined == [1, 2, 3, 4])
 }
 
 @test
 function void test_array_concat_empty_left() {
-    array<integer> result_arr = Array.concat([], [1, 2, 3])
+    array<integer> combined = Array.concat([], [1, 2, 3])
 
-    assert(Array.length(result_arr) == 3)
+    assert(combined == [1, 2, 3])
 }
 
 @test
 function void test_array_concat_empty_right() {
-    array<integer> result_arr = Array.concat([1, 2, 3], [])
+    array<integer> combined = Array.concat([1, 2, 3], [])
 
-    assert(Array.length(result_arr) == 3)
+    assert(combined == [1, 2, 3])
 }
 
 @test
 function void test_array_concat_both_empty() {
-    array<string> result_arr = Array.concat([], [])
+    array<string> combined = Array.concat([], [])
 
-    assert(Array.length(result_arr) == 0)
+    assert(Array.length(combined) == 0)
 }
 
 # ─── Array.partition ──────────────────────────────────────
 
 @test
 function void test_array_partition_basic() {
-    result<(array<integer>, array<integer>)> r = Array.partition(
-        [1, 2, 3, 4, 5], (integer x) -> x > 3)
+    (array<integer> matches, array<integer> rest) =
+        Result.unwrap(Array.partition([1, 2, 3, 4, 5], (integer x) -> x > 3))
 
-    assert(Result.is_success(r))
-
-    (array<integer> matches, array<integer> rest) = Result.unwrap(r)
-
-    assert(Array.length(matches) == 2)
-    assert(Array.length(rest) == 3)
-    assert(Array.contains(matches, 4))
-    assert(Array.contains(matches, 5))
+    assert(matches == [4, 5])
+    assert(rest == [1, 2, 3])
 }
 
 @test
 function void test_array_partition_none_match() {
-    result<(array<integer>, array<integer>)> r = Array.partition(
-        [1, 2, 3], (integer x) -> x > 10)
-
-    (array<integer> matches, array<integer> rest) = Result.unwrap(r)
+    (array<integer> matches, array<integer> rest) =
+        Result.unwrap(Array.partition([1, 2, 3], (integer x) -> x > 10))
 
     assert(Array.length(matches) == 0)
-    assert(Array.length(rest) == 3)
+    assert(rest == [1, 2, 3])
 }
 
 @test
 function void test_array_partition_all_match() {
-    result<(array<integer>, array<integer>)> r = Array.partition(
-        [1, 2, 3], (integer x) -> x > 0)
+    (array<integer> matches, array<integer> rest) =
+        Result.unwrap(Array.partition([1, 2, 3], (integer x) -> x > 0))
 
-    (array<integer> matches, array<integer> rest) = Result.unwrap(r)
-
-    assert(Array.length(matches) == 3)
+    assert(matches == [1, 2, 3])
     assert(Array.length(rest) == 0)
 }
 
 @test
 function void test_array_partition_empty() {
-    result<(array<integer>, array<integer>)> r = Array.partition(
-        [], (integer x) -> x > 0)
-
-    (array<integer> matches, array<integer> rest) = Result.unwrap(r)
+    (array<integer> matches, array<integer> rest) =
+        Result.unwrap(Array.partition([], (integer x) -> x > 0))
 
     assert(Array.length(matches) == 0)
     assert(Array.length(rest) == 0)
 }
 
-# ─── Callback exception propagation tests ───
+# ─── Callback exceptions propagate as failures ────────────
 
 @test
 function void test_array_map_callback_exception() {
     # Division by zero in callback should produce a failure result.
-    result<array<integer>> r = Array.map([1, 0, 3], (integer x) -> 10 // x)
+    result<array<integer>> outcome = Array.map([1, 0, 3], (integer x) -> 10 // x)
 
-    assert(Result.is_failure(r), "map callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "map callback exception should propagate as failure")
 }
 
 @test
@@ -928,140 +811,127 @@ function void test_array_filter_callback_exception() {
     # Accessing out-of-bounds inside callback should produce failure.
     array<string> items = ["a", "b"]
 
-    result<array<string>> r = Array.filter(items, (string s) -> s[100] == "x")
+    result<array<string>> outcome = Array.filter(items, (string s) -> s[100] == "x")
 
-    assert(Result.is_failure(r), "filter callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "filter callback exception should propagate as failure")
 }
 
 @test
 function void test_array_sort_callback_exception() {
     # Division by zero in comparator should produce failure.
-    result<array<integer>> r = Array.sort([3, 1, 2], (integer a, integer b) -> a // (b - b))
+    result<array<integer>> outcome = Array.sort([3, 1, 2], (integer a, integer b) -> a // (b - b))
 
-    assert(Result.is_failure(r), "sort callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "sort callback exception should propagate as failure")
 }
 
 @test
 function void test_array_reduce_callback_exception() {
     # Division by zero in reducer should produce failure.
-    result<integer> r = Array.reduce([1, 0, 3], 100, (integer acc, integer x) -> acc // x)
+    result<integer> outcome = Array.reduce([1, 0, 3], 100, (integer acc, integer x) -> acc // x)
 
-    assert(Result.is_failure(r), "reduce callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "reduce callback exception should propagate as failure")
 }
 
 @test
 function void test_array_each_callback_exception() {
     # Exception in each callback should produce failure.
-    result<none> r = Array.each([1, 0, 3], (integer x) -> {
+    result<none> outcome = Array.each([1, 0, 3], (integer x) -> {
         integer _ = 10 // x
     })
 
-    assert(Result.is_failure(r), "each callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "each callback exception should propagate as failure")
 }
 
 @test
 function void test_array_find_callback_exception() {
     # Exception in find predicate should produce failure.
-    result<integer> r = Array.find([2, 0, 3], (integer x) -> (10 // x) > 5)
+    result<integer> outcome = Array.find([2, 0, 3], (integer x) -> (10 // x) > 5)
 
-    assert(Result.is_failure(r), "find callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "find callback exception should propagate as failure")
 }
 
-# ─── Array.find_index ────────────────────────────────────
+# ─── Array.find_index ─────────────────────────────────────
 
 @test
 function void test_array_find_index_found() {
-    result<integer> r = Array.find_index([10, 20, 30], (integer x) -> x == 20)
+    result<integer> index = Array.find_index([10, 20, 30], (integer x) -> x == 20)
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == 1)
+    assert(index == success(1))
 }
 
 @test
 function void test_array_find_index_not_found() {
-    result<integer> r = Array.find_index([1, 2, 3], (integer x) -> x == 99)
+    result<integer> index = Array.find_index([1, 2, 3], (integer x) -> x == 99)
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(index))
 }
 
 @test
 function void test_array_find_index_first_match() {
-    # Should return the index of the first match.
-    result<integer> r = Array.find_index([5, 10, 10, 15], (integer x) -> x == 10)
+    result<integer> index = Array.find_index([5, 10, 10, 15], (integer x) -> x == 10)
 
-    assert(Result.unwrap(r) == 1)
+    assert(index == success(1), "find_index should return the first match")
 }
 
-# ───────────────────────────────────────────────────────────
-# append, binary_search, compact, take, drop, find_last
-# ───────────────────────────────────────────────────────────
+# ─── append, binary_search, compact, take, drop, find_last ───
 
 @test
 function void test_array_append() {
     array<integer> appended = Array.append([1, 2, 3], 4)
 
-    assert(Array.length(appended) == 4)
-    assert(appended[3] == 4)
+    assert(appended == [1, 2, 3, 4])
 }
 
 @test
 function void test_array_binary_search() {
     assert(Result.unwrap(Array.binary_search([1, 2, 3, 4, 5], 3)) == 2)
-    assert(!Result.is_success(Array.binary_search([1, 2, 3, 4, 5], 99)))
+    assert(Result.is_failure(Array.binary_search([1, 2, 3, 4, 5], 99)))
 }
 
 @test
 function void test_array_compact() {
     array<integer> compacted = Array.compact([some(1), none, some(3)])
 
-    assert(Array.length(compacted) == 2)
-    assert(compacted[0] == 1)
-    assert(compacted[1] == 3)
+    assert(compacted == [1, 3])
 }
 
 @test
 function void test_array_take() {
     array<integer> taken = Array.take([1, 2, 3, 4, 5], 2)
 
-    assert(Array.length(taken) == 2)
-    assert(taken[0] == 1)
-    assert(taken[1] == 2)
+    assert(taken == [1, 2])
 }
 
 @test
 function void test_array_drop() {
     array<integer> dropped = Array.drop([1, 2, 3, 4, 5], 2)
 
-    assert(Array.length(dropped) == 3)
-    assert(dropped[0] == 3)
+    assert(dropped == [3, 4, 5])
 }
 
 @test
 function void test_array_split_at() {
-    (array<integer>, array<integer>) parts = Array.split_at([1, 2, 3, 4, 5], 2)
+    (array<integer> head, array<integer> tail) = Array.split_at([1, 2, 3, 4, 5], 2)
 
-    assert(Array.length(parts.0) == 2)
-    assert(Array.length(parts.1) == 3)
-    assert(parts.0[0] == 1)
-    assert(parts.0[1] == 2)
-    assert(parts.1[0] == 3)
-    assert(parts.1[2] == 5)
+    assert(head == [1, 2])
+    assert(tail == [3, 4, 5])
 }
 
 @test
 function void test_array_split_at_clamps() {
     (array<integer>, array<integer>) low = Array.split_at([1, 2, 3], -4)
-    assert(Array.length(low.0) == 0)
-    assert(Array.length(low.1) == 3)
-
     (array<integer>, array<integer>) high = Array.split_at([1, 2, 3], 99)
-    assert(Array.length(high.0) == 3)
+
+    assert(Array.length(low.0) == 0)
+    assert(low.1 == [1, 2, 3])
+    assert(high.0 == [1, 2, 3])
     assert(Array.length(high.1) == 0)
 }
 
 @test
 function void test_array_split_at_empty() {
     (array<integer>, array<integer>) parts = Array.split_at([], 2)
+
     assert(Array.length(parts.0) == 0)
     assert(Array.length(parts.1) == 0)
 }
@@ -1072,9 +942,7 @@ function void test_array_find_last() {
     assert(Result.unwrap(Array.find_last_index([1, 2, 3, 4], (integer x) -> x < 3)) == 1)
 }
 
-# ───────────────────────────────────────────────────────────
-# Negative tests — invalid arguments produce failure results
-# ───────────────────────────────────────────────────────────
+# ─── Invalid arguments produce failure results ────────────
 
 @test
 function void test_array_chunk_invalid_size() {
@@ -1102,84 +970,81 @@ function void test_array_slice_negative_from() {
     assert(Result.is_failure(Array.slice([1, 2, 3], -1, 2)))
 }
 
-# ───────────────────────────────────────────────────────────
-# Negative tests — callback exceptions propagate as failures
-# ───────────────────────────────────────────────────────────
+# ─── More callback exceptions propagating as failures ─────
 
 @test
 function void test_array_count_callback_exception() {
-    result<integer> r = Array.count([1, 0, 3], (integer x) -> (10 // x) > 0)
+    result<integer> outcome = Array.count([1, 0, 3], (integer x) -> (10 // x) > 0)
 
-    assert(Result.is_failure(r), "count callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "count callback exception should propagate as failure")
 }
 
 @test
 function void test_array_all_callback_exception() {
-    result<boolean> r = Array.all([1, 0, 3], (integer x) -> (10 // x) > 0)
+    result<boolean> outcome = Array.all([1, 0, 3], (integer x) -> (10 // x) > 0)
 
-    assert(Result.is_failure(r), "all callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "all callback exception should propagate as failure")
 }
 
 @test
 function void test_array_any_callback_exception() {
-    result<boolean> r = Array.any([1, 0, 3], (integer x) -> (10 // x) > 100)
+    result<boolean> outcome = Array.any([1, 0, 3], (integer x) -> (10 // x) > 100)
 
-    assert(Result.is_failure(r), "any callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "any callback exception should propagate as failure")
 }
 
 @test
 function void test_array_find_index_callback_exception() {
-    result<integer> r = Array.find_index([1, 0, 3], (integer x) -> (10 // x) == 5)
+    result<integer> outcome = Array.find_index([1, 0, 3], (integer x) -> (10 // x) == 5)
 
-    assert(Result.is_failure(r), "find_index callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "find_index callback exception should propagate as failure")
 }
 
 @test
 function void test_array_take_while_callback_exception() {
-    result<array<integer>> r = Array.take_while([1, 0, 3], (integer x) -> (10 // x) > 0)
+    result<array<integer>> outcome = Array.take_while([1, 0, 3], (integer x) -> (10 // x) > 0)
 
-    assert(Result.is_failure(r), "take_while callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "take_while callback exception should propagate as failure")
 }
 
 @test
 function void test_array_drop_while_callback_exception() {
-    result<array<integer>> r = Array.drop_while([1, 0, 3], (integer x) -> (10 // x) > 5)
+    result<array<integer>> outcome = Array.drop_while([1, 0, 3], (integer x) -> (10 // x) > 5)
 
-    assert(Result.is_failure(r), "drop_while callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "drop_while callback exception should propagate as failure")
 }
 
 @test
 function void test_array_scan_callback_exception() {
-    result<array<integer>> r = Array.scan([1, 0, 3], 100, (integer acc, integer x) -> acc // x)
+    result<array<integer>> outcome =
+        Array.scan([1, 0, 3], 100, (integer acc, integer x) -> acc // x)
 
-    assert(Result.is_failure(r), "scan callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "scan callback exception should propagate as failure")
 }
 
 @test
 function void test_array_flat_map_callback_exception() {
-    result<array<integer>> r = Array.flat_map([1, 0, 3], (integer x) -> [10 // x])
+    result<array<integer>> outcome = Array.flat_map([1, 0, 3], (integer x) -> [10 // x])
 
-    assert(Result.is_failure(r), "flat_map callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "flat_map callback exception should propagate as failure")
 }
 
 @test
 function void test_array_sort_by_callback_exception() {
-    result<array<integer>> r = Array.sort_by([3, 1, 2], (integer x) -> x // (x - x))
+    result<array<integer>> outcome = Array.sort_by([3, 1, 2], (integer x) -> x // (x - x))
 
-    assert(Result.is_failure(r), "sort_by callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "sort_by callback exception should propagate as failure")
 }
 
 @test
 function void test_array_group_by_callback_exception() {
-    result<dictionary<array<integer>>> r = Array.group_by(
+    result<dictionary<array<integer>>> outcome = Array.group_by(
         [1, 0, 3], (integer x) -> Converter.to_string(10 // x))
 
-    assert(Result.is_failure(r), "group_by callback exception should propagate as failure")
+    assert(Result.is_failure(outcome), "group_by callback exception should propagate as failure")
 }
 
-# ───────────────────────────────────────────────────────────
-# Numeric and ordering edge cases
-# ───────────────────────────────────────────────────────────
+# ─── Numeric and ordering edge cases ──────────────────────
 
 @test
 function void test_array_sum_overflow() {
@@ -1209,37 +1074,28 @@ function void test_array_rotate_wraps() {
     # A shift larger than the length wraps around via modulo.
     array<integer> wrapped = Array.rotate([1, 2, 3, 4, 5], 7)
 
-    assert(wrapped[0] == 3)
-    assert(wrapped[4] == 2)
+    assert(wrapped == [3, 4, 5, 1, 2])
 
     # A large negative shift wraps and rotates right.
-    array<integer> wrapped_neg = Array.rotate([1, 2, 3, 4, 5], -7)
+    array<integer> wrapped_right = Array.rotate([1, 2, 3, 4, 5], -7)
 
-    assert(wrapped_neg[0] == 4)
-    assert(wrapped_neg[4] == 3)
+    assert(wrapped_right == [4, 5, 1, 2, 3])
 
     # A shift equal to the length leaves the array unchanged.
     array<integer> same = Array.rotate([1, 2, 3, 4, 5], 5)
 
-    assert(same[0] == 1)
-    assert(same[4] == 5)
+    assert(same == [1, 2, 3, 4, 5])
 }
 
 @test
 function void test_array_unique_preserves_order() {
     # unique keeps the first occurrence of each element and preserves order.
-    array<integer> u = Array.unique([3, 1, 3, 2, 1])
+    array<integer> unique_numbers = Array.unique([3, 1, 3, 2, 1])
 
-    assert(Array.length(u) == 3)
-    assert(u[0] == 3)
-    assert(u[1] == 1)
-    assert(u[2] == 2)
+    assert(unique_numbers == [3, 1, 2])
 
     # The same ordering guarantee holds for strings.
-    array<string> us = Array.unique(["b", "a", "b", "c", "a"])
+    array<string> unique_words = Array.unique(["b", "a", "b", "c", "a"])
 
-    assert(Array.length(us) == 3)
-    assert(us[0] == "b")
-    assert(us[1] == "a")
-    assert(us[2] == "c")
+    assert(unique_words == ["b", "a", "c"])
 }

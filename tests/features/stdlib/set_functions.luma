@@ -5,6 +5,8 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── Construction and Membership ───
+
 @test
 function void test_set_new_is_empty() {
     assert(Set.new() |> Set.is_empty())
@@ -13,75 +15,80 @@ function void test_set_new_is_empty() {
 
 @test
 function void test_set_from_array() {
-    integer len = Set.from_array([1, 2, 2, 3, 3, 3]) |> Set.length()
+    set numbers = Set.from_array([1, 2, 2, 3, 3, 3])
 
-    assert(len == 3)
-    assert(Set.from_array([1, 2, 2, 3, 3, 3]) |> Set.contains(1))
-    assert(Set.from_array([1, 2, 2, 3, 3, 3]) |> Set.contains(2))
-    assert(Set.from_array([1, 2, 2, 3, 3, 3]) |> Set.contains(3))
+    assert(Set.length(numbers) == 3)
+    assert(Set.contains(numbers, 1))
+    assert(Set.contains(numbers, 2))
+    assert(Set.contains(numbers, 3))
 }
 
 @test
 function void test_set_from_array_strings() {
-    integer len = Set.from_array(["a", "b", "a", "c", "b"]) |> Set.length()
+    set letters = Set.from_array(["a", "b", "a", "c", "b"])
 
-    assert(len == 3)
+    assert(Set.length(letters) == 3)
 }
 
 @test
 function void test_set_contains() {
-    assert(Set.from_array([10, 20, 30]) |> Set.contains(10))
-    assert(Set.from_array([10, 20, 30]) |> Set.contains(20))
-    assert(!(Set.from_array([10, 20, 30]) |> Set.contains(99)))
+    set numbers = Set.from_array([10, 20, 30])
+
+    assert(Set.contains(numbers, 10))
+    assert(Set.contains(numbers, 20))
+    assert(!Set.contains(numbers, 99))
 }
 
 @test
 function void test_set_length() {
-    integer len = Set.from_array([1, 1, 2, 3]) |> Set.length()
+    integer length = Set.from_array([1, 1, 2, 3]) |> Set.length()
 
-    assert(len == 3)
+    assert(length == 3)
 }
 
 @test
-function void test_set_union() {
-    integer len = Set.union(Set.from_array([1, 2, 3]), Set.from_array([3, 4, 5]))
-    |> Set.length()
+function void test_set_to_array() {
+    # Elements keep their first-insertion order; duplicates are dropped.
+    array<integer> elements = Set.from_array([3, 1, 2, 1]) |> Set.to_array()
 
-    assert(len == 5)
-    assert(Set.union(Set.from_array([1, 2, 3]), Set.from_array([3, 4, 5])) |> Set.contains(1))
-    assert(Set.union(Set.from_array([1, 2, 3]), Set.from_array([3, 4, 5])) |> Set.contains(5))
+    assert(elements == [3, 1, 2])
+}
+
+@test
+function void test_set_empty() {
+    set empty_set = Set.from_array([])
+
+    assert(Set.length(empty_set) == 0)
+    assert(!Set.contains(empty_set, 1))
+}
+
+# ─── Set Algebra ───
+
+@test
+function void test_set_union() {
+    set combined = Set.union(Set.from_array([1, 2, 3]), Set.from_array([3, 4, 5]))
+
+    assert(Set.length(combined) == 5)
+    assert(Set.contains(combined, 1))
+    assert(Set.contains(combined, 5))
 }
 
 @test
 function void test_set_intersection() {
-    integer len = Set.intersection(Set.from_array([1, 2, 3, 4]), Set.from_array([3, 4, 5, 6]))
-    |> Set.length()
+    set shared = Set.intersection(Set.from_array([1, 2, 3, 4]), Set.from_array([3, 4, 5, 6]))
 
-    assert(len == 2)
-    assert(
-        Set.intersection(Set.from_array([1, 2, 3, 4]), Set.from_array([3, 4, 5, 6]))
-        |> Set.contains(3)
-    )
-    assert(
-        Set.intersection(Set.from_array([1, 2, 3, 4]), Set.from_array([3, 4, 5, 6]))
-        |> Set.contains(4)
-    )
+    assert(Set.length(shared) == 2)
+    assert(Set.contains(shared, 3))
+    assert(Set.contains(shared, 4))
 }
 
 @test
 function void test_set_difference() {
-    integer len = Set.difference(Set.from_array([1, 2, 3, 4]), Set.from_array([3, 4, 5, 6]))
-    |> Set.length()
+    set remaining = Set.difference(Set.from_array([1, 2, 3, 4]), Set.from_array([3, 4, 5, 6]))
 
-    assert(len == 2)
-    assert(
-        Set.difference(Set.from_array([1, 2, 3, 4]), Set.from_array([3, 4, 5, 6]))
-        |> Set.contains(1)
-    )
-    assert(
-        Set.difference(Set.from_array([1, 2, 3, 4]), Set.from_array([3, 4, 5, 6]))
-        |> Set.contains(2)
-    )
+    assert(Set.length(remaining) == 2)
+    assert(Set.contains(remaining, 1))
+    assert(Set.contains(remaining, 2))
 }
 
 @test
@@ -89,19 +96,6 @@ function void test_set_is_subset() {
     assert(Set.is_subset(Set.from_array([1, 2]), Set.from_array([1, 2, 3, 4])))
     assert(!Set.is_subset(Set.from_array([1, 5]), Set.from_array([1, 2, 3, 4])))
     assert(Set.is_subset(Set.new(), Set.from_array([1, 2, 3])))
-}
-
-@test
-function void test_set_to_array() {
-    array<integer> result_array = Set.from_array([3, 1, 2, 1]) |> Set.to_array()
-
-    assert(Array.length(result_array) == 3)
-}
-
-@test
-function void test_set_empty() {
-    assert((Set.from_array([]) |> Set.length()) == 0)
-    assert(!(Set.from_array([]) |> Set.contains(1)))
 }
 
 @test
@@ -134,92 +128,87 @@ function void test_set_equals_strings() {
     assert(!Set.equals(Set.from_array(["a", "b"]), Set.from_array(["a", "c"])))
 }
 
+# ─── Set.add and Set.remove ───
+
 @test
 function void test_set_add() {
-    integer extended_len = Set.from_array([1, 2, 3])
-    |> Set.add(4)
-    |> Set.length()
+    set extended = Set.from_array([1, 2, 3]) |> Set.add(4)
 
-    assert(extended_len == 4)
-    assert(Set.from_array([1, 2, 3]) |> Set.add(4) |> Set.contains(4))
+    assert(Set.length(extended) == 4)
+    assert(Set.contains(extended, 4))
 
-    # Adding a duplicate should not change the set.
-    integer duplicate_len = Set.from_array([1, 2, 3])
-    |> Set.add(2)
-    |> Set.length()
+    # Adding a duplicate must not change the set.
+    integer duplicate_length = Set.from_array([1, 2, 3])
+        |> Set.add(2)
+        |> Set.length()
 
-    assert(duplicate_len == 3)
+    assert(duplicate_length == 3)
 }
 
 @test
 function void test_set_add_to_empty() {
-    integer len = Set.new()
-    |> Set.add(1)
-    |> Set.length()
+    set single = Set.new() |> Set.add(1)
 
-    assert(len == 1)
-    assert(Set.new() |> Set.add(1) |> Set.contains(1))
+    assert(Set.length(single) == 1)
+    assert(Set.contains(single, 1))
 }
 
 @test
 function void test_set_remove() {
-    integer reduced_len = Set.from_array([1, 2, 3])
-    |> Set.remove(2)
-    |> Set.length()
+    set reduced = Set.from_array([1, 2, 3]) |> Set.remove(2)
 
-    assert(reduced_len == 2)
-    assert(!(Set.from_array([1, 2, 3]) |> Set.remove(2) |> Set.contains(2)))
-    assert(Set.from_array([1, 2, 3]) |> Set.remove(2) |> Set.contains(1))
-    assert(Set.from_array([1, 2, 3]) |> Set.remove(2) |> Set.contains(3))
+    assert(Set.length(reduced) == 2)
+    assert(!Set.contains(reduced, 2))
+    assert(Set.contains(reduced, 1))
+    assert(Set.contains(reduced, 3))
 }
 
 @test
 function void test_set_remove_nonexistent() {
-    integer unchanged_len = Set.from_array([1, 2, 3])
-    |> Set.remove(5)
-    |> Set.length()
+    integer unchanged_length = Set.from_array([1, 2, 3])
+        |> Set.remove(5)
+        |> Set.length()
 
-    assert(unchanged_len == 3)
+    assert(unchanged_length == 3)
 }
 
-# ─── Set.symmetric_difference ──────────────────────────────
+# ─── Set.symmetric_difference ───
 
 @test
 function void test_set_symmetric_difference_basic() {
-    integer len = Set.symmetric_difference(Set.from_array([1, 2, 3]), Set.from_array([2, 3, 4]))
-    |> Set.length()
+    set exclusive = Set.symmetric_difference(Set.from_array([1, 2, 3]), Set.from_array([2, 3, 4]))
 
-    assert(len == 2)
+    assert(Set.length(exclusive) == 2)
+    assert(Set.contains(exclusive, 1))
+    assert(Set.contains(exclusive, 4))
 }
 
 @test
 function void test_set_symmetric_difference_disjoint() {
-    # All elements appear when sets share nothing
-    integer len = Set.symmetric_difference(Set.from_array([1, 2]), Set.from_array([3, 4]))
-    |> Set.length()
+    # All elements appear when the sets share nothing.
+    set exclusive = Set.symmetric_difference(Set.from_array([1, 2]), Set.from_array([3, 4]))
 
-    assert(len == 4)
+    assert(Set.length(exclusive) == 4)
 }
 
 @test
 function void test_set_symmetric_difference_equal() {
-    # Identical sets produce an empty set
-    integer len = Set.symmetric_difference(Set.from_array([1, 2, 3]), Set.from_array([1, 2, 3]))
-    |> Set.length()
+    # Identical sets produce an empty set.
+    set exclusive = Set.symmetric_difference(Set.from_array([1, 2, 3]), Set.from_array([1, 2, 3]))
 
-    assert(len == 0)
+    assert(Set.is_empty(exclusive))
 }
 
-# ─── Set.partition ────────────────────────────────────────
+# ─── Set.partition ───
 
 @test
 function void test_set_partition_basic() {
-    result<(set, set)> r = Set.from_array([1, 2, 3, 4, 5])
-    |> Set.partition((integer x) -> x > 3)
+    result<(set, set)> partitioned = Set.from_array([1, 2, 3, 4, 5])
+        |> Set.partition((integer x) -> x > 3)
 
-    assert(Result.is_success(r))
+    assert(Result.is_success(partitioned))
 
-    (set matches, set rest) = Result.unwrap(r)
+    (set matches, set rest) = Result.unwrap(partitioned)
 
     assert(Set.length(matches) == 2)
     assert(Set.length(rest) == 3)
@@ -229,10 +218,10 @@ function void test_set_partition_basic() {
 
 @test
 function void test_set_partition_none_match() {
-    result<(set, set)> r = Set.from_array([1, 2, 3])
-    |> Set.partition((integer x) -> x > 10)
+    result<(set, set)> partitioned = Set.from_array([1, 2, 3])
+        |> Set.partition((integer x) -> x > 10)
 
-    (set matches, set rest) = Result.unwrap(r)
+    (set matches, set rest) = Result.unwrap(partitioned)
 
     assert(Set.length(matches) == 0)
     assert(Set.length(rest) == 3)
@@ -240,75 +229,77 @@ function void test_set_partition_none_match() {
 
 @test
 function void test_set_partition_all_match() {
-    result<(set, set)> r = Set.from_array([1, 2, 3])
-    |> Set.partition((integer x) -> x > 0)
+    result<(set, set)> partitioned = Set.from_array([1, 2, 3])
+        |> Set.partition((integer x) -> x > 0)
 
-    (set matches, set rest) = Result.unwrap(r)
+    (set matches, set rest) = Result.unwrap(partitioned)
 
     assert(Set.length(matches) == 3)
     assert(Set.length(rest) == 0)
 }
 
-# ── Set.filter ──
+# ─── Set.filter ───
 
 @test
 function void test_set_filter_basic() {
-    result<set> r = Set.from_array([1, 2, 3, 4, 5])
-    |> Set.filter((integer x) -> x > 3)
+    result<set> filtered = Set.from_array([1, 2, 3, 4, 5])
+        |> Set.filter((integer x) -> x > 3)
 
-    assert(Result.is_success(r))
-    assert((Result.unwrap(r) |> Set.length()) == 2)
-    assert(Result.unwrap(r) |> Set.contains(4))
-    assert(Result.unwrap(r) |> Set.contains(5))
+    assert(Result.is_success(filtered))
+
+    set kept = Result.unwrap(filtered)
+
+    assert(Set.length(kept) == 2)
+    assert(Set.contains(kept, 4))
+    assert(Set.contains(kept, 5))
 }
 
 @test
 function void test_set_filter_none_match() {
-    result<set> r = Set.from_array([1, 2, 3])
-    |> Set.filter((integer x) -> x > 10)
+    result<set> filtered = Set.from_array([1, 2, 3])
+        |> Set.filter((integer x) -> x > 10)
 
-    assert((Result.unwrap(r) |> Set.length()) == 0)
+    assert((Result.unwrap(filtered) |> Set.length()) == 0)
 }
 
 @test
 function void test_set_filter_all_match() {
-    result<set> r = Set.from_array([1, 2, 3])
-    |> Set.filter((integer x) -> x > 0)
+    result<set> filtered = Set.from_array([1, 2, 3])
+        |> Set.filter((integer x) -> x > 0)
 
-    assert((Result.unwrap(r) |> Set.length()) == 3)
+    assert((Result.unwrap(filtered) |> Set.length()) == 3)
 }
 
-# ── Set.reduce ──
+# ─── Set.reduce ───
 
 @test
 function void test_set_reduce_sum() {
-    result<integer> r = Set.from_array([1, 2, 3, 4, 5])
-    |> Set.reduce(0, (integer acc, integer x) -> acc + x)
+    result<integer> total = Set.from_array([1, 2, 3, 4, 5])
+        |> Set.reduce(0, (integer acc, integer x) -> acc + x)
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == 15)
+    assert(Result.is_success(total))
+    assert(Result.unwrap(total) == 15)
 }
 
 @test
 function void test_set_reduce_empty() {
-    result<integer> r = Set.new()
-    |> Set.reduce(42, (integer acc, integer x) -> acc + x)
+    result<integer> total = Set.new()
+        |> Set.reduce(42, (integer acc, integer x) -> acc + x)
 
-    assert(Result.unwrap(r) == 42)
+    assert(Result.unwrap(total) == 42, "an empty set returns the initial value")
 }
 
 @test
 function void test_set_reduce_string_concat() {
-    result<string> r = Set.from_array(["a", "b", "c"])
-    |> Set.reduce("", (string acc, string x) -> acc + x)
+    # Elements are folded in stored (first-insertion) order.
+    result<string> joined = Set.from_array(["b", "a", "c", "a"])
+        |> Set.reduce("", (string acc, string x) -> "${acc}${x}")
 
-    assert(Result.is_success(r))
-    assert(String.length(Result.unwrap(r)) == 3)
+    assert(Result.is_success(joined))
+    assert(Result.unwrap(joined) == "bac")
 }
 
-# ───────────────────────────────────────────────────────────
-# concat, map, each
-# ───────────────────────────────────────────────────────────
+# ─── concat, map, each ───
 
 @test
 function void test_set_concat() {
@@ -337,23 +328,23 @@ function void test_set_map() {
     set mapped = Result.unwrap(Set.map(Set.from_array([1, 2, 3]), (integer x) -> x * 10))
 
     assert(Set.length(mapped) == 3)
+    assert(Set.contains(mapped, 10))
+    assert(Set.contains(mapped, 20))
     assert(Set.contains(mapped, 30))
 }
 
 @test
 function void test_set_each() {
     reference<integer> total = Reference.new(0)
-    result<none> r = Set.each(Set.from_array([1, 2, 3]), (integer x) -> {
+    result<none> visited = Set.each(Set.from_array([1, 2, 3]), (integer x) -> {
         Reference.set(total, Reference.get(total) + x)
     })
 
-    assert(Result.is_success(r))
+    assert(Result.is_success(visited))
     assert(Reference.get(total) == 6)
 }
 
-# ───────────────────────────────────────────────────────────
-# map deduplication and composite (non-primitive) elements
-# ───────────────────────────────────────────────────────────
+# ─── map deduplication and composite (non-primitive) elements ───
 
 @test
 function void test_set_map_deduplicates() {
@@ -370,12 +361,12 @@ function void test_set_map_deduplicates() {
 function void test_set_composite_elements() {
     # Set stores any value type and deduplicates composite elements by
     # structural equality.
-    set s = Set.from_array([[1], [2], [1]])
+    set nested = Set.from_array([[1], [2], [1]])
 
-    assert(Set.length(s) == 2)
-    assert(Set.contains(s, [1]))
-    assert(Set.contains(s, [2]))
-    assert(!Set.contains(s, [3]))
+    assert(Set.length(nested) == 2)
+    assert(Set.contains(nested, [1]))
+    assert(Set.contains(nested, [2]))
+    assert(!Set.contains(nested, [3]))
 }
 
 @test
@@ -388,64 +379,78 @@ function void test_set_map_to_composite() {
     assert(Set.contains(wrapped, [2]))
 }
 
-# ───────────────────────────────────────────────────────────
-# Negative tests — callback failures propagate as failure results
-#
+# ─── any, all, count, find ───
+
+@test
+function void test_set_any_all_count_find() {
+    set numbers = Set.from_array([1, 2, 3, 4])
+
+    assert(Set.any(numbers, (integer x) -> x > 3) |> Result.unwrap())
+    assert(!(Set.any(numbers, (integer x) -> x > 9) |> Result.unwrap()))
+    assert(Set.all(numbers, (integer x) -> x > 0) |> Result.unwrap())
+    assert(!(Set.all(numbers, (integer x) -> x > 1) |> Result.unwrap()))
+    assert((Set.count(numbers, (integer x) -> x % 2 == 0) |> Result.unwrap()) == 2)
+
+    # find returns the first (stored-order) match, and fails when none match.
+    assert((Set.find(numbers, (integer x) -> x % 2 == 0) |> Result.unwrap()) == 2)
+    assert(Result.is_failure(Set.find(numbers, (integer x) -> x > 9)))
+}
+
+# ─── Negative tests — callback failures propagate as failure results ───
+
 # Wrong-type arguments are rejected by the type checker (compile time), so the
 # negative paths reachable from a compiling feature test are runtime callback
 # failures, which the higher-order operations surface as failure results.
-# ───────────────────────────────────────────────────────────
 
 @test
 function void test_set_map_callback_failure() {
-    result<set> r = Set.map(Set.from_array([1, 0, 3]), (integer x) -> 10 // x)
+    result<set> mapped = Set.map(Set.from_array([1, 0, 3]), (integer x) -> 10 // x)
 
-    assert(Result.is_failure(r), "map callback exception should propagate as failure")
+    assert(Result.is_failure(mapped), "map callback exception should propagate as failure")
 }
 
 @test
 function void test_set_filter_callback_failure() {
-    result<set> r = Set.filter(Set.from_array([1, 0, 3]), (integer x) -> (10 // x) > 0)
+    result<set> filtered = Set.filter(Set.from_array([1, 0, 3]), (integer x) -> (10 // x) > 0)
 
-    assert(Result.is_failure(r), "filter predicate exception should propagate as failure")
+    assert(Result.is_failure(filtered), "filter predicate exception should propagate as failure")
 }
 
 @test
 function void test_set_reduce_callback_failure() {
-    result<integer> r = Set.reduce(
+    result<integer> reduced = Set.reduce(
         Set.from_array([1, 0, 3]),
         100,
         (integer acc, integer x) -> acc // x
     )
 
-    assert(Result.is_failure(r), "reduce callback exception should propagate as failure")
+    assert(Result.is_failure(reduced), "reduce callback exception should propagate as failure")
 }
 
 @test
 function void test_set_partition_callback_failure() {
-    result<(set, set)> r = Set.partition(Set.from_array([1, 0, 3]), (integer x) -> (10 // x) > 0)
+    result<(set, set)> partitioned =
+        Set.partition(Set.from_array([1, 0, 3]), (integer x) -> (10 // x) > 0)
 
-    assert(Result.is_failure(r), "partition predicate exception should propagate as failure")
+    assert(
+        Result.is_failure(partitioned),
+        "partition predicate exception should propagate as failure"
+    )
 }
 
 @test
 function void test_set_each_callback_failure() {
     reference<integer> sink = Reference.new(0)
-    result<none> r = Set.each(Set.from_array([1, 0, 3]), (integer x) -> {
+    result<none> visited = Set.each(Set.from_array([1, 0, 3]), (integer x) -> {
         Reference.set(sink, 10 // x)
     })
 
-    assert(Result.is_failure(r), "each callback exception should propagate as failure")
+    assert(Result.is_failure(visited), "each callback exception should propagate as failure")
 }
 
 @test
-function void test_set_any_all_count_find() {
-    set s = Set.from_array([1, 2, 3, 4])
+function void test_set_any_callback_failure() {
+    result<boolean> found = Set.any(Set.from_array([1, 0, 3]), (integer x) -> (10 // x) > 100)
 
-    assert(Set.any(s, (integer x) -> x > 3) |> Result.unwrap())
-    assert(Set.all(s, (integer x) -> x > 0) |> Result.unwrap())
-    assert((Set.count(s, (integer x) -> x % 2 == 0) |> Result.unwrap()) == 2)
-    # find returns the first (stored-order) match.
-    assert((Set.find(s, (integer x) -> x % 2 == 0) |> Result.unwrap()) == 2)
-    assert(Result.is_failure(Set.find(s, (integer x) -> x > 9)))
+    assert(Result.is_failure(found), "any predicate exception should propagate as failure")
 }

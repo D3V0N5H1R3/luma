@@ -869,6 +869,7 @@ void Parser::parse_pattern_guard(MatchArm& arm) {
 
 MatchArm Parser::parse_match_arm() {
     MatchArm arm;
+    arm.location = current().location;
 
     if (consume_if(TokenType::Else)) {
         arm.pattern = MatchArm::ElsePatternData{};

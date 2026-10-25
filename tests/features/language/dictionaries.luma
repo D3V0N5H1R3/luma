@@ -5,6 +5,8 @@
 # Luma_User_Manual.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── Creation and Lookup ───
+
 @test
 function void test_dictionary_creation() {
     dictionary<integer> scores = {"alice": 95, "bob": 87}
@@ -19,13 +21,19 @@ function void test_dictionary_get() {
     dictionary<integer> coords = {"x": 10, "y": 20}
 
     result<integer> found = Dictionary.get(coords, "x")
-
-    assert(Result.is_success(found))
-    assert(Result.unwrap(found) == 10)
-
     result<integer> missing = Dictionary.get(coords, "z")
 
-    assert(!Result.is_success(missing))
+    assert(found == success(10))
+    assert(Result.is_failure(missing))
+}
+
+@test
+function void test_dictionary_get_missing_key() {
+    dictionary<integer> quantities = {"a": 1}
+
+    result<integer> missing = Dictionary.get(quantities, "z")
+
+    assert(missing == failure("Dictionary.get: key 'z' not found"), "failure names the key")
 }
 
 @test
@@ -35,6 +43,25 @@ function void test_dictionary_get_or() {
     assert(Dictionary.get_or(entries, "a", 0) == 1)
     assert(Dictionary.get_or(entries, "missing", 42) == 42)
 }
+
+@test
+function void test_dictionary_contains_value() {
+    dictionary<integer> entries = {"a": 1, "b": 2, "c": 3}
+
+    assert(Dictionary.has_value(entries, 2))
+    assert(!Dictionary.has_value(entries, 99))
+}
+
+@test
+function void test_dictionary_is_empty() {
+    dictionary<integer> empty = {}
+    dictionary<integer> non_empty = {"a": 1}
+
+    assert(Dictionary.is_empty(empty))
+    assert(!Dictionary.is_empty(non_empty))
+}
+
+# ─── Immutable Updates ───
 
 @test
 function void test_dictionary_set_and_remove() {
@@ -51,41 +78,41 @@ function void test_dictionary_set_and_remove() {
 }
 
 @test
+function void test_dictionary_remove_missing_key() {
+    dictionary<integer> entries = {"a": 1}
+
+    # Removing a key that does not exist returns an unchanged copy.
+    dictionary<integer> unchanged = Dictionary.remove(entries, "z")
+
+    assert(Dictionary.length(unchanged) == 1)
+    assert(Dictionary.has(unchanged, "a"))
+}
+
+@test
 function void test_dictionary_update() {
     dictionary<integer> counts = {"x": 5}
 
     # An existing key: the updater sees the current value.
-    dictionary<integer> bumped =
-        Dictionary.update(counts, "x", (optional<integer> cur) -> Optional.unwrap_or(cur, 0) + 1)
+    dictionary<integer> bumped = Dictionary.update(
+        counts,
+        "x",
+        (optional<integer> current) -> Optional.unwrap_or(current, 0) + 1
+    )
 
     assert(Dictionary.get_or(bumped, "x", 0) == 6)
 
     # An absent key: the updater sees none and can seed a default.
-    dictionary<integer> seeded =
-        Dictionary.update(counts, "y", (optional<integer> cur) -> Optional.unwrap_or(cur, 0) + 1)
+    dictionary<integer> seeded = Dictionary.update(
+        counts,
+        "y",
+        (optional<integer> current) -> Optional.unwrap_or(current, 0) + 1
+    )
 
     assert(Dictionary.get_or(seeded, "y", 0) == 1)
 
     # The input dictionary is never mutated.
     assert(Dictionary.get_or(counts, "x", 0) == 5)
     assert(!Dictionary.has(counts, "y"))
-}
-
-@test
-function void test_dictionary_keys_values() {
-    dictionary<integer> coords = {"x": 1, "y": 2}
-
-    array<string> keys = Dictionary.keys(coords)
-
-    assert(Array.length(keys) == 2)
-    assert("x" in keys)
-    assert("y" in keys)
-
-    array<integer> values = Dictionary.values(coords)
-
-    assert(Array.length(values) == 2)
-    assert(1 in values)
-    assert(2 in values)
 }
 
 @test
@@ -101,36 +128,117 @@ function void test_dictionary_merge() {
 
 @test
 function void test_dictionary_merge_with() {
-    dictionary<integer> a = {"x": 1, "y": 2}
-    dictionary<integer> b = {"y": 10, "z": 3}
+    dictionary<integer> base = {"x": 1, "y": 2}
+    dictionary<integer> overlay = {"y": 10, "z": 3}
+
     # Shared key "y" is combined by summing; unique keys pass through.
-    dictionary<integer> merged = Dictionary.merge_with(a, b, (integer l, integer r) -> l + r)
+    dictionary<integer> merged =
+        Dictionary.merge_with(base, overlay, (integer left, integer right) -> left + right)
 
     assert(Dictionary.get_or(merged, "x", 0) == 1)
     assert(Dictionary.get_or(merged, "y", 0) == 12)
     assert(Dictionary.get_or(merged, "z", 0) == 3)
+
     # Inputs are unchanged.
-    assert(Dictionary.get_or(a, "y", 0) == 2)
+    assert(Dictionary.get_or(base, "y", 0) == 2)
 }
 
 @test
-function void test_dictionary_is_empty() {
-    dictionary<integer> empty = {}
-    dictionary<integer> nonempty = {"a": 1}
+function void test_dictionary_deep_merge() {
+    dictionary<string> base = {"a": "1", "b": "2"}
+    dictionary<string> overlay = {"b": "X"}
+    dictionary<string> merged = Dictionary.deep_merge(base, overlay)
 
-    assert(Dictionary.is_empty(empty))
-    assert(!Dictionary.is_empty(nonempty))
+    assert(Dictionary.get_or(merged, "a", "") == "1")
+    assert(Dictionary.get_or(merged, "b", "") == "X")
 }
 
 @test
-function void test_dictionary_each() {
+function void test_dictionary_deep_merge_nested() {
+    dictionary<dictionary<integer>> base = {"outer": {"x": 1, "y": 2}}
+    dictionary<dictionary<integer>> overlay = {"outer": {"y": 9, "z": 3}}
+    dictionary<dictionary<integer>> merged = Dictionary.deep_merge(base, overlay)
+
+    dictionary<integer> inner = Result.unwrap(Dictionary.get(merged, "outer"))
+
+    assert(Dictionary.length(inner) == 3)
+    assert(Dictionary.get_or(inner, "x", 0) == 1)
+    assert(Dictionary.get_or(inner, "y", 0) == 9)
+    assert(Dictionary.get_or(inner, "z", 0) == 3)
+}
+
+@test
+function void test_dictionary_deep_merge_replaces_scalar() {
+    # When a key is not a dictionary on both sides, the overlay value wins
+    # outright instead of being merged recursively.
+    dictionary<integer> base = {"a": 1}
+    dictionary<integer> overlay = {"a": 99, "b": 2}
+    dictionary<integer> merged = Dictionary.deep_merge(base, overlay)
+
+    assert(Dictionary.get_or(merged, "a", 0) == 99)
+    assert(Dictionary.get_or(merged, "b", 0) == 2)
+}
+
+@test
+function void test_dictionary_deep_merge_shared_substructure() {
+    # Both branches reference the same nested dictionary. deep_merge must merge
+    # each branch independently without treating the shared (non-cyclic)
+    # reference as a circular reference.
+    dictionary<integer> shared = {"p": 1}
+    dictionary<dictionary<integer>> base = {"x": shared, "y": shared}
+    dictionary<dictionary<integer>> overlay = {"x": {"q": 2}, "y": {"r": 3}}
+    dictionary<dictionary<integer>> merged = Dictionary.deep_merge(base, overlay)
+
+    dictionary<integer> merged_x = Result.unwrap(Dictionary.get(merged, "x"))
+    dictionary<integer> merged_y = Result.unwrap(Dictionary.get(merged, "y"))
+
+    assert(Dictionary.get_or(merged_x, "p", 0) == 1)
+    assert(Dictionary.get_or(merged_x, "q", 0) == 2)
+    assert(Dictionary.get_or(merged_y, "p", 0) == 1)
+    assert(Dictionary.get_or(merged_y, "r", 0) == 3)
+}
+
+@test
+function void test_dictionary_deep_merge_self() {
+    # Merging a dictionary with itself is not a cycle: base and overlay are the
+    # same reference, so both sides visit the same node simultaneously. This
+    # must return the dictionary's own contents, not be misreported as a
+    # circular reference.
     dictionary<integer> entries = {"a": 1, "b": 2}
+    dictionary<integer> merged = Dictionary.deep_merge(entries, entries)
 
-    # Verify each runs the callback for every entry without error
-    result<none> r = Dictionary.each(entries, (string entry_key, integer entry_value) ->
-    print("${entry_key}=${entry_value}"))
+    assert(Dictionary.length(merged) == 2)
+    assert(Dictionary.get_or(merged, "a", 0) == 1)
+    assert(Dictionary.get_or(merged, "b", 0) == 2)
+}
 
-    assert(Result.is_success(r))
+@test
+function void test_dictionary_deep_merge_self_nested() {
+    # A self-merge that also visits a shared nested dictionary on both sides at
+    # the same recursion depth — the case a single shared visited-set would
+    # wrongly reject.
+    dictionary<dictionary<integer>> entries = {"outer": {"x": 1, "y": 2}}
+    dictionary<dictionary<integer>> merged = Dictionary.deep_merge(entries, entries)
+
+    dictionary<integer> inner = Result.unwrap(Dictionary.get(merged, "outer"))
+
+    assert(Dictionary.length(inner) == 2)
+    assert(Dictionary.get_or(inner, "x", 0) == 1)
+    assert(Dictionary.get_or(inner, "y", 0) == 2)
+}
+
+# ─── Keys, Values, and Conversions ───
+
+@test
+function void test_dictionary_keys_values() {
+    dictionary<integer> coords = {"x": 1, "y": 2}
+
+    array<string> keys = Dictionary.keys(coords)
+    array<integer> values = Dictionary.values(coords)
+
+    # Dictionaries preserve insertion order.
+    assert(keys == ["x", "y"])
+    assert(values == [1, 2])
 }
 
 @test
@@ -145,35 +253,28 @@ function void test_dictionary_from_keys() {
 }
 
 @test
-function void test_dictionary_invert() {
-    dictionary<string> original = {"a": "x", "b": "y"}
-    dictionary<string> inverted = Dictionary.invert(original)
+function void test_dictionary_from_entries() {
+    array<(string, integer)> entries = [("a", 1), ("b", 2)]
 
-    assert(Dictionary.get_or(inverted, "x", "") == "a")
-    assert(Dictionary.get_or(inverted, "y", "") == "b")
+    dictionary<integer> created = Dictionary.from_entries(entries)
+
+    assert(Dictionary.length(created) == 2)
+    assert(Dictionary.get(created, "a") == success(1))
+    assert(Dictionary.get(created, "b") == success(2))
 }
 
 @test
-function void test_dictionary_map_values() {
-    dictionary<integer> entries = {"a": 1, "b": 2, "c": 3}
-    dictionary<integer> doubled = Result.unwrap(
-        Dictionary.map_values(entries, (integer v) -> v * 2)
-    )
+function void test_dictionary_to_entries() {
+    dictionary<integer> entries = {"x": 10}
 
-    assert(Dictionary.get_or(doubled, "a", 0) == 2)
-    assert(Dictionary.get_or(doubled, "c", 0) == 6)
-}
+    array<(string, integer)> pairs = Dictionary.to_entries(entries)
 
-@test
-function void test_dictionary_filter() {
-    dictionary<integer> entries = {"a": 1, "b": 5, "c": 3}
-    dictionary<integer> large_values = Result.unwrap(Dictionary.filter(entries,
-    (string _, integer entry_value) -> entry_value > 2))
+    assert(Array.length(pairs) == 1)
 
-    assert(Dictionary.length(large_values) == 2)
-    assert(Dictionary.has(large_values, "b"))
-    assert(Dictionary.has(large_values, "c"))
-    assert(!Dictionary.has(large_values, "a"))
+    (string key, integer value) = pairs[0]
+
+    assert(key == "x")
+    assert(value == 10)
 }
 
 @test
@@ -185,29 +286,57 @@ function void test_dictionary_to_array() {
     assert(Array.length(pairs) == 1)
 
     Dictionary.KeyValue first = pairs[0]
+
     assert(first.key == "x")
     assert(first.value == 1)
 }
 
 @test
-function void test_dictionary_deep_merge() {
-    dictionary<string> base = {"a": "1", "b": "2"}
-    dictionary<string> over = {"b": "X"}
-    dictionary<string> merged = Dictionary.deep_merge(base, over)
+function void test_dictionary_from_arrays() {
+    result<dictionary<integer>> created = Dictionary.from_arrays(["a", "b", "c"], [1, 2, 3])
 
-    assert(Dictionary.get_or(merged, "a", "") == "1")
-    assert(Dictionary.get_or(merged, "b", "") == "X")
+    dictionary<integer> entries = Result.unwrap(created)
+
+    assert(Dictionary.length(entries) == 3)
+    assert(Dictionary.get_or(entries, "a", 0) == 1)
+    assert(Dictionary.get_or(entries, "c", 0) == 3)
 }
 
 @test
-function void test_dictionary_contains_value() {
-    dictionary<integer> entries = {"a": 1, "b": 2, "c": 3}
+function void test_dictionary_from_arrays_length_mismatch() {
+    result<dictionary<integer>> created = Dictionary.from_arrays(["a", "b"], [1])
 
-    assert(Dictionary.has_value(entries, 2))
-    assert(!Dictionary.has_value(entries, 99))
+    assert(Result.is_failure(created))
 }
 
-# ─── for key, value in dict ───────────────────────────────
+@test
+function void test_dictionary_invert() {
+    dictionary<string> original = {"a": "x", "b": "y"}
+    dictionary<string> inverted = Dictionary.invert(original)
+
+    assert(Dictionary.get_or(inverted, "x", "") == "a")
+    assert(Dictionary.get_or(inverted, "y", "") == "b")
+}
+
+@test
+function void test_dictionary_invert_non_string_values() {
+    # Inverting stringifies non-string values to form the new keys.
+    dictionary<integer> entries = {"a": 1, "b": 2}
+    dictionary<string> inverted = Dictionary.invert(entries)
+
+    assert(Dictionary.get_or(inverted, "1", "") == "a")
+    assert(Dictionary.get_or(inverted, "2", "") == "b")
+}
+
+@test
+function void test_dictionary_flip() {
+    dictionary<string> flipped = Result.unwrap(Dictionary.flip({"a": "1", "b": "2"}))
+
+    assert(Dictionary.get(flipped, "1") == success("a"))
+    assert(Dictionary.get(flipped, "2") == success("b"))
+}
+
+# ─── Iteration ───
 
 @test
 function void test_for_key_value_in_dict() {
@@ -232,13 +361,11 @@ function void test_for_key_value_collects_keys() {
 
     mutable array<string> collected_keys = []
 
-    for key, _val in labels {
+    for key, _label in labels {
         collected_keys = Array.push(collected_keys, key)
     }
 
-    assert(Array.length(collected_keys) == 2)
-    assert("a" in collected_keys)
-    assert("b" in collected_keys)
+    assert(collected_keys == ["a", "b"], "keys are visited in insertion order")
 }
 
 @test
@@ -247,7 +374,7 @@ function void test_for_key_value_empty_dict() {
 
     mutable boolean has_run = false
 
-    for _key, _val in empty {
+    for _key, _value in empty {
         has_run = true
     }
 
@@ -255,49 +382,42 @@ function void test_for_key_value_empty_dict() {
 }
 
 @test
-function void test_dictionary_reduce() {
-    dictionary<integer> d = { "a": 1, "b": 2, "c": 3 }
+function void test_dictionary_each() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+    reference<integer> total = Reference.new(0)
+    reference<string> visited_keys = Reference.new("")
 
-    result<integer> r =
-        Dictionary.reduce(d, 0, (integer acc, string _key, integer val) -> acc + val)
+    result<none> visited = Dictionary.each(entries, (string key, integer value) -> {
+        Reference.set(total, Reference.get(total) + value)
+        Reference.set(visited_keys, "${Reference.get(visited_keys)}${key}")
+    })
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == 6)
+    assert(Result.is_success(visited))
+    assert(Reference.get(total) == 3, "callback ran once per entry")
+    assert(Reference.get(visited_keys) == "ab", "entries are visited in insertion order")
 }
 
-@test
-function void test_dictionary_reduce_to_string() {
-    dictionary<integer> d = { "x": 1, "y": 2 }
-
-    result<string> r = Dictionary.reduce(d, "", (string acc, string key, integer _val) -> acc + key)
-
-    assert(Result.is_success(r))
-
-    string result_str = Result.unwrap(r)
-
-    assert(String.length(result_str) == 2)
-}
+# ─── Higher-Order Functions ───
 
 @test
-function void test_dictionary_reduce_empty() {
-    dictionary<integer> d = {}
+function void test_dictionary_map_values() {
+    dictionary<integer> entries = {"a": 1, "b": 2, "c": 3}
+    dictionary<integer> doubled = Result.unwrap(
+        Dictionary.map_values(entries, (integer v) -> v * 2)
+    )
 
-    result<integer> r =
-        Dictionary.reduce(d, 42, (integer acc, string _key, integer val) -> acc + val)
-
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == 42)
+    assert(Dictionary.get_or(doubled, "a", 0) == 2)
+    assert(Dictionary.get_or(doubled, "c", 0) == 6)
 }
 
 @test
 function void test_dictionary_map() {
-    dictionary<integer> d = { "a": 1, "b": 2, "c": 3 }
+    dictionary<integer> entries = {"a": 1, "b": 2, "c": 3}
 
-    result<dictionary<integer>> r = Dictionary.map(d, (string _key, integer val) -> val * 10)
+    result<dictionary<integer>> mapped_result =
+        Dictionary.map(entries, (string _key, integer value) -> value * 10)
 
-    assert(Result.is_success(r))
-
-    dictionary<integer> mapped = Result.unwrap(r)
+    dictionary<integer> mapped = Result.unwrap(mapped_result)
 
     assert(Dictionary.get_or(mapped, "a", 0) == 10)
     assert(Dictionary.get_or(mapped, "b", 0) == 20)
@@ -306,442 +426,23 @@ function void test_dictionary_map() {
 
 @test
 function void test_dictionary_map_empty() {
-    dictionary<integer> d = {}
+    dictionary<integer> empty = {}
 
-    result<dictionary<integer>> r = Dictionary.map(d, (string _key, integer val) -> val)
+    result<dictionary<integer>> mapped =
+        Dictionary.map(empty, (string _key, integer value) -> value)
 
-    assert(Result.is_success(r))
-    assert(Dictionary.is_empty(Result.unwrap(r)))
-}
-
-# ───────────────────────────────────────────────────────────
-# Negative tests
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_dictionary_get_missing_key() {
-    dictionary<integer> d = {"a": 1}
-    result<integer> r = Dictionary.get(d, "z")
-
-    assert(Result.is_failure(r))
-}
-
-@test
-function void test_dictionary_filter_error_in_callback() {
-    dictionary<integer> d = {"a": 1, "b": 2}
-
-    result<dictionary<integer>> r = Dictionary.filter(d, (string _key, integer _val) -> {
-        assert(false, "force error")
-        return true
-    })
-
-    assert(Result.is_failure(r))
-}
-
-@test
-function void test_dictionary_map_values_error_in_callback() {
-    dictionary<integer> d = {"a": 1}
-
-    result<dictionary<integer>> r = Dictionary.map_values(d, (integer val) -> {
-        assert(false, "force error")
-        return val
-    })
-
-    assert(Result.is_failure(r))
-}
-
-@test
-function void test_dictionary_each_error_in_callback() {
-    dictionary<integer> d = {"a": 1}
-
-    result<none> r = Dictionary.each(d, (string _key, integer _val) -> {
-        assert(false, "force error")
-    })
-
-    assert(Result.is_failure(r))
-}
-
-@test
-function void test_dictionary_remove_missing_key() {
-    dictionary<integer> d = {"a": 1}
-
-    # Removing a key that does not exist should not crash.
-    dictionary<integer> d2 = Dictionary.remove(d, "z")
-
-    assert(Dictionary.length(d2) == 1)
-    assert(Dictionary.has(d2, "a"))
-}
-
-# ─── Dictionary.partition ─────────────────────────────────
-
-@test
-function void test_dictionary_partition_basic() {
-    result<(dictionary<integer>, dictionary<integer>)> r = Dictionary.partition(
-        {"a": 1, "b": 2, "c": 3},
-        (string _key, integer value) -> value > 1)
-
-        assert(Result.is_success(r))
-
-        (dictionary<integer> matches, dictionary<integer> rest) = Result.unwrap(r)
-
-        assert(Dictionary.length(matches) == 2)
-        assert(Dictionary.length(rest) == 1)
-        assert(Dictionary.has(matches, "b"))
-        assert(Dictionary.has(matches, "c"))
-        assert(Dictionary.has(rest, "a"))
-    }
-
-    @test
-    function void test_dictionary_partition_by_key() {
-        result<(dictionary<integer>, dictionary<integer>)> r = Dictionary.partition(
-            {"apple": 1, "banana": 2, "cherry": 3},
-            (string key, integer _value) -> String.starts_with(key, "b"))
-
-            (dictionary<integer> matches, dictionary<integer> rest) = Result.unwrap(r)
-
-            assert(Dictionary.length(matches) == 1)
-            assert(Dictionary.has(matches, "banana"))
-            assert(Dictionary.length(rest) == 2)
-        }
-
-        @test
-        function void test_dictionary_partition_none_match() {
-            result<(dictionary<integer>, dictionary<integer>)> r = Dictionary.partition(
-                {"a": 1, "b": 2},
-                (string _key, integer value) -> value > 10)
-
-                (dictionary<integer> matches, dictionary<integer> rest) = Result.unwrap(r)
-
-                assert(Dictionary.length(matches) == 0)
-                assert(Dictionary.length(rest) == 2)
-            }
-
-            @test
-            function void test_dictionary_partition_empty() {
-                result<(dictionary<integer>, dictionary<integer>)> r = Dictionary.partition(
-                    {},
-                    (string _key, integer value) -> value > 0)
-
-                    (dictionary<integer> matches, dictionary<integer> rest) = Result.unwrap(r)
-
-                    assert(Dictionary.length(matches) == 0)
-                    assert(Dictionary.length(rest) == 0)
-                }
-
-                # ─── Callback exception propagation ─────────────────────
-
-                @test
-                function void test_dictionary_filter_callback_error() {
-                    dictionary<integer> d = {"a": 1, "b": 2}
-                    result<dictionary<integer>> r =
-                        Dictionary.filter(d, (string _k, integer _v) -> {
-                        assert(false, "boom")
-                        return true
-                    })
-
-                    assert(Result.is_failure(r))
-                }
-
-                # ─── Dictionary.from_entries ─────────────────────────────
-
-                @test
-                function void test_dictionary_from_entries() {
-                    array<(string, integer)> entries = [("a", 1), ("b", 2)]
-                    dictionary<integer> d = Dictionary.from_entries(entries)
-
-                    assert(Dictionary.length(d) == 2)
-                    assert(Result.unwrap(Dictionary.get(d, "a")) == 1)
-                    assert(Result.unwrap(Dictionary.get(d, "b")) == 2)
-                }
-
-                # ─── Dictionary.to_entries ───────────────────────────────
-
-                @test
-                function void test_dictionary_to_entries() {
-                    dictionary<integer> d = {"x": 10}
-                    array<(string, integer)> entries = Dictionary.to_entries(d)
-
-                    assert(Array.length(entries) == 1)
-                    (string key, integer value) = entries[0]
-                    assert(key == "x")
-                    assert(value == 10)
-                }
-
-                # ─── Dictionary.pick ──────────────────────────────────
-
-                @test
-                function void test_dictionary_pick_basic() {
-                    dictionary<integer> d = {"a": 1, "b": 2, "c": 3}
-                    dictionary<integer> picked = Dictionary.pick(d, ["a", "c"])
-
-                    assert(Dictionary.length(picked) == 2)
-                    assert(Dictionary.has(picked, "a"))
-                    assert(Dictionary.has(picked, "c"))
-                    assert(!Dictionary.has(picked, "b"))
-                }
-
-                @test
-                function void test_dictionary_pick_missing_keys() {
-                    dictionary<integer> d = {"a": 1, "b": 2}
-                    dictionary<integer> picked = Dictionary.pick(d, ["a", "z"])
-
-                    assert(Dictionary.length(picked) == 1)
-                    assert(Dictionary.has(picked, "a"))
-                }
-
-                @test
-                function void test_dictionary_pick_empty_keys() {
-                    dictionary<integer> d = {"a": 1, "b": 2}
-                    dictionary<integer> picked = Dictionary.pick(d, [])
-
-                    assert(Dictionary.length(picked) == 0)
-                }
-
-                # ─── Dictionary.omit ──────────────────────────────────
-
-                @test
-                function void test_dictionary_omit_basic() {
-                    dictionary<integer> d = {"a": 1, "b": 2, "c": 3}
-                    dictionary<integer> omitted = Dictionary.omit(d, ["b"])
-
-                    assert(Dictionary.length(omitted) == 2)
-                    assert(Dictionary.has(omitted, "a"))
-                    assert(Dictionary.has(omitted, "c"))
-                    assert(!Dictionary.has(omitted, "b"))
-                }
-
-                @test
-                function void test_dictionary_omit_missing_keys() {
-                    dictionary<integer> d = {"a": 1, "b": 2}
-                    dictionary<integer> omitted = Dictionary.omit(d, ["z"])
-
-                    assert(Dictionary.length(omitted) == 2)
-                }
-
-                @test
-                function void test_dictionary_omit_all_keys() {
-                    dictionary<integer> d = {"a": 1, "b": 2}
-                    dictionary<integer> omitted = Dictionary.omit(d, ["a", "b"])
-
-                    assert(Dictionary.length(omitted) == 0)
-                }
-
-                # ─── Dictionary.find ──────────────────────────────────
-
-                @test
-                function void test_dictionary_find_success() {
-                    dictionary<integer> d = {"a": 1, "b": 2, "c": 3}
-                    result<(string, integer)> r =
-                        Dictionary.find(d, (string _key, integer val) -> val == 2)
-
-                    assert(Result.is_success(r))
-
-                    (string key, integer value) = Result.unwrap(r)
-
-                    assert(key == "b")
-                    assert(value == 2)
-                }
-
-                @test
-                function void test_dictionary_find_not_found() {
-                    dictionary<integer> d = {"a": 1, "b": 2}
-                    result<(string, integer)> r =
-                        Dictionary.find(d, (string _key, integer val) -> val > 10)
-
-                    assert(Result.is_failure(r))
-                }
-
-                # ─── Dictionary.count ─────────────────────────────────
-
-                @test
-                function void test_dictionary_count_basic() {
-                    dictionary<integer> d = {"a": 1, "b": 2, "c": 3, "d": 4}
-                    integer c =
-                        Result.unwrap(Dictionary.count(d, (string _key, integer val) -> val > 2))
-
-                    assert(c == 2)
-                }
-
-                @test
-                function void test_dictionary_count_none_match() {
-                    dictionary<integer> d = {"a": 1, "b": 2}
-                    integer c =
-                        Result.unwrap(Dictionary.count(d, (string _key, integer val) -> val > 10))
-
-                    assert(c == 0)
-                }
-
-# ───────────────────────────────────────────────────────────
-# Dictionary.flip swaps keys and values
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_dictionary_flip() {
-    dictionary<string> flipped = Result.unwrap(Dictionary.flip({"a": "1", "b": "2"}))
-
-    assert(Result.unwrap(Dictionary.get(flipped, "1")) == "a")
-    assert(Result.unwrap(Dictionary.get(flipped, "2")) == "b")
-}
-
-# ───────────────────────────────────────────────────────────
-# Negative tests — callback errors propagate as failures
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_dictionary_map_callback_error() {
-    dictionary<integer> d = {"a": 1, "b": 2}
-
-    result<dictionary<integer>> r = Dictionary.map(d, (string _key, integer value) -> {
-        assert(false, "boom")
-        return value
-    })
-
-    assert(Result.is_failure(r))
-}
-
-@test
-function void test_dictionary_reduce_callback_error() {
-    dictionary<integer> d = {"a": 1, "b": 2}
-
-    result<integer> r = Dictionary.reduce(d, 0, (integer acc, string _key, integer value) -> {
-        assert(false, "boom")
-        return acc + value
-    })
-
-    assert(Result.is_failure(r))
-}
-
-@test
-function void test_dictionary_count_callback_error() {
-    dictionary<integer> d = {"a": 1, "b": 2}
-
-    result<integer> r = Dictionary.count(d, (string _key, integer value) -> {
-        assert(false, "boom")
-        return value > 0
-    })
-
-    assert(Result.is_failure(r))
-}
-
-@test
-function void test_dictionary_partition_callback_error() {
-    dictionary<integer> d = {"a": 1, "b": 2}
-
-    result<(dictionary<integer>, dictionary<integer>)> r = Dictionary.partition(d,
-    (string _key, integer value) -> {
-        assert(false, "boom")
-        return value > 0
-    })
-
-    assert(Result.is_failure(r))
-}
-
-@test
-function void test_dictionary_find_callback_error() {
-    dictionary<integer> d = {"a": 1, "b": 2}
-
-    result<(string, integer)> r = Dictionary.find(d, (string _key, integer value) -> {
-        assert(false, "boom")
-        return value == 1
-    })
-
-    assert(Result.is_failure(r))
-}
-
-# ───────────────────────────────────────────────────────────
-# Dictionary.deep_merge recursively merges nested dictionaries
-# ───────────────────────────────────────────────────────────
-
-@test
-function void test_dictionary_deep_merge_nested() {
-    dictionary<dictionary<integer>> base = {"outer": {"x": 1, "y": 2}}
-    dictionary<dictionary<integer>> over = {"outer": {"y": 9, "z": 3}}
-    dictionary<dictionary<integer>> merged = Dictionary.deep_merge(base, over)
-
-    dictionary<integer> inner = Result.unwrap(Dictionary.get(merged, "outer"))
-
-    assert(Dictionary.length(inner) == 3)
-    assert(Dictionary.get_or(inner, "x", 0) == 1)
-    assert(Dictionary.get_or(inner, "y", 0) == 9)
-    assert(Dictionary.get_or(inner, "z", 0) == 3)
-}
-
-@test
-function void test_dictionary_deep_merge_replaces_scalar() {
-    # When a key is not a dictionary on both sides, the overlay value wins
-    # outright instead of being merged recursively.
-    dictionary<integer> base = {"a": 1}
-    dictionary<integer> over = {"a": 99, "b": 2}
-    dictionary<integer> merged = Dictionary.deep_merge(base, over)
-
-    assert(Dictionary.get_or(merged, "a", 0) == 99)
-    assert(Dictionary.get_or(merged, "b", 0) == 2)
-}
-
-@test
-function void test_dictionary_deep_merge_shared_substructure() {
-    # Both branches reference the same nested dictionary. deep_merge must merge
-    # each branch independently without treating the shared (non-cyclic)
-    # reference as a circular reference.
-    dictionary<integer> shared = {"p": 1}
-    dictionary<dictionary<integer>> base = {"x": shared, "y": shared}
-    dictionary<dictionary<integer>> over = {"x": {"q": 2}, "y": {"r": 3}}
-    dictionary<dictionary<integer>> merged = Dictionary.deep_merge(base, over)
-
-    dictionary<integer> x = Result.unwrap(Dictionary.get(merged, "x"))
-    dictionary<integer> y = Result.unwrap(Dictionary.get(merged, "y"))
-
-    assert(Dictionary.get_or(x, "p", 0) == 1)
-    assert(Dictionary.get_or(x, "q", 0) == 2)
-    assert(Dictionary.get_or(y, "p", 0) == 1)
-    assert(Dictionary.get_or(y, "r", 0) == 3)
-}
-
-@test
-function void test_dictionary_deep_merge_self() {
-    # Merging a dictionary with itself is not a cycle: base and overlay are the
-    # same reference, so both sides visit the same node simultaneously. This
-    # must return the dictionary's own contents, not be misreported as a
-    # circular reference.
-    dictionary<integer> d = {"a": 1, "b": 2}
-    dictionary<integer> merged = Dictionary.deep_merge(d, d)
-
-    assert(Dictionary.length(merged) == 2)
-    assert(Dictionary.get_or(merged, "a", 0) == 1)
-    assert(Dictionary.get_or(merged, "b", 0) == 2)
-}
-
-@test
-function void test_dictionary_deep_merge_self_nested() {
-    # A self-merge that also visits a shared nested dictionary on both sides at
-    # the same recursion depth — the case a single shared visited-set would
-    # wrongly reject.
-    dictionary<dictionary<integer>> d = {"outer": {"x": 1, "y": 2}}
-    dictionary<dictionary<integer>> merged = Dictionary.deep_merge(d, d)
-
-    dictionary<integer> inner = Result.unwrap(Dictionary.get(merged, "outer"))
-
-    assert(Dictionary.length(inner) == 2)
-    assert(Dictionary.get_or(inner, "x", 0) == 1)
-    assert(Dictionary.get_or(inner, "y", 0) == 2)
-}
-
-@test
-function void test_dictionary_invert_non_string_values() {
-    # Inverting stringifies non-string values to form the new keys.
-    dictionary<integer> entries = {"a": 1, "b": 2}
-    dictionary<string> inverted = Dictionary.invert(entries)
-
-    assert(Dictionary.get_or(inverted, "1", "") == "a")
-    assert(Dictionary.get_or(inverted, "2", "") == "b")
+    assert(Dictionary.is_empty(Result.unwrap(mapped)))
 }
 
 @test
 function void test_dictionary_map_keys() {
-    dictionary<integer> d = {"a": 1, "b": 2}
-    result<dictionary<integer>> r = Dictionary.map_keys(d, (string k) -> String.uppercase(k))
+    dictionary<integer> entries = {"a": 1, "b": 2}
 
-    dictionary<integer> mapped = Result.unwrap(r)
+    result<dictionary<integer>> mapped_result =
+        Dictionary.map_keys(entries, (string key) -> String.uppercase(key))
+
+    dictionary<integer> mapped = Result.unwrap(mapped_result)
+
     assert(Dictionary.get_or(mapped, "A", 0) == 1)
     assert(Dictionary.get_or(mapped, "B", 0) == 2)
     assert(Dictionary.length(mapped) == 2)
@@ -749,38 +450,346 @@ function void test_dictionary_map_keys() {
 
 @test
 function void test_dictionary_map_keys_collision() {
-    # Two keys map to the same new key — last write wins
-    dictionary<integer> d = {"a": 1, "b": 2}
-    result<dictionary<integer>> r = Dictionary.map_keys(d, (string _k) -> "x")
+    # Two keys map to the same new key — last write wins.
+    dictionary<integer> entries = {"a": 1, "b": 2}
 
-    dictionary<integer> mapped = Result.unwrap(r)
+    result<dictionary<integer>> mapped_result = Dictionary.map_keys(entries, (string _key) -> "x")
+
+    dictionary<integer> mapped = Result.unwrap(mapped_result)
+
     assert(Dictionary.length(mapped) == 1)
     assert(Dictionary.get_or(mapped, "x", 0) == 2)
 }
 
 @test
+function void test_dictionary_filter() {
+    dictionary<integer> entries = {"a": 1, "b": 5, "c": 3}
+
+    dictionary<integer> large_values = Result.unwrap(
+        Dictionary.filter(entries, (string _key, integer value) -> value > 2)
+    )
+
+    assert(Dictionary.length(large_values) == 2)
+    assert(Dictionary.has(large_values, "b"))
+    assert(Dictionary.has(large_values, "c"))
+    assert(!Dictionary.has(large_values, "a"))
+}
+
+@test
+function void test_dictionary_reduce() {
+    dictionary<integer> entries = {"a": 1, "b": 2, "c": 3}
+
+    result<integer> total =
+        Dictionary.reduce(entries, 0, (integer acc, string _key, integer value) -> acc + value)
+
+    assert(total == success(6))
+}
+
+@test
+function void test_dictionary_reduce_to_string() {
+    dictionary<integer> entries = {"x": 1, "y": 2}
+
+    result<string> joined_keys =
+        Dictionary.reduce(entries, "", (string acc, string key, integer _value) -> "${acc}${key}")
+
+    # Entries are folded in insertion order.
+    assert(joined_keys == success("xy"))
+}
+
+@test
+function void test_dictionary_reduce_empty() {
+    dictionary<integer> empty = {}
+
+    result<integer> total =
+        Dictionary.reduce(empty, 42, (integer acc, string _key, integer value) -> acc + value)
+
+    assert(total == success(42), "an empty fold returns the initial value")
+}
+
+@test
+function void test_dictionary_partition_basic() {
+    result<(dictionary<integer>, dictionary<integer>)> split = Dictionary.partition(
+        {"a": 1, "b": 2, "c": 3},
+        (string _key, integer value) -> value > 1
+    )
+
+    (dictionary<integer> matches, dictionary<integer> rest) = Result.unwrap(split)
+
+    assert(Dictionary.length(matches) == 2)
+    assert(Dictionary.length(rest) == 1)
+    assert(Dictionary.has(matches, "b"))
+    assert(Dictionary.has(matches, "c"))
+    assert(Dictionary.has(rest, "a"))
+}
+
+@test
+function void test_dictionary_partition_by_key() {
+    result<(dictionary<integer>, dictionary<integer>)> split = Dictionary.partition(
+        {"apple": 1, "banana": 2, "cherry": 3},
+        (string key, integer _value) -> String.starts_with(key, "b")
+    )
+
+    (dictionary<integer> matches, dictionary<integer> rest) = Result.unwrap(split)
+
+    assert(Dictionary.length(matches) == 1)
+    assert(Dictionary.has(matches, "banana"))
+    assert(Dictionary.length(rest) == 2)
+}
+
+@test
+function void test_dictionary_partition_none_match() {
+    result<(dictionary<integer>, dictionary<integer>)> split = Dictionary.partition(
+        {"a": 1, "b": 2},
+        (string _key, integer value) -> value > 10
+    )
+
+    (dictionary<integer> matches, dictionary<integer> rest) = Result.unwrap(split)
+
+    assert(Dictionary.length(matches) == 0)
+    assert(Dictionary.length(rest) == 2)
+}
+
+@test
+function void test_dictionary_partition_empty() {
+    result<(dictionary<integer>, dictionary<integer>)> split = Dictionary.partition(
+        {},
+        (string _key, integer value) -> value > 0
+    )
+
+    (dictionary<integer> matches, dictionary<integer> rest) = Result.unwrap(split)
+
+    assert(Dictionary.length(matches) == 0)
+    assert(Dictionary.length(rest) == 0)
+}
+
+@test
+function void test_dictionary_find_success() {
+    dictionary<integer> entries = {"a": 1, "b": 2, "c": 3}
+
+    result<(string, integer)> found =
+        Dictionary.find(entries, (string _key, integer value) -> value == 2)
+
+    (string key, integer value) = Result.unwrap(found)
+
+    assert(key == "b")
+    assert(value == 2)
+}
+
+@test
+function void test_dictionary_find_not_found() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+
+    result<(string, integer)> found =
+        Dictionary.find(entries, (string _key, integer value) -> value > 10)
+
+    assert(Result.is_failure(found))
+}
+
+@test
+function void test_dictionary_count_basic() {
+    dictionary<integer> entries = {"a": 1, "b": 2, "c": 3, "d": 4}
+
+    result<integer> matching_count =
+        Dictionary.count(entries, (string _key, integer value) -> value > 2)
+
+    assert(matching_count == success(2))
+}
+
+@test
+function void test_dictionary_count_none_match() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+
+    result<integer> matching_count =
+        Dictionary.count(entries, (string _key, integer value) -> value > 10)
+
+    assert(matching_count == success(0))
+}
+
+@test
 function void test_dictionary_any_all() {
-    dictionary<integer> d = {"a": 2, "b": 4, "c": 6}
+    dictionary<integer> entries = {"a": 2, "b": 4, "c": 6}
 
-    assert(Result.unwrap(Dictionary.any(d, (string _k, integer v) -> v > 5)))
-    assert(!Result.unwrap(Dictionary.any(d, (string _k, integer v) -> v > 10)))
-    assert(Result.unwrap(Dictionary.all(d, (string _k, integer v) -> v % 2 == 0)))
-    assert(!Result.unwrap(Dictionary.all(d, (string _k, integer v) -> v > 2)))
+    assert(Result.unwrap(Dictionary.any(entries, (string _key, integer v) -> v > 5)))
+    assert(!Result.unwrap(Dictionary.any(entries, (string _key, integer v) -> v > 10)))
+    assert(Result.unwrap(Dictionary.all(entries, (string _key, integer v) -> v % 2 == 0)))
+    assert(!Result.unwrap(Dictionary.all(entries, (string _key, integer v) -> v > 2)))
+}
+
+# ─── Pick and Omit ───
+
+@test
+function void test_dictionary_pick_basic() {
+    dictionary<integer> entries = {"a": 1, "b": 2, "c": 3}
+    dictionary<integer> picked = Dictionary.pick(entries, ["a", "c"])
+
+    assert(Dictionary.length(picked) == 2)
+    assert(Dictionary.has(picked, "a"))
+    assert(Dictionary.has(picked, "c"))
+    assert(!Dictionary.has(picked, "b"))
 }
 
 @test
-function void test_dictionary_from_arrays() {
-    result<dictionary<integer>> r = Dictionary.from_arrays(["a", "b", "c"], [1, 2, 3])
+function void test_dictionary_pick_missing_keys() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+    dictionary<integer> picked = Dictionary.pick(entries, ["a", "z"])
 
-    dictionary<integer> d = Result.unwrap(r)
-    assert(Dictionary.length(d) == 3)
-    assert(Dictionary.get_or(d, "a", 0) == 1)
-    assert(Dictionary.get_or(d, "c", 0) == 3)
+    assert(Dictionary.length(picked) == 1)
+    assert(Dictionary.has(picked, "a"))
 }
 
 @test
-function void test_dictionary_from_arrays_length_mismatch() {
-    result<dictionary<integer>> r = Dictionary.from_arrays(["a", "b"], [1])
+function void test_dictionary_pick_empty_keys() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+    dictionary<integer> picked = Dictionary.pick(entries, [])
 
-    assert(Result.is_failure(r))
+    assert(Dictionary.length(picked) == 0)
+}
+
+@test
+function void test_dictionary_omit_basic() {
+    dictionary<integer> entries = {"a": 1, "b": 2, "c": 3}
+    dictionary<integer> omitted = Dictionary.omit(entries, ["b"])
+
+    assert(Dictionary.length(omitted) == 2)
+    assert(Dictionary.has(omitted, "a"))
+    assert(Dictionary.has(omitted, "c"))
+    assert(!Dictionary.has(omitted, "b"))
+}
+
+@test
+function void test_dictionary_omit_missing_keys() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+    dictionary<integer> omitted = Dictionary.omit(entries, ["z"])
+
+    assert(Dictionary.length(omitted) == 2)
+}
+
+@test
+function void test_dictionary_omit_all_keys() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+    dictionary<integer> omitted = Dictionary.omit(entries, ["a", "b"])
+
+    assert(Dictionary.length(omitted) == 0)
+}
+
+# ─── Callback Errors Become Failures ───
+
+@test
+function void test_dictionary_filter_error_in_callback() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+
+    result<dictionary<integer>> filtered = Dictionary.filter(
+        entries,
+        (string _key, integer _value) -> {
+            assert(false, "force error")
+            return true
+        }
+    )
+
+    assert(Result.is_failure(filtered))
+}
+
+@test
+function void test_dictionary_filter_callback_error() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+
+    result<dictionary<integer>> filtered = Dictionary.filter(
+        entries,
+        (string _key, integer _value) -> {
+            assert(false, "boom")
+            return true
+        }
+    )
+
+    assert(filtered == failure("boom"), "the callback's error message becomes the failure")
+}
+
+@test
+function void test_dictionary_map_values_error_in_callback() {
+    dictionary<integer> entries = {"a": 1}
+
+    result<dictionary<integer>> mapped = Dictionary.map_values(entries, (integer value) -> {
+        assert(false, "force error")
+        return value
+    })
+
+    assert(Result.is_failure(mapped))
+}
+
+@test
+function void test_dictionary_each_error_in_callback() {
+    dictionary<integer> entries = {"a": 1}
+
+    result<none> visited = Dictionary.each(entries, (string _key, integer _value) -> {
+        assert(false, "force error")
+    })
+
+    assert(Result.is_failure(visited))
+}
+
+@test
+function void test_dictionary_map_callback_error() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+
+    result<dictionary<integer>> mapped = Dictionary.map(entries, (string _key, integer value) -> {
+        assert(false, "boom")
+        return value
+    })
+
+    assert(Result.is_failure(mapped))
+}
+
+@test
+function void test_dictionary_reduce_callback_error() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+
+    result<integer> total = Dictionary.reduce(
+        entries,
+        0,
+        (integer acc, string _key, integer value) -> {
+            assert(false, "boom")
+            return acc + value
+        }
+    )
+
+    assert(Result.is_failure(total))
+}
+
+@test
+function void test_dictionary_count_callback_error() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+
+    result<integer> matching_count = Dictionary.count(entries, (string _key, integer value) -> {
+        assert(false, "boom")
+        return value > 0
+    })
+
+    assert(Result.is_failure(matching_count))
+}
+
+@test
+function void test_dictionary_partition_callback_error() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+
+    result<(dictionary<integer>, dictionary<integer>)> split = Dictionary.partition(
+        entries,
+        (string _key, integer value) -> {
+            assert(false, "boom")
+            return value > 0
+        }
+    )
+
+    assert(Result.is_failure(split))
+}
+
+@test
+function void test_dictionary_find_callback_error() {
+    dictionary<integer> entries = {"a": 1, "b": 2}
+
+    result<(string, integer)> found = Dictionary.find(entries, (string _key, integer value) -> {
+        assert(false, "boom")
+        return value == 1
+    })
+
+    assert(Result.is_failure(found))
 }

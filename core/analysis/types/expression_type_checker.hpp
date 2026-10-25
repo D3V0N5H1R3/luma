@@ -224,6 +224,9 @@ private:
     void check_call_arity(const CallExpression& expr, const TypeInfo& callee_type,
                           const std::string& fn_name);
 
+    // Require a boolean condition (and a string message) for the built-in assert.
+    void check_assert_args(const CallExpression& expr, const std::vector<TypeInfo>& arg_types);
+
     // Handle construction of a generic choice variant: infer type params
     // from call arguments and return the specialised choice type.
     // Returns std::nullopt when the callee is not a generic choice

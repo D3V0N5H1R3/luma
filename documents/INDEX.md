@@ -25,37 +25,37 @@ Section-level table of contents for the reference documents in this directory. U
 | 6 — Type Annotations                    | 238–313   |
 | 7 — Functions                           | 317–367   |
 | 8 — Control Flow                        | 371–431   |
-| 9 — Error Handling                      | 435–591   |
-| 10 — Match Expressions                  | 595–683   |
-| 11 — Collections                        | 687–782   |
-| 12 — Strings                            | 786–835   |
-| 13 — Pipe Operator                      | 839–901   |
-| 14 — Lambdas and Higher-Order Functions | 905–944   |
-| 15 — Records                            | 948–1016  |
-| 16 — Choice Types                       | 1020–1097 |
-| 17 — Choice Types — Advanced            | 1101–1114 |
-| 18 — Interfaces                         | 1118–1141 |
-| 19 — Namespaces                         | 1145–1273 |
-| 20 — Concurrency                        | 1277–1346 |
-| 21 — Testing                            | 1350–1446 |
-| 22 — File Organisation                  | 1450–1532 |
-| 23 — Anti-Patterns                      | 1536–1677 |
-| 24 — Security and Resource Limits       | 1681–1704 |
-| See Also                                | 1708–1716 |
+| 9 — Error Handling                      | 435–594   |
+| 10 — Match Expressions                  | 598–686   |
+| 11 — Collections                        | 690–785   |
+| 12 — Strings                            | 789–838   |
+| 13 — Pipe Operator                      | 842–904   |
+| 14 — Lambdas and Higher-Order Functions | 908–947   |
+| 15 — Records                            | 951–1019  |
+| 16 — Choice Types                       | 1023–1100 |
+| 17 — Choice Types — Advanced            | 1104–1117 |
+| 18 — Interfaces                         | 1121–1144 |
+| 19 — Namespaces                         | 1148–1276 |
+| 20 — Concurrency                        | 1280–1349 |
+| 21 — Testing                            | 1353–1453 |
+| 22 — File Organisation                  | 1457–1542 |
+| 23 — Anti-Patterns                      | 1546–1687 |
+| 24 — Security and Resource Limits       | 1691–1714 |
+| See Also                                | 1718–1726 |
 
 ## Luma_Concurrent_Debugging_Guide.md
 
 | Section                               | Lines   |
 | ------------------------------------- | ------- |
 | Table of Contents                     | 9–19    |
-| 1 — Concurrency Model Overview        | 23–85   |
-| 2 — How DAP Presents Concurrent Tasks | 89–107  |
-| 3 — Breakpoints in Concurrent Code    | 111–146 |
-| 4 — Inspecting Channel State          | 150–171 |
-| 5 — Debugging Deadlocks and Races     | 175–215 |
-| 6 — Common Pitfalls                   | 219–257 |
-| 7 — Step-by-Step Example              | 261–324 |
-| See Also                              | 328–334 |
+| 1 — Concurrency Model Overview        | 23–87   |
+| 2 — How DAP Presents Concurrent Tasks | 91–109  |
+| 3 — Breakpoints in Concurrent Code    | 113–148 |
+| 4 — Inspecting Channel State          | 152–173 |
+| 5 — Debugging Deadlocks and Races     | 177–217 |
+| 6 — Common Pitfalls                   | 221–259 |
+| 7 — Step-by-Step Example              | 263–326 |
+| See Also                              | 330–336 |
 
 ## Luma_Debugger.md
 
@@ -96,12 +96,12 @@ Section-level table of contents for the reference documents in this directory. U
 | 2 — Domain Failures — `result<T>`      | 40–131  |
 | 3 — Absent Values — `optional<T>`      | 135–187 |
 | 4 — Programmer Errors — Runtime Errors | 191–210 |
-| 5 — Try / Catch / Finally              | 214–258 |
-| 6 — Standard Library Conventions       | 262–307 |
-| 7 — Third-Party Library Conventions    | 311–358 |
-| 8 — Anti-Patterns                      | 362–455 |
-| 9 — Interpreter Implementation Policy  | 459–514 |
-| See Also                               | 518–528 |
+| 5 — Try / Catch / Finally              | 214–261 |
+| 6 — Standard Library Conventions       | 265–310 |
+| 7 — Third-Party Library Conventions    | 314–361 |
+| 8 — Anti-Patterns                      | 365–458 |
+| 9 — Interpreter Implementation Policy  | 462–517 |
+| See Also                               | 521–531 |
 
 ## Luma_Initial_Concept.md
 
@@ -166,16 +166,16 @@ Section-level table of contents for the reference documents in this directory. U
 | Section                              | Lines   |
 | ------------------------------------ | ------- |
 | Table of Contents                    | 5–18    |
-| Prerequisites                        | 22–171  |
-| 1 — Interpreter                      | 175–473 |
-| 2 — Language Server (VS Code)        | 477–560 |
-| 3 — Debugger (VS Code)               | 564–641 |
-| 4 — VS Code Extension Features       | 645–686 |
-| 5 — Zed Extension                    | 690–739 |
-| 6 — Cross-Cutting & Regression Tests | 743–770 |
-| 7 — Execution Checklist              | 774–786 |
-| 8 — Reporting Issues                 | 788–796 |
-| See Also                             | 800–806 |
+| Prerequisites                        | 22–175  |
+| 1 — Interpreter                      | 179–477 |
+| 2 — Language Server (VS Code)        | 481–564 |
+| 3 — Debugger (VS Code)               | 568–645 |
+| 4 — VS Code Extension Features       | 649–690 |
+| 5 — Zed Extension                    | 694–743 |
+| 6 — Cross-Cutting & Regression Tests | 747–774 |
+| 7 — Execution Checklist              | 778–790 |
+| 8 — Reporting Issues                 | 792–800 |
+| See Also                             | 804–810 |
 
 ## Luma_Performance_Guide.md
 
@@ -184,12 +184,12 @@ Section-level table of contents for the reference documents in this directory. U
 | Table of Contents                     | 5–16    |
 | 1 — Immutability and Deep Copies      | 20–30   |
 | 2 — Collection Performance Comparison | 32–49   |
-| 3 — String Building                   | 51–69   |
-| 4 — Recursion Limits                  | 71–73   |
-| 5 — Loop Iteration Limits             | 75–77   |
-| 6 — Resource Limits                   | 79–92   |
-| 7 — Interpreter Optimisations         | 94–102  |
-| See Also                              | 106–111 |
+| 3 — String Building                   | 51–70   |
+| 4 — Recursion Limits                  | 72–74   |
+| 5 — Loop Iteration Limits             | 76–78   |
+| 6 — Resource Limits                   | 80–93   |
+| 7 — Interpreter Optimisations         | 95–103  |
+| See Also                              | 107–112 |
 
 ## Luma_REPL_Guide.md
 
@@ -233,22 +233,22 @@ Section-level table of contents for the reference documents in this directory. U
 | 2 — Design Goals and Constraints                    | 56–75     |
 | 3 — High-Level Architecture                         | 79–111    |
 | 4 — Module Decomposition                            | 115–843   |
-| 5 — Data Structures                                 | 847–1009  |
-| 6 — Processing Pipeline                             | 1013–1112 |
-| 7 — Bytecode Compiler and Virtual Machine Internals | 1116–1752 |
-| 8 — Type System Design                              | 1756–1798 |
-| 9 — Memory Management Strategy                      | 1802–1830 |
-| 10 — Error Handling Strategy                        | 1834–1874 |
-| 11 — Standard Library Architecture                  | 1878–1991 |
-| 12 — Concurrency Architecture                       | 1995–2091 |
-| 13 — REPL Architecture                              | 2095–2119 |
-| 14 — Testing Architecture                           | 2123–2147 |
-| 15 — File Inclusion and Source Management           | 2151–2178 |
-| 16 — Project File Structure                         | 2182–2252 |
-| 17 — Cross-Platform Considerations                  | 2256–2282 |
-| 18 — Debugger Architecture                          | 2286–2305 |
-| 19 — Design Decisions and Rationale                 | 2309–2401 |
-| See Also                                            | 2405–2414 |
+| 5 — Data Structures                                 | 847–1010  |
+| 6 — Processing Pipeline                             | 1014–1113 |
+| 7 — Bytecode Compiler and Virtual Machine Internals | 1117–1765 |
+| 8 — Type System Design                              | 1769–1811 |
+| 9 — Memory Management Strategy                      | 1815–1843 |
+| 10 — Error Handling Strategy                        | 1847–1887 |
+| 11 — Standard Library Architecture                  | 1891–2004 |
+| 12 — Concurrency Architecture                       | 2008–2104 |
+| 13 — REPL Architecture                              | 2108–2132 |
+| 14 — Testing Architecture                           | 2136–2160 |
+| 15 — File Inclusion and Source Management           | 2164–2191 |
+| 16 — Project File Structure                         | 2195–2265 |
+| 17 — Cross-Platform Considerations                  | 2269–2295 |
+| 18 — Debugger Architecture                          | 2299–2318 |
+| 19 — Design Decisions and Rationale                 | 2322–2414 |
+| See Also                                            | 2418–2427 |
 
 ## Luma_Standard_Library_Reference.md
 
@@ -347,33 +347,33 @@ Section-level table of contents for the reference documents in this directory. U
 | 1 — Getting Started                              | 46–144    |
 | 2 — Types                                        | 148–251   |
 | 3 — Variables and Mutability                     | 255–368   |
-| 4 — Operators                                    | 372–574   |
-| 5 — Control Flow                                 | 578–768   |
-| 6 — Functions                                    | 772–879   |
-| 7 — Lambdas                                      | 883–950   |
-| 8 — Records                                      | 954–1108  |
-| 9 — Arrays                                       | 1112–1207 |
-| 10 — Dictionaries                                | 1211–1271 |
-| 11 — Tuples                                      | 1275–1343 |
-| 12 — Choice Types — Unit Variants                | 1347–1397 |
-| 13 — Choice Types (ADTs)                         | 1401–1512 |
-| 14 — Result and Optional                         | 1516–1750 |
-| 15 — Match                                       | 1754–2002 |
-| 16 — String Interpolation and Multi-Line Strings | 2006–2061 |
-| 17 — Pipe Operator                               | 2065–2110 |
-| 18 — Named Arguments                             | 2114–2137 |
-| 19 — Type Aliases                                | 2141–2163 |
-| 20 — Interfaces                                  | 2167–2243 |
-| 21 — Generics, `downcast`, and `is`              | 2247–2477 |
-| 22 — Namespaces and `use`                        | 2481–2676 |
-| 23 — Ownership (`unique` and `borrow`)           | 2680–2712 |
-| 24 — Testing with `@test`                        | 2716–2765 |
-| 25 — Including Files                             | 2769–2820 |
-| 26 — Standard Library Reference                  | 2824–2828 |
-| 27 — Linter and `--strict` Mode                  | 2832–2884 |
-| 28 — Reserved Keywords                           | 2888–2907 |
-| 29 — Error Reference                             | 2911–3229 |
-| 30 — Complete Programs                           | 3233–3439 |
-| 31 — Debugging                                   | 3443–3464 |
-| 32 — Formal Grammar (EBNF)                       | 3468–3819 |
-| See Also                                         | 3823–3835 |
+| 4 — Operators                                    | 372–576   |
+| 5 — Control Flow                                 | 580–773   |
+| 6 — Functions                                    | 777–884   |
+| 7 — Lambdas                                      | 888–955   |
+| 8 — Records                                      | 959–1113  |
+| 9 — Arrays                                       | 1117–1212 |
+| 10 — Dictionaries                                | 1216–1276 |
+| 11 — Tuples                                      | 1280–1348 |
+| 12 — Choice Types — Unit Variants                | 1352–1402 |
+| 13 — Choice Types (ADTs)                         | 1406–1517 |
+| 14 — Result and Optional                         | 1521–1755 |
+| 15 — Match                                       | 1759–2007 |
+| 16 — String Interpolation and Multi-Line Strings | 2011–2066 |
+| 17 — Pipe Operator                               | 2070–2115 |
+| 18 — Named Arguments                             | 2119–2142 |
+| 19 — Type Aliases                                | 2146–2168 |
+| 20 — Interfaces                                  | 2172–2248 |
+| 21 — Generics, `downcast`, and `is`              | 2252–2482 |
+| 22 — Namespaces and `use`                        | 2486–2681 |
+| 23 — Ownership (`unique` and `borrow`)           | 2685–2717 |
+| 24 — Testing with `@test`                        | 2721–2778 |
+| 25 — Including Files                             | 2782–2833 |
+| 26 — Standard Library Reference                  | 2837–2841 |
+| 27 — Linter and `--strict` Mode                  | 2845–2897 |
+| 28 — Reserved Keywords                           | 2901–2920 |
+| 29 — Error Reference                             | 2924–3241 |
+| 30 — Complete Programs                           | 3245–3451 |
+| 31 — Debugging                                   | 3455–3476 |
+| 32 — Formal Grammar (EBNF)                       | 3480–3831 |
+| See Also                                         | 3835–3847 |

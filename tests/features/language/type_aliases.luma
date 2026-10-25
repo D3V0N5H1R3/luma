@@ -11,7 +11,7 @@ type Score = number
 
 type Predicate = function(integer) -> boolean
 
-type IntList = array<integer>
+type IntegerList = array<integer>
 
 type ScoreMap = dictionary<number>
 
@@ -23,8 +23,8 @@ function Score add_scores(Score first, Score second) {
     return first + second
 }
 
-function boolean apply_predicate(Predicate p, integer value) {
-    return p(value)
+function boolean apply_predicate(Predicate predicate, integer value) {
+    return predicate(value)
 }
 
 function result<UserId> find_user(boolean exists) {
@@ -35,9 +35,7 @@ function result<UserId> find_user(boolean exists) {
     return failure("not found")
 }
 
-# ───────────────────────────────────────────────────────────
-# Basic type alias usage
-# ───────────────────────────────────────────────────────────
+# ─── Basic type alias usage ───────────────────────────────
 
 @test
 function void test_type_alias() {
@@ -72,9 +70,7 @@ function void test_type_alias_interchangeable() {
     assert(Math.approximately_equal(score_as_number, 5.0))
 }
 
-# ───────────────────────────────────────────────────────────
-# Function type aliases
-# ───────────────────────────────────────────────────────────
+# ─── Function type aliases ────────────────────────────────
 
 @test
 function void test_function_type_alias() {
@@ -86,18 +82,18 @@ function void test_function_type_alias() {
 
 @test
 function void test_function_type_alias_as_parameter() {
-    boolean val = apply_predicate((integer x) -> x % 2 == 0, 4)
+    boolean is_even = apply_predicate((integer x) -> x % 2 == 0, 4)
+    boolean is_odd = apply_predicate((integer x) -> x % 2 == 0, 7)
 
-    assert(val)
+    assert(is_even)
+    assert(!is_odd)
 }
 
-# ───────────────────────────────────────────────────────────
-# Collection type aliases
-# ───────────────────────────────────────────────────────────
+# ─── Collection type aliases ──────────────────────────────
 
 @test
 function void test_array_type_alias() {
-    IntList numbers = [10, 20, 30]
+    IntegerList numbers = [10, 20, 30]
 
     assert(Array.length(numbers) == 3)
     assert(numbers[1] == 20)
@@ -111,9 +107,7 @@ function void test_dictionary_type_alias() {
     assert(Dictionary.length(scores) == 2)
 }
 
-# ───────────────────────────────────────────────────────────
-# Type aliases with other features
-# ───────────────────────────────────────────────────────────
+# ─── Type aliases with other features ─────────────────────
 
 @test
 function void test_type_alias_in_array() {
@@ -138,14 +132,11 @@ function void test_type_alias_with_result() {
 
     result<UserId> not_found = find_user(false)
 
-    assert(Result.is_failure(not_found))
+    assert(not_found == failure("not found"))
 }
 
-# ───────────────────────────────────────────────────────────
-# Additional type alias tests
-# ───────────────────────────────────────────────────────────
+# ─── Optional, tuple and list aliases ─────────────────────
 
-# Alias with optional.
 type MaybeScore = optional<number>
 
 @test
@@ -153,11 +144,10 @@ function void test_type_alias_optional() {
     MaybeScore present = some(95.0)
     MaybeScore absent = none
 
-    assert(Optional.is_some(present))
-    assert(!Optional.is_some(absent))
+    assert(Math.approximately_equal(Optional.unwrap(present), 95.0))
+    assert(Optional.is_none(absent))
 }
 
-# Alias of a tuple.
 type Coordinate = (number, number)
 
 @test
@@ -168,55 +158,47 @@ function void test_type_alias_tuple() {
     assert(Math.approximately_equal(point.1, 4.0))
 }
 
-# Alias used in function signature with pipe.
 @test
 function void test_type_alias_in_pipe() {
-    IntList numbers = [3, 1, 4, 1, 5]
+    IntegerList numbers = [3, 1, 4, 1, 5]
     integer length = numbers |> Array.length()
 
     assert(length == 5)
 }
 
-# Alias interchangeable in array operations.
 @test
 function void test_type_alias_in_map() {
-    IntList nums = [1, 2, 3]
-    IntList doubled = Result.unwrap(Array.map(nums, (integer x) -> x * 2))
+    IntegerList numbers = [1, 2, 3]
+    IntegerList doubled = Result.unwrap(Array.map(numbers, (integer x) -> x * 2))
 
-    assert(doubled[0] == 2)
-    assert(doubled[2] == 6)
+    assert(doubled == [2, 4, 6])
 }
 
-# Alias in dictionary value context.
 type NameList = array<string>
 
 @test
-function void test_type_alias_complex() {
+function void test_type_alias_with_stdlib_function() {
     NameList team = ["Alice", "Bob", "Charlie"]
 
     assert(Array.length(team) == 3)
     assert(Array.contains(team, "Bob"))
 }
 
-# ───────────────────────────────────────────────────────────
-# Chained aliases — an alias of another alias
-# ───────────────────────────────────────────────────────────
+# ─── Chained aliases — an alias of another alias ──────────
 
-type Quantity = integer
+type Quantity = number
 type Count = Quantity
 
 @test
 function void test_chained_type_alias() {
     Count items = 7
-    integer raw = items
+    number items_as_number = items
 
     assert(items == 7)
-    assert(raw == 7)
+    assert(items_as_number == 7)
 }
 
-# ───────────────────────────────────────────────────────────
-# Alias as a record field type
-# ───────────────────────────────────────────────────────────
+# ─── Alias as a record field type ─────────────────────────
 
 type PlayerName = string
 
@@ -227,20 +209,18 @@ record Player {
 
 @test
 function void test_type_alias_as_record_field() {
-    Player p = Player { name = "Alice", score = 50.0 }
+    Player player = Player { name = "Alice", score = 50.0 }
 
-    assert(p.name == "Alice")
-    assert(Math.approximately_equal(p.score, 50.0))
+    assert(player.name == "Alice")
+    assert(Math.approximately_equal(player.score, 50.0))
 
     # The alias field is interchangeable with its underlying type.
-    string raw_name = p.name
+    string raw_name = player.name
 
     assert(raw_name == "Alice")
 }
 
-# ───────────────────────────────────────────────────────────
-# Alias as a choice variant payload
-# ───────────────────────────────────────────────────────────
+# ─── Alias as a choice variant payload ────────────────────
 
 choice GameEvent {
     Scored(Score points)
@@ -252,16 +232,14 @@ function void test_type_alias_as_choice_payload() {
     GameEvent event = GameEvent.Scored(12.5)
 
     number outcome = match event {
-    case GameEvent.Scored(p) { p }
-    case GameEvent.Quit { 0.0 }
+        case GameEvent.Scored(points) { points }
+        case GameEvent.Quit { 0.0 }
     }
 
     assert(Math.approximately_equal(outcome, 12.5))
 }
 
-# ───────────────────────────────────────────────────────────
-# Nested generic aliases
-# ───────────────────────────────────────────────────────────
+# ─── Nested generic aliases ───────────────────────────────
 
 type Pair<T> = (T, T)
 
@@ -284,18 +262,16 @@ function void test_generic_type_alias_in_dictionary() {
     assert(Math.approximately_equal(x_range.1, 10.0))
 }
 
-# ───────────────────────────────────────────────────────────
-# Alias used in a match expression
-# ───────────────────────────────────────────────────────────
+# ─── Alias used in a match expression ─────────────────────
 
 @test
 function void test_type_alias_in_match() {
     Score grade = 85.0
 
     string letter = match grade {
-    case >= 90.0 { "A" }
-    case >= 80.0 { "B" }
-    else { "C" }
+        case >= 90.0 { "A" }
+        case >= 80.0 { "B" }
+        else { "C" }
     }
 
     assert(letter == "B")

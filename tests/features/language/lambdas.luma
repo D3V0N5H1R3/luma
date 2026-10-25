@@ -5,8 +5,8 @@
 # Luma_User_Manual.md.
 # ═══════════════════════════════════════════════════════════
 
-function integer apply_fn(function(integer) -> integer f, integer x) {
-    return f(x)
+function integer apply_function(function(integer) -> integer transform, integer value) {
+    return transform(value)
 }
 
 function integer factorial(integer n) {
@@ -17,9 +17,7 @@ function integer factorial(integer n) {
     return n * factorial(n - 1)
 }
 
-# ───────────────────────────────────────────────────────────
-# Basic lambda expressions
-# ───────────────────────────────────────────────────────────
+# ─── Basic lambda expressions ────────────────────────────
 
 @test
 function void test_inline_lambda() {
@@ -27,7 +25,7 @@ function void test_inline_lambda() {
 
     array<integer> doubled = Result.unwrap(Array.map(values, (integer x) -> x * 2))
 
-    assert(Result.unwrap(Array.sum(doubled)) == 30)
+    assert(doubled == [2, 4, 6, 8, 10])
 }
 
 @test
@@ -36,8 +34,7 @@ function void test_multi_param_lambda() {
 
     array<integer> sorted = Result.unwrap(Array.sort(values, (integer a, integer b) -> a - b))
 
-    assert(sorted[0] == 1)
-    assert(sorted[4] == 5)
+    assert(sorted == [1, 2, 3, 4, 5])
 }
 
 @test
@@ -61,9 +58,10 @@ function void test_lambda_capture() {
     integer threshold = 60
     array<integer> scores = [55, 70, 45, 80, 90]
 
-    array<integer> passing = Result.unwrap(Array.filter(scores, (integer s) -> s >= threshold))
+    array<integer> passing = Array.filter(scores, (integer score) -> score >= threshold)
+        |> Result.unwrap()
 
-    assert(Array.length(passing) == 3)
+    assert(passing == [70, 80, 90])
 }
 
 @test
@@ -78,28 +76,24 @@ function void test_lambda_block() {
     assert(compute(0) == 1)
 }
 
-# ───────────────────────────────────────────────────────────
-# Lambda with Array higher-order functions
-# ───────────────────────────────────────────────────────────
+# ─── Lambdas with Array higher-order functions ───────────
 
 @test
 function void test_lambda_with_filter() {
     array<integer> numbers = [1, 2, 3, 4, 5, 6, 7, 8]
 
     array<integer> evens = Array.filter(numbers, (integer n) -> n % 2 == 0)
-    |> Result.unwrap()
+        |> Result.unwrap()
 
-    assert(Array.length(evens) == 4)
-    assert(evens[0] == 2)
-    assert(evens[3] == 8)
+    assert(evens == [2, 4, 6, 8])
 }
 
 @test
 function void test_lambda_with_reduce() {
     array<integer> numbers = [1, 2, 3, 4, 5]
 
-    integer sum = Array.reduce(numbers, 0, (integer acc, integer n) -> acc + n)
-    |> Result.unwrap()
+    integer sum = Array.reduce(numbers, 0, (integer accumulator, integer n) -> accumulator + n)
+        |> Result.unwrap()
 
     assert(sum == 15)
 }
@@ -109,7 +103,7 @@ function void test_lambda_with_any() {
     array<integer> numbers = [1, 3, 5, 7, 8]
 
     boolean has_even = Array.any(numbers, (integer n) -> n % 2 == 0)
-    |> Result.unwrap()
+        |> Result.unwrap()
 
     assert(has_even)
 }
@@ -118,84 +112,78 @@ function void test_lambda_with_any() {
 function void test_lambda_with_all() {
     array<integer> numbers = [2, 4, 6, 8]
 
-    boolean all_even = Array.all(numbers, (integer n) -> n % 2 == 0)
-    |> Result.unwrap()
+    boolean are_all_even = Array.all(numbers, (integer n) -> n % 2 == 0)
+        |> Result.unwrap()
 
-    assert(all_even)
+    assert(are_all_even)
 }
 
-# ───────────────────────────────────────────────────────────
-# Nested and higher-order lambdas
-# ───────────────────────────────────────────────────────────
+# ─── Nested and higher-order lambdas ─────────────────────
 
 @test
 function void test_lambda_returning_lambda() {
     function(integer) -> function(integer) -> integer make_adder =
-    (integer n) -> (integer x) -> x + n
+        (integer n) -> (integer x) -> x + n
 
-    function(integer) -> integer add5 = make_adder(5)
+    function(integer) -> integer add_five = make_adder(5)
 
-    assert(add5(10) == 15)
-    assert(add5(0) == 5)
+    assert(add_five(10) == 15)
+    assert(add_five(0) == 5)
 }
 
 @test
 function void test_lambda_as_argument() {
-    integer val = apply_fn((integer x) -> x * x, 7)
+    integer squared = apply_function((integer x) -> x * x, 7)
 
-    assert(val == 49)
+    assert(squared == 49)
 }
 
 @test
 function void test_lambda_string_operations() {
     array<string> words = ["hello", "world", "foo"]
 
-    array<integer> lengths = Array.map(words, (string w) -> String.length(w))
-    |> Result.unwrap()
+    array<integer> lengths = Array.map(words, (string word) -> String.length(word))
+        |> Result.unwrap()
 
-    assert(lengths[0] == 5)
-    assert(lengths[1] == 5)
-    assert(lengths[2] == 3)
+    assert(lengths == [5, 5, 3])
 }
 
 @test
-function void test_lambda_immediate_invocation() {
+function void test_lambda_two_parameters_called_through_variable() {
     function(integer, integer) -> integer adder = (integer a, integer b) -> a + b
 
-    integer val = adder(3, 4)
+    integer sum = adder(3, 4)
 
-    assert(val == 7)
+    assert(sum == 7)
 }
 
 @test
 function void test_lambda_with_boolean_return() {
-    function(string) -> boolean is_long = (string s) -> String.length(s) > 3
+    function(string) -> boolean is_long = (string text) -> String.length(text) > 3
 
     assert(is_long("hello"))
     assert(!is_long("hi"))
 }
 
-# ───────────────────────────────────────────────────────────
-# Lambdas in data structures and deep nesting
-# ───────────────────────────────────────────────────────────
+# ─── Lambdas in data structures and deep nesting ─────────
 
 @test
 function void test_lambda_curried_three_levels() {
-    function(integer) -> function(integer) -> function(integer) -> integer add3 =
-    (integer a) -> (integer b) -> (integer c) -> a + b + c
+    function(integer) -> function(integer) -> function(integer) -> integer add_three =
+        (integer a) -> (integer b) -> (integer c) -> a + b + c
 
-    function(integer) -> function(integer) -> integer partial1 = add3(1)
-    function(integer) -> integer partial2 = partial1(2)
+    function(integer) -> function(integer) -> integer add_one_then = add_three(1)
+    function(integer) -> integer add_one_and_two = add_one_then(2)
 
-    assert(partial2(3) == 6)
+    assert(add_one_and_two(3) == 6)
 }
 
 @test
 function void test_lambda_array_of_functions() {
-    array<function(integer) -> integer> ops = [(integer x) -> x + 1, (integer x) -> x * 2]
+    array<function(integer) -> integer> operations = [(integer x) -> x + 1, (integer x) -> x * 2]
 
-    function(integer) -> integer increment = ops[0]
-    function(integer) -> integer double_it = ops[1]
+    function(integer) -> integer increment = operations[0]
+    function(integer) -> integer double_it = operations[1]
 
     assert(increment(10) == 11)
     assert(double_it(10) == 20)
@@ -203,57 +191,39 @@ function void test_lambda_array_of_functions() {
 
 @test
 function void test_lambda_dictionary_of_functions() {
-    dictionary<function(integer) -> integer> ops = {
-        "inc": (integer x) -> x + 1,
-        "dbl": (integer x) -> x * 2
+    dictionary<function(integer) -> integer> operations = {
+        "increment": (integer x) -> x + 1,
+        "double": (integer x) -> x * 2
     }
 
-    function(integer) -> integer double_it = ops["dbl"]
+    function(integer) -> integer increment = operations["increment"]
+    function(integer) -> integer double_it = operations["double"]
 
+    assert(increment(21) == 22)
     assert(double_it(21) == 42)
 }
 
 @test
 function void test_lambda_calls_recursive_named_function() {
     array<integer> factorials = Array.map([1, 2, 3, 4, 5], (integer n) -> factorial(n))
-    |> Result.unwrap()
+        |> Result.unwrap()
 
-    assert(factorials[0] == 1)
-    assert(factorials[3] == 24)
-    assert(factorials[4] == 120)
+    assert(factorials == [1, 2, 6, 24, 120])
 }
 
-# ═══════════════════════════════════════════════════════════
-# Negative / edge-case tests — lambdas
-# ═══════════════════════════════════════════════════════════
-
-# Note: Lambda parameter type mismatches and wrong return types are
-# caught at compile time. Below we test runtime error conditions.
-
-@test
-function void test_lambda_exception_in_callback() {
-    array<integer> nums = [1, 0, 3]
-    mutable string caught = ""
-
-    try {
-        # Division by zero in lambda callback.
-        result<array<number>> _ = Array.map(nums, (integer n) -> 10 / n)
-    } catch(err) {
-        caught = err
-    }
-
-    # Array.map wraps callback errors in result, or throws.
-    # Either outcome means the error was detected.
-    assert(String.length(caught) > 0 || true, "callback error should be handled")
-}
+# ─── Captures and composition ────────────────────────────
 
 @test
 function void test_lambda_closure_captures_value_at_creation() {
-    integer x = 10
-    function() -> integer get_x = () -> x
+    mutable integer base = 10
+    function() -> integer get_base = () -> base
 
-    # Even though x is immutable and cannot change, verify capture.
-    assert(get_x() == 10, "closure should capture value at creation time")
+    base = 20
+
+    # Lambdas capture by value: reassigning the variable after the lambda was
+    # created does not change what the lambda sees.
+    assert(get_base() == 10, "closure should capture the value at creation time")
+    assert(base == 20)
 }
 
 @test
@@ -261,23 +231,29 @@ function void test_lambda_higher_order_composition() {
     function(integer) -> integer double_it = (integer n) -> n * 2
     function(integer) -> integer add_one = (integer n) -> n + 1
 
-    # Manual composition.
-    integer result_value = add_one(double_it(5))
+    integer composed = add_one(double_it(5))
 
-    assert(result_value == 11, "composition: double(5) + 1 == 11")
+    assert(composed == 11, "composition: double(5) + 1 == 11")
 }
+
+# ─── Edge cases and callback errors ──────────────────────
+
+# Lambda parameter type mismatches and wrong return types are caught at compile
+# time. The tests below cover empty results and runtime errors raised inside a
+# callback, which the higher-order function surfaces as a failure result.
 
 @test
 function void test_lambda_filter_empty_result() {
-    array<integer> nums = [1, 2, 3]
-    result<array<integer>> filtered = Array.filter(nums, (integer n) -> n > 100)
+    array<integer> numbers = [1, 2, 3]
+
+    result<array<integer>> filtered = Array.filter(numbers, (integer n) -> n > 100)
 
     match filtered {
-        success(arr) {
-            assert(Array.length(arr) == 0, "filter with no matches should return empty array")
+        success(matches) {
+            assert(Array.length(matches) == 0, "filter with no matches should return empty array")
         }
-        failure(e) {
-            assert(false, "filter should not fail: ${e}")
+        failure(message) {
+            assert(false, "filter should not fail: ${message}")
         }
     }
 }
@@ -286,18 +262,37 @@ function void test_lambda_filter_empty_result() {
 function void test_lambda_callback_error_propagates_as_failure() {
     # A lambda that divides by zero on the second element. Array.map surfaces the
     # runtime error as a failure result rather than aborting the program.
-    array<integer> nums = [1, 0, 3]
-    result<array<number>> r = Array.map(nums, (integer n) -> 10 / n)
+    array<integer> numbers = [1, 0, 3]
 
-    assert(!Result.is_success(r), "division by zero in callback should produce a failure")
+    result<array<number>> mapped = Array.map(numbers, (integer n) -> 10 / n)
 
-    match r {
-        success(_arr) {
+    match mapped {
+        success(_values) {
             assert(false, "map must not succeed when the callback divides by zero")
         }
-        failure(e) {
-            assert(String.contains(e, "division by zero"),
-                   "error should mention division by zero, got: ${e}")
+        failure(message) {
+            assert(String.contains(message, "division by zero"),
+                "error should mention division by zero, got: ${message}")
+        }
+    }
+}
+
+@test
+function void test_lambda_filter_callback_error_returns_failure() {
+    # The predicate indexes past the end of a captured array on the second
+    # element; Array.filter returns that runtime error as a failure, not a throw.
+    array<integer> lookup = [1]
+    array<integer> indices = [0, 1]
+
+    result<array<integer>> filtered = Array.filter(indices, (integer i) -> lookup[i] > 0)
+
+    match filtered {
+        success(_values) {
+            assert(false, "filter must not succeed when the callback fails")
+        }
+        failure(message) {
+            assert(String.contains(message, "out of bounds"),
+                "error should mention the out-of-bounds index, got: ${message}")
         }
     }
 }

@@ -76,13 +76,41 @@ static void test_recursive_choice_match_no_clobber() {
                        "    Nil\n"
                        "    Cons(T head, List<T> tail)\n"
                        "}\n"
-                       "function<T> T head(List<T> lst) {\n"
+                       "function<T> T head(List<T> lst, T fallback) {\n"
                        "    return match lst {\n"
                        "        case List.Cons(h, _) { h }\n"
-                       "        else { 0 }\n"
+                       "        else { fallback }\n"
                        "    }\n"
                        "}\n"
-                       "integer x = head(List.Cons(1, List.Nil))\n"));
+                       "integer x = head(List.Cons(1, List.Nil), 0)\n"));
+}
+
+// A concrete value is not a `T`: returning one from a generic function would
+// store, say, an integer where the caller expects a string.
+static void test_generic_return_rejects_concrete_value() {
+    ASSERT_TRUE(fails("function<T> T broken(T value) {\n"
+                      "    return 0\n"
+                      "}\n"));
+    ASSERT_TRUE(fails("choice List<T> {\n"
+                      "    Nil\n"
+                      "    Cons(T head, List<T> tail)\n"
+                      "}\n"
+                      "function<T> T head(List<T> lst) {\n"
+                      "    return match lst {\n"
+                      "        case List.Cons(h, _) { h }\n"
+                      "        else { 0 }\n"
+                      "    }\n"
+                      "}\n"));
+    ASSERT_TRUE(fails("function<T> T pick(T value, boolean flag) {\n"
+                      "    return if flag { value } else { \"text\" }\n"
+                      "}\n"));
+}
+
+static void test_generic_return_accepts_type_parameter_value() {
+    ASSERT_TRUE(passes("function<T> T pick(T first, T second, boolean flag) {\n"
+                       "    return if flag { first } else { second }\n"
+                       "}\n"
+                       "string chosen = pick(\"a\", \"b\", true)\n"));
 }
 
 // Match expression must reject wrong number of bindings.
@@ -371,21 +399,55 @@ static void test_mutable_array_index_assignment_ok() {
                        "items[0] = 10\n"));
 }
 
-// Field-vs-index traversal policy: assigning to the field of an indexed
-// element (a[i].x = …) mutates the stored element, not the array binding, so
-// it is allowed even when the array itself is immutable.  This is the
-// distinguishing case that separates the field-only walk (which must stop at
-// an index access) from the field-and-index walk used for a[i] = ….
-static void test_immutable_array_element_field_assignment_allowed() {
+// Assigning to the field of an indexed element (a[i].x = …) changes the
+// array's value, so it needs a `mutable` root exactly like a[i] = …: immutable
+// bindings share storage, so allowing the write would also change aliases.
+static void test_immutable_array_element_field_assignment_error() {
+    ASSERT_TRUE(fails_with("record Point { integer x, integer y }\n"
+                           "array<Point> ps = [Point { x = 1, y = 2 }]\n"
+                           "ps[0].x = 5\n",
+                           DiagnosticCode::ImmutableAssignment));
+}
+
+static void test_immutable_array_element_field_compound_assignment_error() {
+    ASSERT_TRUE(fails_with("record Point { integer x, integer y }\n"
+                           "array<Point> ps = [Point { x = 1, y = 2 }]\n"
+                           "ps[0].x += 5\n",
+                           DiagnosticCode::ImmutableAssignment));
+}
+
+static void test_immutable_dictionary_entry_field_assignment_error() {
+    ASSERT_TRUE(fails_with("record Point { integer x, integer y }\n"
+                           "dictionary<Point> named = { \"a\": Point { x = 1, y = 2 } }\n"
+                           "named[\"a\"].x = 5\n",
+                           DiagnosticCode::ImmutableAssignment));
+}
+
+static void test_mutable_array_element_field_assignment_ok() {
     ASSERT_TRUE(passes("record Point { integer x, integer y }\n"
-                       "array<Point> ps = [Point { x = 1, y = 2 }]\n"
+                       "mutable array<Point> ps = [Point { x = 1, y = 2 }]\n"
                        "ps[0].x = 5\n"));
 }
 
-static void test_immutable_array_element_field_compound_assignment_allowed() {
-    ASSERT_TRUE(passes("record Point { integer x, integer y }\n"
-                       "array<Point> ps = [Point { x = 1, y = 2 }]\n"
-                       "ps[0].x += 5\n"));
+// A write into a value that is not held in a variable could only be observed
+// through storage the temporary shares (e.g. a reference cell's contents), so
+// it is rejected rather than silently changing that storage.
+static void test_assignment_into_temporary_fails() {
+    ASSERT_TRUE(fails_with("function array<integer> pass_through(array<integer> values) {\n"
+                           "    return values\n"
+                           "}\n"
+                           "array<integer> original = [1, 2, 3]\n"
+                           "pass_through(original)[0] = 42\n",
+                           DiagnosticCode::ImmutableAssignment));
+    ASSERT_TRUE(fails_with("reference<array<integer>> cell = Reference.new([1, 2, 3])\n"
+                           "Reference.get(cell)[0] += 1\n",
+                           DiagnosticCode::ImmutableAssignment));
+    ASSERT_TRUE(fails_with("record Point { integer x, integer y }\n"
+                           "function Point origin() {\n"
+                           "    return Point { x = 0, y = 0 }\n"
+                           "}\n"
+                           "origin().x = 5\n",
+                           DiagnosticCode::ImmutableAssignment));
 }
 
 static void test_immutable_dictionary_assignment_error() {
@@ -903,6 +965,8 @@ int main() {
     RUN(test_recursive_choice_generic_constructor_infers_type);
     RUN(test_recursive_choice_generic_assignability);
     RUN(test_recursive_choice_match_no_clobber);
+    RUN(test_generic_return_rejects_concrete_value);
+    RUN(test_generic_return_accepts_type_parameter_value);
     RUN(test_recursive_choice_match_expr_binding_count);
     RUN(test_namespace_qualified_choice_access);
     RUN(test_turbofish_generic_call);
@@ -961,8 +1025,11 @@ int main() {
     RUN(test_mutable_record_field_assignment_ok);
     RUN(test_immutable_array_index_assignment_error);
     RUN(test_mutable_array_index_assignment_ok);
-    RUN(test_immutable_array_element_field_assignment_allowed);
-    RUN(test_immutable_array_element_field_compound_assignment_allowed);
+    RUN(test_immutable_array_element_field_assignment_error);
+    RUN(test_immutable_array_element_field_compound_assignment_error);
+    RUN(test_immutable_dictionary_entry_field_assignment_error);
+    RUN(test_mutable_array_element_field_assignment_ok);
+    RUN(test_assignment_into_temporary_fails);
     RUN(test_immutable_dictionary_assignment_error);
     RUN(test_mutable_dictionary_assignment_ok);
 

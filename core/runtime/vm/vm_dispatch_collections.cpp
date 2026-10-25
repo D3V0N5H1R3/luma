@@ -246,7 +246,52 @@ void VM::handle_index_get_opt() {
 
 void VM::handle_get_field() {
     auto name_idx = read_u16();
-    const auto& field_name = checked_name(name_idx);
+    push_field(checked_name(name_idx));
+}
+
+void VM::handle_get_field_unique() {
+    auto name_idx = read_u16();
+    const auto field_name = checked_name(name_idx);
+
+    // The record on top of the stack is already exclusive (the write path made
+    // each enclosing level exclusive first), so make the field's own value
+    // exclusive before handing it to the next step of the write.
+    validate_stack_depth(1, "GetFieldUnique");
+    if (const auto& obj = *(stack_.top - 1); obj.is_record()) {
+        if (auto* field = obj.as_record()->find_field(field_name)) {
+            field->make_exclusive();
+        }
+    }
+
+    push_field(field_name);
+}
+
+void VM::handle_index_get_unique() {
+    validate_stack_depth(2, "IndexGetUnique");
+    const auto& container = *(stack_.top - 2);
+    const auto& index_val = *(stack_.top - 1);
+
+    // As for GetFieldUnique: the container is already exclusive; make the
+    // addressed element exclusive before it is pushed for the next write step.
+    if (container.is_array() && index_val.is_integer()) {
+        auto& array = *container.as_array();
+        array.ensure_unique();
+        auto& elements = *array.elements;
+        const auto index = index_val.as_integer();
+
+        if (!is_index_out_of_bounds(index, elements.size())) {
+            elements[static_cast<std::size_t>(index)].make_exclusive();
+        }
+    } else if (container.is_dictionary() && index_val.is_string()) {
+        if (auto* entry = container.as_dictionary()->find(index_val.as_string())) {
+            entry->make_exclusive();
+        }
+    }
+
+    handle_index_get();
+}
+
+void VM::push_field(std::string_view field_name) {
     auto obj = pop();
 
     if (obj.is_record()) {

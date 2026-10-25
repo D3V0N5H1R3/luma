@@ -321,10 +321,8 @@ struct IndexAccessExpression : Expression {
 
 /// Policy for how root_variable_of() walks an access chain down to its root.
 enum class ChainTraversal {
-    /// Descend through field accesses only; stop at an index access.  Used
-    /// where indexed-element mutation is permitted — e.g. 'a[i].x = …' mutates
-    /// the stored element rather than the 'a' binding, so the chain must not be
-    /// resolved past the '[i]'.
+    /// Descend through field accesses only; stop at an index access (the
+    /// chain then has no variable root and nullptr is returned).
     FieldsOnly,
     /// Descend through both field and index accesses to reach the binding —
     /// e.g. 'a[i]', 'p.arr[i]', and 'a[i][j]' all resolve to their root variable.

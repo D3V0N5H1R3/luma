@@ -203,6 +203,25 @@ enum class ErrorCategory {
     return err;
 }
 
+// ─── Listening-address policy ───
+
+// Prepare a socket that will listen: allow an immediate restart on a port
+// still in TIME_WAIT, but never share a port another socket is bound to.
+// POSIX SO_REUSEADDR gives exactly that.  On Windows SO_REUSEADDR instead lets
+// a second socket hijack a port that is already in use (so a bind clash would
+// silently succeed), and SO_EXCLUSIVEADDRUSE is the equivalent of the POSIX
+// behaviour.
+inline void set_listen_address_policy(SocketHandle h) {
+    const int opt{1};
+
+#ifdef _WIN32
+    setsockopt(h, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&opt),
+               sizeof(opt));
+#else
+    setsockopt(h, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+#endif
+}
+
 // ─── Timeout ───
 
 // Set send and receive timeouts on a socket.

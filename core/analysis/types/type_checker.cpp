@@ -131,25 +131,8 @@ void TypeChecker::push_scope() {
 
 void TypeChecker::pop_scope() {
     if (ctx_.current_scope) {
-        // Warn about unused variables.
-        for (const auto& [name, info] : ctx_.current_scope->locals()) {
-            if (name.starts_with('_')) {
-                continue;
-            }
-
-            if (!info.is_read && !info.is_parameter) {
-                warn(std::format("unused variable '{}'", name), info.location,
-                     "prefix with '_' to suppress this warning", DiagnosticCode::UnusedVariable);
-            }
-
-            // Warn about mutable variables/parameters that are never mutated.
-            if (info.is_mutable && !info.is_written) {
-                const auto* const label = info.is_parameter ? "parameter" : "variable";
-                warn(std::format("{} '{}' is declared mutable but never mutated", label, name),
-                     info.location, "remove the 'mutable' keyword",
-                     DiagnosticCode::MutableNeverMutated);
-            }
-        }
+        // Unused (W0001) and never-mutated (W0004) variables are reported by the
+        // linter; reporting them here as well duplicated every warning.
 
         // Warn about unique variables that leave scope without being consumed.
         for (const auto& [name, info] : ctx_.current_scope->unconsumed_unique_locals()) {

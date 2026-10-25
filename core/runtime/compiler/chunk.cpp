@@ -5,6 +5,7 @@
 
 #include "common/byte_utils.hpp"
 #include "runtime/compiler/opcode.hpp"
+#include "runtime/compiler/opcode_metadata.hpp"
 
 namespace luma {
 
@@ -65,10 +66,7 @@ std::size_t Chunk::disassemble_instruction(std::size_t offset, std::ostringstrea
             // Show constant value or name if applicable.
             if (op == Op::Constant && operand < constants.size()) {
                 out << " (" << constants[operand].to_string() << ")";
-            } else if ((op == Op::GetGlobal || op == Op::SetGlobal || op == Op::GetField ||
-                        op == Op::SetField || op == Op::GetFieldOpt || op == Op::IsType ||
-                        op == Op::Downcast || op == Op::TrustedDowncast || op == Op::WidenNumber) &&
-                       operand < names.size()) {
+            } else if (operand_category(op) == OperandCategory::Name && operand < names.size()) {
                 out << " (" << names[operand] << ")";
             }
 

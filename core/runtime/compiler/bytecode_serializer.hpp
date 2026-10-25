@@ -79,7 +79,11 @@ namespace luma {
 //          instead of silently running the old code.
 //   4 → 5: added the WidenNumber opcode after IntToNumber, renumbering
 //          subsequent opcodes.
-static constexpr std::uint32_t k_bytecode_format_version = 5;
+//   5 → 6: added the copy-on-write opcodes (UniqueLocal, UniqueUpvalue,
+//          UniqueGlobal, GetFieldUnique, IndexGetUnique) before EndModule,
+//          renumbering it; v5 bytecode wrote through shared storage, so a value
+//          copied out of a mutable variable changed when the variable did.
+static constexpr std::uint32_t k_bytecode_format_version = 6;
 
 // Magic bytes at the start of a .lumc file.
 static constexpr char k_bytecode_magic[4] = {'L', 'U', 'M', 'C'};

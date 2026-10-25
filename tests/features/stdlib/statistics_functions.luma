@@ -11,7 +11,7 @@
 @test
 function void test_statistics_mean() {
     assert(Math.approximately_equal(Result.unwrap(Statistics.mean([1, 2, 3, 4, 5])), 3.0))
-    assert(Result.is_failure(Statistics.mean([])))
+    assert(Statistics.mean([]) == failure("Statistics.mean: container is empty"))
 }
 
 @test
@@ -25,6 +25,7 @@ function void test_statistics_median() {
     # [nan, 1, 2, 3] yields [1, 2, 3, nan] and the even-length median is the
     # mean of the two middle values, 2 and 3.
     number nan = Math.infinity - Math.infinity
+
     assert(Math.approximately_equal(Result.unwrap(Statistics.median([nan, 1.0, 2.0, 3.0])), 2.5))
 }
 
@@ -37,21 +38,21 @@ function void test_statistics_mode() {
 
 @test
 function void test_statistics_variance() {
-    number variance_result =
+    # Population variance: the sample variance of this data set would be 32 / 7.
+    number variance =
         Result.unwrap(Statistics.variance([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]))
 
-    assert(variance_result > 3.9)
-    assert(variance_result < 4.1)
+    assert(Math.approximately_equal(variance, 4.0))
+    assert(Math.approximately_equal(Result.unwrap(Statistics.variance([5.0])), 0.0))
     assert(Result.is_failure(Statistics.variance([])))
 }
 
 @test
 function void test_statistics_standard_deviation() {
-    number std_dev_result = Result.unwrap(
+    number standard_deviation = Result.unwrap(
         Statistics.standard_deviation([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])
     )
 
-    assert(std_dev_result > 1.9)
-    assert(std_dev_result < 2.1)
+    assert(Math.approximately_equal(standard_deviation, 2.0))
     assert(Result.is_failure(Statistics.standard_deviation([])))
 }

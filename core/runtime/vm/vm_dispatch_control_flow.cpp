@@ -105,6 +105,20 @@ void VM::handle_set_upvalue() {
     }
 }
 
+// Copy-on-write root for an upvalue (see VM::op_unique_local).
+void VM::op_unique_upvalue() {
+    auto& cf = stack_.frames.back();
+    auto index = read_u16();
+
+    validate_upvalue_index(cf, index);
+
+    if (auto* cell = get_upvalue_cell(*cf.closure, index)) {
+        cell->make_exclusive();
+    } else {
+        cf.closure->upvalues[index].make_exclusive();
+    }
+}
+
 void VM::handle_get_global() {
     auto name_idx = read_u16();
     const auto& name = checked_name(name_idx); // bounds-checks name_idx (security-critical)
@@ -119,6 +133,8 @@ void VM::handle_get_global() {
 
     if (slot != nullptr) [[likely]] {
         push(slot->value);
+    } else if (auto hint = global_env_->sandbox_denial_hint(name)) {
+        runtime_error(SandboxPolicy::access_denied_message(name), *hint);
     } else {
         runtime_error(vm_errors::undefined_variable(name), vm_errors::hint_check_variable_spelling);
     }

@@ -515,6 +515,13 @@ public:
     // returned Value shares no mutable state with the original.
     [[nodiscard]] Value deep_copy() const;
 
+    // Copy-on-write: if this array, dictionary, or record shares its storage
+    // with another Value, replace it with a shallow copy this Value owns
+    // exclusively, so an in-place write cannot be seen through an alias.
+    // Nested values stay shared; the write path makes each level exclusive
+    // in turn.  A no-op for every other type.
+    void make_exclusive();
+
     // ================================================================
     // Internal Storage
     // ================================================================

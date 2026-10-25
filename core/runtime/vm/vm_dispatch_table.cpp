@@ -137,6 +137,11 @@ namespace luma {
     X(IntToNumber,     op_int_to_number)             \
     X(WidenNumber,     op_widen_number)              \
     X(Clone,           op_clone)                    \
+    X(UniqueLocal,     op_unique_local)              \
+    X(UniqueUpvalue,   op_unique_upvalue)            \
+    X(UniqueGlobal,    op_unique_global)             \
+    X(GetFieldUnique,  op_get_field_unique)          \
+    X(IndexGetUnique,  op_index_get_unique)          \
     X(EndModule,       op_end_module)
 // clang-format on
 
@@ -755,6 +760,40 @@ void VM::op_clone() {
     validate_stack_depth(1, "Clone");
     auto& top = *(stack_.top - 1);
     top = top.deep_copy();
+}
+
+// ─── Copy-on-write for in-place mutation ──────────────────────────────────────
+// Each op makes the storage of the root variable of an assignment target
+// exclusive before the write path reads it, so the write cannot reach a value
+// another variable still holds (see Value::make_exclusive).
+
+void VM::op_unique_local() {
+    auto& cf = stack_.frames.back();
+    auto slot = read_u16();
+    get_local_slot(cf, slot).make_exclusive();
+}
+
+void VM::op_unique_global() {
+    auto name_idx = read_u16();
+    const auto& name = checked_name(name_idx);
+
+    Binding*& slot = global_slot(name_idx);
+    if (slot == nullptr) {
+        slot = lookup_global_cache(name);
+    }
+
+    // A missing global is reported by the GetGlobal that follows.
+    if (slot != nullptr) {
+        slot->value.make_exclusive();
+    }
+}
+
+void VM::op_get_field_unique() {
+    handle_get_field_unique();
+}
+
+void VM::op_index_get_unique() {
+    handle_index_get_unique();
 }
 
 // ─── Module ───────────────────────────────────────────────────────────────────

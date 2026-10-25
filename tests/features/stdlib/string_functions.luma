@@ -5,6 +5,8 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── Basics, search, and transformation ───
+
 @test
 function void test_string_length() {
     assert(String.length("hello") == 5)
@@ -188,25 +190,23 @@ function void test_string_parse_number() {
 function void test_string_wrap() {
     string wrapped = String.wrap("The quick brown fox", 10)
 
-    assert("\n" in wrapped)
-
-    # Verify lines do not exceed the requested width.
-    array<string> lines = String.split(wrapped, "\n")
-    assert(String.length(lines[0]) <= 10, "first line within width")
+    # Breaks fall between words so that no line exceeds the requested width.
+    assert(wrapped == "The quick\nbrown fox")
 }
 
 @test
 function void test_string_indent() {
     string indented = String.indent("a\nb", "  ")
 
-    assert(String.starts_with(indented, "  a"))
+    assert(indented == "  a\n  b", "the prefix must be added to every line")
 }
 
 @test
 function void test_string_dedent() {
-    string dedented = String.dedent("  a\n  b")
+    assert(String.dedent("  a\n  b") == "a\nb")
 
-    assert(String.starts_with(dedented, "a"))
+    # Only the whitespace common to every line is removed.
+    assert(String.dedent("    a\n  b") == "  a\nb")
 }
 
 @test
@@ -226,12 +226,12 @@ function void test_string_template() {
 
 @test
 function void test_string_template_extended() {
-    dictionary<string> vars = {
+    dictionary<string> variables = {
         "noun": "World",
         "adj": "Wonderful"
     }
     string template = "Hello, {adj} {noun}! Welcome to {place}."
-    string output = String.template(template, vars)
+    string output = String.template(template, variables)
 
     # "place" is missing, so it should not be replaced.
     assert(output == "Hello, Wonderful World! Welcome to {place}.")
@@ -239,8 +239,8 @@ function void test_string_template_extended() {
 
 @test
 function void test_string_template_repeated_occurrences() {
-    dictionary<string> vars = {"x": "Z"}
-    string output = String.template("{x}-{x}-{x}", vars)
+    dictionary<string> variables = {"x": "Z"}
+    string output = String.template("{x}-{x}-{x}", variables)
 
     # Every occurrence of a key is replaced, not just the first.
     assert(output == "Z-Z-Z")
@@ -250,11 +250,11 @@ function void test_string_template_repeated_occurrences() {
 function void test_string_template_sequential_keys() {
     # Keys are applied in insertion order, so an earlier key's replacement can
     # introduce a later key's placeholder, which the later pass then resolves.
-    dictionary<string> vars = {
+    dictionary<string> variables = {
         "first": "<{second}>",
         "second": "done"
     }
-    string output = String.template("[{first}]", vars)
+    string output = String.template("[{first}]", variables)
 
     assert(output == "[<done>]")
 }
@@ -263,8 +263,8 @@ function void test_string_template_sequential_keys() {
 function void test_string_template_replacement_not_rescanned_for_same_key() {
     # A replacement that contains its own key's placeholder is left intact:
     # substitution does not recurse into text it just inserted.
-    dictionary<string> vars = {"loop": "a{loop}b"}
-    string output = String.template("({loop})", vars)
+    dictionary<string> variables = {"loop": "a{loop}b"}
+    string output = String.template("({loop})", variables)
 
     assert(output == "(a{loop}b)")
 }
@@ -311,7 +311,8 @@ function void test_string_empty_operations() {
 }
 
 @test
-function void test_substring_negative_end() {
+function void test_string_substring_negative_end() {
+    # A negative end index is not counted from the back; it yields an empty string.
     string substring_result = String.substring("hello", 0, -1)
 
     assert(substring_result == "")
@@ -356,17 +357,18 @@ function void test_string_chunk_invalid_size() {
 
 @test
 function void test_string_unicode_reverse() {
-    assert(String.reverse("abc") == "cba")
+    # Reversal works on codepoints, so multi-byte characters stay intact.
+    assert(String.reverse("日本語") == "語本日")
 }
 
 @test
 function void test_string_unicode_characters() {
-    array<string> character_list = String.characters("hey")
+    array<string> character_list = String.characters("日本語")
 
     assert(Array.length(character_list) == 3)
-    assert(character_list[0] == "h")
-    assert(character_list[1] == "e")
-    assert(character_list[2] == "y")
+    assert(character_list[0] == "日")
+    assert(character_list[1] == "本")
+    assert(character_list[2] == "語")
 }
 
 @test
@@ -405,6 +407,8 @@ function void test_string_is_digit() {
     assert(!String.is_digit("3.14"))
 }
 
+# ─── Codepoints and bytes ───
+
 @test
 function void test_string_to_codepoints() {
     array<integer> codepoints = String.to_codepoints("ABC")
@@ -439,16 +443,15 @@ function void test_string_from_codepoints() {
     result<string> from_codepoints_result = String.from_codepoints(codepoints)
 
     assert(Result.is_success(from_codepoints_result))
-    string codepoints_text = Result.unwrap(from_codepoints_result)
-    assert(codepoints_text == "Hi")
+    assert(Result.unwrap(from_codepoints_result) == "Hi")
 }
 
 @test
 function void test_string_from_codepoints_empty() {
-    result<string> r = String.from_codepoints([])
+    result<string> converted = String.from_codepoints([])
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == "")
+    assert(Result.is_success(converted))
+    assert(Result.unwrap(converted) == "")
 }
 
 @test
@@ -463,9 +466,9 @@ function void test_string_from_codepoints_roundtrip() {
 @test
 function void test_string_from_codepoints_invalid() {
     # Codepoint above U+10FFFF is invalid.
-    result<string> r = String.from_codepoints([1114112])
+    result<string> converted = String.from_codepoints([1114112])
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(converted))
 }
 
 @test
@@ -495,10 +498,10 @@ function void test_string_from_bytes() {
 
 @test
 function void test_string_from_bytes_empty() {
-    result<string> r = String.from_bytes([])
+    result<string> converted = String.from_bytes([])
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == "")
+    assert(Result.is_success(converted))
+    assert(Result.unwrap(converted) == "")
 }
 
 @test
@@ -513,33 +516,35 @@ function void test_string_from_bytes_roundtrip() {
 @test
 function void test_string_from_bytes_negative_value() {
     # Byte value below 0 is out of range.
-    result<string> r = String.from_bytes([-1])
+    result<string> converted = String.from_bytes([-1])
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(converted))
 }
 
 @test
 function void test_string_from_bytes_above_255() {
     # Byte value above 255 is out of range.
-    result<string> r = String.from_bytes([256])
+    result<string> converted = String.from_bytes([256])
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(converted))
 }
 
-# ─── UTF-8 multi-byte character tests ──────────────────────
+# ─── UTF-8 multi-byte character tests ───
 
 @test
 function void test_string_length_multibyte_cjk() {
     # CJK character U+4E16 is 3 bytes in UTF-8.
-    string s = String.from_codepoints([19990]) |> Result.unwrap()
-    assert(String.length(s) == 1, "CJK character should be 1 codepoint")
-    assert(String.byte_length(s) == 3, "CJK character should be 3 bytes")
+    string cjk_character = String.from_codepoints([19990]) |> Result.unwrap()
+
+    assert(String.length(cjk_character) == 1, "CJK character should be 1 codepoint")
+    assert(String.byte_length(cjk_character) == 3, "CJK character should be 3 bytes")
 }
 
 @test
 function void test_string_length_accented() {
     # Build "café" from codepoints: c=99, a=97, f=102, é=233
     string cafe = String.from_codepoints([99, 97, 102, 233]) |> Result.unwrap()
+
     assert(String.length(cafe) == 4, "café has 4 codepoints")
     assert(String.byte_length(cafe) == 5, "café is 5 bytes in UTF-8")
 }
@@ -550,6 +555,7 @@ function void test_string_reverse_multibyte() {
     string cafe = String.from_codepoints([99, 97, 102, 233]) |> Result.unwrap()
     string reversed = String.reverse(cafe)
     string expected = String.from_codepoints([233, 102, 97, 99]) |> Result.unwrap()
+
     assert(reversed == expected, "reversing multi-byte string should preserve codepoints")
 }
 
@@ -557,23 +563,35 @@ function void test_string_reverse_multibyte() {
 function void test_string_characters_multibyte() {
     # Build "Ñ" from codepoint 209 — characters() should yield exactly 1 element.
     string n_tilde = String.from_codepoints([209]) |> Result.unwrap()
-    array<string> chars = String.characters(n_tilde)
-    assert(Array.length(chars) == 1, "Ñ should be 1 character")
-    assert(chars[0] == n_tilde, "character should equal the original")
+    array<string> characters = String.characters(n_tilde)
+
+    assert(Array.length(characters) == 1, "Ñ should be 1 character")
+    assert(characters[0] == n_tilde, "character should equal the original")
 }
 
 @test
 function void test_string_for_loop_multibyte() {
     # For-in on a multi-byte string should yield codepoints, not bytes.
-    string s = String.from_codepoints([65, 233, 66]) |> Result.unwrap()  # "AéB"
+    string mixed = String.from_codepoints([65, 233, 66]) |> Result.unwrap()  # "AéB"
     mutable integer count = 0
-    for _ch in s {
+
+    for _character in mixed {
         count += 1
     }
+
     assert(count == 3, "for-in should yield 3 codepoints")
 }
 
-# ─── String.is_blank ─────────────────────────────────────
+@test
+function void test_string_case_conversion_is_ascii_only() {
+    # uppercase/lowercase and the *_ignore_case helpers fold only ASCII letters;
+    # non-ASCII characters pass through unchanged.
+    assert(String.uppercase("héllo") == "HéLLO")
+    assert(String.lowercase("ÀB") == "Àb")
+    assert(!String.equals_ignore_case("É", "é"))
+}
+
+# ─── String.is_blank ───
 
 @test
 function void test_string_is_blank_empty() {
@@ -592,7 +610,7 @@ function void test_string_is_blank_non_blank() {
     assert(!String.is_blank(" x "))
 }
 
-# ─── String.is_ascii ──────────────────────────────────
+# ─── String.is_ascii ───
 
 @test
 function void test_string_is_ascii() {
@@ -603,7 +621,7 @@ function void test_string_is_ascii() {
     assert(!String.is_ascii("日本語"))
 }
 
-# ─── String.common_prefix ─────────────────────────────
+# ─── String.common_prefix ───
 
 @test
 function void test_string_common_prefix() {
@@ -614,7 +632,7 @@ function void test_string_common_prefix() {
     assert(String.common_prefix("same", "same") == "same")
 }
 
-# ─── String.common_suffix ─────────────────────────────
+# ─── String.common_suffix ───
 
 @test
 function void test_string_common_suffix() {
@@ -625,9 +643,7 @@ function void test_string_common_suffix() {
     assert(String.common_suffix("same", "same") == "same")
 }
 
-# ───────────────────────────────────────────────────────────
-# Case conversion, slug, palindrome, and edit distance
-# ───────────────────────────────────────────────────────────
+# ─── Case conversion, slug, palindrome, and edit distance ───
 
 @test
 function void test_string_to_snake_case() {
@@ -666,9 +682,7 @@ function void test_string_levenshtein_distance() {
     assert(String.levenshtein_distance("abc", "abc") == 0)
 }
 
-# ───────────────────────────────────────────────────────────
-# Negative / error-path tests
-# ───────────────────────────────────────────────────────────
+# ─── Negative / error-path tests ───
 
 @test
 function void test_string_character_at_out_of_bounds() {
@@ -743,15 +757,13 @@ function void test_string_levenshtein_distance_too_long() {
     assert(has_thrown, "String.levenshtein_distance throws on oversized input")
 }
 
-# ───────────────────────────────────────────────────────────
-# Additional coverage: count, truncate edges, negative search,
-# surrogate rejection, multibyte indexing
-# ───────────────────────────────────────────────────────────
+# ─── count, truncate edges, negative search, case-insensitive comparison ───
 
 @test
 function void test_string_count() {
     assert(String.count("banana", "a") == 3)
     assert(String.count("banana", "an") == 2)
+
     # Matches do not overlap: "aa" in "aaaa" is found twice, not three times.
     assert(String.count("aaaa", "aa") == 2)
     assert(String.count("hello", "z") == 0)
@@ -762,6 +774,7 @@ function void test_string_truncate_no_ellipsis() {
     # A limit of 3 or fewer leaves no room for the "..." marker.
     assert(String.truncate("Hello", 3) == "Hel")
     assert(String.truncate("Hello", 0) == "")
+
     # Exactly at the limit is returned unchanged.
     assert(String.truncate("Hello", 5) == "Hello")
 }
@@ -789,23 +802,27 @@ function void test_string_contains_ignore_case() {
     assert(String.contains_ignore_case("abc", ""))
 }
 
+# ─── Unicode validation and indexing ───
+
 @test
 function void test_string_from_codepoints_surrogate() {
     # UTF-16 surrogate halves (U+D800-U+DFFF) are not valid scalar values.
-    result<string> r = String.from_codepoints([55296])
+    result<string> converted = String.from_codepoints([55296])
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(converted))
 }
 
 @test
 function void test_string_character_at_multibyte() {
     # "AéB": codepoints A=65, é=233, B=66. Index 1 must yield "é", not a byte.
-    string s = String.from_codepoints([65, 233, 66]) |> Result.unwrap()
+    string mixed = String.from_codepoints([65, 233, 66]) |> Result.unwrap()
     string accented = String.from_codepoints([233]) |> Result.unwrap()
 
-    assert(Result.unwrap(String.character_at(s, 1)) == accented)
-    assert(Result.unwrap(String.character_at(s, 2)) == "B")
+    assert(Result.unwrap(String.character_at(mixed, 1)) == accented)
+    assert(Result.unwrap(String.character_at(mixed, 2)) == "B")
 }
+
+# ─── Whitespace splitting and word counts ───
 
 @test
 function void test_string_split_whitespace() {
@@ -841,83 +858,52 @@ function void test_string_word_count() {
     assert(String.word_count("solo") == 1)
 }
 
+# ─── Codepoint-range editing ───
+
 @test
 function void test_string_insert() {
-    result<string> at_start = String.insert("hello", 0, ">>")
-    assert(Result.is_success(at_start))
-    assert(Result.unwrap(at_start) == ">>hello")
-
-    result<string> at_end = String.insert("hello", 5, "!")
-    assert(Result.is_success(at_end))
-    assert(Result.unwrap(at_end) == "hello!")
-
-    result<string> at_mid = String.insert("hello", 2, "XY")
-    assert(Result.is_success(at_mid))
-    assert(Result.unwrap(at_mid) == "heXYllo")
+    assert(String.insert("hello", 0, ">>") == success(">>hello"))
+    assert(String.insert("hello", 5, "!") == success("hello!"))
+    assert(String.insert("hello", 2, "XY") == success("heXYllo"))
 }
 
 @test
 function void test_string_insert_out_of_bounds() {
-    result<string> negative = String.insert("hello", -1, "x")
-    assert(Result.is_failure(negative))
-
-    result<string> too_big = String.insert("hello", 6, "x")
-    assert(Result.is_failure(too_big))
+    assert(Result.is_failure(String.insert("hello", -1, "x")))
+    assert(Result.is_failure(String.insert("hello", 6, "x")))
 }
 
 @test
 function void test_string_delete() {
-    result<string> mid = String.delete("hello", 1, 3)
-    assert(Result.is_success(mid))
-    assert(Result.unwrap(mid) == "hlo")
-
-    result<string> whole = String.delete("hello", 0, 5)
-    assert(Result.is_success(whole))
-    assert(Result.unwrap(whole) == "")
-
-    result<string> empty_range = String.delete("hello", 2, 2)
-    assert(Result.is_success(empty_range))
-    assert(Result.unwrap(empty_range) == "hello")
+    assert(String.delete("hello", 1, 3) == success("hlo"))
+    assert(String.delete("hello", 0, 5) == success(""))
+    assert(String.delete("hello", 2, 2) == success("hello"), "an empty range deletes nothing")
 }
 
 @test
 function void test_string_delete_out_of_bounds() {
-    result<string> negative = String.delete("hello", -1, 2)
-    assert(Result.is_failure(negative))
-
-    result<string> too_big = String.delete("hello", 0, 6)
-    assert(Result.is_failure(too_big))
-
-    result<string> inverted = String.delete("hello", 3, 1)
-    assert(Result.is_failure(inverted))
+    assert(Result.is_failure(String.delete("hello", -1, 2)))
+    assert(Result.is_failure(String.delete("hello", 0, 6)))
+    assert(Result.is_failure(String.delete("hello", 3, 1)), "start > end must fail")
 }
 
 @test
 function void test_string_replace_range() {
-    result<string> mid = String.replace_range("hello", 1, 3, "XY")
-    assert(Result.is_success(mid))
-    assert(Result.unwrap(mid) == "hXYlo")
+    assert(String.replace_range("hello", 1, 3, "XY") == success("hXYlo"))
+    assert(String.replace_range("hello", 0, 5, "bye") == success("bye"))
 
-    result<string> whole = String.replace_range("hello", 0, 5, "bye")
-    assert(Result.is_success(whole))
-    assert(Result.unwrap(whole) == "bye")
-
-    result<string> as_insert = String.replace_range("hello", 2, 2, "__")
-    assert(Result.is_success(as_insert))
-    assert(Result.unwrap(as_insert) == "he__llo")
+    # An empty range behaves like an insert.
+    assert(String.replace_range("hello", 2, 2, "__") == success("he__llo"))
 }
 
 @test
 function void test_string_replace_range_out_of_bounds() {
-    result<string> negative = String.replace_range("hello", -1, 2, "x")
-    assert(Result.is_failure(negative))
-
-    result<string> too_big = String.replace_range("hello", 0, 6, "x")
-    assert(Result.is_failure(too_big))
-
-    result<string> inverted = String.replace_range("hello", 3, 1, "x")
-    assert(Result.is_failure(inverted))
+    assert(Result.is_failure(String.replace_range("hello", -1, 2, "x")))
+    assert(Result.is_failure(String.replace_range("hello", 0, 6, "x")))
+    assert(Result.is_failure(String.replace_range("hello", 3, 1, "x")), "start > end must fail")
 }
+
+# ─── Prefix/suffix sets and character-class constants ───
 
 @test
 function void test_string_starts_with_any() {
@@ -939,18 +925,21 @@ function void test_string_character_class_constants() {
     assert(String.hex_digits == "0123456789abcdef")
     assert(String.ascii_lowercase == "abcdefghijklmnopqrstuvwxyz")
     assert(String.ascii_uppercase == "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-    assert(String.ascii_letters == String.ascii_lowercase + String.ascii_uppercase)
+    assert(String.ascii_letters == "${String.ascii_lowercase}${String.ascii_uppercase}")
     assert(String.length(String.ascii_letters) == 52)
+
     # Whitespace: space, tab, newline, carriage return, form-feed, vertical-tab.
     assert(String.length(String.whitespace) == 6)
     assert(String.contains(String.whitespace, " "))
     assert(String.contains(String.whitespace, "\t"))
     assert(String.contains(String.whitespace, "\n"))
+
     # Punctuation is the ASCII punctuation set and excludes letters and digits.
     assert(String.contains(String.punctuation, "!"))
     assert(String.contains(String.punctuation, "@"))
     assert(!String.contains(String.punctuation, "a"))
     assert(!String.contains(String.punctuation, "0"))
+
     # The constants compose with existing predicates.
     assert(String.is_digit(String.digits))
     assert(String.is_ascii(String.punctuation))

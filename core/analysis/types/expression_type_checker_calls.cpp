@@ -63,6 +63,11 @@ TypeInfo ExpressionTypeChecker::visit_call(const CallExpression& expr) {
         tc_.mark_function_called(fn_name);
     }
 
+    if (fn_name == "assert" && !pipe_applies_here &&
+        tc_.functions().find(fn_name) == tc_.functions().end()) {
+        check_assert_args(expr, arg_types);
+    }
+
     // Dispatch to generic call handler for generic functions.
     if (callee_type.kind == TypeInfo::Kind::Func) {
         if (!fn_name.empty()) {
@@ -300,6 +305,30 @@ std::string ExpressionTypeChecker::resolve_callee_name(const CallExpression& exp
     }
 
     return {};
+}
+
+void ExpressionTypeChecker::check_assert_args(const CallExpression& expr,
+                                              const std::vector<TypeInfo>& arg_types) {
+    const auto is_permissive = [](const TypeInfo& type, TypeInfo::Kind expected) {
+        return type.kind == expected || type.kind == TypeInfo::Kind::StdlibAny ||
+               type.kind == TypeInfo::Kind::Unknown;
+    };
+
+    // Runtime truthiness would let any non-boolean through — notably every
+    // result value, including failure(...) — so a mistyped assertion could
+    // never fail. Require a boolean, as for if/while conditions.
+    if (!arg_types.empty() && !is_permissive(arg_types[0], TypeInfo::Kind::Boolean)) {
+        tc_.error(
+            std::format("assert condition must be boolean, got '{}'", arg_types[0].to_string()),
+            expr.arguments[0]->location,
+            "use a comparison (==, !=), or compare a result with success(...)");
+    }
+
+    if (arg_types.size() >= 2 && !is_permissive(arg_types[1], TypeInfo::Kind::String)) {
+        tc_.error(
+            std::format("assert message must be a string, got '{}'", arg_types[1].to_string()),
+            expr.arguments[1]->location, "pass a string as the assertion message");
+    }
 }
 
 void ExpressionTypeChecker::check_call_arity(const CallExpression& expr,

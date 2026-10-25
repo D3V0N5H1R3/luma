@@ -6,6 +6,7 @@
 #include "analysis/ast/statement.hpp"
 #include "analysis/lexer/token_type.hpp"
 #include "analysis/types/compile_time_arithmetic.hpp"
+#include "analysis/types/generic_resolver.hpp"
 #include "analysis/types/statement_type_checker.hpp"
 #include "analysis/types/type_check_helpers.hpp"
 #include "analysis/types/type_checking_context.hpp"
@@ -64,12 +65,43 @@ void check_inc_dec_target(TypeCheckingServices& tc, const Expression& target,
     (void)type_check_helpers::require_numeric_operand(tc, type, op, loc);
 }
 
+// True when `type` is a type parameter of the generic declaration being
+// checked — bound to a named `unknown` so its body checks permissively.
+[[nodiscard]] bool is_rigid_type_parameter(TypeCheckingServices& tc, const TypeInfo& type) {
+    if (type.kind != TypeInfo::Kind::Unknown || type.name.empty()) {
+        return false;
+    }
+
+    const auto& bindings = tc.generics().bindings();
+    const auto it = bindings.find(type.name);
+
+    return it != bindings.end() && it->second.kind == TypeInfo::Kind::Unknown &&
+           it->second.name == type.name;
+}
+
+// True when `type` is a specific, known type — not a type parameter or a
+// permissive placeholder — so it cannot stand in for an arbitrary `T`.
+[[nodiscard]] bool is_concrete_type(const TypeInfo& type) {
+    return type.kind != TypeInfo::Kind::Unknown && type.kind != TypeInfo::Kind::StdlibAny;
+}
+
 } // namespace
 
 void StatementTypeChecker::check_target_mutability(const Expression& target,
                                                    const SourceLocation& loc, AssignmentKind kind) {
     const bool plain = kind == AssignmentKind::Plain;
     const std::string_view verb = plain ? "assign to" : "compound-assign to";
+
+    // A field or element of a value that is not held in a variable (a call
+    // result, a literal, ...): the write could never be observed, except
+    // through storage the temporary shares with another value, which it would
+    // silently change.
+    const auto report_temporary_target = [&](const SourceLocation& at) {
+        tc_.error("cannot assign into a temporary value", at,
+                  "store the value in a mutable variable, change it there, and use that "
+                  "variable instead",
+                  DiagnosticCode::ImmutableAssignment);
+    };
 
     if (target.kind == ExpressionKind::Variable) {
         const auto& var = static_cast<const VariableExpression&>(target);
@@ -105,9 +137,12 @@ void StatementTypeChecker::check_target_mutability(const Expression& target,
         // Track mutation for mutable-but-never-mutated warning.
         tc_.context().current_scope->mark_written(var.name);
     } else if (target.kind == ExpressionKind::FieldAccess) {
-        // Walk the chain of field accesses to find the root variable.
-        // Stop at IndexAccess — indexed element field mutation is allowed.
-        if (const auto* var = root_variable_of(target, ChainTraversal::FieldsOnly)) {
+        // Walk the whole chain of field and index accesses to the root
+        // variable. Writing a field of an indexed element (`a[i].x = …`)
+        // mutates the array's value too: immutable bindings share storage
+        // (only `mutable` ones are cloned), so allowing it through an
+        // immutable root would also change every alias of that value.
+        if (const auto* var = root_variable_of(target, ChainTraversal::FieldsAndIndices)) {
             const auto* sym = tc_.lookup_variable(var->name);
 
             if ((sym != nullptr) && !sym->is_mutable) {
@@ -122,6 +157,8 @@ void StatementTypeChecker::check_target_mutability(const Expression& target,
             }
 
             tc_.context().current_scope->mark_written(var->name);
+        } else {
+            report_temporary_target(loc);
         }
     } else if (target.kind == ExpressionKind::IndexAccess) {
         // Walk through nested index/field accesses to find the root variable.
@@ -148,6 +185,8 @@ void StatementTypeChecker::check_target_mutability(const Expression& target,
             }
 
             tc_.context().current_scope->mark_written(var->name);
+        } else {
+            report_temporary_target(loc);
         }
     } else if (plain) {
         tc_.error(
@@ -176,17 +215,7 @@ void StatementTypeChecker::visit_assignment(const AssignmentStatement& stmt) {
     const auto target_type = tc_.infer_assignment_target(*stmt.target);
     const auto value_type = tc_.infer_expression_type(*stmt.value);
 
-    // Warn on self-assignment (x = x).
-    if (stmt.target->kind == ExpressionKind::Variable &&
-        stmt.value->kind == ExpressionKind::Variable) {
-        const auto& target_var = static_cast<const VariableExpression&>(*stmt.target);
-        const auto& value_var = static_cast<const VariableExpression&>(*stmt.value);
-
-        if (target_var.name == value_var.name) {
-            tc_.warn("self-assignment has no effect", stmt.location,
-                     "assigning a variable to itself does nothing", DiagnosticCode::SelfAssignment);
-        }
-    }
+    // Self-assignment (x = x) is reported by the linter (W0005), not here.
 
     if (type_check_helpers::check_type_assignable(tc_, target_type, value_type,
                                                   "type mismatch in assignment", stmt.location)) {
@@ -306,6 +335,21 @@ void StatementTypeChecker::visit_return(const ReturnStatement& stmt) {
 
     if (stmt.value) {
         const auto value_type = tc_.infer_expression_type(*stmt.value);
+
+        if (is_rigid_type_parameter(tc_, *ctx.current_return_type) &&
+            is_concrete_type(value_type)) {
+            // Inside a generic body `T` is checked permissively, so without this
+            // `return 0` from a `T`-returning function passed and stored an
+            // integer where the caller expects, say, a string.
+            tc_.error(std::format("cannot return '{}' from a function returning type "
+                                  "parameter '{}'",
+                                  value_type.to_string(), ctx.current_return_type->name),
+                      stmt.location,
+                      std::format("return a value of type '{}' (for example a parameter of "
+                                  "that type), or change the return type",
+                                  ctx.current_return_type->name));
+            return;
+        }
 
         if (ctx.current_return_type->kind != TypeInfo::Kind::Void &&
             type_check_helpers::check_type_assignable(tc_, *ctx.current_return_type, value_type,

@@ -53,6 +53,31 @@ inline void merge_diagnostics(std::vector<Diagnostic>& target,
     target.insert(target.end(), source.begin(), source.end());
 }
 
+// Merge `source`, skipping any diagnostic an earlier pass already reported
+// with the same code at the same location.  Some rules are checked by both the
+// type checker (which knows types) and the linter (which also sees untyped
+// cases); this keeps their overlap from being reported twice.
+inline void merge_new_diagnostics(std::vector<Diagnostic>& target,
+                                  std::vector<Diagnostic>&& source) {
+    const auto existing_count = target.size();
+
+    for (auto& diagnostic : source) {
+        const auto location = diagnostic.primary_location();
+        const auto is_duplicate =
+            diagnostic.code != DiagnosticCode::None &&
+            std::any_of(target.begin(),
+                        target.begin() + static_cast<std::ptrdiff_t>(existing_count),
+                        [&](const Diagnostic& earlier) {
+                            return earlier.code == diagnostic.code &&
+                                   earlier.primary_location() == location;
+                        });
+
+        if (!is_duplicate) {
+            target.push_back(std::move(diagnostic));
+        }
+    }
+}
+
 // Result of running the pipeline — the diagnostics (errors + warnings)
 // collected along the way plus per-pass timing.  The framework is
 // deliberately artifact-agnostic: back-end passes (compile/optimize/verify)

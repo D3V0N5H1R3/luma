@@ -322,13 +322,19 @@ void register_keyvaluestore_ns(const EnvPtr& env) {
 
             const auto safe = validate_path(args[0].as_string(), loc);
 
+            // A read-only store can never gain entries, so opening a missing
+            // file (usually a mistyped path) fails instead of yielding an empty
+            // store.
+            if (!std::filesystem::exists(safe)) {
+                return make_failure_value(
+                    error_msg("KeyValueStore", "open_read_only",
+                              std::format("store file not found: {}", args[0].as_string())));
+            }
+
             auto store = std::make_shared<KeyValueStoreValue>();
             store->file_path = safe.string();
             store->read_only = true;
-
-            if (std::filesystem::exists(safe)) {
-                store->entries = read_store(safe);
-            }
+            store->entries = read_store(safe);
 
             return make_success_value(Value{std::move(store)});
         })

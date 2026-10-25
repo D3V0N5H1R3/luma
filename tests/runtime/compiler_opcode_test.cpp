@@ -528,6 +528,47 @@ static void test_compile_clone_mutable() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// Copy-on-write for in-place writes
+// ═══════════════════════════════════════════════════════════
+
+// The container path of a write target is compiled in write mode so the write
+// cannot reach storage another value shares.
+static void test_compile_field_write_through_index_uses_unique_ops() {
+    const auto result = compile("record Point { integer x, integer y }\n"
+                                "function void f() {\n"
+                                "    mutable array<Point> points = [Point { x = 1, y = 2 }]\n"
+                                "    points[0].x = 5\n"
+                                "}");
+
+    ASSERT_TRUE(result.success);
+    ASSERT_TRUE(any_func_has_opcode(result, Op::UniqueLocal));
+    ASSERT_TRUE(any_func_has_opcode(result, Op::IndexGetUnique));
+}
+
+static void test_compile_nested_field_write_uses_unique_ops() {
+    const auto result = compile("record Inner { integer value }\n"
+                                "record Outer { Inner inner }\n"
+                                "mutable Outer outer = Outer { inner = Inner { value = 1 } }\n"
+                                "outer.inner.value = 5\n");
+
+    ASSERT_TRUE(result.success);
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::UniqueGlobal));
+    ASSERT_TRUE(has_opcode(result.top_level.chunk(), Op::GetFieldUnique));
+}
+
+// Reads never pay for copy-on-write.
+static void test_compile_reads_emit_no_unique_ops() {
+    const auto result = compile("function integer f() {\n"
+                                "    mutable array<integer> values = [1, 2]\n"
+                                "    return values[0] + values[1]\n"
+                                "}");
+
+    ASSERT_TRUE(result.success);
+    ASSERT_FALSE(any_func_has_opcode(result, Op::UniqueLocal));
+    ASSERT_FALSE(any_func_has_opcode(result, Op::IndexGetUnique));
+}
+
+// ═══════════════════════════════════════════════════════════
 // IntToNumber (integer → number widening)
 // ═══════════════════════════════════════════════════════════
 
@@ -714,7 +755,7 @@ struct OpcodeExpectation {
 };
 
 // clang-format off
-constexpr std::array<OpcodeExpectation, 100> k_opcode_expectations{{
+constexpr std::array<OpcodeExpectation, 105> k_opcode_expectations{{
     {Op::Constant, OperandCategory::Constant, OperandLayout::U16, false,false,true,false,false,false,false,false, true, 1},
     {Op::ConstantLong, OperandCategory::Constant, OperandLayout::U32Long, false,false,true,false,false,false,false,false, true, 1},
     {Op::Pop, OperandCategory::None, OperandLayout::Simple, false,false,true,false,false,false,false,false, true, -1},
@@ -814,6 +855,11 @@ constexpr std::array<OpcodeExpectation, 100> k_opcode_expectations{{
     {Op::IntToNumber, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, false, 0},
     {Op::WidenNumber, OperandCategory::Name, OperandLayout::U16, false,false,false,false,false,false,false,false, false, 0},
     {Op::Clone, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, false, 0},
+    {Op::UniqueLocal, OperandCategory::Local, OperandLayout::U16, false,false,false,true,false,false,false,false, true, 0},
+    {Op::UniqueUpvalue, OperandCategory::Upvalue, OperandLayout::U16, false,false,false,true,false,false,false,false, true, 0},
+    {Op::UniqueGlobal, OperandCategory::Name, OperandLayout::U16, false,false,false,true,false,false,false,false, true, 0},
+    {Op::GetFieldUnique, OperandCategory::Name, OperandLayout::U16, false,false,false,false,false,false,false,false, false, 0},
+    {Op::IndexGetUnique, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, true, -1},
     {Op::EndModule, OperandCategory::None, OperandLayout::Simple, false,false,false,false,false,false,false,false, false, 0},
 }};
 // clang-format on
@@ -978,6 +1024,9 @@ int main() {
 
     // Clone.
     RUN(test_compile_clone_mutable);
+    RUN(test_compile_field_write_through_index_uses_unique_ops);
+    RUN(test_compile_nested_field_write_uses_unique_ops);
+    RUN(test_compile_reads_emit_no_unique_ops);
 
     // IntToNumber.
     RUN(test_compile_int_to_number);

@@ -25,7 +25,10 @@ void Linter::visit_expression_statement(const ExpressionStatement& expr_stmt) {
                 const auto full_name = ns->name + "." + fa.field_name;
 
                 if (stdlib::result_returning_functions().contains(full_name)) {
-                    warn(std::format("Result of '{}' is discarded", full_name), expr_stmt.location,
+                    // Report at the expression, like the type checker's error for
+                    // the same discarded result, so the pipeline de-duplicates them.
+                    warn(std::format("Result of '{}' is discarded", full_name),
+                         expr_stmt.expression->location,
                          "assign the result to a variable and handle it with 'match' or "
                          "'Result.unwrap_or', or suppress with '_ = ...'",
                          DiagnosticCode::DiscardedResult);
@@ -171,16 +174,20 @@ void Linter::lint_match_arms(const std::vector<MatchArm>& arms, SourceLocation m
 
         auto guard = make_scope_guard();
 
+        // Prefer the arm's own location so a warning points at the arm that
+        // introduced the binding rather than at the enclosing `match`.
+        const SourceLocation binding_loc = arm.location.value_or(match_loc);
+
         if (arm.has_binding()) {
-            tracker_.track_variable(arm.binding_name(), match_loc, false);
+            tracker_.track_variable(arm.binding_name(), binding_loc, false);
         }
 
         for (const auto& binding : arm.choice_bindings()) {
-            tracker_.track_variable(binding, match_loc, false);
+            tracker_.track_variable(binding, binding_loc, false);
         }
 
         for (const auto& binding : arm.record_field_bindings()) {
-            tracker_.track_variable(binding, match_loc, false);
+            tracker_.track_variable(binding, binding_loc, false);
         }
 
         // The guard is evaluated within the arm scope and may reference the

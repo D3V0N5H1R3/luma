@@ -230,6 +230,13 @@ TypeInfo ExpressionTypeChecker::merge_if_branch_types(const TypeInfo& then_type,
         return then_type;
     }
 
+    // Like match arms: an unknown (error-recovery or type-parameter) then-branch
+    // adopts the else-branch's concrete type, so the result is not silently
+    // permissive.
+    if (then_type.kind == TypeInfo::Kind::Unknown && else_type.kind != TypeInfo::Kind::Unknown) {
+        return else_type;
+    }
+
     if (!tc_.is_assignable(then_type, else_type) && !tc_.is_assignable(else_type, then_type)) {
         tc_.error(std::format("if branches have different types: '{}' and '{}'",
                               then_type.to_string(), else_type.to_string()),

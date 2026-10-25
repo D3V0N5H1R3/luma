@@ -80,7 +80,7 @@ Flags may appear in any order — `luma --test file.luma` and `luma file.luma --
 
 Type checking runs before every execution. If type errors are found, execution is aborted and the errors are printed. Use `--check` when you want to validate without running the program.
 
-Sandbox mode (`--box`) disables all standard library modules that interact with the operating system — `Console`, `Csv`, `FileSystem`, `Http`, `KeyValueStore`, `Process`, `Socket`, and `Xml`. Within modules that remain available, individual file-I/O functions are also disabled: `Compression.gunzip_file`, `Compression.gzip_file`, `Hash.sha256_file`, `Hash.sha512_file`, and `Log.set_output`. Programs running in sandbox mode can only perform pure computation and terminal output via `print`. Attempting to call a sandboxed function produces a clear error: `'Module.function' is not available in sandbox mode (--box)`. Use sandbox mode when running untrusted `.luma` files.
+Sandbox mode (`--box`) disables all standard library modules that interact with the operating system — `Console`, `Csv`, `FileSystem`, `Http`, `KeyValueStore`, `Process`, `Socket`, and `Xml`. Within modules that remain available, individual file-I/O functions are also disabled: `Compression.gunzip_file`, `Compression.gzip_file`, `Compression.gzip_file_with`, `Hash.digest_file`, `Hash.md5_file`, `Hash.sha1_file`, `Hash.sha256_file`, `Hash.sha512_file`, and `Log.set_output`. Programs running in sandbox mode can only perform pure computation and terminal output via `print`. Calling any of these functions produces a clear error: `'Module.function' is not available in sandbox mode (--box)`. Use sandbox mode when running untrusted `.luma` files.
 
 Arguments after the file name are available via `Process.get_arguments()`.
 
@@ -342,13 +342,13 @@ Record destructuring reads plain data — it is distinct from record _creation_,
 
 ### Scope and Shadowing
 
-Declaring a variable that is already defined in the **same** scope is a runtime error. However, an inner block (e.g. inside `if`, `for`, or `{}`) creates a new scope, so inner declarations safely shadow outer ones:
+Declaring a variable that is already defined in the **same** scope is a compile-time type error (`variable 'x' is already declared in this scope`). An inner block (e.g. inside `if`, `for`, or `{}`) creates a new scope, so an inner declaration may shadow an outer one. Because shadowing is easy to misread, the linter warns about it (W0012 — an error under `--strict`); prefix the inner name with `_` when the shadowing is intentional, or choose a different name:
 
 ```luma
 integer x = 1
 
 {
-    integer x = 2 # ok — inner scope shadows outer x
+    integer x = 2 # warning W0012 — inner scope shadows outer x
 
     print(x)      # 2
 }
@@ -377,7 +377,7 @@ for item in [1, 2, 3] {
 | -------- | -------------------------------- | ---------------------------------------------------- |
 | `+`      | Addition or string concatenation | `string + string` concatenates                       |
 | `-`      | Subtraction or unary negation    | `-x` negates `integer` or `number`                   |
-| `*`      | Multiplication or string repeat  | `"ha" * 3` → `"hahaha"`                              |
+| `*`      | Multiplication or string repeat  | `"ha" * 3` → `"hahaha"`; see note below              |
 | `/`      | True division                    | Always yields a `number` (so `7 / 2 == 3.5`)         |
 | `//`     | Floor division                   | Both operands must be `integer`; result is `integer` |
 | `%`      | Modulo                           |                                                      |
@@ -392,6 +392,8 @@ The `//` operator always returns an `integer` and requires both operands to be `
 ```
 
 Use `//` when you explicitly need an integer quotient and want to document that intent.
+
+String repeat (`text * count`) clamps a negative count computed at run time to zero, giving `""`. A negative literal count such as `"ab" * -3` is always a mistake, so it is a compile-time error.
 
 ### Bit Manipulation
 
@@ -531,7 +533,7 @@ function optional<string> get_display_name(optional<User> user) {
 }
 ```
 
-> `?` **can be used inside `@main`**. If `?` propagates a failure, the program terminates with a `RuntimeError` whose message includes the failure value. The typed error payload is preserved, so a surrounding `try`/`catch` can recover it. You can also use `??` to provide a default instead:
+> `?` **can be used inside `@main`**. If `?` propagates a failure, the program terminates with a `RuntimeError` whose message includes the failure value. A surrounding `try`/`catch` receives the failure as its `string` binding — the failure message itself, or the text of a typed error such as `"MathError.DivisionByZero"`. You can also use `??` to provide a default instead:
 >
 > ```luma
 > @main
@@ -710,10 +712,13 @@ print(n) # 128
 All three clauses are optional, but at least `catch` or `finally` must be present:
 
 ```luma
+integer divisor = 0
+
 try {
-    integer result = 10 / 0
+    integer quotient = 10 // divisor
+    print(quotient)
 } catch(err) {
-    print("caught: ${err}") # caught: division by zero
+    print("caught: ${err}") # caught: Integer division: division by zero
 } finally {
     print("always runs")
 }
@@ -1123,8 +1128,8 @@ array<number>  empty = []
 ### Accessing Elements (Zero-Based)
 
 ```luma
-print(nums[0]) # 1
-print(nums[4]) # 5
+print(nums[0]) # 1.0
+print(nums[4]) # 5.0
 ```
 
 Out-of-bounds access is a runtime error. For safe access use `Array.get`.
@@ -1132,8 +1137,8 @@ Out-of-bounds access is a runtime error. For safe access use `Array.get`.
 ### Safe Access
 
 ```luma
-result<number> r = Array.get(nums, 10) # failure("index 10 out of bounds")
-result<number> v = Array.get(nums, 2)  # success(3)
+optional<number> missing = Array.get(nums, 10) # none — index out of bounds
+optional<number> third   = Array.get(nums, 2)  # some(3.0)
 ```
 
 ### Mutating Elements
@@ -1161,7 +1166,7 @@ list[1] = 99 # [1, 99, 3]
 | `Array.first(arr)`            | `result<T>` — first element                                                                                                 |
 | `Array.flat_map(arr, fn)`     | `result<array<T>>` — map then flatten one level; `failure` if callback throws                                               |
 | `Array.flatten(arr)`          | `array<T>` — flatten one nesting level                                                                                      |
-| `Array.get(arr, i)`           | `result<T>` — safe indexed access                                                                                           |
+| `Array.get(arr, i)`           | `optional<T>` — safe indexed access; `none` when `i` is out of bounds                                                       |
 | `Array.group_by(arr, fn)`     | `result<dictionary<array<T>>>` — group elements by key returned by `fn`; `failure` if callback throws                       |
 | `Array.index_of(arr, v)`      | `result<integer>` — first index, `failure` if not found                                                                     |
 | `Array.is_empty(arr)`         | `true` if the array has no elements                                                                                         |
@@ -1197,7 +1202,7 @@ list[1] = 99 # [1, 99, 3]
 ### Pipeline Example
 
 ```luma
-array<number> result = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+array<number> squares_of_evens = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     |> Array.filter((number x) -> x % 2 == 0)
     |> Result.unwrap_or([])
     |> Array.map((number x) -> x * x)
@@ -1244,7 +1249,7 @@ dictionary<number> removed = Dictionary.remove(scores, "bob")
 | Function                          | Description                                                                                        |
 | --------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `Dictionary.has_value(d, v)`      | `true` if any value equals `v`                                                                     |
-| `Dictionary.count(d, fn)`         | `integer` — count entries matching predicate                                                       |
+| `Dictionary.count(d, fn)`         | `result<integer>` — count entries matching predicate                                               |
 | `Dictionary.deep_merge(a, b)`     | Recursive merge; `b` wins on conflicts                                                             |
 | `Dictionary.each(d, fn)`          | `result<none>` — iterate key-value pairs; `failure` if callback throws                             |
 | `Dictionary.filter(d, fn)`        | `result<dictionary<T>>` — keep entries where `fn` returns `true`; `failure` if callback throws     |
@@ -1485,7 +1490,7 @@ Expr expr = Expr.Mul(
     Expr.Num(4)
 )
 
-integer result = evaluate(expr) # 20
+integer value = evaluate(expr) # 20
 ```
 
 Generic choice types can also be recursive:
@@ -1989,7 +1994,7 @@ print(grade) # B (for score = 85)
 Multi-statement arm bodies are also supported:
 
 ```luma
-number result = match x {
+number doubled = match x {
     case 0 {
         print("zero case")
 
@@ -2068,8 +2073,8 @@ The `|>` operator passes the left-hand value as the **first argument** to the ri
 
 ```luma
 # These are equivalent:
-string result = String.trim(String.uppercase("hello world"))
-string result = "hello world" |> String.uppercase |> String.trim
+string nested = String.trim(String.uppercase("hello world"))
+string piped = "hello world" |> String.uppercase |> String.trim
 ```
 
 ### With Extra Arguments
@@ -2077,7 +2082,7 @@ string result = "hello world" |> String.uppercase |> String.trim
 The piped value is inserted as the first argument; additional arguments follow:
 
 ```luma
-array<number> result = [1, 2, 3, 4, 5, 6]
+array<number> squares_of_evens = [1, 2, 3, 4, 5, 6]
     |> Array.filter((number x) -> x % 2 == 0)
     |> Result.unwrap_or([])
     |> Array.map((number x) -> x * x)
@@ -2376,7 +2381,7 @@ match r {
 ```luma
 string s = "hello"
 
-result<number> bad  = downcast<number>(s) # failure("downcast failed: value is not of type 'number'")
+result<number> bad  = downcast<number>(s) # failure("cannot downcast 'string' to 'number'")
 result<string> good = downcast<string>(s) # success("hello")
 ```
 
@@ -2395,7 +2400,7 @@ If the type does not match at runtime:
 
 ```luma
 string  s = "hello"
-integer n = trusted_downcast<integer>(s) # RuntimeError: trusted_downcast failed: value is not of type 'integer'
+integer n = trusted_downcast<integer>(s) # RuntimeError: trusted_downcast failed: expected 'integer', got 'string'
 ```
 
 > **When to prefer `downcast` vs `trusted_downcast`.** Use plain `downcast<T>` (returns `result<T>`) when the type mismatch is a recoverable condition. Use `trusted_downcast<T>` when a type mismatch is a programming error that should never happen — the same way you would use `Result.unwrap` for a result you are certain is `success`.
@@ -2482,7 +2487,7 @@ Use `is<T>` when you only need to branch on the type without binding the narrowe
 
 ### Declaring a Namespace
 
-Namespaces group related functions, records, choice types, type aliases, and interfaces together. All members can be accessed with or without the namespace qualifier.
+Namespaces group related functions, records, choice types, type aliases, and interfaces together. Members are accessed with the namespace qualifier (`Geometry.distance`); bare names are available only after a `use` import (see [Bare Names Require `use`](#bare-names-require-use)).
 
 ```luma
 namespace Geometry {
@@ -2569,7 +2574,7 @@ Geometry.Quadrant q2 = Quadrant.I # Quadrant.I imported as bare name
 
 ### Specific Import
 
-`use Namespace.name` imports a single member. If the name does not exist, a runtime error is raised when the `use` line executes:
+`use Namespace.name` imports a single member. If the name does not exist, the type checker rejects the program (`cannot resolve import 'name' from namespace 'Namespace'`):
 
 ```luma
 use Geometry.distance
@@ -2738,13 +2743,13 @@ function void test_strings() {
 ```luma
 @test
 function void test_with_message() {
-    integer result = 2 + 2
+    integer sum = 2 + 2
 
-    assert(result == 4, "expected 4 but got ${result}")
+    assert(sum == 4, "expected 4 but got ${sum}")
 }
 ```
 
-Any runtime error inside a `@test` function — not just assertion failures — causes that test to be marked `[FAIL]`. The error message is displayed next to the test name.
+Any runtime error inside a `@test` function — not just assertion failures — causes that test to be marked `FAIL`. The error message is displayed next to the test name.
 
 ### Running Tests
 
@@ -2755,11 +2760,19 @@ luma --test myfile.luma
 Output:
 
 ```text
-[PASS] test_addition
-[PASS] test_strings
-[PASS] test_with_message
+  pass  test_addition
+  pass  test_strings
+  pass  test_with_message
 
-3 passed, 0 failed.
+3 test(s): 3 passed
+```
+
+A failing test is reported as `FAIL` followed by its message, and the summary adds the failure count:
+
+```text
+  FAIL  test_with_message: expected 4 but got 5
+
+3 test(s): 2 passed, 1 failed
 ```
 
 A non-zero exit code is returned if any test fails (exit code 1 — runtime error), making `--test` suitable for CI pipelines.
@@ -2980,6 +2993,7 @@ Detected before execution. If any type errors are found, execution does not star
 | `cannot assign to field of borrowed variable 'x' — borrow variables are read-only`             | Field mutation on a borrow reference                                     |
 | `cannot assign to element of immutable variable 'x'`                                           | Element mutation on a const variable                                     |
 | `cannot assign to element of borrowed variable 'x' — borrow variables are read-only`           | Element mutation on a borrow reference                                   |
+| `cannot assign into a temporary value`                                                         | Field or element write into a call result, e.g. `make_point().x = 5`     |
 | `cannot compound-assign to immutable variable 'x'`                                             | `+=` etc. on a non-`mutable` binding                                     |
 | `cannot compound-assign to borrowed variable 'x' — borrow variables are read-only`             | `+=` etc. on a borrow reference                                          |
 | `cannot compound-assign to field of immutable variable 'x'`                                    | Field compound assignment on a const variable                            |
@@ -3056,7 +3070,7 @@ Detected before execution. If any type errors are found, execution does not star
 | `integer overflow in modulo`               | Constant integer modulo exceeds bounds             |
 | `integer overflow in negation`             | Negation of `INT64_MIN` exceeds bounds             |
 | `shift amount out of range`                | Shift amount outside `0..63`                       |
-| `string repeat count must be non-negative` | Negative string repeat count                       |
+| `string repeat count must be non-negative` | Negative literal repeat count (`"ab" * -3`)        |
 | `string repeat count exceeds maximum`      | String repeat count too large                      |
 
 #### Records, Choices, Interfaces, and Namespaces
@@ -3210,21 +3224,19 @@ Include resolution errors. Execution does not start.
 | `non-exhaustive match: no arm matched value V`                                | No `match` arm matched the subject value                                                            |
 | `number overflow in addition` / `subtraction` / `multiplication` / `division` | `number` arithmetic with finite inputs produced `±Infinity`                                         |
 | `range bounds must be integers`                                               | `start..end` expression uses non-integer bounds                                                     |
-| `shift amount out of range`                                                   | `<<` or `>>` with a shift amount outside `0..63`                                                    |
+| `Bits.shift_left: shift amount N is out of range`                             | `Bits.shift_left` / `Bits.shift_right` with a shift amount outside `0..63`                          |
 | `spawn requires a function call expression`                                   | `spawn` applied to a non-call expression at runtime                                                 |
 | `string concatenation exceeds maximum size`                                   | String `+` result exceeds the size limit                                                            |
-| `string repeat count must be non-negative`                                    | `str * n` with `n < 0`                                                                              |
 | `task queue is full — too many pending tasks`                                 | More pending tasks than the task-queue limit allows                                                 |
-| `trusted_downcast failed: value is not of type 'T'`                           | `trusted_downcast<T>` used on a value of wrong type                                                 |
+| `trusted_downcast failed: expected 'T', got 'U'`                              | `trusted_downcast<T>` used on a value of wrong type                                                 |
 | `tuple destructuring: expected N elements, got M`                             | Right-hand tuple has wrong element count                                                            |
 | `undefined variable 'x'`                                                      | `x` is not in scope at runtime                                                                      |
 | `unknown named argument 'name'`                                               | Named argument matches no parameter of the called function                                          |
 | `unwrap called on fail: msg`                                                  | `Result.unwrap` on a `failure` value (location prefix added when `failure()` was written in source) |
-| `variable 'x' is already defined in this scope`                               | Re-declaring a name in the same block                                                               |
 | `no @main function found`                                                     | File has no `@main` function (also a TypeError under `--check`)                                     |
-| `while loop exceeded maximum iteration limit (1000000000)`                    | A `while` loop executed more than 1 billion iterations                                              |
+| `loop exceeded maximum iteration count (10000000)`                            | A `while` loop executed more than 10 million iterations (see `LUMA_LIMIT_MAX_WHILE_ITERATIONS`)     |
 
-**Note:** `downcast<T>` never throws a RuntimeError — it returns `failure("downcast failed: value is not of type 'T'")` as a `result<T>` value. `trusted_downcast<T>` **does** throw a RuntimeError when the type does not match.
+**Note:** `downcast<T>` never throws a RuntimeError — it returns `failure("cannot downcast 'U' to 'T'")` as a `result<T>` value. `trusted_downcast<T>` **does** throw a RuntimeError when the type does not match.
 
 **Note:** The numeric limits referenced in these messages (such as recursion depth and pending-task count) are documented canonically in the [resource-limit table](Luma_Performance_Guide.md#6--resource-limits), along with their `LUMA_LIMIT_*` environment-variable overrides.
 

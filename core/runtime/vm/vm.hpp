@@ -523,6 +523,9 @@ private:
     void handle_contains();
     void handle_make_dict();
     void handle_get_field();
+    void handle_get_field_unique();
+    void handle_index_get_unique();
+    void push_field(std::string_view field_name);
     void handle_set_field();
     void handle_get_field_opt();
     void handle_index_get_opt();
@@ -755,6 +758,11 @@ private:
     void op_int_to_number();           // Op::IntToNumber
     void op_widen_number();            // Op::WidenNumber
     void op_clone();                   // Op::Clone
+    void op_unique_local();            // Op::UniqueLocal
+    void op_unique_upvalue();          // Op::UniqueUpvalue
+    void op_unique_global();           // Op::UniqueGlobal
+    void op_get_field_unique();        // Op::GetFieldUnique
+    void op_index_get_unique();        // Op::IndexGetUnique
     void op_end_module();              // Op::EndModule
 
     // ─── Template numeric helpers ───

@@ -218,10 +218,13 @@ Note: `downcast<T>` is an exception to this rule — it is a safe operation that
 ### Basic Usage
 
 ```luma
+integer divisor = 0
+
 try {
-    integer result = 10 / 0
+    integer quotient = 10 // divisor
+    print(quotient)
 } catch(err) {
-    print("caught: ${err}")  # caught: division by zero
+    print("caught: ${err}")  # caught: Integer division: division by zero
 } finally {
     print("always runs")     # runs whether or not an error occurred
 }

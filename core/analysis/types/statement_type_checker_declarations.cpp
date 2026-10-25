@@ -60,17 +60,7 @@ void StatementTypeChecker::visit_variable_declaration(const VariableDeclStatemen
                   stmt.location, "choose a different name, or use the existing variable");
     }
 
-    // Linter: shadowed variable warning.
-    if (!stmt.name.starts_with('_')) {
-        const auto parent_scope = tc_.context().current_scope->parent();
-        const auto* outer = parent_scope ? parent_scope->lookup(stmt.name) : nullptr;
-
-        if (outer != nullptr) {
-            tc_.warn(std::format("'{}' shadows an outer variable", stmt.name), stmt.location,
-                     "choose a different name or prefix with '_' to suppress",
-                     DiagnosticCode::ShadowedVariable);
-        }
-    }
+    // Shadowing an outer variable is reported by the linter (W0012), not here.
 
     tc_.context().current_scope->define(stmt.name, declared_type,
                                         {.is_mutable = stmt.is_mutable,

@@ -39,7 +39,7 @@ Create a folder `luma-manual-tests/` with these files:
 @main
 function void main() {
     string greeting = "Hello, world!"
-    Console.print(greeting)
+    print(greeting)
 }
 ```
 
@@ -56,8 +56,8 @@ function string format_money(number amount) {
 
 @main
 function void main() {
-    number result = add(3.0, 4.5)
-    Console.print(format_money(result))
+    number total = add(3.0, 4.5)
+    print(format_money(total))
 }
 ```
 
@@ -65,7 +65,7 @@ function void main() {
 
 ```luma
 record Point {
-    number x
+    number x,
     number y
 }
 
@@ -76,15 +76,17 @@ choice Shape {
 
 function number area(Shape shape) {
     return match shape {
-        case Shape.Circle(r) => 3.14159 * r * r
-        case Shape.Rectangle(w, h) => w * h
+        case Shape.Circle(radius) { 3.14159 * radius * radius }
+        case Shape.Rectangle(width, height) { width * height }
     }
 }
 
 @main
 function void main() {
+    Point origin = Point { x = 0.0, y = 0.0 }
     Shape circle = Shape.Circle(5.0)
-    Console.print("Area: ${area(circle)}")
+    print("Origin: (${origin.x}, ${origin.y})")
+    print("Area: ${area(circle)}")
 }
 ```
 
@@ -95,15 +97,15 @@ function result<integer> safe_divide(integer a, integer b) {
     if b == 0 {
         return failure("division by zero")
     }
-    return success(a / b)
+
+    return success(a // b)
 }
 
 @main
 function void main() {
-    result<integer> r = safe_divide(10, 0)
-    match r {
-        case success(value) => Console.print("Result: ${value}")
-        case failure(err) => Console.print("Error: ${err}")
+    match safe_divide(10, 0) {
+        success(value) { print("Result: ${value}") }
+        failure(message) { print("Error: ${message}") }
     }
 }
 ```
@@ -111,14 +113,16 @@ function void main() {
 #### `concurrency.luma`
 
 ```luma
+function string greet_from_task() {
+    return "hello from task"
+}
+
 @main
 function void main() {
     task_scope {
-        task<string> t1 = spawn {
-            return "hello from task"
-        }
-        string msg = await t1
-        Console.print(msg)
+        task<string> greeting_task = spawn greet_from_task()
+        string message = await greeting_task
+        print(message)
     }
 }
 ```
@@ -147,7 +151,7 @@ function void test_factorial_recursive() {
 
 @main
 function void main() {
-    Console.print("5! = ${factorial(5)}")
+    print("5! = ${factorial(5)}")
 }
 ```
 
@@ -166,7 +170,7 @@ include "include_helper.luma"
 
 @main
 function void main() {
-    Console.print(greet("Luma"))
+    print(greet("Luma"))
 }
 ```
 
@@ -185,20 +189,20 @@ Most tests below use the files from the workspace setup above or small inline co
 function void main() {
     # For loop with range
     mutable integer sum = 0
-    for i in Array.range(1, 11) {
-        sum = sum + i
+    for i in 1..11 {
+        sum += i
     }
-    Console.print("Sum 1..10: ${sum}")
+    print("Sum 1..10: ${sum}")
 
     # While loop
     mutable integer n = 10
     while n > 0 {
         if n == 5 {
-            n = n - 1
+            n -= 1
             continue
         }
-        Console.print("n = ${n}")
-        n = n - 1
+        print("n = ${n}")
+        n -= 1
     }
 }
 ```
@@ -210,28 +214,30 @@ function void main() {
 function void main() {
     # Arrays
     array<integer> nums = [3, 1, 4, 1, 5, 9]
-    array<integer> sorted = nums |> Array.sort()
-    array<integer> unique = sorted |> Array.unique()
-    Console.print("Sorted unique: ${unique}")
+    array<integer> sorted = nums
+        |> Array.sort((integer a, integer b) -> a - b)
+        |> Result.unwrap_or([])
+    array<integer> distinct = sorted |> Array.unique()
+    print("Sorted unique: ${distinct}")
 
     # Dictionary
     dictionary<integer> ages = {"alice": 30, "bob": 25}
-    Console.print("Alice is ${Dictionary.get(ages, "alice")}")
+    print("Alice is ${Dictionary.get_or(ages, "alice", 0)}")
 
     # Tuples
     (string, integer) pair = ("hello", 42)
-    Console.print("${pair.0} ${pair.1}")
+    print("${pair.0} ${pair.1}")
 
     # Queue and Stack
-    mutable queue<string> q = Queue.new()
-    q = Queue.enqueue(q, "first")
-    q = Queue.enqueue(q, "second")
-    Console.print("Dequeued: ${Queue.peek(q)}")
+    queue<string> waiting = Queue.new()
+        |> Queue.enqueue("first")
+        |> Queue.enqueue("second")
+    print("Next in queue: ${Queue.peek(waiting) ?? ""}")
 
-    mutable stack<integer> s = Stack.new()
-    s = Stack.push(s, 10)
-    s = Stack.push(s, 20)
-    Console.print("Top: ${Stack.peek(s)}")
+    stack<integer> pile = Stack.new()
+        |> Stack.push(10)
+        |> Stack.push(20)
+    print("Top: ${Stack.peek(pile) ?? 0}")
 }
 ```
 
@@ -245,56 +251,54 @@ function function(integer) -> integer make_adder(integer x) {
 @main
 function void main() {
     function(integer) -> integer add5 = make_adder(5)
-    Console.print("add5(3) = ${add5(3)}")
-    Console.print("add5(10) = ${add5(10)}")
+    print("add5(3) = ${add5(3)}")
+    print("add5(10) = ${add5(10)}")
 }
 ```
 
 #### `generics.luma`
 
 ```luma
-function T identity<T>(T value) {
+function<T> T identity(T value) {
     return value
 }
 
 record Pair<A, B> {
-    A first
+    A first,
     B second
 }
 
 @main
 function void main() {
-    integer x = identity<integer>(42)
-    string s = identity<string>("hello")
-    Pair<string, integer> p = Pair { first: "age", second: 30 }
-    Console.print("${p.first} = ${p.second}")
+    integer answer = identity(42)
+    string greeting = identity("hello")
+    Pair<string, integer> entry = Pair { first = "age", second = 30 }
+    print("${greeting} ${answer}")
+    print("${entry.first} = ${entry.second}")
 }
 ```
 
 #### `interfaces.luma`
 
 ```luma
-interface Printable {
-    function string to_display(self)
+interface Named {
+    string name
 }
 
 record Dog {
-    string name
+    string name,
     integer age
 }
 
-function string to_display(Dog d) {
-    return "${d.name} (${d.age} years)"
-}
-
-function void print_item(Printable item) {
-    Console.print(to_display(item))
+function string describe(Named item) {
+    return "Name: ${item.name}"
 }
 
 @main
 function void main() {
-    Dog rex = Dog { name: "Rex", age: 5 }
-    print_item(rex)
+    Dog rex = Dog { name = "Rex", age = 5 }
+    print(describe(rex))
+    print("${rex.name} (${rex.age} years)")
 }
 ```
 
@@ -304,9 +308,9 @@ function void main() {
 @main
 function void main() {
     # This should fail in sandbox mode
-    Console.print("before file access")
-    result<string> content = FileSystem.read("somefile.txt")
-    Console.print("after: ${content}")
+    print("before file access")
+    result<string> content = FileSystem.read_file("somefile.txt")
+    print("after: ${content}")
 }
 ```
 
@@ -320,7 +324,7 @@ function void main() {
 | 1.1.4  | Strict mode             | `luma --strict hello.luma` (with an unused variable)                   | Lint warning promoted to error, non-zero exit              |
 | 1.1.5  | Sandbox mode            | `luma --box sandbox_test.luma`                                         | FileSystem call fails with "not available in sandbox mode" |
 | 1.1.6  | Type-check only         | `luma --check math.luma`                                               | Reports type errors without running; exits 0 if clean      |
-| 1.1.7  | Version                 | `luma --version`                                                       | Prints version string (e.g., "luma 0.7.x")                 |
+| 1.1.7 | Version                 | `luma --version` | Prints the version string (e.g. "Luma 0.15.0") |
 | 1.1.8  | Help                    | `luma --help`                                                          | Shows usage with all flags listed                          |
 | 1.1.9  | Invalid file            | `luma nonexistent.luma`                                                | Error message, exits with non-zero code                    |
 | 1.1.10 | Syntax error exit code  | `luma` a file with syntax error                                        | Exits with code 3 (SyntaxError)                            |
@@ -352,8 +356,8 @@ function void main() {
 | 1.3.2  | Mutable variable     | `mutable integer x = 1` then `x = 2`            | Compiles and runs successfully      |
 | 1.3.3  | String interpolation | `"1 + 2 = ${1 + 2}"`                            | Produces `"1 + 2 = 3"`              |
 | 1.3.4  | Triple-quoted string | Use `"""` multiline string                      | Auto-dedents common whitespace      |
-| 1.3.5  | Boolean operations   | `true and false`, `not true`, `true or false`   | `false`, `false`, `true`            |
-| 1.3.6  | Integer arithmetic   | `10 / 3`, `10 % 3`                              | `3`, `1` (integer division)         |
+| 1.3.5 | Boolean operations   | `true && false`, `!true`, `true \|\| false` | `false`, `false`, `true` |
+| 1.3.6 | Integer arithmetic   | `10 // 3`, `10 % 3`, `10 / 3` | `3`, `1`, `3.3333333333333335` (`//` is floor division; `/` always yields a `number`) |
 | 1.3.7  | Number precision     | `0.1 + 0.2`                                     | Standard IEEE-754 result            |
 | 1.3.8  | String concatenation | `"hello" + " " + "world"`                       | `"hello world"`                     |
 | 1.3.9  | Type promotion       | `integer` + `number` operation                  | Promotes to `number` result         |
@@ -379,12 +383,12 @@ function void main() {
 | 1.5.1 | Basic function call    | Run `math.luma`                                    | `add(3.0, 4.5)` returns `7.5`                  |
 | 1.5.2 | Recursion              | Run `tests.luma`                                   | `factorial(5)` returns `120`                   |
 | 1.5.3 | Closures               | Run `closures.luma`                                | `add5(3)` returns `8`, `add5(10)` returns `15` |
-| 1.5.4 | Higher-order functions | `Array.map([1,2,3], (integer x) -> x * 2)`         | Returns `[2, 4, 6]`                            |
+| 1.5.4 | Higher-order functions | `Array.map([1, 2, 3], (integer x) -> x * 2)` | Returns `success([2, 4, 6])` |
 | 1.5.5 | Named arguments        | `add(a: 1.0, b: 2.0)`                              | Works the same as positional                   |
 | 1.5.6 | Optional parameters    | Function with default value, call without that arg | Default applied                                |
-| 1.5.7 | Pipe operator          | `"hello" \|> String.to_upper()`                    | Returns `"HELLO"`                              |
-| 1.5.8 | Pipe chain             | `[3,1,2] \|> Array.sort() \|> Array.reverse()`     | Returns `[3, 2, 1]`                            |
-| 1.5.9 | Namespace function     | `Math.sqrt(16.0)`                                  | Returns `4.0`                                  |
+| 1.5.7 | Pipe operator          | `"hello" \|> String.uppercase()` | Returns `"HELLO"` |
+| 1.5.8 | Pipe chain             | `[3, 1, 2] \|> Array.sort((integer a, integer b) -> a - b) \|> Result.unwrap_or([]) \|> Array.reverse()` | Returns `[3, 2, 1]` |
+| 1.5.9 | Namespace function     | `Math.square_root(16.0)` | Returns `success(4.0)` |
 
 ### 1.6 Types & Data Structures
 
@@ -395,10 +399,10 @@ function void main() {
 | 1.6.3  | Match on choice        | Run `types.luma`                                 | `area()` dispatches correctly                |
 | 1.6.4  | Generic function       | Run `generics.luma`                              | `identity` works for integer and string      |
 | 1.6.5  | Generic record         | `Pair<string, integer>`                          | Fields typed correctly                       |
-| 1.6.6  | Interface (structural) | Run `interfaces.luma`                            | `print_item(rex)` works via structural match |
-| 1.6.7  | Downcast               | `downcast<Dog>(some_printable)`                  | Returns `result<Dog>`                        |
+| 1.6.6 | Interface (structural) | Run `interfaces.luma` | `describe(rex)` accepts the `Dog` through the `Named` interface |
+| 1.6.7 | Downcast               | `downcast<Dog>(some_named)` where `Named some_named = rex` | Returns `result<Dog>` |
 | 1.6.8  | Type alias             | `type Name = string` then use `Name`             | Transparent alias works                      |
-| 1.6.9  | Record with block      | `Point { x: 1.0, y: 2.0 }` literal syntax        | Creates record correctly                     |
+| 1.6.9 | Record with block      | `Point { x = 1.0, y = 2.0 }` literal syntax | Creates record correctly |
 | 1.6.10 | Private fields         | Record with `private` field, access from outside | Compile error unless `trusted`               |
 
 ### 1.7 Collections
@@ -407,9 +411,9 @@ function void main() {
 | ----- | ----------------------- | -------------------------------------------------- | -------------------------------- |
 | 1.7.1 | Array operations        | Run `collections.luma`                             | Sort, unique, print work         |
 | 1.7.2 | Array indexing          | `[10, 20, 30][1]`                                  | Returns `20`                     |
-| 1.7.3 | Array slicing           | `[1,2,3,4,5][1:3]`                                 | Returns `[2, 3]`                 |
-| 1.7.4 | Array.map/filter/reduce | `[1,2,3,4] \|> Array.filter((integer x) -> x > 2)` | Returns `[3, 4]`                 |
-| 1.7.5 | Dictionary              | `Dictionary.get(ages, "alice")`                    | Returns the value for key        |
+| 1.7.3 | Array slicing           | `[1, 2, 3, 4, 5][1..3]` | Returns `[2, 3]` |
+| 1.7.4 | Array.map/filter/reduce | `[1, 2, 3, 4] \|> Array.filter((integer x) -> x > 2)` | Returns `success([3, 4])` |
+| 1.7.5 | Dictionary              | `Dictionary.get(ages, "alice")` | Returns `success(30)` |
 | 1.7.6 | Queue FIFO              | Enqueue A, B; dequeue                              | Returns A first                  |
 | 1.7.7 | Stack LIFO              | Push 10, 20; peek                                  | Returns 20                       |
 | 1.7.8 | Set operations          | `Set.union`, `Set.intersection`, `Set.difference`  | Correct set results              |
@@ -424,8 +428,8 @@ function void main() {
 | 1.8.3 | Default operator `??` | `safe_divide(1, 0) ?? -1`                        | Returns `-1`                      |
 | 1.8.4 | Propagation `?`       | Function using `?` to propagate errors           | Error bubbles to caller           |
 | 1.8.5 | Optional some/none    | `optional<integer> x = some(42)` / `none`        | Correct value or absence          |
-| 1.8.6 | Try/catch             | `try { 1 / 0 } catch err { Console.print(err) }` | Catches runtime error             |
-| 1.8.7 | Assert                | `assert(false)`                                  | Runtime error: "Assertion failed" |
+| 1.8.6 | Try/catch             | With `integer divisor = 0`: `try { print(1 // divisor) } catch(err) { print(err) }` | Catches the runtime error and prints "Integer division: division by zero" |
+| 1.8.7 | Assert                | `assert(false)` | Runtime error: "assertion failed" |
 | 1.8.8 | Assert with message   | `assert(false, "custom msg")`                    | Shows "custom msg"                |
 
 ### 1.9 Concurrency
@@ -443,15 +447,15 @@ function void main() {
 
 | #       | Test                     | Steps                                                                        | Expected                               |
 | ------- | ------------------------ | ---------------------------------------------------------------------------- | -------------------------------------- |
-| 1.10.1  | String functions         | `String.to_upper("hello")`, `String.split("a,b", ",")`                       | `"HELLO"`, `["a", "b"]`                |
-| 1.10.2  | Math functions           | `Math.sqrt(9.0)`, `Math.pi`                                                  | `3.0`, `3.14159...`                    |
-| 1.10.3  | DateTime                 | `DateTime.now()`                                                             | Returns current timestamp              |
-| 1.10.4  | JSON parse               | `Json.parse("{\"key\": 1}")`                                                 | Parsed dictionary                      |
-| 1.10.5  | RegularExpression        | `RegularExpression.is_match("hello123", "[a-z]+\\d+")`                       | Returns `true`                         |
-| 1.10.6  | Random                   | `Random.integer(1, 100)`                                                     | Returns integer in range               |
-| 1.10.7  | FileSystem (non-sandbox) | `FileSystem.write("test.txt", "content")` then `FileSystem.read("test.txt")` | Write succeeds; read returns "content" |
+| 1.10.1 | String functions         | `String.uppercase("hello")`, `String.split("a,b", ",")` | `"HELLO"`, `["a", "b"]` |
+| 1.10.2 | Math functions           | `Math.square_root(9.0)`, `Math.pi` | `success(3.0)`, `3.14159...` |
+| 1.10.3 | DateTime                 | `DateTime.now_unix()` | Returns the current Unix timestamp |
+| 1.10.4 | JSON parse               | `Json.parse("{\"key\": 1}")` | `success` holding a `Json.Value.JsonObject` |
+| 1.10.5 | RegularExpression        | `RegularExpression.matches("hello123", "[a-z]+[0-9]+")` | Returns `success(true)` |
+| 1.10.6 | Random                   | `Random.generate_integer(1, 100)` | Returns `success(n)` with `n` in `1..=100` |
+| 1.10.7 | FileSystem (non-sandbox) | `FileSystem.write_file("test.txt", "content")` then `FileSystem.read_file("test.txt")` | Write succeeds; read returns `success("content")` |
 | 1.10.8  | Hash                     | `Hash.sha256("hello")`                                                       | Returns hex digest string              |
-| 1.10.9  | Converter                | `Converter.integer_to_string(42)`                                            | Returns `"42"`                         |
+| 1.10.9 | Converter                | `Converter.to_string(42)` | Returns `"42"` |
 | 1.10.10 | Array.sort_by            | `Array.sort_by(items, (T x) -> x.key)`                                       | Sorted by key                          |
 
 ### 1.11 Include & Multi-File
@@ -467,7 +471,7 @@ function void main() {
 
 | #      | Test             | Steps                                                       | Expected                              |
 | ------ | ---------------- | ----------------------------------------------------------- | ------------------------------------- |
-| 1.12.1 | All tests pass   | `luma --test tests.luma`                                    | "2/2 tests passed" (green output)     |
+| 1.12.1 | All tests pass   | `luma --test tests.luma`                                    | "2 test(s): 2 passed" (green output)  |
 | 1.12.2 | Test failure     | Add `assert(false)` to a test, run `--test`                 | Shows which test failed with location |
 | 1.12.3 | Strict test mode | `luma --strict --test tests.luma`                           | Lint warnings become errors           |
 | 1.12.4 | Test with main   | File has both `@test` and `@main`; `--test` only runs tests | `@main` not executed                  |
@@ -482,8 +486,8 @@ function void main() {
 | ----- | ------------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | 2.1.1 | Syntax error detected    | Open `hello.luma`, delete the closing `}`                                                             | Red underline appears on the error location within ~1 second |
 | 2.1.2 | Type error detected      | In `math.luma`, change `return a + b` to `return a + "text"`                                          | Red underline with "type mismatch" diagnostic                |
-| 2.1.3 | Lint warning             | Add `integer unused = 42` inside `main()` of `hello.luma`                                             | Yellow underline on `unused` with "unused variable" warning  |
-| 2.1.4 | Errors clear on fix      | Undo the changes from 1.1.1                                                                           | Red underlines disappear                                     |
+| 2.1.3 | Lint warning             | Add `integer unused = 42` inside `main()` of `hello.luma`                                             | Yellow underline on `unused` with "is never used" (W0001)    |
+| 2.1.4 | Errors clear on fix      | Undo the changes from 2.1.1–2.1.3                                                                     | Red underlines disappear                                     |
 | 2.1.5 | Diagnostics on save mode | Set `luma.diagnostics.onSave: true` in settings, introduce a lint warning → no squiggles until Ctrl+S | Warning appears only after save                              |
 
 ### 2.2 Hover
@@ -492,8 +496,8 @@ function void main() {
 | ----- | --------------------- | ------------------------------------------------ | ------------------------------------------------------- |
 | 2.2.1 | Variable hover        | Hover over `greeting` in `hello.luma`            | Tooltip shows type `string`                             |
 | 2.2.2 | Function hover        | Hover over `add` in `math.luma` at its call site | Tooltip shows `function number add(number a, number b)` |
-| 2.2.3 | Stdlib module hover   | Hover over `Console` in any file                 | Tooltip shows module description                        |
-| 2.2.4 | Stdlib function hover | Hover over `print` in `Console.print(...)`       | Tooltip shows signature and description                 |
+| 2.2.3 | Stdlib module hover   | Hover over `String` in `math.luma`               | Tooltip shows module description                        |
+| 2.2.4 | Stdlib function hover | Hover over `print` in `print(...)`       | Tooltip shows signature and description                 |
 | 2.2.5 | Type keyword hover    | Hover over `integer` in a type annotation        | Tooltip shows type description                          |
 | 2.2.6 | Record type hover     | Hover over `Point` in `types.luma`               | Tooltip shows record fields                             |
 
@@ -501,7 +505,7 @@ function void main() {
 
 | #     | Test                      | Steps                                           | Expected                                   |
 | ----- | ------------------------- | ----------------------------------------------- | ------------------------------------------ |
-| 2.3.1 | Stdlib module completion  | Type `Console.` (with dot) in a function body   | Dropdown shows `print`, `read_line`, etc.  |
+| 2.3.1 | Stdlib module completion  | Type `Console.` (with dot) in a function body   | Dropdown shows `prompt`, `read_line`, etc. |
 | 2.3.2 | Pipe completion           | Type `"hello" \|> String.`                      | Dropdown shows String module members       |
 | 2.3.3 | Local variable completion | In a function with local `greeting`, type `gre` | `greeting` appears in completions          |
 | 2.3.4 | Keyword completion        | Start a new line and type `fun`                 | `function` keyword appears                 |
@@ -593,7 +597,7 @@ function void main() {
 
 | #     | Test                      | Steps                                                                                                    | Expected                                         |
 | ----- | ------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| 3.2.1 | Line breakpoint           | Set breakpoint on `Console.print(greeting)` in `hello.luma`, F5                                          | Execution pauses at that line                    |
+| 3.2.1 | Line breakpoint           | Set breakpoint on `print(greeting)` in `hello.luma`, F5                                          | Execution pauses at that line                    |
 | 3.2.2 | Conditional breakpoint    | Right-click gutter → Conditional Breakpoint → `n > 3` on `return n * factorial(n-1)` in `tests.luma`, F5 | Only pauses when `n > 3`                         |
 | 3.2.3 | Hit count breakpoint      | Right-click gutter → Hit Count → enter `3` on recursive `factorial` call                                 | Pauses on 3rd hit                                |
 | 3.2.4 | Log point                 | Right-click gutter → Log Point → enter `n = {n}` on factorial line                                       | Messages appear in Debug Console without pausing |
@@ -637,7 +641,7 @@ function void main() {
 
 | #     | Test          | Steps                                                   | Expected                                               |
 | ----- | ------------- | ------------------------------------------------------- | ------------------------------------------------------ |
-| 3.6.1 | Task threads  | Debug `concurrency.luma` with breakpoint inside `spawn` | Threads panel shows main + spawned task                |
+| 3.6.1 | Task threads  | Debug `concurrency.luma` with a breakpoint in `greet_from_task` | Threads panel shows main + spawned task                |
 | 3.6.2 | Switch thread | Click different thread in Threads panel                 | Stack and Variables update to show that thread's state |
 
 ---

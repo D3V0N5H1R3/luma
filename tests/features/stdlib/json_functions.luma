@@ -5,6 +5,8 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── serialize / deserialize ───
+
 @test
 function void test_json_serialize_integer() {
     string json = Json.serialize(42)
@@ -39,31 +41,30 @@ function void test_json_serialize_array() {
 
 @test
 function void test_json_deserialize_integer() {
-    integer v = Json.deserialize("42") |> Result.unwrap()
+    integer value = Json.deserialize("42") |> Result.unwrap()
 
-    assert(v == 42)
+    assert(value == 42)
 }
 
 @test
 function void test_json_deserialize_string() {
-    string v = Json.deserialize("\"hello\"") |> Result.unwrap()
+    string value = Json.deserialize("\"hello\"") |> Result.unwrap()
 
-    assert(v == "hello")
+    assert(value == "hello")
 }
 
 @test
 function void test_json_deserialize_boolean() {
-    boolean v = Json.deserialize("true") |> Result.unwrap()
+    boolean value = Json.deserialize("true") |> Result.unwrap()
 
-    assert(v)
+    assert(value)
 }
 
 @test
 function void test_json_deserialize_array() {
-    array<integer> v = Json.deserialize("[1, 2, 3]") |> Result.unwrap()
+    array<integer> values = Json.deserialize("[1, 2, 3]") |> Result.unwrap()
 
-    assert(Array.length(v) == 3)
-    assert(v[0] == 1)
+    assert(values == [1, 2, 3])
 }
 
 @test
@@ -72,8 +73,7 @@ function void test_json_roundtrip_array() {
 
     array<integer> parsed = Json.deserialize(json) |> Result.unwrap()
 
-    assert(Array.length(parsed) == 3)
-    assert(parsed[0] == 1)
+    assert(parsed == [1, 2, 3])
 }
 
 @test
@@ -93,7 +93,18 @@ function void test_json_deserialize_invalid() {
 function void test_json_serialize_pretty() {
     string json = Json.serialize_pretty([1, 2])
 
-    assert(String.contains(json, "\n"))
+    # Two-space indentation, one element per line.
+    assert(json == "[\n  1,\n  2\n]")
+}
+
+@test
+function void test_json_serialize_escapes_strings() {
+    # Quotes, backslashes and control characters are escaped; deserialize undoes it.
+    string original = "a\"b\n\\c"
+    string json = Json.serialize(original)
+
+    assert(json == "\"a\\\"b\\n\\\\c\"")
+    assert(Json.deserialize(json) == success(original))
 }
 
 # ─── Json.get ────────────────────────────────────────────
@@ -120,16 +131,16 @@ function void test_json_get_nested_key() {
 function void test_json_get_array_index() {
     string json = "[10, 20, 30]"
 
-    integer val = Json.get(json, "1") |> Result.unwrap()
+    integer element = Json.get(json, "1") |> Result.unwrap()
 
-    assert(val == 20)
+    assert(element == 20)
 }
 
 @test
 function void test_json_get_missing_key() {
-    result<integer> r = Json.get("{\"a\": 1}", "b")
+    result<integer> outcome = Json.get("{\"a\": 1}", "b")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(outcome))
 }
 
 # ─── Json.set ────────────────────────────────────────────
@@ -138,18 +149,18 @@ function void test_json_get_missing_key() {
 function void test_json_set_existing_key() {
     string updated = Json.set("{\"x\": 1}", "x", 99) |> Result.unwrap()
 
-    integer v = Json.get(updated, "x") |> Result.unwrap()
+    integer value = Json.get(updated, "x") |> Result.unwrap()
 
-    assert(v == 99)
+    assert(value == 99)
 }
 
 @test
 function void test_json_set_new_key() {
     string updated = Json.set("{}", "greeting", "hi") |> Result.unwrap()
 
-    string v = Json.get(updated, "greeting") |> Result.unwrap()
+    string value = Json.get(updated, "greeting") |> Result.unwrap()
 
-    assert(v == "hi")
+    assert(value == "hi")
 }
 
 # ─── Json.merge ──────────────────────────────────────────
@@ -176,18 +187,18 @@ function void test_json_merge_right_wins_on_conflict() {
 
 @test
 function void test_json_merge_invalid_fails() {
-    result<string> r = Json.merge("{invalid}", "{}")
+    result<string> outcome = Json.merge("{invalid}", "{}")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(outcome))
 }
 
-# ───────────────────────────────────────────────────────────
-# get_path, set_path
-# ───────────────────────────────────────────────────────────
+# ─── get_path, set_path ───
 
 @test
 function void test_json_get_path() {
-    assert(Converter.to_string(Result.unwrap(Json.get_path("{\"a\":{\"b\":42}}", "a.b"))) == "42")
+    integer value = Json.get_path("{\"a\":{\"b\":42}}", "a.b") |> Result.unwrap()
+
+    assert(value == 42)
 }
 
 @test
@@ -195,9 +206,7 @@ function void test_json_set_path() {
     assert(Result.unwrap(Json.set_path("{\"a\":1}", "a", 9)) == "{\"a\":9}")
 }
 
-# ───────────────────────────────────────────────────────────
-# Additional serialize / deserialize coverage
-# ───────────────────────────────────────────────────────────
+# ─── Additional serialize / deserialize coverage ───
 
 @test
 function void test_json_serialize_number() {
@@ -206,39 +215,38 @@ function void test_json_serialize_number() {
 
 @test
 function void test_json_serialize_dictionary() {
-    dictionary<integer> d = {"b": 2, "a": 1}
+    dictionary<integer> scores = {"b": 2, "a": 1}
 
-    assert(Json.serialize(d) == "{\"b\":2,\"a\":1}")
+    # Keys keep their insertion order.
+    assert(Json.serialize(scores) == "{\"b\":2,\"a\":1}")
 }
 
 @test
 function void test_json_serialize_nested() {
-    dictionary<array<integer>> d = {"items": [1, 2, 3]}
+    dictionary<array<integer>> nested = {"items": [1, 2, 3]}
 
-    assert(Json.serialize(d) == "{\"items\":[1,2,3]}")
+    assert(Json.serialize(nested) == "{\"items\":[1,2,3]}")
 }
 
 @test
 function void test_json_deserialize_number() {
-    number v = Json.deserialize("3.14") |> Result.unwrap()
+    number value = Json.deserialize("3.14") |> Result.unwrap()
 
-    assert(v > 3.13)
-    assert(v < 3.15)
+    assert(Math.approximately_equal(value, 3.14))
 }
 
 @test
 function void test_json_deserialize_null() {
-    result<integer> r = Json.deserialize("null")
-
-    assert(Result.is_success(r))
+    # JSON null becomes Luma's none.
+    assert(Json.deserialize("null") == success(none))
 }
 
 @test
 function void test_json_deserialize_object() {
-    dictionary<integer> v = Json.deserialize("{\"a\": 1, \"b\": 2}") |> Result.unwrap()
+    dictionary<integer> parsed = Json.deserialize("{\"a\": 1, \"b\": 2}") |> Result.unwrap()
 
-    integer a = Dictionary.get(v, "a") |> Result.unwrap()
-    integer b = Dictionary.get(v, "b") |> Result.unwrap()
+    integer a = Dictionary.get(parsed, "a") |> Result.unwrap()
+    integer b = Dictionary.get(parsed, "b") |> Result.unwrap()
 
     assert(a == 1)
     assert(b == 2)
@@ -252,8 +260,10 @@ function void test_json_roundtrip_dictionary() {
     dictionary<integer> parsed = Json.deserialize(json) |> Result.unwrap()
 
     integer x = Dictionary.get(parsed, "x") |> Result.unwrap()
+    integer y = Dictionary.get(parsed, "y") |> Result.unwrap()
 
     assert(x == 1)
+    assert(y == 2)
 }
 
 @test
@@ -263,20 +273,17 @@ function void test_json_serialize_pretty_roundtrips() {
     string pretty = Json.serialize_pretty(original)
     array<integer> parsed = Json.deserialize(pretty) |> Result.unwrap()
 
-    assert(Array.length(parsed) == 3)
-    assert(parsed[2] == 3)
+    assert(parsed == original)
 }
 
 @test
 function void test_json_deserialize_unicode_escape() {
-    string v = Json.deserialize("\"\\u0041\"") |> Result.unwrap()
+    string value = Json.deserialize("\"\\u0041\"") |> Result.unwrap()
 
-    assert(v == "A")
+    assert(value == "A")
 }
 
-# ───────────────────────────────────────────────────────────
-# Path navigation — bracket index, nested set, dot index
-# ───────────────────────────────────────────────────────────
+# ─── Path navigation — bracket index, nested set, dot index ───
 
 @test
 function void test_json_get_path_array_bracket() {
@@ -308,9 +315,9 @@ function void test_json_set_path_nested_object() {
 function void test_json_get_dot_array_index() {
     string json = "{\"a\": {\"b\": [7, 8, 9]}}"
 
-    integer v = Json.get(json, "a.b.2") |> Result.unwrap()
+    integer value = Json.get(json, "a.b.2") |> Result.unwrap()
 
-    assert(v == 9)
+    assert(value == 9)
 }
 
 @test
@@ -324,9 +331,7 @@ function void test_json_merge_overwrites_object() {
     assert(b == 99)
 }
 
-# ───────────────────────────────────────────────────────────
-# Negative cases — malformed input and invalid operations
-# ───────────────────────────────────────────────────────────
+# ─── Negative cases — malformed input and invalid operations ───
 
 @test
 function void test_json_deserialize_trailing_fails() {
@@ -345,104 +350,102 @@ function void test_json_deserialize_unterminated_fails() {
 
 @test
 function void test_json_get_into_scalar_fails() {
-    result<integer> r = Json.get("5", "a")
+    result<integer> outcome = Json.get("5", "a")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(outcome))
 }
 
 @test
 function void test_json_get_path_out_of_bounds_fails() {
-    result<integer> r = Json.get_path("[1, 2, 3]", "[9]")
+    result<integer> outcome = Json.get_path("[1, 2, 3]", "[9]")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(outcome))
 }
 
 @test
 function void test_json_set_missing_parent_fails() {
-    result<string> r = Json.set("{\"a\": 1}", "x.y", 1)
+    result<string> outcome = Json.set("{\"a\": 1}", "x.y", 1)
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(outcome))
 }
 
 @test
 function void test_json_set_non_object_fails() {
-    result<string> r = Json.set("[1, 2]", "a", 1)
+    result<string> outcome = Json.set("[1, 2]", "a", 1)
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(outcome))
 }
 
 @test
 function void test_json_set_path_out_of_bounds_fails() {
-    result<string> r = Json.set_path("[1, 2]", "[5]", 9)
+    result<string> outcome = Json.set_path("[1, 2]", "[5]", 9)
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(outcome))
 }
 
 @test
 function void test_json_merge_non_objects_fails() {
-    result<string> r = Json.merge("[1]", "[2]")
+    result<string> outcome = Json.merge("[1]", "[2]")
 
-    assert(Result.is_failure(r))
+    assert(Result.is_failure(outcome))
 }
 
-# ═══════════════════════════════════════════════════════════
-# Json.Value — the statically-typed JSON ADT
-# ═══════════════════════════════════════════════════════════
+# ─── Json.Value — the statically-typed JSON ADT ───
 
 # Exhaustive match over every Json.Value variant, with NO else branch.  This
 # only type-checks if the choice declares exactly these six variants, so it
 # doubles as a check that Json.Value is fully registered and annotatable.
-function string describe(Json.Value v) {
-    return match v {
-    case Json.Value.JsonObject(_fields) { "object" }
-    case Json.Value.JsonArray(_items)   { "array" }
-    case Json.Value.JsonString(_s)      { "string" }
-    case Json.Value.JsonNumber(_n)      { "number" }
-    case Json.Value.JsonBool(_b)        { "bool" }
-    case Json.Value.JsonNull            { "null" }
+function string describe(Json.Value value) {
+    return match value {
+        case Json.Value.JsonObject(_fields) { "object" }
+        case Json.Value.JsonArray(_items)   { "array" }
+        case Json.Value.JsonString(_text)   { "string" }
+        case Json.Value.JsonNumber(_number) { "number" }
+        case Json.Value.JsonBool(_flag)     { "bool" }
+        case Json.Value.JsonNull            { "null" }
     }
 }
 
 @test
 function void test_json_value_parse_object() {
-    Json.Value v = Result.unwrap(Json.parse("{\"a\": 1}"))
+    Json.Value document = Result.unwrap(Json.parse("{\"a\": 1}"))
 
-    assert(describe(v) == "object", "object should describe as object")
+    assert(describe(document) == "object", "object should describe as object")
 }
 
 @test
 function void test_json_value_parse_array() {
-    Json.Value v = Result.unwrap(Json.parse("[1, 2, 3]"))
+    Json.Value document = Result.unwrap(Json.parse("[1, 2, 3]"))
 
-    assert(describe(v) == "array", "array should describe as array")
+    assert(describe(document) == "array", "array should describe as array")
 }
 
 @test
 function void test_json_value_parse_string() {
-    Json.Value v = Result.unwrap(Json.parse("\"hello\""))
+    Json.Value document = Result.unwrap(Json.parse("\"hello\""))
 
-    assert(describe(v) == "string", "string should describe as string")
+    assert(describe(document) == "string", "string should describe as string")
 }
 
 @test
 function void test_json_value_parse_number() {
-    Json.Value v = Result.unwrap(Json.parse("42"))
+    Json.Value document = Result.unwrap(Json.parse("42"))
 
-    assert(describe(v) == "number", "number should describe as number")
+    assert(describe(document) == "number", "number should describe as number")
 }
 
 @test
 function void test_json_value_parse_boolean() {
-    Json.Value v = Result.unwrap(Json.parse("true"))
+    Json.Value document = Result.unwrap(Json.parse("true"))
 
-    assert(describe(v) == "bool", "boolean should describe as bool")
+    assert(describe(document) == "bool", "boolean should describe as bool")
 }
 
 @test
 function void test_json_value_parse_null() {
-    Json.Value v = Result.unwrap(Json.parse("null"))
+    Json.Value document = Result.unwrap(Json.parse("null"))
 
-    assert(describe(v) == "null", "null should describe as null")
+    assert(describe(document) == "null", "null should describe as null")
 }
 
 @test
@@ -454,48 +457,48 @@ function void test_json_value_parse_invalid_is_failure() {
 
 @test
 function void test_json_value_as_string() {
-    Json.Value v = Result.unwrap(Json.parse("\"hi\""))
-    string s = Result.unwrap(Json.as_string(v))
+    Json.Value document = Result.unwrap(Json.parse("\"hi\""))
+    string text = Result.unwrap(Json.as_string(document))
 
-    assert(s == "hi", "as_string should extract the string payload")
+    assert(text == "hi", "as_string should extract the string payload")
 }
 
 @test
 function void test_json_value_as_string_wrong_type_is_failure() {
-    Json.Value v = Result.unwrap(Json.parse("42"))
-    result<string> extracted = Json.as_string(v)
+    Json.Value document = Result.unwrap(Json.parse("42"))
+    result<string> extracted = Json.as_string(document)
 
     assert(Result.is_failure(extracted), "as_string on a number should fail")
 }
 
 @test
 function void test_json_value_as_number() {
-    Json.Value v = Result.unwrap(Json.parse("3.5"))
-    number n = Result.unwrap(Json.as_number(v))
+    Json.Value document = Result.unwrap(Json.parse("3.5"))
+    number payload = Result.unwrap(Json.as_number(document))
 
-    assert(Math.approximately_equal(n, 3.5), "as_number should extract the numeric payload")
+    assert(Math.approximately_equal(payload, 3.5), "as_number should extract the numeric payload")
 }
 
 @test
 function void test_json_value_as_boolean() {
-    Json.Value v = Result.unwrap(Json.parse("true"))
-    boolean b = Result.unwrap(Json.as_boolean(v))
+    Json.Value document = Result.unwrap(Json.parse("true"))
+    boolean is_true = Result.unwrap(Json.as_boolean(document))
 
-    assert(b, "as_boolean should extract the boolean payload")
+    assert(is_true, "as_boolean should extract the boolean payload")
 }
 
 @test
 function void test_json_value_as_array() {
-    Json.Value v = Result.unwrap(Json.parse("[1, 2, 3]"))
-    array<Json.Value> items = Result.unwrap(Json.as_array(v))
+    Json.Value document = Result.unwrap(Json.parse("[1, 2, 3]"))
+    array<Json.Value> items = Result.unwrap(Json.as_array(document))
 
     assert(Array.length(items) == 3, "as_array should extract the three elements")
 }
 
 @test
 function void test_json_value_as_object() {
-    Json.Value v = Result.unwrap(Json.parse("{\"a\": 1, \"b\": 2}"))
-    dictionary<Json.Value> fields = Result.unwrap(Json.as_object(v))
+    Json.Value document = Result.unwrap(Json.parse("{\"a\": 1, \"b\": 2}"))
+    dictionary<Json.Value> fields = Result.unwrap(Json.as_object(document))
 
     assert(Dictionary.has(fields, "a"), "as_object should expose key a")
     assert(Dictionary.has(fields, "b"), "as_object should expose key b")
@@ -503,105 +506,85 @@ function void test_json_value_as_object() {
 
 @test
 function void test_json_value_field_some() {
-    Json.Value v = Result.unwrap(Json.parse("{\"name\": \"luma\"}"))
+    Json.Value document = Result.unwrap(Json.parse("{\"name\": \"luma\"}"))
 
-    match Json.field(v, "name") {
-    case some(name_value) {
-        string name = Result.unwrap(Json.as_string(name_value))
+    match Json.field(document, "name") {
+        case some(name_value) {
+            string name = Result.unwrap(Json.as_string(name_value))
 
-        assert(name == "luma", "field should return the value at key name")
-    }
-    case none {
-        assert(false, "field name should be present")
-    }
+            assert(name == "luma", "field should return the value at key name")
+        }
+        case none {
+            assert(false, "field name should be present")
+        }
     }
 }
 
 @test
 function void test_json_value_field_missing_is_none() {
-    Json.Value v = Result.unwrap(Json.parse("{\"a\": 1}"))
+    Json.Value document = Result.unwrap(Json.parse("{\"a\": 1}"))
 
-    match Json.field(v, "missing") {
-    case some(_x) {
-        assert(false, "missing key should be none")
-    }
-    case none {
-        assert(true, "missing key is none")
-    }
-    }
+    assert(Optional.is_none(Json.field(document, "missing")), "missing key should be none")
 }
 
 @test
 function void test_json_value_field_on_non_object_is_none() {
-    Json.Value v = Result.unwrap(Json.parse("[1, 2]"))
+    Json.Value document = Result.unwrap(Json.parse("[1, 2]"))
 
-    match Json.field(v, "a") {
-    case some(_x) {
-        assert(false, "field on an array should be none")
-    }
-    case none {
-        assert(true, "field on an array is none")
-    }
-    }
+    assert(Optional.is_none(Json.field(document, "a")), "field on an array should be none")
 }
 
 @test
 function void test_json_value_index_some() {
-    Json.Value v = Result.unwrap(Json.parse("[10, 20, 30]"))
+    Json.Value document = Result.unwrap(Json.parse("[10, 20, 30]"))
 
-    match Json.index(v, 1) {
-    case some(second) {
-        number n = Result.unwrap(Json.as_number(second))
+    match Json.index(document, 1) {
+        case some(second) {
+            number payload = Result.unwrap(Json.as_number(second))
 
-        assert(Math.approximately_equal(n, 20.0), "index 1 should be 20")
-    }
-    case none {
-        assert(false, "index 1 should be present")
-    }
+            assert(Math.approximately_equal(payload, 20.0), "index 1 should be 20")
+        }
+        case none {
+            assert(false, "index 1 should be present")
+        }
     }
 }
 
 @test
 function void test_json_value_index_out_of_bounds_is_none() {
-    Json.Value v = Result.unwrap(Json.parse("[10, 20]"))
+    Json.Value document = Result.unwrap(Json.parse("[10, 20]"))
 
-    match Json.index(v, 5) {
-    case some(_x) {
-        assert(false, "out-of-bounds index should be none")
-    }
-    case none {
-        assert(true, "out-of-bounds index is none")
-    }
-    }
+    assert(Optional.is_none(Json.index(document, 5)), "out-of-bounds index should be none")
 }
 
 @test
 function void test_json_value_nested_access() {
-    Json.Value v = Result.unwrap(Json.parse("{\"user\": {\"age\": 30}}"))
+    Json.Value document = Result.unwrap(Json.parse("{\"user\": {\"age\": 30}}"))
 
-    match Json.field(v, "user") {
-    case some(user_value) {
-        match Json.field(user_value, "age") {
-        case some(age_value) {
-            number age = Result.unwrap(Json.as_number(age_value))
+    match Json.field(document, "user") {
+        case some(user_value) {
+            match Json.field(user_value, "age") {
+                case some(age_value) {
+                    number age = Result.unwrap(Json.as_number(age_value))
 
-            assert(Math.approximately_equal(age, 30.0), "nested field user.age should be 30")
+                    assert(Math.approximately_equal(age, 30.0),
+                        "nested field user.age should be 30")
+                }
+                case none {
+                    assert(false, "age should be present")
+                }
+            }
         }
         case none {
-            assert(false, "age should be present")
+            assert(false, "user should be present")
         }
-        }
-    }
-    case none {
-        assert(false, "user should be present")
-    }
     }
 }
 
 @test
 function void test_json_value_to_string_roundtrip() {
-    Json.Value v = Result.unwrap(Json.parse("{\"b\": [2, 3], \"a\": 1}"))
-    string serialized = Json.to_string(v)
+    Json.Value document = Result.unwrap(Json.parse("{\"b\": [2, 3], \"a\": 1}"))
+    string serialized = Json.to_string(document)
 
     # Keys are emitted in sorted order and integral numbers carry no decimal.
     assert(serialized == "{\"a\":1,\"b\":[2,3]}", "to_string should round-trip with sorted keys")
@@ -609,8 +592,8 @@ function void test_json_value_to_string_roundtrip() {
 
 @test
 function void test_json_value_to_string_fraction() {
-    Json.Value v = Result.unwrap(Json.parse("2.5"))
-    string serialized = Json.to_string(v)
+    Json.Value document = Result.unwrap(Json.parse("2.5"))
+    string serialized = Json.to_string(document)
 
     assert(serialized == "2.5", "to_string should preserve a fractional number")
 }
@@ -619,32 +602,22 @@ function void test_json_value_to_string_fraction() {
 
 @test
 function void test_json_parse_detailed_success() {
-    result<Json.Value, Json.ParseError> r = Json.parse_detailed("{\"a\": 1}")
+    result<Json.Value, Json.ParseError> parsed = Json.parse_detailed("{\"a\": 1}")
 
-    assert(Result.is_success(r), "valid JSON should parse")
-
-    Json.Value v = Result.unwrap(r)
-    string tag = match v {
-        case Json.Value.JsonObject(_o) { "object" }
-        case Json.Value.JsonArray(_a) { "array" }
-        case Json.Value.JsonString(_s) { "string" }
-        case Json.Value.JsonNumber(_n) { "number" }
-        case Json.Value.JsonBool(_b) { "bool" }
-        case Json.Value.JsonNull { "null" }
-    }
-    assert(tag == "object", "the parsed value is a JSON object")
+    assert(Result.is_success(parsed), "valid JSON should parse")
+    assert(describe(Result.unwrap(parsed)) == "object", "the parsed value is a JSON object")
 }
 
 @test
 function void test_json_parse_detailed_failure_location() {
-    result<Json.Value, Json.ParseError> r = Json.parse_detailed("{ bad")
+    result<Json.Value, Json.ParseError> parsed = Json.parse_detailed("{ bad")
 
-    match r {
+    match parsed {
         success(_v) { assert(false, "malformed JSON should not parse") }
-        failure(e) {
-            assert(e.line == 1, "the error is on line 1")
-            assert(e.column >= 1, "the column is 1-based")
-            assert(String.length(e.message) > 0, "the message is populated")
+        failure(parse_error) {
+            assert(parse_error.line == 1, "the error is on line 1")
+            assert(parse_error.column >= 1, "the column is 1-based")
+            assert(String.length(parse_error.message) > 0, "the message is populated")
         }
     }
 }
@@ -652,11 +625,11 @@ function void test_json_parse_detailed_failure_location() {
 @test
 function void test_json_parse_detailed_reports_line() {
     # The bad token sits on the third line.
-    result<Json.Value, Json.ParseError> r = Json.parse_detailed("[\n  1,\n  bad\n]")
+    result<Json.Value, Json.ParseError> parsed = Json.parse_detailed("[\n  1,\n  bad\n]")
 
-    match r {
+    match parsed {
         success(_v) { assert(false, "malformed JSON should not parse") }
-        failure(e) { assert(e.line == 3, "the error is reported on line 3") }
+        failure(parse_error) { assert(parse_error.line == 3, "the error is reported on line 3") }
     }
 }
 
@@ -665,18 +638,22 @@ function void test_json_parse_detailed_reports_line() {
 @test
 function void test_json_pretty_minify_roundtrip() {
     string compact = Result.unwrap(Json.minify("{ \"a\" : 1 }"))
+
     assert(compact == "{\"a\":1}", "minify strips whitespace")
 
-    string pretty = Result.unwrap(Json.pretty("{\"a\":1}"))
-    assert(String.contains(pretty, "\n"), "pretty adds newlines")
+    string pretty = Result.unwrap(Json.pretty(compact))
+
+    assert(pretty == "{\n  \"a\": 1\n}", "pretty indents by two spaces")
+    assert(Json.minify(pretty) == success(compact), "minify undoes pretty")
 
     assert(Result.is_failure(Json.minify("not json")), "invalid JSON fails")
+    assert(Result.is_failure(Json.pretty("not json")), "invalid JSON fails")
 }
 
 @test
 function void test_json_equals_semantic() {
     assert(Result.unwrap(Json.equals("{\"a\":1,\"b\":2}", "{\"b\":2,\"a\":1}")),
-           "key order is ignored")
+        "key order is ignored")
     assert(!Result.unwrap(Json.equals("{\"a\":1}", "{\"a\":2}")), "different values differ")
     assert(Result.is_failure(Json.equals("bad", "{}")), "invalid JSON fails")
 }
@@ -695,31 +672,32 @@ function void test_json_has_path_and_remove_path() {
     assert(!Json.has_path("invalid", "a"), "invalid JSON is false")
 
     string removed = Result.unwrap(Json.remove_path("{\"a\":1,\"b\":2}", "a"))
+
     assert(removed == "{\"b\":2}", "key removed")
     assert(Result.is_failure(Json.remove_path("{\"a\":1}", "missing")), "removing absent key fails")
 }
 
 @test
 function void test_json_value_predicates_and_as_integer() {
-    Json.Value num = Result.unwrap(Json.parse("42"))
-    assert(Json.is_number(num), "42 is a number")
-    assert(!Json.is_string(num), "42 is not a string")
-    assert(Result.unwrap(Json.as_integer(num)) == 42, "as_integer extracts 42")
+    Json.Value whole_number = Result.unwrap(Json.parse("42"))
+    assert(Json.is_number(whole_number), "42 is a number")
+    assert(!Json.is_string(whole_number), "42 is not a string")
+    assert(Result.unwrap(Json.as_integer(whole_number)) == 42, "as_integer extracts 42")
 
-    Json.Value frac = Result.unwrap(Json.parse("3.5"))
-    assert(Result.is_failure(Json.as_integer(frac)), "non-whole number fails as_integer")
+    Json.Value fraction = Result.unwrap(Json.parse("3.5"))
+    assert(Result.is_failure(Json.as_integer(fraction)), "non-whole number fails as_integer")
 
-    Json.Value nil = Result.unwrap(Json.parse("null"))
-    assert(Json.is_null(nil), "null is null")
+    Json.Value null_value = Result.unwrap(Json.parse("null"))
+    assert(Json.is_null(null_value), "null is null")
 
-    Json.Value obj = Result.unwrap(Json.parse("{}"))
-    assert(Json.is_object(obj), "{} is an object")
+    Json.Value empty_object = Result.unwrap(Json.parse("{}"))
+    assert(Json.is_object(empty_object), "{} is an object")
 
-    Json.Value arr = Result.unwrap(Json.parse("[1, 2, 3]"))
-    assert(Json.is_array(arr), "[1, 2, 3] is an array")
-    assert(!Json.is_array(num), "42 is not an array")
+    Json.Value number_array = Result.unwrap(Json.parse("[1, 2, 3]"))
+    assert(Json.is_array(number_array), "[1, 2, 3] is an array")
+    assert(!Json.is_array(whole_number), "42 is not an array")
 
     Json.Value flag = Result.unwrap(Json.parse("true"))
     assert(Json.is_boolean(flag), "true is a boolean")
-    assert(!Json.is_boolean(num), "42 is not a boolean")
+    assert(!Json.is_boolean(whole_number), "42 is not a boolean")
 }

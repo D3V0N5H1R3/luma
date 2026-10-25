@@ -5,6 +5,8 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── Core Functions ───
+
 @test
 function void test_regularexpression_matches() {
     result<boolean> ok_result = RegularExpression.matches("hello123", "[a-z]+[0-9]+")
@@ -28,11 +30,11 @@ function void test_regularexpression_find() {
 
     assert(Result.is_success(find_result))
 
-    RegularExpression.Match m = Result.unwrap(find_result)
+    RegularExpression.Match found = Result.unwrap(find_result)
 
-    assert(m.text == "123")
-    assert(m.position == 3)
-    assert(m.length == 3)
+    assert(found.text == "123")
+    assert(found.position == 3)
+    assert(found.length == 3)
 
     result<RegularExpression.Match> no_match_result = RegularExpression.find("abcdef", "[0-9]+")
 
@@ -42,7 +44,7 @@ function void test_regularexpression_find() {
 @test
 function void test_regularexpression_find_all() {
     result<array<RegularExpression.Match>> find_all_result =
-    RegularExpression.find_all("one1two2three3", "[0-9]")
+        RegularExpression.find_all("one1two2three3", "[0-9]")
 
     assert(Result.is_success(find_all_result))
 
@@ -63,6 +65,10 @@ function void test_regularexpression_replace() {
 
     assert(Result.is_success(replace_result))
     assert(Result.unwrap(replace_result) == "f0 bar baz")
+
+    result<string> invalid_result = RegularExpression.replace("text", "[", "#")
+
+    assert(!Result.is_success(invalid_result))
 }
 
 @test
@@ -103,33 +109,32 @@ function void test_regularexpression_replace_all() {
 
 @test
 function void test_regularexpression_find_capture_groups() {
-    RegularExpression.Match m =
-    RegularExpression.find("alice@example.com", "([a-z]+)@([a-z]+)\\.([a-z]+)")
-    |> Result.unwrap()
+    RegularExpression.Match found =
+        RegularExpression.find("alice@example.com", "([a-z]+)@([a-z]+)\\.([a-z]+)")
+        |> Result.unwrap()
 
-    assert(m.text == "alice@example.com")
-    assert(Array.length(m.groups) == 3)
-    assert(m.groups[0].text == "alice")
-    assert(m.groups[0].position == 0)
-    assert(m.groups[0].length == 5)
-    assert(m.groups[1].text == "example")
-    assert(m.groups[2].text == "com")
+    assert(found.text == "alice@example.com")
+    assert(Array.length(found.groups) == 3)
+    assert(found.groups[0].text == "alice")
+    assert(found.groups[0].position == 0)
+    assert(found.groups[0].length == 5)
+    assert(found.groups[1].text == "example")
+    assert(found.groups[2].text == "com")
 }
 
 @test
 function void test_regularexpression_find_no_groups() {
-    RegularExpression.Match m =
-    RegularExpression.find("abc123", "[0-9]+") |> Result.unwrap()
+    RegularExpression.Match found = RegularExpression.find("abc123", "[0-9]+") |> Result.unwrap()
 
-    assert(m.text == "123")
-    assert(Array.length(m.groups) == 0)
+    assert(found.text == "123")
+    assert(Array.length(found.groups) == 0)
 }
 
 @test
 function void test_regularexpression_find_all_capture_groups() {
     array<RegularExpression.Match> matches =
-    RegularExpression.find_all("width=100 height=200", "([a-z]+)=([0-9]+)")
-    |> Result.unwrap()
+        RegularExpression.find_all("width=100 height=200", "([a-z]+)=([0-9]+)")
+        |> Result.unwrap()
 
     assert(Array.length(matches) == 2)
     assert(matches[0].groups[0].text == "width")
@@ -154,10 +159,10 @@ function void test_regularexpression_replace_first_only() {
     assert(Result.is_success(first_only))
     assert(Result.unwrap(first_only) == "X bbb aaa")
 
-    result<string> all = RegularExpression.replace_all("aaa bbb aaa", "a+", "X")
+    result<string> every_match = RegularExpression.replace_all("aaa bbb aaa", "a+", "X")
 
-    assert(Result.is_success(all))
-    assert(Result.unwrap(all) == "X bbb X")
+    assert(Result.is_success(every_match))
+    assert(Result.unwrap(every_match) == "X bbb X")
 }
 
 @test
@@ -192,28 +197,28 @@ function void test_regularexpression_redos_rejected() {
 
 @test
 function void test_regularexpression_find_named_groups_dotnet_style() {
-    # (?<name>...) -- .NET/PCRE2-style named group syntax.  std::regex has no
+    # (?<name>...) -- .NET/PCRE2-style named group syntax. std::regex has no
     # native support for this; the pattern is stripped to a plain capturing
     # group before compilation and the name<->index mapping is tracked
-    # client-side (see the engine-limitation note on parse_named_capture_groups
-    # in regularexpression_module.cpp).
-    RegularExpression.Match m =
-    RegularExpression.find("2024-01-15", "(?<year>[0-9]+)-(?<month>[0-9]+)-(?<day>[0-9]+)")
-    |> Result.unwrap()
+    # client-side (see parse_named_capture_groups in regularexpression_module.cpp).
+    RegularExpression.Match found =
+        RegularExpression.find("2024-01-15", "(?<year>[0-9]+)-(?<month>[0-9]+)-(?<day>[0-9]+)")
+        |> Result.unwrap()
 
     # The positional groups array is unaffected by named-group tracking.
-    assert(Array.length(m.groups) == 3)
-    assert(m.groups[0].text == "2024")
+    assert(Array.length(found.groups) == 3)
+    assert(found.groups[0].text == "2024")
 
-    RegularExpression.Capture year = Dictionary.get(m.named_groups, "year") |> Result.unwrap()
+    RegularExpression.Capture year = Dictionary.get(found.named_groups, "year") |> Result.unwrap()
 
     assert(year.name == "year")
     assert(year.text == "2024")
     assert(year.position == 0)
     assert(year.length == 4)
 
-    RegularExpression.Capture month = Dictionary.get(m.named_groups, "month") |> Result.unwrap()
-    RegularExpression.Capture day = Dictionary.get(m.named_groups, "day") |> Result.unwrap()
+    RegularExpression.Capture month =
+        Dictionary.get(found.named_groups, "month") |> Result.unwrap()
+    RegularExpression.Capture day = Dictionary.get(found.named_groups, "day") |> Result.unwrap()
 
     assert(month.text == "01")
     assert(day.text == "15")
@@ -222,12 +227,13 @@ function void test_regularexpression_find_named_groups_dotnet_style() {
 @test
 function void test_regularexpression_find_named_groups_python_style() {
     # (?P<name>...) -- Python-style named group syntax.
-    RegularExpression.Match m =
-    RegularExpression.find("alice@example.com", "(?P<user>[a-z]+)@(?P<domain>[a-z.]+)")
-    |> Result.unwrap()
+    RegularExpression.Match found =
+        RegularExpression.find("alice@example.com", "(?P<user>[a-z]+)@(?P<domain>[a-z.]+)")
+        |> Result.unwrap()
 
-    RegularExpression.Capture user = Dictionary.get(m.named_groups, "user") |> Result.unwrap()
-    RegularExpression.Capture domain = Dictionary.get(m.named_groups, "domain") |> Result.unwrap()
+    RegularExpression.Capture user = Dictionary.get(found.named_groups, "user") |> Result.unwrap()
+    RegularExpression.Capture domain =
+        Dictionary.get(found.named_groups, "domain") |> Result.unwrap()
 
     assert(user.text == "alice")
     assert(domain.text == "example.com")
@@ -235,55 +241,56 @@ function void test_regularexpression_find_named_groups_python_style() {
 
 @test
 function void test_regularexpression_named_and_unnamed_groups_mixed() {
-    # Unnamed groups still appear positionally in `groups`, but are absent from
-    # `named_groups` -- an unnamed group has name = "" only if it *were* placed
-    # in named_groups, which it never is (it simply has no key).
-    RegularExpression.Match m =
-    RegularExpression.find("width=100", "([a-z]+)=(?<value>[0-9]+)") |> Result.unwrap()
+    # Unnamed groups still appear positionally in `groups`, but never get a
+    # key in `named_groups` -- only the named group does.
+    RegularExpression.Match found =
+        RegularExpression.find("width=100", "([a-z]+)=(?<value>[0-9]+)") |> Result.unwrap()
 
-    assert(Array.length(m.groups) == 2)
-    assert(m.groups[0].text == "width")
-    assert(m.groups[1].text == "100")
+    assert(Array.length(found.groups) == 2)
+    assert(found.groups[0].text == "width")
+    assert(found.groups[1].text == "100")
 
-    RegularExpression.Capture value = Dictionary.get(m.named_groups, "value") |> Result.unwrap()
+    RegularExpression.Capture value =
+        Dictionary.get(found.named_groups, "value") |> Result.unwrap()
 
     assert(value.text == "100")
-    assert(Result.is_failure(Dictionary.get(m.named_groups, "width")))
+    assert(Dictionary.length(found.named_groups) == 1, "the unnamed group must not be keyed")
 }
 
 @test
 function void test_regularexpression_no_named_groups_empty_dictionary() {
     # A pattern with no named groups still produces a (valid, empty)
     # named_groups dictionary -- never a missing field.
-    RegularExpression.Match m =
-    RegularExpression.find("abc123", "([a-z]+)([0-9]+)") |> Result.unwrap()
+    RegularExpression.Match found =
+        RegularExpression.find("abc123", "([a-z]+)([0-9]+)") |> Result.unwrap()
 
-    assert(Result.is_failure(Dictionary.get(m.named_groups, "anything")))
+    assert(Dictionary.length(found.named_groups) == 0)
+    assert(Result.is_failure(Dictionary.get(found.named_groups, "anything")))
 }
 
 @test
 function void test_regularexpression_find_all_named_groups() {
     array<RegularExpression.Match> matches =
-    RegularExpression.find_all("width=100 height=200", "(?<key>[a-z]+)=(?<val>[0-9]+)")
-    |> Result.unwrap()
+        RegularExpression.find_all("width=100 height=200", "(?<key>[a-z]+)=(?<value>[0-9]+)")
+        |> Result.unwrap()
 
     assert(Array.length(matches) == 2)
 
-    RegularExpression.Capture key0 = Dictionary.get(matches[0].named_groups, "key")
-        |> Result.unwrap()
-    RegularExpression.Capture val0 = Dictionary.get(matches[0].named_groups, "val")
-        |> Result.unwrap()
+    RegularExpression.Capture first_key =
+        Dictionary.get(matches[0].named_groups, "key") |> Result.unwrap()
+    RegularExpression.Capture first_value =
+        Dictionary.get(matches[0].named_groups, "value") |> Result.unwrap()
 
-    assert(key0.text == "width")
-    assert(val0.text == "100")
+    assert(first_key.text == "width")
+    assert(first_value.text == "100")
 
-    RegularExpression.Capture key1 = Dictionary.get(matches[1].named_groups, "key")
-        |> Result.unwrap()
-    RegularExpression.Capture val1 = Dictionary.get(matches[1].named_groups, "val")
-        |> Result.unwrap()
+    RegularExpression.Capture second_key =
+        Dictionary.get(matches[1].named_groups, "key") |> Result.unwrap()
+    RegularExpression.Capture second_value =
+        Dictionary.get(matches[1].named_groups, "value") |> Result.unwrap()
 
-    assert(key1.text == "height")
-    assert(val1.text == "200")
+    assert(second_key.text == "height")
+    assert(second_value.text == "200")
 }
 
 @test
@@ -295,8 +302,10 @@ function void test_regularexpression_named_group_lookbehind_not_confused() {
     assert(!RegularExpression.is_valid("(?<=foo)bar"))
     assert(!RegularExpression.is_valid("(?<!foo)bar"))
 
-    RegularExpression.Match m = RegularExpression.find("bar", "(?<value>bar)") |> Result.unwrap()
-    RegularExpression.Capture value = Dictionary.get(m.named_groups, "value") |> Result.unwrap()
+    RegularExpression.Match found =
+        RegularExpression.find("bar", "(?<value>bar)") |> Result.unwrap()
+    RegularExpression.Capture value =
+        Dictionary.get(found.named_groups, "value") |> Result.unwrap()
 
     assert(value.text == "bar")
 }
@@ -312,11 +321,12 @@ function void test_regularexpression_unterminated_named_group_fails() {
 
 @test
 function void test_regularexpression_oversized_pattern() {
-    # A pattern beyond the 10,000-byte limit is rejected by is_valid even though
-    # it is otherwise benign.
+    # A pattern beyond the 10,000-byte limit is rejected even though it is
+    # otherwise benign.
     string oversized = Result.unwrap(String.repeat("a", 10001))
 
     assert(!RegularExpression.is_valid(oversized))
+    assert(Result.is_failure(RegularExpression.matches("a", oversized)))
 
     # Comfortably under the limit, the same shape is accepted.
     string within_limit = Result.unwrap(String.repeat("a", 9000))
@@ -324,14 +334,11 @@ function void test_regularexpression_oversized_pattern() {
     assert(RegularExpression.is_valid(within_limit))
 }
 
-# ═══════════════════════════════════════════════════════════
-# RegularExpression.Error (opt-in typed errors via compile_typed)
-# ═══════════════════════════════════════════════════════════
+# ─── RegularExpression.Error (opt-in typed errors via compile_typed) ───
 
 # Exhaustive match over every RegularExpression.Error variant, doubling as a check
 # that the choice is fully registered, exhaustively matchable, and usable as a
-# parameter type annotation. The InvalidSyntax payload is bound but unused (hence
-# the leading underscore).
+# parameter type annotation.
 function string regex_error_label(RegularExpression.Error e) {
     return match e {
         case RegularExpression.Error.InvalidSyntax(_message) { "invalid_syntax" }
@@ -340,43 +347,52 @@ function string regex_error_label(RegularExpression.Error e) {
     }
 }
 
-function string compile_typed_label(result<string, RegularExpression.Error> r) {
-    return match r {
+function string compile_typed_label(result<string, RegularExpression.Error> compiled) {
+    return match compiled {
         success(_pattern) { "ok" }
         failure(e)        { regex_error_label(e) }
     }
 }
 
 @test
-function void test_regex_compile_typed_valid_returns_pattern() {
-    result<string, RegularExpression.Error> r = RegularExpression.compile_typed("[0-9]+")
+function void test_regularexpression_compile_typed_valid_returns_pattern() {
+    result<string, RegularExpression.Error> compiled = RegularExpression.compile_typed("[0-9]+")
 
-    assert(Result.is_success(r), "a safe well-formed pattern compiles")
-    assert(Result.unwrap(r) == "[0-9]+", "the validated pattern is returned on success")
+    assert(Result.is_success(compiled), "a safe well-formed pattern compiles")
+    assert(Result.unwrap(compiled) == "[0-9]+", "the validated pattern is returned on success")
 }
 
 @test
-function void test_regex_compile_typed_invalid_syntax() {
-    result<string, RegularExpression.Error> r = RegularExpression.compile_typed("(unclosed")
+function void test_regularexpression_compile_typed_invalid_syntax() {
+    result<string, RegularExpression.Error> compiled = RegularExpression.compile_typed("(unclosed")
 
-    assert(Result.is_failure(r), "an unbalanced group fails")
-    assert(compile_typed_label(r) == "invalid_syntax", "a typo classifies as InvalidSyntax")
+    assert(Result.is_failure(compiled), "an unbalanced group fails")
+    assert(compile_typed_label(compiled) == "invalid_syntax", "a typo classifies as InvalidSyntax")
 }
 
 @test
-function void test_regex_compile_typed_unsafe() {
-    result<string, RegularExpression.Error> r = RegularExpression.compile_typed("(a+)+")
+function void test_regularexpression_compile_typed_unsafe() {
+    result<string, RegularExpression.Error> compiled = RegularExpression.compile_typed("(a+)+")
 
-    assert(Result.is_failure(r), "a nested quantifier is rejected")
-    assert(compile_typed_label(r) == "unsafe", "a ReDoS-prone pattern classifies as Unsafe")
+    assert(Result.is_failure(compiled), "a nested quantifier is rejected")
+    assert(compile_typed_label(compiled) == "unsafe", "a ReDoS-prone pattern classifies as Unsafe")
 }
 
 @test
-function void test_regex_compile_typed_carries_message() {
+function void test_regularexpression_compile_typed_too_large() {
+    string oversized = Result.unwrap(String.repeat("a", 10001))
+    result<string, RegularExpression.Error> compiled = RegularExpression.compile_typed(oversized)
+
+    assert(Result.is_failure(compiled), "a pattern past the size limit is rejected")
+    assert(compile_typed_label(compiled) == "too_large", "an oversized pattern is TooLarge")
+}
+
+@test
+function void test_regularexpression_compile_typed_carries_message() {
     # The InvalidSyntax payload carries the engine's non-empty diagnostic message.
-    result<string, RegularExpression.Error> r = RegularExpression.compile_typed("(unclosed")
+    result<string, RegularExpression.Error> compiled = RegularExpression.compile_typed("(unclosed")
 
-    string detail = match r {
+    string detail = match compiled {
         success(_pattern) { "" }
         failure(e) {
             match e {
@@ -389,20 +405,19 @@ function void test_regex_compile_typed_carries_message() {
     assert(String.length(detail) > 0, "InvalidSyntax carries a diagnostic message")
 }
 
-# ═══════════════════════════════════════════════════════════
-# Flag-accepting variants (RegularExpression.Flags)
-# ═══════════════════════════════════════════════════════════
+# ─── Flag-accepting variants (RegularExpression.Flags) ───
 
 @test
 function void test_regularexpression_matches_with_case_insensitive() {
+    array<RegularExpression.Flags> ignore_case = [RegularExpression.Flags.CaseInsensitive]
+
     # An empty flags array behaves exactly like the flagless matches.
     result<boolean> plain = RegularExpression.matches_with("HELLO", "hello", [])
 
     assert(Result.is_success(plain))
     assert(!Result.unwrap(plain), "lowercase pattern does not match uppercase text")
 
-    result<boolean> insensitive =
-    RegularExpression.matches_with("HELLO", "hello", [RegularExpression.Flags.CaseInsensitive])
+    result<boolean> insensitive = RegularExpression.matches_with("HELLO", "hello", ignore_case)
 
     assert(Result.is_success(insensitive))
     assert(Result.unwrap(insensitive), "CaseInsensitive makes it match")
@@ -410,20 +425,20 @@ function void test_regularexpression_matches_with_case_insensitive() {
 
 @test
 function void test_regularexpression_find_with_case_insensitive() {
-    RegularExpression.Match m =
-    RegularExpression.find_with("Foo BAR baz", "bar", [RegularExpression.Flags.CaseInsensitive])
-    |> Result.unwrap()
+    array<RegularExpression.Flags> ignore_case = [RegularExpression.Flags.CaseInsensitive]
+    RegularExpression.Match found =
+        RegularExpression.find_with("Foo BAR baz", "bar", ignore_case) |> Result.unwrap()
 
-    assert(m.text == "BAR")
-    assert(m.position == 4)
-    assert(m.length == 3)
+    assert(found.text == "BAR")
+    assert(found.position == 4)
+    assert(found.length == 3)
 }
 
 @test
 function void test_regularexpression_find_all_with_case_insensitive() {
+    array<RegularExpression.Flags> ignore_case = [RegularExpression.Flags.CaseInsensitive]
     array<RegularExpression.Match> matches =
-    RegularExpression.find_all_with("aAbBaA", "a", [RegularExpression.Flags.CaseInsensitive])
-    |> Result.unwrap()
+        RegularExpression.find_all_with("aAbBaA", "a", ignore_case) |> Result.unwrap()
 
     assert(Array.length(matches) == 4)
     assert(matches[0].text == "a")
@@ -433,9 +448,9 @@ function void test_regularexpression_find_all_with_case_insensitive() {
 @test
 function void test_regularexpression_replace_with_case_insensitive() {
     # replace_with substitutes only the first match, honouring the flag.
+    array<RegularExpression.Flags> ignore_case = [RegularExpression.Flags.CaseInsensitive]
     result<string> first_only =
-    RegularExpression.replace_with("Cat cat CAT", "cat", "dog",
-    [RegularExpression.Flags.CaseInsensitive])
+        RegularExpression.replace_with("Cat cat CAT", "cat", "dog", ignore_case)
 
     assert(Result.is_success(first_only))
     assert(Result.unwrap(first_only) == "dog cat CAT")
@@ -443,19 +458,19 @@ function void test_regularexpression_replace_with_case_insensitive() {
 
 @test
 function void test_regularexpression_replace_all_with_case_insensitive() {
-    result<string> all =
-    RegularExpression.replace_all_with("Cat cat CAT", "cat", "dog",
-    [RegularExpression.Flags.CaseInsensitive])
+    array<RegularExpression.Flags> ignore_case = [RegularExpression.Flags.CaseInsensitive]
+    result<string> every_match =
+        RegularExpression.replace_all_with("Cat cat CAT", "cat", "dog", ignore_case)
 
-    assert(Result.is_success(all))
-    assert(Result.unwrap(all) == "dog dog dog")
+    assert(Result.is_success(every_match))
+    assert(Result.unwrap(every_match) == "dog dog dog")
 }
 
 @test
 function void test_regularexpression_split_with_case_insensitive() {
+    array<RegularExpression.Flags> ignore_case = [RegularExpression.Flags.CaseInsensitive]
     array<string> parts =
-    RegularExpression.split_with("aXbxc", "x", [RegularExpression.Flags.CaseInsensitive])
-    |> Result.unwrap()
+        RegularExpression.split_with("aXbxc", "x", ignore_case) |> Result.unwrap()
 
     assert(Array.length(parts) == 3)
     assert(parts[0] == "a")
@@ -466,20 +481,20 @@ function void test_regularexpression_split_with_case_insensitive() {
 @test
 function void test_regularexpression_multiline_flag() {
     # Without MultiLine, ^ and $ anchor to the whole string.
-    array<RegularExpression.Match> single =
-    RegularExpression.find_all("one\ntwo\nthree", "^[a-z]+$") |> Result.unwrap()
+    array<RegularExpression.Match> whole_string_matches =
+        RegularExpression.find_all("one\ntwo\nthree", "^[a-z]+$") |> Result.unwrap()
 
-    assert(Array.length(single) == 0)
+    assert(Array.length(whole_string_matches) == 0)
 
     # With MultiLine, ^ and $ match at every line boundary.
-    array<RegularExpression.Match> multi =
-    RegularExpression.find_all_with("one\ntwo\nthree", "^[a-z]+$",
-    [RegularExpression.Flags.MultiLine])
-    |> Result.unwrap()
+    array<RegularExpression.Flags> multi_line = [RegularExpression.Flags.MultiLine]
+    array<RegularExpression.Match> per_line_matches =
+        RegularExpression.find_all_with("one\ntwo\nthree", "^[a-z]+$", multi_line)
+        |> Result.unwrap()
 
-    assert(Array.length(multi) == 3)
-    assert(multi[0].text == "one")
-    assert(multi[2].text == "three")
+    assert(Array.length(per_line_matches) == 3)
+    assert(per_line_matches[0].text == "one")
+    assert(per_line_matches[2].text == "three")
 }
 
 @test
@@ -492,7 +507,7 @@ function void test_regularexpression_dotall_flag() {
 
     # With DotAll, '.' matches the newline too.
     result<boolean> dotall =
-    RegularExpression.matches_with("a\nb", "a.b", [RegularExpression.Flags.DotAll])
+        RegularExpression.matches_with("a\nb", "a.b", [RegularExpression.Flags.DotAll])
 
     assert(Result.is_success(dotall))
     assert(Result.unwrap(dotall))
@@ -500,26 +515,24 @@ function void test_regularexpression_dotall_flag() {
 
 @test
 function void test_regularexpression_combined_flags() {
-    # CaseInsensitive + DotAll together.
-    result<boolean> both =
-    RegularExpression.matches_with("A\nB", "a.b",
-    [RegularExpression.Flags.CaseInsensitive, RegularExpression.Flags.DotAll])
+    array<RegularExpression.Flags> flags =
+        [RegularExpression.Flags.CaseInsensitive, RegularExpression.Flags.DotAll]
+    result<boolean> combined = RegularExpression.matches_with("A\nB", "a.b", flags)
 
-    assert(Result.is_success(both))
-    assert(Result.unwrap(both))
+    assert(Result.is_success(combined))
+    assert(Result.unwrap(combined), "both flags must apply together")
 }
 
 @test
 function void test_regularexpression_with_redos_rejected() {
     # The ReDoS guard still runs for the flag-accepting variants.
+    array<RegularExpression.Flags> ignore_case = [RegularExpression.Flags.CaseInsensitive]
+
     assert(!Result.is_success(RegularExpression.matches_with("aaaa", "(a+)+", [])))
-    assert(!Result.is_success(
-    RegularExpression.find_with("aaaa", "(a+)+", [RegularExpression.Flags.CaseInsensitive])))
+    assert(!Result.is_success(RegularExpression.find_with("aaaa", "(a+)+", ignore_case)))
 }
 
-# ═══════════════════════════════════════════════════════════
-# RegularExpression.count
-# ═══════════════════════════════════════════════════════════
+# ─── RegularExpression.count ───
 
 @test
 function void test_regularexpression_count() {
@@ -536,10 +549,10 @@ function void test_regularexpression_count() {
     assert(Result.unwrap(runs) == 2)
 
     # No match yields a success carrying zero, not a failure.
-    result<integer> empty = RegularExpression.count("abcdef", "[0-9]+")
+    result<integer> no_matches = RegularExpression.count("abcdef", "[0-9]+")
 
-    assert(Result.is_success(empty))
-    assert(Result.unwrap(empty) == 0)
+    assert(Result.is_success(no_matches))
+    assert(Result.unwrap(no_matches) == 0)
 
     # An invalid pattern fails.
     assert(!Result.is_success(RegularExpression.count("text", "[")))

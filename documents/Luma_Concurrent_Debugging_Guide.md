@@ -26,11 +26,13 @@ Luma provides structured concurrency through three core primitives:
 
 ### Tasks (`spawn` / `await`)
 
-Use `spawn` to run a function call concurrently. Each spawned task executes on the internal thread pool in its own VM instance. Use `await` to block until a task completes and retrieve its result:
+Use `spawn` inside a `task_scope` to run a function call concurrently. Each spawned task executes on the internal thread pool in its own VM instance. Use `await` to block until a task completes and retrieve its result:
 
 ```luma
-task<integer> t = spawn compute(42)
-integer result = await t
+task_scope {
+    task<integer> t = spawn compute(42)
+    integer answer = await t
+}
 ```
 
 Each task may be awaited only once. A second `await` on the same task produces a runtime error.

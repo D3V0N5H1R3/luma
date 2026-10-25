@@ -92,6 +92,8 @@ void TypeChecker::register_declaration(const Declaration& decl) {
         } else if constexpr (std::is_same_v<T, NamespaceDeclaration>) {
             register_namespace(node, "");
         } else if constexpr (std::is_same_v<T, TypeAliasDeclaration>) {
+            warn_if_duplicate(symbols_.type_aliases, node.name, "type alias", node.location);
+
             symbols_.type_aliases[node.name] = node.target_type;
             registry_.register_symbol(node.name, SuggestionCategory::Type);
 
@@ -419,19 +421,7 @@ void TypeChecker::check_function(const FunctionDeclaration& func) {
 
     check_statement_list(func.body);
 
-    // Linter: warn about unused parameters.
-    for (const auto& param : func.parameters) {
-        if (param.name.starts_with('_')) {
-            continue;
-        }
-
-        const auto* sym = current_scope()->lookup(param.name);
-
-        if ((sym != nullptr) && !sym->is_read) {
-            warn(std::format("unused parameter '{}'", param.name), func.location,
-                 "prefix with '_' to suppress this warning", DiagnosticCode::UnusedParameter);
-        }
-    }
+    // Unused parameters are reported by the linter (W0003), not here.
 
     // Warn when a concrete-typed function might fall off the end without returning.
     if (ctx_.current_return_type && ctx_.current_return_type->kind != TypeInfo::Kind::Void &&

@@ -306,6 +306,50 @@ static void test_if_condition_boolean_ok() {
                        "}\n"));
 }
 
+// ─── String repeat count ───
+
+// Luma has no negative integer literals (`-3` is negation of `3`), so the
+// literal check must see through the unary minus.
+static void test_string_repeat_negative_literal_count_fails() {
+    ASSERT_TRUE(fails_with("string repeated = \"ab\" * -3\n", DiagnosticCode::InvalidRepeatCount));
+}
+
+static void test_string_repeat_computed_negative_count_passes() {
+    ASSERT_TRUE(passes("integer count = 2 - 5\n"
+                       "string repeated = \"ab\" * count\n"));
+}
+
+// ─── assert argument checks ───
+
+static void test_assert_condition_must_be_boolean() {
+    ASSERT_TRUE(fails("function void foo() {\n"
+                      "    assert(1)\n"
+                      "}\n"));
+    ASSERT_TRUE(fails("function void foo() {\n"
+                      "    assert(\"text\")\n"
+                      "}\n"));
+}
+
+// A failure(...) value is truthy at runtime, so asserting on a result could never fail.
+static void test_assert_condition_rejects_result() {
+    ASSERT_TRUE(fails("function void foo() {\n"
+                      "    assert(Array.all([1, 2], (integer x) -> x > 5))\n"
+                      "}\n"));
+}
+
+static void test_assert_message_must_be_string() {
+    ASSERT_TRUE(fails("function void foo() {\n"
+                      "    assert(true, 42)\n"
+                      "}\n"));
+}
+
+static void test_assert_boolean_condition_ok() {
+    ASSERT_TRUE(passes("function void foo() {\n"
+                       "    integer total = 2 + 2\n"
+                       "    assert(total == 4, \"expected 4 but got ${total}\")\n"
+                       "}\n"));
+}
+
 // ─── Increment/decrement type checks ───
 
 static void test_increment_requires_numeric() {
@@ -513,6 +557,12 @@ int main() {
 
     RUN(test_if_condition_must_be_boolean);
     RUN(test_if_condition_boolean_ok);
+    RUN(test_assert_condition_must_be_boolean);
+    RUN(test_string_repeat_negative_literal_count_fails);
+    RUN(test_string_repeat_computed_negative_count_passes);
+    RUN(test_assert_condition_rejects_result);
+    RUN(test_assert_message_must_be_string);
+    RUN(test_assert_boolean_condition_ok);
 
     // ─── Increment/decrement ───
 

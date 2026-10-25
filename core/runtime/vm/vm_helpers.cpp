@@ -199,9 +199,11 @@ bool VM::handle_exception(const std::string& message, const std::optional<Value>
 
     stack_.top = stack_.base + handler.stack_depth;
 
-    // Push error value for catch block.
+    // Push error value for catch block.  `catch(err)` binds a string — the type
+    // checker types `err` as one — so a non-string payload (a typed error from
+    // `Result.unwrap` on `result<T, E>`) binds its text instead of the value.
     if (error_value.has_value()) {
-        push(*error_value);
+        push(error_value->is_string() ? *error_value : Value{error_value->to_string()});
     } else {
         push(Value{std::string{message}});
     }

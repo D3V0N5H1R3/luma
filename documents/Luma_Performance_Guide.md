@@ -54,9 +54,9 @@ Building strings incrementally in a loop uses repeated concatenation, which crea
 
 ```luma
 # Inefficient — O(n²) string building
-mutable string result = ""
+mutable string joined = ""
 for item in items {
-    result = result + Converter.to_string(item) + ", "
+    joined = joined + "${item}, "
 }
 ```
 
@@ -65,7 +65,8 @@ for item in items {
 ```luma
 # Efficient — single pass
 array<string> parts = Array.map(items, (integer item) -> Converter.to_string(item))
-string result = String.join(parts, ", ")
+    |> Result.unwrap_or([])
+string joined = String.join(parts, ", ")
 ```
 
 ## 4 — Recursion Limits

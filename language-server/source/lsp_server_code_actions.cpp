@@ -203,7 +203,7 @@ public:
                                                   const QuickFixContext& ctx) const override {
         std::vector<JsonValue> actions;
 
-        const std::string var_name = extract_quoted_name(diag.message, "unused variable '");
+        const std::string var_name = extract_first_quoted_name(diag.message).value_or("");
         if (var_name.empty()) {
             return actions;
         }
@@ -319,10 +319,7 @@ public:
                                                   const QuickFixContext& ctx) const override {
         std::vector<JsonValue> actions;
 
-        std::string var_name = extract_quoted_name(diag.message, "variable '");
-        if (var_name.empty()) {
-            var_name = extract_quoted_name(diag.message, "parameter '");
-        }
+        const std::string var_name = extract_first_quoted_name(diag.message).value_or("");
         if (var_name.empty()) {
             return actions;
         }
@@ -371,7 +368,7 @@ public:
                                                   const QuickFixContext& ctx) const override {
         std::vector<JsonValue> actions;
 
-        const std::string param_name = extract_quoted_name(diag.message, "unused parameter '");
+        const std::string param_name = extract_first_quoted_name(diag.message).value_or("");
         if (param_name.empty()) {
             return actions;
         }
@@ -583,7 +580,7 @@ void collect_fix_all_unused_variables(const std::string& uri, const AnalysisResu
     const auto& tokens = cached.semantic.tokens;
 
     for (const auto* d : unused_var_diags) {
-        const std::string var_name = extract_quoted_name(d->message, "unused variable '");
+        const std::string var_name = extract_first_quoted_name(d->message).value_or("");
         if (var_name.empty()) {
             continue;
         }

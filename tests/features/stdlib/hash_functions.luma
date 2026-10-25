@@ -5,6 +5,8 @@
 # Luma_Standard_Library_Reference.md.
 # ═══════════════════════════════════════════════════════════
 
+# ─── Digests, checksums, HMAC and verification ───
+
 @test
 function void test_hash_md5() {
     assert(Hash.md5("") == "d41d8cd98f00b204e9800998ecf8427e")
@@ -36,10 +38,10 @@ function void test_hash_sha256() {
 
 @test
 function void test_hash_sha512() {
-    string hash = Hash.sha512("")
+    string empty_hash = Hash.sha512("")
 
-    assert(String.starts_with(hash, "cf83e1357eefb8bd"))
-    assert(String.length(hash) == 128)
+    assert(String.starts_with(empty_hash, "cf83e1357eefb8bd"))
+    assert(String.length(empty_hash) == 128)
 
     # FIPS 180 test vector for the full digest.
     string abc_hash = "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a" +
@@ -72,7 +74,7 @@ function void test_hash_crc32_known_vectors() {
 }
 
 @test
-function void test_hash_hmac_sha256() {
+function void test_hash_hmac_sha256_hex_length() {
     string hmac = Hash.hmac_sha256("key", "message")
 
     assert(String.length(hmac) == 64)
@@ -92,7 +94,7 @@ function void test_hash_hmac_sha256_known_vectors() {
 }
 
 @test
-function void test_hash_hmac_sha512() {
+function void test_hash_hmac_sha512_hex_length() {
     string hmac = Hash.hmac_sha512("key", "message")
 
     assert(String.length(hmac) == 128)
@@ -153,54 +155,50 @@ function void test_hash_verify_unknown_algorithm_throws() {
 
 @test
 function void test_hash_algorithms() {
-    array<string> algos = Hash.algorithms()
+    array<string> algorithm_names = Hash.algorithms()
 
-    assert(Array.length(algos) == 5)
-    assert(algos[0] == "md5")
-    assert(algos[4] == "crc32")
+    assert(algorithm_names == ["md5", "sha1", "sha256", "sha512", "crc32"])
 }
 
 @test
-function void test_hash_sha256_file() {
-    result<string> r = Hash.sha256_file("nonexistent_file.bin")
+function void test_hash_sha256_file_missing_fails() {
+    result<string> digest = Hash.sha256_file("nonexistent_file.bin")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(digest))
 }
 
 @test
-function void test_hash_sha512_file() {
-    result<string> r = Hash.sha512_file("nonexistent_file.bin")
+function void test_hash_sha512_file_missing_fails() {
+    result<string> digest = Hash.sha512_file("nonexistent_file.bin")
 
-    assert(!Result.is_success(r))
+    assert(!Result.is_success(digest))
 }
 
 @test
 function void test_hash_sha256_file_success() {
     # Hashing a file's contents agrees with hashing the same bytes directly.
-    string path = "_test_hash_sha256_feature.bin"
+    string path = "_hash_test_sha256_file.bin"
     string content = "feature test content"
 
     assert(Result.is_success(FileSystem.write_file(path, content)))
 
-    result<string> r = Hash.sha256_file(path)
+    result<string> digest = Hash.sha256_file(path)
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == Hash.sha256(content))
+    assert(digest == success(Hash.sha256(content)))
 
     boolean _ = Result.unwrap_or(FileSystem.delete(path), false)
 }
 
 @test
 function void test_hash_sha512_file_success() {
-    string path = "_test_hash_sha512_feature.bin"
+    string path = "_hash_test_sha512_file.bin"
     string content = "feature test content"
 
     assert(Result.is_success(FileSystem.write_file(path, content)))
 
-    result<string> r = Hash.sha512_file(path)
+    result<string> digest = Hash.sha512_file(path)
 
-    assert(Result.is_success(r))
-    assert(Result.unwrap(r) == Hash.sha512(content))
+    assert(digest == success(Hash.sha512(content)))
 
     boolean _ = Result.unwrap_or(FileSystem.delete(path), false)
 }
@@ -227,27 +225,27 @@ function void test_hash_algorithm_verify() {
 
 @test
 function void test_hash_algorithm_crc32() {
-    # crc32 renders as a fixed 8-hex-digit checksum ("abc" -> 0x352441c2).
+    # crc32 renders as a fixed 8-hex-digit checksum ("abc" -> 0x352441c2),
+    # zero-padded even when the checksum is 0.
     assert(Hash.digest(Hash.Algorithm.Crc32, "abc") == "352441c2")
+    assert(Hash.digest(Hash.Algorithm.Crc32, "") == "00000000")
     assert(Hash.verify(Hash.Algorithm.Crc32, "abc", "352441c2"))
 }
 
-# ═══════════════════════════════════════════════════════════
-# Hash.Digest (algorithm-tagged typed digests)
-# ═══════════════════════════════════════════════════════════
+# ─── Hash.Digest (algorithm-tagged typed digests) ───
 
 @test
 function void test_hash_sha256_typed_tags_algorithm() {
-    Hash.Digest d = Hash.sha256_typed("abc")
+    Hash.Digest digest = Hash.sha256_typed("abc")
 
-    string algo = match d.algorithm {
+    string algorithm_name = match digest.algorithm {
         case Hash.Algorithm.Sha256 { "sha256" }
         else { "other" }
     }
 
-    assert(algo == "sha256", "sha256_typed tags the Sha256 algorithm")
-    assert(d.hexadecimal == Hash.sha256("abc"), "the hex matches the plain digest")
-    assert(String.length(d.hexadecimal) == 64, "a SHA-256 hex digest is 64 characters")
+    assert(algorithm_name == "sha256", "sha256_typed tags the Sha256 algorithm")
+    assert(digest.hexadecimal == Hash.sha256("abc"), "the hex matches the plain digest")
+    assert(String.length(digest.hexadecimal) == 64, "a SHA-256 hex digest is 64 characters")
 }
 
 @test
@@ -256,37 +254,42 @@ function void test_hash_typed_variants_tag_each_algorithm() {
         case Hash.Algorithm.Md5 { "md5" }
         else { "other" }
     }
+    string sha1 = match Hash.sha1_typed("x").algorithm {
+        case Hash.Algorithm.Sha1 { "sha1" }
+        else { "other" }
+    }
     string sha512 = match Hash.sha512_typed("x").algorithm {
         case Hash.Algorithm.Sha512 { "sha512" }
         else { "other" }
     }
 
     assert(md5 == "md5", "md5_typed tags Md5")
+    assert(sha1 == "sha1", "sha1_typed tags Sha1")
     assert(sha512 == "sha512", "sha512_typed tags Sha512")
+    assert(Hash.sha1_typed("x").hexadecimal == Hash.sha1("x"), "the hex matches the plain digest")
 }
 
 # ─── Hash.md5_file / sha1_file / digest_file ─────────────────────────────
 
 @test
 function void test_hash_file_digests() {
-    result<boolean> _w = FileSystem.write_file("_hash_ft.txt", "abc")
+    string path = "_hash_test_file_digests.txt"
+
+    assert(Result.is_success(FileSystem.write_file(path, "abc")))
 
     # Known reference digests for the string "abc".
-    assert(Result.unwrap(Hash.md5_file("_hash_ft.txt")) == "900150983cd24fb0d6963f7d28e17f72",
-           "md5(abc)")
-    assert(Result.unwrap(Hash.sha1_file("_hash_ft.txt")) ==
-               "a9993e364706816aba3e25717850c26c9cd0d89d",
-           "sha1(abc)")
+    assert(Hash.md5_file(path) == success("900150983cd24fb0d6963f7d28e17f72"), "md5(abc)")
+    assert(Hash.sha1_file(path) == success("a9993e364706816aba3e25717850c26c9cd0d89d"),
+        "sha1(abc)")
 
     # digest_file accepts a name string and a Hash.Algorithm choice.
-    assert(Result.unwrap(Hash.digest_file("sha256", "_hash_ft.txt")) ==
-               "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-           "digest_file sha256(abc)")
-    assert(Result.unwrap(Hash.digest_file(Hash.Algorithm.Md5, "_hash_ft.txt")) ==
-               "900150983cd24fb0d6963f7d28e17f72",
-           "digest_file choice md5(abc)")
+    string sha256_abc = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+
+    assert(Hash.digest_file("sha256", path) == success(sha256_abc), "digest_file sha256(abc)")
+    assert(Hash.digest_file(Hash.Algorithm.Md5, path) ==
+        success("900150983cd24fb0d6963f7d28e17f72"), "digest_file choice md5(abc)")
 
     assert(Result.is_failure(Hash.md5_file("_no_such_hash_file.txt")), "missing file fails")
 
-    result<boolean> _d = FileSystem.delete("_hash_ft.txt")
+    boolean _ = Result.unwrap_or(FileSystem.delete(path), false)
 }

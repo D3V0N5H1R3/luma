@@ -3,17 +3,30 @@
 #
 # Feature Tests are based on Luma_Initial_Concept.md and
 # Luma_Standard_Library_Reference.md.
+#
+# Process.run, Process.execute and Process.run_command all launch the program
+# directly (no shell), so cmd.exe built-ins such as `echo` and `exit` must be
+# spelled `cmd /c ...` on Windows, while POSIX names `sh -c` for shell syntax.
 # ═══════════════════════════════════════════════════════════
+
+# The stdlib has no platform query, so detect Windows from the "OS" variable,
+# which Windows always sets to exactly "Windows_NT".  Comparing the value (not
+# just its presence) keeps a stray "OS" variable on POSIX from misdirecting
+# the tests.
+function boolean is_windows_host() {
+    return Process.get_environment_variable("OS") == success("Windows_NT")
+}
+
+# ─── Environment variables ────────────────────────────────
 
 @test
 function void test_process_get_environment_variable() {
     result<string> path_result = Process.get_environment_variable("PATH")
-
-    assert(Result.is_success(path_result))
-
     result<string> missing_result = Process.get_environment_variable("_NONEXISTENT_ENV_VAR_XYZ_")
 
-    assert(!Result.is_success(missing_result))
+    assert(Result.is_success(path_result))
+    assert(String.length(Result.unwrap(path_result)) > 0, "PATH should not be empty")
+    assert(Result.is_failure(missing_result))
 }
 
 @test
@@ -36,94 +49,38 @@ function void test_process_set_environment_variable() {
 
     assert(Result.is_success(set_env_result))
     assert(Process.has_environment_variable("_LUMA_TEST_VAR"))
-
-    result<string> env_value = Process.get_environment_variable("_LUMA_TEST_VAR")
-
-    assert(Result.is_success(env_value))
-    assert(Result.unwrap(env_value) == "hello")
-}
-
-@test
-function void test_process_get_args() {
-    array<string> args = Process.get_arguments()
-
-    assert(type_of(args) == "array")
-}
-
-@test
-function void test_process_run() {
-    # `echo` is a cmd.exe built-in on Windows (needs "cmd /c") but a standalone
-    # binary on POSIX, so pick the command for the host platform.  The "OS"
-    # environment variable is set to "Windows_NT" on Windows and unset elsewhere.
-    mutable string command = "echo hello"
-
-    if (Process.has_environment_variable("OS")) {
-        command = "cmd /c echo hello"
-    }
-
-    result<Process.ProcessResult> output = Process.run(command)
-
-    assert(Result.is_success(output))
-
-    Process.ProcessResult pr = Result.unwrap(output)
-
-    assert(pr.exit_code == 0)
-    assert(String.length(pr.output) > 0)
-}
-
-# ─── Negative / error tests ───
-
-@test
-function void test_process_run_nonexistent_command() {
-    # Running a command that does not exist should return a failure.
-    result<Process.ProcessResult> r = Process.run("_luma_nonexistent_command_xyz_123")
-
-    assert(Result.is_failure(r), "non-existent command should fail")
-}
-
-@test
-function void test_process_run_nonzero_exit_code() {
-    # A command that exits with a non-zero code.  Process.run execs directly
-    # without a shell, so the shell is named explicitly: "cmd /c exit 42" on
-    # Windows, "sh -c \"exit 42\"" on POSIX.
-    mutable string command = "sh -c \"exit 42\""
-
-    if (Process.has_environment_variable("OS")) {
-        command = "cmd /c exit 42"
-    }
-
-    result<Process.ProcessResult> r = Process.run(command)
-
-    assert(Result.is_success(r), "command should execute successfully")
-
-    Process.ProcessResult pr = Result.unwrap(r)
-
-    assert(pr.exit_code == 42, "exit code should be 42")
+    assert(Process.get_environment_variable("_LUMA_TEST_VAR") == success("hello"))
 }
 
 @test
 function void test_process_get_environment_variable_missing() {
-    result<string> r = Process.get_environment_variable("_LUMA_DEFINITELY_NOT_SET_XYZ_999_")
+    result<string> missing_result =
+        Process.get_environment_variable("_LUMA_DEFINITELY_NOT_SET_XYZ_999_")
 
-    assert(Result.is_failure(r), "missing env var should return failure")
+    assert(Result.is_failure(missing_result), "missing env var should return failure")
 }
-
-# ─── Process.get_process_id ──────────────────────────────
 
 @test
-function void test_process_get_process_id() {
-    integer pid = Process.get_process_id()
+function void test_process_set_environment_variable_empty_name() {
+    result<void> set_result = Process.set_environment_variable("", "value")
 
-    assert(pid > 0, "process ID should be positive")
+    assert(Result.is_failure(set_result), "empty variable name should fail")
 }
 
-# ─── Process.get_all_environment_variables ─────────────────────────────────
+@test
+function void test_process_set_environment_variable_name_with_equals() {
+    result<void> set_result = Process.set_environment_variable("invalid=name", "value")
+
+    assert(Result.is_failure(set_result), "variable name containing '=' should fail")
+}
+
+# ─── Process.get_all_environment_variables ────────────────
 
 @test
 function void test_process_get_all_environment_variables() {
-    dictionary<string> env = Process.get_all_environment_variables()
+    dictionary<string> environment = Process.get_all_environment_variables()
 
-    assert(Dictionary.length(env) > 0, "should have at least one env var")
+    assert(Dictionary.length(environment) > 0, "should have at least one env var")
 }
 
 @test
@@ -135,188 +92,229 @@ function void test_process_set_variable_appears_in_snapshot() {
 
     assert(Result.is_success(set_result))
 
-    dictionary<string> env = Process.get_all_environment_variables()
-    result<string> looked_up = Dictionary.get(env, "_LUMA_FEATURE_ENV_VAR")
+    dictionary<string> environment = Process.get_all_environment_variables()
+    result<string> looked_up = Dictionary.get(environment, "_LUMA_FEATURE_ENV_VAR")
 
-    assert(Result.is_success(looked_up), "set variable should appear in the snapshot")
-    assert(Result.unwrap(looked_up) == "round-trip")
+    assert(looked_up == success("round-trip"), "set variable should appear in the snapshot")
 }
 
-# ─── Additional negative / error tests (platform-neutral) ──────────────────
+# ─── Process.get_arguments / Process.get_process_id ───────
+
+@test
+function void test_process_get_args() {
+    # Both ctest and run_luma_tests.py invoke `luma --strict --test <file>`
+    # with nothing after the file name.
+    array<string> args = Process.get_arguments()
+
+    assert(Array.length(args) == 0, "no arguments follow the test file name")
+}
+
+@test
+function void test_process_get_process_id() {
+    integer pid = Process.get_process_id()
+
+    assert(pid > 0, "process ID should be positive")
+}
+
+# ─── Process.run ──────────────────────────────────────────
+
+@test
+function void test_process_run() {
+    string command = if is_windows_host() { "cmd /c echo hello" } else { "echo hello" }
+
+    result<Process.ProcessResult> run_result = Process.run(command)
+
+    assert(Result.is_success(run_result))
+
+    Process.ProcessResult process_result = Result.unwrap(run_result)
+
+    assert(process_result.exit_code == 0)
+    assert(String.contains(process_result.output, "hello"), "captures stdout")
+}
+
+@test
+function void test_process_run_nonexistent_command() {
+    result<Process.ProcessResult> run_result = Process.run("_luma_nonexistent_command_xyz_123")
+
+    assert(Result.is_failure(run_result), "non-existent command should fail")
+}
+
+@test
+function void test_process_run_nonzero_exit_code() {
+    # A non-zero exit is still a successfully captured run.
+    string command = if is_windows_host() { "cmd /c exit 42" } else { "sh -c \"exit 42\"" }
+
+    result<Process.ProcessResult> run_result = Process.run(command)
+
+    assert(Result.is_success(run_result), "command should execute successfully")
+
+    Process.ProcessResult process_result = Result.unwrap(run_result)
+
+    assert(process_result.exit_code == 42, "exit code should be 42")
+}
 
 @test
 function void test_process_run_empty_command() {
     # An empty command string is rejected before any spawn is attempted.
-    result<Process.ProcessResult> r = Process.run("")
+    result<Process.ProcessResult> run_result = Process.run("")
 
-    assert(Result.is_failure(r), "empty command should fail")
+    assert(Result.is_failure(run_result), "empty command should fail")
 }
 
 @test
 function void test_process_run_unclosed_quote() {
     # A mismatched quote makes the tokeniser reject the command, surfaced as a
     # failure result rather than a thrown error.
-    result<Process.ProcessResult> r = Process.run("echo \"unterminated")
+    result<Process.ProcessResult> run_result = Process.run("echo \"unterminated")
 
-    assert(Result.is_failure(r), "unclosed quote should fail")
+    assert(Result.is_failure(run_result), "unclosed quote should fail")
 }
 
-@test
-function void test_process_set_environment_variable_empty_name() {
-    result<void> r = Process.set_environment_variable("", "value")
-
-    assert(Result.is_failure(r), "empty variable name should fail")
-}
-
-@test
-function void test_process_set_environment_variable_name_with_equals() {
-    result<void> r = Process.set_environment_variable("invalid=name", "value")
-
-    assert(Result.is_failure(r), "variable name containing '=' should fail")
-}
-
-# ─── Process.execute — separate stdout / stderr capture (N06) ──────────────
+# ─── Process.execute — separate stdout / stderr capture ───
 # Process.execute returns a Process.CommandOutput record that keeps stdout and
-# stderr in distinct fields (unlike Process.run, which merges them), plus a
-# derived success flag.  The host shell is named explicitly, mirroring the
-# Process.run tests: "cmd /c ..." on Windows, "sh -c ..." on POSIX.
+# stderr in distinct fields (unlike Process.run, which captures only stdout),
+# plus a derived success flag.
 
 @test
 function void test_process_execute_captures_streams_separately() {
-    mutable string command = "sh -c \"echo out_line; echo err_line 1>&2\""
-
-    if (Process.has_environment_variable("OS")) {
-        command = "cmd /c \"echo out_line & echo err_line 1>&2\""
+    string command = if is_windows_host() {
+        "cmd /c \"echo out_line & echo err_line 1>&2\""
+    } else {
+        "sh -c \"echo out_line; echo err_line 1>&2\""
     }
 
-    result<Process.CommandOutput> r = Process.execute(command)
+    result<Process.CommandOutput> execute_result = Process.execute(command)
 
-    assert(Result.is_success(r), "command should execute successfully")
+    assert(Result.is_success(execute_result), "command should execute successfully")
 
-    Process.CommandOutput out = Result.unwrap(r)
+    Process.CommandOutput output = Result.unwrap(execute_result)
 
-    assert(out.exit_code == 0, "exit code should be zero")
-    assert(out.success, "success flag should be true for a zero exit")
-    assert(String.contains(out.standard_output, "out_line"), "stdout should hold the out line")
-    assert(String.contains(out.standard_error, "err_line"), "stderr should hold the err line")
-    assert(!String.contains(out.standard_output, "err_line"), "stdout must not hold stderr text")
+    assert(output.exit_code == 0, "exit code should be zero")
+    assert(output.success, "success flag should be true for a zero exit")
+    assert(String.contains(output.standard_output, "out_line"), "stdout should hold the out line")
+    assert(String.contains(output.standard_error, "err_line"), "stderr should hold the err line")
+    assert(!String.contains(output.standard_output, "err_line"), "stdout must not hold stderr text")
 }
 
 @test
 function void test_process_execute_nonzero_exit_sets_success_false() {
-    mutable string command = "sh -c \"exit 5\""
+    string command = if is_windows_host() { "cmd /c exit 5" } else { "sh -c \"exit 5\"" }
 
-    if (Process.has_environment_variable("OS")) {
-        command = "cmd /c exit 5"
-    }
+    result<Process.CommandOutput> execute_result = Process.execute(command)
 
-    result<Process.CommandOutput> r = Process.execute(command)
+    assert(Result.is_success(execute_result), "a non-zero exit is still a captured result")
 
-    assert(Result.is_success(r), "a non-zero exit is still a captured result")
+    Process.CommandOutput output = Result.unwrap(execute_result)
 
-    Process.CommandOutput out = Result.unwrap(r)
-
-    assert(out.exit_code == 5, "exit code should be 5")
-    assert(!out.success, "success flag should be false for a non-zero exit")
+    assert(output.exit_code == 5, "exit code should be 5")
+    assert(!output.success, "success flag should be false for a non-zero exit")
 }
 
 @test
 function void test_process_execute_nonexistent_command() {
-    result<Process.CommandOutput> r = Process.execute("_luma_nonexistent_command_xyz_123")
+    result<Process.CommandOutput> execute_result =
+        Process.execute("_luma_nonexistent_command_xyz_123")
 
-    assert(Result.is_failure(r), "non-existent command should fail to launch")
+    assert(Result.is_failure(execute_result), "non-existent command should fail to launch")
 }
 
 @test
 function void test_process_execute_empty_command() {
-    result<Process.CommandOutput> r = Process.execute("")
+    result<Process.CommandOutput> execute_result = Process.execute("")
 
-    assert(Result.is_failure(r), "empty command should fail")
+    assert(Result.is_failure(execute_result), "empty command should fail")
 }
+
+# ─── Process.command / Process.run_command (shell-free) ───
 
 @test
 function void test_process_command_record() {
-    Process.Command cmd = Process.command("echo", ["hello", "world"])
+    Process.Command echo_command = Process.command("echo", ["hello", "world"])
 
-    assert(cmd.program == "echo", "program stored")
-    assert(Array.length(cmd.arguments) == 2, "two arguments")
-    assert(cmd.arguments[0] == "hello", "first argument stored")
-    assert(cmd.arguments[1] == "world", "second argument stored")
+    assert(echo_command.program == "echo", "program stored")
+    assert(Array.length(echo_command.arguments) == 2, "two arguments")
+    assert(echo_command.arguments[0] == "hello", "first argument stored")
+    assert(echo_command.arguments[1] == "world", "second argument stored")
 }
 
 @test
 function void test_process_run_command() {
-    # `echo` is a standalone binary on POSIX but a cmd.exe built-in on Windows,
-    # so build the shell-free argv for the host platform.
-    mutable Process.Command cmd = Process.command("echo", ["hello"])
-
-    if (Process.has_environment_variable("OS")) {
-        cmd = Process.command("cmd", ["/c", "echo", "hello"])
+    Process.Command echo_command = if is_windows_host() {
+        Process.command("cmd", ["/c", "echo", "hello"])
+    } else {
+        Process.command("echo", ["hello"])
     }
 
-    result<Process.CommandOutput> r = Process.run_command(cmd)
+    result<Process.CommandOutput> run_result = Process.run_command(echo_command)
 
-    assert(Result.is_success(r), "run_command succeeds")
+    assert(Result.is_success(run_result), "run_command succeeds")
 
-    Process.CommandOutput out = Result.unwrap(r)
+    Process.CommandOutput output = Result.unwrap(run_result)
 
-    assert(out.exit_code == 0, "zero exit code")
-    assert(out.success, "success flag is set")
-    assert(String.contains(out.standard_output, "hello"), "captures stdout")
+    assert(output.exit_code == 0, "zero exit code")
+    assert(output.success, "success flag is set")
+    assert(String.contains(output.standard_output, "hello"), "captures stdout")
 }
 
 @test
 function void test_process_run_command_shell_free() {
-    # No shell is involved, so metacharacters reach echo as a literal argument.
-    # On Windows echo needs cmd (which would re-parse), so assert only on POSIX.
-    if (!Process.has_environment_variable("OS")) {
-        Process.Command cmd = Process.command("echo", ["a; b | c $(whoami)"])
-        Process.CommandOutput out = Result.unwrap(Process.run_command(cmd))
-
-        assert(String.contains(out.standard_output, "a; b | c $(whoami)"),
-            "shell metacharacters are inert")
+    # The argument vector is never re-parsed by a shell, so the metacharacters
+    # reach echo as one literal argument.  On Windows echo is a cmd.exe
+    # built-in, so cmd is the program; the argument is still handed over as a
+    # single quoted argv entry, so its `;` and `|` are not interpreted either.
+    string literal_argument = "a; b | c $(whoami)"
+    Process.Command echo_command = if is_windows_host() {
+        Process.command("cmd", ["/c", "echo", literal_argument])
+    } else {
+        Process.command("echo", [literal_argument])
     }
+
+    Process.CommandOutput output = Result.unwrap(Process.run_command(echo_command))
+
+    assert(output.exit_code == 0, "echo exits cleanly")
+    assert(String.contains(output.standard_output, literal_argument),
+        "shell metacharacters are inert")
 }
 
 @test
 function void test_process_run_command_nonexistent_fails() {
     array<string> no_args = []
-    Process.Command cmd = Process.command("_luma_nonexistent_command_xyz_123", no_args)
+    Process.Command missing_command = Process.command("_luma_nonexistent_command_xyz_123", no_args)
 
-    result<Process.CommandOutput> r = Process.run_command(cmd)
+    result<Process.CommandOutput> run_result = Process.run_command(missing_command)
 
-    assert(Result.is_failure(r), "a non-existent program fails to launch")
+    assert(Result.is_failure(run_result), "a non-existent program fails to launch")
 }
 
 @test
 function void test_process_run_command_empty_program_fails() {
-    Process.Command cmd = Process.command("", ["x"])
+    Process.Command empty_command = Process.command("", ["x"])
 
-    result<Process.CommandOutput> r = Process.run_command(cmd)
+    result<Process.CommandOutput> run_result = Process.run_command(empty_command)
 
-    assert(Result.is_failure(r), "an empty program name fails")
+    assert(Result.is_failure(run_result), "an empty program name fails")
 }
 
-# ─── Process.run_command_timeout (bounded execution) ───
+# ─── Process.run_command_timeout (bounded execution) ──────
 # Runs a shell-free Process.Command but kills+fails it if it overruns the
 # deadline, so a hung child can never freeze the program forever.
 
 @test
 function void test_process_run_command_timeout_completes_within_deadline() {
-    mutable Process.Command cmd = Process.command("echo", ["hello"])
-
-    if (Process.has_environment_variable("OS")) {
-        cmd = Process.command("cmd", ["/c", "echo", "hello"])
+    Process.Command echo_command = if is_windows_host() {
+        Process.command("cmd", ["/c", "echo", "hello"])
+    } else {
+        Process.command("echo", ["hello"])
     }
 
-    result<Process.CommandOutput> r = Process.run_command_timeout(cmd, 60000)
+    result<Process.CommandOutput> run_result = Process.run_command_timeout(echo_command, 60000)
 
-    assert(Result.is_success(r), "a fast command finishes inside the deadline")
+    assert(Result.is_success(run_result), "a fast command finishes inside the deadline")
 
-    Process.CommandOutput out = Result.unwrap(r)
+    Process.CommandOutput output = Result.unwrap(run_result)
 
-    assert(out.exit_code == 0, "zero exit code")
-    assert(String.contains(out.standard_output, "hello"), "captures stdout")
+    assert(output.exit_code == 0, "zero exit code")
+    assert(String.contains(output.standard_output, "hello"), "captures stdout")
 }
 
 @test
@@ -324,31 +322,31 @@ function void test_process_run_command_timeout_kills_slow_command() {
     # A command that sleeps far longer than the 200 ms deadline must be killed
     # and reported as a failure.  ping's inter-echo delay stands in for sleep on
     # Windows; POSIX uses sleep directly.
-    mutable Process.Command cmd = Process.command("sleep", ["10"])
-
-    if (Process.has_environment_variable("OS")) {
-        cmd = Process.command("ping", ["-n", "10", "127.0.0.1"])
+    Process.Command slow_command = if is_windows_host() {
+        Process.command("ping", ["-n", "10", "127.0.0.1"])
+    } else {
+        Process.command("sleep", ["10"])
     }
 
-    result<Process.CommandOutput> r = Process.run_command_timeout(cmd, 200)
+    result<Process.CommandOutput> run_result = Process.run_command_timeout(slow_command, 200)
 
-    assert(Result.is_failure(r), "an overrunning command is killed and fails")
+    assert(Result.is_failure(run_result), "an overrunning command is killed and fails")
 }
 
 @test
 function void test_process_run_command_timeout_rejects_nonpositive() {
-    mutable Process.Command cmd = Process.command("echo", ["hi"])
-
-    if (Process.has_environment_variable("OS")) {
-        cmd = Process.command("cmd", ["/c", "echo", "hi"])
+    Process.Command echo_command = if is_windows_host() {
+        Process.command("cmd", ["/c", "echo", "hi"])
+    } else {
+        Process.command("echo", ["hi"])
     }
 
-    result<Process.CommandOutput> r = Process.run_command_timeout(cmd, 0)
+    result<Process.CommandOutput> run_result = Process.run_command_timeout(echo_command, 0)
 
-    assert(Result.is_failure(r), "a non-positive timeout is rejected")
+    assert(Result.is_failure(run_result), "a non-positive timeout is rejected")
 }
 
-# ─── Process.exit_status (Process.ExitStatus) ───
+# ─── Process.exit_status (Process.ExitStatus) ─────────────
 # Classifies a Process.CommandOutput's exit_code sign convention: 0 = Success,
 # a positive code = Failed(code), a negative code = LaunchFailed (the process
 # never ran). Exhaustive match over every variant, doubling as a registration
@@ -363,55 +361,47 @@ function void test_process_run_command_timeout_rejects_nonpositive() {
 
 function string exit_status_label(Process.ExitStatus status) {
     return match status {
-    case Process.ExitStatus.Success        { "success" }
-    case Process.ExitStatus.Failed(code)    { "failed:${code}" }
-    case Process.ExitStatus.LaunchFailed    { "launch_failed" }
+        case Process.ExitStatus.Success      { "success" }
+        case Process.ExitStatus.Failed(code) { "failed:${code}" }
+        case Process.ExitStatus.LaunchFailed { "launch_failed" }
     }
 }
 
 @test
 function void test_process_exit_status_success() {
-    mutable string command = "echo hi"
+    string command = if is_windows_host() { "cmd /c echo hi" } else { "echo hi" }
 
-    if (Process.has_environment_variable("OS")) {
-        command = "cmd /c echo hi"
-    }
+    Process.CommandOutput output = Result.unwrap(Process.execute(command))
 
-    result<Process.CommandOutput> r = Process.execute(command)
-    Process.CommandOutput out = Result.unwrap(r)
-
-    assert(Process.exit_status(out) == Process.ExitStatus.Success, "zero exit code is Success")
-    assert(exit_status_label(Process.exit_status(out)) == "success", "labels as success")
+    assert(Process.exit_status(output) == Process.ExitStatus.Success, "zero exit code is Success")
+    assert(exit_status_label(Process.exit_status(output)) == "success", "labels as success")
 }
 
 @test
 function void test_process_exit_status_failed_carries_code() {
-    mutable string command = "sh -c \"exit 7\""
+    string command = if is_windows_host() { "cmd /c exit 7" } else { "sh -c \"exit 7\"" }
 
-    if (Process.has_environment_variable("OS")) {
-        command = "cmd /c exit 7"
+    Process.CommandOutput output = Result.unwrap(Process.execute(command))
+
+    match Process.exit_status(output) {
+        case Process.ExitStatus.Failed(code) {
+            assert(code == 7, "carries the positive exit code")
+        }
+        else {
+            assert(false, "positive exit code must classify as Failed")
+        }
     }
 
-    result<Process.CommandOutput> r = Process.execute(command)
-    Process.CommandOutput out = Result.unwrap(r)
-
-    match Process.exit_status(out) {
-    case Process.ExitStatus.Failed(code) { assert(code == 7, "carries the positive exit code") }
-    else { assert(false, "positive exit code must classify as Failed") }
-    }
-
-    assert(exit_status_label(Process.exit_status(out)) == "failed:7", "labels with the code")
+    assert(exit_status_label(Process.exit_status(output)) == "failed:7", "labels with the code")
 }
 
-# ═══════════════════════════════════════════════════════════
-# Process.Error (opt-in typed launch errors via run_command_typed)
-# ═══════════════════════════════════════════════════════════
+# ─── Process.Error (typed launch errors via run_command_typed) ───
 
 # Exhaustive match over every Process.Error variant, doubling as a check that the
 # choice is fully registered, exhaustively matchable, and usable as a parameter
 # type annotation.
-function string process_error_label(Process.Error e) {
-    return match e {
+function string process_error_label(Process.Error launch_error) {
+    return match launch_error {
         case Process.Error.NotFound         { "not_found" }
         case Process.Error.PermissionDenied { "permission_denied" }
         case Process.Error.InvalidCommand   { "invalid_command" }
@@ -421,53 +411,55 @@ function string process_error_label(Process.Error e) {
 
 @test
 function void test_process_run_command_typed_success() {
-    mutable Process.Command cmd = Process.command("sh", ["-c", "echo hi"])
-
-    if (Process.has_environment_variable("OS")) {
-        cmd = Process.command("cmd", ["/c", "echo", "hi"])
+    Process.Command echo_command = if is_windows_host() {
+        Process.command("cmd", ["/c", "echo", "hi"])
+    } else {
+        Process.command("sh", ["-c", "echo hi"])
     }
 
-    result<Process.CommandOutput, Process.Error> r = Process.run_command_typed(cmd)
+    result<Process.CommandOutput, Process.Error> run_result =
+        Process.run_command_typed(echo_command)
 
-    assert(Result.is_success(r), "a runnable command succeeds")
-    assert(Result.unwrap(r).exit_code == 0, "echo exits cleanly")
+    assert(Result.is_success(run_result), "a runnable command succeeds")
+    assert(Result.unwrap(run_result).exit_code == 0, "echo exits cleanly")
 }
 
 @test
 function void test_process_run_command_typed_not_found() {
-    Process.Command cmd = Process.command("_luma_nonexistent_xyz_123", [])
-    result<Process.CommandOutput, Process.Error> r = Process.run_command_typed(cmd)
+    Process.Command missing_command = Process.command("_luma_nonexistent_xyz_123", [])
+    result<Process.CommandOutput, Process.Error> run_result =
+        Process.run_command_typed(missing_command)
 
-    assert(Result.is_failure(r), "a missing program fails")
-
-    string label = match r {
-        success(_o) { "unexpected_success" }
-        failure(e)  { process_error_label(e) }
+    string label = match run_result {
+        success(_output) { "unexpected_success" }
+        failure(e)       { process_error_label(e) }
     }
 
+    assert(Result.is_failure(run_result), "a missing program fails")
     assert(label == "not_found", "a missing program classifies as NotFound")
 }
 
 @test
 function void test_process_run_command_typed_empty_program_is_invalid() {
-    Process.Command cmd = Process.command("", ["x"])
-    result<Process.CommandOutput, Process.Error> r = Process.run_command_typed(cmd)
+    Process.Command empty_command = Process.command("", ["x"])
+    result<Process.CommandOutput, Process.Error> run_result =
+        Process.run_command_typed(empty_command)
 
-    string label = match r {
-        success(_o) { "unexpected_success" }
-        failure(e)  { process_error_label(e) }
+    string label = match run_result {
+        success(_output) { "unexpected_success" }
+        failure(e)       { process_error_label(e) }
     }
 
     assert(label == "invalid_command", "an empty program classifies as InvalidCommand")
 }
 
-# ─── Process.signal (Process.Signal) ───
+# ─── Process.signal (Process.Signal) ──────────────────────
 
 # Exhaustive match over every Process.Signal variant.  Beyond labelling a signal,
 # this doubles as a check that Process.Signal is fully registered, exhaustively
 # matchable, and usable as a parameter type annotation.
-function string signal_label(Process.Signal s) {
-    return match s {
+function string signal_label(Process.Signal signal) {
+    return match signal {
         case Process.Signal.Terminate { "terminate" }
         case Process.Signal.Kill      { "kill" }
         case Process.Signal.Interrupt { "interrupt" }
@@ -477,38 +469,54 @@ function string signal_label(Process.Signal s) {
 
 @test
 function void test_process_signal_variants_are_exhaustive() {
+    Process.Signal kill_signal = Process.Signal.Kill
+
     assert(signal_label(Process.Signal.Terminate) == "terminate")
     assert(signal_label(Process.Signal.Kill) == "kill")
     assert(signal_label(Process.Signal.Interrupt) == "interrupt")
     assert(signal_label(Process.Signal.Hangup) == "hangup")
-
-    # Choice equality works like every other stdlib choice.
-    Process.Signal s = Process.Signal.Kill
-    assert(s == Process.Signal.Kill)
-    assert(s != Process.Signal.Terminate)
+    assert(kill_signal == Process.Signal.Kill)
+    assert(kill_signal != Process.Signal.Terminate)
 }
 
 @test
 function void test_process_signal_invalid_pid_fails() {
     # A non-positive pid is a domain failure, not a crash.
-    result<boolean> r = Process.signal(0, Process.Signal.Terminate)
-    assert(Result.is_failure(r), "pid 0 fails")
+    result<boolean> signal_result = Process.signal(0, Process.Signal.Terminate)
+
+    assert(Result.is_failure(signal_result), "pid 0 fails")
 }
 
 @test
 function void test_process_signal_missing_process_fails() {
     # Signalling a pid that (almost certainly) does not exist returns a failure
     # result rather than crashing.
-    result<boolean> r = Process.signal(2147483646, Process.Signal.Terminate)
-    assert(Result.is_failure(r), "an absent process fails")
+    result<boolean> signal_result = Process.signal(2147483646, Process.Signal.Terminate)
+
+    assert(Result.is_failure(signal_result), "an absent process fails")
 }
+
+# ─── Process.find_executable ──────────────────────────────
 
 @test
 function void test_process_find_executable_missing() {
     # A name that (almost certainly) is not on PATH resolves to none rather
     # than crashing or launching anything.
     optional<string> found = Process.find_executable("luma_no_such_program_xyz")
+    optional<string> found_empty = Process.find_executable("")
+
     assert(Optional.is_none(found), "an absent executable yields none")
-    # An empty name is also none.
-    assert(Optional.is_none(Process.find_executable("")))
+    assert(Optional.is_none(found_empty), "an empty name yields none")
+}
+
+@test
+function void test_process_find_executable_resolves_shell() {
+    # The host shell is always on PATH; Windows resolves "cmd" via PATHEXT.
+    string shell_name = if is_windows_host() { "cmd" } else { "sh" }
+
+    optional<string> found = Process.find_executable(shell_name)
+
+    assert(Optional.is_some(found), "the host shell is found on PATH")
+    assert(String.contains_ignore_case(Optional.unwrap(found), shell_name),
+        "the resolved path names the shell")
 }

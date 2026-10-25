@@ -172,6 +172,41 @@ constexpr std::size_t kModuleCount = std::size(kModules);
     return find_module(name) != nullptr;
 }
 
+// The catalog functions that sandbox-aware modules (Hash, Compression, Log)
+// withhold in sandbox mode, e.g. `Hash.sha256_file`.  Found by registering
+// each such module in sandbox mode into a scratch environment and collecting
+// the catalog members it left out.  The set never changes, so it is computed
+// once: the debugger registers a sandboxed stdlib for every watch evaluation.
+[[nodiscard]] inline const StringSet& sandbox_withheld_functions() {
+    static const StringSet withheld = [] {
+        StringSet names;
+
+        for (const auto& mod : kModules) {
+            if (!mod.sandbox_aware) {
+                continue;
+            }
+
+            const auto scratch = Environment::create();
+            mod.sandbox_register_fn(scratch, true);
+
+            for (const auto& [name, spec] : stdlib::catalog()) {
+                const auto split = split_module(name);
+
+                // Only direct module members (`Hash.sha256_file`), not nested
+                // choice variants such as `Log.Level.Debug`.
+                if (split && split->first == mod.name &&
+                    split->second.find('.') == std::string_view::npos && !scratch->has(name)) {
+                    names.insert(name);
+                }
+            }
+        }
+
+        return names;
+    }();
+
+    return withheld;
+}
+
 // Register choice variants and sandbox-blocked prefixes.
 // Shared by both eager and lazy registration paths.
 inline void register_stdlib_postamble(const EnvPtr& env, bool sandbox) {
@@ -221,13 +256,16 @@ inline void register_stdlib_postamble(const EnvPtr& env, bool sandbox) {
     // look-ups produce a clear "not available in sandbox mode" message
     // instead of the generic "undefined variable" error.  The blocked
     // set is derived from the catalog's capability tags — single source
-    // of truth for sandbox restrictions.
+    // of truth for sandbox restrictions.  Sandbox-aware modules (Hash,
+    // Compression, Log) stay available but withhold their file functions,
+    // which are blocked by name (see sandbox_withheld_functions).
     if (sandbox) {
         StringSet blocked;
         for (const auto& mod : stdlib::sandbox_blocked_modules()) {
             blocked.insert(mod);
         }
-        env->set_sandbox_blocked(std::move(blocked));
+
+        env->set_sandbox_blocked(std::move(blocked), sandbox_withheld_functions());
     }
 }
 

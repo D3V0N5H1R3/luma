@@ -713,11 +713,7 @@ static void register_socket_server(const EnvPtr& env) {
 
             SocketGuard guard{sock};
 
-            // Allow address reuse to avoid bind failures on restart.
-            const int opt{1};
-
-            setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt),
-                       sizeof(opt));
+            platform_socket::set_listen_address_policy(sock);
 
             if (::bind(sock, info->ai_addr,
                        static_cast<platform_socket::addr_length_t>(info->ai_addrlen)) != 0) {
@@ -772,10 +768,7 @@ static void register_socket_server(const EnvPtr& env) {
 
             SocketGuard guard{sock};
 
-            const int opt{1};
-
-            setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&opt),
-                       sizeof(opt));
+            platform_socket::set_listen_address_policy(sock);
 
             if (::bind(sock, info->ai_addr,
                        static_cast<platform_socket::addr_length_t>(info->ai_addrlen)) != 0) {

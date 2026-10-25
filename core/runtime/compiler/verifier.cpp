@@ -317,6 +317,7 @@ StackEffect instruction_stack_effect(const std::vector<std::uint8_t>& code, std:
         case Op::NullCoalesce:
         case Op::GetField:
         case Op::GetFieldOpt:
+        case Op::GetFieldUnique:
         case Op::Await:
         case Op::ForIterInit:
         case Op::TypeOf:
@@ -345,6 +346,7 @@ StackEffect instruction_stack_effect(const std::vector<std::uint8_t>& code, std:
         case Op::MakeRangeInc:
         case Op::IndexGet:
         case Op::IndexGetOpt:
+        case Op::IndexGetUnique:
         case Op::SetField: // Pops the record and value, pushes the updated record.
         case Op::MakeChoice:
         case Op::MakeChoiceConstructor:
@@ -401,6 +403,9 @@ StackEffect instruction_stack_effect(const std::vector<std::uint8_t>& code, std:
         case Op::IncrementLocal:
         case Op::DecrementLocal:
         case Op::GetLocalReturn:
+        case Op::UniqueLocal:
+        case Op::UniqueUpvalue:
+        case Op::UniqueGlobal:
         case Op::EndModule:
             return {.pops = 0, .pushes = 0};
     }
