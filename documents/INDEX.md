@@ -95,13 +95,13 @@ Section-level table of contents for the reference documents in this directory. U
 | 1 — Error Categories                   | 25–36   |
 | 2 — Domain Failures — `result<T>`      | 40–131  |
 | 3 — Absent Values — `optional<T>`      | 135–187 |
-| 4 — Programmer Errors — Runtime Errors | 191–220 |
-| 5 — Try / Catch / Finally              | 224–268 |
-| 6 — Standard Library Conventions       | 272–317 |
-| 7 — Third-Party Library Conventions    | 321–368 |
-| 8 — Anti-Patterns                      | 372–465 |
-| 9 — Interpreter Implementation Policy  | 469–524 |
-| See Also                               | 528–538 |
+| 4 — Programmer Errors — Runtime Errors | 191–210 |
+| 5 — Try / Catch / Finally              | 214–258 |
+| 6 — Standard Library Conventions       | 262–307 |
+| 7 — Third-Party Library Conventions    | 311–358 |
+| 8 — Anti-Patterns                      | 362–455 |
+| 9 — Interpreter Implementation Policy  | 459–514 |
+| See Also                               | 518–528 |
 
 ## Luma_Initial_Concept.md
 
@@ -259,41 +259,41 @@ Section-level table of contents for the reference documents in this directory. U
 | 2 — Array              | 67–136    |
 | 3 — Bits               | 138–160   |
 | 4 — Calculus           | 164–192   |
-| 5 — Channel            | 194–232   |
-| 6 — Compression        | 234–281   |
-| 7 — Console            | 283–303   |
-| 8 — Converter          | 305–328   |
-| 9 — Csv                | 330–362   |
-| 10 — DateTime          | 364–505   |
-| 11 — Decimal           | 507–594   |
-| 12 — Dictionary        | 596–637   |
-| 13 — Encoder           | 639–668   |
-| 14 — FileSystem        | 670–756   |
-| 15 — Hash              | 758–798   |
-| 16 — Http              | 800–905   |
-| 17 — Json              | 907–1002  |
-| 18 — KeyValueStore     | 1004–1054 |
-| 19 — LinearAlgebra     | 1056–1113 |
-| 20 — Log               | 1115–1139 |
-| 21 — Math              | 1141–1274 |
-| 22 — Optional          | 1276–1331 |
-| 23 — Order             | 1333–1384 |
-| 24 — Process           | 1386–1483 |
-| 25 — Queue             | 1485–1510 |
-| 26 — Random            | 1512–1566 |
-| 27 — Reference         | 1568–1629 |
-| 28 — RegularExpression | 1631–1732 |
-| 29 — Resource          | 1734–1785 |
-| 30 — Result            | 1787–1818 |
-| 31 — Set               | 1820–1853 |
-| 32 — Socket            | 1855–1919 |
-| 33 — Stack             | 1923–1949 |
-| 34 — Statistics        | 1951–1961 |
-| 35 — String            | 1963–2067 |
-| 36 — Task              | 2069–2137 |
-| 37 — Terminal          | 2139–2354 |
-| 38 — Xml               | 2356–2431 |
-| See Also               | 2435–2442 |
+| 5 — Channel            | 194–243   |
+| 6 — Compression        | 245–292   |
+| 7 — Console            | 294–314   |
+| 8 — Converter          | 316–339   |
+| 9 — Csv                | 341–373   |
+| 10 — DateTime          | 375–516   |
+| 11 — Decimal           | 518–605   |
+| 12 — Dictionary        | 607–648   |
+| 13 — Encoder           | 650–679   |
+| 14 — FileSystem        | 681–767   |
+| 15 — Hash              | 769–809   |
+| 16 — Http              | 811–916   |
+| 17 — Json              | 918–1013  |
+| 18 — KeyValueStore     | 1015–1065 |
+| 19 — LinearAlgebra     | 1067–1124 |
+| 20 — Log               | 1126–1150 |
+| 21 — Math              | 1152–1285 |
+| 22 — Optional          | 1287–1342 |
+| 23 — Order             | 1344–1395 |
+| 24 — Process           | 1397–1494 |
+| 25 — Queue             | 1496–1521 |
+| 26 — Random            | 1523–1577 |
+| 27 — Reference         | 1579–1640 |
+| 28 — RegularExpression | 1642–1743 |
+| 29 — Resource          | 1745–1796 |
+| 30 — Result            | 1798–1829 |
+| 31 — Set               | 1831–1864 |
+| 32 — Socket            | 1866–1930 |
+| 33 — Stack             | 1934–1960 |
+| 34 — Statistics        | 1962–1972 |
+| 35 — String            | 1974–2078 |
+| 36 — Task              | 2080–2148 |
+| 37 — Terminal          | 2150–2365 |
+| 38 — Xml               | 2367–2442 |
+| See Also               | 2446–2453 |
 
 ## Luma_Syntax_Highlighting.md
 

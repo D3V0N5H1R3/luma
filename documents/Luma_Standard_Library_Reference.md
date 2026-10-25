@@ -195,41 +195,52 @@ Callbacks that return `result<number>` (such as `Math.sine`) are automatically u
 
 Thread-safe FIFO queues for passing values between tasks.
 
-| Function                                             | Parameter Types                     | Return Type         | Description                                                                                                                                                        |
-| ---------------------------------------------------- | ----------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Channel.close(channel)`                             | `(channel<T>)`                      | `none`              | Close the channel                                                                                                                                                  |
-| `Channel.capacity(channel)`                          | `(channel<T>)`                      | `optional<integer>` | Buffered capacity; `none` for an unbounded channel                                                                                                                 |
-| `Channel.consume(channel, function)`                 | `(channel<T>, function(T) -> none)` | `result<integer>`   | Receive each value until the channel closes and drains, applying `function`; returns the count; fail if `function` throws. Blocks until close — call inside a task |
-| `Channel.is_closed(channel)`                         | `(channel<T>)`                      | `boolean`           | Whether the channel is closed                                                                                                                                      |
-| `Channel.is_empty(channel)`                          | `(channel<T>)`                      | `boolean`           | Whether no values are buffered                                                                                                                                     |
-| `Channel.is_full(channel)`                           | `(channel<T>)`                      | `boolean`           | Whether a buffered channel is at capacity; always `false` when unbounded                                                                                           |
-| `Channel.length(channel)`                            | `(channel<T>)`                      | `integer`           | Number of buffered values                                                                                                                                          |
-| `Channel.new()`                                      | `()`                                | `channel<T>`        | Create unbounded channel (no capacity limit)                                                                                                                       |
-| `Channel.new_buffered(capacity)`                     | `(integer)`                         | `channel<T>`        | Create buffered channel; throws if `cap ≤ 0`                                                                                                                       |
-| `Channel.poll(channel)`                              | `(channel<T>)`                      | `optional<T>`       | Non-blocking, non-throwing receive; `some(v)` when ready, `none` when empty (open or drained-closed). Pair with `is_closed` to tell empty-open from drained-closed |
-| `Channel.receive(channel)`                           | `(channel<T>)`                      | `T`                 | Blocking receive; throws `ChannelClosedError` if closed and drained                                                                                                |
-| `Channel.receive_all(channel)`                       | `(channel<T>)`                      | `array<T>`          | Drain all buffered values                                                                                                                                          |
-| `Channel.receive_timeout(channel, milliseconds)`     | `(channel<T>, integer)`             | `result<T>`         | Timed receive; fail on timeout, throws `ChannelClosedError` if closed                                                                                              |
-| `Channel.select(channels)`                           | `(array<channel<T>>)`               | `result<T>`         | Wait for the first ready channel; returns `(index, value)`; fail if all are closed                                                                                 |
-| `Channel.send(channel, value)`                       | `(channel<T>, T)`                   | `boolean`           | Blocking send; returns `false` if the channel is closed                                                                                                            |
-| `Channel.send_all(channel, values)`                  | `(channel<T>, array<T>)`            | `integer`           | Blocking-send each element in order; returns the count sent, stopping early if the channel closes mid-send                                                         |
-| `Channel.send_timeout(channel, value, milliseconds)` | `(channel<T>, T, integer)`          | `result<boolean>`   | Timed send; fail on timeout, throws `ChannelClosedError` if closed                                                                                                 |
-| `Channel.try_receive(channel)`                       | `(channel<T>)`                      | `T`                 | Non-blocking receive; throws `ChannelEmptyError` if empty, `ChannelClosedError` if closed                                                                          |
-| `Channel.try_send(channel, value)`                   | `(channel<T>, T)`                   | `boolean`           | Non-blocking send; returns `false` if the channel is full or closed                                                                                                |
+| Function                                             | Parameter Types                     | Return Type            | Description                                                                                                                                                        |
+| ---------------------------------------------------- | ----------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Channel.close(channel)`                             | `(channel<T>)`                      | `none`                 | Close the channel; values already buffered can still be received                                                                                                   |
+| `Channel.capacity(channel)`                          | `(channel<T>)`                      | `optional<integer>`    | Buffered capacity; `none` for an unbounded channel                                                                                                                 |
+| `Channel.consume(channel, function)`                 | `(channel<T>, function(T) -> none)` | `result<integer>`      | Receive each value until the channel closes and drains, applying `function`; returns the count; fail if `function` throws. Blocks until close — call inside a task |
+| `Channel.is_closed(channel)`                         | `(channel<T>)`                      | `boolean`              | Whether the channel is closed                                                                                                                                      |
+| `Channel.is_empty(channel)`                          | `(channel<T>)`                      | `boolean`              | Whether no values are buffered                                                                                                                                     |
+| `Channel.is_full(channel)`                           | `(channel<T>)`                      | `boolean`              | Whether a buffered channel is at capacity; always `false` when unbounded                                                                                           |
+| `Channel.length(channel)`                            | `(channel<T>)`                      | `integer`              | Number of buffered values                                                                                                                                          |
+| `Channel.new()`                                      | `()`                                | `channel<T>`           | Create an unbounded channel (capped at the maximum queue size)                                                                                                     |
+| `Channel.new_buffered(capacity)`                     | `(integer)`                         | `channel<T>`           | Create a channel that buffers at most `capacity` values; runtime error if `capacity` ≤ 0 or above the maximum queue size                                           |
+| `Channel.poll(channel)`                              | `(channel<T>)`                      | `optional<T>`          | Non-blocking receive; `some(v)` when ready, `none` when empty (open or drained-closed). Pair with `is_closed` to tell empty-open from drained-closed               |
+| `Channel.receive(channel)`                           | `(channel<T>)`                      | `result<T>`            | Blocking receive; fail once the channel is closed and drained                                                                                                      |
+| `Channel.receive_all(channel)`                       | `(channel<T>)`                      | `array<T>`             | Take every value buffered right now, without blocking                                                                                                              |
+| `Channel.receive_timeout(channel, milliseconds)`     | `(channel<T>, integer)`             | `result<T>`            | Timed receive; fail on timeout or once the channel is closed and drained                                                                                           |
+| `Channel.select(channels)`                           | `(array<channel<T>>)`               | `result<(integer, T)>` | Wait for a value on any channel; returns `(index, value)`; fail if every channel is closed and drained                                                             |
+| `Channel.send(channel, value)`                       | `(channel<T>, T)`                   | `boolean`              | Blocking send (waits while a buffered channel is full); returns `false` if the channel is closed                                                                   |
+| `Channel.send_all(channel, values)`                  | `(channel<T>, array<T>)`            | `integer`              | Blocking-send each element in order; returns the count sent, stopping early if the channel closes mid-send                                                         |
+| `Channel.send_timeout(channel, value, milliseconds)` | `(channel<T>, T, integer)`          | `result<boolean>`      | Timed send; fail on timeout or if the channel is closed                                                                                                            |
+| `Channel.try_receive(channel)`                       | `(channel<T>)`                      | `result<T>`            | Non-blocking receive; fail when no value is buffered or the channel is closed and drained                                                                          |
+| `Channel.try_send(channel, value)`                   | `(channel<T>, T)`                   | `boolean`              | Non-blocking send; returns `false` if the channel is full or closed                                                                                                |
 
 Values are deep-copied on send to prevent shared mutable state between tasks.
 
-**Channel Error Types:**
+**Closed, empty, and timed-out channels:**
 
-Channel operations use typed exceptions instead of result types for error conditions:
+Closing a channel stops further sends, but receivers still get every value that was buffered before the close. Channel functions report a closed, empty, or timed-out channel through their return value rather than a runtime error, so handle it like any other `result<T>`:
 
-| Exception            | Thrown When                                                 |
-| -------------------- | ----------------------------------------------------------- |
-| `ChannelClosedError` | Sending to or receiving from a channel that has been closed |
-| `ChannelFullError`   | Non-blocking send (`try_send`) on a full buffered channel   |
-| `ChannelEmptyError`  | Non-blocking receive (`try_receive`) on an empty channel    |
+| Situation                              | Result                                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Send to a closed channel               | `send` and `try_send` return `false`; `send_timeout` fails with `"…: channel closed"`       |
+| Receive from a closed, drained channel | `receive`, `try_receive`, `receive_timeout`, and `select` fail                              |
+| No value buffered yet                  | `try_receive` fails with `"Channel.try_receive: no value available"`; `poll` returns `none` |
+| Timeout elapsed                        | `send_timeout` and `receive_timeout` fail with `"…: timeout"`                               |
+| Buffered channel full                  | `try_send` returns `false`; `send` waits for room                                           |
 
-These are runtime errors catchable with `try`/`catch`. Use `Channel.is_closed(channel)` to check channel state without throwing.
+The only runtime errors are invalid arguments — a `new_buffered` capacity that is not positive or exceeds the maximum queue size, or a negative timeout — and an unbounded channel reaching the maximum queue size (`LUMA_LIMIT_MAX_CHANNEL_QUEUE_SIZE`, default 1,000,000) during a send.
+
+```luma
+channel<integer> ch = Channel.new_buffered(2)
+_ = Channel.send(ch, 1)
+Channel.close(ch)
+
+result<integer> first = Channel.receive(ch)  # success(1) — buffered before the close
+result<integer> second = Channel.receive(ch) # failure("Channel.receive: channel closed")
+```
 
 ## 6 — Compression
 

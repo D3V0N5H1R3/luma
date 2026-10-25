@@ -1868,7 +1868,7 @@ Analysis-phase errors (syntax, type, compile, lint) are represented as `Diagnost
 Runtime errors in Luma are surfaced through two mechanisms:
 
 - **`result<T>` values** — Functions that can fail return `result<T>`. The caller handles the failure explicitly via `match`, `??`, `Result.unwrap_or`, or `Result.is_success`. This is the primary and preferred mechanism.
-- **Hard runtime errors** — Conditions that cannot be expressed as `result<T>` (division by zero on raw arithmetic, index out of bounds with `[]`, `Result.unwrap` on a `failure` value) terminate execution immediately with a `RuntimeError` including the full source location. Channel operations use typed exception subclasses (`ChannelClosedError`, `ChannelFullError`, `ChannelEmptyError`) that inherit from `RuntimeError`.
+- **Hard runtime errors** — Conditions that cannot be expressed as `result<T>` (division by zero on raw arithmetic, index out of bounds with `[]`, `Result.unwrap` on a `failure` value) terminate execution immediately with a `RuntimeError` including the full source location. The channel layer signals closed, full, and empty channels internally with `RuntimeError` subclasses (`ChannelClosedError`, `ChannelFullError`, `ChannelEmptyError`); the `Channel` module translates them into `false` or `failure` return values, so only an unbounded channel reaching its maximum queue size surfaces as a runtime error.
 
 The interpreter does not expose exceptions to user code. C++ exceptions are used only internally for control flow (break, continue, return) and are caught at the appropriate scope boundary.
 

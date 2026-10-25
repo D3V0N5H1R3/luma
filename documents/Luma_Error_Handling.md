@@ -194,28 +194,18 @@ Runtime errors represent conditions that should never occur in a correct program
 
 Common sources:
 
-| Source                           | Example                                         |
-| -------------------------------- | ----------------------------------------------- |
-| Division by zero                 | `integer x = 0; integer r = 10 / x`             |
-| Out-of-bounds array access       | `names[99]` when the array has fewer elements   |
-| `assert` failure                 | `assert value >= 0, "must be non-negative"`     |
-| `Result.unwrap` on `failure`     | Calling `Result.unwrap` without checking first  |
-| `trusted_downcast` type mismatch | `trusted_downcast<Dog>` on a `Cat` value        |
-| Maximum recursion depth          | Call stack exceeds the maximum depth            |
-| Integer overflow                 | `integer i = 9223372036854775807; i++`          |
-| Channel closed                   | `Channel.send(ch, v)` after `Channel.close(ch)` |
-| Channel full (non-blocking)      | `Channel.try_send(ch, v)` when buffer is full   |
-| Channel empty (non-blocking)     | `Channel.try_receive(ch)` when buffer is empty  |
+| Source                           | Example                                                      |
+| -------------------------------- | ------------------------------------------------------------ |
+| Division by zero                 | `integer x = 0; integer r = 10 / x`                          |
+| Out-of-bounds array access       | `names[99]` when the array has fewer elements                |
+| `assert` failure                 | `assert value >= 0, "must be non-negative"`                  |
+| `Result.unwrap` on `failure`     | Calling `Result.unwrap` without checking first               |
+| `trusted_downcast` type mismatch | `trusted_downcast<Dog>` on a `Cat` value                     |
+| Maximum recursion depth          | Call stack exceeds the maximum depth                         |
+| Integer overflow                 | `integer i = 9223372036854775807; i++`                       |
+| Unbounded channel at capacity    | `Channel.send(ch, v)` once `ch` holds the maximum queue size |
 
-The channel module uses three typed exception classes for error signalling:
-
-| Exception            | Description                                           |
-| -------------------- | ----------------------------------------------------- |
-| `ChannelClosedError` | Operating on a channel that has been closed           |
-| `ChannelFullError`   | Non-blocking send when the channel buffer is full     |
-| `ChannelEmptyError`  | Non-blocking receive when the channel buffer is empty |
-
-Use `try`/`catch` to recover from these where recovery is meaningful — see [§5](#5--try--catch--finally).
+Closed, empty, and full channels are **not** runtime errors: channel functions report them through their return value — `false` from `send`/`try_send`, a `failure` from `receive`, `try_receive`, `receive_timeout`, `send_timeout`, and `select`. See the [Channel section of the Standard Library Reference](Luma_Standard_Library_Reference.md#5--channel).
 
 Note: `downcast<T>` is an exception to this rule — it is a safe operation that returns `result<T>` rather than throwing. `trusted_downcast<T>` is the unsafe variant that throws a RuntimeError on mismatch.
 
