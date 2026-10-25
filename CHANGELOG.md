@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Build — DEB package dependencies are derived from the built binaries** via `dpkg-shlibdeps` when available, replacing the stale `libc6 (>= 2.31)` floor.
 - **Build — configuring inside the source directory is now rejected**, and editing `VERSION` triggers a reconfigure.
 - **Tooling — C++ formatting now requires clang-format 20 or newer** (previously 18). `.clang-format` uses the clang-format 20 option spellings, which older versions reject; the CI gate, Dev Container, Git and agent hooks, `lint.py` / `format.py`, and the `format` target all require 20, and skip or fail with a clear message on older versions. clang-tidy stays pinned to 18, and the CI clang-tidy job no longer floats with the `ubuntu-latest` image.
+- **Benchmarks — short cases are no longer dominated by timer resolution.** `DateTime.milliseconds_since_start()` ticks in whole milliseconds, so many cases finished in 0–2 ms and reported noise. `time_it` now treats the requested iteration count as a minimum and scales up any run shorter than 30 ms; the `iterations` column reports the count actually timed. A new "luma hello world (bytecode cache hit)" startup case separates compile cost from cache loading, and "Math statistical (10 elem)" is renamed "Statistics mean/median/stddev (10 elem)". Refresh the CI benchmark baseline once after upgrading.
 
 ### Fixed
 
@@ -33,6 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Scripts — `run_luma_examples.py` no longer crashes on Linux/macOS when an example times out after printing output.** The partial output arrives as bytes there even in text mode; it is now decoded and shown in the failure report.
 - **Scripts — `bump_version.py` is all-or-nothing.** Every file is validated before any is written, so a missing version field no longer leaves a partial bump, and documentation references only match whole version numbers (bumping `0.15` no longer rewrites `10.15` or `0.150`).
 - **Scripts — `generate_coverage.py` bounds its build to the CPU count** instead of an unlimited `make -j`, which could exhaust memory.
+- **Benchmarks — several cases measured the wrong work.** The KeyValueStore read cases ran against an empty store because the copy-on-write result of every `set`/`remove` was discarded; the startup cases timed bytecode-cache hits instead of compilation and left `.lumc` files in the working directory; "Encoder base64 roundtrip" only encoded; and "Hash.verify" also timed computing the reference hash.
 
 ### Security
 

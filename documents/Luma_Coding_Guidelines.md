@@ -271,16 +271,17 @@ function Score lookup(UserId id) {
 
 ### Integer Versus Number
 
-`integer` and `number` are distinct types. Integer division truncates; mixed arithmetic promotes the integer to a number.
+`integer` and `number` are distinct types. Division with `/` always yields a `number`, even for two `integer` operands; use `//` for integer (floor) division. Mixed arithmetic promotes the integer to a number.
 
 ```luma
-7 / 2   # 3 (integer division, truncates toward zero)
-7 // 2  # 3 (integer division — explicit, integer-only operator)
+7 / 2   # 3.5 (true division — always a number)
+7 // 2  # 3 (integer floor division — integer-only operator)
+-7 // 2 # -4 (floor division rounds toward negative infinity)
 7.0 / 2 # 3.5 (number division, integer 2 promoted)
 7 / 2.0 # 3.5 (number division, integer 7 promoted)
 ```
 
-Use `//` when both operands are `integer` and you want to make the integer-division intent explicit in the code.
+Use `//` when both operands are `integer` and you need an `integer` result — assigning the result of `/` to an `integer` is a type error.
 
 **Rule: `integer` is for indices and range bounds.** Use `integer` for values that index into a collection or string (array subscripts, string offsets, loop counters used as indices) and for range end-points (`0..n`). Use `number` for everything else — counts, sizes, quantities, scores, IDs, measurements, and mathematical computations. This makes intent immediately visible: a variable typed `integer` addresses a position or delimits a range; a variable typed `number` holds a value.
 
@@ -520,10 +521,10 @@ result<number> final = safe_divide(100.0, 5.0)
 
 ### Never Ignore Results
 
-Every `result<T>` must be handled — matched, unwrapped with a default (`??`), or propagated (`?`). Silently dropping a result hides errors. The type checker emits a warning when a `result<T>` return value is discarded. Assign to `_` to explicitly acknowledge and suppress the warning.
+Every `result<T>` must be handled — matched, unwrapped with a default (`??`), or propagated (`?`). Silently dropping a result hides errors, so discarding a `result<T>` return value is a compile error. Assign to `_` to explicitly acknowledge and discard it.
 
 ```luma
-_ = parse(input) # explicitly discard — warning suppressed
+_ = parse(input) # explicitly discard
 ```
 
 ### `optional<T>`
@@ -1277,21 +1278,23 @@ Dictionary.get(scores, "alice")
 
 ### Tasks
 
-Use `spawn` to run a function in the background. Always `await` the task to retrieve its result.
+Use `spawn` inside a `task_scope` to run a function in the background, and `await` the task to retrieve its result.
 
 ```luma
-task<number> t = spawn calculate(data)
+task_scope {
+    task<number> t = spawn calculate(data)
 
-# Do other work while the task runs
+    # Do other work while the task runs
 
-number result = await t
+    number total = await t
+}
 ```
 
 Tasks receive a deep copy of their environment. They do not share mutable state with the spawning scope. Communicate between tasks using channels.
 
 ### Structured Concurrency
 
-Prefer `task_scope` over bare `spawn`/`await` to ensure all tasks complete before continuing. A `task_scope` block collects child results in spawn order and cancels remaining siblings on first failure.
+A `task_scope` block ensures all tasks complete before continuing. It collects child results in spawn order and cancels remaining siblings on first failure.
 
 ```luma
 array<number> results = task_scope {
@@ -1301,7 +1304,7 @@ array<number> results = task_scope {
 }
 ```
 
-Using `spawn` outside a `task_scope` is allowed but produces a type-checker warning. Fire-and-forget tasks are still permitted when structured lifetimes are not needed.
+Using `spawn` outside a `task_scope` is a compile error, so no task can outlive the scope that started it.
 
 ### Cooperative Cancellation
 
@@ -1330,14 +1333,14 @@ task_scope {
 Channels are typed, thread-safe message queues.
 
 ```luma
-# Unbuffered — send blocks until a receiver is ready
+# Unbounded — send never blocks
 channel<integer> ch = Channel.new()
 
 # Buffered — allows limited queueing
-channel<integer> ch = Channel.new_buffered(10)
+channel<integer> buffered = Channel.new_buffered(10)
 
-Channel.send(ch, 42)
-integer msg = Channel.receive(ch)
+_ = Channel.send(buffered, 42)
+result<integer> msg = Channel.receive(buffered) # failure once closed and drained
 ```
 
 Values are deep-copied on send. The sender and receiver work with independent copies.

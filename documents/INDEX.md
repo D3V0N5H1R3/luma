@@ -22,26 +22,26 @@ Section-level table of contents for the reference documents in this directory. U
 | 3 — Formatting and Whitespace           | 92–137    |
 | 4 — Comments                            | 141–181   |
 | 5 — Variables and Mutability            | 185–234   |
-| 6 — Type Annotations                    | 238–312   |
-| 7 — Functions                           | 316–366   |
-| 8 — Control Flow                        | 370–430   |
-| 9 — Error Handling                      | 434–590   |
-| 10 — Match Expressions                  | 594–682   |
-| 11 — Collections                        | 686–781   |
-| 12 — Strings                            | 785–834   |
-| 13 — Pipe Operator                      | 838–900   |
-| 14 — Lambdas and Higher-Order Functions | 904–943   |
-| 15 — Records                            | 947–1015  |
-| 16 — Choice Types                       | 1019–1096 |
-| 17 — Choice Types — Advanced            | 1100–1113 |
-| 18 — Interfaces                         | 1117–1140 |
-| 19 — Namespaces                         | 1144–1272 |
-| 20 — Concurrency                        | 1276–1343 |
-| 21 — Testing                            | 1347–1443 |
-| 22 — File Organisation                  | 1447–1529 |
-| 23 — Anti-Patterns                      | 1533–1674 |
-| 24 — Security and Resource Limits       | 1678–1701 |
-| See Also                                | 1705–1713 |
+| 6 — Type Annotations                    | 238–313   |
+| 7 — Functions                           | 317–367   |
+| 8 — Control Flow                        | 371–431   |
+| 9 — Error Handling                      | 435–591   |
+| 10 — Match Expressions                  | 595–683   |
+| 11 — Collections                        | 687–782   |
+| 12 — Strings                            | 786–835   |
+| 13 — Pipe Operator                      | 839–901   |
+| 14 — Lambdas and Higher-Order Functions | 905–944   |
+| 15 — Records                            | 948–1016  |
+| 16 — Choice Types                       | 1020–1097 |
+| 17 — Choice Types — Advanced            | 1101–1114 |
+| 18 — Interfaces                         | 1118–1141 |
+| 19 — Namespaces                         | 1145–1273 |
+| 20 — Concurrency                        | 1277–1346 |
+| 21 — Testing                            | 1350–1446 |
+| 22 — File Organisation                  | 1450–1532 |
+| 23 — Anti-Patterns                      | 1536–1677 |
+| 24 — Security and Resource Limits       | 1681–1704 |
+| See Also                                | 1708–1716 |
 
 ## Luma_Concurrent_Debugging_Guide.md
 

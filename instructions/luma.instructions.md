@@ -70,7 +70,7 @@ function void main() {
 
 `boolean`, `integer`, `number`, `string`.
 
-- `integer` and `number` are distinct. Integer division truncates; mixed arithmetic promotes integers.
+- `integer` and `number` are distinct. `/` always yields a `number` (`7 / 2 == 3.5`); use `//` for integer floor division. Mixed arithmetic promotes integers.
 - **`integer` is for indices and range bounds.** Use `integer` for array subscripts, string offsets, loop counters that index into collections, and range end-points (`0..n`). Use `number` for all other numeric values — counts, sizes, quantities, scores, IDs, measurements, and computations.
 
 ### Collections
@@ -91,7 +91,7 @@ function void main() {
 
 - `result<T>` — either `success(value)` or `failure(message)`. Primary error-handling mechanism.
 - `optional<T>` — either `some(value)` or `none`. Use to represent values that may be absent.
-    - Match exhaustively with `some(x)` and `none` arms, or unwrap with `??`.
+    - Match exhaustively with `case some(x)` and `case none` arms, or unwrap with `??`.
 
 ---
 
@@ -329,16 +329,18 @@ The interpreter enforces limits on pending tasks (100,000), open sockets (1,000)
 
 ### Spawn and Await
 
-Use `spawn` to run a function call asynchronously and `await` to retrieve the result.
+Use `spawn` inside a `task_scope` to run a function call asynchronously and `await` to retrieve the result.
 
 ```luma
-task<integer> t = spawn compute(42)
-integer result = await t
+task_scope {
+    task<integer> t = spawn compute(42)
+    integer value = await t
+}
 ```
 
 ### Structured Concurrency with `task_scope`
 
-Prefer `task_scope` over bare `spawn`/`await`. A `task_scope` block waits for all spawned tasks, cancels siblings on first failure, and returns an `array` of results.
+A `task_scope` block waits for all spawned tasks, cancels siblings on first failure, and returns an `array` of results.
 
 ```luma
 array<integer> results = task_scope {
@@ -349,7 +351,7 @@ array<integer> results = task_scope {
 ```
 
 - `task_scope` blocks can be nested; inner scopes are independent of outer scopes.
-- The type checker emits a warning for `spawn` outside a `task_scope`.
+- `spawn` outside a `task_scope` is a compile error.
 - Use `Task.cancel(t)` and `Task.is_cancelled(t)` for cooperative cancellation.
 
 ### Channels
@@ -359,7 +361,7 @@ Use channels for inter-task communication.
 ```luma
 channel<integer> ch = Channel.new()
 boolean _ = Channel.send(ch, 42)
-integer received = Channel.receive(ch)
+result<integer> received = Channel.receive(ch) # failure once closed and drained
 ```
 
 ---

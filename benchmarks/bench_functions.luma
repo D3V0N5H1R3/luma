@@ -10,6 +10,7 @@ function integer bench_fib(integer n) {
     if n <= 1 {
         return n
     }
+
     return bench_fib(n - 1) + bench_fib(n - 2)
 }
 
@@ -29,6 +30,7 @@ function integer bench_tail_loop(integer n, integer acc) {
     if n <= 0 {
         return acc
     }
+
     return bench_tail_loop(n - 1, acc + 1)
 }
 
