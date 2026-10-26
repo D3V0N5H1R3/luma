@@ -150,16 +150,16 @@ Section-level table of contents for the reference documents in this directory. U
 | 12 — Usage                      | 212–264   |
 | 13 — Editor Integration         | 268–276   |
 | 14 — File Layout                | 280–435   |
-| 15 — Module Responsibilities    | 439–857   |
-| 16 — Data Flow                  | 861–982   |
-| 17 — JSON-RPC Dispatch          | 986–1025  |
-| 18 — Capability Negotiation     | 1029–1076 |
-| 19 — Stdlib Signature Access    | 1080–1089 |
-| 20 — Build Integration          | 1093–1127 |
-| 21 — Error Handling             | 1131–1138 |
-| 22 — Logging                    | 1142–1151 |
-| 23 — Platform-Specific Handling | 1155–1166 |
-| See Also                        | 1170–1176 |
+| 15 — Module Responsibilities    | 439–854   |
+| 16 — Data Flow                  | 858–979   |
+| 17 — JSON-RPC Dispatch          | 983–1022  |
+| 18 — Capability Negotiation     | 1026–1073 |
+| 19 — Stdlib Signature Access    | 1077–1086 |
+| 20 — Build Integration          | 1090–1124 |
+| 21 — Error Handling             | 1128–1135 |
+| 22 — Logging                    | 1139–1148 |
+| 23 — Platform-Specific Handling | 1152–1163 |
+| See Also                        | 1167–1173 |
 
 ## Luma_Manual_Tests.md
 

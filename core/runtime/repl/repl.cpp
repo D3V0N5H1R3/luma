@@ -643,7 +643,7 @@ std::vector<std::string> build_repl_completions() {
         completions.emplace_back(name);
 
         // Also add just the module name prefix.
-        if (const auto split = split_module(name)) {
+        if (const auto split = symbols::split_module(name)) {
             completions.emplace_back(split->first);
         }
     }

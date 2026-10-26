@@ -10,7 +10,7 @@ void register_channel_functions(std::vector<FunctionSpec>& specs, const ModuleBu
             m.fn("close", 1, "(channel: channel<T>)", R::void_type(), {p.channel_any}),
             m.fn("capacity", 1, "(channel: channel<T>)", R::optional(R::integer_type()),
                  {p.channel_any}),
-            m.fn("consume", 2, "(channel: channel<T>, function: func(T) -> void)",
+            m.fn("consume", 2, "(channel: channel<T>, function: function(T) -> void)",
                  R::result_integer(), {p.channel_any, p.func}),
             m.fn("is_closed", 1, "(channel: channel<T>)", R::boolean_type(), {p.channel_any}),
             m.fn("is_empty", 1, "(channel: channel<T>)", R::boolean_type(), {p.channel_any}),

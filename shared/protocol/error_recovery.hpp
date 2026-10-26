@@ -30,8 +30,10 @@
 //
 //   TRANSIENT (log and continue to the next message)
 //     • protocol::ParseError (other than ResyncError) — a single message
-//       had bad framing or invalid JSON.  The transport layer resyncs to
-//       the next Content-Length boundary automatically (up to 1 000 lines).
+//       had bad framing.  The transport resyncs to the next
+//       Content-Length boundary automatically (up to 1 000 lines).
+//       Oversized and invalid-JSON messages never reach the loop as
+//       exceptions: the transport skips them in place (see below).
 //     • Handler/dispatch exceptions — a bug or unexpected input in
 //       request processing.  The server sends an error response
 //       (DAP) or logs (LSP) and continues.
@@ -40,11 +42,15 @@
 //
 // ─── Recovery mechanisms ─────────────────────────────────────────────
 //
-// 1. Transport-level resync (Transport::resync_to_next_message)
-//    After a parse error, the transport scans forward discarding
-//    bytes until a valid Content-Length header is found, then buffers
-//    it for the next read_message() call.  This is capped at
-//    k_default_max_resync_iterations (1 000 lines) to prevent
+// 1. Transport-level recovery (Transport::read_message)
+//    An oversized message (Content-Length above the limit) is skipped by
+//    discarding exactly its body bytes, and an invalid-JSON body has
+//    already been read in full, so both leave the stream aligned on the
+//    next frame.  Only malformed headers, where the frame boundary is
+//    unknown, trigger Transport::resync_to_next_message, which scans
+//    forward discarding lines until a valid Content-Length header is
+//    found and buffers it for the next read_message() call.  The scan is
+//    capped at k_default_max_resync_iterations (1 000 lines) to prevent
 //    runaway scanning on non-protocol streams.
 //
 // 2. Consecutive-error tracking (this header)

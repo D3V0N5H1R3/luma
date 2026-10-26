@@ -2076,7 +2076,7 @@ NativeFunctionValue {
 }
 ```
 
-Type information does not live on the runtime value. The `StdlibCatalog` (`shared/stdlib/stdlib_catalog.hpp`) is the single source of truth for every function's arity, parameter types, return type, and sandbox capability; the type checker and the language server both read it, and the conformance test checks that every registered function appears in it.
+Type information does not live on the runtime value. The `StdlibCatalog` (`shared/stdlib/stdlib_catalog.hpp`) is the single source of truth for every function's arity, parameter types, return type, and OS capability tag; the type checker and the language server both read it, and the conformance test checks that every registered function appears in it. The capability tag is metadata rather than the sandbox gate: sandbox enforcement happens at registration (the stdlib registry's `kModules` table), the catalog only derives the blocked-module set used to word the sandbox error, and the conformance test checks that the two agree — see [Luma_Sandbox.md](Luma_Sandbox.md).
 
 Modules register functions through a fluent builder (`function_builder.hpp`):
 

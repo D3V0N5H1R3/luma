@@ -12,8 +12,7 @@
 
 namespace luma::dap {
 
-// Concrete stdin/stdout transport with thread-safe writes and
-// optional read timeout.
+// Concrete stdin/stdout transport with thread-safe writes.
 using Transport = protocol::StdioTransport;
 
 } // namespace luma::dap

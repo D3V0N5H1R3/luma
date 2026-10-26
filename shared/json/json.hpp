@@ -2,14 +2,18 @@
 #define LUMA_JSON_HPP
 
 // All includes below are required in the header:
+//   <concepts>     — JsonExtractible and the JsonBuilder constraints
+//   <cstddef>      — std::size_t (parse max_depth)
 //   <cstdint>      — int64_t in variant
-//   <concepts>     — std::constructible_from / std::same_as in JsonBuilder
 //   <map>          — ObjectType = std::map<...>
+//   <optional>     — try_as / try_get results
 //   <string>       — key type and string variant alternative
 //   <string_view>  — operator[] and has() parameter types
 //   <variant>      — JsonValue::data_
 //   <vector>       — ArrayType = std::vector<JsonValue>
+//   narrow_int.hpp — try_narrow_int for try_as<int>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <optional>
@@ -47,7 +51,8 @@ public:
     explicit JsonValue(std::string value) noexcept;
     explicit JsonValue(const char* value);
     explicit JsonValue(ArrayType value) noexcept;
-    explicit JsonValue(ObjectType value) noexcept;
+    // Not noexcept: MSVC's std::map move constructor allocates a sentinel node.
+    explicit JsonValue(ObjectType value);
 
     // Type queries.
     [[nodiscard]] bool is_null() const noexcept;
@@ -131,11 +136,17 @@ public:
         return try_get<T>(key).value_or(default_val);
     }
 
-    // Serialisation to JSON string.
+    // Serialisation to compact JSON.  Doubles use the shortest round-trip form,
+    // so a whole-number double serialises without a fraction (3.0 → "3") and
+    // parses back as an integer; read numbers with as_number(), which accepts
+    // both.  Throws std::runtime_error for NaN/Infinity or for a value nested
+    // deeper than CompileTimeLimits::max_json_depth.
     [[nodiscard]] std::string to_string() const;
 
     // Parse a JSON string into a JsonValue.
-    // max_depth controls the maximum nesting depth for arrays/objects.
+    // max_depth controls the maximum nesting depth for arrays/objects; it is
+    // capped at CompileTimeLimits::max_json_depth (128), the serializer's
+    // limit, so every parsed value can be serialised again.
     [[nodiscard]] static JsonValue parse(std::string_view input, std::size_t max_depth = 128);
 
 private:

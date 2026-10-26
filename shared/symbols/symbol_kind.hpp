@@ -1,11 +1,11 @@
-#ifndef LUMA_SHARED_SYMBOL_KIND_HPP
-#define LUMA_SHARED_SYMBOL_KIND_HPP
+#ifndef LUMA_SYMBOLS_SYMBOL_KIND_HPP
+#define LUMA_SYMBOLS_SYMBOL_KIND_HPP
 
 #include <cstdint>
 #include <ostream>
 #include <string_view>
 
-namespace luma {
+namespace luma::symbols {
 
 // ═══════════════════════════════════════════════════════════════════
 // SymbolKind — classification of named symbols
@@ -19,6 +19,7 @@ namespace luma {
 // (https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#symbolKind)
 // so the language server can use them directly without mapping.
 
+// Enumerators are listed in ascending value order.
 enum class SymbolKind : uint8_t {
     Namespace = 3,
     Field = 8,
@@ -27,8 +28,8 @@ enum class SymbolKind : uint8_t {
     Function = 12,
     Variable = 13,
     Constant = 14,
-    Struct = 23,    // Record type
     TypeAlias = 19, // Object in LSP terms
+    Struct = 23,    // Record type
 };
 
 // Convert SymbolKind to its integer value for LSP protocol.
@@ -53,10 +54,10 @@ enum class SymbolKind : uint8_t {
             return "Variable";
         case SymbolKind::Constant:
             return "Constant";
-        case SymbolKind::Struct:
-            return "Struct";
         case SymbolKind::TypeAlias:
             return "TypeAlias";
+        case SymbolKind::Struct:
+            return "Struct";
     }
 
     // No default case above: -Wswitch then flags any newly added enumerator.
@@ -68,6 +69,6 @@ inline std::ostream& operator<<(std::ostream& os, SymbolKind kind) {
     return os << symbol_kind_name(kind);
 }
 
-} // namespace luma
+} // namespace luma::symbols
 
-#endif // LUMA_SHARED_SYMBOL_KIND_HPP
+#endif // LUMA_SYMBOLS_SYMBOL_KIND_HPP

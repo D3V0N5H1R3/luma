@@ -47,6 +47,33 @@ static void test_result_none_and_result_void_are_interchangeable() {
     ASSERT_TRUE(fails("result<integer> r = Process.set_environment_variable(\"A\", \"1\")\n"));
 }
 
+// ─── Stdlib records sharing a short name ───
+
+// Math.Interval and DateTime.Interval are both named "Interval" but have
+// different fields, so they must be distinct types.
+static void test_math_and_datetime_intervals_are_distinct_types() {
+    ASSERT_TRUE(fails("function result<number> f() {\n"
+                      "  DateTime.Interval wrong = Math.interval(1.0, 5.0)?\n"
+                      "  return success(wrong.start)\n"
+                      "}\n"));
+    ASSERT_TRUE(fails("function result<number> f() {\n"
+                      "  Math.Interval wrong = DateTime.interval(1.0, 5.0)?\n"
+                      "  return success(wrong.minimum)\n"
+                      "}\n"));
+}
+
+// A field that only the other interval record has is rejected statically.
+static void test_math_interval_field_access_is_checked() {
+    ASSERT_TRUE(passes("function result<number> f() {\n"
+                       "  Math.Interval range = Math.interval(1.0, 5.0)?\n"
+                       "  return success(range.maximum - range.minimum)\n"
+                       "}\n"));
+    ASSERT_TRUE(fails("function result<number> f() {\n"
+                      "  Math.Interval range = Math.interval(1.0, 5.0)?\n"
+                      "  return success(range.start)\n"
+                      "}\n"));
+}
+
 // ─── None type ───
 
 // none is not assignable to a concrete type.
@@ -860,6 +887,8 @@ int main() {
     RUN(test_statistics_variance_returns_result_number);
     RUN(test_statistics_standard_deviation_returns_result_number);
     RUN(test_result_none_and_result_void_are_interchangeable);
+    RUN(test_math_and_datetime_intervals_are_distinct_types);
+    RUN(test_math_interval_field_access_is_checked);
 
     // ─── None/Optional type ───
 

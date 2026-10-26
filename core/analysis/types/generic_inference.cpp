@@ -44,8 +44,8 @@ template <typename Map>
                                 const std::string& current_namespace) {
     auto it = map.find(name);
 
-    if (it == map.end() && !current_namespace.empty() && !is_qualified_name(name)) {
-        it = map.find(make_qualified(current_namespace, name));
+    if (it == map.end() && !current_namespace.empty() && !symbols::is_qualified_name(name)) {
+        it = map.find(symbols::make_qualified(current_namespace, name));
     }
 
     return it;

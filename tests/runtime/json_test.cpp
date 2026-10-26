@@ -7,6 +7,7 @@
 
 #include "json/json.hpp"
 #include "json/json_helpers.hpp"
+#include "parse_error.hpp"
 #include "test_framework.hpp"
 
 using namespace luma::json;
@@ -86,11 +87,9 @@ static void test_serialise_deeply_nested_is_depth_bounded() {
     // Regression: JsonValue::serialise() recursed once per nesting level with no
     // depth guard, so a programmatically-built deep value (the parser bounds
     // parse depth, but values can also be constructed directly) could overflow
-    // the native stack.  serialise() now collapses nodes past
-    // CompileTimeLimits::max_json_depth (128) to null, mirroring the stdlib
-    // serializer.  A value nested well beyond the cap must therefore serialise
-    // to a truncated string containing the null marker rather than reproducing
-    // every level down to the innermost integer.
+    // the native stack.  serialise() now stops at
+    // CompileTimeLimits::max_json_depth (128) and throws rather than silently
+    // emitting a truncated document.
     JsonValue v{static_cast<int64_t>(1)};
 
     for (int i = 0; i < 300; ++i) {
@@ -99,10 +98,7 @@ static void test_serialise_deeply_nested_is_depth_bounded() {
         v = JsonValue{std::move(arr)};
     }
 
-    const auto s = v.to_string();
-
-    ASSERT_TRUE(s.find("null") != std::string::npos); // truncated at the cap
-    ASSERT_TRUE(s.find('1') == std::string::npos);    // innermost never reached
+    ASSERT_THROWS_WITH_MESSAGE(v.to_string(), "nested deeper than");
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -296,6 +292,37 @@ static void test_parse_array() {
     ASSERT_EQ(v.as_array()[2].as_integer(), 3);
 }
 
+static void test_parse_depth_limit_is_a_json_parse_error() {
+    // The nesting limit is reported like every other syntax failure: as a
+    // positioned luma::JsonParseError, so callers catching the ParseError
+    // hierarchy see it.
+    bool caught = false;
+
+    try {
+        (void)JsonValue::parse("[[[1]]]", 2);
+    } catch (const luma::JsonParseError& e) {
+        caught = true;
+        ASSERT_EQ(e.position(), std::size_t{2});
+        ASSERT_TRUE(std::string{e.what()}.find("maximum nesting depth 2") != std::string::npos);
+    }
+
+    ASSERT_TRUE(caught);
+    ASSERT_TRUE(JsonValue::parse("[[1]]", 2).is_array());
+}
+
+static void test_parse_depth_is_capped_at_serializer_limit() {
+    // A caller-supplied max_depth above the serializer's limit is capped, so
+    // every parsed value can be serialised again.
+    const auto nested = [](int depth) {
+        return std::string(static_cast<std::size_t>(depth), '[') + "1" +
+               std::string(static_cast<std::size_t>(depth), ']');
+    };
+
+    const auto deepest = JsonValue::parse(nested(128), 1000);
+    ASSERT_EQ(deepest.to_string(), nested(128));
+    ASSERT_THROWS(JsonValue::parse(nested(129), 1000));
+}
+
 static void test_parse_nested_array() {
     auto v = JsonValue::parse("[[1, 2], [3]]");
     ASSERT_TRUE(v.is_array());
@@ -441,6 +468,8 @@ int main() {
     RUN(test_parse_string_unicode_escape);
     RUN(test_parse_empty_array);
     RUN(test_parse_array);
+    RUN(test_parse_depth_limit_is_a_json_parse_error);
+    RUN(test_parse_depth_is_capped_at_serializer_limit);
     RUN(test_parse_nested_array);
     RUN(test_parse_empty_object);
     RUN(test_parse_object);

@@ -21,6 +21,7 @@
 #include "runtime/vm/vm.hpp"
 #include "runtime/vm/vm_error_messages.hpp"
 #include "runtime/vm/vm_types.hpp"
+#include "symbols/qualified_name.hpp"
 
 namespace luma {
 
@@ -328,7 +329,16 @@ bool TypeMatcher::matches_simple_type(const Value& val, const TypePattern& patte
     }
 
     if (val.is_record()) {
-        return val.as_record()->type_name == pattern.base;
+        const auto& type_name = val.as_record()->type_name;
+
+        // Most stdlib records carry their short name at runtime ("Rectangle")
+        // while programs spell the type qualified (is<Math.Rectangle>), so a
+        // qualified pattern also matches its bare member — mirroring the type
+        // checker's bare-name record identity.  Records whose short names
+        // collide (Math.Interval / DateTime.Interval) carry the qualified name
+        // at runtime and therefore still only match their own pattern.
+        return type_name == pattern.base || (symbols::is_qualified_name(pattern.base) &&
+                                             type_name == symbols::qualified_member(pattern.base));
     }
 
     return pattern.matches(val.display_type_name());

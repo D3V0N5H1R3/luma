@@ -307,7 +307,7 @@ TypeInfo GenericResolver::infer_call(const FunctionDeclaration& func, std::strin
     auto& context = services_->context();
     const auto saved_namespace = context.current_namespace;
 
-    if (const auto split = split_module(fn_name)) {
+    if (const auto split = symbols::split_module(fn_name)) {
         context.current_namespace = std::string{split->first};
     }
 

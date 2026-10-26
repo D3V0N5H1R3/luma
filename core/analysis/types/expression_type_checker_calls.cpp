@@ -194,7 +194,7 @@ std::optional<TypeInfo> ExpressionTypeChecker::piped_callee_first_param(const Ex
     }
 
     const auto* param_types =
-        tc_.stdlib_handler().get_param_types(make_qualified(ns_name, field.field_name));
+        tc_.stdlib_handler().get_param_types(symbols::make_qualified(ns_name, field.field_name));
 
     // Function-typed stdlib parameters are matched loosely, as for explicit
     // arguments in check_stdlib_function_call().
@@ -255,9 +255,10 @@ TypeInfo ExpressionTypeChecker::visit_pipe(const PipeExpression& expr) {
                         is_declared_callee = true;
 
                         if (!fn_it->second->parameters.empty()) {
-                            check_pipe_first_parameter(fn_it->second->parameters[0],
-                                                       make_qualified(ns_name, field.field_name),
-                                                       left_type, *expr.left, expr.location);
+                            check_pipe_first_parameter(
+                                fn_it->second->parameters[0],
+                                symbols::make_qualified(ns_name, field.field_name), left_type,
+                                *expr.left, expr.location);
                         }
                     }
                 }
@@ -365,8 +366,8 @@ std::string ExpressionTypeChecker::resolve_callee_name(const CallExpression& exp
         const auto& fa = static_cast<const FieldAccessExpression&>(*expr.callee);
 
         if (fa.object->kind == ExpressionKind::Variable) {
-            return make_qualified(static_cast<const VariableExpression&>(*fa.object).name,
-                                  fa.field_name);
+            return symbols::make_qualified(static_cast<const VariableExpression&>(*fa.object).name,
+                                           fa.field_name);
         }
     }
 
@@ -382,7 +383,7 @@ ExpressionTypeChecker::find_declared_function(std::string_view fn_name) const {
     // A bare name is the declared function only while the visible symbol of
     // that name is the function itself: a parameter or local variable that
     // shadows it is a function value, checked by its type alone.
-    if (!is_qualified_name(fn_name)) {
+    if (!symbols::is_qualified_name(fn_name)) {
         const auto* func = tc_.find_function(fn_name);
         const auto* symbol = tc_.lookup_variable(fn_name);
 
@@ -396,7 +397,7 @@ ExpressionTypeChecker::find_declared_function(std::string_view fn_name) const {
     }
 
     // Namespace function called as Namespace.function(...).
-    const auto split = split_module(fn_name);
+    const auto split = symbols::split_module(fn_name);
 
     if (!split) {
         return nullptr;
@@ -640,7 +641,7 @@ ExpressionTypeChecker::check_stdlib_function_call(const CallExpression& expr,
         return std::nullopt;
     }
 
-    const auto full_name = make_qualified(ns.name, fa.field_name);
+    const auto full_name = symbols::make_qualified(ns.name, fa.field_name);
     const auto* ret_type = tc_.stdlib_handler().get_return_type(full_name);
 
     // Check stdlib arity.

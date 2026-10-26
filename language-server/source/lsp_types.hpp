@@ -194,7 +194,7 @@ struct MarkupContent {
 
 struct DocumentSymbol {
     std::string name;
-    luma::SymbolKind kind{luma::SymbolKind::Function};
+    luma::symbols::SymbolKind kind{luma::symbols::SymbolKind::Function};
     Range range;
     Range selection_range;
     std::vector<DocumentSymbol> children;

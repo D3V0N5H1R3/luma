@@ -179,14 +179,11 @@ using detail::ParamShorthands;
          .register_fn = detail::register_order_functions},
     };
 
-    // Approximate total number of stdlib function and constant specs across all
-    // modules (the real count is ~996).  Used only to pre-size the vector and
-    // avoid reallocations during registration; it does not need to be exact but
-    // must stay at or above the real total so the single up-front reserve covers
-    // the whole build — otherwise the per-append reserve in append_specs would
-    // force exact-size (non-geometric) reallocations once the estimate is
-    // exceeded.
-    static constexpr std::size_t k_approx_catalog_size = 1100;
+    // Upper estimate of the stdlib function and constant specs across all
+    // modules (about 1,090 today).  Used only to pre-size the vector; it does
+    // not need to be exact, and append_specs grows the vector geometrically if
+    // the catalog ever outgrows it.
+    static constexpr std::size_t k_approx_catalog_size = 1280;
 
     std::vector<FunctionSpec> specs;
     specs.reserve(k_approx_catalog_size);
@@ -240,8 +237,8 @@ struct DerivedSets { // NOLINT(bugprone-exception-escape)
             sets.constants.insert(name);
         }
 
-        if (!spec.is_safe()) {
-            if (const auto split = split_module(name)) {
+        if (spec.requires_capability()) {
+            if (const auto split = symbols::split_module(name)) {
                 sets.blocked_modules.insert(std::string{split->first});
             }
         }

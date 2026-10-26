@@ -405,7 +405,7 @@ bool ExpressionTypeChecker::check_internal_record_access(const RecordCreationExp
         return false;
     }
 
-    const auto short_name = qualified_member(expr.type_name);
+    const auto short_name = symbols::qualified_member(expr.type_name);
 
     if (type_check_helpers::is_within_namespace(tc_.context().current_namespace, ns)) {
         return false;

@@ -503,21 +503,18 @@ This avoids any third-party JSON dependency. The implementation supports only th
 
 The Content-Length framed stdin/stdout transport is **shared infrastructure**, defined once in `shared/protocol/` as `luma::protocol::StdioTransport` (layered on the `BufferedTransport` / `Transport` base). Both tools re-export it under their own namespace — `luma::lsp::StdioTransport` here and `luma::dap::Transport` in the debugger — so this is its single authoritative description; the [Debugger](Luma_Debugger.md) design document refers back here rather than repeating it.
 
-`StdioTransport` reads `Content-Length` headers from `stdin`, extracts the JSON body, and writes framed messages to `stdout`. Writes are mutex-protected (so the debugger can emit events from background threads), and an optional read timeout lets a server poll for input without blocking indefinitely.
+`StdioTransport` reads `Content-Length` headers from `stdin`, extracts the JSON body, and writes framed messages to `stdout`. Writes are mutex-protected (so the debugger can emit events from background threads). Reads block until data arrives or `stdin` reaches end-of-file — both servers rely on the editor closing the pipe to signal shutdown — and a read interrupted by a signal (`EINTR`) is retried rather than treated as a closed connection.
 
 ```cpp
 namespace luma::protocol {
 
 class StdioTransport : public BufferedTransport {
 public:
-    // Set the read timeout in milliseconds. 0 = no timeout (default).
-    void set_read_timeout(unsigned int timeout_ms);
-
     // Write a JSON message with Content-Length framing to stdout. Thread-safe.
     void write_message(const JsonValue& message) override;
 
 protected:
-    // Read raw bytes from stdin (honours the optional read timeout).
+    // Read raw bytes from stdin; returns 0 at end-of-file.
     [[nodiscard]] std::size_t read_raw(std::span<char> buf) override;
 };
 
@@ -582,8 +579,8 @@ struct MarkupContent {
     std::string value;
 };
 
-// SymbolKind enum values — from shared/symbols/symbol_kind.hpp (luma::SymbolKind).
-// Used directly via luma::SymbolKind and luma::to_lsp_symbol_kind().
+// SymbolKind enum values — from shared/symbols/symbol_kind.hpp (luma::symbols::SymbolKind).
+// Used directly via luma::symbols::SymbolKind and luma::symbols::to_lsp_symbol_kind().
 enum class SymbolKind : uint8_t {
     Namespace = 3,
     Field     = 8,
@@ -598,7 +595,7 @@ enum class SymbolKind : uint8_t {
 
 struct DocumentSymbol {
     std::string name;
-    luma::SymbolKind kind{luma::SymbolKind::Function};
+    luma::symbols::SymbolKind kind{luma::symbols::SymbolKind::Function};
     Range range;
     Range selection_range;
     std::vector<DocumentSymbol> children;
@@ -1159,7 +1156,7 @@ This handling belongs to the shared stdio transport (`shared/protocol/`) and app
 ### Windows
 
 - Each binary sets `stdin` and `stdout` to binary mode at start-up using `_setmode(_fileno(stdin), _O_BINARY)` and `_setmode(_fileno(stdout), _O_BINARY)` to prevent `\r\n` translation that would corrupt `Content-Length` framing. The debugger additionally sets `stderr` to binary mode.
-- The shared transport guards its input polling (`WaitForSingleObject` on Windows, `poll` on POSIX) behind `_WIN32` branches to support its optional read timeout.
+- The shared transport reads `stdin` with `_read` on Windows and `read` on POSIX (retrying on `EINTR`), selected by a `_WIN32` branch.
 
 ### Ubuntu and macOS
 

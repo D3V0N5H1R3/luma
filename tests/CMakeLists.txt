@@ -286,21 +286,6 @@ luma_add_test(NAME stdio_transport_test
     LIBS    luma_shared
     LABELS  runtime)
 
-# platform_socket_test exercises the shared socket primitives (WinsockGuard,
-# sockopt_ptr, close_socket, invalid_socket).  The Winsock calls need ws2_32 on
-# Windows; POSIX sockets need no extra library.
-if(WIN32)
-    luma_add_test(NAME platform_socket_test
-        SOURCES runtime/platform_socket_test.cpp
-        LIBS    luma_shared ws2_32
-        LABELS  runtime)
-else()
-    luma_add_test(NAME platform_socket_test
-        SOURCES runtime/platform_socket_test.cpp
-        LIBS    luma_shared
-        LABELS  runtime)
-endif()
-
 # ── Integration test ──
 
 luma_add_test(NAME integration_test

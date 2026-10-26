@@ -200,7 +200,7 @@ void DeclarationCompiler::emit_qualified_choice_variants(const std::string& type
                                                          const ChoiceDeclaration& choice,
                                                          SourceLocation loc) {
     for (const auto& variant : choice.variants) {
-        auto qualified = make_qualified(type_name, variant.name);
+        auto qualified = symbols::make_qualified(type_name, variant.name);
         auto name_idx = api_.add_name(qualified);
         emit_choice_variant(type_name, variant.name, variant.fields.size(), loc);
         api_.emit_u16(Op::SetGlobal, name_idx, loc);
@@ -228,7 +228,8 @@ void DeclarationCompiler::register_record_declarations(
         for (const auto& inner : ns.declarations) {
             if (inner->kind == DeclarationKind::Record) {
                 const auto& record = static_cast<const RecordDeclaration&>(*inner);
-                table.insert_or_assign(make_qualified(ns.name, record.name), std::cref(record));
+                table.insert_or_assign(symbols::make_qualified(ns.name, record.name),
+                                       std::cref(record));
                 table.try_emplace(record.name, std::cref(record));
             } else if (inner->kind == DeclarationKind::Namespace) {
                 self(static_cast<const NamespaceDeclaration&>(*inner), self);
@@ -261,12 +262,12 @@ void DeclarationCompiler::compile_namespace_declaration(const NamespaceDeclarati
     for (const auto& inner : ns.declarations) {
         if (inner->kind == DeclarationKind::Function) {
             const auto& func = static_cast<const FunctionDeclaration&>(*inner);
-            auto qualified = make_qualified(ns.name, func.name);
+            auto qualified = symbols::make_qualified(ns.name, func.name);
             emit_function_definition(qualified, func);
         } else if (inner->kind == DeclarationKind::Record) {
             // Register the record under its qualified name.
             const auto& record = static_cast<const RecordDeclaration&>(*inner);
-            auto qualified = make_qualified(ns.name, record.name);
+            auto qualified = symbols::make_qualified(ns.name, record.name);
             auto name_idx = api_.add_name(qualified);
 
             api_.emit(Op::None, ns.location);
@@ -282,7 +283,7 @@ void DeclarationCompiler::compile_namespace_declaration(const NamespaceDeclarati
         } else if (inner->kind == DeclarationKind::Choice) {
             // Register choice variants under qualified names.
             const auto& choice = static_cast<const ChoiceDeclaration&>(*inner);
-            auto type_name = make_qualified(ns.name, choice.name);
+            auto type_name = symbols::make_qualified(ns.name, choice.name);
             emit_qualified_choice_variants(type_name, choice, ns.location);
         } else {
             // Recurse for nested declarations.
@@ -297,7 +298,7 @@ void DeclarationCompiler::compile_use_declaration(const UseDeclaration& use_decl
     // Use declarations create global aliases so that bare names
     // resolve to their namespace-qualified counterparts at runtime.
     const auto& path = use_decl.namespace_path;
-    const auto split = split_module(path);
+    const auto split = symbols::split_module(path);
 
     if (!split) {
         compile_wildcard_import(path, use_decl.location);
@@ -337,7 +338,7 @@ void DeclarationCompiler::compile_wildcard_import(const std::string& ns_name, So
 
         if (inner->kind == DeclarationKind::Function) {
             const auto& func = static_cast<const FunctionDeclaration&>(*inner);
-            emit_global_alias(make_qualified(ns->name, func.name), func.name, loc);
+            emit_global_alias(symbols::make_qualified(ns->name, func.name), func.name, loc);
         } else if (inner->kind == DeclarationKind::Record) {
             const auto& rec = static_cast<const RecordDeclaration&>(*inner);
             api_.ctx().record_declarations.declarations.insert_or_assign(rec.name, std::cref(rec));
@@ -402,8 +403,9 @@ void DeclarationCompiler::emit_global_alias(const std::string& qualified, const 
 void DeclarationCompiler::emit_choice_aliases(const std::string& ns_name,
                                               const ChoiceDeclaration& choice, SourceLocation loc) {
     for (const auto& variant : choice.variants) {
-        auto qualified = make_qualified(make_qualified(ns_name, choice.name), variant.name);
-        auto bare = make_qualified(choice.name, variant.name);
+        auto qualified =
+            symbols::make_qualified(symbols::make_qualified(ns_name, choice.name), variant.name);
+        auto bare = symbols::make_qualified(choice.name, variant.name);
         emit_global_alias(qualified, bare, loc);
     }
 }

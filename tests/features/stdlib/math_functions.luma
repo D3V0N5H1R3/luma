@@ -708,6 +708,31 @@ function void test_math_intervals_overlap() {
     assert(!Math.intervals_overlap(base, Result.unwrap(Math.interval(6.0, 9.0))), "disjoint")
 }
 
+@test
+function void test_math_interval_has_its_own_identity() {
+    Math.Interval numeric = Result.unwrap(Math.interval(0.0, 5.0))
+
+    # Math.Interval and DateTime.Interval share a short name but not their fields,
+    # so a numeric range is never mistaken for a timestamp range.
+    assert(is<Math.Interval>(numeric), "is Math.Interval")
+    assert(!is<DateTime.Interval>(numeric), "is not DateTime.Interval")
+
+    mutable boolean matched = false
+    match numeric {
+        case Math.Interval { minimum, maximum } {
+            matched = Math.approximately_equal(maximum - minimum, 5.0, 0.001)
+        }
+    }
+    assert(matched, "record pattern matches Math.Interval")
+}
+
+@test
+function void test_math_rectangle_type_test() {
+    Math.Rectangle rectangle = Math.rectangle(0.0, 0.0, 2.0, 3.0)
+
+    assert(is<Math.Rectangle>(rectangle), "qualified type test matches a stdlib record")
+}
+
 # ─── Math.Angle (unit-safe angle) ─────────────────────────
 
 @test

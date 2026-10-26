@@ -14,19 +14,22 @@
 //       unrecoverably corrupt.  A distinct ParseError subtype so the
 //       classifier can treat it as fatal (see error_recovery.hpp).
 //
-//   Error callback (report_error):
-//     • Transient parse errors in read_message() — a single message
-//       had bad framing or invalid JSON.  The error is reported via
-//       the configured ErrorCallback (defaults to stderr), then the
-//       transport resyncs silently and returns std::nullopt.  The
-//       had_recoverable_read_error() flag distinguishes this from EOF so the
-//       caller can continue to the next message.
+//   Error callback (report_error) — read_message() returns std::nullopt
+//   with had_recoverable_read_error() set, so the caller can continue:
+//     • Oversized message — the Content-Length is known, so exactly that
+//       many body bytes are discarded and the stream stays aligned on the
+//       next frame.  Line-based resync cannot be used here: a JSON body
+//       has no newline, so it would be read as one over-long "header".
+//     • Invalid JSON body — the body was consumed in full, so the stream
+//       is already aligned on the next frame and no resync is needed.
+//     • Malformed headers (missing Content-Length, over-long header line)
+//       — the frame boundary is unknown, so the transport resyncs.
 //
-//   Silent resync (resync_to_next_message):
-//     • After a transient parse error, the transport scans forward
-//       discarding input until the next Content-Length header is found
-//       (up to max_resync_iterations lines).  The found header is
-//       buffered for the next read_message() call.
+//   Resync (resync_to_next_message):
+//     • Scans forward discarding input until the next Content-Length
+//       header is found (up to max_resync_iterations lines, over-long
+//       lines included).  The found header is buffered for the next
+//       read_message() call.
 //
 // See error_recovery.hpp for the full error classification policy,
 // consecutive-error tracking, and the shutdown strategy used by the
@@ -35,6 +38,7 @@
 
 #include "protocol/transport.hpp"
 
+#include <algorithm>
 #include <format>
 #include <iostream>
 #include <utility>
@@ -72,8 +76,7 @@ void Transport::report_error(std::string_view message) {
 }
 
 std::optional<std::size_t> Transport::parse_headers() {
-    std::size_t content_length{0};
-    bool found_length{false};
+    std::optional<std::size_t> content_length;
 
     while (true) {
         // Drain the resync buffer before reading from the stream.
@@ -93,56 +96,76 @@ std::optional<std::size_t> Transport::parse_headers() {
             break;
         }
 
-        // Delegate Content-Length parsing to the free function.
-        auto parsed = try_parse_content_length(*line);
-
-        if (parsed.has_value()) {
-            content_length = *parsed;
-
-            // Sanity check: reject absurdly large messages to prevent OOM.
-            if (content_length > limits_.max_message_bytes) {
-                throw ParseError(std::format("Content-Length {} exceeds limit of {} bytes",
-                                             content_length, limits_.max_message_bytes));
-            }
-
-            found_length = true;
-        }
         // Other headers (e.g. Content-Type) are ignored.
+        if (const auto parsed = try_parse_content_length(*line)) {
+            content_length = parsed;
+        }
     }
 
-    if (!found_length) {
+    if (!content_length.has_value()) {
         throw ParseError("Message missing Content-Length header");
     }
 
     return content_length;
 }
 
+void Transport::discard_exact(std::size_t count) {
+    // Discard in bounded chunks so an absurd Content-Length never turns into
+    // a single giant allocation.
+    constexpr std::size_t k_discard_chunk_bytes = std::size_t{64} * 1024;
+
+    while (count > 0) {
+        const auto chunk = std::min(count, k_discard_chunk_bytes);
+        (void)read_exact(chunk);
+        count -= chunk;
+    }
+}
+
+std::optional<JsonValue> Transport::skip_message(std::string_view reason) {
+    report_error(std::format("luma: transport parse error: {}\n", reason));
+    recoverable_read_error_ = true;
+    return std::nullopt;
+}
+
 std::optional<JsonValue> Transport::read_message() {
     recoverable_read_error_ = false;
 
+    std::string body;
+
     try {
-        auto content_length = parse_headers();
+        const auto content_length = parse_headers();
 
         if (!content_length.has_value()) {
             return std::nullopt; // EOF
         }
 
-        // Read the JSON body.
-        auto body = read_exact(*content_length);
+        if (*content_length > limits_.max_message_bytes) {
+            discard_exact(*content_length);
 
-        return JsonValue::parse(body);
+            return skip_message(std::format("Content-Length {} exceeds limit of {} bytes",
+                                            *content_length, limits_.max_message_bytes));
+        }
+
+        body = read_exact(*content_length);
     } catch (const ConnectionClosed&) {
         // Fatal I/O failure — let it propagate so the server loop can exit.
         throw;
     } catch (const std::exception& e) {
-        // Recoverable parse error — report via callback (not re-throw) so
-        // callers see nullopt instead of a double-reported error.  If resync
-        // itself fails, that exception propagates — the stream is
-        // unrecoverably corrupt.
+        // Malformed framing: the message boundary is unknown, so scan ahead to
+        // the next header.  If resync itself fails, that exception propagates —
+        // the stream is unrecoverably corrupt.
         report_error(std::format("luma: transport parse error: {}\n", e.what()));
         resync_to_next_message();
         recoverable_read_error_ = true;
         return std::nullopt;
+    }
+
+    try {
+        return JsonValue::parse(body);
+    } catch (const std::exception& e) {
+        // The body was read in full, so the stream already sits on the next
+        // frame — skip this message without resyncing.
+        return skip_message(e.what());
     }
 }
 
@@ -152,14 +175,24 @@ void Transport::resync_to_next_message() {
     // process it correctly without losing the message boundary.
     //
     // Iteration cap: limits_.max_resync_iterations (default 1000) prevents
-    // runaway scanning on corrupt or non-protocol streams.  If the cap is
-    // reached without finding a valid header, ParseError is thrown to signal
-    // that the transport is unrecoverably desynchronised.
+    // runaway scanning on corrupt or non-protocol streams.  An over-long line
+    // is discarded like any other non-header line and counts as one
+    // iteration.  If the cap is reached without finding a valid header,
+    // ResyncError is thrown to signal that the transport is unrecoverably
+    // desynchronised.
     for (std::size_t iteration = 0; iteration < limits_.max_resync_iterations; ++iteration) {
-        auto line = read_line();
+        std::optional<std::string> line;
+
+        try {
+            line = read_line();
+        } catch (const ParseError&) {
+            continue; // Over-long line — not a header, keep scanning.
+        }
+
         if (!line.has_value()) {
             return; // EOF reached while resyncing.
         }
+
         if (try_parse_content_length(*line).has_value()) {
             buffered_header_line_ = std::move(line);
             return;

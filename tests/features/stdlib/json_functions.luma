@@ -339,6 +339,17 @@ function void test_json_deserialize_trailing_fails() {
 }
 
 @test
+function void test_json_duplicate_keys_fail_consistently() {
+    string text = "{\"a\": 1, \"a\": 2}"
+
+    # Json.deserialize and Json.parse agree: a repeated object key is malformed
+    # input, not a silent "last value wins".
+    assert(Json.deserialize(text) |> Result.is_failure(), "deserialize rejects duplicate keys")
+    assert(Json.parse(text) |> Result.is_failure(), "parse rejects duplicate keys")
+    assert(Json.deserialize("{\"a\": 1, \"b\": 2}") |> Result.is_success(), "distinct keys")
+}
+
+@test
 function void test_json_deserialize_leading_zero_fails() {
     assert(Json.deserialize("01") |> Result.is_failure())
 }

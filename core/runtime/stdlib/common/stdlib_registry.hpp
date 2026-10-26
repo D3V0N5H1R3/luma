@@ -184,7 +184,7 @@ constexpr std::size_t kModuleCount = std::size(kModules);
             mod.sandbox_register_fn(scratch, true);
 
             for (const auto& [name, spec] : stdlib::catalog()) {
-                const auto split = split_module(name);
+                const auto split = symbols::split_module(name);
 
                 // Only direct module members (`Hash.sha256_file`), not nested
                 // choice variants such as `Log.Level.Debug`.

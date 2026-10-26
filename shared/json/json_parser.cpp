@@ -1,10 +1,12 @@
 #include "json/json_parser.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cstdint>
 #include <format>
-#include <limits>
+#include <optional>
 #include <stdexcept>
+#include <string_view>
 
 #include "common/depth_guard.hpp"
 #include "common/escape.hpp"
@@ -48,22 +50,29 @@ constexpr std::uint32_t k_high_surrogate_max = 0xDBFF;
 constexpr std::uint32_t k_low_surrogate_min = 0xDC00;
 constexpr std::uint32_t k_low_surrogate_max = 0xDFFF;
 
-// Maximum value for max_depth parameter before it overflows int.
-constexpr std::size_t k_max_depth_limit = static_cast<std::size_t>(std::numeric_limits<int>::max());
+// Ceiling for the max_depth parameter: the serializer refuses values nested
+// deeper than this, so capping parsing here guarantees that every value the
+// parser accepts can be serialised again.
+constexpr auto k_max_depth_limit = static_cast<std::size_t>(CompileTimeLimits::max_json_depth);
 } // namespace
 
 namespace {
 
-// Parse exactly 4 hex digits into a Unicode code point.
-// Returns std::nullopt if any character is not a valid hex digit.
-[[nodiscard]] std::optional<unsigned int> parse_hex_codepoint(const char* str, std::size_t len) {
-    if (len < 4) {
+// Number of hex digits in a \uXXXX escape.
+constexpr std::size_t k_unicode_escape_digits = 4;
+
+// Parse the first 4 characters of `digits` as hex into a Unicode code point.
+// Returns std::nullopt if fewer than 4 characters remain or any of them is not
+// a valid hex digit.
+[[nodiscard]] std::optional<unsigned int> parse_hex_codepoint(std::string_view digits) {
+    if (digits.size() < k_unicode_escape_digits) {
         return std::nullopt;
     }
 
+    const auto hex = digits.substr(0, k_unicode_escape_digits);
     unsigned int codepoint{0};
-    auto [ptr, ec] = std::from_chars(str, str + 4, codepoint, 16);
-    if (ec != std::errc{} || ptr != str + 4) {
+    auto [ptr, ec] = std::from_chars(hex.data(), hex.data() + hex.size(), codepoint, 16);
+    if (ec != std::errc{} || ptr != hex.data() + hex.size()) {
         return std::nullopt;
     }
 
@@ -72,11 +81,11 @@ namespace {
 
 // Combine a UTF-16 high surrogate (0xD800–0xDBFF) with a low surrogate
 // (0xDC00–0xDFFF) into the final Unicode code point.
-// `low_str` / `low_len` point to the 4 hex digits of the low surrogate.
+// `low_digits` starts at the 4 hex digits of the low surrogate.
 // Returns std::nullopt if the low surrogate is invalid.
-[[nodiscard]] std::optional<unsigned int>
-handle_surrogate_pair(unsigned int high_surrogate, const char* low_str, std::size_t low_len) {
-    const auto low = parse_hex_codepoint(low_str, low_len);
+[[nodiscard]] std::optional<unsigned int> handle_surrogate_pair(unsigned int high_surrogate,
+                                                                std::string_view low_digits) {
+    const auto low = parse_hex_codepoint(low_digits);
     if (!low.has_value() || *low < k_low_surrogate_min || *low > k_low_surrogate_max) {
         return std::nullopt;
     }
@@ -228,7 +237,7 @@ std::string JsonParser::parse_unicode_escape() {
         throw JsonParseError{pos_, k_incomplete_unicode};
     }
 
-    const auto codepoint = parse_hex_codepoint(input_.data() + pos_, 4);
+    const auto codepoint = parse_hex_codepoint(input_.substr(pos_));
     pos_ += 4;
 
     if (!codepoint.has_value()) {
@@ -245,7 +254,7 @@ std::string JsonParser::parse_unicode_escape() {
 
         pos_ += 2; // skip \u
 
-        const auto combined = handle_surrogate_pair(final_codepoint, input_.data() + pos_, 4);
+        const auto combined = handle_surrogate_pair(final_codepoint, input_.substr(pos_));
         pos_ += 4;
 
         if (!combined.has_value()) {
@@ -293,10 +302,11 @@ std::string JsonParser::parse_string() {
 
             // Bytes >= 0x80 (UTF-8 lead/continuation bytes) are copied through
             // verbatim; multi-byte sequences are not validated for
-            // well-formedness.  This parser consumes the LSP/DAP wire protocol
-            // from a trusted local editor peer, so a malformed sequence is a
-            // client bug, not an attack surface, and round-trips unchanged
-            // rather than being rejected or silently replaced.
+            // well-formedness.  This parser serves both the LSP/DAP wire
+            // protocol and the Json module (Json.parse / parse_detailed), and
+            // the Json module's other parser (Json.deserialize) copies such
+            // bytes the same way, so every entry point round-trips them
+            // unchanged instead of one rejecting what another accepts.
             result += c;
         }
     }
@@ -459,6 +469,13 @@ template <typename Collection, typename ParseElement>
 JsonValue JsonParser::parse_collection(const char* depth_label, char open, char close,
                                        const char* unterminated_msg, Collection initial,
                                        ParseElement parse_element) {
+    // Report the limit as a positioned JsonParseError (like every other parse
+    // failure) before the guard, whose own check throws a bare runtime_error.
+    if (depth_ >= max_nesting_depth_) {
+        throw JsonParseError{pos_, std::format("{}: maximum nesting depth {} exceeded", depth_label,
+                                               max_nesting_depth_)};
+    }
+
     const DepthGuard guard{depth_, max_nesting_depth_, depth_label};
 
     expect(open);

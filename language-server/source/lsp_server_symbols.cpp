@@ -17,6 +17,8 @@
 
 namespace luma::lsp {
 
+using symbols::SymbolKind;
+
 // ═══════════════════════════════════════════════════════════
 // Document Symbol helpers
 // ═══════════════════════════════════════════════════════════
@@ -100,7 +102,7 @@ namespace {
 // record field children (SymbolKind::Field).
 template <typename Member>
 [[nodiscard]] std::vector<DocumentSymbol>
-build_named_member_children(const std::vector<Member>& members, luma::SymbolKind kind,
+build_named_member_children(const std::vector<Member>& members, SymbolKind kind,
                             const Range& parent_range, const Range& parent_selection,
                             const std::vector<Token>& tokens) {
     std::vector<DocumentSymbol> children;

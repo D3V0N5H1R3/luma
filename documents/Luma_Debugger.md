@@ -444,7 +444,7 @@ On Windows, sets `stdin`, `stdout`, and `stderr` to binary mode to prevent `\r\n
 
 ### `dap_transport.hpp` — Message Framing (Shared Transport)
 
-`dap_transport.hpp` re-exports the shared stdio transport under the debugger's namespace: `using luma::dap::Transport = luma::protocol::StdioTransport;`. The Content-Length framing, thread-safe writes, optional read timeout, and shared JSON value type (`luma::json::JsonValue` from `shared/json/`) are exactly those the language server uses.
+`dap_transport.hpp` re-exports the shared stdio transport under the debugger's namespace: `using luma::dap::Transport = luma::protocol::StdioTransport;`. The Content-Length framing, thread-safe writes, and shared JSON value type (`luma::json::JsonValue` from `shared/json/`) are exactly those the language server uses.
 
 That shared transport and JSON type are documented authoritatively in the [Language Server](Luma_Language_Server.md) design document — see §15 (Module Responsibilities) and §23 (Platform-Specific Handling).
 

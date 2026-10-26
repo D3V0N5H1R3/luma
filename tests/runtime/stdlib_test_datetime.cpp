@@ -879,7 +879,7 @@ static void test_datetime_interval_valid() {
 
     const auto& inner = *v.as_result()->owned_inner;
     ASSERT_TRUE(inner.is_record());
-    ASSERT_EQ(inner.as_record()->type_name, "Interval");
+    ASSERT_EQ(inner.as_record()->type_name, "DateTime.Interval");
     ASSERT_EQ(inner.as_record()->find_field("start")->as_number(), 100.0);
     ASSERT_EQ(inner.as_record()->find_field("end")->as_number(), 200.0);
 }

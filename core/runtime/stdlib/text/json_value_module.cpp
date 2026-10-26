@@ -452,8 +452,9 @@ void register_json_value(const EnvPtr& env) {
                 return Value{
                     ResultValue::failure(make_parse_error_record(e.what(), pos.line, pos.column))};
             } catch (const std::exception& e) {
-                // Non-positional failure (e.g. nesting too deep): report line 1,
-                // column 1 rather than guessing an offset.
+                // Every parse failure — nesting depth included — is a positioned
+                // JsonParseError; this defensive arm covers anything else (such
+                // as an allocation failure) without guessing an offset.
                 return Value{ResultValue::failure(make_parse_error_record(e.what(), 1, 1))};
             }
         })

@@ -11,7 +11,7 @@
 #include "symbols/symbol_kind.hpp"
 #include "test_framework.hpp"
 
-using namespace luma;
+using namespace luma::symbols;
 
 // ═══════════════════════════════════════════════════════════
 // to_lsp_symbol_kind — integer values match the LSP spec

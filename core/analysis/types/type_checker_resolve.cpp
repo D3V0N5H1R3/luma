@@ -65,7 +65,7 @@ bool TypeChecker::report_internal_type_access(const TypeAnnotation& ann,
     if (internal_access_reported_.insert(&ann).second) {
         error(std::format("'{}' is internal to namespace '{}' and cannot "
                           "be accessed from outside",
-                          qualified_member(ann.name()),
+                          symbols::qualified_member(ann.name()),
                           type_check_helpers::owning_namespace(ann.name())),
               loc,
               "internal members are private to their namespace — use a public API "
@@ -128,10 +128,10 @@ TypeInfo TypeChecker::resolve_type(const TypeAnnotation& ann) {
     // lookup above found nothing (it never caches Unknown), so retry with the
     // qualified name; that result is cached under the qualified key only.
     if (resolved.kind == TypeInfo::Kind::Unknown && resolved.name == ann.name() &&
-        !ctx_.current_namespace.empty() && !is_qualified_name(ann.name()) &&
+        !ctx_.current_namespace.empty() && !symbols::is_qualified_name(ann.name()) &&
         !generics_.bindings().contains(ann.name())) {
         auto qualified = ann;
-        qualified.name() = make_qualified(ctx_.current_namespace, ann.name());
+        qualified.name() = symbols::make_qualified(ctx_.current_namespace, ann.name());
 
         if (auto member = resolve_type(qualified); member.kind != TypeInfo::Kind::Unknown) {
             return member;

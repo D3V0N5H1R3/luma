@@ -167,7 +167,7 @@ void TypeChecker::import_all_namespace_types(StringMap<const T*>& map, TypeInfo:
 
         const auto bare = qname.substr(prefix.size());
 
-        if (is_qualified_name(bare)) {
+        if (symbols::is_qualified_name(bare)) {
             continue; // nested namespace member — skip
         }
 
@@ -204,7 +204,7 @@ bool TypeChecker::import_one_namespace_type(StringMap<const T*>& map, TypeInfo::
 
 void TypeChecker::register_use_declaration(const UseDeclaration& use_decl) {
     const auto& path = use_decl.namespace_path;
-    const auto split = split_module(path);
+    const auto split = symbols::split_module(path);
 
     // Imported function signatures name their namespace's own types by their
     // bare names, so resolve them from inside that namespace.
@@ -276,7 +276,7 @@ void TypeChecker::register_use_declaration(const UseDeclaration& use_decl) {
 }
 
 void TypeChecker::register_namespace(const NamespaceDeclaration& ns, std::string_view prefix) {
-    const auto qualified = make_qualified(prefix, ns.name);
+    const auto qualified = symbols::make_qualified(prefix, ns.name);
 
     // Helper: register a qualified name as a type symbol, and mark internal if needed.
     auto register_type_member = [&](const std::string& qname, bool is_internal) {
@@ -293,7 +293,7 @@ void TypeChecker::register_namespace(const NamespaceDeclaration& ns, std::string
             symbols_.namespace_functions[ns.name][func.name] = &func;
 
             if (decl->is_internal_to_namespace) {
-                internal_members_.insert(make_qualified(qualified, func.name));
+                internal_members_.insert(symbols::make_qualified(qualified, func.name));
             }
         } else if (decl->kind == DeclarationKind::Namespace) {
             const auto& inner_ns = static_cast<const NamespaceDeclaration&>(*decl);
@@ -301,22 +301,22 @@ void TypeChecker::register_namespace(const NamespaceDeclaration& ns, std::string
             register_namespace(inner_ns, qualified);
         } else if (decl->kind == DeclarationKind::Record) {
             const auto& rec = static_cast<const RecordDeclaration&>(*decl);
-            const auto qname = make_qualified(qualified, rec.name);
+            const auto qname = symbols::make_qualified(qualified, rec.name);
             symbols_.records[qname] = &rec;
             register_type_member(qname, decl->is_internal_to_namespace);
         } else if (decl->kind == DeclarationKind::Choice) {
             const auto& ch = static_cast<const ChoiceDeclaration&>(*decl);
-            const auto qname = make_qualified(qualified, ch.name);
+            const auto qname = symbols::make_qualified(qualified, ch.name);
             symbols_.choices[qname] = &ch;
             register_type_member(qname, decl->is_internal_to_namespace);
         } else if (decl->kind == DeclarationKind::Interface) {
             const auto& iface = static_cast<const InterfaceDeclaration&>(*decl);
-            const auto qname = make_qualified(qualified, iface.name);
+            const auto qname = symbols::make_qualified(qualified, iface.name);
             symbols_.interfaces[qname] = &iface;
             register_type_member(qname, decl->is_internal_to_namespace);
         } else if (decl->kind == DeclarationKind::TypeAlias) {
             const auto& alias = static_cast<const TypeAliasDeclaration&>(*decl);
-            const auto qname = make_qualified(qualified, alias.name);
+            const auto qname = symbols::make_qualified(qualified, alias.name);
             symbols_.type_aliases[qname] = alias.target_type;
             register_type_member(qname, decl->is_internal_to_namespace);
         }
@@ -347,7 +347,7 @@ void TypeChecker::check_declaration(const Declaration& decl) {
             // The fully qualified path ("Outer.Inner"): nested namespace
             // members are registered under it, so a bare sibling name is
             // retried as "<path>.<name>".
-            ctx_.current_namespace = make_qualified(saved_namespace, node.name);
+            ctx_.current_namespace = symbols::make_qualified(saved_namespace, node.name);
 
             for (const auto& decl : node.declarations) {
                 check_declaration(*decl);

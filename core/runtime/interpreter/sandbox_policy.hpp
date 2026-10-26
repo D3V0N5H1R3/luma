@@ -44,10 +44,10 @@ public:
         if (blocked_functions_.contains(name)) {
             return std::format("{} reads or writes files, which sandbox mode disables; the "
                                "rest of the {} module stays available",
-                               name, qualified_module(name));
+                               name, symbols::qualified_module(name));
         }
 
-        const auto split = split_module(name);
+        const auto split = symbols::split_module(name);
 
         if (split && blocked_.contains(split->first)) {
             return std::format("the {} module is disabled in sandbox mode to "

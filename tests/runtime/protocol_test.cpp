@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <filesystem>
 #include <functional>
 #include <optional>
 #include <set>
@@ -454,8 +455,64 @@ static void test_buffered_transport_unterminated_header_too_long_throws() {
     ASSERT_THROWS_WITH_MESSAGE(transport.call_read_line(), "Header line exceeds");
 }
 
-// ═══════════════════════════════════════════════════════════
-// parse_error.hpp — exception hierarchy
+// Frame a body as a complete Content-Length message.
+static std::string frame(const std::string& body) {
+    return "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
+}
+
+static void test_buffered_transport_skips_oversized_message_and_reads_next() {
+    // The oversized body has no newline and is longer than the header cap, so
+    // a line-based resync would misread it as one over-long header line.
+    BufferedMockTransport transport(
+        TransportLimits{.max_message_bytes = 32, .max_header_length = 64});
+    std::string reported;
+    transport.set_error_callback([&](std::string_view msg) { reported = std::string{msg}; });
+
+    transport.queue_raw(frame("{\"x\":\"" + std::string(500, 'a') + "\"}"));
+    transport.queue_raw(frame(R"({"id":1})"));
+
+    const auto skipped = transport.read_message();
+    ASSERT_FALSE(skipped.has_value());
+    ASSERT_TRUE(transport.had_recoverable_read_error());
+    ASSERT_TRUE(reported.find("exceeds limit") != std::string::npos);
+
+    const auto next = transport.read_message();
+    ASSERT_TRUE(next.has_value());
+    ASSERT_EQ((*next)["id"].as_integer(), int64_t{1});
+}
+
+static void test_buffered_transport_skips_invalid_json_and_reads_next() {
+    BufferedMockTransport transport;
+    transport.set_error_callback([](std::string_view) {});
+
+    transport.queue_raw(frame("{x}"));
+    transport.queue_raw(frame(R"({"id":2})"));
+
+    ASSERT_FALSE(transport.read_message().has_value());
+    ASSERT_TRUE(transport.had_recoverable_read_error());
+
+    const auto next = transport.read_message();
+    ASSERT_TRUE(next.has_value());
+    ASSERT_EQ((*next)["id"].as_integer(), int64_t{2});
+}
+
+static void test_buffered_transport_resync_skips_over_long_line() {
+    // A missing Content-Length forces a resync; the garbage that follows is an
+    // over-long line, which resync must discard rather than propagate.
+    BufferedMockTransport transport(TransportLimits{.max_header_length = 32});
+    transport.set_error_callback([](std::string_view) {});
+
+    transport.queue_raw("Content-Type: x\r\n\r\n" + std::string(100, 'z') + "\r\n");
+    transport.queue_raw(frame(R"({"id":3})"));
+
+    ASSERT_FALSE(transport.read_message().has_value());
+    ASSERT_TRUE(transport.had_recoverable_read_error());
+
+    const auto next = transport.read_message();
+    ASSERT_TRUE(next.has_value());
+    ASSERT_EQ((*next)["id"].as_integer(), int64_t{3});
+}
+
 // ═══════════════════════════════════════════════════════════
 
 static void test_parse_error_base() {
@@ -565,6 +622,59 @@ static void test_canonicalize_uri_already_lowercase() {
 static void test_canonicalize_uri_unix_path() {
     auto result = canonicalize_uri("file:///home/user/file.txt");
     ASSERT_EQ(result, std::string{"file:///home/user/file.txt"});
+}
+
+static void test_canonicalize_uri_decodes_encoded_drive_colon() {
+    // VS Code percent-encodes the drive colon; path_to_uri() does not.  Both
+    // spellings of the same file must produce the same cache key.
+    ASSERT_EQ(canonicalize_uri("file:///c%3A/Users/test"), std::string{"file:///c:/Users/test"});
+    ASSERT_EQ(canonicalize_uri("file:///C%3a/Users/test"), std::string{"file:///c:/Users/test"});
+    ASSERT_EQ(canonicalize_uri("file:///c%3A/Users/test"),
+              canonicalize_uri(path_to_uri("C:/Users/test")));
+}
+
+static void test_canonicalize_uri_leaves_non_drive_paths() {
+    ASSERT_EQ(canonicalize_uri("file:///cats/x"), std::string{"file:///cats/x"});
+    ASSERT_EQ(canonicalize_uri("file:///c"), std::string{"file:///c"});
+    ASSERT_EQ(canonicalize_uri("untitled:Untitled-1"), std::string{"untitled:Untitled-1"});
+}
+
+static void test_uri_to_path_localhost_authority() {
+    const auto with_host = uri_to_path("file://localhost/a/b.luma");
+    const auto without_host = uri_to_path("file:///a/b.luma");
+    ASSERT_TRUE(with_host.has_value());
+    ASSERT_TRUE(without_host.has_value());
+    ASSERT_EQ(*with_host, *without_host);
+}
+
+static void test_uri_to_path_drive_in_authority_is_local() {
+    // Non-standard "file://C:/x" (the drive where the authority belongs) must
+    // stay a local drive path, not become the UNC share "//C:/x".
+    const auto path = uri_to_path("file://C:/luma_dir/x.luma");
+    ASSERT_TRUE(path.has_value());
+
+    const auto normalized = std::filesystem::path{*path}.generic_string();
+    ASSERT_TRUE(normalized.find("C:/luma_dir/x.luma") != std::string::npos);
+    ASSERT_FALSE(normalized.starts_with("//"));
+}
+
+static void test_uri_to_path_unc_authority_is_not_relative() {
+    const auto path = uri_to_path("file://server/share/x.luma");
+    ASSERT_TRUE(path.has_value());
+
+    // A remote authority becomes a UNC path, never a path relative to the
+    // working directory.
+    const auto normalized = std::filesystem::path{*path}.generic_string();
+    ASSERT_TRUE(normalized.starts_with("/"));
+    ASSERT_TRUE(normalized.ends_with("server/share/x.luma"));
+}
+
+static void test_uri_to_path_preserves_utf8() {
+    // "caf\xC3\xA9" is "café" in UTF-8; the percent-decoded bytes must come back
+    // unchanged as UTF-8 text, not re-encoded through the ANSI code page.
+    const auto path = uri_to_path("file:///nonexistent_luma_dir/caf%C3%A9.luma");
+    ASSERT_TRUE(path.has_value());
+    ASSERT_TRUE(path->find("caf\xC3\xA9.luma") != std::string::npos);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -719,7 +829,30 @@ static void test_recovery_state_default_threshold() {
 // (exercised through read_message via the MockTransport defined above)
 // ═══════════════════════════════════════════════════════════
 
-static void test_transport_resync_recovers_to_next_message() {
+static void test_transport_resync_recovers_after_missing_content_length() {
+    MockTransport transport;
+    transport.set_error_callback([](std::string_view) {}); // suppress error output
+
+    // Headers without a Content-Length → the boundary is unknown → resync.
+    transport.queue_line("Content-Type: application/json");
+    transport.queue_line("");
+    transport.queue_line("stray body text");
+
+    // Resync scans forward and buffers the next Content-Length header.
+    transport.queue_line("Content-Length: 11");
+    transport.queue_line("");
+    transport.queue_exact(R"({"id":"ok"})");
+
+    ASSERT_FALSE(transport.read_message().has_value());
+    ASSERT_TRUE(transport.had_recoverable_read_error());
+
+    // Second read succeeds using the header buffered during resync.
+    auto second = transport.read_message();
+    ASSERT_TRUE(second.has_value());
+    ASSERT_EQ((*second)["id"].as_string(), std::string{"ok"});
+}
+
+static void test_transport_skips_invalid_json_without_resync() {
     MockTransport transport;
     transport.set_error_callback([](std::string_view) {}); // suppress error output
 
@@ -728,17 +861,17 @@ static void test_transport_resync_recovers_to_next_message() {
     transport.queue_line("");
     transport.queue_exact("{x}");
 
-    // Resync scans forward and buffers the next Content-Length header.
+    // The body was consumed in full, so the next frame follows directly.
     transport.queue_line("Content-Length: 11");
-    // The second message's headers continue after the buffered header line.
     transport.queue_line("");
     transport.queue_exact(R"({"id":"ok"})");
 
-    // First read reports the error and returns nullopt after resyncing.
+    // First read reports the error and skips the message.
     auto first = transport.read_message();
     ASSERT_FALSE(first.has_value());
+    ASSERT_TRUE(transport.had_recoverable_read_error());
 
-    // Second read succeeds using the header buffered during resync.
+    // Second read succeeds without losing the next frame.
     auto second = transport.read_message();
     ASSERT_TRUE(second.has_value());
     ASSERT_EQ((*second)["id"].as_string(), std::string{"ok"});
@@ -749,10 +882,10 @@ static void test_transport_resync_cap_throws() {
     MockTransport transport(TransportLimits{.max_resync_iterations = 3});
     transport.set_error_callback([](std::string_view) {}); // suppress error output
 
-    // Valid header, invalid body → parse error starts the resync scan.
-    transport.queue_line("Content-Length: 3");
+    // Headers without a Content-Length leave the frame boundary unknown, so
+    // the transport starts a resync scan.
+    transport.queue_line("Content-Type: application/json");
     transport.queue_line("");
-    transport.queue_exact("{x}");
 
     // Only non-Content-Length lines follow, so resync never finds a boundary
     // and exhausts its iteration cap.
@@ -818,6 +951,9 @@ int main() {
     RUN(test_buffered_transport_read_line_strips_crlf);
     RUN(test_buffered_transport_header_line_too_long_throws);
     RUN(test_buffered_transport_unterminated_header_too_long_throws);
+    RUN(test_buffered_transport_skips_oversized_message_and_reads_next);
+    RUN(test_buffered_transport_skips_invalid_json_and_reads_next);
+    RUN(test_buffered_transport_resync_skips_over_long_line);
 
     // Exception hierarchy.
     RUN(test_parse_error_base);
@@ -840,6 +976,12 @@ int main() {
     RUN(test_canonicalize_uri_lowercase_drive);
     RUN(test_canonicalize_uri_already_lowercase);
     RUN(test_canonicalize_uri_unix_path);
+    RUN(test_canonicalize_uri_decodes_encoded_drive_colon);
+    RUN(test_canonicalize_uri_leaves_non_drive_paths);
+    RUN(test_uri_to_path_localhost_authority);
+    RUN(test_uri_to_path_drive_in_authority_is_local);
+    RUN(test_uri_to_path_unc_authority_is_not_relative);
+    RUN(test_uri_to_path_preserves_utf8);
 
     // Position utilities — UTF-8 ↔ UTF-16 column conversion.
     RUN(test_is_supplementary_sequence);
@@ -865,7 +1007,8 @@ int main() {
     RUN(test_recovery_state_default_threshold);
 
     // Transport resync recovery.
-    RUN(test_transport_resync_recovers_to_next_message);
+    RUN(test_transport_resync_recovers_after_missing_content_length);
+    RUN(test_transport_skips_invalid_json_without_resync);
     RUN(test_transport_resync_cap_throws);
 
     return SUMMARY();

@@ -68,7 +68,7 @@ Every standard-library function is tagged with a **capability** describing the h
 
 A module is **safe** if all of its functions are `None`. Sandbox mode blocks every module that is *not* safe — a **deny-by-default** posture over host capabilities: a function is reachable in the sandbox only if it declares that it needs no host resource.
 
-Sandbox mode today is **all-or-nothing** over the non-`None` capabilities: `--box` removes Console, FileSystem, Process, and Network access together. Finer-grained per-capability grants (for example, allowing FileSystem but not Network) are a planned extension; the capability tags already carry the information such a policy would need.
+Sandbox mode today is **all-or-nothing** over the non-`None` capabilities: `--box` removes Console, FileSystem, Process, and Network access together. Finer-grained per-capability grants (for example, allowing FileSystem but not Network) are a planned extension; the capability tags carry most of the information such a policy would need, except for the file and console-input members of the sandbox-aware modules, which deliberately stay `Capability::None` (see below).
 
 A small number of modules are **sandbox-aware** (`Compression`, `Hash`, `Log`, `Terminal`): they remain available but register a reduced, side-effect-free surface when the sandbox flag is set — `Compression` and `Hash` withhold their file functions, `Log` withholds `set_output`, and `Terminal` withholds its console-input functions (see [§4](#4--guarantees)).
 
