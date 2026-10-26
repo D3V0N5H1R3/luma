@@ -73,6 +73,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -189,6 +190,12 @@ public:
 
     [[nodiscard]] CompileResult compile(const Program& program, bool repl_mode = false);
 
+    // REPL form: `earlier_programs` are the session's previous inputs, whose
+    // record declarations stay known so a later input's record literal still
+    // gets their field order and defaults.
+    [[nodiscard]] CompileResult compile(const Program& program, bool repl_mode,
+                                        std::span<const Program> earlier_programs);
+
     // Hidden local variable names — see HiddenVar enum in hidden_var.hpp.
 
 private:
@@ -262,6 +269,10 @@ private:
     // ─── Declaration compilation (delegated to DeclarationCompiler) ───
     void compile_declaration(const Declaration& decl) {
         declaration_compiler_.compile_declaration(decl);
+    }
+
+    void register_record_declarations(const std::vector<DeclarationPtr>& declarations) {
+        declaration_compiler_.register_record_declarations(declarations);
     }
 
     // ─── Statement compilation ───

@@ -126,7 +126,8 @@ Patterns, pitfalls, and non-obvious knowledge discovered during development sess
 ## REPL
 
 - `luma` (no args) enters REPL. Also `--repl`/`-r`.
-- Type checking is skipped in REPL (errors caught at runtime).
+- Each input is type-checked incrementally (`TypeChecker::check_incremental`) in a scope nested inside those of all earlier *committed* inputs, so their definitions stay visible and a redefinition shadows. `repl_detail::run_and_keep` commits after the input ran and its `Program` is stored — also when it failed at runtime, because the statements before the error already changed the VM's globals. The symbol tables hold raw pointers into that AST, so a rejected input is discarded by the next check. The committed scopes are shared with later inputs, so `check_incremental` also restores each one's unique-ownership snapshot from commit time; otherwise a rejected input that consumed a `unique` left it consumed.
+- The VM retains every input's function table (`VM::retain_compiled_functions`) because closures bound to globals outlive the input that created them; `FunctionValue::function_table` makes `MakeClosure` inside an earlier input's function index its own table, not the currently installed one.
 - Persistent environment across lines. Variables and functions can be redefined.
 - Commands: `:quit`/`:q`, `:help`/`:h`, `:clear`/`:c`, `:file <path>`/`:f`.
 - Multi-line input triggered by unmatched `{`. Tab completion for keywords, stdlib modules, locals, REPL commands.

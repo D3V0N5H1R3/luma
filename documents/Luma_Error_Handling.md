@@ -67,7 +67,7 @@ function result<number, MathError> safe_divide(number a, number b) {
 }
 ```
 
-`failure(...)` records its source location (line and column) at the point it is written. When `Result.unwrap` is later called on such a value and throws, the error message includes a `[line:col]` prefix that identifies where the failure originated, even after the value has been passed through multiple call frames.
+`failure(...)` records its source location (line and column) at the point it is written. When `Result.unwrap` is later called on such a value and throws, the error message includes a `[line:col]` prefix that identifies where the failure originated, even after the value has been passed through multiple call frames (for example, back out of `Task.retry`). The location is not part of the value: printing the failure, matching on it, or calling `Result.error` shows only the error itself.
 
 ### Handling Results
 

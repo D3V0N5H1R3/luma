@@ -51,6 +51,7 @@ void VM::move_from(VM&& other) noexcept {
 void VM::transfer_state(VM&& other) noexcept {
     global_env_ = std::move(other.global_env_);
     compiled_functions_ = std::exchange(other.compiled_functions_, nullptr);
+    retained_function_tables_ = std::move(other.retained_function_tables_);
     loop_iterations_ = other.loop_iterations_;
     base_depth_ = other.base_depth_;
     exception_handler_ = std::move(other.exception_handler_);

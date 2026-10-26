@@ -161,6 +161,23 @@ function void test_calculus_limit() {
     assert(Math.approximately_equal(limit, 1.0, 0.01))
 }
 
+@test
+function void test_calculus_limit_of_divergent_function_fails() {
+    # 1/x runs off to -infinity on the left of 0 and +infinity on the right, so
+    # there is no limit — averaging the sides must not report 0.
+    result<number> outcome = Calculus.limit(0.0, (number x) -> 1.0 / x)
+
+    assert(Result.is_failure(outcome), "1/x has no limit at 0")
+}
+
+@test
+function void test_calculus_limit_with_different_sides_fails() {
+    # A jump: the left-hand limit is -1 and the right-hand limit is 1.
+    result<number> outcome = Calculus.limit(0.0, (number x) -> if x < 0.0 { -1.0 } else { 1.0 })
+
+    assert(Result.is_failure(outcome), "a jump discontinuity has no two-sided limit")
+}
+
 # ─── derivative_with ─────────────────────────────────────
 
 @test

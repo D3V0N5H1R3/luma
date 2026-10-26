@@ -83,7 +83,10 @@ namespace luma {
 //          UniqueGlobal, GetFieldUnique, IndexGetUnique) before EndModule,
 //          renumbering it; v5 bytecode wrote through shared storage, so a value
 //          copied out of a mutable variable changed when the variable did.
-static constexpr std::uint32_t k_bytecode_format_version = 6;
+//   6 → 7: no layout change; invalidates v6 caches whose code was wrong — a
+//          record literal before its declaration lost the field defaults, and
+//          `((x) -> x)(1)` compiled the call's arguments as a separate tuple.
+static constexpr std::uint32_t k_bytecode_format_version = 7;
 
 // Magic bytes at the start of a .lumc file.
 static constexpr char k_bytecode_magic[4] = {'L', 'U', 'M', 'C'};

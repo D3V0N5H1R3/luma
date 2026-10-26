@@ -30,6 +30,29 @@ static void test_underscore_prefix_no_shadow_warning() {
                          DiagnosticCode::ShadowedVariable));
 }
 
+static void test_for_loop_variable_shadow_warning() {
+    ASSERT_TRUE(reports("function void test() {\n"
+                        "  integer i = 10\n"
+                        "  for i in 0..3 {\n"
+                        "    print(i)\n"
+                        "  }\n"
+                        "  print(i)\n"
+                        "}\n",
+                        DiagnosticCode::ShadowedVariable));
+}
+
+static void test_sibling_for_loops_do_not_shadow() {
+    ASSERT_FALSE(reports("function void test() {\n"
+                         "  for i in 0..3 {\n"
+                         "    print(i)\n"
+                         "  }\n"
+                         "  for i in 0..3 {\n"
+                         "    print(i)\n"
+                         "  }\n"
+                         "}\n",
+                         DiagnosticCode::ShadowedVariable));
+}
+
 static void test_unreachable_code_warning() {
     ASSERT_TRUE(has_warnings("function integer test() {\n"
                              "  return 1\n"
@@ -338,6 +361,8 @@ int main() {
 
     RUN(test_shadow_variable_warns);
     RUN(test_underscore_prefix_no_shadow_warning);
+    RUN(test_for_loop_variable_shadow_warning);
+    RUN(test_sibling_for_loops_do_not_shadow);
     RUN(test_unreachable_code_warning);
     RUN(test_redundant_boolean_comparison_warning);
 

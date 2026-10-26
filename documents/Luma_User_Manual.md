@@ -133,7 +133,7 @@ REPL commands: `:quit` / `:q`, `:help` / `:h`, `:clear` / `:c`, `:file <path>` /
 
 The `:file` command loads and executes a `.luma` file in the current REPL session. All declarations from the file become available for subsequent interactive use.
 
-The REPL skips static type checking to allow incremental exploration. Type errors are caught at runtime instead of before execution.
+The REPL type-checks every input before running it. Each input is checked against the definitions of the earlier inputs that ran, so a type error is reported straight away and the rejected line defines nothing. Redefining a name on a later line replaces it, even with a different type.
 
 Using `break` or `continue` outside a loop in the REPL prints a clear error message instead of crashing:
 
@@ -940,6 +940,18 @@ function(number, number) -> number add = (number a, number b) -> a + b
 print(add(3, 4)) # 7
 ```
 
+A parenthesised lambda, or a function returned by a call, can be called in place. The arguments must start on the same line:
+
+```luma
+print(((integer a, integer b) -> a * b)(3, 4)) # 12
+
+function function(integer) -> integer make_adder(integer amount) {
+    return (integer value) -> value + amount
+}
+
+print(make_adder(10)(5)) # 15
+```
+
 ### Captures
 
 Lambdas capture surrounding variables **by value** at creation time:
@@ -1555,7 +1567,7 @@ match r {
 }
 ```
 
-The `failure(...)` expression automatically records the source line and column where it was written. When `Result.unwrap` is called on such a value and throws, the error message includes a `[line:col]` prefix identifying the origin of the failure.
+The `failure(...)` expression automatically records the source line and column where it was written. When `Result.unwrap` is called on such a value and throws, the error message includes a `[line:col]` prefix identifying the origin of the failure. The location is not part of the value: printing a failure, matching on it, or reading `Result.error` gives just the error (`failure(missing)`, `"missing"`).
 
 ### Checking and Unwrapping
 

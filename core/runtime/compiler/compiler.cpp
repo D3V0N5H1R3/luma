@@ -14,6 +14,11 @@ namespace luma {
 // ─────────── Public API ───────────
 
 Compiler::CompileResult Compiler::compile(const Program& program, bool repl_mode) {
+    return compile(program, repl_mode, {});
+}
+
+Compiler::CompileResult Compiler::compile(const Program& program, bool repl_mode,
+                                          std::span<const Program> earlier_programs) {
     ctx_.diagnostics.clear();
     ctx_.compiled_functions.clear();
     ctx_.record_declarations.clear();
@@ -25,7 +30,14 @@ Compiler::CompileResult Compiler::compile(const Program& program, bool repl_mode
     // Create the top-level scope (acts as "script" function).
     begin_function(CompilerLimits::k_top_level_name, 0);
 
-    // Register all declarations first (forward declaration pass).
+    // Register all declarations first (forward declaration pass).  Earlier
+    // programs go first so the current one's records win on redefinition.
+    for (const auto& earlier : earlier_programs) {
+        register_record_declarations(earlier.declarations);
+    }
+
+    register_record_declarations(program.declarations);
+
     for (const auto& decl : program.declarations) {
         compile_declaration(*decl);
     }

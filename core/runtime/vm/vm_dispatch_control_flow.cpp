@@ -135,8 +135,41 @@ void VM::handle_get_global() {
         push(slot->value);
     } else if (auto hint = global_env_->sandbox_denial_hint(name)) {
         runtime_error(SandboxPolicy::access_denied_message(name), *hint);
-    } else {
+    } else if (!push_global_field_path(name)) {
         runtime_error(vm_errors::undefined_variable(name), vm_errors::hint_check_variable_spelling);
+    }
+}
+
+bool VM::push_global_field_path(std::string_view qualified_name) {
+    // The compiler turns `a.b` into one qualified GetGlobal whenever `a` is not
+    // a local, since it cannot tell a module member (Math.pi) from a field of a
+    // global variable.  The REPL's top-level variables are globals, so a miss
+    // falls back to reading the fields of global `a`.
+    const auto dot = qualified_name.find('.');
+
+    if (dot == std::string_view::npos) {
+        return false;
+    }
+
+    const auto* root = lookup_global_cache(qualified_name.substr(0, dot));
+
+    if (root == nullptr) {
+        return false;
+    }
+
+    push(root->value);
+
+    auto fields = qualified_name.substr(dot + 1);
+
+    while (true) {
+        const auto next = fields.find('.');
+        push_field(fields.substr(0, next));
+
+        if (next == std::string_view::npos) {
+            return true;
+        }
+
+        fields = fields.substr(next + 1);
     }
 }
 
@@ -455,15 +488,22 @@ void VM::handle_make_closure() {
     auto func_idx = read_u16();
     (void)read_byte(); // upvalue_count — read but not used directly
 
-    if ((compiled_functions_ == nullptr) || func_idx >= compiled_functions_->size()) {
+    // Indices refer to the table of the function being executed, which is not
+    // the installed one when the REPL calls a closure from an earlier input.
+    const auto* table = (cf.closure != nullptr && cf.closure->function_table != nullptr)
+                            ? cf.closure->function_table
+                            : compiled_functions_;
+
+    if ((table == nullptr) || func_idx >= table->size()) {
         runtime_error(vm_errors::invalid_function_index(func_idx));
     }
 
-    const auto* compiled = &(*compiled_functions_)[func_idx];
+    const auto* compiled = &(*table)[func_idx];
 
     auto func_val = std::make_shared<FunctionValue>();
     func_val->name = compiled->name;
     func_val->compiled = compiled;
+    func_val->function_table = table;
 
     func_val->upvalues.resize(compiled->upvalues.size());
     func_val->upvalue_cells.resize(compiled->upvalues.size());

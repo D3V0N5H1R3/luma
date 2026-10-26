@@ -80,6 +80,7 @@ namespace {
     auto copy = std::make_shared<luma::FunctionValue>();
     copy->name = func.name;
     copy->compiled = func.compiled;
+    copy->function_table = func.function_table;
     copy->upvalues = deep_copy_values(func.upvalues);
 
     // Deep-copy mutable upvalue cells — spawned tasks get

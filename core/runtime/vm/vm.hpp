@@ -296,6 +296,13 @@ public:
     [[nodiscard]] Value execute_function(const CompiledFunction& func,
                                          const std::vector<CompiledFunction>& functions);
 
+    // Takes ownership of one REPL input's compiled functions for the VM's
+    // lifetime and returns the stored table.  Closures created by an input
+    // (e.g. a function declaration bound to a global) outlive its evaluation
+    // and may be called by any later input.
+    [[nodiscard]] const std::vector<CompiledFunction>&
+    retain_compiled_functions(std::vector<CompiledFunction> functions);
+
     [[nodiscard]] EnvPtr global_env() const {
         return global_env_;
     }
@@ -526,6 +533,9 @@ private:
     void handle_get_field_unique();
     void handle_index_get_unique();
     void push_field(std::string_view field_name);
+    // Resolves a qualified global miss `a.b.c` as fields of global `a`; returns
+    // false (pushing nothing) when `a` is not a global either.
+    [[nodiscard]] bool push_global_field_path(std::string_view qualified_name);
     void handle_set_field();
     void handle_get_field_opt();
     void handle_index_get_opt();
@@ -845,6 +855,10 @@ private:
     // outlive the VM execution.  Verified by execute() and execute_function(),
     // which accept the vector by const-reference from the caller's stack.
     const std::vector<CompiledFunction>* compiled_functions_{nullptr};
+    // Function tables kept alive by retain_compiled_functions().  Held by
+    // unique_ptr so each table's address — which closures point into — is
+    // stable as more are added.
+    std::vector<std::unique_ptr<const std::vector<CompiledFunction>>> retained_function_tables_;
     std::int64_t loop_iterations_{0};
     std::size_t base_depth_{0};
 

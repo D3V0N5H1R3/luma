@@ -280,3 +280,19 @@ function void test_record_string_representation() {
 
     assert("${vector}" == "Vector { x = 3.5, y = -1.2 }")
 }
+
+# ─── Declaration order ────────────────────────────────────
+
+@test
+function void test_record_used_before_its_declaration() {
+    # Defaults come from the declaration even though it appears later in the file.
+    Setting setting = Setting { name = "volume" }
+
+    assert(setting.name == "volume")
+    assert(setting.level == 5, "the declared default should fill the omitted field")
+}
+
+record Setting {
+    string name,
+    integer level = 5
+}

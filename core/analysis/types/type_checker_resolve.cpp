@@ -551,8 +551,19 @@ std::optional<bool> TypeChecker::is_container_assignable(const TypeInfo& target,
             }
 
             // Check both success type (inner_types[0]) and error type (inner_types[1]).
-            if (!is_assignable(target.result_value_type(), source.result_value_type())) {
-                return false;
+            // `void` and `none` both spell "no value" as a success type: stdlib
+            // signatures say result<void>, the documentation says result<none>.
+            {
+                const auto is_no_value = [](const TypeInfo& type) {
+                    return type.kind == TypeInfo::Kind::Void || type.kind == TypeInfo::Kind::None;
+                };
+                const bool both_no_value = is_no_value(target.result_value_type()) &&
+                                           is_no_value(source.result_value_type());
+
+                if (!both_no_value &&
+                    !is_assignable(target.result_value_type(), source.result_value_type())) {
+                    return false;
+                }
             }
 
             if (target.inner_types.size() > 1 && source.inner_types.size() > 1) {

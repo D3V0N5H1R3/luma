@@ -2,6 +2,7 @@
 #define LUMA_REPL_REPL_DETAIL_HPP
 
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -33,8 +34,23 @@ namespace repl_detail {
 // the VM result value.  Returns std::nullopt and prints diagnostics on a type or
 // compile error; runtime errors propagate as RuntimeError exceptions.  This is
 // the real back half of the REPL evaluation pipeline, exposed here so tests
-// exercise production code rather than a copy.
-[[nodiscard]] std::optional<Value> compile_and_run(Program& program, TypeChecker& checker, VM& vm);
+// exercise production code rather than a copy.  The input is type-checked
+// against every input kept by keep_program(), so earlier definitions are
+// visible; `earlier_programs` are those kept inputs, for the compiler's record
+// layouts.
+[[nodiscard]] std::optional<Value> compile_and_run(Program& program, TypeChecker& checker, VM& vm,
+                                                   std::span<const Program> earlier_programs = {});
+
+// Keeps a successfully evaluated Program alive for the rest of the session and
+// commits its definitions to `checker`, making them visible to later inputs.
+void keep_program(std::vector<Program>& programs, Program program, TypeChecker& checker);
+
+// Runs `program` through compile_and_run and keeps it (keep_program) unless it
+// was rejected before running.  An input that fails at runtime is kept too —
+// the statements before the error have already changed the VM's globals — and
+// the RuntimeError is rethrown.
+[[nodiscard]] std::optional<Value> run_and_keep(Program program, TypeChecker& checker, VM& vm,
+                                                std::vector<Program>& programs);
 
 // Returns the completions matching `prefix`, sorted ascending.  An exact
 // prefix match is preferred; if none exists, a case-insensitive substring

@@ -285,7 +285,7 @@ luma>
 
 ### Type Errors
 
-The REPL runs type checking before execution. Type errors are reported but do not end the session:
+The REPL runs type checking before execution, against everything the earlier lines defined. Type errors are reported but do not end the session, and a rejected line does not run, so nothing it declares becomes defined:
 
 ```text
 luma> integer x = "hello"

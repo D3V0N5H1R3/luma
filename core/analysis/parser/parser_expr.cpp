@@ -195,7 +195,15 @@ ExpressionPtr Parser::parse_postfix() {
                                                                  std::move(index), false);
         } else if (check(TokenType::LeftParen) &&
                    (expression->kind == ExpressionKind::Variable ||
-                    expression->kind == ExpressionKind::FieldAccess)) {
+                    expression->kind == ExpressionKind::FieldAccess ||
+                    ((expression->kind == ExpressionKind::Lambda ||
+                      expression->kind == ExpressionKind::Call) &&
+                     peek_at(-1).location.line == current().location.line))) {
+            // Calling a lambda (only reachable when parenthesised — an
+            // unparenthesised body would have consumed the '(') or a call's
+            // result: `((x) -> x)(1)`, `make_adder(1)(2)`.  The '(' must stay
+            // on the same line so a new line starting with '(' is not
+            // swallowed as arguments.
             expression = parse_call(std::move(expression));
         } else if (check(TokenType::ColonColon) && check_at(1, TokenType::Less) &&
                    (expression->kind == ExpressionKind::Variable ||

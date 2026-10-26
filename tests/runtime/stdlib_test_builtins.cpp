@@ -105,6 +105,15 @@ static void test_fail_has_location() {
     ASSERT_RESULT_FAILURE(v);
     ASSERT_TRUE(v.as_result()->has_failure_location);
     ASSERT_EQ(v.as_result()->failure_location.line, 1);
+    // The location is unwrap-error context only; printing shows the bare value.
+    ASSERT_EQ(v.to_string(), std::string("failure(oops)"));
+}
+
+static void test_retry_failure_prints_without_location() {
+    const auto v = eval("Task.retry(2, () -> failure(\"boom\"))");
+
+    ASSERT_RESULT_FAILURE(v);
+    ASSERT_EQ(v.to_string(), std::string("failure(boom)"));
 }
 
 static void test_read_file_limited() {
@@ -478,6 +487,7 @@ int main() {
     RUN(test_type_of_too_many_args_throws);
     RUN(test_success_construction);
     RUN(test_fail_has_location);
+    RUN(test_retry_failure_prints_without_location);
     RUN(test_read_file_limited);
     RUN(test_resource_with);
     RUN(test_resource_with_cleanup_on_error);

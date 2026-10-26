@@ -196,13 +196,11 @@ void load_and_execute_file(const std::string& file_path, SourceManager& source_m
             return;
         }
 
-        auto value = repl_detail::compile_and_run(*file_program, checker, vm);
+        auto value = repl_detail::run_and_keep(std::move(*file_program), checker, vm, programs);
 
         if (!value) {
             return;
         }
-
-        append_program(programs, std::move(*file_program));
 
         std::cout << "Loaded: " << file_path << "\n";
     } catch (const RuntimeError& error) {
@@ -246,16 +244,17 @@ void handle_help_command() {
 }
 
 void handle_clear_command(EnvPtr& global_env, bool sandbox, VM& vm, std::vector<Program>& programs,
-                          SourceManager& source_manager) {
+                          SourceManager& source_manager, TypeChecker& checker) {
     global_env = Environment::create();
 
     register_all(global_env, sandbox);
 
     vm = VM{global_env};
 
-    programs.clear();
+    // Forget the checker's definitions before the ASTs they point into.
+    checker.reset_incremental();
 
-    // TypeChecker resets its own state at the start of each check() call.
+    programs.clear();
 
     source_manager = SourceManager{};
 
@@ -272,7 +271,7 @@ void handle_expression(const std::string& input, SourceManager& source_manager,
             return;
         }
 
-        auto value = repl_detail::compile_and_run(*program, checker, vm);
+        auto value = repl_detail::run_and_keep(std::move(*program), checker, vm, programs);
 
         if (!value) {
             return;
@@ -282,8 +281,6 @@ void handle_expression(const std::string& input, SourceManager& source_manager,
             std::cout << term::out_cyan() << "=> " << term::out_reset() << value->to_string()
                       << "\n";
         }
-
-        append_program(programs, std::move(*program));
     } catch (const RuntimeError& error) {
         render_runtime_error(renderer, error);
     } catch (const std::exception& error) {
@@ -346,7 +343,7 @@ CommandResult dispatch_command(const std::string& line, ReplState& state) {
 
             case CommandKind::Clear:
                 handle_clear_command(state.global_env, state.sandbox, state.vm, state.programs,
-                                     state.source_manager);
+                                     state.source_manager, state.checker);
                 return CommandResult::Continue;
 
             case CommandKind::File:
@@ -395,10 +392,11 @@ std::optional<Program> lex_and_parse(const std::string& source, FileId file_id) 
     return program;
 }
 
-std::optional<Value> compile_and_run(Program& program, TypeChecker& checker, VM& vm) {
+std::optional<Value> compile_and_run(Program& program, TypeChecker& checker, VM& vm,
+                                     std::span<const Program> earlier_programs) {
     // Type check
     {
-        auto diagnostics = checker.check(program, /*require_main=*/false);
+        auto diagnostics = checker.check_incremental(program);
 
         bool has_errors = false;
 
@@ -418,7 +416,7 @@ std::optional<Value> compile_and_run(Program& program, TypeChecker& checker, VM&
     // Compile
     Compiler compiler;
 
-    auto result = compiler.compile(program, /*repl_mode=*/true);
+    auto result = compiler.compile(program, /*repl_mode=*/true, earlier_programs);
 
     if (!result.success) {
         for (const auto& diag : result.diagnostics) {
@@ -428,8 +426,34 @@ std::optional<Value> compile_and_run(Program& program, TypeChecker& checker, VM&
         return std::nullopt;
     }
 
-    // Execute
-    return vm.execute_function(result.top_level, result.functions);
+    // Execute.  The VM keeps the function table: closures this input binds to
+    // globals (function declarations, lambdas) are called by later inputs.
+    const auto& functions = vm.retain_compiled_functions(std::move(result.functions));
+
+    return vm.execute_function(result.top_level, functions);
+}
+
+void keep_program(std::vector<Program>& programs, Program program, TypeChecker& checker) {
+    append_program(programs, std::move(program));
+    checker.commit_incremental();
+}
+
+std::optional<Value> run_and_keep(Program program, TypeChecker& checker, VM& vm,
+                                  std::vector<Program>& programs) {
+    std::optional<Value> value;
+
+    try {
+        value = compile_and_run(program, checker, vm, programs);
+    } catch (const RuntimeError&) {
+        keep_program(programs, std::move(program), checker);
+        throw;
+    }
+
+    if (value) {
+        keep_program(programs, std::move(program), checker);
+    }
+
+    return value;
 }
 
 std::vector<std::string> build_repl_completions() {

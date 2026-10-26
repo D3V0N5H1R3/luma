@@ -106,8 +106,8 @@ The CLI module selects one of several modes based on command-line arguments. Eac
 | Test            | `luma --test, -t <file.luma>`   | Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM Test Runner           |
 | Sandbox         | `luma --box, -b <file.luma>`    | Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM (OS modules disabled) |
 | Project init    | `luma init`                     | Creates a `luma.json` project configuration in the current directory                            |
-| REPL            | `luma`                          | Loop: Lexer → Parser → Compiler → VM (`:file` adds Include Resolver)                            |
-| REPL (explicit) | `luma --repl, -r`               | Loop: Lexer → Parser → Compiler → VM (`:file` adds Include Resolver)                            |
+| REPL            | `luma`                          | Loop: Lexer → Parser → Type Checker → Compiler → VM (`:file` adds Include Resolver)             |
+| REPL (explicit) | `luma --repl, -r`               | Loop: Lexer → Parser → Type Checker → Compiler → VM (`:file` adds Include Resolver)             |
 | Eval (stdin)    | `luma --eval, -e`               | Stdin → Lexer → Parser → Type Checker → Compiler → VM (no `@main` required)                     |
 
 ---
@@ -558,8 +558,8 @@ See Section 11 for detailed organisation.
 
 - Displays a prompt (`luma>`) and reads a line of input.
 - The prompt and continuation prompt (`...`) are colourised when `stdout` is connected to an interactive terminal — the main prompt is bold, the continuation prompt is cyan. Expression results are prefixed with a cyan `=>`.
-- Runs Lexer → Parser → Type Checker → Compiler → VM on each input.
-- Maintains a persistent environment across lines — variables and functions defined in one line are available in subsequent lines.
+- Runs Lexer → Parser → Type Checker → Compiler → VM on each input. The type checker checks each input incrementally against the inputs that ran before it (`TypeChecker::check_incremental`), so a line sees earlier definitions and may redefine them.
+- Maintains a persistent environment across lines — variables and functions defined in one line are available in subsequent lines. The VM retains each input's compiled function table, since a function declared on one line is called by later ones.
 - Prints the result of expressions automatically (prefixed with `=>`).
 - Handles REPL commands: `:quit` / `:q`, `:help` / `:h`, `:clear` / `:c`, `:file <path>` / `:f <path>`.
 - The `:file` command loads a `.luma` file through the full pipeline (Lexer → Parser → Include Resolver → Type Checker → Linter → Compiler → VM), registers its declarations in the REPL environment, and executes its top-level statements. All definitions become available for subsequent interactive use.
@@ -1509,7 +1509,7 @@ If no handler is found (or the handler belongs to an outer execution context bel
 
 ### 7.15 REPL Execution Model
 
-The REPL creates a single `VM` instance that persists across input lines. Each line is independently lexed, parsed, and compiled into a `CompiledFunction`. The VM calls `execute_function(func, functions)`, which:
+The REPL creates a single `VM` instance that persists across input lines. Each line is independently lexed, parsed, type-checked and compiled into a `CompiledFunction`; the line's function table is handed to `VM::retain_compiled_functions`, which keeps it for the VM's lifetime because closures the line binds to globals outlive it. Each `FunctionValue` records the table it came from, so a closure created inside an earlier line's function resolves its `MakeClosure` index against that line's table. The VM then calls `execute_function(func, functions)`, which:
 
 1. Saves the current stack size, frame count, handler count, and base depth.
 2. Calls `run(func)`.
@@ -1754,7 +1754,7 @@ The complete opcode set (105 opcodes) with stack effects. Stack notation: `(befo
 
 **Copy-on-write opcodes:**
 
-Copying a value shares its storage, so a write must first make sure no other value still uses the storage it is about to change. The compiler emits these opcodes only for the container path of an assignment, compound-assignment, or `++`/`--` target: `points[0].x = 5` compiles to `UniqueLocal` on `points`, the usual `GetLocal`, the index, `IndexGetUnique`, the new value, and `SetField x`. Each step replaces a shared array, dictionary, or record with a shallow copy it owns (`Value::make_exclusive`), so reads stay free and a copy is made only on the first write to shared storage. A target rooted in a temporary rather than a variable (`make_point().x = 5`) is a type error; for the REPL, which skips type checking, the compiler copies the temporary first.
+Copying a value shares its storage, so a write must first make sure no other value still uses the storage it is about to change. The compiler emits these opcodes only for the container path of an assignment, compound-assignment, or `++`/`--` target: `points[0].x = 5` compiles to `UniqueLocal` on `points`, the usual `GetLocal`, the index, `IndexGetUnique`, the new value, and `SetField x`. Each step replaces a shared array, dictionary, or record with a shallow copy it owns (`Value::make_exclusive`), so reads stay free and a copy is made only on the first write to shared storage. A target rooted in a temporary rather than a variable (`make_point().x = 5`) is a type error; for compilation that bypasses the type checker (debugger expression evaluation), the compiler copies the temporary first.
 
 | Opcode           | Operands     | Stack Effect                | Description                                                                          |
 | ---------------- | ------------ | --------------------------- | ------------------------------------------------------------------------------------ |
@@ -2077,7 +2077,7 @@ task_scope {
 
 - `Interpreter::current_scope_` (thread-local) points to the active `TaskScope` on the current thread.
 - When a task is spawned, it captures the current scope's token and registers itself. Outside a scope, `current_scope_` is `nullptr` and the task runs unstructured (fire-and-forget).
-- The type checker rejects `spawn` outside a `task_scope` with a compile-time error. Only the REPL, which skips type checking, can still reach the unstructured runtime path.
+- The type checker rejects `spawn` outside a `task_scope` with a compile-time error — in programs, test files and the REPL alike. Only compilation that bypasses the type checker (debugger expression evaluation) could still reach the unstructured runtime path.
 
 ### 12.5 Task Environment Isolation
 

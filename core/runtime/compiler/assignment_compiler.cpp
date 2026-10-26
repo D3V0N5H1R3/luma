@@ -145,8 +145,8 @@ void Compiler::compile_write_target(const Expression& container) {
     // A temporary (call result, optional chain, ...) can still share storage
     // with a variable — `Reference.get(cell)` or a function returning its
     // argument — so writing into it must not reach that storage.  The type
-    // checker rejects such targets; this keeps the REPL (which skips type
-    // checking) sound too.
+    // checker rejects such targets; this keeps paths that bypass it (debugger
+    // expression evaluation) sound too.
     compile_expression(container);
     emit(Op::Clone, container.location);
 }

@@ -209,6 +209,17 @@ public:
     // need a @main entry point (e.g. luma --test).
     [[nodiscard]] std::vector<Diagnostic> check(const Program& program, bool require_main = true);
 
+    // Incremental checking for the REPL.  Each input is checked in a fresh
+    // scope nested inside those of every earlier *committed* input, so their
+    // variables, functions and types stay visible and redefining a name simply
+    // shadows it.  The symbol tables point into the input's AST, so call
+    // commit_incremental() only once that Program is kept alive; the next
+    // check_incremental() discards an uncommitted input.
+    [[nodiscard]] std::vector<Diagnostic> check_incremental(const Program& program);
+    void commit_incremental();
+    // Forgets every committed input (the REPL's :clear).
+    void reset_incremental();
+
     // Returns warnings emitted during the last check() call.
     [[nodiscard]] const std::vector<Diagnostic>& get_warnings() const;
 
@@ -226,6 +237,31 @@ private:
     // ====================================================================
 
     void reset_state();
+
+    // Registers the stdlib types and builds the global scope (built-ins and
+    // stdlib namespaces).  Expects reset_state() to have run.
+    void initialize_global_scope();
+
+    // Registers and checks the program's declarations, then its top-level
+    // statements, in the current scope.
+    void check_program(const Program& program);
+
+    // Definitions of every committed REPL input (see check_incremental()).
+    struct IncrementalState {
+        std::shared_ptr<TypeScope> committed_scope;
+        SymbolTables committed_symbols;
+        StringSet committed_internal_members;
+        StringMap<std::vector<TypeParam>> committed_alias_params;
+        // Unique-variable ownership of each committed scope at commit time.
+        // The scopes are shared with later inputs, so an input that is never
+        // committed (e.g. rejected after consuming a unique) must not keep its
+        // mark.
+        std::vector<std::pair<std::shared_ptr<TypeScope>, TypeScope::OwnershipSnapshot>>
+            committed_ownership;
+        bool has_pending_input{false};
+    };
+
+    IncrementalState incremental_;
 
     // ====================================================================
     // Scope Management                          (impl: type_checker.cpp)

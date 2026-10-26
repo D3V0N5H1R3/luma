@@ -296,3 +296,22 @@ function void test_lambda_filter_callback_error_returns_failure() {
         }
     }
 }
+
+# ─── Immediate calls ──────────────────────────────────────
+
+@test
+function void test_parenthesised_lambda_called_immediately() {
+    # The arguments are passed to the lambda, not left behind as a tuple.
+    integer sum = ((integer a, integer b) -> a + b)(2, 3)
+
+    assert(sum == 5, "an immediately called lambda receives its arguments")
+}
+
+function function(integer) -> integer make_adder(integer amount) {
+    return (integer value) -> value + amount
+}
+
+@test
+function void test_call_result_called_immediately() {
+    assert(make_adder(10)(5) == 15, "a returned function can be called in place")
+}

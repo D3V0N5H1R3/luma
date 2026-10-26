@@ -72,6 +72,12 @@ Value VM::execute_function(const CompiledFunction& func,
     return execute_function(func);
 }
 
+const std::vector<CompiledFunction>&
+VM::retain_compiled_functions(std::vector<CompiledFunction> functions) {
+    return *retained_function_tables_.emplace_back(
+        std::make_unique<const std::vector<CompiledFunction>>(std::move(functions)));
+}
+
 // ─────────── Test execution ───────────
 
 bool VM::execute_tests(const std::vector<CompiledFunction>& functions,

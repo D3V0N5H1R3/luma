@@ -28,6 +28,19 @@ static void test_statistics_standard_deviation_returns_result_number() {
     ASSERT_TRUE(passes("result<number> r = Statistics.standard_deviation([1.0, 2.0, 3.0])\n"));
 }
 
+// Stdlib signatures declare result<void>; the documentation spells it
+// result<none>.  Both annotations accept either.
+static void test_result_none_and_result_void_are_interchangeable() {
+    ASSERT_TRUE(passes("result<none> r = Process.set_environment_variable(\"A\", \"1\")\n"));
+    ASSERT_TRUE(passes("result<void> r = Process.set_environment_variable(\"A\", \"1\")\n"));
+    ASSERT_TRUE(passes("result<void> r = success(none)\n"));
+    ASSERT_TRUE(passes("function result<none> set() {\n"
+                       "  return Process.set_environment_variable(\"A\", \"1\")\n"
+                       "}\n"));
+    // Only the "no value" spellings are interchangeable.
+    ASSERT_TRUE(fails("result<integer> r = Process.set_environment_variable(\"A\", \"1\")\n"));
+}
+
 // ─── None type ───
 
 // none is not assignable to a concrete type.
@@ -640,6 +653,7 @@ int main() {
     RUN(test_statistics_mode_returns_result_number);
     RUN(test_statistics_variance_returns_result_number);
     RUN(test_statistics_standard_deviation_returns_result_number);
+    RUN(test_result_none_and_result_void_are_interchangeable);
 
     // ─── None/Optional type ───
 

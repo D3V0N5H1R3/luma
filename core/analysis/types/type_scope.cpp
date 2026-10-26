@@ -135,4 +135,24 @@ void TypeScope::restore_ownership(const OwnershipSnapshot& snap) {
     }
 }
 
+TypeScope::OwnershipSnapshot TypeScope::snapshot_local_ownership() const {
+    OwnershipSnapshot snap;
+
+    for (const auto& [name, sym] : symbols_) {
+        if (sym.is_unique) {
+            snap.emplace_back(name, sym.is_consumed);
+        }
+    }
+
+    return snap;
+}
+
+void TypeScope::restore_local_ownership(const OwnershipSnapshot& snap) {
+    for (const auto& [name, was_consumed] : snap) {
+        if (const auto it = symbols_.find(name); it != symbols_.end() && it->second.is_unique) {
+            it->second.is_consumed = was_consumed;
+        }
+    }
+}
+
 } // namespace luma

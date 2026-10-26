@@ -350,30 +350,30 @@ Section-level table of contents for the reference documents in this directory. U
 | 4 — Operators                                    | 372–576   |
 | 5 — Control Flow                                 | 580–773   |
 | 6 — Functions                                    | 777–884   |
-| 7 — Lambdas                                      | 888–955   |
-| 8 — Records                                      | 959–1113  |
-| 9 — Arrays                                       | 1117–1212 |
-| 10 — Dictionaries                                | 1216–1276 |
-| 11 — Tuples                                      | 1280–1348 |
-| 12 — Choice Types — Unit Variants                | 1352–1402 |
-| 13 — Choice Types (ADTs)                         | 1406–1517 |
-| 14 — Result and Optional                         | 1521–1755 |
-| 15 — Match                                       | 1759–2007 |
-| 16 — String Interpolation and Multi-Line Strings | 2011–2066 |
-| 17 — Pipe Operator                               | 2070–2115 |
-| 18 — Named Arguments                             | 2119–2142 |
-| 19 — Type Aliases                                | 2146–2168 |
-| 20 — Interfaces                                  | 2172–2248 |
-| 21 — Generics, `downcast`, and `is`              | 2252–2482 |
-| 22 — Namespaces and `use`                        | 2486–2681 |
-| 23 — Ownership (`unique` and `borrow`)           | 2685–2717 |
-| 24 — Testing with `@test`                        | 2721–2778 |
-| 25 — Including Files                             | 2782–2833 |
-| 26 — Standard Library Reference                  | 2837–2841 |
-| 27 — Linter and `--strict` Mode                  | 2845–2897 |
-| 28 — Reserved Keywords                           | 2901–2920 |
-| 29 — Error Reference                             | 2924–3241 |
-| 30 — Complete Programs                           | 3245–3451 |
-| 31 — Debugging                                   | 3455–3476 |
-| 32 — Formal Grammar (EBNF)                       | 3480–3831 |
-| See Also                                         | 3835–3847 |
+| 7 — Lambdas                                      | 888–967   |
+| 8 — Records                                      | 971–1125  |
+| 9 — Arrays                                       | 1129–1224 |
+| 10 — Dictionaries                                | 1228–1288 |
+| 11 — Tuples                                      | 1292–1360 |
+| 12 — Choice Types — Unit Variants                | 1364–1414 |
+| 13 — Choice Types (ADTs)                         | 1418–1529 |
+| 14 — Result and Optional                         | 1533–1767 |
+| 15 — Match                                       | 1771–2019 |
+| 16 — String Interpolation and Multi-Line Strings | 2023–2078 |
+| 17 — Pipe Operator                               | 2082–2127 |
+| 18 — Named Arguments                             | 2131–2154 |
+| 19 — Type Aliases                                | 2158–2180 |
+| 20 — Interfaces                                  | 2184–2260 |
+| 21 — Generics, `downcast`, and `is`              | 2264–2494 |
+| 22 — Namespaces and `use`                        | 2498–2693 |
+| 23 — Ownership (`unique` and `borrow`)           | 2697–2729 |
+| 24 — Testing with `@test`                        | 2733–2790 |
+| 25 — Including Files                             | 2794–2845 |
+| 26 — Standard Library Reference                  | 2849–2853 |
+| 27 — Linter and `--strict` Mode                  | 2857–2909 |
+| 28 — Reserved Keywords                           | 2913–2932 |
+| 29 — Error Reference                             | 2936–3253 |
+| 30 — Complete Programs                           | 3257–3463 |
+| 31 — Debugging                                   | 3467–3488 |
+| 32 — Formal Grammar (EBNF)                       | 3492–3843 |
+| See Also                                         | 3847–3859 |

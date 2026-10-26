@@ -245,6 +245,11 @@ public:
     [[nodiscard]] OwnershipSnapshot snapshot_ownership() const;
     void restore_ownership(const OwnershipSnapshot& snap);
 
+    // As above, but for this scope's own symbols only — unambiguous when an
+    // inner scope shadows a name, since the restore never consults a parent.
+    [[nodiscard]] OwnershipSnapshot snapshot_local_ownership() const;
+    void restore_local_ownership(const OwnershipSnapshot& snap);
+
 private:
     StringMap<SymbolInfo> symbols_;
     std::shared_ptr<TypeScope> parent_;

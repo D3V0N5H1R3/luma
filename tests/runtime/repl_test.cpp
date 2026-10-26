@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "analysis/ast/declaration.hpp"
 #include "analysis/errors/error.hpp"
 #include "analysis/lexer/token_type.hpp"
 #include "analysis/types/type_checker.hpp"
@@ -422,16 +423,18 @@ static void test_history_caps_size_and_drops_oldest() {
 // functions report lex/parse/type/compile failures by returning std::nullopt
 // (and printing diagnostics); this adapter converts that into an exception so
 // the tests can assert on recovery.  Runtime errors propagate directly as
-// RuntimeError from compile_and_run.  A persistent TypeChecker and VM mirror a
-// real REPL session, so definitions from earlier lines stay visible.
-static Value repl_eval(TypeChecker& checker, VM& vm, const std::string& source) {
+// RuntimeError from compile_and_run.  A persistent TypeChecker, VM and program
+// list mirror a real REPL session, so definitions from earlier successful lines
+// stay visible.
+static Value repl_eval(TypeChecker& checker, VM& vm, std::vector<Program>& programs,
+                       const std::string& source) {
     auto program = repl_detail::lex_and_parse(source);
 
     if (!program) {
         throw std::runtime_error{"lex/parse error"};
     }
 
-    auto value = repl_detail::compile_and_run(*program, checker, vm);
+    auto value = repl_detail::run_and_keep(std::move(*program), checker, vm, programs);
 
     if (!value) {
         throw std::runtime_error{"type/compile error"};
@@ -446,11 +449,12 @@ static void test_syntax_error_is_recoverable() {
 
     VM vm{env};
     TypeChecker checker;
+    std::vector<Program> programs;
 
-    ASSERT_THROWS(repl_eval(checker, vm, "integer x = )"));
+    ASSERT_THROWS(repl_eval(checker, vm, programs, "integer x = )"));
 
     // Environment is still functional after the error.
-    const auto result = repl_eval(checker, vm, "1 + 2");
+    const auto result = repl_eval(checker, vm, programs, "1 + 2");
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), 3);
@@ -458,18 +462,17 @@ static void test_syntax_error_is_recoverable() {
 
 static void test_runtime_error_is_recoverable() {
     // A runtime error (assertion failure thrown during VM execution, which
-    // propagates out of compile_and_run) must not break the session.  Each line
-    // is self-contained because the REPL type checker resets between inputs, so
-    // a value defined on one line is not visible to the next.
+    // propagates out of compile_and_run) must not break the session.
     const auto env = luma::test::make_std_env();
 
     VM vm{env};
     TypeChecker checker;
+    std::vector<Program> programs;
 
-    ASSERT_THROWS(repl_eval(checker, vm, "assert(false)"));
+    ASSERT_THROWS(repl_eval(checker, vm, programs, "assert(false)"));
 
     // The pipeline still evaluates correctly after the runtime error.
-    const auto result = repl_eval(checker, vm, "6 + 9");
+    const auto result = repl_eval(checker, vm, programs, "6 + 9");
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), 15);
@@ -477,35 +480,130 @@ static void test_runtime_error_is_recoverable() {
 
 static void test_pipeline_recovers_across_multiple_errors() {
     // A multi-line REPL session with interleaved successes and errors: the
-    // pipeline must keep evaluating correctly throughout.  Lines are
-    // self-contained because the REPL type checker resets between inputs, so a
-    // value defined on one line is not visible to the next.
+    // pipeline must keep evaluating correctly throughout, and definitions from
+    // the successful lines stay visible.
     const auto env = luma::test::make_std_env();
 
     VM vm{env};
     TypeChecker checker;
+    std::vector<Program> programs;
 
     // Line 1: a successful definition.
-    repl_eval(checker, vm, "integer a = 100");
+    repl_eval(checker, vm, programs, "integer a = 100");
 
     // Line 2: parse error (caught and discarded).
     try {
-        repl_eval(checker, vm, "!!!");
+        repl_eval(checker, vm, programs, "!!!");
     } catch (const std::exception&) {} // NOLINT(bugprone-empty-catch)
 
     // Line 3: another successful definition.
-    repl_eval(checker, vm, "integer b = 200");
+    repl_eval(checker, vm, programs, "integer b = 200");
 
     // Line 4: runtime error (caught and discarded).
     try {
-        repl_eval(checker, vm, "assert(false)");
+        repl_eval(checker, vm, programs, "assert(false)");
     } catch (const std::exception&) {} // NOLINT(bugprone-empty-catch)
 
-    // Line 5: the pipeline still evaluates a fresh expression correctly.
-    const auto result = repl_eval(checker, vm, "100 + 200");
+    // Line 5: both earlier definitions are still visible.
+    const auto result = repl_eval(checker, vm, programs, "a + b");
 
     ASSERT_TRUE(result.is_integer());
     ASSERT_EQ(result.as_integer(), 300);
+}
+
+static void test_variable_persists_across_lines() {
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    repl_eval(checker, vm, programs, "integer x = 5");
+
+    const auto result = repl_eval(checker, vm, programs, "x + 1");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 6);
+}
+
+static void test_function_and_record_persist_across_lines() {
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    repl_eval(checker, vm, programs, "function integer square(integer n) { return n * n }");
+    // `y` is filled from the declaration's default on a later line.
+    repl_eval(checker, vm, programs, "record Point { integer x, integer y = 4 }");
+    repl_eval(checker, vm, programs, "Point p = Point { x = 3 }");
+
+    const auto result = repl_eval(checker, vm, programs, "square(p.x) + p.y");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 13);
+}
+
+static void test_redefinition_shadows_earlier_line() {
+    // Redefining a name on a later line is allowed and may change its type.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    repl_eval(checker, vm, programs, "integer y = 1");
+    repl_eval(checker, vm, programs, "string y = \"one\"");
+
+    const auto result = repl_eval(checker, vm, programs, "String.length(y)");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 3);
+}
+
+static void test_rejected_line_defines_nothing() {
+    // A line that fails type checking never ran, so its names stay undefined.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_THROWS(repl_eval(checker, vm, programs, "integer z = \"oops\""));
+    ASSERT_THROWS(repl_eval(checker, vm, programs, "z + 1"));
+}
+
+static void test_runtime_error_keeps_definitions_that_ran() {
+    // The declaration ran before the assertion failed, so `a` exists in the VM
+    // and must stay visible to the type checker as well.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    ASSERT_THROWS(repl_eval(checker, vm, programs, "integer a = 1; assert(false)"));
+
+    const auto result = repl_eval(checker, vm, programs, "a + 1");
+
+    ASSERT_TRUE(result.is_integer());
+    ASSERT_EQ(result.as_integer(), 2);
+}
+
+static void test_rejected_line_does_not_consume_unique() {
+    // A rejected line never ran, so a unique value it would have consumed is
+    // still available afterwards.
+    const auto env = luma::test::make_std_env();
+
+    VM vm{env};
+    TypeChecker checker;
+    std::vector<Program> programs;
+
+    repl_eval(checker, vm, programs, "function void consume(unique string _s) { }");
+    repl_eval(checker, vm, programs, "unique string x = \"hello\"");
+    ASSERT_THROWS(repl_eval(checker, vm, programs, "consume(x); integer bad = \"oops\""));
+
+    repl_eval(checker, vm, programs, "consume(x)");
 }
 
 // ─── run_eval — stdin program evaluation (backs the editor Playground) ───
@@ -668,6 +766,12 @@ int main() {
     RUN(test_syntax_error_is_recoverable);
     RUN(test_runtime_error_is_recoverable);
     RUN(test_pipeline_recovers_across_multiple_errors);
+    RUN(test_variable_persists_across_lines);
+    RUN(test_function_and_record_persist_across_lines);
+    RUN(test_redefinition_shadows_earlier_line);
+    RUN(test_rejected_line_defines_nothing);
+    RUN(test_runtime_error_keeps_definitions_that_ran);
+    RUN(test_rejected_line_does_not_consume_unique);
 
     RUN(test_run_eval_executes_top_level_without_main);
     RUN(test_run_eval_runs_multiple_statements);

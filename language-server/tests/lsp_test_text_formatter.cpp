@@ -80,6 +80,23 @@ void test_indent_respects_tab_size() {
               std::string("function f() {\n  return 1\n}\n"));
 }
 
+void test_indents_case_arms_inside_match() {
+    // `case` arms sit one level inside the match and keep their own braces;
+    // they must not be outdented like `else`/`catch`.
+    const std::string source = "match s {\n"
+                               "case Shape.Circle(r) {\n"
+                               "r\n"
+                               "}\n"
+                               "case Shape.Point { 0.0 }\n"
+                               "}\n";
+    ASSERT_EQ(format_luma_source(source, 4), std::string("match s {\n"
+                                                         "    case Shape.Circle(r) {\n"
+                                                         "        r\n"
+                                                         "    }\n"
+                                                         "    case Shape.Point { 0.0 }\n"
+                                                         "}\n"));
+}
+
 // ─── Declaration separation ────────────────────────────────────────
 
 void test_inserts_blank_line_before_declaration() {
@@ -123,6 +140,7 @@ int main() { // NOLINT(bugprone-exception-escape)
     RUN(test_leaves_comment_contents_untouched);
     RUN(test_indents_braced_block);
     RUN(test_indent_respects_tab_size);
+    RUN(test_indents_case_arms_inside_match);
     RUN(test_inserts_blank_line_before_declaration);
     RUN(test_formatting_is_idempotent);
     RUN(test_range_formatting_preserves_base_indent);

@@ -207,6 +207,39 @@ void DeclarationCompiler::emit_qualified_choice_variants(const std::string& type
 
 // ─────────── Record declarations ───────────
 
+void DeclarationCompiler::register_record_declarations(
+    const std::vector<DeclarationPtr>& declarations) {
+    auto& table = api_.ctx().record_declarations.declarations;
+
+    for (const auto& decl : declarations) {
+        if (decl->kind == DeclarationKind::Record) {
+            const auto& record = static_cast<const RecordDeclaration&>(*decl);
+            table.insert_or_assign(record.name, std::cref(record));
+        }
+    }
+
+    // Namespaced records also answer to their bare name inside the namespace;
+    // never let that shadow a top-level record of the same name.
+    const auto register_namespace = [&table](const NamespaceDeclaration& ns,
+                                             const auto& self) -> void {
+        for (const auto& inner : ns.declarations) {
+            if (inner->kind == DeclarationKind::Record) {
+                const auto& record = static_cast<const RecordDeclaration&>(*inner);
+                table.insert_or_assign(make_qualified(ns.name, record.name), std::cref(record));
+                table.try_emplace(record.name, std::cref(record));
+            } else if (inner->kind == DeclarationKind::Namespace) {
+                self(static_cast<const NamespaceDeclaration&>(*inner), self);
+            }
+        }
+    };
+
+    for (const auto& decl : declarations) {
+        if (decl->kind == DeclarationKind::Namespace) {
+            register_namespace(static_cast<const NamespaceDeclaration&>(*decl), register_namespace);
+        }
+    }
+}
+
 void DeclarationCompiler::compile_record_declaration(const RecordDeclaration& record) {
     // Records are types — register the constructor as a global.
     auto name_idx = api_.add_name(record.name);

@@ -530,6 +530,11 @@ struct ChoiceValue {
 struct FunctionValue {
     std::string name;
     const CompiledFunction* compiled{nullptr};
+    // The function table `compiled` belongs to, which its MakeClosure indices
+    // refer to.  Null means the VM's installed table.  It differs only in the
+    // REPL, where each input is compiled into its own table but a closure from
+    // an earlier input can still be called.
+    const std::vector<CompiledFunction>* function_table{nullptr};
 
     // Captured upvalues.  Immutable captures are stored directly in
     // `upvalues`.  Mutable captures use a shared cell (heap-allocated

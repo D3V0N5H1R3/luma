@@ -60,14 +60,14 @@ void Linter::visit_for(const ForStatement& for_stmt) {
     // Register loop variables.
     if (!for_stmt.destructure_variables.empty()) {
         for (const auto& var : for_stmt.destructure_variables) {
-            tracker_.track_variable(var, for_stmt.location, false);
+            declare_local(var, for_stmt.location);
         }
     } else if (!for_stmt.loop_variable.empty()) {
-        tracker_.track_variable(for_stmt.loop_variable, for_stmt.location, false);
+        declare_local(for_stmt.loop_variable, for_stmt.location);
     }
 
     if (!for_stmt.index_variable.empty()) {
-        tracker_.track_variable(for_stmt.index_variable, for_stmt.location, false);
+        declare_local(for_stmt.index_variable, for_stmt.location);
     }
 
     lint_block(for_stmt.body);
